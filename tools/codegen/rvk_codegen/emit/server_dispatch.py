@@ -146,7 +146,9 @@ def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
 
 def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
-    lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{"]
+    # One trace scope per decoded command, inside the case's own block
+    # (docs/trace.md).
+    lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{", f'    AV_SCOPE("server:{cmd.name}");']
 
     decl_lines: list[str] = []
     decode_lines: list[str] = []
@@ -585,6 +587,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_server.h"',
         "",
+        '#include "core/trace/function_scope.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',
         "",

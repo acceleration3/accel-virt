@@ -5,6 +5,7 @@
 
 #include "vk_dispatch_client.h"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/sync_call_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "vk_protocol_ids.h"
@@ -13,6 +14,7 @@
 namespace av::vkproto {
 
 void rvk_vkDestroyInstance(::av::ClientTransport& t, VkInstance instance, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyInstance");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkInstance(payload, instance);
     (void)pAllocator;  // VkAllocationCallbacks not crossed over the wire
@@ -22,6 +24,7 @@ void rvk_vkDestroyInstance(::av::ClientTransport& t, VkInstance instance, const 
 }
 
 void rvk_vkDestroyDevice(::av::ClientTransport& t, VkDevice device, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDevice");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     (void)pAllocator;  // VkAllocationCallbacks not crossed over the wire
@@ -31,6 +34,7 @@ void rvk_vkDestroyDevice(::av::ClientTransport& t, VkDevice device, const VkAllo
 }
 
 void rvk_vkGetDeviceQueue(::av::ClientTransport& t, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, uint64_t* pQueue) {
+    AV_SCOPE("rvk_vkGetDeviceQueue");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(queueFamilyIndex);
@@ -50,6 +54,7 @@ void rvk_vkGetDeviceQueue(::av::ClientTransport& t, VkDevice device, uint32_t qu
 }
 
 VkResult rvk_vkEnumeratePhysicalDevices(::av::ClientTransport& t, VkInstance instance, uint32_t* pPhysicalDeviceCount, uint64_t* pPhysicalDevices) {
+    AV_SCOPE("rvk_vkEnumeratePhysicalDevices");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkInstance(payload, instance);
     const uint8_t array_present = pPhysicalDevices != nullptr ? 1 : 0;
@@ -85,6 +90,7 @@ VkResult rvk_vkEnumeratePhysicalDevices(::av::ClientTransport& t, VkInstance ins
 }
 
 void rvk_vkGetPhysicalDeviceProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pProperties->sType);
@@ -104,6 +110,7 @@ void rvk_vkGetPhysicalDeviceProperties2(::av::ClientTransport& t, VkPhysicalDevi
 }
 
 VkResult rvk_vkCreateInstance(::av::ClientTransport& t, const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, uint64_t* pInstance) {
+    AV_SCOPE("rvk_vkCreateInstance");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkInstanceCreateInfo(payload, *pCreateInfo);
     (void)pAllocator;  // VkAllocationCallbacks not crossed over the wire
@@ -123,6 +130,7 @@ VkResult rvk_vkCreateInstance(::av::ClientTransport& t, const VkInstanceCreateIn
 }
 
 VkResult rvk_vkCreateDevice(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, uint64_t* pDevice) {
+    AV_SCOPE("rvk_vkCreateDevice");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkDeviceCreateInfo(payload, *pCreateInfo);
@@ -143,6 +151,7 @@ VkResult rvk_vkCreateDevice(::av::ClientTransport& t, VkPhysicalDevice physicalD
 }
 
 void rvk_vkGetPhysicalDeviceProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const ::av::SyncCallScope rvk_call{t};
@@ -160,6 +169,7 @@ void rvk_vkGetPhysicalDeviceProperties(::av::ClientTransport& t, VkPhysicalDevic
 }
 
 void rvk_vkGetPhysicalDeviceFeatures(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFeatures");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const ::av::SyncCallScope rvk_call{t};
@@ -177,6 +187,7 @@ void rvk_vkGetPhysicalDeviceFeatures(::av::ClientTransport& t, VkPhysicalDevice 
 }
 
 void rvk_vkGetPhysicalDeviceFormatProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFormatProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(format);
@@ -195,6 +206,7 @@ void rvk_vkGetPhysicalDeviceFormatProperties(::av::ClientTransport& t, VkPhysica
 }
 
 VkResult rvk_vkGetPhysicalDeviceImageFormatProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceImageFormatProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(format);
@@ -218,6 +230,7 @@ VkResult rvk_vkGetPhysicalDeviceImageFormatProperties(::av::ClientTransport& t, 
 }
 
 void rvk_vkGetPhysicalDeviceMemoryProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceMemoryProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const ::av::SyncCallScope rvk_call{t};
@@ -235,6 +248,7 @@ void rvk_vkGetPhysicalDeviceMemoryProperties(::av::ClientTransport& t, VkPhysica
 }
 
 void rvk_vkGetPhysicalDeviceQueueFamilyProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceQueueFamilyProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pQueueFamilyProperties != nullptr ? 1 : 0;
@@ -269,6 +283,7 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties(::av::ClientTransport& t, VkPh
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceSparseImageFormatProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(format);
@@ -308,6 +323,7 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties(::av::ClientTransport& t
 }
 
 VkResult rvk_vkEnumerateDeviceExtensionProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) {
+    AV_SCOPE("rvk_vkEnumerateDeviceExtensionProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     {
@@ -353,6 +369,7 @@ VkResult rvk_vkEnumerateDeviceExtensionProperties(::av::ClientTransport& t, VkPh
 }
 
 VkResult rvk_vkEnumerateDeviceLayerProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkLayerProperties* pProperties) {
+    AV_SCOPE("rvk_vkEnumerateDeviceLayerProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pProperties != nullptr ? 1 : 0;
@@ -388,6 +405,7 @@ VkResult rvk_vkEnumerateDeviceLayerProperties(::av::ClientTransport& t, VkPhysic
 }
 
 void rvk_vkGetPhysicalDeviceFeatures2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFeatures2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pFeatures->sType);
@@ -407,6 +425,7 @@ void rvk_vkGetPhysicalDeviceFeatures2(::av::ClientTransport& t, VkPhysicalDevice
 }
 
 void rvk_vkGetPhysicalDeviceFormatProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFormatProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(format);
@@ -427,6 +446,7 @@ void rvk_vkGetPhysicalDeviceFormatProperties2(::av::ClientTransport& t, VkPhysic
 }
 
 VkResult rvk_vkGetPhysicalDeviceImageFormatProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceImageFormatProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceImageFormatInfo2(payload, *pImageFormatInfo);
@@ -448,6 +468,7 @@ VkResult rvk_vkGetPhysicalDeviceImageFormatProperties2(::av::ClientTransport& t,
 }
 
 void rvk_vkGetPhysicalDeviceMemoryProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceMemoryProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pMemoryProperties->sType);
@@ -467,6 +488,7 @@ void rvk_vkGetPhysicalDeviceMemoryProperties2(::av::ClientTransport& t, VkPhysic
 }
 
 void rvk_vkGetPhysicalDeviceQueueFamilyProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceQueueFamilyProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pQueueFamilyProperties != nullptr ? 1 : 0;
@@ -501,6 +523,7 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties2(::av::ClientTransport& t, VkP
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceSparseImageFormatProperties2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceSparseImageFormatInfo2(payload, *pFormatInfo);
@@ -536,6 +559,7 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2(::av::ClientTransport& 
 }
 
 VkResult rvk_vkDeviceWaitIdle(::av::ClientTransport& t, VkDevice device) {
+    AV_SCOPE("rvk_vkDeviceWaitIdle");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     const ::av::SyncCallScope rvk_call{t};
@@ -551,6 +575,7 @@ VkResult rvk_vkDeviceWaitIdle(::av::ClientTransport& t, VkDevice device) {
 }
 
 VkResult rvk_vkQueueWaitIdle(::av::ClientTransport& t, VkQueue queue) {
+    AV_SCOPE("rvk_vkQueueWaitIdle");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkQueue(payload, queue);
     const ::av::SyncCallScope rvk_call{t};
@@ -566,6 +591,7 @@ VkResult rvk_vkQueueWaitIdle(::av::ClientTransport& t, VkQueue queue) {
 }
 
 VkResult rvk_vkAllocateMemory(::av::ClientTransport& t, VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory) {
+    AV_SCOPE("rvk_vkAllocateMemory");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkMemoryAllocateInfo(payload, *pAllocateInfo);
@@ -586,6 +612,7 @@ VkResult rvk_vkAllocateMemory(::av::ClientTransport& t, VkDevice device, const V
 }
 
 void rvk_vkFreeMemory(::av::ClientTransport& t, VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkFreeMemory");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceMemory(payload, memory);
@@ -596,6 +623,7 @@ void rvk_vkFreeMemory(::av::ClientTransport& t, VkDevice device, VkDeviceMemory 
 }
 
 VkResult rvk_vkBindBufferMemory(::av::ClientTransport& t, VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) {
+    AV_SCOPE("rvk_vkBindBufferMemory");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBuffer(payload, buffer);
@@ -614,6 +642,7 @@ VkResult rvk_vkBindBufferMemory(::av::ClientTransport& t, VkDevice device, VkBuf
 }
 
 VkResult rvk_vkBindImageMemory(::av::ClientTransport& t, VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset) {
+    AV_SCOPE("rvk_vkBindImageMemory");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -632,6 +661,7 @@ VkResult rvk_vkBindImageMemory(::av::ClientTransport& t, VkDevice device, VkImag
 }
 
 void rvk_vkGetBufferMemoryRequirements(::av::ClientTransport& t, VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetBufferMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBuffer(payload, buffer);
@@ -650,6 +680,7 @@ void rvk_vkGetBufferMemoryRequirements(::av::ClientTransport& t, VkDevice device
 }
 
 void rvk_vkGetImageMemoryRequirements(::av::ClientTransport& t, VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -668,6 +699,7 @@ void rvk_vkGetImageMemoryRequirements(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkCreateBuffer(::av::ClientTransport& t, VkDevice device, const VkBufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBuffer* pBuffer) {
+    AV_SCOPE("rvk_vkCreateBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferCreateInfo(payload, *pCreateInfo);
@@ -688,6 +720,7 @@ VkResult rvk_vkCreateBuffer(::av::ClientTransport& t, VkDevice device, const VkB
 }
 
 void rvk_vkDestroyBuffer(::av::ClientTransport& t, VkDevice device, VkBuffer buffer, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBuffer(payload, buffer);
@@ -698,6 +731,7 @@ void rvk_vkDestroyBuffer(::av::ClientTransport& t, VkDevice device, VkBuffer buf
 }
 
 VkResult rvk_vkCreateImage(::av::ClientTransport& t, VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImage* pImage) {
+    AV_SCOPE("rvk_vkCreateImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageCreateInfo(payload, *pCreateInfo);
@@ -718,6 +752,7 @@ VkResult rvk_vkCreateImage(::av::ClientTransport& t, VkDevice device, const VkIm
 }
 
 void rvk_vkDestroyImage(::av::ClientTransport& t, VkDevice device, VkImage image, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -728,6 +763,7 @@ void rvk_vkDestroyImage(::av::ClientTransport& t, VkDevice device, VkImage image
 }
 
 VkResult rvk_vkCreateImageView(::av::ClientTransport& t, VkDevice device, const VkImageViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImageView* pView) {
+    AV_SCOPE("rvk_vkCreateImageView");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageViewCreateInfo(payload, *pCreateInfo);
@@ -748,6 +784,7 @@ VkResult rvk_vkCreateImageView(::av::ClientTransport& t, VkDevice device, const 
 }
 
 void rvk_vkDestroyImageView(::av::ClientTransport& t, VkDevice device, VkImageView imageView, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyImageView");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageView(payload, imageView);
@@ -758,6 +795,7 @@ void rvk_vkDestroyImageView(::av::ClientTransport& t, VkDevice device, VkImageVi
 }
 
 VkResult rvk_vkCreateSampler(::av::ClientTransport& t, VkDevice device, const VkSamplerCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSampler* pSampler) {
+    AV_SCOPE("rvk_vkCreateSampler");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSamplerCreateInfo(payload, *pCreateInfo);
@@ -778,6 +816,7 @@ VkResult rvk_vkCreateSampler(::av::ClientTransport& t, VkDevice device, const Vk
 }
 
 void rvk_vkDestroySampler(::av::ClientTransport& t, VkDevice device, VkSampler sampler, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroySampler");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSampler(payload, sampler);
@@ -788,6 +827,7 @@ void rvk_vkDestroySampler(::av::ClientTransport& t, VkDevice device, VkSampler s
 }
 
 VkResult rvk_vkCreateSemaphore(::av::ClientTransport& t, VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore) {
+    AV_SCOPE("rvk_vkCreateSemaphore");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreCreateInfo(payload, *pCreateInfo);
@@ -808,6 +848,7 @@ VkResult rvk_vkCreateSemaphore(::av::ClientTransport& t, VkDevice device, const 
 }
 
 void rvk_vkDestroySemaphore(::av::ClientTransport& t, VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroySemaphore");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphore(payload, semaphore);
@@ -818,6 +859,7 @@ void rvk_vkDestroySemaphore(::av::ClientTransport& t, VkDevice device, VkSemapho
 }
 
 VkResult rvk_vkCreateFence(::av::ClientTransport& t, VkDevice device, const VkFenceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFence* pFence) {
+    AV_SCOPE("rvk_vkCreateFence");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFenceCreateInfo(payload, *pCreateInfo);
@@ -838,6 +880,7 @@ VkResult rvk_vkCreateFence(::av::ClientTransport& t, VkDevice device, const VkFe
 }
 
 void rvk_vkDestroyFence(::av::ClientTransport& t, VkDevice device, VkFence fence, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyFence");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFence(payload, fence);
@@ -848,6 +891,7 @@ void rvk_vkDestroyFence(::av::ClientTransport& t, VkDevice device, VkFence fence
 }
 
 VkResult rvk_vkResetFences(::av::ClientTransport& t, VkDevice device, uint32_t fenceCount, const VkFence* pFences) {
+    AV_SCOPE("rvk_vkResetFences");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(fenceCount);
@@ -861,6 +905,7 @@ VkResult rvk_vkResetFences(::av::ClientTransport& t, VkDevice device, uint32_t f
 }
 
 VkResult rvk_vkWaitForFences(::av::ClientTransport& t, VkDevice device, uint32_t fenceCount, const VkFence* pFences, VkBool32 waitAll, uint64_t timeout) {
+    AV_SCOPE("rvk_vkWaitForFences");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(fenceCount);
@@ -882,6 +927,7 @@ VkResult rvk_vkWaitForFences(::av::ClientTransport& t, VkDevice device, uint32_t
 }
 
 VkResult rvk_vkGetFenceStatus(::av::ClientTransport& t, VkDevice device, VkFence fence) {
+    AV_SCOPE("rvk_vkGetFenceStatus");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFence(payload, fence);
@@ -898,6 +944,7 @@ VkResult rvk_vkGetFenceStatus(::av::ClientTransport& t, VkDevice device, VkFence
 }
 
 VkResult rvk_vkCreateCommandPool(::av::ClientTransport& t, VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCommandPool* pCommandPool) {
+    AV_SCOPE("rvk_vkCreateCommandPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPoolCreateInfo(payload, *pCreateInfo);
@@ -918,6 +965,7 @@ VkResult rvk_vkCreateCommandPool(::av::ClientTransport& t, VkDevice device, cons
 }
 
 void rvk_vkDestroyCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyCommandPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPool(payload, commandPool);
@@ -928,6 +976,7 @@ void rvk_vkDestroyCommandPool(::av::ClientTransport& t, VkDevice device, VkComma
 }
 
 VkResult rvk_vkResetCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
+    AV_SCOPE("rvk_vkResetCommandPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPool(payload, commandPool);
@@ -939,6 +988,7 @@ VkResult rvk_vkResetCommandPool(::av::ClientTransport& t, VkDevice device, VkCom
 }
 
 VkResult rvk_vkBeginCommandBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) {
+    AV_SCOPE("rvk_vkBeginCommandBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCommandBufferBeginInfo(payload, *pBeginInfo);
@@ -949,6 +999,7 @@ VkResult rvk_vkBeginCommandBuffer(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 VkResult rvk_vkEndCommandBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer) {
+    AV_SCOPE("rvk_vkEndCommandBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     if (t.send_async(::av::vkproto::kCmd_vkEndCommandBuffer, payload) != ::av::TransportResult::ok) {
@@ -958,6 +1009,7 @@ VkResult rvk_vkEndCommandBuffer(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 VkResult rvk_vkResetCommandBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags) {
+    AV_SCOPE("rvk_vkResetCommandBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(flags);
@@ -968,6 +1020,7 @@ VkResult rvk_vkResetCommandBuffer(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkDestroyShaderModule(::av::ClientTransport& t, VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyShaderModule");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkShaderModule(payload, shaderModule);
@@ -978,6 +1031,7 @@ void rvk_vkDestroyShaderModule(::av::ClientTransport& t, VkDevice device, VkShad
 }
 
 VkResult rvk_vkCreateShaderModule(::av::ClientTransport& t, VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule) {
+    AV_SCOPE("rvk_vkCreateShaderModule");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkShaderModuleCreateInfo(payload, *pCreateInfo);
@@ -998,6 +1052,7 @@ VkResult rvk_vkCreateShaderModule(::av::ClientTransport& t, VkDevice device, con
 }
 
 VkResult rvk_vkCreatePipelineLayout(::av::ClientTransport& t, VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout) {
+    AV_SCOPE("rvk_vkCreatePipelineLayout");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineLayoutCreateInfo(payload, *pCreateInfo);
@@ -1018,6 +1073,7 @@ VkResult rvk_vkCreatePipelineLayout(::av::ClientTransport& t, VkDevice device, c
 }
 
 void rvk_vkDestroyPipelineLayout(::av::ClientTransport& t, VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyPipelineLayout");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineLayout(payload, pipelineLayout);
@@ -1028,6 +1084,7 @@ void rvk_vkDestroyPipelineLayout(::av::ClientTransport& t, VkDevice device, VkPi
 }
 
 void rvk_vkDestroyPipeline(::av::ClientTransport& t, VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyPipeline");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipeline(payload, pipeline);
@@ -1038,6 +1095,7 @@ void rvk_vkDestroyPipeline(::av::ClientTransport& t, VkDevice device, VkPipeline
 }
 
 VkResult rvk_vkCreatePipelineCache(::av::ClientTransport& t, VkDevice device, const VkPipelineCacheCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineCache* pPipelineCache) {
+    AV_SCOPE("rvk_vkCreatePipelineCache");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCacheCreateInfo(payload, *pCreateInfo);
@@ -1058,6 +1116,7 @@ VkResult rvk_vkCreatePipelineCache(::av::ClientTransport& t, VkDevice device, co
 }
 
 void rvk_vkDestroyPipelineCache(::av::ClientTransport& t, VkDevice device, VkPipelineCache pipelineCache, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyPipelineCache");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCache(payload, pipelineCache);
@@ -1068,6 +1127,7 @@ void rvk_vkDestroyPipelineCache(::av::ClientTransport& t, VkDevice device, VkPip
 }
 
 VkResult rvk_vkCreateRenderPass(::av::ClientTransport& t, VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) {
+    AV_SCOPE("rvk_vkCreateRenderPass");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderPassCreateInfo(payload, *pCreateInfo);
@@ -1088,6 +1148,7 @@ VkResult rvk_vkCreateRenderPass(::av::ClientTransport& t, VkDevice device, const
 }
 
 void rvk_vkDestroyRenderPass(::av::ClientTransport& t, VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyRenderPass");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderPass(payload, renderPass);
@@ -1098,6 +1159,7 @@ void rvk_vkDestroyRenderPass(::av::ClientTransport& t, VkDevice device, VkRender
 }
 
 VkResult rvk_vkCreateFramebuffer(::av::ClientTransport& t, VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFramebuffer* pFramebuffer) {
+    AV_SCOPE("rvk_vkCreateFramebuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFramebufferCreateInfo(payload, *pCreateInfo);
@@ -1118,6 +1180,7 @@ VkResult rvk_vkCreateFramebuffer(::av::ClientTransport& t, VkDevice device, cons
 }
 
 void rvk_vkDestroyFramebuffer(::av::ClientTransport& t, VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyFramebuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFramebuffer(payload, framebuffer);
@@ -1128,6 +1191,7 @@ void rvk_vkDestroyFramebuffer(::av::ClientTransport& t, VkDevice device, VkFrame
 }
 
 VkResult rvk_vkCreateDescriptorSetLayout(::av::ClientTransport& t, VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorSetLayout* pSetLayout) {
+    AV_SCOPE("rvk_vkCreateDescriptorSetLayout");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorSetLayoutCreateInfo(payload, *pCreateInfo);
@@ -1148,6 +1212,7 @@ VkResult rvk_vkCreateDescriptorSetLayout(::av::ClientTransport& t, VkDevice devi
 }
 
 void rvk_vkDestroyDescriptorSetLayout(::av::ClientTransport& t, VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDescriptorSetLayout");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorSetLayout(payload, descriptorSetLayout);
@@ -1158,6 +1223,7 @@ void rvk_vkDestroyDescriptorSetLayout(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkCreateDescriptorPool(::av::ClientTransport& t, VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorPool* pDescriptorPool) {
+    AV_SCOPE("rvk_vkCreateDescriptorPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorPoolCreateInfo(payload, *pCreateInfo);
@@ -1178,6 +1244,7 @@ VkResult rvk_vkCreateDescriptorPool(::av::ClientTransport& t, VkDevice device, c
 }
 
 void rvk_vkDestroyDescriptorPool(::av::ClientTransport& t, VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDescriptorPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorPool(payload, descriptorPool);
@@ -1188,6 +1255,7 @@ void rvk_vkDestroyDescriptorPool(::av::ClientTransport& t, VkDevice device, VkDe
 }
 
 void rvk_vkFreeCommandBuffers(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) {
+    AV_SCOPE("rvk_vkFreeCommandBuffers");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPool(payload, commandPool);
@@ -1201,6 +1269,7 @@ void rvk_vkFreeCommandBuffers(::av::ClientTransport& t, VkDevice device, VkComma
 }
 
 VkResult rvk_vkQueueSubmit(::av::ClientTransport& t, VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
+    AV_SCOPE("rvk_vkQueueSubmit");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkQueue(payload, queue);
     payload.write_pod(submitCount);
@@ -1215,6 +1284,7 @@ VkResult rvk_vkQueueSubmit(::av::ClientTransport& t, VkQueue queue, uint32_t sub
 }
 
 void rvk_vkCmdBindPipeline(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) {
+    AV_SCOPE("rvk_vkCmdBindPipeline");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(pipelineBindPoint);
@@ -1225,6 +1295,7 @@ void rvk_vkCmdBindPipeline(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetViewport(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport* pViewports) {
+    AV_SCOPE("rvk_vkCmdSetViewport");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstViewport);
@@ -1238,6 +1309,7 @@ void rvk_vkCmdSetViewport(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdSetScissor(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_t scissorCount, const VkRect2D* pScissors) {
+    AV_SCOPE("rvk_vkCmdSetScissor");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstScissor);
@@ -1251,6 +1323,7 @@ void rvk_vkCmdSetScissor(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdBindVertexBuffers(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets) {
+    AV_SCOPE("rvk_vkCmdBindVertexBuffers");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstBinding);
@@ -1267,6 +1340,7 @@ void rvk_vkCmdBindVertexBuffers(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdBindIndexBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType) {
+    AV_SCOPE("rvk_vkCmdBindIndexBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -1278,6 +1352,7 @@ void rvk_vkCmdBindIndexBuffer(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdBindDescriptorSets(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t* pDynamicOffsets) {
+    AV_SCOPE("rvk_vkCmdBindDescriptorSets");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(pipelineBindPoint);
@@ -1297,6 +1372,7 @@ void rvk_vkCmdBindDescriptorSets(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdDraw(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+    AV_SCOPE("rvk_vkCmdDraw");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(vertexCount);
@@ -1309,6 +1385,7 @@ void rvk_vkCmdDraw(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint
 }
 
 void rvk_vkCmdDrawIndexed(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    AV_SCOPE("rvk_vkCmdDrawIndexed");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(indexCount);
@@ -1322,6 +1399,7 @@ void rvk_vkCmdDrawIndexed(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdPipelineBarrier(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers) {
+    AV_SCOPE("rvk_vkCmdPipelineBarrier");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(srcStageMask);
@@ -1345,6 +1423,7 @@ void rvk_vkCmdPipelineBarrier(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdCopyBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions) {
+    AV_SCOPE("rvk_vkCmdCopyBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, srcBuffer);
@@ -1359,6 +1438,7 @@ void rvk_vkCmdCopyBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdBeginRenderPass(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, VkSubpassContents contents) {
+    AV_SCOPE("rvk_vkCmdBeginRenderPass");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderPassBeginInfo(payload, *pRenderPassBegin);
@@ -1369,6 +1449,7 @@ void rvk_vkCmdBeginRenderPass(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdEndRenderPass(::av::ClientTransport& t, VkCommandBuffer commandBuffer) {
+    AV_SCOPE("rvk_vkCmdEndRenderPass");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     if (t.send_async(::av::vkproto::kCmd_vkCmdEndRenderPass, payload) != ::av::TransportResult::ok) {
@@ -1377,6 +1458,7 @@ void rvk_vkCmdEndRenderPass(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdNextSubpass(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkSubpassContents contents) {
+    AV_SCOPE("rvk_vkCmdNextSubpass");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(contents);
@@ -1386,6 +1468,7 @@ void rvk_vkCmdNextSubpass(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdPushConstants(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues) {
+    AV_SCOPE("rvk_vkCmdPushConstants");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkPipelineLayout(payload, layout);
@@ -1401,6 +1484,7 @@ void rvk_vkCmdPushConstants(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 VkResult rvk_vkCreateGraphicsPipelines(::av::ClientTransport& t, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) {
+    AV_SCOPE("rvk_vkCreateGraphicsPipelines");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCache(payload, pipelineCache);
@@ -1427,6 +1511,7 @@ VkResult rvk_vkCreateGraphicsPipelines(::av::ClientTransport& t, VkDevice device
 }
 
 void rvk_vkUpdateDescriptorSets(::av::ClientTransport& t, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies) {
+    AV_SCOPE("rvk_vkUpdateDescriptorSets");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(descriptorWriteCount);
@@ -1443,6 +1528,7 @@ void rvk_vkUpdateDescriptorSets(::av::ClientTransport& t, VkDevice device, uint3
 }
 
 VkResult rvk_vkAllocateCommandBuffers(::av::ClientTransport& t, VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, uint64_t* pCommandBuffers) {
+    AV_SCOPE("rvk_vkAllocateCommandBuffers");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandBufferAllocateInfo(payload, *pAllocateInfo);
@@ -1464,6 +1550,7 @@ VkResult rvk_vkAllocateCommandBuffers(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkAllocateDescriptorSets(::av::ClientTransport& t, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets) {
+    AV_SCOPE("rvk_vkAllocateDescriptorSets");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorSetAllocateInfo(payload, *pAllocateInfo);
@@ -1485,6 +1572,7 @@ VkResult rvk_vkAllocateDescriptorSets(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkFreeDescriptorSets(::av::ClientTransport& t, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets) {
+    AV_SCOPE("rvk_vkFreeDescriptorSets");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorPool(payload, descriptorPool);
@@ -1505,6 +1593,7 @@ VkResult rvk_vkFreeDescriptorSets(::av::ClientTransport& t, VkDevice device, VkD
 }
 
 VkResult rvk_vkCreateComputePipelines(::av::ClientTransport& t, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) {
+    AV_SCOPE("rvk_vkCreateComputePipelines");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCache(payload, pipelineCache);
@@ -1531,6 +1620,7 @@ VkResult rvk_vkCreateComputePipelines(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkResetDescriptorPool(::av::ClientTransport& t, VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) {
+    AV_SCOPE("rvk_vkResetDescriptorPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorPool(payload, descriptorPool);
@@ -1548,6 +1638,7 @@ VkResult rvk_vkResetDescriptorPool(::av::ClientTransport& t, VkDevice device, Vk
 }
 
 VkResult rvk_vkCreateEvent(::av::ClientTransport& t, VkDevice device, const VkEventCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkEvent* pEvent) {
+    AV_SCOPE("rvk_vkCreateEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkEventCreateInfo(payload, *pCreateInfo);
@@ -1568,6 +1659,7 @@ VkResult rvk_vkCreateEvent(::av::ClientTransport& t, VkDevice device, const VkEv
 }
 
 void rvk_vkDestroyEvent(::av::ClientTransport& t, VkDevice device, VkEvent event, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkEvent(payload, event);
@@ -1578,6 +1670,7 @@ void rvk_vkDestroyEvent(::av::ClientTransport& t, VkDevice device, VkEvent event
 }
 
 VkResult rvk_vkGetEventStatus(::av::ClientTransport& t, VkDevice device, VkEvent event) {
+    AV_SCOPE("rvk_vkGetEventStatus");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkEvent(payload, event);
@@ -1594,6 +1687,7 @@ VkResult rvk_vkGetEventStatus(::av::ClientTransport& t, VkDevice device, VkEvent
 }
 
 VkResult rvk_vkSetEvent(::av::ClientTransport& t, VkDevice device, VkEvent event) {
+    AV_SCOPE("rvk_vkSetEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkEvent(payload, event);
@@ -1610,6 +1704,7 @@ VkResult rvk_vkSetEvent(::av::ClientTransport& t, VkDevice device, VkEvent event
 }
 
 VkResult rvk_vkResetEvent(::av::ClientTransport& t, VkDevice device, VkEvent event) {
+    AV_SCOPE("rvk_vkResetEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkEvent(payload, event);
@@ -1626,6 +1721,7 @@ VkResult rvk_vkResetEvent(::av::ClientTransport& t, VkDevice device, VkEvent eve
 }
 
 void rvk_vkCmdSetEvent(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask) {
+    AV_SCOPE("rvk_vkCmdSetEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -1636,6 +1732,7 @@ void rvk_vkCmdSetEvent(::av::ClientTransport& t, VkCommandBuffer commandBuffer, 
 }
 
 void rvk_vkCmdResetEvent(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask) {
+    AV_SCOPE("rvk_vkCmdResetEvent");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -1646,6 +1743,7 @@ void rvk_vkCmdResetEvent(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdWaitEvents(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers) {
+    AV_SCOPE("rvk_vkCmdWaitEvents");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(eventCount);
@@ -1672,6 +1770,7 @@ void rvk_vkCmdWaitEvents(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdCopyImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageCopy* pRegions) {
+    AV_SCOPE("rvk_vkCmdCopyImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, srcImage);
@@ -1688,6 +1787,7 @@ void rvk_vkCmdCopyImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer,
 }
 
 void rvk_vkCmdCopyBufferToImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions) {
+    AV_SCOPE("rvk_vkCmdCopyBufferToImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, srcBuffer);
@@ -1703,6 +1803,7 @@ void rvk_vkCmdCopyBufferToImage(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdCopyImageToBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions) {
+    AV_SCOPE("rvk_vkCmdCopyImageToBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, srcImage);
@@ -1718,6 +1819,7 @@ void rvk_vkCmdCopyImageToBuffer(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdBlitImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit* pRegions, VkFilter filter) {
+    AV_SCOPE("rvk_vkCmdBlitImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, srcImage);
@@ -1735,6 +1837,7 @@ void rvk_vkCmdBlitImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer,
 }
 
 void rvk_vkCmdClearColorImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue* pColor, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) {
+    AV_SCOPE("rvk_vkCmdClearColorImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, image);
@@ -1750,6 +1853,7 @@ void rvk_vkCmdClearColorImage(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdClearDepthStencilImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue* pDepthStencil, uint32_t rangeCount, const VkImageSubresourceRange* pRanges) {
+    AV_SCOPE("rvk_vkCmdClearDepthStencilImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, image);
@@ -1765,6 +1869,7 @@ void rvk_vkCmdClearDepthStencilImage(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdClearAttachments(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkClearAttachment* pAttachments, uint32_t rectCount, const VkClearRect* pRects) {
+    AV_SCOPE("rvk_vkCmdClearAttachments");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(attachmentCount);
@@ -1781,6 +1886,7 @@ void rvk_vkCmdClearAttachments(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdFillBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) {
+    AV_SCOPE("rvk_vkCmdFillBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, dstBuffer);
@@ -1793,6 +1899,7 @@ void rvk_vkCmdFillBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdUpdateBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, const void* pData) {
+    AV_SCOPE("rvk_vkCmdUpdateBuffer");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, dstBuffer);
@@ -1807,6 +1914,7 @@ void rvk_vkCmdUpdateBuffer(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetLineWidth(::av::ClientTransport& t, VkCommandBuffer commandBuffer, float lineWidth) {
+    AV_SCOPE("rvk_vkCmdSetLineWidth");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(lineWidth);
@@ -1816,6 +1924,7 @@ void rvk_vkCmdSetLineWidth(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetDepthBias(::av::ClientTransport& t, VkCommandBuffer commandBuffer, float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor) {
+    AV_SCOPE("rvk_vkCmdSetDepthBias");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthBiasConstantFactor);
@@ -1827,6 +1936,7 @@ void rvk_vkCmdSetDepthBias(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetBlendConstants(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const float* blendConstants) {
+    AV_SCOPE("rvk_vkCmdSetBlendConstants");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     for (uint32_t rvk_i = 0; rvk_i < 4u; ++rvk_i) {
@@ -1838,6 +1948,7 @@ void rvk_vkCmdSetBlendConstants(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdSetDepthBounds(::av::ClientTransport& t, VkCommandBuffer commandBuffer, float minDepthBounds, float maxDepthBounds) {
+    AV_SCOPE("rvk_vkCmdSetDepthBounds");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(minDepthBounds);
@@ -1848,6 +1959,7 @@ void rvk_vkCmdSetDepthBounds(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdSetStencilCompareMask(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t compareMask) {
+    AV_SCOPE("rvk_vkCmdSetStencilCompareMask");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(faceMask);
@@ -1858,6 +1970,7 @@ void rvk_vkCmdSetStencilCompareMask(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdSetStencilWriteMask(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t writeMask) {
+    AV_SCOPE("rvk_vkCmdSetStencilWriteMask");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(faceMask);
@@ -1868,6 +1981,7 @@ void rvk_vkCmdSetStencilWriteMask(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdSetStencilReference(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32_t reference) {
+    AV_SCOPE("rvk_vkCmdSetStencilReference");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(faceMask);
@@ -1878,6 +1992,7 @@ void rvk_vkCmdSetStencilReference(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdDispatch(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+    AV_SCOPE("rvk_vkCmdDispatch");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(groupCountX);
@@ -1889,6 +2004,7 @@ void rvk_vkCmdDispatch(::av::ClientTransport& t, VkCommandBuffer commandBuffer, 
 }
 
 void rvk_vkCmdDispatchIndirect(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset) {
+    AV_SCOPE("rvk_vkCmdDispatchIndirect");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -1899,6 +2015,7 @@ void rvk_vkCmdDispatchIndirect(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdDrawIndirect(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndirect");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -1911,6 +2028,7 @@ void rvk_vkCmdDrawIndirect(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdDrawIndexedIndirect(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndexedIndirect");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -1923,6 +2041,7 @@ void rvk_vkCmdDrawIndexedIndirect(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdExecuteCommands(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) {
+    AV_SCOPE("rvk_vkCmdExecuteCommands");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(commandBufferCount);
@@ -1935,6 +2054,7 @@ void rvk_vkCmdExecuteCommands(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 VkResult rvk_vkAcquireNextImage2KHR(::av::ClientTransport& t, VkDevice device, const VkAcquireNextImageInfoKHR* pAcquireInfo, uint32_t* pImageIndex) {
+    AV_SCOPE("rvk_vkAcquireNextImage2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkAcquireNextImageInfoKHR(payload, *pAcquireInfo);
@@ -1954,6 +2074,7 @@ VkResult rvk_vkAcquireNextImage2KHR(::av::ClientTransport& t, VkDevice device, c
 }
 
 VkResult rvk_vkBindBufferMemory2(::av::ClientTransport& t, VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo* pBindInfos) {
+    AV_SCOPE("rvk_vkBindBufferMemory2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(bindInfoCount);
@@ -1973,6 +2094,7 @@ VkResult rvk_vkBindBufferMemory2(::av::ClientTransport& t, VkDevice device, uint
 }
 
 VkResult rvk_vkBindImageMemory2(::av::ClientTransport& t, VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos) {
+    AV_SCOPE("rvk_vkBindImageMemory2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(bindInfoCount);
@@ -1992,6 +2114,7 @@ VkResult rvk_vkBindImageMemory2(::av::ClientTransport& t, VkDevice device, uint3
 }
 
 void rvk_vkCmdBeginQuery(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, VkQueryControlFlags flags) {
+    AV_SCOPE("rvk_vkCmdBeginQuery");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -2003,6 +2126,7 @@ void rvk_vkCmdBeginQuery(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdBeginRenderPass2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, const VkSubpassBeginInfo* pSubpassBeginInfo) {
+    AV_SCOPE("rvk_vkCmdBeginRenderPass2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderPassBeginInfo(payload, *pRenderPassBegin);
@@ -2013,6 +2137,7 @@ void rvk_vkCmdBeginRenderPass2(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdBeginRendering(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo) {
+    AV_SCOPE("rvk_vkCmdBeginRendering");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderingInfo(payload, *pRenderingInfo);
@@ -2022,6 +2147,7 @@ void rvk_vkCmdBeginRendering(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdBindVertexBuffers2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes, const VkDeviceSize* pStrides) {
+    AV_SCOPE("rvk_vkCmdBindVertexBuffers2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstBinding);
@@ -2052,6 +2178,7 @@ void rvk_vkCmdBindVertexBuffers2(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdBlitImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkBlitImageInfo2* pBlitImageInfo) {
+    AV_SCOPE("rvk_vkCmdBlitImage2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBlitImageInfo2(payload, *pBlitImageInfo);
@@ -2061,6 +2188,7 @@ void rvk_vkCmdBlitImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdCopyBuffer2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyBufferInfo2* pCopyBufferInfo) {
+    AV_SCOPE("rvk_vkCmdCopyBuffer2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyBufferInfo2(payload, *pCopyBufferInfo);
@@ -2070,6 +2198,7 @@ void rvk_vkCmdCopyBuffer2(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdCopyBufferToImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyBufferToImageInfo2* pCopyBufferToImageInfo) {
+    AV_SCOPE("rvk_vkCmdCopyBufferToImage2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyBufferToImageInfo2(payload, *pCopyBufferToImageInfo);
@@ -2079,6 +2208,7 @@ void rvk_vkCmdCopyBufferToImage2(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdCopyImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyImageInfo2* pCopyImageInfo) {
+    AV_SCOPE("rvk_vkCmdCopyImage2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyImageInfo2(payload, *pCopyImageInfo);
@@ -2088,6 +2218,7 @@ void rvk_vkCmdCopyImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer
 }
 
 void rvk_vkCmdCopyImageToBuffer2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyImageToBufferInfo2* pCopyImageToBufferInfo) {
+    AV_SCOPE("rvk_vkCmdCopyImageToBuffer2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyImageToBufferInfo2(payload, *pCopyImageToBufferInfo);
@@ -2097,6 +2228,7 @@ void rvk_vkCmdCopyImageToBuffer2(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdCopyQueryPoolResults(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride, VkQueryResultFlags flags) {
+    AV_SCOPE("rvk_vkCmdCopyQueryPoolResults");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -2112,6 +2244,7 @@ void rvk_vkCmdCopyQueryPoolResults(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdDispatchBase(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+    AV_SCOPE("rvk_vkCmdDispatchBase");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(baseGroupX);
@@ -2126,6 +2259,7 @@ void rvk_vkCmdDispatchBase(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdDrawIndexedIndirectCount(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndexedIndirectCount");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -2140,6 +2274,7 @@ void rvk_vkCmdDrawIndexedIndirectCount(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdDrawIndirectCount(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndirectCount");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -2154,6 +2289,7 @@ void rvk_vkCmdDrawIndirectCount(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdEndQuery(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query) {
+    AV_SCOPE("rvk_vkCmdEndQuery");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -2164,6 +2300,7 @@ void rvk_vkCmdEndQuery(::av::ClientTransport& t, VkCommandBuffer commandBuffer, 
 }
 
 void rvk_vkCmdEndRenderPass2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassEndInfo) {
+    AV_SCOPE("rvk_vkCmdEndRenderPass2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkSubpassEndInfo(payload, *pSubpassEndInfo);
@@ -2173,6 +2310,7 @@ void rvk_vkCmdEndRenderPass2(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdEndRendering(::av::ClientTransport& t, VkCommandBuffer commandBuffer) {
+    AV_SCOPE("rvk_vkCmdEndRendering");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     if (t.send_async(::av::vkproto::kCmd_vkCmdEndRendering, payload) != ::av::TransportResult::ok) {
@@ -2181,6 +2319,7 @@ void rvk_vkCmdEndRendering(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdNextSubpass2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSubpassBeginInfo* pSubpassBeginInfo, const VkSubpassEndInfo* pSubpassEndInfo) {
+    AV_SCOPE("rvk_vkCmdNextSubpass2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkSubpassBeginInfo(payload, *pSubpassBeginInfo);
@@ -2191,6 +2330,7 @@ void rvk_vkCmdNextSubpass2(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdPipelineBarrier2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo) {
+    AV_SCOPE("rvk_vkCmdPipelineBarrier2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkDependencyInfo(payload, *pDependencyInfo);
@@ -2200,6 +2340,7 @@ void rvk_vkCmdPipelineBarrier2(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdResetEvent2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags2 stageMask) {
+    AV_SCOPE("rvk_vkCmdResetEvent2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -2210,6 +2351,7 @@ void rvk_vkCmdResetEvent2(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdResetQueryPool(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount) {
+    AV_SCOPE("rvk_vkCmdResetQueryPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -2221,6 +2363,7 @@ void rvk_vkCmdResetQueryPool(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdResolveImage(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve* pRegions) {
+    AV_SCOPE("rvk_vkCmdResolveImage");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkImage(payload, srcImage);
@@ -2237,6 +2380,7 @@ void rvk_vkCmdResolveImage(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdResolveImage2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkResolveImageInfo2* pResolveImageInfo) {
+    AV_SCOPE("rvk_vkCmdResolveImage2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkResolveImageInfo2(payload, *pResolveImageInfo);
@@ -2246,6 +2390,7 @@ void rvk_vkCmdResolveImage2(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdSetCullMode(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCullModeFlags cullMode) {
+    AV_SCOPE("rvk_vkCmdSetCullMode");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(cullMode);
@@ -2255,6 +2400,7 @@ void rvk_vkCmdSetCullMode(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdSetDepthBiasEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthBiasEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthBiasEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthBiasEnable);
@@ -2264,6 +2410,7 @@ void rvk_vkCmdSetDepthBiasEnable(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdSetDepthBoundsTestEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthBoundsTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthBoundsTestEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthBoundsTestEnable);
@@ -2273,6 +2420,7 @@ void rvk_vkCmdSetDepthBoundsTestEnable(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdSetDepthCompareOp(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp) {
+    AV_SCOPE("rvk_vkCmdSetDepthCompareOp");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthCompareOp);
@@ -2282,6 +2430,7 @@ void rvk_vkCmdSetDepthCompareOp(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdSetDepthTestEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthTestEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthTestEnable);
@@ -2291,6 +2440,7 @@ void rvk_vkCmdSetDepthTestEnable(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdSetDepthWriteEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthWriteEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthWriteEnable);
@@ -2300,6 +2450,7 @@ void rvk_vkCmdSetDepthWriteEnable(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdSetDeviceMask(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t deviceMask) {
+    AV_SCOPE("rvk_vkCmdSetDeviceMask");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(deviceMask);
@@ -2309,6 +2460,7 @@ void rvk_vkCmdSetDeviceMask(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdSetEvent2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo) {
+    AV_SCOPE("rvk_vkCmdSetEvent2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -2319,6 +2471,7 @@ void rvk_vkCmdSetEvent2(::av::ClientTransport& t, VkCommandBuffer commandBuffer,
 }
 
 void rvk_vkCmdSetFrontFace(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkFrontFace frontFace) {
+    AV_SCOPE("rvk_vkCmdSetFrontFace");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(frontFace);
@@ -2328,6 +2481,7 @@ void rvk_vkCmdSetFrontFace(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetPrimitiveRestartEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 primitiveRestartEnable) {
+    AV_SCOPE("rvk_vkCmdSetPrimitiveRestartEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(primitiveRestartEnable);
@@ -2337,6 +2491,7 @@ void rvk_vkCmdSetPrimitiveRestartEnable(::av::ClientTransport& t, VkCommandBuffe
 }
 
 void rvk_vkCmdSetPrimitiveTopology(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPrimitiveTopology primitiveTopology) {
+    AV_SCOPE("rvk_vkCmdSetPrimitiveTopology");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(primitiveTopology);
@@ -2346,6 +2501,7 @@ void rvk_vkCmdSetPrimitiveTopology(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetRasterizerDiscardEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 rasterizerDiscardEnable) {
+    AV_SCOPE("rvk_vkCmdSetRasterizerDiscardEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(rasterizerDiscardEnable);
@@ -2355,6 +2511,7 @@ void rvk_vkCmdSetRasterizerDiscardEnable(::av::ClientTransport& t, VkCommandBuff
 }
 
 void rvk_vkCmdSetScissorWithCount(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t scissorCount, const VkRect2D* pScissors) {
+    AV_SCOPE("rvk_vkCmdSetScissorWithCount");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(scissorCount);
@@ -2367,6 +2524,7 @@ void rvk_vkCmdSetScissorWithCount(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdSetStencilOp(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, VkStencilOp failOp, VkStencilOp passOp, VkStencilOp depthFailOp, VkCompareOp compareOp) {
+    AV_SCOPE("rvk_vkCmdSetStencilOp");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(faceMask);
@@ -2380,6 +2538,7 @@ void rvk_vkCmdSetStencilOp(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdSetStencilTestEnable(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 stencilTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetStencilTestEnable");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stencilTestEnable);
@@ -2389,6 +2548,7 @@ void rvk_vkCmdSetStencilTestEnable(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetViewportWithCount(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t viewportCount, const VkViewport* pViewports) {
+    AV_SCOPE("rvk_vkCmdSetViewportWithCount");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(viewportCount);
@@ -2401,6 +2561,7 @@ void rvk_vkCmdSetViewportWithCount(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdWaitEvents2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents, const VkDependencyInfo* pDependencyInfos) {
+    AV_SCOPE("rvk_vkCmdWaitEvents2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(eventCount);
@@ -2416,6 +2577,7 @@ void rvk_vkCmdWaitEvents2(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 }
 
 void rvk_vkCmdWriteTimestamp(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkQueryPool queryPool, uint32_t query) {
+    AV_SCOPE("rvk_vkCmdWriteTimestamp");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(pipelineStage);
@@ -2427,6 +2589,7 @@ void rvk_vkCmdWriteTimestamp(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdWriteTimestamp2(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkQueryPool queryPool, uint32_t query) {
+    AV_SCOPE("rvk_vkCmdWriteTimestamp2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stage);
@@ -2438,6 +2601,7 @@ void rvk_vkCmdWriteTimestamp2(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 VkResult rvk_vkCreateBufferView(::av::ClientTransport& t, VkDevice device, const VkBufferViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBufferView* pView) {
+    AV_SCOPE("rvk_vkCreateBufferView");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferViewCreateInfo(payload, *pCreateInfo);
@@ -2458,6 +2622,7 @@ VkResult rvk_vkCreateBufferView(::av::ClientTransport& t, VkDevice device, const
 }
 
 VkResult rvk_vkCreateDescriptorUpdateTemplate(::av::ClientTransport& t, VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) {
+    AV_SCOPE("rvk_vkCreateDescriptorUpdateTemplate");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorUpdateTemplateCreateInfo(payload, *pCreateInfo);
@@ -2478,6 +2643,7 @@ VkResult rvk_vkCreateDescriptorUpdateTemplate(::av::ClientTransport& t, VkDevice
 }
 
 VkResult rvk_vkCreatePrivateDataSlot(::av::ClientTransport& t, VkDevice device, const VkPrivateDataSlotCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPrivateDataSlot* pPrivateDataSlot) {
+    AV_SCOPE("rvk_vkCreatePrivateDataSlot");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPrivateDataSlotCreateInfo(payload, *pCreateInfo);
@@ -2498,6 +2664,7 @@ VkResult rvk_vkCreatePrivateDataSlot(::av::ClientTransport& t, VkDevice device, 
 }
 
 VkResult rvk_vkCreateQueryPool(::av::ClientTransport& t, VkDevice device, const VkQueryPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkQueryPool* pQueryPool) {
+    AV_SCOPE("rvk_vkCreateQueryPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkQueryPoolCreateInfo(payload, *pCreateInfo);
@@ -2518,6 +2685,7 @@ VkResult rvk_vkCreateQueryPool(::av::ClientTransport& t, VkDevice device, const 
 }
 
 VkResult rvk_vkCreateRenderPass2(::av::ClientTransport& t, VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) {
+    AV_SCOPE("rvk_vkCreateRenderPass2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderPassCreateInfo2(payload, *pCreateInfo);
@@ -2538,6 +2706,7 @@ VkResult rvk_vkCreateRenderPass2(::av::ClientTransport& t, VkDevice device, cons
 }
 
 VkResult rvk_vkCreateSamplerYcbcrConversion(::av::ClientTransport& t, VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversion* pYcbcrConversion) {
+    AV_SCOPE("rvk_vkCreateSamplerYcbcrConversion");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSamplerYcbcrConversionCreateInfo(payload, *pCreateInfo);
@@ -2558,6 +2727,7 @@ VkResult rvk_vkCreateSamplerYcbcrConversion(::av::ClientTransport& t, VkDevice d
 }
 
 void rvk_vkDestroyBufferView(::av::ClientTransport& t, VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyBufferView");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferView(payload, bufferView);
@@ -2568,6 +2738,7 @@ void rvk_vkDestroyBufferView(::av::ClientTransport& t, VkDevice device, VkBuffer
 }
 
 void rvk_vkDestroyDescriptorUpdateTemplate(::av::ClientTransport& t, VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDescriptorUpdateTemplate");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorUpdateTemplate(payload, descriptorUpdateTemplate);
@@ -2578,6 +2749,7 @@ void rvk_vkDestroyDescriptorUpdateTemplate(::av::ClientTransport& t, VkDevice de
 }
 
 void rvk_vkDestroyPrivateDataSlot(::av::ClientTransport& t, VkDevice device, VkPrivateDataSlot privateDataSlot, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyPrivateDataSlot");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPrivateDataSlot(payload, privateDataSlot);
@@ -2588,6 +2760,7 @@ void rvk_vkDestroyPrivateDataSlot(::av::ClientTransport& t, VkDevice device, VkP
 }
 
 void rvk_vkDestroyQueryPool(::av::ClientTransport& t, VkDevice device, VkQueryPool queryPool, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyQueryPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkQueryPool(payload, queryPool);
@@ -2598,6 +2771,7 @@ void rvk_vkDestroyQueryPool(::av::ClientTransport& t, VkDevice device, VkQueryPo
 }
 
 void rvk_vkDestroySamplerYcbcrConversion(::av::ClientTransport& t, VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroySamplerYcbcrConversion");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSamplerYcbcrConversion(payload, ycbcrConversion);
@@ -2608,6 +2782,7 @@ void rvk_vkDestroySamplerYcbcrConversion(::av::ClientTransport& t, VkDevice devi
 }
 
 VkResult rvk_vkEnumeratePhysicalDeviceGroups(::av::ClientTransport& t, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) {
+    AV_SCOPE("rvk_vkEnumeratePhysicalDeviceGroups");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkInstance(payload, instance);
     const uint8_t array_present = pPhysicalDeviceGroupProperties != nullptr ? 1 : 0;
@@ -2643,6 +2818,7 @@ VkResult rvk_vkEnumeratePhysicalDeviceGroups(::av::ClientTransport& t, VkInstanc
 }
 
 VkResult rvk_vkFlushMappedMemoryRanges(::av::ClientTransport& t, VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) {
+    AV_SCOPE("rvk_vkFlushMappedMemoryRanges");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(memoryRangeCount);
@@ -2662,6 +2838,7 @@ VkResult rvk_vkFlushMappedMemoryRanges(::av::ClientTransport& t, VkDevice device
 }
 
 VkDeviceAddress rvk_vkGetBufferDeviceAddress(::av::ClientTransport& t, VkDevice device, const VkBufferDeviceAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetBufferDeviceAddress");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferDeviceAddressInfo(payload, *pInfo);
@@ -2678,6 +2855,7 @@ VkDeviceAddress rvk_vkGetBufferDeviceAddress(::av::ClientTransport& t, VkDevice 
 }
 
 void rvk_vkGetBufferMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetBufferMemoryRequirements2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferMemoryRequirementsInfo2(payload, *pInfo);
@@ -2698,6 +2876,7 @@ void rvk_vkGetBufferMemoryRequirements2(::av::ClientTransport& t, VkDevice devic
 }
 
 uint64_t rvk_vkGetBufferOpaqueCaptureAddress(::av::ClientTransport& t, VkDevice device, const VkBufferDeviceAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetBufferOpaqueCaptureAddress");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferDeviceAddressInfo(payload, *pInfo);
@@ -2714,6 +2893,7 @@ uint64_t rvk_vkGetBufferOpaqueCaptureAddress(::av::ClientTransport& t, VkDevice 
 }
 
 void rvk_vkGetDescriptorSetLayoutSupport(::av::ClientTransport& t, VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayoutSupport* pSupport) {
+    AV_SCOPE("rvk_vkGetDescriptorSetLayoutSupport");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorSetLayoutCreateInfo(payload, *pCreateInfo);
@@ -2734,6 +2914,7 @@ void rvk_vkGetDescriptorSetLayoutSupport(::av::ClientTransport& t, VkDevice devi
 }
 
 void rvk_vkGetDeviceBufferMemoryRequirements(::av::ClientTransport& t, VkDevice device, const VkDeviceBufferMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceBufferMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceBufferMemoryRequirements(payload, *pInfo);
@@ -2754,6 +2935,7 @@ void rvk_vkGetDeviceBufferMemoryRequirements(::av::ClientTransport& t, VkDevice 
 }
 
 void rvk_vkGetDeviceGroupPeerMemoryFeatures(::av::ClientTransport& t, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures) {
+    AV_SCOPE("rvk_vkGetDeviceGroupPeerMemoryFeatures");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(heapIndex);
@@ -2774,6 +2956,7 @@ void rvk_vkGetDeviceGroupPeerMemoryFeatures(::av::ClientTransport& t, VkDevice d
 }
 
 VkResult rvk_vkGetDeviceGroupPresentCapabilitiesKHR(::av::ClientTransport& t, VkDevice device, VkDeviceGroupPresentCapabilitiesKHR* pDeviceGroupPresentCapabilities) {
+    AV_SCOPE("rvk_vkGetDeviceGroupPresentCapabilitiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(pDeviceGroupPresentCapabilities->sType);
@@ -2794,6 +2977,7 @@ VkResult rvk_vkGetDeviceGroupPresentCapabilitiesKHR(::av::ClientTransport& t, Vk
 }
 
 VkResult rvk_vkGetDeviceGroupSurfacePresentModesKHR(::av::ClientTransport& t, VkDevice device, VkSurfaceKHR surface, VkDeviceGroupPresentModeFlagsKHR* pModes) {
+    AV_SCOPE("rvk_vkGetDeviceGroupSurfacePresentModesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSurfaceKHR(payload, surface);
@@ -2813,6 +2997,7 @@ VkResult rvk_vkGetDeviceGroupSurfacePresentModesKHR(::av::ClientTransport& t, Vk
 }
 
 void rvk_vkGetDeviceImageMemoryRequirements(::av::ClientTransport& t, VkDevice device, const VkDeviceImageMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceImageMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceImageMemoryRequirements(payload, *pInfo);
@@ -2833,6 +3018,7 @@ void rvk_vkGetDeviceImageMemoryRequirements(::av::ClientTransport& t, VkDevice d
 }
 
 void rvk_vkGetDeviceImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice device, const VkDeviceImageMemoryRequirements* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceImageSparseMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceImageMemoryRequirements(payload, *pInfo);
@@ -2868,6 +3054,7 @@ void rvk_vkGetDeviceImageSparseMemoryRequirements(::av::ClientTransport& t, VkDe
 }
 
 void rvk_vkGetDeviceMemoryCommitment(::av::ClientTransport& t, VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) {
+    AV_SCOPE("rvk_vkGetDeviceMemoryCommitment");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceMemory(payload, memory);
@@ -2886,6 +3073,7 @@ void rvk_vkGetDeviceMemoryCommitment(::av::ClientTransport& t, VkDevice device, 
 }
 
 uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddress(::av::ClientTransport& t, VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetDeviceMemoryOpaqueCaptureAddress");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceMemoryOpaqueCaptureAddressInfo(payload, *pInfo);
@@ -2902,6 +3090,7 @@ uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddress(::av::ClientTransport& t, VkD
 }
 
 void rvk_vkGetDeviceQueue2(::av::ClientTransport& t, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, uint64_t* pQueue) {
+    AV_SCOPE("rvk_vkGetDeviceQueue2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceQueueInfo2(payload, *pQueueInfo);
@@ -2920,6 +3109,7 @@ void rvk_vkGetDeviceQueue2(::av::ClientTransport& t, VkDevice device, const VkDe
 }
 
 void rvk_vkGetImageMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageMemoryRequirements2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageMemoryRequirementsInfo2(payload, *pInfo);
@@ -2940,6 +3130,7 @@ void rvk_vkGetImageMemoryRequirements2(::av::ClientTransport& t, VkDevice device
 }
 
 void rvk_vkGetImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageSparseMemoryRequirements");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -2975,6 +3166,7 @@ void rvk_vkGetImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice d
 }
 
 void rvk_vkGetImageSparseMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageSparseMemoryRequirements2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageSparseMemoryRequirementsInfo2(payload, *pInfo);
@@ -3010,6 +3202,7 @@ void rvk_vkGetImageSparseMemoryRequirements2(::av::ClientTransport& t, VkDevice 
 }
 
 void rvk_vkGetImageSubresourceLayout(::av::ClientTransport& t, VkDevice device, VkImage image, const VkImageSubresource* pSubresource, VkSubresourceLayout* pLayout) {
+    AV_SCOPE("rvk_vkGetImageSubresourceLayout");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -3029,6 +3222,7 @@ void rvk_vkGetImageSubresourceLayout(::av::ClientTransport& t, VkDevice device, 
 }
 
 void rvk_vkGetPhysicalDeviceExternalBufferProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalBufferProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalBufferInfo(payload, *pExternalBufferInfo);
@@ -3049,6 +3243,7 @@ void rvk_vkGetPhysicalDeviceExternalBufferProperties(::av::ClientTransport& t, V
 }
 
 void rvk_vkGetPhysicalDeviceExternalFenceProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalFenceProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalFenceInfo(payload, *pExternalFenceInfo);
@@ -3069,6 +3264,7 @@ void rvk_vkGetPhysicalDeviceExternalFenceProperties(::av::ClientTransport& t, Vk
 }
 
 void rvk_vkGetPhysicalDeviceExternalSemaphoreProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalSemaphoreProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalSemaphoreInfo(payload, *pExternalSemaphoreInfo);
@@ -3089,6 +3285,7 @@ void rvk_vkGetPhysicalDeviceExternalSemaphoreProperties(::av::ClientTransport& t
 }
 
 VkResult rvk_vkGetPhysicalDevicePresentRectanglesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t* pRectCount, VkRect2D* pRects) {
+    AV_SCOPE("rvk_vkGetPhysicalDevicePresentRectanglesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkSurfaceKHR(payload, surface);
@@ -3125,6 +3322,7 @@ VkResult rvk_vkGetPhysicalDevicePresentRectanglesKHR(::av::ClientTransport& t, V
 }
 
 VkResult rvk_vkGetPhysicalDeviceToolProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pToolCount, VkPhysicalDeviceToolProperties* pToolProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceToolProperties");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pToolProperties != nullptr ? 1 : 0;
@@ -3160,6 +3358,7 @@ VkResult rvk_vkGetPhysicalDeviceToolProperties(::av::ClientTransport& t, VkPhysi
 }
 
 void rvk_vkGetPrivateData(::av::ClientTransport& t, VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t* pData) {
+    AV_SCOPE("rvk_vkGetPrivateData");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(objectType);
@@ -3180,6 +3379,7 @@ void rvk_vkGetPrivateData(::av::ClientTransport& t, VkDevice device, VkObjectTyp
 }
 
 VkResult rvk_vkGetQueryPoolResults(::av::ClientTransport& t, VkDevice device, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void* pData, VkDeviceSize stride, VkQueryResultFlags flags) {
+    AV_SCOPE("rvk_vkGetQueryPoolResults");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkQueryPool(payload, queryPool);
@@ -3206,6 +3406,7 @@ VkResult rvk_vkGetQueryPoolResults(::av::ClientTransport& t, VkDevice device, Vk
 }
 
 void rvk_vkGetRenderAreaGranularity(::av::ClientTransport& t, VkDevice device, VkRenderPass renderPass, VkExtent2D* pGranularity) {
+    AV_SCOPE("rvk_vkGetRenderAreaGranularity");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderPass(payload, renderPass);
@@ -3224,6 +3425,7 @@ void rvk_vkGetRenderAreaGranularity(::av::ClientTransport& t, VkDevice device, V
 }
 
 VkResult rvk_vkGetSemaphoreCounterValue(::av::ClientTransport& t, VkDevice device, VkSemaphore semaphore, uint64_t* pValue) {
+    AV_SCOPE("rvk_vkGetSemaphoreCounterValue");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphore(payload, semaphore);
@@ -3243,6 +3445,7 @@ VkResult rvk_vkGetSemaphoreCounterValue(::av::ClientTransport& t, VkDevice devic
 }
 
 VkResult rvk_vkInvalidateMappedMemoryRanges(::av::ClientTransport& t, VkDevice device, uint32_t memoryRangeCount, const VkMappedMemoryRange* pMemoryRanges) {
+    AV_SCOPE("rvk_vkInvalidateMappedMemoryRanges");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(memoryRangeCount);
@@ -3262,6 +3465,7 @@ VkResult rvk_vkInvalidateMappedMemoryRanges(::av::ClientTransport& t, VkDevice d
 }
 
 VkResult rvk_vkMergePipelineCaches(::av::ClientTransport& t, VkDevice device, VkPipelineCache dstCache, uint32_t srcCacheCount, const VkPipelineCache* pSrcCaches) {
+    AV_SCOPE("rvk_vkMergePipelineCaches");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCache(payload, dstCache);
@@ -3282,6 +3486,7 @@ VkResult rvk_vkMergePipelineCaches(::av::ClientTransport& t, VkDevice device, Vk
 }
 
 VkResult rvk_vkQueueBindSparse(::av::ClientTransport& t, VkQueue queue, uint32_t bindInfoCount, const VkBindSparseInfo* pBindInfo, VkFence fence) {
+    AV_SCOPE("rvk_vkQueueBindSparse");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkQueue(payload, queue);
     payload.write_pod(bindInfoCount);
@@ -3302,6 +3507,7 @@ VkResult rvk_vkQueueBindSparse(::av::ClientTransport& t, VkQueue queue, uint32_t
 }
 
 VkResult rvk_vkQueueSubmit2(::av::ClientTransport& t, VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence) {
+    AV_SCOPE("rvk_vkQueueSubmit2");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkQueue(payload, queue);
     payload.write_pod(submitCount);
@@ -3316,6 +3522,7 @@ VkResult rvk_vkQueueSubmit2(::av::ClientTransport& t, VkQueue queue, uint32_t su
 }
 
 void rvk_vkResetQueryPool(::av::ClientTransport& t, VkDevice device, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount) {
+    AV_SCOPE("rvk_vkResetQueryPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkQueryPool(payload, queryPool);
@@ -3327,6 +3534,7 @@ void rvk_vkResetQueryPool(::av::ClientTransport& t, VkDevice device, VkQueryPool
 }
 
 VkResult rvk_vkSetPrivateData(::av::ClientTransport& t, VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t data) {
+    AV_SCOPE("rvk_vkSetPrivateData");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(objectType);
@@ -3346,6 +3554,7 @@ VkResult rvk_vkSetPrivateData(::av::ClientTransport& t, VkDevice device, VkObjec
 }
 
 VkResult rvk_vkSignalSemaphore(::av::ClientTransport& t, VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo) {
+    AV_SCOPE("rvk_vkSignalSemaphore");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreSignalInfo(payload, *pSignalInfo);
@@ -3362,6 +3571,7 @@ VkResult rvk_vkSignalSemaphore(::av::ClientTransport& t, VkDevice device, const 
 }
 
 void rvk_vkTrimCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags) {
+    AV_SCOPE("rvk_vkTrimCommandPool");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPool(payload, commandPool);
@@ -3372,6 +3582,7 @@ void rvk_vkTrimCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandP
 }
 
 VkResult rvk_vkWaitSemaphores(::av::ClientTransport& t, VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) {
+    AV_SCOPE("rvk_vkWaitSemaphores");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreWaitInfo(payload, *pWaitInfo);
@@ -3389,6 +3600,7 @@ VkResult rvk_vkWaitSemaphores(::av::ClientTransport& t, VkDevice device, const V
 }
 
 void rvk_vkGetPhysicalDeviceFeatures2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFeatures2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pFeatures->sType);
@@ -3408,6 +3620,7 @@ void rvk_vkGetPhysicalDeviceFeatures2KHR(::av::ClientTransport& t, VkPhysicalDev
 }
 
 void rvk_vkGetPhysicalDeviceFormatProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFormatProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(format);
@@ -3428,6 +3641,7 @@ void rvk_vkGetPhysicalDeviceFormatProperties2KHR(::av::ClientTransport& t, VkPhy
 }
 
 VkResult rvk_vkGetPhysicalDeviceImageFormatProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo, VkImageFormatProperties2* pImageFormatProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceImageFormatProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceImageFormatInfo2(payload, *pImageFormatInfo);
@@ -3449,6 +3663,7 @@ VkResult rvk_vkGetPhysicalDeviceImageFormatProperties2KHR(::av::ClientTransport&
 }
 
 void rvk_vkGetPhysicalDeviceMemoryProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* pMemoryProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceMemoryProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pMemoryProperties->sType);
@@ -3468,6 +3683,7 @@ void rvk_vkGetPhysicalDeviceMemoryProperties2KHR(::av::ClientTransport& t, VkPhy
 }
 
 void rvk_vkGetPhysicalDeviceProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     payload.write_pod(pProperties->sType);
@@ -3487,6 +3703,7 @@ void rvk_vkGetPhysicalDeviceProperties2KHR(::av::ClientTransport& t, VkPhysicalD
 }
 
 void rvk_vkGetPhysicalDeviceQueueFamilyProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pQueueFamilyPropertyCount, VkQueueFamilyProperties2* pQueueFamilyProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceQueueFamilyProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pQueueFamilyProperties != nullptr ? 1 : 0;
@@ -3521,6 +3738,7 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties2KHR(::av::ClientTransport& t, 
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceSparseImageFormatProperties2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceSparseImageFormatInfo2(payload, *pFormatInfo);
@@ -3556,6 +3774,7 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(::av::ClientTranspor
 }
 
 VkResult rvk_vkBindBufferMemory2KHR(::av::ClientTransport& t, VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo* pBindInfos) {
+    AV_SCOPE("rvk_vkBindBufferMemory2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(bindInfoCount);
@@ -3575,6 +3794,7 @@ VkResult rvk_vkBindBufferMemory2KHR(::av::ClientTransport& t, VkDevice device, u
 }
 
 VkResult rvk_vkBindImageMemory2KHR(::av::ClientTransport& t, VkDevice device, uint32_t bindInfoCount, const VkBindImageMemoryInfo* pBindInfos) {
+    AV_SCOPE("rvk_vkBindImageMemory2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(bindInfoCount);
@@ -3594,6 +3814,7 @@ VkResult rvk_vkBindImageMemory2KHR(::av::ClientTransport& t, VkDevice device, ui
 }
 
 void rvk_vkGetBufferMemoryRequirements2KHR(::av::ClientTransport& t, VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetBufferMemoryRequirements2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferMemoryRequirementsInfo2(payload, *pInfo);
@@ -3614,6 +3835,7 @@ void rvk_vkGetBufferMemoryRequirements2KHR(::av::ClientTransport& t, VkDevice de
 }
 
 void rvk_vkGetImageMemoryRequirements2KHR(::av::ClientTransport& t, VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageMemoryRequirements2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageMemoryRequirementsInfo2(payload, *pInfo);
@@ -3634,6 +3856,7 @@ void rvk_vkGetImageMemoryRequirements2KHR(::av::ClientTransport& t, VkDevice dev
 }
 
 void rvk_vkGetImageSparseMemoryRequirements2KHR(::av::ClientTransport& t, VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetImageSparseMemoryRequirements2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImageSparseMemoryRequirementsInfo2(payload, *pInfo);
@@ -3669,6 +3892,7 @@ void rvk_vkGetImageSparseMemoryRequirements2KHR(::av::ClientTransport& t, VkDevi
 }
 
 void rvk_vkCmdBeginRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, const VkSubpassBeginInfo* pSubpassBeginInfo) {
+    AV_SCOPE("rvk_vkCmdBeginRenderPass2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderPassBeginInfo(payload, *pRenderPassBegin);
@@ -3679,6 +3903,7 @@ void rvk_vkCmdBeginRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdBeginRenderingKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo) {
+    AV_SCOPE("rvk_vkCmdBeginRenderingKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderingInfo(payload, *pRenderingInfo);
@@ -3688,6 +3913,7 @@ void rvk_vkCmdBeginRenderingKHR(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdBlitImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkBlitImageInfo2* pBlitImageInfo) {
+    AV_SCOPE("rvk_vkCmdBlitImage2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBlitImageInfo2(payload, *pBlitImageInfo);
@@ -3697,6 +3923,7 @@ void rvk_vkCmdBlitImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdCopyBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyBufferInfo2* pCopyBufferInfo) {
+    AV_SCOPE("rvk_vkCmdCopyBuffer2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyBufferInfo2(payload, *pCopyBufferInfo);
@@ -3706,6 +3933,7 @@ void rvk_vkCmdCopyBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdCopyBufferToImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyBufferToImageInfo2* pCopyBufferToImageInfo) {
+    AV_SCOPE("rvk_vkCmdCopyBufferToImage2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyBufferToImageInfo2(payload, *pCopyBufferToImageInfo);
@@ -3715,6 +3943,7 @@ void rvk_vkCmdCopyBufferToImage2KHR(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdCopyImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyImageInfo2* pCopyImageInfo) {
+    AV_SCOPE("rvk_vkCmdCopyImage2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyImageInfo2(payload, *pCopyImageInfo);
@@ -3724,6 +3953,7 @@ void rvk_vkCmdCopyImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdCopyImageToBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyImageToBufferInfo2* pCopyImageToBufferInfo) {
+    AV_SCOPE("rvk_vkCmdCopyImageToBuffer2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyImageToBufferInfo2(payload, *pCopyImageToBufferInfo);
@@ -3733,6 +3963,7 @@ void rvk_vkCmdCopyImageToBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdDispatchBaseKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+    AV_SCOPE("rvk_vkCmdDispatchBaseKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(baseGroupX);
@@ -3747,6 +3978,7 @@ void rvk_vkCmdDispatchBaseKHR(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdDrawIndexedIndirectCountKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndexedIndirectCountKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -3761,6 +3993,7 @@ void rvk_vkCmdDrawIndexedIndirectCountKHR(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdDrawIndirectCountKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawIndirectCountKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -3775,6 +4008,7 @@ void rvk_vkCmdDrawIndirectCountKHR(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdEndRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSubpassEndInfo* pSubpassEndInfo) {
+    AV_SCOPE("rvk_vkCmdEndRenderPass2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkSubpassEndInfo(payload, *pSubpassEndInfo);
@@ -3784,6 +4018,7 @@ void rvk_vkCmdEndRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdEndRenderingKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer) {
+    AV_SCOPE("rvk_vkCmdEndRenderingKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     if (t.send_async(::av::vkproto::kCmd_vkCmdEndRenderingKHR, payload) != ::av::TransportResult::ok) {
@@ -3792,6 +4027,7 @@ void rvk_vkCmdEndRenderingKHR(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdNextSubpass2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSubpassBeginInfo* pSubpassBeginInfo, const VkSubpassEndInfo* pSubpassEndInfo) {
+    AV_SCOPE("rvk_vkCmdNextSubpass2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkSubpassBeginInfo(payload, *pSubpassBeginInfo);
@@ -3802,6 +4038,7 @@ void rvk_vkCmdNextSubpass2KHR(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdPipelineBarrier2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo) {
+    AV_SCOPE("rvk_vkCmdPipelineBarrier2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkDependencyInfo(payload, *pDependencyInfo);
@@ -3811,6 +4048,7 @@ void rvk_vkCmdPipelineBarrier2KHR(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdResetEvent2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags2 stageMask) {
+    AV_SCOPE("rvk_vkCmdResetEvent2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -3821,6 +4059,7 @@ void rvk_vkCmdResetEvent2KHR(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdResolveImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkResolveImageInfo2* pResolveImageInfo) {
+    AV_SCOPE("rvk_vkCmdResolveImage2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkResolveImageInfo2(payload, *pResolveImageInfo);
@@ -3830,6 +4069,7 @@ void rvk_vkCmdResolveImage2KHR(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdSetDeviceMaskKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t deviceMask) {
+    AV_SCOPE("rvk_vkCmdSetDeviceMaskKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(deviceMask);
@@ -3839,6 +4079,7 @@ void rvk_vkCmdSetDeviceMaskKHR(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdSetEvent2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo) {
+    AV_SCOPE("rvk_vkCmdSetEvent2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkEvent(payload, event);
@@ -3849,6 +4090,7 @@ void rvk_vkCmdSetEvent2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdWaitEvents2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t eventCount, const VkEvent* pEvents, const VkDependencyInfo* pDependencyInfos) {
+    AV_SCOPE("rvk_vkCmdWaitEvents2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(eventCount);
@@ -3864,6 +4106,7 @@ void rvk_vkCmdWaitEvents2KHR(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdWriteTimestamp2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkQueryPool queryPool, uint32_t query) {
+    AV_SCOPE("rvk_vkCmdWriteTimestamp2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stage);
@@ -3875,6 +4118,7 @@ void rvk_vkCmdWriteTimestamp2KHR(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 VkResult rvk_vkCreateDescriptorUpdateTemplateKHR(::av::ClientTransport& t, VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) {
+    AV_SCOPE("rvk_vkCreateDescriptorUpdateTemplateKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorUpdateTemplateCreateInfo(payload, *pCreateInfo);
@@ -3895,6 +4139,7 @@ VkResult rvk_vkCreateDescriptorUpdateTemplateKHR(::av::ClientTransport& t, VkDev
 }
 
 VkResult rvk_vkCreateRenderPass2KHR(::av::ClientTransport& t, VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) {
+    AV_SCOPE("rvk_vkCreateRenderPass2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderPassCreateInfo2(payload, *pCreateInfo);
@@ -3915,6 +4160,7 @@ VkResult rvk_vkCreateRenderPass2KHR(::av::ClientTransport& t, VkDevice device, c
 }
 
 VkResult rvk_vkCreateSamplerYcbcrConversionKHR(::av::ClientTransport& t, VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversion* pYcbcrConversion) {
+    AV_SCOPE("rvk_vkCreateSamplerYcbcrConversionKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSamplerYcbcrConversionCreateInfo(payload, *pCreateInfo);
@@ -3935,6 +4181,7 @@ VkResult rvk_vkCreateSamplerYcbcrConversionKHR(::av::ClientTransport& t, VkDevic
 }
 
 void rvk_vkDestroyDescriptorUpdateTemplateKHR(::av::ClientTransport& t, VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDescriptorUpdateTemplateKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorUpdateTemplate(payload, descriptorUpdateTemplate);
@@ -3945,6 +4192,7 @@ void rvk_vkDestroyDescriptorUpdateTemplateKHR(::av::ClientTransport& t, VkDevice
 }
 
 void rvk_vkDestroySamplerYcbcrConversionKHR(::av::ClientTransport& t, VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroySamplerYcbcrConversionKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSamplerYcbcrConversion(payload, ycbcrConversion);
@@ -3955,6 +4203,7 @@ void rvk_vkDestroySamplerYcbcrConversionKHR(::av::ClientTransport& t, VkDevice d
 }
 
 VkResult rvk_vkEnumeratePhysicalDeviceGroupsKHR(::av::ClientTransport& t, VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) {
+    AV_SCOPE("rvk_vkEnumeratePhysicalDeviceGroupsKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkInstance(payload, instance);
     const uint8_t array_present = pPhysicalDeviceGroupProperties != nullptr ? 1 : 0;
@@ -3990,6 +4239,7 @@ VkResult rvk_vkEnumeratePhysicalDeviceGroupsKHR(::av::ClientTransport& t, VkInst
 }
 
 VkDeviceAddress rvk_vkGetBufferDeviceAddressKHR(::av::ClientTransport& t, VkDevice device, const VkBufferDeviceAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetBufferDeviceAddressKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferDeviceAddressInfo(payload, *pInfo);
@@ -4006,6 +4256,7 @@ VkDeviceAddress rvk_vkGetBufferDeviceAddressKHR(::av::ClientTransport& t, VkDevi
 }
 
 uint64_t rvk_vkGetBufferOpaqueCaptureAddressKHR(::av::ClientTransport& t, VkDevice device, const VkBufferDeviceAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetBufferOpaqueCaptureAddressKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkBufferDeviceAddressInfo(payload, *pInfo);
@@ -4022,6 +4273,7 @@ uint64_t rvk_vkGetBufferOpaqueCaptureAddressKHR(::av::ClientTransport& t, VkDevi
 }
 
 void rvk_vkGetDescriptorSetLayoutSupportKHR(::av::ClientTransport& t, VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayoutSupport* pSupport) {
+    AV_SCOPE("rvk_vkGetDescriptorSetLayoutSupportKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDescriptorSetLayoutCreateInfo(payload, *pCreateInfo);
@@ -4042,6 +4294,7 @@ void rvk_vkGetDescriptorSetLayoutSupportKHR(::av::ClientTransport& t, VkDevice d
 }
 
 void rvk_vkGetDeviceBufferMemoryRequirementsKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceBufferMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceBufferMemoryRequirementsKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceBufferMemoryRequirements(payload, *pInfo);
@@ -4062,6 +4315,7 @@ void rvk_vkGetDeviceBufferMemoryRequirementsKHR(::av::ClientTransport& t, VkDevi
 }
 
 void rvk_vkGetDeviceGroupPeerMemoryFeaturesKHR(::av::ClientTransport& t, VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures) {
+    AV_SCOPE("rvk_vkGetDeviceGroupPeerMemoryFeaturesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(heapIndex);
@@ -4082,6 +4336,7 @@ void rvk_vkGetDeviceGroupPeerMemoryFeaturesKHR(::av::ClientTransport& t, VkDevic
 }
 
 void rvk_vkGetDeviceImageMemoryRequirementsKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceImageMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceImageMemoryRequirementsKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceImageMemoryRequirements(payload, *pInfo);
@@ -4102,6 +4357,7 @@ void rvk_vkGetDeviceImageMemoryRequirementsKHR(::av::ClientTransport& t, VkDevic
 }
 
 void rvk_vkGetDeviceImageSparseMemoryRequirementsKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceImageMemoryRequirements* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
+    AV_SCOPE("rvk_vkGetDeviceImageSparseMemoryRequirementsKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceImageMemoryRequirements(payload, *pInfo);
@@ -4137,6 +4393,7 @@ void rvk_vkGetDeviceImageSparseMemoryRequirementsKHR(::av::ClientTransport& t, V
 }
 
 uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddressKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo) {
+    AV_SCOPE("rvk_vkGetDeviceMemoryOpaqueCaptureAddressKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceMemoryOpaqueCaptureAddressInfo(payload, *pInfo);
@@ -4153,6 +4410,7 @@ uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddressKHR(::av::ClientTransport& t, 
 }
 
 void rvk_vkGetPhysicalDeviceExternalBufferPropertiesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo* pExternalBufferInfo, VkExternalBufferProperties* pExternalBufferProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalBufferPropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalBufferInfo(payload, *pExternalBufferInfo);
@@ -4173,6 +4431,7 @@ void rvk_vkGetPhysicalDeviceExternalBufferPropertiesKHR(::av::ClientTransport& t
 }
 
 void rvk_vkGetPhysicalDeviceExternalFencePropertiesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalFencePropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalFenceInfo(payload, *pExternalFenceInfo);
@@ -4193,6 +4452,7 @@ void rvk_vkGetPhysicalDeviceExternalFencePropertiesKHR(::av::ClientTransport& t,
 }
 
 void rvk_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo, VkExternalSemaphoreProperties* pExternalSemaphoreProperties) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     serialize_VkPhysicalDeviceExternalSemaphoreInfo(payload, *pExternalSemaphoreInfo);
@@ -4213,6 +4473,7 @@ void rvk_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(::av::ClientTransport
 }
 
 VkResult rvk_vkGetSemaphoreCounterValueKHR(::av::ClientTransport& t, VkDevice device, VkSemaphore semaphore, uint64_t* pValue) {
+    AV_SCOPE("rvk_vkGetSemaphoreCounterValueKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphore(payload, semaphore);
@@ -4232,6 +4493,7 @@ VkResult rvk_vkGetSemaphoreCounterValueKHR(::av::ClientTransport& t, VkDevice de
 }
 
 VkResult rvk_vkQueueSubmit2KHR(::av::ClientTransport& t, VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence) {
+    AV_SCOPE("rvk_vkQueueSubmit2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkQueue(payload, queue);
     payload.write_pod(submitCount);
@@ -4252,6 +4514,7 @@ VkResult rvk_vkQueueSubmit2KHR(::av::ClientTransport& t, VkQueue queue, uint32_t
 }
 
 VkResult rvk_vkSignalSemaphoreKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo) {
+    AV_SCOPE("rvk_vkSignalSemaphoreKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreSignalInfo(payload, *pSignalInfo);
@@ -4268,6 +4531,7 @@ VkResult rvk_vkSignalSemaphoreKHR(::av::ClientTransport& t, VkDevice device, con
 }
 
 void rvk_vkTrimCommandPoolKHR(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags) {
+    AV_SCOPE("rvk_vkTrimCommandPoolKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCommandPool(payload, commandPool);
@@ -4278,6 +4542,7 @@ void rvk_vkTrimCommandPoolKHR(::av::ClientTransport& t, VkDevice device, VkComma
 }
 
 VkResult rvk_vkWaitSemaphoresKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) {
+    AV_SCOPE("rvk_vkWaitSemaphoresKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreWaitInfo(payload, *pWaitInfo);
@@ -4295,6 +4560,7 @@ VkResult rvk_vkWaitSemaphoresKHR(::av::ClientTransport& t, VkDevice device, cons
 }
 
 void rvk_vkCmdBeginConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin) {
+    AV_SCOPE("rvk_vkCmdBeginConditionalRenderingEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkConditionalRenderingBeginInfoEXT(payload, *pConditionalRenderingBegin);
@@ -4304,6 +4570,7 @@ void rvk_vkCmdBeginConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBu
 }
 
 void rvk_vkCmdEndConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer) {
+    AV_SCOPE("rvk_vkCmdEndConditionalRenderingEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     if (t.send_async(::av::vkproto::kCmd_vkCmdEndConditionalRenderingEXT, payload) != ::av::TransportResult::ok) {
@@ -4312,6 +4579,7 @@ void rvk_vkCmdEndConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBuff
 }
 
 void rvk_vkCmdSetColorWriteEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables) {
+    AV_SCOPE("rvk_vkCmdSetColorWriteEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(attachmentCount);
@@ -4324,6 +4592,7 @@ void rvk_vkCmdSetColorWriteEnableEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetDepthBiasEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthBiasEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthBiasEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthBiasEnable);
@@ -4333,6 +4602,7 @@ void rvk_vkCmdSetDepthBiasEnableEXT(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdSetLogicOpEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkLogicOp logicOp) {
+    AV_SCOPE("rvk_vkCmdSetLogicOpEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(logicOp);
@@ -4342,6 +4612,7 @@ void rvk_vkCmdSetLogicOpEXT(::av::ClientTransport& t, VkCommandBuffer commandBuf
 }
 
 void rvk_vkCmdSetPatchControlPointsEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t patchControlPoints) {
+    AV_SCOPE("rvk_vkCmdSetPatchControlPointsEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(patchControlPoints);
@@ -4351,6 +4622,7 @@ void rvk_vkCmdSetPatchControlPointsEXT(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdSetPrimitiveRestartEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 primitiveRestartEnable) {
+    AV_SCOPE("rvk_vkCmdSetPrimitiveRestartEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(primitiveRestartEnable);
@@ -4360,6 +4632,7 @@ void rvk_vkCmdSetPrimitiveRestartEnableEXT(::av::ClientTransport& t, VkCommandBu
 }
 
 void rvk_vkCmdSetRasterizerDiscardEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 rasterizerDiscardEnable) {
+    AV_SCOPE("rvk_vkCmdSetRasterizerDiscardEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(rasterizerDiscardEnable);
@@ -4369,6 +4642,7 @@ void rvk_vkCmdSetRasterizerDiscardEnableEXT(::av::ClientTransport& t, VkCommandB
 }
 
 void rvk_vkCmdSetVertexInputEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t vertexBindingDescriptionCount, const VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions, uint32_t vertexAttributeDescriptionCount, const VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions) {
+    AV_SCOPE("rvk_vkCmdSetVertexInputEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(vertexBindingDescriptionCount);
@@ -4385,6 +4659,7 @@ void rvk_vkCmdSetVertexInputEXT(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 VkResult rvk_vkBuildAccelerationStructuresKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR deferredOperation, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkAccelerationStructureBuildRangeInfoKHR** ppBuildRangeInfos) {
+    AV_SCOPE("rvk_vkBuildAccelerationStructuresKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, deferredOperation);
@@ -4411,6 +4686,7 @@ VkResult rvk_vkBuildAccelerationStructuresKHR(::av::ClientTransport& t, VkDevice
 }
 
 void rvk_vkCmdBindShadersEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t stageCount, const VkShaderStageFlagBits* pStages, const VkShaderEXT* pShaders) {
+    AV_SCOPE("rvk_vkCmdBindShadersEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stageCount);
@@ -4430,6 +4706,7 @@ void rvk_vkCmdBindShadersEXT(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdBindVertexBuffers2EXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes, const VkDeviceSize* pStrides) {
+    AV_SCOPE("rvk_vkCmdBindVertexBuffers2EXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstBinding);
@@ -4460,6 +4737,7 @@ void rvk_vkCmdBindVertexBuffers2EXT(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdBuildAccelerationStructuresIndirectKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkDeviceAddress* pIndirectDeviceAddresses, const uint32_t* pIndirectStrides, const uint32_t** ppMaxPrimitiveCounts) {
+    AV_SCOPE("rvk_vkCmdBuildAccelerationStructuresIndirectKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(infoCount);
@@ -4484,6 +4762,7 @@ void rvk_vkCmdBuildAccelerationStructuresIndirectKHR(::av::ClientTransport& t, V
 }
 
 void rvk_vkCmdBuildAccelerationStructuresKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkAccelerationStructureBuildRangeInfoKHR** ppBuildRangeInfos) {
+    AV_SCOPE("rvk_vkCmdBuildAccelerationStructuresKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(infoCount);
@@ -4502,6 +4781,7 @@ void rvk_vkCmdBuildAccelerationStructuresKHR(::av::ClientTransport& t, VkCommand
 }
 
 void rvk_vkCmdCopyAccelerationStructureKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCmdCopyAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyAccelerationStructureInfoKHR(payload, *pInfo);
@@ -4511,6 +4791,7 @@ void rvk_vkCmdCopyAccelerationStructureKHR(::av::ClientTransport& t, VkCommandBu
 }
 
 void rvk_vkCmdCopyAccelerationStructureToMemoryKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCmdCopyAccelerationStructureToMemoryKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyAccelerationStructureToMemoryInfoKHR(payload, *pInfo);
@@ -4520,6 +4801,7 @@ void rvk_vkCmdCopyAccelerationStructureToMemoryKHR(::av::ClientTransport& t, VkC
 }
 
 void rvk_vkCmdCopyMemoryToAccelerationStructureKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCmdCopyMemoryToAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkCopyMemoryToAccelerationStructureInfoKHR(payload, *pInfo);
@@ -4529,6 +4811,7 @@ void rvk_vkCmdCopyMemoryToAccelerationStructureKHR(::av::ClientTransport& t, VkC
 }
 
 void rvk_vkCmdDrawMeshTasksEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+    AV_SCOPE("rvk_vkCmdDrawMeshTasksEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(groupCountX);
@@ -4540,6 +4823,7 @@ void rvk_vkCmdDrawMeshTasksEXT(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdDrawMeshTasksIndirectCountEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawMeshTasksIndirectCountEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -4554,6 +4838,7 @@ void rvk_vkCmdDrawMeshTasksIndirectCountEXT(::av::ClientTransport& t, VkCommandB
 }
 
 void rvk_vkCmdDrawMeshTasksIndirectEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32_t drawCount, uint32_t stride) {
+    AV_SCOPE("rvk_vkCmdDrawMeshTasksIndirectEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -4566,6 +4851,7 @@ void rvk_vkCmdDrawMeshTasksIndirectEXT(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdPushDescriptorSetKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t set, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites) {
+    AV_SCOPE("rvk_vkCmdPushDescriptorSetKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(pipelineBindPoint);
@@ -4581,6 +4867,7 @@ void rvk_vkCmdPushDescriptorSetKHR(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetAlphaToCoverageEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 alphaToCoverageEnable) {
+    AV_SCOPE("rvk_vkCmdSetAlphaToCoverageEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(alphaToCoverageEnable);
@@ -4590,6 +4877,7 @@ void rvk_vkCmdSetAlphaToCoverageEnableEXT(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetAlphaToOneEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 alphaToOneEnable) {
+    AV_SCOPE("rvk_vkCmdSetAlphaToOneEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(alphaToOneEnable);
@@ -4599,6 +4887,7 @@ void rvk_vkCmdSetAlphaToOneEnableEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetColorBlendAdvancedEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount, const VkColorBlendAdvancedEXT* pColorBlendAdvanced) {
+    AV_SCOPE("rvk_vkCmdSetColorBlendAdvancedEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstAttachment);
@@ -4612,6 +4901,7 @@ void rvk_vkCmdSetColorBlendAdvancedEXT(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdSetColorBlendEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount, const VkBool32* pColorBlendEnables) {
+    AV_SCOPE("rvk_vkCmdSetColorBlendEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstAttachment);
@@ -4625,6 +4915,7 @@ void rvk_vkCmdSetColorBlendEnableEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetColorBlendEquationEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount, const VkColorBlendEquationEXT* pColorBlendEquations) {
+    AV_SCOPE("rvk_vkCmdSetColorBlendEquationEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstAttachment);
@@ -4638,6 +4929,7 @@ void rvk_vkCmdSetColorBlendEquationEXT(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdSetColorWriteMaskEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstAttachment, uint32_t attachmentCount, const VkColorComponentFlags* pColorWriteMasks) {
+    AV_SCOPE("rvk_vkCmdSetColorWriteMaskEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstAttachment);
@@ -4651,6 +4943,7 @@ void rvk_vkCmdSetColorWriteMaskEXT(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetConservativeRasterizationModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkConservativeRasterizationModeEXT conservativeRasterizationMode) {
+    AV_SCOPE("rvk_vkCmdSetConservativeRasterizationModeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(conservativeRasterizationMode);
@@ -4660,6 +4953,7 @@ void rvk_vkCmdSetConservativeRasterizationModeEXT(::av::ClientTransport& t, VkCo
 }
 
 void rvk_vkCmdSetCoverageModulationModeNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCoverageModulationModeNV coverageModulationMode) {
+    AV_SCOPE("rvk_vkCmdSetCoverageModulationModeNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageModulationMode);
@@ -4669,6 +4963,7 @@ void rvk_vkCmdSetCoverageModulationModeNV(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetCoverageModulationTableEnableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 coverageModulationTableEnable) {
+    AV_SCOPE("rvk_vkCmdSetCoverageModulationTableEnableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageModulationTableEnable);
@@ -4678,6 +4973,7 @@ void rvk_vkCmdSetCoverageModulationTableEnableNV(::av::ClientTransport& t, VkCom
 }
 
 void rvk_vkCmdSetCoverageModulationTableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t coverageModulationTableCount, const float* pCoverageModulationTable) {
+    AV_SCOPE("rvk_vkCmdSetCoverageModulationTableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageModulationTableCount);
@@ -4690,6 +4986,7 @@ void rvk_vkCmdSetCoverageModulationTableNV(::av::ClientTransport& t, VkCommandBu
 }
 
 void rvk_vkCmdSetCoverageReductionModeNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCoverageReductionModeNV coverageReductionMode) {
+    AV_SCOPE("rvk_vkCmdSetCoverageReductionModeNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageReductionMode);
@@ -4699,6 +4996,7 @@ void rvk_vkCmdSetCoverageReductionModeNV(::av::ClientTransport& t, VkCommandBuff
 }
 
 void rvk_vkCmdSetCoverageToColorEnableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 coverageToColorEnable) {
+    AV_SCOPE("rvk_vkCmdSetCoverageToColorEnableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageToColorEnable);
@@ -4708,6 +5006,7 @@ void rvk_vkCmdSetCoverageToColorEnableNV(::av::ClientTransport& t, VkCommandBuff
 }
 
 void rvk_vkCmdSetCoverageToColorLocationNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t coverageToColorLocation) {
+    AV_SCOPE("rvk_vkCmdSetCoverageToColorLocationNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(coverageToColorLocation);
@@ -4717,6 +5016,7 @@ void rvk_vkCmdSetCoverageToColorLocationNV(::av::ClientTransport& t, VkCommandBu
 }
 
 void rvk_vkCmdSetCullModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCullModeFlags cullMode) {
+    AV_SCOPE("rvk_vkCmdSetCullModeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(cullMode);
@@ -4726,6 +5026,7 @@ void rvk_vkCmdSetCullModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBu
 }
 
 void rvk_vkCmdSetDepthBoundsTestEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthBoundsTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthBoundsTestEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthBoundsTestEnable);
@@ -4735,6 +5036,7 @@ void rvk_vkCmdSetDepthBoundsTestEnableEXT(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetDepthClampEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthClampEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthClampEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthClampEnable);
@@ -4744,6 +5046,7 @@ void rvk_vkCmdSetDepthClampEnableEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetDepthClampRangeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkDepthClampModeEXT depthClampMode, const VkDepthClampRangeEXT* pDepthClampRange) {
+    AV_SCOPE("rvk_vkCmdSetDepthClampRangeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthClampMode);
@@ -4754,6 +5057,7 @@ void rvk_vkCmdSetDepthClampRangeEXT(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdSetDepthClipEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthClipEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthClipEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthClipEnable);
@@ -4763,6 +5067,7 @@ void rvk_vkCmdSetDepthClipEnableEXT(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdSetDepthClipNegativeOneToOneEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 negativeOneToOne) {
+    AV_SCOPE("rvk_vkCmdSetDepthClipNegativeOneToOneEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(negativeOneToOne);
@@ -4772,6 +5077,7 @@ void rvk_vkCmdSetDepthClipNegativeOneToOneEXT(::av::ClientTransport& t, VkComman
 }
 
 void rvk_vkCmdSetDepthCompareOpEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkCompareOp depthCompareOp) {
+    AV_SCOPE("rvk_vkCmdSetDepthCompareOpEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthCompareOp);
@@ -4781,6 +5087,7 @@ void rvk_vkCmdSetDepthCompareOpEXT(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetDepthTestEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthTestEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthTestEnable);
@@ -4790,6 +5097,7 @@ void rvk_vkCmdSetDepthTestEnableEXT(::av::ClientTransport& t, VkCommandBuffer co
 }
 
 void rvk_vkCmdSetDepthWriteEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 depthWriteEnable) {
+    AV_SCOPE("rvk_vkCmdSetDepthWriteEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(depthWriteEnable);
@@ -4799,6 +5107,7 @@ void rvk_vkCmdSetDepthWriteEnableEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetExtraPrimitiveOverestimationSizeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, float extraPrimitiveOverestimationSize) {
+    AV_SCOPE("rvk_vkCmdSetExtraPrimitiveOverestimationSizeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(extraPrimitiveOverestimationSize);
@@ -4808,6 +5117,7 @@ void rvk_vkCmdSetExtraPrimitiveOverestimationSizeEXT(::av::ClientTransport& t, V
 }
 
 void rvk_vkCmdSetFragmentShadingRateKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkExtent2D* pFragmentSize, const VkFragmentShadingRateCombinerOpKHR* combinerOps) {
+    AV_SCOPE("rvk_vkCmdSetFragmentShadingRateKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkExtent2D(payload, *pFragmentSize);
@@ -4820,6 +5130,7 @@ void rvk_vkCmdSetFragmentShadingRateKHR(::av::ClientTransport& t, VkCommandBuffe
 }
 
 void rvk_vkCmdSetFrontFaceEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkFrontFace frontFace) {
+    AV_SCOPE("rvk_vkCmdSetFrontFaceEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(frontFace);
@@ -4829,6 +5140,7 @@ void rvk_vkCmdSetFrontFaceEXT(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdSetLineRasterizationModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkLineRasterizationModeEXT lineRasterizationMode) {
+    AV_SCOPE("rvk_vkCmdSetLineRasterizationModeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(lineRasterizationMode);
@@ -4838,6 +5150,7 @@ void rvk_vkCmdSetLineRasterizationModeEXT(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetLineStippleEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t lineStippleFactor, uint16_t lineStipplePattern) {
+    AV_SCOPE("rvk_vkCmdSetLineStippleEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(lineStippleFactor);
@@ -4848,6 +5161,7 @@ void rvk_vkCmdSetLineStippleEXT(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdSetLineStippleEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 stippledLineEnable) {
+    AV_SCOPE("rvk_vkCmdSetLineStippleEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stippledLineEnable);
@@ -4857,6 +5171,7 @@ void rvk_vkCmdSetLineStippleEnableEXT(::av::ClientTransport& t, VkCommandBuffer 
 }
 
 void rvk_vkCmdSetLogicOpEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 logicOpEnable) {
+    AV_SCOPE("rvk_vkCmdSetLogicOpEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(logicOpEnable);
@@ -4866,6 +5181,7 @@ void rvk_vkCmdSetLogicOpEnableEXT(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 void rvk_vkCmdSetPolygonModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPolygonMode polygonMode) {
+    AV_SCOPE("rvk_vkCmdSetPolygonModeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(polygonMode);
@@ -4875,6 +5191,7 @@ void rvk_vkCmdSetPolygonModeEXT(::av::ClientTransport& t, VkCommandBuffer comman
 }
 
 void rvk_vkCmdSetPrimitiveTopologyEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPrimitiveTopology primitiveTopology) {
+    AV_SCOPE("rvk_vkCmdSetPrimitiveTopologyEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(primitiveTopology);
@@ -4884,6 +5201,7 @@ void rvk_vkCmdSetPrimitiveTopologyEXT(::av::ClientTransport& t, VkCommandBuffer 
 }
 
 void rvk_vkCmdSetProvokingVertexModeEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkProvokingVertexModeEXT provokingVertexMode) {
+    AV_SCOPE("rvk_vkCmdSetProvokingVertexModeEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(provokingVertexMode);
@@ -4893,6 +5211,7 @@ void rvk_vkCmdSetProvokingVertexModeEXT(::av::ClientTransport& t, VkCommandBuffe
 }
 
 void rvk_vkCmdSetRasterizationSamplesEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkSampleCountFlagBits rasterizationSamples) {
+    AV_SCOPE("rvk_vkCmdSetRasterizationSamplesEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(rasterizationSamples);
@@ -4902,6 +5221,7 @@ void rvk_vkCmdSetRasterizationSamplesEXT(::av::ClientTransport& t, VkCommandBuff
 }
 
 void rvk_vkCmdSetRasterizationStreamEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t rasterizationStream) {
+    AV_SCOPE("rvk_vkCmdSetRasterizationStreamEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(rasterizationStream);
@@ -4911,6 +5231,7 @@ void rvk_vkCmdSetRasterizationStreamEXT(::av::ClientTransport& t, VkCommandBuffe
 }
 
 void rvk_vkCmdSetRayTracingPipelineStackSizeKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t pipelineStackSize) {
+    AV_SCOPE("rvk_vkCmdSetRayTracingPipelineStackSizeKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(pipelineStackSize);
@@ -4920,6 +5241,7 @@ void rvk_vkCmdSetRayTracingPipelineStackSizeKHR(::av::ClientTransport& t, VkComm
 }
 
 void rvk_vkCmdSetRepresentativeFragmentTestEnableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 representativeFragmentTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetRepresentativeFragmentTestEnableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(representativeFragmentTestEnable);
@@ -4929,6 +5251,7 @@ void rvk_vkCmdSetRepresentativeFragmentTestEnableNV(::av::ClientTransport& t, Vk
 }
 
 void rvk_vkCmdSetSampleLocationsEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 sampleLocationsEnable) {
+    AV_SCOPE("rvk_vkCmdSetSampleLocationsEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(sampleLocationsEnable);
@@ -4938,6 +5261,7 @@ void rvk_vkCmdSetSampleLocationsEnableEXT(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetSampleMaskEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkSampleCountFlagBits samples, const VkSampleMask* pSampleMask) {
+    AV_SCOPE("rvk_vkCmdSetSampleMaskEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(samples);
@@ -4950,6 +5274,7 @@ void rvk_vkCmdSetSampleMaskEXT(::av::ClientTransport& t, VkCommandBuffer command
 }
 
 void rvk_vkCmdSetScissorWithCountEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t scissorCount, const VkRect2D* pScissors) {
+    AV_SCOPE("rvk_vkCmdSetScissorWithCountEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(scissorCount);
@@ -4962,6 +5287,7 @@ void rvk_vkCmdSetScissorWithCountEXT(::av::ClientTransport& t, VkCommandBuffer c
 }
 
 void rvk_vkCmdSetShadingRateImageEnableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 shadingRateImageEnable) {
+    AV_SCOPE("rvk_vkCmdSetShadingRateImageEnableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(shadingRateImageEnable);
@@ -4971,6 +5297,7 @@ void rvk_vkCmdSetShadingRateImageEnableNV(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetStencilOpEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, VkStencilOp failOp, VkStencilOp passOp, VkStencilOp depthFailOp, VkCompareOp compareOp) {
+    AV_SCOPE("rvk_vkCmdSetStencilOpEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(faceMask);
@@ -4984,6 +5311,7 @@ void rvk_vkCmdSetStencilOpEXT(::av::ClientTransport& t, VkCommandBuffer commandB
 }
 
 void rvk_vkCmdSetStencilTestEnableEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 stencilTestEnable) {
+    AV_SCOPE("rvk_vkCmdSetStencilTestEnableEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(stencilTestEnable);
@@ -4993,6 +5321,7 @@ void rvk_vkCmdSetStencilTestEnableEXT(::av::ClientTransport& t, VkCommandBuffer 
 }
 
 void rvk_vkCmdSetTessellationDomainOriginEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkTessellationDomainOrigin domainOrigin) {
+    AV_SCOPE("rvk_vkCmdSetTessellationDomainOriginEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(domainOrigin);
@@ -5002,6 +5331,7 @@ void rvk_vkCmdSetTessellationDomainOriginEXT(::av::ClientTransport& t, VkCommand
 }
 
 void rvk_vkCmdSetViewportSwizzleNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewportSwizzleNV* pViewportSwizzles) {
+    AV_SCOPE("rvk_vkCmdSetViewportSwizzleNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstViewport);
@@ -5015,6 +5345,7 @@ void rvk_vkCmdSetViewportSwizzleNV(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdSetViewportWScalingEnableNV(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBool32 viewportWScalingEnable) {
+    AV_SCOPE("rvk_vkCmdSetViewportWScalingEnableNV");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(viewportWScalingEnable);
@@ -5024,6 +5355,7 @@ void rvk_vkCmdSetViewportWScalingEnableNV(::av::ClientTransport& t, VkCommandBuf
 }
 
 void rvk_vkCmdSetViewportWithCountEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t viewportCount, const VkViewport* pViewports) {
+    AV_SCOPE("rvk_vkCmdSetViewportWithCountEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(viewportCount);
@@ -5036,6 +5368,7 @@ void rvk_vkCmdSetViewportWithCountEXT(::av::ClientTransport& t, VkCommandBuffer 
 }
 
 void rvk_vkCmdTraceRaysIndirectKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, VkDeviceAddress indirectDeviceAddress) {
+    AV_SCOPE("rvk_vkCmdTraceRaysIndirectKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkStridedDeviceAddressRegionKHR(payload, *pRaygenShaderBindingTable);
@@ -5049,6 +5382,7 @@ void rvk_vkCmdTraceRaysIndirectKHR(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdTraceRaysKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth) {
+    AV_SCOPE("rvk_vkCmdTraceRaysKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkStridedDeviceAddressRegionKHR(payload, *pRaygenShaderBindingTable);
@@ -5064,6 +5398,7 @@ void rvk_vkCmdTraceRaysKHR(::av::ClientTransport& t, VkCommandBuffer commandBuff
 }
 
 void rvk_vkCmdWriteAccelerationStructuresPropertiesKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t accelerationStructureCount, const VkAccelerationStructureKHR* pAccelerationStructures, VkQueryType queryType, VkQueryPool queryPool, uint32_t firstQuery) {
+    AV_SCOPE("rvk_vkCmdWriteAccelerationStructuresPropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(accelerationStructureCount);
@@ -5079,6 +5414,7 @@ void rvk_vkCmdWriteAccelerationStructuresPropertiesKHR(::av::ClientTransport& t,
 }
 
 VkResult rvk_vkCopyAccelerationStructureKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR deferredOperation, const VkCopyAccelerationStructureInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCopyAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, deferredOperation);
@@ -5096,6 +5432,7 @@ VkResult rvk_vkCopyAccelerationStructureKHR(::av::ClientTransport& t, VkDevice d
 }
 
 VkResult rvk_vkCopyAccelerationStructureToMemoryKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR deferredOperation, const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCopyAccelerationStructureToMemoryKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, deferredOperation);
@@ -5113,6 +5450,7 @@ VkResult rvk_vkCopyAccelerationStructureToMemoryKHR(::av::ClientTransport& t, Vk
 }
 
 VkResult rvk_vkCopyImageToImageEXT(::av::ClientTransport& t, VkDevice device, const VkCopyImageToImageInfo* pCopyImageToImageInfo) {
+    AV_SCOPE("rvk_vkCopyImageToImageEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCopyImageToImageInfo(payload, *pCopyImageToImageInfo);
@@ -5129,6 +5467,7 @@ VkResult rvk_vkCopyImageToImageEXT(::av::ClientTransport& t, VkDevice device, co
 }
 
 VkResult rvk_vkCopyImageToMemoryEXT(::av::ClientTransport& t, VkDevice device, const VkCopyImageToMemoryInfo* pCopyImageToMemoryInfo) {
+    AV_SCOPE("rvk_vkCopyImageToMemoryEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCopyImageToMemoryInfo(payload, *pCopyImageToMemoryInfo);
@@ -5145,6 +5484,7 @@ VkResult rvk_vkCopyImageToMemoryEXT(::av::ClientTransport& t, VkDevice device, c
 }
 
 VkResult rvk_vkCopyMemoryToAccelerationStructureKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR deferredOperation, const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkCopyMemoryToAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, deferredOperation);
@@ -5162,6 +5502,7 @@ VkResult rvk_vkCopyMemoryToAccelerationStructureKHR(::av::ClientTransport& t, Vk
 }
 
 VkResult rvk_vkCopyMemoryToImageEXT(::av::ClientTransport& t, VkDevice device, const VkCopyMemoryToImageInfo* pCopyMemoryToImageInfo) {
+    AV_SCOPE("rvk_vkCopyMemoryToImageEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkCopyMemoryToImageInfo(payload, *pCopyMemoryToImageInfo);
@@ -5178,6 +5519,7 @@ VkResult rvk_vkCopyMemoryToImageEXT(::av::ClientTransport& t, VkDevice device, c
 }
 
 VkResult rvk_vkCreateAccelerationStructureKHR(::av::ClientTransport& t, VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkAccelerationStructureKHR* pAccelerationStructure) {
+    AV_SCOPE("rvk_vkCreateAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkAccelerationStructureCreateInfoKHR(payload, *pCreateInfo);
@@ -5198,6 +5540,7 @@ VkResult rvk_vkCreateAccelerationStructureKHR(::av::ClientTransport& t, VkDevice
 }
 
 VkResult rvk_vkCreateDeferredOperationKHR(::av::ClientTransport& t, VkDevice device, const VkAllocationCallbacks* pAllocator, VkDeferredOperationKHR* pDeferredOperation) {
+    AV_SCOPE("rvk_vkCreateDeferredOperationKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     (void)pAllocator;  // VkAllocationCallbacks not crossed over the wire
@@ -5217,6 +5560,7 @@ VkResult rvk_vkCreateDeferredOperationKHR(::av::ClientTransport& t, VkDevice dev
 }
 
 VkResult rvk_vkCreateRayTracingPipelinesKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) {
+    AV_SCOPE("rvk_vkCreateRayTracingPipelinesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, deferredOperation);
@@ -5244,6 +5588,7 @@ VkResult rvk_vkCreateRayTracingPipelinesKHR(::av::ClientTransport& t, VkDevice d
 }
 
 VkResult rvk_vkCreateShadersEXT(::av::ClientTransport& t, VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkShaderEXT* pShaders) {
+    AV_SCOPE("rvk_vkCreateShadersEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(createInfoCount);
@@ -5269,6 +5614,7 @@ VkResult rvk_vkCreateShadersEXT(::av::ClientTransport& t, VkDevice device, uint3
 }
 
 VkResult rvk_vkDeferredOperationJoinKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR operation) {
+    AV_SCOPE("rvk_vkDeferredOperationJoinKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, operation);
@@ -5285,6 +5631,7 @@ VkResult rvk_vkDeferredOperationJoinKHR(::av::ClientTransport& t, VkDevice devic
 }
 
 void rvk_vkDestroyAccelerationStructureKHR(::av::ClientTransport& t, VkDevice device, VkAccelerationStructureKHR accelerationStructure, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyAccelerationStructureKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkAccelerationStructureKHR(payload, accelerationStructure);
@@ -5295,6 +5642,7 @@ void rvk_vkDestroyAccelerationStructureKHR(::av::ClientTransport& t, VkDevice de
 }
 
 void rvk_vkDestroyDeferredOperationKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR operation, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyDeferredOperationKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, operation);
@@ -5305,6 +5653,7 @@ void rvk_vkDestroyDeferredOperationKHR(::av::ClientTransport& t, VkDevice device
 }
 
 void rvk_vkDestroyShaderEXT(::av::ClientTransport& t, VkDevice device, VkShaderEXT shader, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyShaderEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkShaderEXT(payload, shader);
@@ -5315,6 +5664,7 @@ void rvk_vkDestroyShaderEXT(::av::ClientTransport& t, VkDevice device, VkShaderE
 }
 
 void rvk_vkGetAccelerationStructureBuildSizesKHR(::av::ClientTransport& t, VkDevice device, VkAccelerationStructureBuildTypeKHR buildType, const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo) {
+    AV_SCOPE("rvk_vkGetAccelerationStructureBuildSizesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(buildType);
@@ -5343,6 +5693,7 @@ void rvk_vkGetAccelerationStructureBuildSizesKHR(::av::ClientTransport& t, VkDev
 }
 
 VkDeviceAddress rvk_vkGetAccelerationStructureDeviceAddressKHR(::av::ClientTransport& t, VkDevice device, const VkAccelerationStructureDeviceAddressInfoKHR* pInfo) {
+    AV_SCOPE("rvk_vkGetAccelerationStructureDeviceAddressKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkAccelerationStructureDeviceAddressInfoKHR(payload, *pInfo);
@@ -5359,6 +5710,7 @@ VkDeviceAddress rvk_vkGetAccelerationStructureDeviceAddressKHR(::av::ClientTrans
 }
 
 uint32_t rvk_vkGetDeferredOperationMaxConcurrencyKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR operation) {
+    AV_SCOPE("rvk_vkGetDeferredOperationMaxConcurrencyKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, operation);
@@ -5375,6 +5727,7 @@ uint32_t rvk_vkGetDeferredOperationMaxConcurrencyKHR(::av::ClientTransport& t, V
 }
 
 VkResult rvk_vkGetDeferredOperationResultKHR(::av::ClientTransport& t, VkDevice device, VkDeferredOperationKHR operation) {
+    AV_SCOPE("rvk_vkGetDeferredOperationResultKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeferredOperationKHR(payload, operation);
@@ -5391,6 +5744,7 @@ VkResult rvk_vkGetDeferredOperationResultKHR(::av::ClientTransport& t, VkDevice 
 }
 
 void rvk_vkGetDeviceAccelerationStructureCompatibilityKHR(::av::ClientTransport& t, VkDevice device, const VkAccelerationStructureVersionInfoKHR* pVersionInfo, VkAccelerationStructureCompatibilityKHR* pCompatibility) {
+    AV_SCOPE("rvk_vkGetDeviceAccelerationStructureCompatibilityKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkAccelerationStructureVersionInfoKHR(payload, *pVersionInfo);
@@ -5409,6 +5763,7 @@ void rvk_vkGetDeviceAccelerationStructureCompatibilityKHR(::av::ClientTransport&
 }
 
 void rvk_vkGetImageSubresourceLayout2EXT(::av::ClientTransport& t, VkDevice device, VkImage image, const VkImageSubresource2* pSubresource, VkSubresourceLayout2* pLayout) {
+    AV_SCOPE("rvk_vkGetImageSubresourceLayout2EXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -5430,6 +5785,7 @@ void rvk_vkGetImageSubresourceLayout2EXT(::av::ClientTransport& t, VkDevice devi
 }
 
 VkResult rvk_vkGetPhysicalDeviceFragmentShadingRatesKHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pFragmentShadingRateCount, VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceFragmentShadingRatesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pFragmentShadingRates != nullptr ? 1 : 0;
@@ -5465,6 +5821,7 @@ VkResult rvk_vkGetPhysicalDeviceFragmentShadingRatesKHR(::av::ClientTransport& t
 }
 
 VkResult rvk_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(::av::ClientTransport& t, VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData) {
+    AV_SCOPE("rvk_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipeline(payload, pipeline);
@@ -5489,6 +5846,7 @@ VkResult rvk_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(::av::ClientTrans
 }
 
 VkResult rvk_vkGetRayTracingShaderGroupHandlesKHR(::av::ClientTransport& t, VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData) {
+    AV_SCOPE("rvk_vkGetRayTracingShaderGroupHandlesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipeline(payload, pipeline);
@@ -5513,6 +5871,7 @@ VkResult rvk_vkGetRayTracingShaderGroupHandlesKHR(::av::ClientTransport& t, VkDe
 }
 
 VkDeviceSize rvk_vkGetRayTracingShaderGroupStackSizeKHR(::av::ClientTransport& t, VkDevice device, VkPipeline pipeline, uint32_t group, VkShaderGroupShaderKHR groupShader) {
+    AV_SCOPE("rvk_vkGetRayTracingShaderGroupStackSizeKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipeline(payload, pipeline);
@@ -5531,6 +5890,7 @@ VkDeviceSize rvk_vkGetRayTracingShaderGroupStackSizeKHR(::av::ClientTransport& t
 }
 
 VkResult rvk_vkTransitionImageLayoutEXT(::av::ClientTransport& t, VkDevice device, uint32_t transitionCount, const VkHostImageLayoutTransitionInfo* pTransitions) {
+    AV_SCOPE("rvk_vkTransitionImageLayoutEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(transitionCount);
@@ -5550,6 +5910,7 @@ VkResult rvk_vkTransitionImageLayoutEXT(::av::ClientTransport& t, VkDevice devic
 }
 
 VkResult rvk_vkWriteAccelerationStructuresPropertiesKHR(::av::ClientTransport& t, VkDevice device, uint32_t accelerationStructureCount, const VkAccelerationStructureKHR* pAccelerationStructures, VkQueryType queryType, size_t dataSize, void* pData, size_t stride) {
+    AV_SCOPE("rvk_vkWriteAccelerationStructuresPropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(accelerationStructureCount);
@@ -5577,6 +5938,7 @@ VkResult rvk_vkWriteAccelerationStructuresPropertiesKHR(::av::ClientTransport& t
 }
 
 VkResult rvk_vkGetCalibratedTimestampsEXT(::av::ClientTransport& t, VkDevice device, uint32_t timestampCount, const VkCalibratedTimestampInfoKHR* pTimestampInfos, uint64_t* pTimestamps, uint64_t* pMaxDeviation) {
+    AV_SCOPE("rvk_vkGetCalibratedTimestampsEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(timestampCount);
@@ -5604,6 +5966,7 @@ VkResult rvk_vkGetCalibratedTimestampsEXT(::av::ClientTransport& t, VkDevice dev
 }
 
 VkResult rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, uint32_t* pTimeDomainCount, VkTimeDomainKHR* pTimeDomains) {
+    AV_SCOPE("rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkPhysicalDevice(payload, physicalDevice);
     const uint8_t array_present = pTimeDomains != nullptr ? 1 : 0;
@@ -5639,6 +6002,7 @@ VkResult rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(::av::ClientTranspor
 }
 
 void rvk_vkCmdSetRenderingAttachmentLocationsKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderingAttachmentLocationInfo* pLocationInfo) {
+    AV_SCOPE("rvk_vkCmdSetRenderingAttachmentLocationsKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderingAttachmentLocationInfo(payload, *pLocationInfo);
@@ -5648,6 +6012,7 @@ void rvk_vkCmdSetRenderingAttachmentLocationsKHR(::av::ClientTransport& t, VkCom
 }
 
 void rvk_vkCmdSetRenderingInputAttachmentIndicesKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderingInputAttachmentIndexInfo* pInputAttachmentIndexInfo) {
+    AV_SCOPE("rvk_vkCmdSetRenderingInputAttachmentIndicesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkRenderingInputAttachmentIndexInfo(payload, *pInputAttachmentIndexInfo);
@@ -5657,6 +6022,7 @@ void rvk_vkCmdSetRenderingInputAttachmentIndicesKHR(::av::ClientTransport& t, Vk
 }
 
 void rvk_vkCmdBindIndexBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkIndexType indexType) {
+    AV_SCOPE("rvk_vkCmdBindIndexBuffer2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkBuffer(payload, buffer);
@@ -5669,6 +6035,7 @@ void rvk_vkCmdBindIndexBuffer2KHR(::av::ClientTransport& t, VkCommandBuffer comm
 }
 
 VkResult rvk_vkCreatePipelineBinariesKHR(::av::ClientTransport& t, VkDevice device, const VkPipelineBinaryCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineBinaryHandlesInfoKHR* pBinaries) {
+    AV_SCOPE("rvk_vkCreatePipelineBinariesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineBinaryCreateInfoKHR(payload, *pCreateInfo);
@@ -5693,6 +6060,7 @@ VkResult rvk_vkCreatePipelineBinariesKHR(::av::ClientTransport& t, VkDevice devi
 }
 
 void rvk_vkDestroyPipelineBinaryKHR(::av::ClientTransport& t, VkDevice device, VkPipelineBinaryKHR pipelineBinary, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkDestroyPipelineBinaryKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineBinaryKHR(payload, pipelineBinary);
@@ -5703,6 +6071,7 @@ void rvk_vkDestroyPipelineBinaryKHR(::av::ClientTransport& t, VkDevice device, V
 }
 
 void rvk_vkGetDeviceImageSubresourceLayoutKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceImageSubresourceInfo* pInfo, VkSubresourceLayout2* pLayout) {
+    AV_SCOPE("rvk_vkGetDeviceImageSubresourceLayoutKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceImageSubresourceInfo(payload, *pInfo);
@@ -5723,6 +6092,7 @@ void rvk_vkGetDeviceImageSubresourceLayoutKHR(::av::ClientTransport& t, VkDevice
 }
 
 void rvk_vkGetImageSubresourceLayout2KHR(::av::ClientTransport& t, VkDevice device, VkImage image, const VkImageSubresource2* pSubresource, VkSubresourceLayout2* pLayout) {
+    AV_SCOPE("rvk_vkGetImageSubresourceLayout2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImage(payload, image);
@@ -5744,6 +6114,7 @@ void rvk_vkGetImageSubresourceLayout2KHR(::av::ClientTransport& t, VkDevice devi
 }
 
 VkResult rvk_vkGetPipelineKeyKHR(::av::ClientTransport& t, VkDevice device, const VkPipelineCreateInfoKHR* pPipelineCreateInfo, VkPipelineBinaryKeyKHR* pPipelineKey) {
+    AV_SCOPE("rvk_vkGetPipelineKeyKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkPipelineCreateInfoKHR(payload, *pPipelineCreateInfo);
@@ -5765,6 +6136,7 @@ VkResult rvk_vkGetPipelineKeyKHR(::av::ClientTransport& t, VkDevice device, cons
 }
 
 void rvk_vkGetRenderingAreaGranularityKHR(::av::ClientTransport& t, VkDevice device, const VkRenderingAreaInfo* pRenderingAreaInfo, VkExtent2D* pGranularity) {
+    AV_SCOPE("rvk_vkGetRenderingAreaGranularityKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkRenderingAreaInfo(payload, *pRenderingAreaInfo);
@@ -5783,6 +6155,7 @@ void rvk_vkGetRenderingAreaGranularityKHR(::av::ClientTransport& t, VkDevice dev
 }
 
 VkResult rvk_vkReleaseCapturedPipelineDataKHR(::av::ClientTransport& t, VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo, const VkAllocationCallbacks* pAllocator) {
+    AV_SCOPE("rvk_vkReleaseCapturedPipelineDataKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkReleaseCapturedPipelineDataInfoKHR(payload, *pInfo);
@@ -5800,6 +6173,7 @@ VkResult rvk_vkReleaseCapturedPipelineDataKHR(::av::ClientTransport& t, VkDevice
 }
 
 void rvk_vkCmdBeginQueryIndexedEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, VkQueryControlFlags flags, uint32_t index) {
+    AV_SCOPE("rvk_vkCmdBeginQueryIndexedEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -5812,6 +6186,7 @@ void rvk_vkCmdBeginQueryIndexedEXT(::av::ClientTransport& t, VkCommandBuffer com
 }
 
 void rvk_vkCmdBeginTransformFeedbackEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstCounterBuffer, uint32_t counterBufferCount, const VkBuffer* pCounterBuffers, const VkDeviceSize* pCounterBufferOffsets) {
+    AV_SCOPE("rvk_vkCmdBeginTransformFeedbackEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstCounterBuffer);
@@ -5832,6 +6207,7 @@ void rvk_vkCmdBeginTransformFeedbackEXT(::av::ClientTransport& t, VkCommandBuffe
 }
 
 void rvk_vkCmdBindTransformFeedbackBuffersEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes) {
+    AV_SCOPE("rvk_vkCmdBindTransformFeedbackBuffersEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstBinding);
@@ -5855,6 +6231,7 @@ void rvk_vkCmdBindTransformFeedbackBuffersEXT(::av::ClientTransport& t, VkComman
 }
 
 void rvk_vkCmdDrawIndirectByteCountEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t instanceCount, uint32_t firstInstance, VkBuffer counterBuffer, VkDeviceSize counterBufferOffset, uint32_t counterOffset, uint32_t vertexStride) {
+    AV_SCOPE("rvk_vkCmdDrawIndirectByteCountEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(instanceCount);
@@ -5869,6 +6246,7 @@ void rvk_vkCmdDrawIndirectByteCountEXT(::av::ClientTransport& t, VkCommandBuffer
 }
 
 void rvk_vkCmdEndQueryIndexedEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, uint32_t index) {
+    AV_SCOPE("rvk_vkCmdEndQueryIndexedEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkQueryPool(payload, queryPool);
@@ -5880,6 +6258,7 @@ void rvk_vkCmdEndQueryIndexedEXT(::av::ClientTransport& t, VkCommandBuffer comma
 }
 
 void rvk_vkCmdEndTransformFeedbackEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t firstCounterBuffer, uint32_t counterBufferCount, const VkBuffer* pCounterBuffers, const VkDeviceSize* pCounterBufferOffsets) {
+    AV_SCOPE("rvk_vkCmdEndTransformFeedbackEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkCommandBuffer(payload, commandBuffer);
     payload.write_pod(firstCounterBuffer);
@@ -5900,6 +6279,7 @@ void rvk_vkCmdEndTransformFeedbackEXT(::av::ClientTransport& t, VkCommandBuffer 
 }
 
 void rvk_vkSetDeviceMemoryPriorityEXT(::av::ClientTransport& t, VkDevice device, VkDeviceMemory memory, float priority) {
+    AV_SCOPE("rvk_vkSetDeviceMemoryPriorityEXT");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkDeviceMemory(payload, memory);
@@ -5910,6 +6290,7 @@ void rvk_vkSetDeviceMemoryPriorityEXT(::av::ClientTransport& t, VkDevice device,
 }
 
 VkResult rvk_vkGetFenceFdKHR(::av::ClientTransport& t, VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) {
+    AV_SCOPE("rvk_vkGetFenceFdKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkFenceGetFdInfoKHR(payload, *pGetFdInfo);
@@ -5929,6 +6310,7 @@ VkResult rvk_vkGetFenceFdKHR(::av::ClientTransport& t, VkDevice device, const Vk
 }
 
 VkResult rvk_vkGetMemoryFdKHR(::av::ClientTransport& t, VkDevice device, const VkMemoryGetFdInfoKHR* pGetFdInfo, int* pFd) {
+    AV_SCOPE("rvk_vkGetMemoryFdKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkMemoryGetFdInfoKHR(payload, *pGetFdInfo);
@@ -5948,6 +6330,7 @@ VkResult rvk_vkGetMemoryFdKHR(::av::ClientTransport& t, VkDevice device, const V
 }
 
 VkResult rvk_vkGetMemoryFdPropertiesKHR(::av::ClientTransport& t, VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, int fd, VkMemoryFdPropertiesKHR* pMemoryFdProperties) {
+    AV_SCOPE("rvk_vkGetMemoryFdPropertiesKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     payload.write_pod(handleType);
@@ -5970,6 +6353,7 @@ VkResult rvk_vkGetMemoryFdPropertiesKHR(::av::ClientTransport& t, VkDevice devic
 }
 
 VkResult rvk_vkGetSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) {
+    AV_SCOPE("rvk_vkGetSemaphoreFdKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkSemaphoreGetFdInfoKHR(payload, *pGetFdInfo);
@@ -5989,6 +6373,7 @@ VkResult rvk_vkGetSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, cons
 }
 
 VkResult rvk_vkImportFenceFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) {
+    AV_SCOPE("rvk_vkImportFenceFdKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImportFenceFdInfoKHR(payload, *pImportFenceFdInfo);
@@ -6005,6 +6390,7 @@ VkResult rvk_vkImportFenceFdKHR(::av::ClientTransport& t, VkDevice device, const
 }
 
 VkResult rvk_vkImportSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) {
+    AV_SCOPE("rvk_vkImportSemaphoreFdKHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkImportSemaphoreFdInfoKHR(payload, *pImportSemaphoreFdInfo);
@@ -6021,6 +6407,7 @@ VkResult rvk_vkImportSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, c
 }
 
 VkResult rvk_vkUnmapMemory2KHR(::av::ClientTransport& t, VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo) {
+    AV_SCOPE("rvk_vkUnmapMemory2KHR");
     ::av::WireWriter payload = t.request_writer();
     serialize_VkDevice(payload, device);
     serialize_VkMemoryUnmapInfo(payload, *pMemoryUnmapInfo);

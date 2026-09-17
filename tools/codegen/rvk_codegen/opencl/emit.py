@@ -741,6 +741,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "proto/client_transport.hpp"', "",
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
+         '#include "core/trace/function_scope.hpp"',
          '#include "proto/sync_call_scope.hpp"',
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
@@ -752,6 +753,8 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         sig = _client_signature(reg, cmd)
         h.append(f"{sig};")
         c.append(f"{sig} {{")
+        # One trace scope per command sent (docs/trace.md).
+        c.append(f'    AV_SCOPE("rvk_{cmd.name}");')
         c.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode_param(reg, cmd, p, c)
@@ -1080,7 +1083,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    virtual void released(HandleKind kind, void* object) = 0;", ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
          "#include <stddef.h>", "#include <stdint.h>", "",
-         '#include "cl_protocol_ids.h"', "",
+         '#include "cl_protocol_ids.h"',
+         '#include "core/trace/function_scope.hpp"', "",
          "namespace av::clproto {", ""] + SIZE_HELPERS
 
     for cmd in reg.commands.values():
@@ -1090,6 +1094,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                  "::av::WireReader& r,")
         c.append(f"{' ' * (len(cmd.name) + 19)}::av::WireWriter& reply, "
                  "::av::WireArena& arena) {")
+        # One trace scope per decoded command (docs/trace.md).
+        c.append(f'    AV_SCOPE("server:{cmd.name}");')
         c.append("    (void)r;")
         c.append("    (void)reply;")
         c.append("    (void)arena;")

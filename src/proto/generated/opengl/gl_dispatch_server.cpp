@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "core/trace/function_scope.hpp"
 #include "gl_protocol_ids.h"
 #include "gl_sizes.h"
 
@@ -252,6 +253,7 @@ static bool pixel_map_values(const RealGl& rvk_gl, GLenum map, uint64_t& values)
 }
 
 static bool decode_glActiveShaderProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glActiveShaderProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -265,6 +267,7 @@ static bool decode_glActiveShaderProgram(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glActiveTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glActiveTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -275,6 +278,7 @@ static bool decode_glActiveTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glAttachShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glAttachShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -288,6 +292,7 @@ static bool decode_glAttachShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glBeginConditionalRender(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBeginConditionalRender");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -301,6 +306,7 @@ static bool decode_glBeginConditionalRender(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glBeginQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBeginQuery");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -314,6 +320,7 @@ static bool decode_glBeginQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glBeginQueryIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBeginQueryIndexed");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -330,6 +337,7 @@ static bool decode_glBeginQueryIndexed(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glBeginTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBeginTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum primitiveMode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -340,6 +348,7 @@ static bool decode_glBeginTransformFeedback(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glBindAttribLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindAttribLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -373,6 +382,7 @@ static bool decode_glBindAttribLocation(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glBindBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -386,6 +396,7 @@ static bool decode_glBindBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glBindBufferBase(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindBufferBase");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -402,6 +413,7 @@ static bool decode_glBindBufferBase(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glBindBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindBufferRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -424,6 +436,7 @@ static bool decode_glBindBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBindBuffersBase(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindBuffersBase");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -473,6 +486,7 @@ static bool decode_glBindBuffersBase(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBindBuffersRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindBuffersRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -588,6 +602,7 @@ static bool decode_glBindBuffersRange(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glBindFragDataLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindFragDataLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -621,6 +636,7 @@ static bool decode_glBindFragDataLocation(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glBindFragDataLocationIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindFragDataLocationIndexed");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -657,6 +673,7 @@ static bool decode_glBindFragDataLocationIndexed(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glBindFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -670,6 +687,7 @@ static bool decode_glBindFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBindImageTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindImageTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint unit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -698,6 +716,7 @@ static bool decode_glBindImageTexture(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glBindImageTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindImageTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -744,6 +763,7 @@ static bool decode_glBindImageTextures(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glBindProgramPipeline(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindProgramPipeline");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -754,6 +774,7 @@ static bool decode_glBindProgramPipeline(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glBindRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindRenderbuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -767,6 +788,7 @@ static bool decode_glBindRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glBindSampler(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindSampler");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint unit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -780,6 +802,7 @@ static bool decode_glBindSampler(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glBindSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindSamplers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -826,6 +849,7 @@ static bool decode_glBindSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glBindTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -839,6 +863,7 @@ static bool decode_glBindTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glBindTextureUnit(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindTextureUnit");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint unit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -852,6 +877,7 @@ static bool decode_glBindTextureUnit(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBindTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -898,6 +924,7 @@ static bool decode_glBindTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glBindTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -911,6 +938,7 @@ static bool decode_glBindTransformFeedback(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glBindVertexArray(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindVertexArray");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -921,6 +949,7 @@ static bool decode_glBindVertexArray(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBindVertexBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindVertexBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint bindingindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -940,6 +969,7 @@ static bool decode_glBindVertexBuffer(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glBindVertexBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindVertexBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1052,6 +1082,7 @@ static bool decode_glBindVertexBuffers(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glBlendColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendColor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -1067,6 +1098,7 @@ static bool decode_glBlendColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glBlendEquation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendEquation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1077,6 +1109,7 @@ static bool decode_glBlendEquation(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glBlendEquationSeparate(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendEquationSeparate");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum modeRGB{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1090,6 +1123,7 @@ static bool decode_glBlendEquationSeparate(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glBlendEquationSeparatei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendEquationSeparatei");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buf{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1106,6 +1140,7 @@ static bool decode_glBlendEquationSeparatei(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glBlendEquationi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendEquationi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buf{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1119,6 +1154,7 @@ static bool decode_glBlendEquationi(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glBlendFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendFunc");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum sfactor{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1132,6 +1168,7 @@ static bool decode_glBlendFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glBlendFuncSeparate(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendFuncSeparate");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum sfactorRGB{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1151,6 +1188,7 @@ static bool decode_glBlendFuncSeparate(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glBlendFuncSeparatei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendFuncSeparatei");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buf{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1173,6 +1211,7 @@ static bool decode_glBlendFuncSeparatei(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glBlendFunci(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlendFunci");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buf{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1189,6 +1228,7 @@ static bool decode_glBlendFunci(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glBlitFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlitFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint srcX0{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1226,6 +1266,7 @@ static bool decode_glBlitFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glBlitNamedFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBlitNamedFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint readFramebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1269,6 +1310,7 @@ static bool decode_glBlitNamedFramebuffer(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1318,6 +1360,7 @@ static bool decode_glBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glBufferStorage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferStorage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1367,6 +1410,7 @@ static bool decode_glBufferStorage(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1416,6 +1460,7 @@ static bool decode_glBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glCheckFramebufferStatus(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCheckFramebufferStatus");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1427,6 +1472,7 @@ static bool decode_glCheckFramebufferStatus(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glCheckNamedFramebufferStatus(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCheckNamedFramebufferStatus");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1441,6 +1487,7 @@ static bool decode_glCheckNamedFramebufferStatus(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glClampColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClampColor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1454,6 +1501,7 @@ static bool decode_glClampColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glClear(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClear");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1464,6 +1512,7 @@ static bool decode_glClear(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glClearBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1527,6 +1576,7 @@ static bool decode_glClearBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glClearBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1596,6 +1646,7 @@ static bool decode_glClearBufferSubData(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glClearBufferfi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferfi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1614,6 +1665,7 @@ static bool decode_glClearBufferfi(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glClearBufferfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1659,6 +1711,7 @@ static bool decode_glClearBufferfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glClearBufferiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1704,6 +1757,7 @@ static bool decode_glClearBufferiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glClearBufferuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearBufferuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1749,6 +1803,7 @@ static bool decode_glClearBufferuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glClearColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearColor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -1764,6 +1819,7 @@ static bool decode_glClearColor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glClearDepth(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearDepth");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble depth{};
     if (!rvk_r.read_pod(depth)) return false;
@@ -1773,6 +1829,7 @@ static bool decode_glClearDepth(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glClearDepthf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearDepthf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat d{};
     if (!rvk_r.read_pod(d)) return false;
@@ -1782,6 +1839,7 @@ static bool decode_glClearDepthf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glClearNamedBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedBufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1845,6 +1903,7 @@ static bool decode_glClearNamedBufferData(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glClearNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1914,6 +1973,7 @@ static bool decode_glClearNamedBufferSubData(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glClearNamedFramebufferfi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedFramebufferfi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1935,6 +1995,7 @@ static bool decode_glClearNamedFramebufferfi(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glClearNamedFramebufferfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedFramebufferfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -1983,6 +2044,7 @@ static bool decode_glClearNamedFramebufferfv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glClearNamedFramebufferiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedFramebufferiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2031,6 +2093,7 @@ static bool decode_glClearNamedFramebufferiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glClearNamedFramebufferuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedFramebufferuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2079,6 +2142,7 @@ static bool decode_glClearNamedFramebufferuiv(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glClearStencil(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearStencil");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2089,6 +2153,7 @@ static bool decode_glClearStencil(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glClearTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2152,6 +2217,7 @@ static bool decode_glClearTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glClearTexSubImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearTexSubImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2233,6 +2299,7 @@ static bool decode_glClearTexSubImage(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glClientWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClientWaitSync");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
@@ -2250,6 +2317,7 @@ static bool decode_glClientWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glClipControl(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClipControl");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum origin{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2263,6 +2331,7 @@ static bool decode_glClipControl(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glColorMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorMask");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLboolean red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2282,6 +2351,7 @@ static bool decode_glColorMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColorMaski(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorMaski");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2304,6 +2374,7 @@ static bool decode_glColorMaski(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glColorP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2317,6 +2388,7 @@ static bool decode_glColorP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColorP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2359,6 +2431,7 @@ static bool decode_glColorP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glColorP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorP4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2372,6 +2445,7 @@ static bool decode_glColorP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColorP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorP4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2414,6 +2488,7 @@ static bool decode_glColorP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glCompileShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompileShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2424,6 +2499,7 @@ static bool decode_glCompileShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glCompressedTexImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2495,6 +2571,7 @@ static bool decode_glCompressedTexImage1D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCompressedTexImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2569,6 +2646,7 @@ static bool decode_glCompressedTexImage2D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCompressedTexImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2646,6 +2724,7 @@ static bool decode_glCompressedTexImage3D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCompressedTexSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2717,6 +2796,7 @@ static bool decode_glCompressedTexSubImage1D(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glCompressedTexSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2794,6 +2874,7 @@ static bool decode_glCompressedTexSubImage2D(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glCompressedTexSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTexSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2877,6 +2958,7 @@ static bool decode_glCompressedTexSubImage3D(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glCompressedTextureSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -2948,6 +3030,7 @@ static bool decode_glCompressedTextureSubImage1D(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCompressedTextureSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3025,6 +3108,7 @@ static bool decode_glCompressedTextureSubImage2D(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCompressedTextureSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3108,6 +3192,7 @@ static bool decode_glCompressedTextureSubImage3D(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCopyBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum readTarget{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3130,6 +3215,7 @@ static bool decode_glCopyBufferSubData(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glCopyImageSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyImageSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint srcName{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3182,6 +3268,7 @@ static bool decode_glCopyImageSubData(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glCopyNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyNamedBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint readBuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3204,6 +3291,7 @@ static bool decode_glCopyNamedBufferSubData(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glCopyTexImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTexImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3232,6 +3320,7 @@ static bool decode_glCopyTexImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glCopyTexImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTexImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3263,6 +3352,7 @@ static bool decode_glCopyTexImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glCopyTexSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTexSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3288,6 +3378,7 @@ static bool decode_glCopyTexSubImage1D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glCopyTexSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTexSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3319,6 +3410,7 @@ static bool decode_glCopyTexSubImage2D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glCopyTexSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTexSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3353,6 +3445,7 @@ static bool decode_glCopyTexSubImage3D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glCopyTextureSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3378,6 +3471,7 @@ static bool decode_glCopyTextureSubImage1D(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyTextureSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3409,6 +3503,7 @@ static bool decode_glCopyTextureSubImage2D(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyTextureSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3443,6 +3538,7 @@ static bool decode_glCopyTextureSubImage3D(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCreateBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3484,6 +3580,7 @@ static bool decode_glCreateBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glCreateFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateFramebuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3525,6 +3622,7 @@ static bool decode_glCreateFramebuffers(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glCreateProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glCreateProgram == nullptr) return false;
     const auto rvk_ret = rvk_gl.glCreateProgram();
@@ -3533,6 +3631,7 @@ static bool decode_glCreateProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glCreateProgramPipelines(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateProgramPipelines");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3574,6 +3673,7 @@ static bool decode_glCreateProgramPipelines(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glCreateQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateQueries");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3618,6 +3718,7 @@ static bool decode_glCreateQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glCreateRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateRenderbuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3659,6 +3760,7 @@ static bool decode_glCreateRenderbuffers(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glCreateSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateSamplers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3700,6 +3802,7 @@ static bool decode_glCreateSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glCreateShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3711,6 +3814,7 @@ static bool decode_glCreateShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glCreateShaderProgramv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateShaderProgramv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3753,6 +3857,7 @@ static bool decode_glCreateShaderProgramv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCreateTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3797,6 +3902,7 @@ static bool decode_glCreateTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glCreateTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateTransformFeedbacks");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3838,6 +3944,7 @@ static bool decode_glCreateTransformFeedbacks(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glCreateVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCreateVertexArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3879,6 +3986,7 @@ static bool decode_glCreateVertexArrays(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glCullFace(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCullFace");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3889,6 +3997,7 @@ static bool decode_glCullFace(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glDebugMessageCallback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDebugMessageCallback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLDEBUGPROC callback = nullptr;
     const void* userParam = nullptr;
@@ -3898,6 +4007,7 @@ static bool decode_glDebugMessageCallback(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glDebugMessageControl(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDebugMessageControl");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum source{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3953,6 +4063,7 @@ static bool decode_glDebugMessageControl(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glDebugMessageInsert(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDebugMessageInsert");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum source{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -3995,6 +4106,7 @@ static bool decode_glDebugMessageInsert(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glDeleteBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4038,6 +4150,7 @@ static bool decode_glDeleteBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glDeleteFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteFramebuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4081,6 +4194,7 @@ static bool decode_glDeleteFramebuffers(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glDeleteProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4091,6 +4205,7 @@ static bool decode_glDeleteProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glDeleteProgramPipelines(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteProgramPipelines");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4134,6 +4249,7 @@ static bool decode_glDeleteProgramPipelines(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glDeleteQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteQueries");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4177,6 +4293,7 @@ static bool decode_glDeleteQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glDeleteRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteRenderbuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4220,6 +4337,7 @@ static bool decode_glDeleteRenderbuffers(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glDeleteSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteSamplers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4263,6 +4381,7 @@ static bool decode_glDeleteSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glDeleteShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4273,6 +4392,7 @@ static bool decode_glDeleteShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glDeleteSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteSync");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
@@ -4284,6 +4404,7 @@ static bool decode_glDeleteSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glDeleteTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4327,6 +4448,7 @@ static bool decode_glDeleteTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glDeleteTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteTransformFeedbacks");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4370,6 +4492,7 @@ static bool decode_glDeleteTransformFeedbacks(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glDeleteVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteVertexArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4413,6 +4536,7 @@ static bool decode_glDeleteVertexArrays(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glDepthFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthFunc");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum func{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4423,6 +4547,7 @@ static bool decode_glDepthFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glDepthMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthMask");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLboolean flag{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4433,6 +4558,7 @@ static bool decode_glDepthMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glDepthRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble n{};
     if (!rvk_r.read_pod(n)) return false;
@@ -4444,6 +4570,7 @@ static bool decode_glDepthRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glDepthRangeArrayv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthRangeArrayv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4490,6 +4617,7 @@ static bool decode_glDepthRangeArrayv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glDepthRangeIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthRangeIndexed");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4504,6 +4632,7 @@ static bool decode_glDepthRangeIndexed(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glDepthRangef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDepthRangef");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat n{};
     if (!rvk_r.read_pod(n)) return false;
@@ -4515,6 +4644,7 @@ static bool decode_glDepthRangef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glDetachShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDetachShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4528,6 +4658,7 @@ static bool decode_glDetachShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glDisable(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisable");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum cap{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4538,6 +4669,7 @@ static bool decode_glDisable(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glDisableVertexArrayAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableVertexArrayAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4551,6 +4683,7 @@ static bool decode_glDisableVertexArrayAttrib(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glDisableVertexAttribArray(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableVertexAttribArray");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4561,6 +4694,7 @@ static bool decode_glDisableVertexAttribArray(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glDisablei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisablei");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4574,6 +4708,7 @@ static bool decode_glDisablei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glDispatchCompute(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDispatchCompute");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint num_groups_x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4590,6 +4725,7 @@ static bool decode_glDispatchCompute(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glDispatchComputeIndirect(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDispatchComputeIndirect");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLintptr indirect{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4600,6 +4736,7 @@ static bool decode_glDispatchComputeIndirect(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4617,6 +4754,7 @@ static bool decode_glDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawArraysIndirect");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4632,6 +4770,7 @@ static bool decode_glDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glDrawArraysInstanced(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawArraysInstanced");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4652,6 +4791,7 @@ static bool decode_glDrawArraysInstanced(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glDrawArraysInstancedBaseInstance(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawArraysInstancedBaseInstance");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4675,6 +4815,7 @@ static bool decode_glDrawArraysInstancedBaseInstance(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glDrawBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum buf{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4685,6 +4826,7 @@ static bool decode_glDrawBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glDrawBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4728,6 +4870,7 @@ static bool decode_glDrawBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glDrawElements(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElements");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4749,6 +4892,7 @@ static bool decode_glDrawElements(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsBaseVertex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4773,6 +4917,7 @@ static bool decode_glDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsIndirect");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4791,6 +4936,7 @@ static bool decode_glDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glDrawElementsInstanced(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsInstanced");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4815,6 +4961,7 @@ static bool decode_glDrawElementsInstanced(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glDrawElementsInstancedBaseInstance(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsInstancedBaseInstance");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4842,6 +4989,7 @@ static bool decode_glDrawElementsInstancedBaseInstance(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glDrawElementsInstancedBaseVertex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsInstancedBaseVertex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4869,6 +5017,7 @@ static bool decode_glDrawElementsInstancedBaseVertex(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glDrawElementsInstancedBaseVertexBaseInstance(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawElementsInstancedBaseVertexBaseInstance");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4899,6 +5048,7 @@ static bool decode_glDrawElementsInstancedBaseVertexBaseInstance(const RealGl& r
 }
 
 static bool decode_glDrawRangeElements(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawRangeElements");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4926,6 +5076,7 @@ static bool decode_glDrawRangeElements(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glDrawRangeElementsBaseVertex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawRangeElementsBaseVertex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4956,6 +5107,7 @@ static bool decode_glDrawRangeElementsBaseVertex(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glDrawTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4970,6 +5122,7 @@ static bool decode_glDrawTransformFeedback(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glDrawTransformFeedbackInstanced(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawTransformFeedbackInstanced");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -4987,6 +5140,7 @@ static bool decode_glDrawTransformFeedbackInstanced(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glDrawTransformFeedbackStream(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawTransformFeedbackStream");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5004,6 +5158,7 @@ static bool decode_glDrawTransformFeedbackStream(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glDrawTransformFeedbackStreamInstanced(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawTransformFeedbackStreamInstanced");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5024,6 +5179,7 @@ static bool decode_glDrawTransformFeedbackStreamInstanced(const RealGl& rvk_gl, 
 }
 
 static bool decode_glEnable(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnable");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum cap{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5034,6 +5190,7 @@ static bool decode_glEnable(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glEnableVertexArrayAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableVertexArrayAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5047,6 +5204,7 @@ static bool decode_glEnableVertexArrayAttrib(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glEnableVertexAttribArray(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableVertexAttribArray");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5057,6 +5215,7 @@ static bool decode_glEnableVertexAttribArray(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glEnablei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnablei");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5070,6 +5229,7 @@ static bool decode_glEnablei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glEndConditionalRender(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEndConditionalRender");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glEndConditionalRender == nullptr) return false;
     rvk_gl.glEndConditionalRender();
@@ -5077,6 +5237,7 @@ static bool decode_glEndConditionalRender(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glEndQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEndQuery");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5087,6 +5248,7 @@ static bool decode_glEndQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glEndQueryIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEndQueryIndexed");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5100,6 +5262,7 @@ static bool decode_glEndQueryIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glEndTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEndTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glEndTransformFeedback == nullptr) return false;
     rvk_gl.glEndTransformFeedback();
@@ -5107,6 +5270,7 @@ static bool decode_glEndTransformFeedback(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glFenceSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFenceSync");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t rvk_token = 0;
     if (!rvk_r.read_pod(rvk_token)) return false;
@@ -5123,6 +5287,7 @@ static bool decode_glFenceSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glFinish(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFinish");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glFinish == nullptr) return false;
     rvk_gl.glFinish();
@@ -5130,6 +5295,7 @@ static bool decode_glFinish(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glFlush(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFlush");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glFlush == nullptr) return false;
     rvk_gl.glFlush();
@@ -5137,6 +5303,7 @@ static bool decode_glFlush(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glFramebufferParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5153,6 +5320,7 @@ static bool decode_glFramebufferParameteri(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glFramebufferRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferRenderbuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5172,6 +5340,7 @@ static bool decode_glFramebufferRenderbuffer(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glFramebufferTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5191,6 +5360,7 @@ static bool decode_glFramebufferTexture(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glFramebufferTexture1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferTexture1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5213,6 +5383,7 @@ static bool decode_glFramebufferTexture1D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glFramebufferTexture2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferTexture2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5235,6 +5406,7 @@ static bool decode_glFramebufferTexture2D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glFramebufferTexture3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferTexture3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5260,6 +5432,7 @@ static bool decode_glFramebufferTexture3D(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glFramebufferTextureLayer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferTextureLayer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5282,6 +5455,7 @@ static bool decode_glFramebufferTextureLayer(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glFrontFace(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFrontFace");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5292,6 +5466,7 @@ static bool decode_glFrontFace(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glGenBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5333,6 +5508,7 @@ static bool decode_glGenBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGenFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenFramebuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5374,6 +5550,7 @@ static bool decode_glGenFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGenProgramPipelines(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenProgramPipelines");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5415,6 +5592,7 @@ static bool decode_glGenProgramPipelines(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGenQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenQueries");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5456,6 +5634,7 @@ static bool decode_glGenQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGenRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenRenderbuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5497,6 +5676,7 @@ static bool decode_glGenRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGenSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenSamplers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5538,6 +5718,7 @@ static bool decode_glGenSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGenTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5579,6 +5760,7 @@ static bool decode_glGenTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGenTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenTransformFeedbacks");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5620,6 +5802,7 @@ static bool decode_glGenTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGenVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenVertexArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5661,6 +5844,7 @@ static bool decode_glGenVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGenerateMipmap(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenerateMipmap");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5671,6 +5855,7 @@ static bool decode_glGenerateMipmap(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGenerateTextureMipmap(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenerateTextureMipmap");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5681,6 +5866,7 @@ static bool decode_glGenerateTextureMipmap(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetActiveAtomicCounterBufferiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveAtomicCounterBufferiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5734,6 +5920,7 @@ static bool decode_glGetActiveAtomicCounterBufferiv(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5871,6 +6058,7 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetActiveSubroutineName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveSubroutineName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -5951,6 +6139,7 @@ static bool decode_glGetActiveSubroutineName(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetActiveSubroutineUniformName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveSubroutineUniformName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6031,6 +6220,7 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetActiveSubroutineUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveSubroutineUniformiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6087,6 +6277,7 @@ static bool decode_glGetActiveSubroutineUniformiv(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveUniform");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6224,6 +6415,7 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetActiveUniformBlockName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveUniformBlockName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6301,6 +6493,7 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetActiveUniformBlockiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveUniformBlockiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6354,6 +6547,7 @@ static bool decode_glGetActiveUniformBlockiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetActiveUniformName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveUniformName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6431,6 +6625,7 @@ static bool decode_glGetActiveUniformName(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetActiveUniformsiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetActiveUniformsiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6511,6 +6706,7 @@ static bool decode_glGetActiveUniformsiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetAttachedShaders(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetAttachedShaders");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6585,6 +6781,7 @@ static bool decode_glGetAttachedShaders(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetAttribLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetAttribLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6616,6 +6813,7 @@ static bool decode_glGetAttribLocation(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetBooleani_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBooleani_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6659,6 +6857,7 @@ static bool decode_glGetBooleani_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetBooleanv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBooleanv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6720,6 +6919,7 @@ static bool decode_glGetBooleanv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetBufferParameteri64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBufferParameteri64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6763,6 +6963,7 @@ static bool decode_glGetBufferParameteri64v(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetBufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6806,6 +7007,7 @@ static bool decode_glGetBufferParameteriv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6853,6 +7055,7 @@ static bool decode_glGetBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetCompressedTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetCompressedTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6913,6 +7116,7 @@ static bool decode_glGetCompressedTexImage(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetCompressedTextureImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetCompressedTextureImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -6976,6 +7180,7 @@ static bool decode_glGetCompressedTextureImage(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetCompressedTextureSubImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetCompressedTextureSubImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7057,6 +7262,7 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetDebugMessageLog");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7252,6 +7458,7 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetDoublei_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetDoublei_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7295,6 +7502,7 @@ static bool decode_glGetDoublei_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetDoublev(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetDoublev");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7356,6 +7564,7 @@ static bool decode_glGetDoublev(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGetError(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetError");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glGetError == nullptr) return false;
     const auto rvk_ret = rvk_gl.glGetError();
@@ -7364,6 +7573,7 @@ static bool decode_glGetError(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glGetFloati_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFloati_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7407,6 +7617,7 @@ static bool decode_glGetFloati_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetFloatv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFloatv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7468,6 +7679,7 @@ static bool decode_glGetFloatv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glGetFragDataIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFragDataIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7499,6 +7711,7 @@ static bool decode_glGetFragDataIndex(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetFragDataLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFragDataLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7530,6 +7743,7 @@ static bool decode_glGetFragDataLocation(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetFramebufferAttachmentParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFramebufferAttachmentParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7576,6 +7790,7 @@ static bool decode_glGetFramebufferAttachmentParameteriv(const RealGl& rvk_gl, :
 }
 
 static bool decode_glGetFramebufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFramebufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7619,6 +7834,7 @@ static bool decode_glGetFramebufferParameteriv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetGraphicsResetStatus(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetGraphicsResetStatus");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glGetGraphicsResetStatus == nullptr) return false;
     const auto rvk_ret = rvk_gl.glGetGraphicsResetStatus();
@@ -7627,6 +7843,7 @@ static bool decode_glGetGraphicsResetStatus(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetInteger64i_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetInteger64i_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7670,6 +7887,7 @@ static bool decode_glGetInteger64i_v(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetInteger64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetInteger64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7731,6 +7949,7 @@ static bool decode_glGetInteger64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetIntegeri_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetIntegeri_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7774,6 +7993,7 @@ static bool decode_glGetIntegeri_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetIntegerv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetIntegerv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7835,6 +8055,7 @@ static bool decode_glGetIntegerv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetInternalformati64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetInternalformati64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7885,6 +8106,7 @@ static bool decode_glGetInternalformati64v(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetInternalformativ(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetInternalformativ");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7935,6 +8157,7 @@ static bool decode_glGetInternalformativ(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultisamplefv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultisamplefv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -7978,6 +8201,7 @@ static bool decode_glGetMultisamplefv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetNamedBufferParameteri64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferParameteri64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8021,6 +8245,7 @@ static bool decode_glGetNamedBufferParameteri64v(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glGetNamedBufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8064,6 +8289,7 @@ static bool decode_glGetNamedBufferParameteriv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8111,6 +8337,7 @@ static bool decode_glGetNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetNamedFramebufferAttachmentParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedFramebufferAttachmentParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8157,6 +8384,7 @@ static bool decode_glGetNamedFramebufferAttachmentParameteriv(const RealGl& rvk_
 }
 
 static bool decode_glGetNamedFramebufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedFramebufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8200,6 +8428,7 @@ static bool decode_glGetNamedFramebufferParameteriv(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetNamedRenderbufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedRenderbufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8243,6 +8472,7 @@ static bool decode_glGetNamedRenderbufferParameteriv(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glGetObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetObjectLabel");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum identifier{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8320,6 +8550,7 @@ static bool decode_glGetObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetObjectPtrLabel");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t ptr_token = 0;
     if (!rvk_r.read_pod(ptr_token)) return false;
@@ -8394,6 +8625,7 @@ static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramBinary");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8498,6 +8730,7 @@ static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetProgramInfoLog(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramInfoLog");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8572,6 +8805,7 @@ static bool decode_glGetProgramInfoLog(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetProgramInterfaceiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramInterfaceiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8618,6 +8852,7 @@ static bool decode_glGetProgramInterfaceiv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetProgramPipelineInfoLog(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramPipelineInfoLog");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8692,6 +8927,7 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetProgramPipelineiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramPipelineiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8735,6 +8971,7 @@ static bool decode_glGetProgramPipelineiv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetProgramResourceIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramResourceIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8769,6 +9006,7 @@ static bool decode_glGetProgramResourceIndex(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetProgramResourceLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramResourceLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8803,6 +9041,7 @@ static bool decode_glGetProgramResourceLocation(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glGetProgramResourceLocationIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramResourceLocationIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8837,6 +9076,7 @@ static bool decode_glGetProgramResourceLocationIndex(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glGetProgramResourceName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramResourceName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -8917,6 +9157,7 @@ static bool decode_glGetProgramResourceName(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetProgramResourceiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramResourceiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9033,6 +9274,7 @@ static bool decode_glGetProgramResourceiv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetProgramStageiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramStageiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9079,6 +9321,7 @@ static bool decode_glGetProgramStageiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetProgramiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetProgramiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9122,6 +9365,7 @@ static bool decode_glGetProgramiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetQueryBufferObjecti64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryBufferObjecti64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9141,6 +9385,7 @@ static bool decode_glGetQueryBufferObjecti64v(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetQueryBufferObjectiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryBufferObjectiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9160,6 +9405,7 @@ static bool decode_glGetQueryBufferObjectiv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetQueryBufferObjectui64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryBufferObjectui64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9179,6 +9425,7 @@ static bool decode_glGetQueryBufferObjectui64v(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetQueryBufferObjectuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryBufferObjectuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9198,6 +9445,7 @@ static bool decode_glGetQueryBufferObjectuiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetQueryIndexediv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryIndexediv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9244,6 +9492,7 @@ static bool decode_glGetQueryIndexediv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetQueryObjecti64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryObjecti64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9304,6 +9553,7 @@ static bool decode_glGetQueryObjecti64v(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetQueryObjectiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryObjectiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9364,6 +9614,7 @@ static bool decode_glGetQueryObjectiv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetQueryObjectui64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryObjectui64v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9424,6 +9675,7 @@ static bool decode_glGetQueryObjectui64v(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetQueryObjectuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryObjectuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9484,6 +9736,7 @@ static bool decode_glGetQueryObjectuiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetQueryiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetQueryiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9527,6 +9780,7 @@ static bool decode_glGetQueryiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGetRenderbufferParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetRenderbufferParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9570,6 +9824,7 @@ static bool decode_glGetRenderbufferParameteriv(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glGetSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSamplerParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9613,6 +9868,7 @@ static bool decode_glGetSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSamplerParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9656,6 +9912,7 @@ static bool decode_glGetSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSamplerParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9699,6 +9956,7 @@ static bool decode_glGetSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSamplerParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9742,6 +10000,7 @@ static bool decode_glGetSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetShaderInfoLog(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetShaderInfoLog");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9816,6 +10075,7 @@ static bool decode_glGetShaderInfoLog(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetShaderPrecisionFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetShaderPrecisionFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum shadertype{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9889,6 +10149,7 @@ static bool decode_glGetShaderPrecisionFormat(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetShaderSource");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -9963,6 +10224,7 @@ static bool decode_glGetShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetShaderiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetShaderiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10006,6 +10268,7 @@ static bool decode_glGetShaderiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetString(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetString");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum name{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10021,6 +10284,7 @@ static bool decode_glGetString(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glGetStringi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetStringi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum name{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10039,6 +10303,7 @@ static bool decode_glGetStringi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGetSubroutineIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSubroutineIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10073,6 +10338,7 @@ static bool decode_glGetSubroutineIndex(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetSubroutineUniformLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSubroutineUniformLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10107,6 +10373,7 @@ static bool decode_glGetSubroutineUniformLocation(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetSynciv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
@@ -10183,6 +10450,7 @@ static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glGetTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10256,6 +10524,7 @@ static bool decode_glGetTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetTexLevelParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexLevelParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10302,6 +10571,7 @@ static bool decode_glGetTexLevelParameterfv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetTexLevelParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexLevelParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10348,6 +10618,7 @@ static bool decode_glGetTexLevelParameteriv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10391,6 +10662,7 @@ static bool decode_glGetTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10434,6 +10706,7 @@ static bool decode_glGetTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10477,6 +10750,7 @@ static bool decode_glGetTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10520,6 +10794,7 @@ static bool decode_glGetTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetTextureImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10589,6 +10864,7 @@ static bool decode_glGetTextureImage(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetTextureLevelParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureLevelParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10635,6 +10911,7 @@ static bool decode_glGetTextureLevelParameterfv(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glGetTextureLevelParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureLevelParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10681,6 +10958,7 @@ static bool decode_glGetTextureLevelParameteriv(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glGetTextureParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10724,6 +11002,7 @@ static bool decode_glGetTextureParameterIiv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10767,6 +11046,7 @@ static bool decode_glGetTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetTextureParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10810,6 +11090,7 @@ static bool decode_glGetTextureParameterfv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetTextureParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10853,6 +11134,7 @@ static bool decode_glGetTextureParameteriv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetTextureSubImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureSubImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -10940,6 +11222,7 @@ static bool decode_glGetTextureSubImage(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTransformFeedbackVarying");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11077,6 +11360,7 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glGetTransformFeedbacki64_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTransformFeedbacki64_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint xfb{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11123,6 +11407,7 @@ static bool decode_glGetTransformFeedbacki64_v(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetTransformFeedbacki_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTransformFeedbacki_v");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint xfb{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11169,6 +11454,7 @@ static bool decode_glGetTransformFeedbacki_v(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetTransformFeedbackiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTransformFeedbackiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint xfb{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11212,6 +11498,7 @@ static bool decode_glGetTransformFeedbackiv(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetUniformBlockIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformBlockIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11243,6 +11530,7 @@ static bool decode_glGetUniformBlockIndex(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetUniformIndices(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformIndices");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11315,6 +11603,7 @@ static bool decode_glGetUniformIndices(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetUniformLocation(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformLocation");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11346,6 +11635,7 @@ static bool decode_glGetUniformLocation(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetUniformSubroutineuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformSubroutineuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum shadertype{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11389,6 +11679,7 @@ static bool decode_glGetUniformSubroutineuiv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11432,6 +11723,7 @@ static bool decode_glGetUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11475,6 +11767,7 @@ static bool decode_glGetUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11518,6 +11811,7 @@ static bool decode_glGetUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11561,6 +11855,7 @@ static bool decode_glGetUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetVertexArrayIndexed64iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexArrayIndexed64iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11607,6 +11902,7 @@ static bool decode_glGetVertexArrayIndexed64iv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetVertexArrayIndexediv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexArrayIndexediv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11653,6 +11949,7 @@ static bool decode_glGetVertexArrayIndexediv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetVertexArrayiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexArrayiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11696,6 +11993,7 @@ static bool decode_glGetVertexArrayiv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetVertexAttribIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11739,6 +12037,7 @@ static bool decode_glGetVertexAttribIiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetVertexAttribIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11782,6 +12081,7 @@ static bool decode_glGetVertexAttribIuiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetVertexAttribLdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribLdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11825,6 +12125,7 @@ static bool decode_glGetVertexAttribLdv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetVertexAttribdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11868,6 +12169,7 @@ static bool decode_glGetVertexAttribdv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetVertexAttribfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11911,6 +12213,7 @@ static bool decode_glGetVertexAttribfv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetVertexAttribiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -11954,6 +12257,7 @@ static bool decode_glGetVertexAttribiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetnCompressedTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnCompressedTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12017,6 +12321,7 @@ static bool decode_glGetnCompressedTexImage(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetnTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12086,6 +12391,7 @@ static bool decode_glGetnTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetnUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnUniformdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12133,6 +12439,7 @@ static bool decode_glGetnUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetnUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnUniformfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12180,6 +12487,7 @@ static bool decode_glGetnUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetnUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnUniformiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12227,6 +12535,7 @@ static bool decode_glGetnUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetnUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetnUniformuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12274,6 +12583,7 @@ static bool decode_glGetnUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glHint(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glHint");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12287,6 +12597,7 @@ static bool decode_glHint(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::W
 }
 
 static bool decode_glInvalidateBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateBufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12297,6 +12608,7 @@ static bool decode_glInvalidateBufferData(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glInvalidateBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12313,6 +12625,7 @@ static bool decode_glInvalidateBufferSubData(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glInvalidateFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12359,6 +12672,7 @@ static bool decode_glInvalidateFramebuffer(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glInvalidateNamedFramebufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateNamedFramebufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12405,6 +12719,7 @@ static bool decode_glInvalidateNamedFramebufferData(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glInvalidateNamedFramebufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateNamedFramebufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12463,6 +12778,7 @@ static bool decode_glInvalidateNamedFramebufferSubData(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glInvalidateSubFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateSubFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12521,6 +12837,7 @@ static bool decode_glInvalidateSubFramebuffer(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glInvalidateTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateTexImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12534,6 +12851,7 @@ static bool decode_glInvalidateTexImage(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glInvalidateTexSubImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInvalidateTexSubImage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12565,6 +12883,7 @@ static bool decode_glInvalidateTexSubImage(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glIsBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12576,6 +12895,7 @@ static bool decode_glIsBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glIsEnabled(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsEnabled");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum cap{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12587,6 +12907,7 @@ static bool decode_glIsEnabled(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glIsEnabledi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsEnabledi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12601,6 +12922,7 @@ static bool decode_glIsEnabledi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glIsFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsFramebuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12612,6 +12934,7 @@ static bool decode_glIsFramebuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glIsProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12623,6 +12946,7 @@ static bool decode_glIsProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glIsProgramPipeline(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsProgramPipeline");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12634,6 +12958,7 @@ static bool decode_glIsProgramPipeline(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glIsQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsQuery");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12645,6 +12970,7 @@ static bool decode_glIsQuery(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIsRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsRenderbuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12656,6 +12982,7 @@ static bool decode_glIsRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glIsSampler(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsSampler");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12667,6 +12994,7 @@ static bool decode_glIsSampler(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glIsShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12678,6 +13006,7 @@ static bool decode_glIsShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glIsSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsSync");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
@@ -12689,6 +13018,7 @@ static bool decode_glIsSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glIsTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12700,6 +13030,7 @@ static bool decode_glIsTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glIsTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12711,6 +13042,7 @@ static bool decode_glIsTransformFeedback(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glIsVertexArray(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsVertexArray");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12722,6 +13054,7 @@ static bool decode_glIsVertexArray(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glLineWidth(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLineWidth");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat width{};
     if (!rvk_r.read_pod(width)) return false;
@@ -12731,6 +13064,7 @@ static bool decode_glLineWidth(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glLinkProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLinkProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12741,6 +13075,7 @@ static bool decode_glLinkProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glLogicOp(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLogicOp");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum opcode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12751,6 +13086,7 @@ static bool decode_glLogicOp(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glMemoryBarrier(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMemoryBarrier");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield barriers{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12761,6 +13097,7 @@ static bool decode_glMemoryBarrier(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glMemoryBarrierByRegion(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMemoryBarrierByRegion");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield barriers{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12771,6 +13108,7 @@ static bool decode_glMemoryBarrierByRegion(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glMinSampleShading(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMinSampleShading");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat value{};
     if (!rvk_r.read_pod(value)) return false;
@@ -12780,6 +13118,7 @@ static bool decode_glMinSampleShading(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12860,6 +13199,7 @@ static bool decode_glMultiDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawArraysIndirect");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12881,6 +13221,7 @@ static bool decode_glMultiDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMultiDrawArraysIndirectCount(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawArraysIndirectCount");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12906,6 +13247,7 @@ static bool decode_glMultiDrawArraysIndirectCount(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glMultiDrawElements(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawElements");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -12978,6 +13320,7 @@ static bool decode_glMultiDrawElements(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMultiDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawElementsBaseVertex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13083,6 +13426,7 @@ static bool decode_glMultiDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glMultiDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawElementsIndirect");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13107,6 +13451,7 @@ static bool decode_glMultiDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glMultiDrawElementsIndirectCount(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiDrawElementsIndirectCount");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13135,6 +13480,7 @@ static bool decode_glMultiDrawElementsIndirectCount(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glMultiTexCoordP1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13151,6 +13497,7 @@ static bool decode_glMultiTexCoordP1ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMultiTexCoordP1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13196,6 +13543,7 @@ static bool decode_glMultiTexCoordP1uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexCoordP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13212,6 +13560,7 @@ static bool decode_glMultiTexCoordP2ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMultiTexCoordP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13257,6 +13606,7 @@ static bool decode_glMultiTexCoordP2uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexCoordP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13273,6 +13623,7 @@ static bool decode_glMultiTexCoordP3ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMultiTexCoordP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13318,6 +13669,7 @@ static bool decode_glMultiTexCoordP3uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexCoordP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13334,6 +13686,7 @@ static bool decode_glMultiTexCoordP4ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMultiTexCoordP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordP4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13379,6 +13732,7 @@ static bool decode_glMultiTexCoordP4uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glNamedBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13428,6 +13782,7 @@ static bool decode_glNamedBufferData(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glNamedBufferStorage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferStorage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13477,6 +13832,7 @@ static bool decode_glNamedBufferStorage(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferSubData");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13526,6 +13882,7 @@ static bool decode_glNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glNamedFramebufferDrawBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferDrawBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13539,6 +13896,7 @@ static bool decode_glNamedFramebufferDrawBuffer(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glNamedFramebufferDrawBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferDrawBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13585,6 +13943,7 @@ static bool decode_glNamedFramebufferDrawBuffers(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glNamedFramebufferParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13601,6 +13960,7 @@ static bool decode_glNamedFramebufferParameteri(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glNamedFramebufferReadBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferReadBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13614,6 +13974,7 @@ static bool decode_glNamedFramebufferReadBuffer(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glNamedFramebufferRenderbuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferRenderbuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13633,6 +13994,7 @@ static bool decode_glNamedFramebufferRenderbuffer(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedFramebufferTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13652,6 +14014,7 @@ static bool decode_glNamedFramebufferTexture(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glNamedFramebufferTextureLayer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTextureLayer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13674,6 +14037,7 @@ static bool decode_glNamedFramebufferTextureLayer(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedRenderbufferStorage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedRenderbufferStorage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13693,6 +14057,7 @@ static bool decode_glNamedRenderbufferStorage(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glNamedRenderbufferStorageMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedRenderbufferStorageMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13715,6 +14080,7 @@ static bool decode_glNamedRenderbufferStorageMultisample(const RealGl& rvk_gl, :
 }
 
 static bool decode_glNormalP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormalP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13728,6 +14094,7 @@ static bool decode_glNormalP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glNormalP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormalP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13770,6 +14137,7 @@ static bool decode_glNormalP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glObjectLabel");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum identifier{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13805,6 +14173,7 @@ static bool decode_glObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glObjectPtrLabel");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t ptr_token = 0;
     if (!rvk_r.read_pod(ptr_token)) return false;
@@ -13837,6 +14206,7 @@ static bool decode_glObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glPatchParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPatchParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13873,6 +14243,7 @@ static bool decode_glPatchParameterfv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glPatchParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPatchParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13886,6 +14257,7 @@ static bool decode_glPatchParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glPauseTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPauseTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPauseTransformFeedback == nullptr) return false;
     rvk_gl.glPauseTransformFeedback();
@@ -13893,6 +14265,7 @@ static bool decode_glPauseTransformFeedback(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glPixelStoref(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelStoref");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13905,6 +14278,7 @@ static bool decode_glPixelStoref(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPixelStorei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelStorei");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13918,6 +14292,7 @@ static bool decode_glPixelStorei(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPointParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPointParameterf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13930,6 +14305,7 @@ static bool decode_glPointParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glPointParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPointParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13966,6 +14342,7 @@ static bool decode_glPointParameterfv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glPointParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPointParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -13979,6 +14356,7 @@ static bool decode_glPointParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glPointParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPointParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14015,6 +14393,7 @@ static bool decode_glPointParameteriv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glPointSize(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPointSize");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat size{};
     if (!rvk_r.read_pod(size)) return false;
@@ -14024,6 +14403,7 @@ static bool decode_glPointSize(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glPolygonMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPolygonMode");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14037,6 +14417,7 @@ static bool decode_glPolygonMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPolygonOffset(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPolygonOffset");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat factor{};
     if (!rvk_r.read_pod(factor)) return false;
@@ -14048,6 +14429,7 @@ static bool decode_glPolygonOffset(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glPolygonOffsetClamp(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPolygonOffsetClamp");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat factor{};
     if (!rvk_r.read_pod(factor)) return false;
@@ -14061,6 +14443,7 @@ static bool decode_glPolygonOffsetClamp(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glPopDebugGroup(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPopDebugGroup");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPopDebugGroup == nullptr) return false;
     rvk_gl.glPopDebugGroup();
@@ -14068,6 +14451,7 @@ static bool decode_glPopDebugGroup(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glPrimitiveRestartIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPrimitiveRestartIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14078,6 +14462,7 @@ static bool decode_glPrimitiveRestartIndex(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramBinary");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14127,6 +14512,7 @@ static bool decode_glProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glProgramParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14143,6 +14529,7 @@ static bool decode_glProgramParameteri(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14158,6 +14545,7 @@ static bool decode_glProgramUniform1d(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14207,6 +14595,7 @@ static bool decode_glProgramUniform1dv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14222,6 +14611,7 @@ static bool decode_glProgramUniform1f(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14271,6 +14661,7 @@ static bool decode_glProgramUniform1fv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14287,6 +14678,7 @@ static bool decode_glProgramUniform1i(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14336,6 +14728,7 @@ static bool decode_glProgramUniform1iv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14352,6 +14745,7 @@ static bool decode_glProgramUniform1ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14401,6 +14795,7 @@ static bool decode_glProgramUniform1uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glProgramUniform2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14418,6 +14813,7 @@ static bool decode_glProgramUniform2d(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14467,6 +14863,7 @@ static bool decode_glProgramUniform2dv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14484,6 +14881,7 @@ static bool decode_glProgramUniform2f(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14533,6 +14931,7 @@ static bool decode_glProgramUniform2fv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14552,6 +14951,7 @@ static bool decode_glProgramUniform2i(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14601,6 +15001,7 @@ static bool decode_glProgramUniform2iv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14620,6 +15021,7 @@ static bool decode_glProgramUniform2ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14669,6 +15071,7 @@ static bool decode_glProgramUniform2uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glProgramUniform3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14688,6 +15091,7 @@ static bool decode_glProgramUniform3d(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14737,6 +15141,7 @@ static bool decode_glProgramUniform3dv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14756,6 +15161,7 @@ static bool decode_glProgramUniform3f(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14805,6 +15211,7 @@ static bool decode_glProgramUniform3fv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14827,6 +15234,7 @@ static bool decode_glProgramUniform3i(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14876,6 +15284,7 @@ static bool decode_glProgramUniform3iv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14898,6 +15307,7 @@ static bool decode_glProgramUniform3ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14947,6 +15357,7 @@ static bool decode_glProgramUniform3uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glProgramUniform4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -14968,6 +15379,7 @@ static bool decode_glProgramUniform4d(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15017,6 +15429,7 @@ static bool decode_glProgramUniform4dv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15038,6 +15451,7 @@ static bool decode_glProgramUniform4f(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15087,6 +15501,7 @@ static bool decode_glProgramUniform4fv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15112,6 +15527,7 @@ static bool decode_glProgramUniform4i(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15161,6 +15577,7 @@ static bool decode_glProgramUniform4iv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15186,6 +15603,7 @@ static bool decode_glProgramUniform4ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniform4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15235,6 +15653,7 @@ static bool decode_glProgramUniform4uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glProgramUniformMatrix2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15287,6 +15706,7 @@ static bool decode_glProgramUniformMatrix2dv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15339,6 +15759,7 @@ static bool decode_glProgramUniformMatrix2fv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix2x3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15391,6 +15812,7 @@ static bool decode_glProgramUniformMatrix2x3dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix2x3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15443,6 +15865,7 @@ static bool decode_glProgramUniformMatrix2x3fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix2x4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15495,6 +15918,7 @@ static bool decode_glProgramUniformMatrix2x4dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix2x4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15547,6 +15971,7 @@ static bool decode_glProgramUniformMatrix2x4fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15599,6 +16024,7 @@ static bool decode_glProgramUniformMatrix3dv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15651,6 +16077,7 @@ static bool decode_glProgramUniformMatrix3fv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix3x2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15703,6 +16130,7 @@ static bool decode_glProgramUniformMatrix3x2dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix3x2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15755,6 +16183,7 @@ static bool decode_glProgramUniformMatrix3x2fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix3x4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15807,6 +16236,7 @@ static bool decode_glProgramUniformMatrix3x4dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix3x4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15859,6 +16289,7 @@ static bool decode_glProgramUniformMatrix3x4fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15911,6 +16342,7 @@ static bool decode_glProgramUniformMatrix4dv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -15963,6 +16395,7 @@ static bool decode_glProgramUniformMatrix4fv(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glProgramUniformMatrix4x2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16015,6 +16448,7 @@ static bool decode_glProgramUniformMatrix4x2dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix4x2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16067,6 +16501,7 @@ static bool decode_glProgramUniformMatrix4x2fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix4x3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16119,6 +16554,7 @@ static bool decode_glProgramUniformMatrix4x3dv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProgramUniformMatrix4x3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16171,6 +16607,7 @@ static bool decode_glProgramUniformMatrix4x3fv(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glProvokingVertex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProvokingVertex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16181,6 +16618,7 @@ static bool decode_glProvokingVertex(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glPushDebugGroup(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushDebugGroup");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum source{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16217,6 +16655,7 @@ static bool decode_glPushDebugGroup(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glQueryCounter(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glQueryCounter");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16230,6 +16669,7 @@ static bool decode_glQueryCounter(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glReadBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glReadBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum src{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16240,6 +16680,7 @@ static bool decode_glReadBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glReadPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glReadPixels");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16314,6 +16755,7 @@ static bool decode_glReadPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glReadnPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glReadnPixels");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16389,6 +16831,7 @@ static bool decode_glReadnPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glReleaseShaderCompiler(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glReleaseShaderCompiler");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glReleaseShaderCompiler == nullptr) return false;
     rvk_gl.glReleaseShaderCompiler();
@@ -16396,6 +16839,7 @@ static bool decode_glReleaseShaderCompiler(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glRenderbufferStorage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRenderbufferStorage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16415,6 +16859,7 @@ static bool decode_glRenderbufferStorage(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glRenderbufferStorageMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRenderbufferStorageMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16437,6 +16882,7 @@ static bool decode_glRenderbufferStorageMultisample(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glResumeTransformFeedback(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glResumeTransformFeedback");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glResumeTransformFeedback == nullptr) return false;
     rvk_gl.glResumeTransformFeedback();
@@ -16444,6 +16890,7 @@ static bool decode_glResumeTransformFeedback(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glSampleCoverage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSampleCoverage");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat value{};
     if (!rvk_r.read_pod(value)) return false;
@@ -16456,6 +16903,7 @@ static bool decode_glSampleCoverage(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glSampleMaski(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSampleMaski");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint maskNumber{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16469,6 +16917,7 @@ static bool decode_glSampleMaski(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16508,6 +16957,7 @@ static bool decode_glSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16547,6 +16997,7 @@ static bool decode_glSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glSamplerParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameterf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16562,6 +17013,7 @@ static bool decode_glSamplerParameterf(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16601,6 +17053,7 @@ static bool decode_glSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glSamplerParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16617,6 +17070,7 @@ static bool decode_glSamplerParameteri(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSamplerParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint sampler{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16656,6 +17110,7 @@ static bool decode_glSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glScissor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16675,6 +17130,7 @@ static bool decode_glScissor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glScissorArrayv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissorArrayv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16721,6 +17177,7 @@ static bool decode_glScissorArrayv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glScissorIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissorIndexed");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16743,6 +17200,7 @@ static bool decode_glScissorIndexed(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glScissorIndexedv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissorIndexedv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16785,6 +17243,7 @@ static bool decode_glScissorIndexedv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glSecondaryColorP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColorP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16798,6 +17257,7 @@ static bool decode_glSecondaryColorP3ui(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glSecondaryColorP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColorP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16840,6 +17300,7 @@ static bool decode_glSecondaryColorP3uiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glShaderBinary(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glShaderBinary");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -16922,6 +17383,7 @@ static bool decode_glShaderBinary(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glShaderSource");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17005,6 +17467,7 @@ static bool decode_glShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glShaderStorageBlockBinding(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glShaderStorageBlockBinding");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17021,6 +17484,7 @@ static bool decode_glShaderStorageBlockBinding(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glSpecializeShader(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSpecializeShader");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint shader{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17118,6 +17582,7 @@ static bool decode_glSpecializeShader(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glStencilFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilFunc");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum func{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17134,6 +17599,7 @@ static bool decode_glStencilFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glStencilFuncSeparate(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilFuncSeparate");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17153,6 +17619,7 @@ static bool decode_glStencilFuncSeparate(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glStencilMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilMask");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17163,6 +17630,7 @@ static bool decode_glStencilMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glStencilMaskSeparate(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilMaskSeparate");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17176,6 +17644,7 @@ static bool decode_glStencilMaskSeparate(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glStencilOp(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilOp");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum fail{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17192,6 +17661,7 @@ static bool decode_glStencilOp(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glStencilOpSeparate(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glStencilOpSeparate");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17211,6 +17681,7 @@ static bool decode_glStencilOpSeparate(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTexBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17227,6 +17698,7 @@ static bool decode_glTexBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glTexBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexBufferRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17249,6 +17721,7 @@ static bool decode_glTexBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glTexCoordP1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17262,6 +17735,7 @@ static bool decode_glTexCoordP1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexCoordP1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17304,6 +17778,7 @@ static bool decode_glTexCoordP1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexCoordP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17317,6 +17792,7 @@ static bool decode_glTexCoordP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexCoordP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17359,6 +17835,7 @@ static bool decode_glTexCoordP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexCoordP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17372,6 +17849,7 @@ static bool decode_glTexCoordP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexCoordP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17414,6 +17892,7 @@ static bool decode_glTexCoordP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexCoordP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17427,6 +17906,7 @@ static bool decode_glTexCoordP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexCoordP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordP4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17469,6 +17949,7 @@ static bool decode_glTexCoordP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17542,6 +18023,7 @@ static bool decode_glTexImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17618,6 +18100,7 @@ static bool decode_glTexImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexImage2DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexImage2DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17643,6 +18126,7 @@ static bool decode_glTexImage2DMultisample(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTexImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17722,6 +18206,7 @@ static bool decode_glTexImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexImage3DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexImage3DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17750,6 +18235,7 @@ static bool decode_glTexImage3DMultisample(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17789,6 +18275,7 @@ static bool decode_glTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17828,6 +18315,7 @@ static bool decode_glTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glTexParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameterf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17843,6 +18331,7 @@ static bool decode_glTexParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17882,6 +18371,7 @@ static bool decode_glTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glTexParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17898,6 +18388,7 @@ static bool decode_glTexParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17937,6 +18428,7 @@ static bool decode_glTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glTexStorage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17956,6 +18448,7 @@ static bool decode_glTexStorage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexStorage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -17978,6 +18471,7 @@ static bool decode_glTexStorage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexStorage2DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorage2DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18003,6 +18497,7 @@ static bool decode_glTexStorage2DMultisample(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glTexStorage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18028,6 +18523,7 @@ static bool decode_glTexStorage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glTexStorage3DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorage3DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18056,6 +18552,7 @@ static bool decode_glTexStorage3DMultisample(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glTexSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18126,6 +18623,7 @@ static bool decode_glTexSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18202,6 +18700,7 @@ static bool decode_glTexSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18284,6 +18783,7 @@ static bool decode_glTexSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTextureBarrier(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureBarrier");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glTextureBarrier == nullptr) return false;
     rvk_gl.glTextureBarrier();
@@ -18291,6 +18791,7 @@ static bool decode_glTextureBarrier(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glTextureBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18307,6 +18808,7 @@ static bool decode_glTextureBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTextureBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureBufferRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18329,6 +18831,7 @@ static bool decode_glTextureBufferRange(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glTextureParameterIiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterIiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18368,6 +18871,7 @@ static bool decode_glTextureParameterIiv(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterIuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18407,6 +18911,7 @@ static bool decode_glTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glTextureParameterf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18422,6 +18927,7 @@ static bool decode_glTextureParameterf(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureParameterfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18461,6 +18967,7 @@ static bool decode_glTextureParameterfv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glTextureParameteri(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameteri");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18477,6 +18984,7 @@ static bool decode_glTextureParameteri(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureParameteriv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameteriv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18516,6 +19024,7 @@ static bool decode_glTextureParameteriv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glTextureStorage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18535,6 +19044,7 @@ static bool decode_glTextureStorage1D(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glTextureStorage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18557,6 +19067,7 @@ static bool decode_glTextureStorage2D(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glTextureStorage2DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage2DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18582,6 +19093,7 @@ static bool decode_glTextureStorage2DMultisample(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glTextureStorage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18607,6 +19119,7 @@ static bool decode_glTextureStorage3D(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glTextureStorage3DMultisample(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage3DMultisample");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18635,6 +19148,7 @@ static bool decode_glTextureStorage3DMultisample(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glTextureSubImage1D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage1D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18705,6 +19219,7 @@ static bool decode_glTextureSubImage1D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureSubImage2D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage2D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18781,6 +19296,7 @@ static bool decode_glTextureSubImage2D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureSubImage3D(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage3D");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18863,6 +19379,7 @@ static bool decode_glTextureSubImage3D(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureView(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureView");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18894,6 +19411,7 @@ static bool decode_glTextureView(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTransformFeedbackBufferBase(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTransformFeedbackBufferBase");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint xfb{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18910,6 +19428,7 @@ static bool decode_glTransformFeedbackBufferBase(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glTransformFeedbackBufferRange(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTransformFeedbackBufferRange");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint xfb{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18932,6 +19451,7 @@ static bool decode_glTransformFeedbackBufferRange(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glTransformFeedbackVaryings(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTransformFeedbackVaryings");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18976,6 +19496,7 @@ static bool decode_glTransformFeedbackVaryings(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glUniform1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -18988,6 +19509,7 @@ static bool decode_glUniform1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19034,6 +19556,7 @@ static bool decode_glUniform1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19046,6 +19569,7 @@ static bool decode_glUniform1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19092,6 +19616,7 @@ static bool decode_glUniform1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19105,6 +19630,7 @@ static bool decode_glUniform1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19151,6 +19677,7 @@ static bool decode_glUniform1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19164,6 +19691,7 @@ static bool decode_glUniform1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19210,6 +19738,7 @@ static bool decode_glUniform1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glUniform2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19224,6 +19753,7 @@ static bool decode_glUniform2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19270,6 +19800,7 @@ static bool decode_glUniform2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19284,6 +19815,7 @@ static bool decode_glUniform2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19330,6 +19862,7 @@ static bool decode_glUniform2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19346,6 +19879,7 @@ static bool decode_glUniform2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19392,6 +19926,7 @@ static bool decode_glUniform2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19408,6 +19943,7 @@ static bool decode_glUniform2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19454,6 +19990,7 @@ static bool decode_glUniform2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glUniform3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19470,6 +20007,7 @@ static bool decode_glUniform3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19516,6 +20054,7 @@ static bool decode_glUniform3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19532,6 +20071,7 @@ static bool decode_glUniform3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19578,6 +20118,7 @@ static bool decode_glUniform3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19597,6 +20138,7 @@ static bool decode_glUniform3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19643,6 +20185,7 @@ static bool decode_glUniform3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19662,6 +20205,7 @@ static bool decode_glUniform3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19708,6 +20252,7 @@ static bool decode_glUniform3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glUniform4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19726,6 +20271,7 @@ static bool decode_glUniform4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19772,6 +20318,7 @@ static bool decode_glUniform4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19790,6 +20337,7 @@ static bool decode_glUniform4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19836,6 +20384,7 @@ static bool decode_glUniform4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19858,6 +20407,7 @@ static bool decode_glUniform4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glUniform4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19904,6 +20454,7 @@ static bool decode_glUniform4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19926,6 +20477,7 @@ static bool decode_glUniform4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUniform4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19972,6 +20524,7 @@ static bool decode_glUniform4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glUniformBlockBinding(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformBlockBinding");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -19988,6 +20541,7 @@ static bool decode_glUniformBlockBinding(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glUniformMatrix2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20037,6 +20591,7 @@ static bool decode_glUniformMatrix2dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20086,6 +20641,7 @@ static bool decode_glUniformMatrix2fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix2x3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2x3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20135,6 +20691,7 @@ static bool decode_glUniformMatrix2x3dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix2x3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2x3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20184,6 +20741,7 @@ static bool decode_glUniformMatrix2x3fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix2x4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2x4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20233,6 +20791,7 @@ static bool decode_glUniformMatrix2x4dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix2x4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix2x4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20282,6 +20841,7 @@ static bool decode_glUniformMatrix2x4fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20331,6 +20891,7 @@ static bool decode_glUniformMatrix3dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20380,6 +20941,7 @@ static bool decode_glUniformMatrix3fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix3x2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3x2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20429,6 +20991,7 @@ static bool decode_glUniformMatrix3x2dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix3x2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3x2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20478,6 +21041,7 @@ static bool decode_glUniformMatrix3x2fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix3x4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3x4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20527,6 +21091,7 @@ static bool decode_glUniformMatrix3x4dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix3x4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix3x4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20576,6 +21141,7 @@ static bool decode_glUniformMatrix3x4fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20625,6 +21191,7 @@ static bool decode_glUniformMatrix4dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20674,6 +21241,7 @@ static bool decode_glUniformMatrix4fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glUniformMatrix4x2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4x2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20723,6 +21291,7 @@ static bool decode_glUniformMatrix4x2dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix4x2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4x2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20772,6 +21341,7 @@ static bool decode_glUniformMatrix4x2fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix4x3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4x3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20821,6 +21391,7 @@ static bool decode_glUniformMatrix4x3dv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformMatrix4x3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformMatrix4x3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20870,6 +21441,7 @@ static bool decode_glUniformMatrix4x3fv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glUniformSubroutinesuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformSubroutinesuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum shadertype{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20916,6 +21488,7 @@ static bool decode_glUniformSubroutinesuiv(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glUseProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUseProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20926,6 +21499,7 @@ static bool decode_glUseProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glUseProgramStages(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUseProgramStages");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20942,6 +21516,7 @@ static bool decode_glUseProgramStages(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glValidateProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glValidateProgram");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20952,6 +21527,7 @@ static bool decode_glValidateProgram(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glValidateProgramPipeline(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glValidateProgramPipeline");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20962,6 +21538,7 @@ static bool decode_glValidateProgramPipeline(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glVertexArrayAttribBinding(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayAttribBinding");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -20978,6 +21555,7 @@ static bool decode_glVertexArrayAttribBinding(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexArrayAttribFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayAttribFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21003,6 +21581,7 @@ static bool decode_glVertexArrayAttribFormat(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glVertexArrayAttribIFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayAttribIFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21025,6 +21604,7 @@ static bool decode_glVertexArrayAttribIFormat(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexArrayAttribLFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayAttribLFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21047,6 +21627,7 @@ static bool decode_glVertexArrayAttribLFormat(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexArrayBindingDivisor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayBindingDivisor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21063,6 +21644,7 @@ static bool decode_glVertexArrayBindingDivisor(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glVertexArrayElementBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayElementBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21076,6 +21658,7 @@ static bool decode_glVertexArrayElementBuffer(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexArrayVertexBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21098,6 +21681,7 @@ static bool decode_glVertexArrayVertexBuffer(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glVertexArrayVertexBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexBuffers");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21213,6 +21797,7 @@ static bool decode_glVertexArrayVertexBuffers(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexAttrib1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21225,6 +21810,7 @@ static bool decode_glVertexAttrib1d(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21267,6 +21853,7 @@ static bool decode_glVertexAttrib1dv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21279,6 +21866,7 @@ static bool decode_glVertexAttrib1f(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21321,6 +21909,7 @@ static bool decode_glVertexAttrib1fv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib1s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21334,6 +21923,7 @@ static bool decode_glVertexAttrib1s(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib1sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib1sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21376,6 +21966,7 @@ static bool decode_glVertexAttrib1sv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21390,6 +21981,7 @@ static bool decode_glVertexAttrib2d(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21432,6 +22024,7 @@ static bool decode_glVertexAttrib2dv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21446,6 +22039,7 @@ static bool decode_glVertexAttrib2f(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21488,6 +22082,7 @@ static bool decode_glVertexAttrib2fv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21504,6 +22099,7 @@ static bool decode_glVertexAttrib2s(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21546,6 +22142,7 @@ static bool decode_glVertexAttrib2sv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21562,6 +22159,7 @@ static bool decode_glVertexAttrib3d(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21604,6 +22202,7 @@ static bool decode_glVertexAttrib3dv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21620,6 +22219,7 @@ static bool decode_glVertexAttrib3f(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21662,6 +22262,7 @@ static bool decode_glVertexAttrib3fv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21681,6 +22282,7 @@ static bool decode_glVertexAttrib3s(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21723,6 +22325,7 @@ static bool decode_glVertexAttrib3sv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4Nbv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nbv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21765,6 +22368,7 @@ static bool decode_glVertexAttrib4Nbv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4Niv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Niv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21807,6 +22411,7 @@ static bool decode_glVertexAttrib4Niv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4Nsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nsv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21849,6 +22454,7 @@ static bool decode_glVertexAttrib4Nsv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4Nub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nub");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21871,6 +22477,7 @@ static bool decode_glVertexAttrib4Nub(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4Nubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21913,6 +22520,7 @@ static bool decode_glVertexAttrib4Nubv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttrib4Nuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21955,6 +22563,7 @@ static bool decode_glVertexAttrib4Nuiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttrib4Nusv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4Nusv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -21997,6 +22606,7 @@ static bool decode_glVertexAttrib4Nusv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttrib4bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22039,6 +22649,7 @@ static bool decode_glVertexAttrib4bv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22057,6 +22668,7 @@ static bool decode_glVertexAttrib4d(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22099,6 +22711,7 @@ static bool decode_glVertexAttrib4dv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22117,6 +22730,7 @@ static bool decode_glVertexAttrib4f(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22159,6 +22773,7 @@ static bool decode_glVertexAttrib4fv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22201,6 +22816,7 @@ static bool decode_glVertexAttrib4iv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22223,6 +22839,7 @@ static bool decode_glVertexAttrib4s(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glVertexAttrib4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22265,6 +22882,7 @@ static bool decode_glVertexAttrib4sv(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttrib4ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4ubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22307,6 +22925,7 @@ static bool decode_glVertexAttrib4ubv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22349,6 +22968,7 @@ static bool decode_glVertexAttrib4uiv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttrib4usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttrib4usv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22391,6 +23011,7 @@ static bool decode_glVertexAttrib4usv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribBinding(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribBinding");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint attribindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22404,6 +23025,7 @@ static bool decode_glVertexAttribBinding(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glVertexAttribDivisor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribDivisor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22417,6 +23039,7 @@ static bool decode_glVertexAttribDivisor(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glVertexAttribFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint attribindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22439,6 +23062,7 @@ static bool decode_glVertexAttribFormat(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glVertexAttribI1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI1i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22452,6 +23076,7 @@ static bool decode_glVertexAttribI1i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribI1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI1iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22494,6 +23119,7 @@ static bool decode_glVertexAttribI1iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22507,6 +23133,7 @@ static bool decode_glVertexAttribI1ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22549,6 +23176,7 @@ static bool decode_glVertexAttribI1uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribI2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22565,6 +23193,7 @@ static bool decode_glVertexAttribI2i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribI2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22607,6 +23236,7 @@ static bool decode_glVertexAttribI2iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22623,6 +23253,7 @@ static bool decode_glVertexAttribI2ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22665,6 +23296,7 @@ static bool decode_glVertexAttribI2uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribI3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22684,6 +23316,7 @@ static bool decode_glVertexAttribI3i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribI3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22726,6 +23359,7 @@ static bool decode_glVertexAttribI3iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22745,6 +23379,7 @@ static bool decode_glVertexAttribI3ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22787,6 +23422,7 @@ static bool decode_glVertexAttribI3uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribI4bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22829,6 +23465,7 @@ static bool decode_glVertexAttribI4bv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22851,6 +23488,7 @@ static bool decode_glVertexAttribI4i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribI4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22893,6 +23531,7 @@ static bool decode_glVertexAttribI4iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22935,6 +23574,7 @@ static bool decode_glVertexAttribI4sv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI4ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4ubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22977,6 +23617,7 @@ static bool decode_glVertexAttribI4ubv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribI4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -22999,6 +23640,7 @@ static bool decode_glVertexAttribI4ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribI4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23041,6 +23683,7 @@ static bool decode_glVertexAttribI4uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribI4usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribI4usv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23083,6 +23726,7 @@ static bool decode_glVertexAttribI4usv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribIFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribIFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint attribindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23102,6 +23746,7 @@ static bool decode_glVertexAttribIFormat(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glVertexAttribIPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribIPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23125,6 +23770,7 @@ static bool decode_glVertexAttribIPointer(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glVertexAttribL1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23137,6 +23783,7 @@ static bool decode_glVertexAttribL1d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribL1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23179,6 +23826,7 @@ static bool decode_glVertexAttribL1dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribL2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23193,6 +23841,7 @@ static bool decode_glVertexAttribL2d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribL2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23235,6 +23884,7 @@ static bool decode_glVertexAttribL2dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribL3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23251,6 +23901,7 @@ static bool decode_glVertexAttribL3d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribL3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23293,6 +23944,7 @@ static bool decode_glVertexAttribL3dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribL4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23311,6 +23963,7 @@ static bool decode_glVertexAttribL4d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glVertexAttribL4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23353,6 +24006,7 @@ static bool decode_glVertexAttribL4dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribLFormat(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribLFormat");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint attribindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23372,6 +24026,7 @@ static bool decode_glVertexAttribLFormat(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glVertexAttribLPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribLPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23395,6 +24050,7 @@ static bool decode_glVertexAttribLPointer(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glVertexAttribP1ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP1ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23414,6 +24070,7 @@ static bool decode_glVertexAttribP1ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribP1uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP1uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23462,6 +24119,7 @@ static bool decode_glVertexAttribP1uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23481,6 +24139,7 @@ static bool decode_glVertexAttribP2ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23529,6 +24188,7 @@ static bool decode_glVertexAttribP2uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23548,6 +24208,7 @@ static bool decode_glVertexAttribP3ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23596,6 +24257,7 @@ static bool decode_glVertexAttribP3uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23615,6 +24277,7 @@ static bool decode_glVertexAttribP4ui(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribP4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23663,6 +24326,7 @@ static bool decode_glVertexAttribP4uiv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glVertexAttribPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23689,6 +24353,7 @@ static bool decode_glVertexAttribPointer(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glVertexBindingDivisor(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexBindingDivisor");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint bindingindex{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23702,6 +24367,7 @@ static bool decode_glVertexBindingDivisor(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glVertexP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP2ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23715,6 +24381,7 @@ static bool decode_glVertexP2ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glVertexP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP2uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23757,6 +24424,7 @@ static bool decode_glVertexP2uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glVertexP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23770,6 +24438,7 @@ static bool decode_glVertexP3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glVertexP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23812,6 +24481,7 @@ static bool decode_glVertexP3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glVertexP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23825,6 +24495,7 @@ static bool decode_glVertexP4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glVertexP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexP4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23867,6 +24538,7 @@ static bool decode_glVertexP4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glViewport(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glViewport");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23886,6 +24558,7 @@ static bool decode_glViewport(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glViewportArrayv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glViewportArrayv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23932,6 +24605,7 @@ static bool decode_glViewportArrayv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glViewportIndexedf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glViewportIndexedf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23950,6 +24624,7 @@ static bool decode_glViewportIndexedf(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glViewportIndexedfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glViewportIndexedfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -23992,6 +24667,7 @@ static bool decode_glViewportIndexedfv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWaitSync");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
@@ -24008,6 +24684,7 @@ static bool decode_glWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glAccum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glAccum");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum op{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24020,6 +24697,7 @@ static bool decode_glAccum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glAlphaFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glAlphaFunc");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum func{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24032,6 +24710,7 @@ static bool decode_glAlphaFunc(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glAreTexturesResident(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glAreTexturesResident");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24107,6 +24786,7 @@ static bool decode_glAreTexturesResident(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glArrayElement(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glArrayElement");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint i{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24118,6 +24798,7 @@ static bool decode_glArrayElement(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glBegin(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBegin");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24128,6 +24809,7 @@ static bool decode_glBegin(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glBitmap(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBitmap");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei width{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24182,6 +24864,7 @@ static bool decode_glBitmap(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glCallList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCallList");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint list{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24192,6 +24875,7 @@ static bool decode_glCallList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glCallLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCallLists");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24238,6 +24922,7 @@ static bool decode_glCallLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glClearAccum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearAccum");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -24253,6 +24938,7 @@ static bool decode_glClearAccum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glClearIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearIndex");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat c{};
     if (!rvk_r.read_pod(c)) return false;
@@ -24262,6 +24948,7 @@ static bool decode_glClearIndex(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glClientActiveTexture(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClientActiveTexture");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24272,6 +24959,7 @@ static bool decode_glClientActiveTexture(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClipPlane");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum plane{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24314,6 +25002,7 @@ static bool decode_glClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor3b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3b");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24330,6 +25019,7 @@ static bool decode_glColor3b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor3bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLbyte* v = nullptr;
     uint64_t v_room = 0;
@@ -24369,6 +25059,7 @@ static bool decode_glColor3bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -24382,6 +25073,7 @@ static bool decode_glColor3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -24421,6 +25113,7 @@ static bool decode_glColor3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -24434,6 +25127,7 @@ static bool decode_glColor3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -24473,6 +25167,7 @@ static bool decode_glColor3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24489,6 +25184,7 @@ static bool decode_glColor3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -24528,6 +25224,7 @@ static bool decode_glColor3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24544,6 +25241,7 @@ static bool decode_glColor3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -24583,6 +25281,7 @@ static bool decode_glColor3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3ub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3ub");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24599,6 +25298,7 @@ static bool decode_glColor3ub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3ubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLubyte* v = nullptr;
     uint64_t v_room = 0;
@@ -24638,6 +25338,7 @@ static bool decode_glColor3ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24654,6 +25355,7 @@ static bool decode_glColor3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLuint* v = nullptr;
     uint64_t v_room = 0;
@@ -24693,6 +25395,7 @@ static bool decode_glColor3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor3us(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3us");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLushort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24709,6 +25412,7 @@ static bool decode_glColor3us(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor3usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor3usv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLushort* v = nullptr;
     uint64_t v_room = 0;
@@ -24748,6 +25452,7 @@ static bool decode_glColor3usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor4b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4b");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24767,6 +25472,7 @@ static bool decode_glColor4b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor4bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLbyte* v = nullptr;
     uint64_t v_room = 0;
@@ -24806,6 +25512,7 @@ static bool decode_glColor4bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -24821,6 +25528,7 @@ static bool decode_glColor4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -24860,6 +25568,7 @@ static bool decode_glColor4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -24875,6 +25584,7 @@ static bool decode_glColor4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -24914,6 +25624,7 @@ static bool decode_glColor4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24933,6 +25644,7 @@ static bool decode_glColor4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -24972,6 +25684,7 @@ static bool decode_glColor4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -24991,6 +25704,7 @@ static bool decode_glColor4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glColor4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -25030,6 +25744,7 @@ static bool decode_glColor4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4ub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4ub");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25049,6 +25764,7 @@ static bool decode_glColor4ub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4ubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLubyte* v = nullptr;
     uint64_t v_room = 0;
@@ -25088,6 +25804,7 @@ static bool decode_glColor4ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25107,6 +25824,7 @@ static bool decode_glColor4ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLuint* v = nullptr;
     uint64_t v_room = 0;
@@ -25146,6 +25864,7 @@ static bool decode_glColor4uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColor4us(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4us");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLushort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25165,6 +25884,7 @@ static bool decode_glColor4us(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glColor4usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColor4usv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLushort* v = nullptr;
     uint64_t v_room = 0;
@@ -25204,6 +25924,7 @@ static bool decode_glColor4usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glColorMaterial(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorMaterial");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25217,6 +25938,7 @@ static bool decode_glColorMaterial(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glColorPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25237,6 +25959,7 @@ static bool decode_glColorPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glCopyPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyPixels");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25259,6 +25982,7 @@ static bool decode_glCopyPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glDeleteLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteLists");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint list{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25272,6 +25996,7 @@ static bool decode_glDeleteLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glDisableClientState(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableClientState");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25282,6 +26007,7 @@ static bool decode_glDisableClientState(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glDrawPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDrawPixels");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei width{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25346,6 +26072,7 @@ static bool decode_glDrawPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glEdgeFlag(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEdgeFlag");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLboolean flag{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25356,6 +26083,7 @@ static bool decode_glEdgeFlag(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glEdgeFlagPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEdgeFlagPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei stride{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25370,6 +26098,7 @@ static bool decode_glEdgeFlagPointer(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glEdgeFlagv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEdgeFlagv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLboolean* flag = nullptr;
     uint64_t flag_room = 0;
@@ -25409,6 +26138,7 @@ static bool decode_glEdgeFlagv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glEnableClientState(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableClientState");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25420,6 +26150,7 @@ static bool decode_glEnableClientState(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glEnd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glEnd == nullptr) return false;
     rvk_gl.glEnd();
@@ -25427,6 +26158,7 @@ static bool decode_glEnd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::Wi
 }
 
 static bool decode_glEndList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEndList");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glEndList == nullptr) return false;
     rvk_gl.glEndList();
@@ -25434,6 +26166,7 @@ static bool decode_glEndList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glEvalCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble u{};
     if (!rvk_r.read_pod(u)) return false;
@@ -25443,6 +26176,7 @@ static bool decode_glEvalCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glEvalCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* u = nullptr;
     uint64_t u_room = 0;
@@ -25482,6 +26216,7 @@ static bool decode_glEvalCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glEvalCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat u{};
     if (!rvk_r.read_pod(u)) return false;
@@ -25491,6 +26226,7 @@ static bool decode_glEvalCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glEvalCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* u = nullptr;
     uint64_t u_room = 0;
@@ -25530,6 +26266,7 @@ static bool decode_glEvalCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glEvalCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble u{};
     if (!rvk_r.read_pod(u)) return false;
@@ -25541,6 +26278,7 @@ static bool decode_glEvalCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glEvalCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* u = nullptr;
     uint64_t u_room = 0;
@@ -25580,6 +26318,7 @@ static bool decode_glEvalCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glEvalCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat u{};
     if (!rvk_r.read_pod(u)) return false;
@@ -25591,6 +26330,7 @@ static bool decode_glEvalCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glEvalCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalCoord2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* u = nullptr;
     uint64_t u_room = 0;
@@ -25630,6 +26370,7 @@ static bool decode_glEvalCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glEvalMesh1(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalMesh1");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25646,6 +26387,7 @@ static bool decode_glEvalMesh1(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glEvalMesh2(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalMesh2");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25668,6 +26410,7 @@ static bool decode_glEvalMesh2(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glEvalPoint1(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalPoint1");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint i{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25678,6 +26421,7 @@ static bool decode_glEvalPoint1(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glEvalPoint2(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEvalPoint2");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint i{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25691,12 +26435,14 @@ static bool decode_glEvalPoint2(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glFeedbackBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFeedbackBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     (void)rvk_gl;  // Refused: feedback mode writes into the buffer at every later draw.
     return false;
 }
 
 static bool decode_glFogCoordPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoordPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25714,6 +26460,7 @@ static bool decode_glFogCoordPointer(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glFogCoordd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoordd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble coord{};
     if (!rvk_r.read_pod(coord)) return false;
@@ -25723,6 +26470,7 @@ static bool decode_glFogCoordd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glFogCoorddv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoorddv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* coord = nullptr;
     uint64_t coord_room = 0;
@@ -25762,6 +26510,7 @@ static bool decode_glFogCoorddv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glFogCoordf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoordf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat coord{};
     if (!rvk_r.read_pod(coord)) return false;
@@ -25771,6 +26520,7 @@ static bool decode_glFogCoordf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glFogCoordfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoordfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* coord = nullptr;
     uint64_t coord_room = 0;
@@ -25810,6 +26560,7 @@ static bool decode_glFogCoordfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glFogf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25822,6 +26573,7 @@ static bool decode_glFogf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::W
 }
 
 static bool decode_glFogfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25858,6 +26610,7 @@ static bool decode_glFogfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glFogi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25871,6 +26624,7 @@ static bool decode_glFogi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::W
 }
 
 static bool decode_glFogiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25907,6 +26661,7 @@ static bool decode_glFogiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glFrustum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFrustum");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble left{};
     if (!rvk_r.read_pod(left)) return false;
@@ -25926,6 +26681,7 @@ static bool decode_glFrustum(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glGenLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenLists");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei range{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25937,6 +26693,7 @@ static bool decode_glGenLists(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glGetClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetClipPlane");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum plane{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -25977,6 +26734,7 @@ static bool decode_glGetClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetLightfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26020,6 +26778,7 @@ static bool decode_glGetLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGetLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetLightiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26063,6 +26822,7 @@ static bool decode_glGetLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glGetMapdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMapdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26107,6 +26867,7 @@ static bool decode_glGetMapdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glGetMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMapfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26151,6 +26912,7 @@ static bool decode_glGetMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glGetMapiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMapiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26195,6 +26957,7 @@ static bool decode_glGetMapiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glGetMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMaterialfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26238,6 +27001,7 @@ static bool decode_glGetMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMaterialiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26281,6 +27045,7 @@ static bool decode_glGetMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetPixelMapfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26322,6 +27087,7 @@ static bool decode_glGetPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetPixelMapuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26363,6 +27129,7 @@ static bool decode_glGetPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGetPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetPixelMapusv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26404,6 +27171,7 @@ static bool decode_glGetPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGetPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetPolygonStipple");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte* mask_storage = nullptr;
     size_t mask_storage_count = 0;
@@ -26442,6 +27210,7 @@ static bool decode_glGetPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glGetTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexEnvfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26485,6 +27254,7 @@ static bool decode_glGetTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexEnviv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26528,6 +27298,7 @@ static bool decode_glGetTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexGendv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26571,6 +27342,7 @@ static bool decode_glGetTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexGenfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26614,6 +27386,7 @@ static bool decode_glGetTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glGetTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTexGeniv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26657,6 +27430,7 @@ static bool decode_glGetTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glIndexMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexMask");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26667,6 +27441,7 @@ static bool decode_glIndexMask(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glIndexPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26684,6 +27459,7 @@ static bool decode_glIndexPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glIndexd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble c{};
     if (!rvk_r.read_pod(c)) return false;
@@ -26693,6 +27469,7 @@ static bool decode_glIndexd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glIndexdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble* c_storage = nullptr;
     size_t c_storage_count = 0;
@@ -26730,6 +27507,7 @@ static bool decode_glIndexdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIndexf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat c{};
     if (!rvk_r.read_pod(c)) return false;
@@ -26739,6 +27517,7 @@ static bool decode_glIndexf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glIndexfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat* c_storage = nullptr;
     size_t c_storage_count = 0;
@@ -26776,6 +27555,7 @@ static bool decode_glIndexfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIndexi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint c{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26786,6 +27566,7 @@ static bool decode_glIndexi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glIndexiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint* c_storage = nullptr;
     size_t c_storage_count = 0;
@@ -26823,6 +27604,7 @@ static bool decode_glIndexiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIndexs(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexs");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort c{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26833,6 +27615,7 @@ static bool decode_glIndexs(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glIndexsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexsv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort* c_storage = nullptr;
     size_t c_storage_count = 0;
@@ -26870,6 +27653,7 @@ static bool decode_glIndexsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIndexub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexub");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte c{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26880,6 +27664,7 @@ static bool decode_glIndexub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glIndexubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte* c_storage = nullptr;
     size_t c_storage_count = 0;
@@ -26917,6 +27702,7 @@ static bool decode_glIndexubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glInitNames(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInitNames");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glInitNames == nullptr) return false;
     rvk_gl.glInitNames();
@@ -26924,6 +27710,7 @@ static bool decode_glInitNames(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glInterleavedArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glInterleavedArrays");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum format{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26941,6 +27728,7 @@ static bool decode_glInterleavedArrays(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glIsList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsList");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint list{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26952,6 +27740,7 @@ static bool decode_glIsList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glLightModelf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightModelf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -26964,6 +27753,7 @@ static bool decode_glLightModelf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glLightModelfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightModelfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27000,6 +27790,7 @@ static bool decode_glLightModelfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glLightModeli(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightModeli");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27013,6 +27804,7 @@ static bool decode_glLightModeli(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glLightModeliv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightModeliv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27049,6 +27841,7 @@ static bool decode_glLightModeliv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glLightf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27064,6 +27857,7 @@ static bool decode_glLightf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27103,6 +27897,7 @@ static bool decode_glLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glLighti(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLighti");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27119,6 +27914,7 @@ static bool decode_glLighti(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLightiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum light{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27158,6 +27954,7 @@ static bool decode_glLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glLineStipple(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLineStipple");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint factor{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27171,6 +27968,7 @@ static bool decode_glLineStipple(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glListBase(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glListBase");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint base{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27181,6 +27979,7 @@ static bool decode_glListBase(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glLoadIdentity(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadIdentity");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glLoadIdentity == nullptr) return false;
     rvk_gl.glLoadIdentity();
@@ -27188,6 +27987,7 @@ static bool decode_glLoadIdentity(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glLoadMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadMatrixd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* m = nullptr;
     uint64_t m_room = 0;
@@ -27227,6 +28027,7 @@ static bool decode_glLoadMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glLoadMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadMatrixf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* m = nullptr;
     uint64_t m_room = 0;
@@ -27266,6 +28067,7 @@ static bool decode_glLoadMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glLoadName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint name{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27276,6 +28078,7 @@ static bool decode_glLoadName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glLoadTransposeMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadTransposeMatrixd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* m = nullptr;
     uint64_t m_room = 0;
@@ -27315,6 +28118,7 @@ static bool decode_glLoadTransposeMatrixd(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glLoadTransposeMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glLoadTransposeMatrixf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* m = nullptr;
     uint64_t m_room = 0;
@@ -27354,6 +28158,7 @@ static bool decode_glLoadTransposeMatrixf(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glMap1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMap1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27407,6 +28212,7 @@ static bool decode_glMap1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glMap1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMap1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27460,6 +28266,7 @@ static bool decode_glMap1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glMap2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMap2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27523,6 +28330,7 @@ static bool decode_glMap2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glMap2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMap2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27586,6 +28394,7 @@ static bool decode_glMap2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glMapGrid1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMapGrid1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint un{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27600,6 +28409,7 @@ static bool decode_glMapGrid1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMapGrid1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMapGrid1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint un{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27614,6 +28424,7 @@ static bool decode_glMapGrid1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMapGrid2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMapGrid2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint un{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27635,6 +28446,7 @@ static bool decode_glMapGrid2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMapGrid2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMapGrid2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint un{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27656,6 +28468,7 @@ static bool decode_glMapGrid2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMaterialf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMaterialf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27671,6 +28484,7 @@ static bool decode_glMaterialf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMaterialfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27710,6 +28524,7 @@ static bool decode_glMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glMateriali(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMateriali");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27726,6 +28541,7 @@ static bool decode_glMateriali(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMaterialiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum face{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27765,6 +28581,7 @@ static bool decode_glMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glMatrixMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixMode");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27775,6 +28592,7 @@ static bool decode_glMatrixMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glMultMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultMatrixd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* m = nullptr;
     uint64_t m_room = 0;
@@ -27814,6 +28632,7 @@ static bool decode_glMultMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glMultMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultMatrixf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* m = nullptr;
     uint64_t m_room = 0;
@@ -27853,6 +28672,7 @@ static bool decode_glMultMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glMultTransposeMatrixd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultTransposeMatrixd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* m = nullptr;
     uint64_t m_room = 0;
@@ -27892,6 +28712,7 @@ static bool decode_glMultTransposeMatrixd(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glMultTransposeMatrixf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultTransposeMatrixf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* m = nullptr;
     uint64_t m_room = 0;
@@ -27931,6 +28752,7 @@ static bool decode_glMultTransposeMatrixf(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glMultiTexCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27943,6 +28765,7 @@ static bool decode_glMultiTexCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27985,6 +28808,7 @@ static bool decode_glMultiTexCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -27997,6 +28821,7 @@ static bool decode_glMultiTexCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28039,6 +28864,7 @@ static bool decode_glMultiTexCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28052,6 +28878,7 @@ static bool decode_glMultiTexCoord1i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28094,6 +28921,7 @@ static bool decode_glMultiTexCoord1iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord1s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28107,6 +28935,7 @@ static bool decode_glMultiTexCoord1s(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord1sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord1sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28149,6 +28978,7 @@ static bool decode_glMultiTexCoord1sv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28163,6 +28993,7 @@ static bool decode_glMultiTexCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28205,6 +29036,7 @@ static bool decode_glMultiTexCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28219,6 +29051,7 @@ static bool decode_glMultiTexCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28261,6 +29094,7 @@ static bool decode_glMultiTexCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28277,6 +29111,7 @@ static bool decode_glMultiTexCoord2i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28319,6 +29154,7 @@ static bool decode_glMultiTexCoord2iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28335,6 +29171,7 @@ static bool decode_glMultiTexCoord2s(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28377,6 +29214,7 @@ static bool decode_glMultiTexCoord2sv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28393,6 +29231,7 @@ static bool decode_glMultiTexCoord3d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28435,6 +29274,7 @@ static bool decode_glMultiTexCoord3dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28451,6 +29291,7 @@ static bool decode_glMultiTexCoord3f(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28493,6 +29334,7 @@ static bool decode_glMultiTexCoord3fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28512,6 +29354,7 @@ static bool decode_glMultiTexCoord3i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28554,6 +29397,7 @@ static bool decode_glMultiTexCoord3iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28573,6 +29417,7 @@ static bool decode_glMultiTexCoord3s(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28615,6 +29460,7 @@ static bool decode_glMultiTexCoord3sv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28633,6 +29479,7 @@ static bool decode_glMultiTexCoord4d(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28675,6 +29522,7 @@ static bool decode_glMultiTexCoord4dv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28693,6 +29541,7 @@ static bool decode_glMultiTexCoord4f(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28735,6 +29584,7 @@ static bool decode_glMultiTexCoord4fv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28757,6 +29607,7 @@ static bool decode_glMultiTexCoord4i(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28799,6 +29650,7 @@ static bool decode_glMultiTexCoord4iv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexCoord4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28821,6 +29673,7 @@ static bool decode_glMultiTexCoord4s(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexCoord4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoord4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28863,6 +29716,7 @@ static bool decode_glMultiTexCoord4sv(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glNewList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNewList");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint list{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28876,6 +29730,7 @@ static bool decode_glNewList(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glNormal3b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3b");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbyte nx{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -28892,6 +29747,7 @@ static bool decode_glNormal3b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glNormal3bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLbyte* v = nullptr;
     uint64_t v_room = 0;
@@ -28931,6 +29787,7 @@ static bool decode_glNormal3bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glNormal3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble nx{};
     if (!rvk_r.read_pod(nx)) return false;
@@ -28944,6 +29801,7 @@ static bool decode_glNormal3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glNormal3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -28983,6 +29841,7 @@ static bool decode_glNormal3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glNormal3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat nx{};
     if (!rvk_r.read_pod(nx)) return false;
@@ -28996,6 +29855,7 @@ static bool decode_glNormal3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glNormal3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -29035,6 +29895,7 @@ static bool decode_glNormal3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glNormal3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint nx{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29051,6 +29912,7 @@ static bool decode_glNormal3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glNormal3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -29090,6 +29952,7 @@ static bool decode_glNormal3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glNormal3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort nx{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29106,6 +29969,7 @@ static bool decode_glNormal3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glNormal3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormal3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -29145,6 +30009,7 @@ static bool decode_glNormal3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glNormalPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormalPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29162,6 +30027,7 @@ static bool decode_glNormalPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glOrtho(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glOrtho");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble left{};
     if (!rvk_r.read_pod(left)) return false;
@@ -29181,6 +30047,7 @@ static bool decode_glOrtho(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glPassThrough(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPassThrough");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat token{};
     if (!rvk_r.read_pod(token)) return false;
@@ -29190,6 +30057,7 @@ static bool decode_glPassThrough(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelMapfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29236,6 +30104,7 @@ static bool decode_glPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelMapuiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29282,6 +30151,7 @@ static bool decode_glPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelMapusv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum map{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29328,6 +30198,7 @@ static bool decode_glPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glPixelTransferf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelTransferf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29340,6 +30211,7 @@ static bool decode_glPixelTransferf(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glPixelTransferi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelTransferi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29353,6 +30225,7 @@ static bool decode_glPixelTransferi(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glPixelZoom(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPixelZoom");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat xfactor{};
     if (!rvk_r.read_pod(xfactor)) return false;
@@ -29364,6 +30237,7 @@ static bool decode_glPixelZoom(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPolygonStipple");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLubyte* mask = nullptr;
     uint64_t mask_room = 0;
@@ -29404,6 +30278,7 @@ static bool decode_glPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glPopAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPopAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPopAttrib == nullptr) return false;
     rvk_gl.glPopAttrib();
@@ -29411,6 +30286,7 @@ static bool decode_glPopAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glPopClientAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPopClientAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPopClientAttrib == nullptr) return false;
     rvk_gl.glPopClientAttrib();
@@ -29418,6 +30294,7 @@ static bool decode_glPopClientAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glPopMatrix(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPopMatrix");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPopMatrix == nullptr) return false;
     rvk_gl.glPopMatrix();
@@ -29425,6 +30302,7 @@ static bool decode_glPopMatrix(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glPopName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPopName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPopName == nullptr) return false;
     rvk_gl.glPopName();
@@ -29432,6 +30310,7 @@ static bool decode_glPopName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glPrioritizeTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPrioritizeTextures");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei n{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29508,6 +30387,7 @@ static bool decode_glPrioritizeTextures(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glPushAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29518,6 +30398,7 @@ static bool decode_glPushAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glPushClientAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushClientAttrib");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29528,6 +30409,7 @@ static bool decode_glPushClientAttrib(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glPushMatrix(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushMatrix");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glPushMatrix == nullptr) return false;
     rvk_gl.glPushMatrix();
@@ -29535,6 +30417,7 @@ static bool decode_glPushMatrix(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glPushName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushName");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint name{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29545,6 +30428,7 @@ static bool decode_glPushName(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glRasterPos2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -29556,6 +30440,7 @@ static bool decode_glRasterPos2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -29595,6 +30480,7 @@ static bool decode_glRasterPos2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -29606,6 +30492,7 @@ static bool decode_glRasterPos2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -29645,6 +30532,7 @@ static bool decode_glRasterPos2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29658,6 +30546,7 @@ static bool decode_glRasterPos2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -29697,6 +30586,7 @@ static bool decode_glRasterPos2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29710,6 +30600,7 @@ static bool decode_glRasterPos2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -29749,6 +30640,7 @@ static bool decode_glRasterPos2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -29762,6 +30654,7 @@ static bool decode_glRasterPos3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -29801,6 +30694,7 @@ static bool decode_glRasterPos3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -29814,6 +30708,7 @@ static bool decode_glRasterPos3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -29853,6 +30748,7 @@ static bool decode_glRasterPos3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29869,6 +30765,7 @@ static bool decode_glRasterPos3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -29908,6 +30805,7 @@ static bool decode_glRasterPos3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -29924,6 +30822,7 @@ static bool decode_glRasterPos3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -29963,6 +30862,7 @@ static bool decode_glRasterPos3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -29978,6 +30878,7 @@ static bool decode_glRasterPos4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -30017,6 +30918,7 @@ static bool decode_glRasterPos4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -30032,6 +30934,7 @@ static bool decode_glRasterPos4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -30071,6 +30974,7 @@ static bool decode_glRasterPos4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30090,6 +30994,7 @@ static bool decode_glRasterPos4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -30129,6 +31034,7 @@ static bool decode_glRasterPos4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRasterPos4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30148,6 +31054,7 @@ static bool decode_glRasterPos4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glRasterPos4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRasterPos4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -30187,6 +31094,7 @@ static bool decode_glRasterPos4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glRectd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectd");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x1{};
     if (!rvk_r.read_pod(x1)) return false;
@@ -30202,6 +31110,7 @@ static bool decode_glRectd(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glRectdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectdv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v1 = nullptr;
     uint64_t v1_room = 0;
@@ -30273,6 +31182,7 @@ static bool decode_glRectdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glRectf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x1{};
     if (!rvk_r.read_pod(x1)) return false;
@@ -30288,6 +31198,7 @@ static bool decode_glRectf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glRectfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v1 = nullptr;
     uint64_t v1_room = 0;
@@ -30359,6 +31270,7 @@ static bool decode_glRectfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glRecti(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRecti");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x1{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30378,6 +31290,7 @@ static bool decode_glRecti(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glRectiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v1 = nullptr;
     uint64_t v1_room = 0;
@@ -30449,6 +31362,7 @@ static bool decode_glRectiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glRects(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRects");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x1{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30468,6 +31382,7 @@ static bool decode_glRects(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::
 }
 
 static bool decode_glRectsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRectsv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v1 = nullptr;
     uint64_t v1_room = 0;
@@ -30539,6 +31454,7 @@ static bool decode_glRectsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glRenderMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRenderMode");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30550,6 +31466,7 @@ static bool decode_glRenderMode(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glRotated(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRotated");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble angle{};
     if (!rvk_r.read_pod(angle)) return false;
@@ -30565,6 +31482,7 @@ static bool decode_glRotated(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glRotatef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glRotatef");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat angle{};
     if (!rvk_r.read_pod(angle)) return false;
@@ -30580,6 +31498,7 @@ static bool decode_glRotatef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glScaled(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScaled");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -30593,6 +31512,7 @@ static bool decode_glScaled(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glScalef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScalef");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -30606,6 +31526,7 @@ static bool decode_glScalef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
 }
 
 static bool decode_glSecondaryColor3b(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3b");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30622,6 +31543,7 @@ static bool decode_glSecondaryColor3b(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColor3bv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3bv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLbyte* v = nullptr;
     uint64_t v_room = 0;
@@ -30661,6 +31583,7 @@ static bool decode_glSecondaryColor3bv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -30674,6 +31597,7 @@ static bool decode_glSecondaryColor3d(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColor3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -30713,6 +31637,7 @@ static bool decode_glSecondaryColor3dv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat red{};
     if (!rvk_r.read_pod(red)) return false;
@@ -30726,6 +31651,7 @@ static bool decode_glSecondaryColor3f(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColor3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -30765,6 +31691,7 @@ static bool decode_glSecondaryColor3fv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30781,6 +31708,7 @@ static bool decode_glSecondaryColor3i(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColor3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -30820,6 +31748,7 @@ static bool decode_glSecondaryColor3iv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30836,6 +31765,7 @@ static bool decode_glSecondaryColor3s(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColor3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -30875,6 +31805,7 @@ static bool decode_glSecondaryColor3sv(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3ub(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3ub");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLubyte red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30891,6 +31822,7 @@ static bool decode_glSecondaryColor3ub(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3ubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3ubv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLubyte* v = nullptr;
     uint64_t v_room = 0;
@@ -30930,6 +31862,7 @@ static bool decode_glSecondaryColor3ubv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glSecondaryColor3ui(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3ui");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -30946,6 +31879,7 @@ static bool decode_glSecondaryColor3ui(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3uiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3uiv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLuint* v = nullptr;
     uint64_t v_room = 0;
@@ -30985,6 +31919,7 @@ static bool decode_glSecondaryColor3uiv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glSecondaryColor3us(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3us");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLushort red{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31001,6 +31936,7 @@ static bool decode_glSecondaryColor3us(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glSecondaryColor3usv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColor3usv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLushort* v = nullptr;
     uint64_t v_room = 0;
@@ -31040,6 +31976,7 @@ static bool decode_glSecondaryColor3usv(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glSecondaryColorPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColorPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31060,12 +31997,14 @@ static bool decode_glSecondaryColorPointer(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glSelectBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSelectBuffer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     (void)rvk_gl;  // Refused: selection mode writes its hits into the buffer at every later draw.
     return false;
 }
 
 static bool decode_glShadeModel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glShadeModel");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31076,6 +32015,7 @@ static bool decode_glShadeModel(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31085,6 +32025,7 @@ static bool decode_glTexCoord1d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -31124,6 +32065,7 @@ static bool decode_glTexCoord1dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31133,6 +32075,7 @@ static bool decode_glTexCoord1f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -31172,6 +32115,7 @@ static bool decode_glTexCoord1fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31182,6 +32126,7 @@ static bool decode_glTexCoord1i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -31221,6 +32166,7 @@ static bool decode_glTexCoord1iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord1s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31231,6 +32177,7 @@ static bool decode_glTexCoord1s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord1sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord1sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -31270,6 +32217,7 @@ static bool decode_glTexCoord1sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31281,6 +32229,7 @@ static bool decode_glTexCoord2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -31320,6 +32269,7 @@ static bool decode_glTexCoord2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31331,6 +32281,7 @@ static bool decode_glTexCoord2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -31370,6 +32321,7 @@ static bool decode_glTexCoord2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31383,6 +32335,7 @@ static bool decode_glTexCoord2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -31422,6 +32375,7 @@ static bool decode_glTexCoord2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31435,6 +32389,7 @@ static bool decode_glTexCoord2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -31474,6 +32429,7 @@ static bool decode_glTexCoord2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31487,6 +32443,7 @@ static bool decode_glTexCoord3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -31526,6 +32483,7 @@ static bool decode_glTexCoord3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31539,6 +32497,7 @@ static bool decode_glTexCoord3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -31578,6 +32537,7 @@ static bool decode_glTexCoord3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31594,6 +32554,7 @@ static bool decode_glTexCoord3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -31633,6 +32594,7 @@ static bool decode_glTexCoord3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31649,6 +32611,7 @@ static bool decode_glTexCoord3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -31688,6 +32651,7 @@ static bool decode_glTexCoord3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31703,6 +32667,7 @@ static bool decode_glTexCoord4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -31742,6 +32707,7 @@ static bool decode_glTexCoord4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat s{};
     if (!rvk_r.read_pod(s)) return false;
@@ -31757,6 +32723,7 @@ static bool decode_glTexCoord4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -31796,6 +32763,7 @@ static bool decode_glTexCoord4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31815,6 +32783,7 @@ static bool decode_glTexCoord4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -31854,6 +32823,7 @@ static bool decode_glTexCoord4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoord4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort s{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31873,6 +32843,7 @@ static bool decode_glTexCoord4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTexCoord4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoord4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -31912,6 +32883,7 @@ static bool decode_glTexCoord4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glTexCoordPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31932,6 +32904,7 @@ static bool decode_glTexCoordPointer(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glTexEnvf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexEnvf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31947,6 +32920,7 @@ static bool decode_glTexEnvf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexEnvfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -31986,6 +32960,7 @@ static bool decode_glTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glTexEnvi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexEnvi");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32002,6 +32977,7 @@ static bool decode_glTexEnvi(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexEnviv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32041,6 +33017,7 @@ static bool decode_glTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glTexGend(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGend");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32056,6 +33033,7 @@ static bool decode_glTexGend(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGendv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32095,6 +33073,7 @@ static bool decode_glTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glTexGenf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGenf");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32110,6 +33089,7 @@ static bool decode_glTexGenf(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGenfv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32149,6 +33129,7 @@ static bool decode_glTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glTexGeni(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGeni");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32165,6 +33146,7 @@ static bool decode_glTexGeni(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
 }
 
 static bool decode_glTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexGeniv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum coord{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32204,6 +33186,7 @@ static bool decode_glTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glTranslated(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTranslated");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32217,6 +33200,7 @@ static bool decode_glTranslated(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glTranslatef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTranslatef");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32230,6 +33214,7 @@ static bool decode_glTranslatef(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
 }
 
 static bool decode_glVertex2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32241,6 +33226,7 @@ static bool decode_glVertex2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -32280,6 +33266,7 @@ static bool decode_glVertex2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32291,6 +33278,7 @@ static bool decode_glVertex2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -32330,6 +33318,7 @@ static bool decode_glVertex2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32343,6 +33332,7 @@ static bool decode_glVertex2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -32382,6 +33372,7 @@ static bool decode_glVertex2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32395,6 +33386,7 @@ static bool decode_glVertex2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -32434,6 +33426,7 @@ static bool decode_glVertex2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32447,6 +33440,7 @@ static bool decode_glVertex3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -32486,6 +33480,7 @@ static bool decode_glVertex3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32499,6 +33494,7 @@ static bool decode_glVertex3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -32538,6 +33534,7 @@ static bool decode_glVertex3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32554,6 +33551,7 @@ static bool decode_glVertex3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -32593,6 +33591,7 @@ static bool decode_glVertex3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32609,6 +33608,7 @@ static bool decode_glVertex3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -32648,6 +33648,7 @@ static bool decode_glVertex3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32663,6 +33664,7 @@ static bool decode_glVertex4d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -32702,6 +33704,7 @@ static bool decode_glVertex4dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32717,6 +33720,7 @@ static bool decode_glVertex4f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -32756,6 +33760,7 @@ static bool decode_glVertex4fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32775,6 +33780,7 @@ static bool decode_glVertex4i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -32814,6 +33820,7 @@ static bool decode_glVertex4iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertex4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32833,6 +33840,7 @@ static bool decode_glVertex4s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
 }
 
 static bool decode_glVertex4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertex4sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -32872,6 +33880,7 @@ static bool decode_glVertex4sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
 }
 
 static bool decode_glVertexPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexPointer");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -32892,6 +33901,7 @@ static bool decode_glVertexPointer(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glWindowPos2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32903,6 +33913,7 @@ static bool decode_glWindowPos2d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -32942,6 +33953,7 @@ static bool decode_glWindowPos2dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -32953,6 +33965,7 @@ static bool decode_glWindowPos2f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -32992,6 +34005,7 @@ static bool decode_glWindowPos2fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33005,6 +34019,7 @@ static bool decode_glWindowPos2i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -33044,6 +34059,7 @@ static bool decode_glWindowPos2iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33057,6 +34073,7 @@ static bool decode_glWindowPos2s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos2sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -33096,6 +34113,7 @@ static bool decode_glWindowPos2sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3d");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLdouble x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -33109,6 +34127,7 @@ static bool decode_glWindowPos3d(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3dv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLdouble* v = nullptr;
     uint64_t v_room = 0;
@@ -33148,6 +34167,7 @@ static bool decode_glWindowPos3dv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3f");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLfloat x{};
     if (!rvk_r.read_pod(x)) return false;
@@ -33161,6 +34181,7 @@ static bool decode_glWindowPos3f(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3fv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLfloat* v = nullptr;
     uint64_t v_room = 0;
@@ -33200,6 +34221,7 @@ static bool decode_glWindowPos3fv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3i");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33216,6 +34238,7 @@ static bool decode_glWindowPos3i(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3iv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLint* v = nullptr;
     uint64_t v_room = 0;
@@ -33255,6 +34278,7 @@ static bool decode_glWindowPos3iv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glWindowPos3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3s");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLshort x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33271,6 +34295,7 @@ static bool decode_glWindowPos3s(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
 }
 
 static bool decode_glWindowPos3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWindowPos3sv");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     const GLshort* v = nullptr;
     uint64_t v_room = 0;
@@ -33310,6 +34335,7 @@ static bool decode_glWindowPos3sv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glDeleteObjectARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteObjectARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLhandleARB obj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33320,6 +34346,7 @@ static bool decode_glDeleteObjectARB(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetHandleARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetHandleARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33331,6 +34358,7 @@ static bool decode_glGetHandleARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glGetObjectParameterfvARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetObjectParameterfvARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLhandleARB obj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33374,6 +34402,7 @@ static bool decode_glGetObjectParameterfvARB(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetObjectParameterivARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetObjectParameterivARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLhandleARB obj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33417,6 +34446,7 @@ static bool decode_glGetObjectParameterivARB(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetInfoLogARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetInfoLogARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLhandleARB obj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33491,6 +34521,7 @@ static bool decode_glGetInfoLogARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glGetAttachedObjectsARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetAttachedObjectsARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLhandleARB containerObj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33565,6 +34596,7 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTexPageCommitmentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexPageCommitmentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33599,6 +34631,7 @@ static bool decode_glTexPageCommitmentARB(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glBufferPageCommitmentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferPageCommitmentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33618,6 +34651,7 @@ static bool decode_glBufferPageCommitmentARB(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glNamedBufferPageCommitmentEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferPageCommitmentEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33637,6 +34671,7 @@ static bool decode_glNamedBufferPageCommitmentEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedBufferPageCommitmentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferPageCommitmentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33656,6 +34691,7 @@ static bool decode_glNamedBufferPageCommitmentARB(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glTexturePageCommitmentEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexturePageCommitmentEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33690,6 +34726,7 @@ static bool decode_glTexturePageCommitmentEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glMaxShaderCompilerThreadsARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMaxShaderCompilerThreadsARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33700,6 +34737,7 @@ static bool decode_glMaxShaderCompilerThreadsARB(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glMaxShaderCompilerThreadsKHR(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMaxShaderCompilerThreadsKHR");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33710,6 +34748,7 @@ static bool decode_glMaxShaderCompilerThreadsKHR(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glScissorExclusiveNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissorExclusiveNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint x{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33729,6 +34768,7 @@ static bool decode_glScissorExclusiveNV(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glScissorExclusiveArrayvNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glScissorExclusiveArrayvNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint first{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33775,6 +34815,7 @@ static bool decode_glScissorExclusiveArrayvNV(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glFramebufferSampleLocationsfvNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferSampleLocationsfvNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33824,6 +34865,7 @@ static bool decode_glFramebufferSampleLocationsfvNV(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glNamedFramebufferSampleLocationsfvNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferSampleLocationsfvNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33873,6 +34915,7 @@ static bool decode_glNamedFramebufferSampleLocationsfvNV(const RealGl& rvk_gl, :
 }
 
 static bool decode_glResolveDepthValuesNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glResolveDepthValuesNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     if (rvk_gl.glResolveDepthValuesNV == nullptr) return false;
     rvk_gl.glResolveDepthValuesNV();
@@ -33880,6 +34923,7 @@ static bool decode_glResolveDepthValuesNV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetTextureHandleARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureHandleARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33891,6 +34935,7 @@ static bool decode_glGetTextureHandleARB(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetTextureSamplerHandleARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureSamplerHandleARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33905,6 +34950,7 @@ static bool decode_glGetTextureSamplerHandleARB(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glMakeTextureHandleResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeTextureHandleResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33915,6 +34961,7 @@ static bool decode_glMakeTextureHandleResidentARB(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glMakeTextureHandleNonResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeTextureHandleNonResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33925,6 +34972,7 @@ static bool decode_glMakeTextureHandleNonResidentARB(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glGetImageHandleARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetImageHandleARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33948,6 +34996,7 @@ static bool decode_glGetImageHandleARB(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glMakeImageHandleResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeImageHandleResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33961,6 +35010,7 @@ static bool decode_glMakeImageHandleResidentARB(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glMakeImageHandleNonResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeImageHandleNonResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33971,6 +35021,7 @@ static bool decode_glMakeImageHandleNonResidentARB(const RealGl& rvk_gl, ::av::W
 }
 
 static bool decode_glUniformHandleui64ARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformHandleui64ARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -33984,6 +35035,7 @@ static bool decode_glUniformHandleui64ARB(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glUniformHandleui64vARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformHandleui64vARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34030,6 +35082,7 @@ static bool decode_glUniformHandleui64vARB(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniformHandleui64ARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformHandleui64ARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34046,6 +35099,7 @@ static bool decode_glProgramUniformHandleui64ARB(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glProgramUniformHandleui64vARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformHandleui64vARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34095,6 +35149,7 @@ static bool decode_glProgramUniformHandleui64vARB(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glIsTextureHandleResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsTextureHandleResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34106,6 +35161,7 @@ static bool decode_glIsTextureHandleResidentARB(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glIsImageHandleResidentARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsImageHandleResidentARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34117,6 +35173,7 @@ static bool decode_glIsImageHandleResidentARB(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glVertexAttribL1ui64ARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL1ui64ARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34130,6 +35187,7 @@ static bool decode_glVertexAttribL1ui64ARB(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glVertexAttribL1ui64vARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribL1ui64vARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34172,6 +35230,7 @@ static bool decode_glVertexAttribL1ui64vARB(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetVertexAttribLui64vARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexAttribLui64vARB");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34215,6 +35274,7 @@ static bool decode_glGetVertexAttribLui64vARB(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetTextureHandleNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureHandleNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34226,6 +35286,7 @@ static bool decode_glGetTextureHandleNV(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetTextureSamplerHandleNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureSamplerHandleNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34240,6 +35301,7 @@ static bool decode_glGetTextureSamplerHandleNV(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glMakeTextureHandleResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeTextureHandleResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34250,6 +35312,7 @@ static bool decode_glMakeTextureHandleResidentNV(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glMakeTextureHandleNonResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeTextureHandleNonResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34260,6 +35323,7 @@ static bool decode_glMakeTextureHandleNonResidentNV(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetImageHandleNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetImageHandleNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34283,6 +35347,7 @@ static bool decode_glGetImageHandleNV(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMakeImageHandleResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeImageHandleResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34296,6 +35361,7 @@ static bool decode_glMakeImageHandleResidentNV(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glMakeImageHandleNonResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeImageHandleNonResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34306,6 +35372,7 @@ static bool decode_glMakeImageHandleNonResidentNV(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glUniformHandleui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformHandleui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34319,6 +35386,7 @@ static bool decode_glUniformHandleui64NV(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glUniformHandleui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformHandleui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34365,6 +35433,7 @@ static bool decode_glUniformHandleui64vNV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniformHandleui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformHandleui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34381,6 +35450,7 @@ static bool decode_glProgramUniformHandleui64NV(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformHandleui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformHandleui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34430,6 +35500,7 @@ static bool decode_glProgramUniformHandleui64vNV(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glIsTextureHandleResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsTextureHandleResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34441,6 +35512,7 @@ static bool decode_glIsTextureHandleResidentNV(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glIsImageHandleResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsImageHandleResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint64 handle{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34452,6 +35524,7 @@ static bool decode_glIsImageHandleResidentNV(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMakeBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34465,6 +35538,7 @@ static bool decode_glMakeBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glMakeBufferNonResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeBufferNonResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34475,6 +35549,7 @@ static bool decode_glMakeBufferNonResidentNV(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glIsBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34486,6 +35561,7 @@ static bool decode_glIsBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMakeNamedBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeNamedBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34499,6 +35575,7 @@ static bool decode_glMakeNamedBufferResidentNV(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glMakeNamedBufferNonResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMakeNamedBufferNonResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34509,6 +35586,7 @@ static bool decode_glMakeNamedBufferNonResidentNV(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glIsNamedBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsNamedBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34520,6 +35598,7 @@ static bool decode_glIsNamedBufferResidentNV(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetBufferParameterui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBufferParameterui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34563,6 +35642,7 @@ static bool decode_glGetBufferParameterui64vNV(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetNamedBufferParameterui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferParameterui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34606,6 +35686,7 @@ static bool decode_glGetNamedBufferParameterui64vNV(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetIntegerui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetIntegerui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum value{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34646,6 +35727,7 @@ static bool decode_glGetIntegerui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glUniformui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34659,6 +35741,7 @@ static bool decode_glUniformui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniformui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34705,6 +35788,7 @@ static bool decode_glUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGetUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34748,6 +35832,7 @@ static bool decode_glGetUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glProgramUniformui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34764,6 +35849,7 @@ static bool decode_glProgramUniformui64NV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34813,6 +35899,7 @@ static bool decode_glProgramUniformui64vNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glBufferAddressRangeNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferAddressRangeNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34832,6 +35919,7 @@ static bool decode_glBufferAddressRangeNV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glVertexFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34848,6 +35936,7 @@ static bool decode_glVertexFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glNormalFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNormalFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34861,6 +35950,7 @@ static bool decode_glNormalFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glColorFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glColorFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34877,6 +35967,7 @@ static bool decode_glColorFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glIndexFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIndexFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34890,6 +35981,7 @@ static bool decode_glIndexFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glTexCoordFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexCoordFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34906,6 +35998,7 @@ static bool decode_glTexCoordFormatNV(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glEdgeFlagFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEdgeFlagFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLsizei stride{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34916,6 +36009,7 @@ static bool decode_glEdgeFlagFormatNV(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glSecondaryColorFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSecondaryColorFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint size{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34932,6 +36026,7 @@ static bool decode_glSecondaryColorFormatNV(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glFogCoordFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFogCoordFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum type{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34945,6 +36040,7 @@ static bool decode_glFogCoordFormatNV(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glVertexAttribFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34967,6 +36063,7 @@ static bool decode_glVertexAttribFormatNV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glVertexAttribIFormatNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexAttribIFormatNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint index{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -34986,6 +36083,7 @@ static bool decode_glVertexAttribIFormatNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetIntegerui64i_vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetIntegerui64i_vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum value{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35029,6 +36127,7 @@ static bool decode_glGetIntegerui64i_vNV(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glUniform1i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35042,6 +36141,7 @@ static bool decode_glUniform1i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glUniform2i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35058,6 +36158,7 @@ static bool decode_glUniform2i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glUniform3i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35077,6 +36178,7 @@ static bool decode_glUniform3i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glUniform4i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35099,6 +36201,7 @@ static bool decode_glUniform4i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glUniform1i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35145,6 +36248,7 @@ static bool decode_glUniform1i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform2i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35191,6 +36295,7 @@ static bool decode_glUniform2i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform3i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35237,6 +36342,7 @@ static bool decode_glUniform3i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform4i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35283,6 +36389,7 @@ static bool decode_glUniform4i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform1ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35296,6 +36403,7 @@ static bool decode_glUniform1ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform2ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35312,6 +36420,7 @@ static bool decode_glUniform2ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform3ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35331,6 +36440,7 @@ static bool decode_glUniform3ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform4ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35353,6 +36463,7 @@ static bool decode_glUniform4ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glUniform1ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform1ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35399,6 +36510,7 @@ static bool decode_glUniform1ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glUniform2ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform2ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35445,6 +36557,7 @@ static bool decode_glUniform2ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glUniform3ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform3ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35491,6 +36604,7 @@ static bool decode_glUniform3ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glUniform4ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glUniform4ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLint location{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35537,6 +36651,7 @@ static bool decode_glUniform4ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glGetUniformi64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUniformi64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35580,6 +36695,7 @@ static bool decode_glGetUniformi64vNV(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glProgramUniform1i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35596,6 +36712,7 @@ static bool decode_glProgramUniform1i64NV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform2i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35615,6 +36732,7 @@ static bool decode_glProgramUniform2i64NV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform3i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35637,6 +36755,7 @@ static bool decode_glProgramUniform3i64NV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform4i64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4i64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35662,6 +36781,7 @@ static bool decode_glProgramUniform4i64NV(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform1i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35711,6 +36831,7 @@ static bool decode_glProgramUniform1i64vNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform2i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35760,6 +36881,7 @@ static bool decode_glProgramUniform2i64vNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform3i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35809,6 +36931,7 @@ static bool decode_glProgramUniform3i64vNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform4i64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4i64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35858,6 +36981,7 @@ static bool decode_glProgramUniform4i64vNV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform1ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35874,6 +36998,7 @@ static bool decode_glProgramUniform1ui64NV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform2ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35893,6 +37018,7 @@ static bool decode_glProgramUniform2ui64NV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform3ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35915,6 +37041,7 @@ static bool decode_glProgramUniform3ui64NV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform4ui64NV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4ui64NV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35940,6 +37067,7 @@ static bool decode_glProgramUniform4ui64NV(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform1ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -35989,6 +37117,7 @@ static bool decode_glProgramUniform1ui64vNV(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glProgramUniform2ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36038,6 +37167,7 @@ static bool decode_glProgramUniform2ui64vNV(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glProgramUniform3ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36087,6 +37217,7 @@ static bool decode_glProgramUniform3ui64vNV(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glProgramUniform4ui64vNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4ui64vNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36136,6 +37267,7 @@ static bool decode_glProgramUniform4ui64vNV(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glMatrixLoadfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixLoadfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36178,6 +37310,7 @@ static bool decode_glMatrixLoadfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glMatrixLoaddEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixLoaddEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36220,6 +37353,7 @@ static bool decode_glMatrixLoaddEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glMatrixMultfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixMultfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36262,6 +37396,7 @@ static bool decode_glMatrixMultfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glMatrixMultdEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixMultdEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36304,6 +37439,7 @@ static bool decode_glMatrixMultdEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glMatrixLoadIdentityEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixLoadIdentityEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36314,6 +37450,7 @@ static bool decode_glMatrixLoadIdentityEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glMatrixRotatefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixRotatefEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36332,6 +37469,7 @@ static bool decode_glMatrixRotatefEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMatrixRotatedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixRotatedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36350,6 +37488,7 @@ static bool decode_glMatrixRotatedEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMatrixScalefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixScalefEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36366,6 +37505,7 @@ static bool decode_glMatrixScalefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMatrixScaledEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixScaledEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36382,6 +37522,7 @@ static bool decode_glMatrixScaledEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMatrixTranslatefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixTranslatefEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36398,6 +37539,7 @@ static bool decode_glMatrixTranslatefEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glMatrixTranslatedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixTranslatedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36414,6 +37556,7 @@ static bool decode_glMatrixTranslatedEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glMatrixFrustumEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixFrustumEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36436,6 +37579,7 @@ static bool decode_glMatrixFrustumEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMatrixOrthoEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixOrthoEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36458,6 +37602,7 @@ static bool decode_glMatrixOrthoEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glMatrixPopEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixPopEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36468,6 +37613,7 @@ static bool decode_glMatrixPopEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
 }
 
 static bool decode_glMatrixPushEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixPushEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36478,6 +37624,7 @@ static bool decode_glMatrixPushEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r
 }
 
 static bool decode_glClientAttribDefaultEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClientAttribDefaultEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36488,6 +37635,7 @@ static bool decode_glClientAttribDefaultEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glPushClientAttribDefaultEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glPushClientAttribDefaultEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLbitfield mask{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36498,6 +37646,7 @@ static bool decode_glPushClientAttribDefaultEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glTextureParameterfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36516,6 +37665,7 @@ static bool decode_glTextureParameterfEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36558,6 +37708,7 @@ static bool decode_glTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTextureParameteriEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameteriEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36577,6 +37728,7 @@ static bool decode_glTextureParameteriEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36619,6 +37771,7 @@ static bool decode_glTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTextureImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36695,6 +37848,7 @@ static bool decode_glTextureImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36774,6 +37928,7 @@ static bool decode_glTextureImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36847,6 +38002,7 @@ static bool decode_glTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36926,6 +38082,7 @@ static bool decode_glTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCopyTextureImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36957,6 +38114,7 @@ static bool decode_glCopyTextureImage1DEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyTextureImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -36991,6 +38149,7 @@ static bool decode_glCopyTextureImage2DEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37019,6 +38178,7 @@ static bool decode_glCopyTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glCopyTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37053,6 +38213,7 @@ static bool decode_glCopyTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetTextureImageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureImageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37122,6 +38283,7 @@ static bool decode_glGetTextureImageEXT(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glGetTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37168,6 +38330,7 @@ static bool decode_glGetTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37214,6 +38377,7 @@ static bool decode_glGetTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetTextureLevelParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureLevelParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37263,6 +38427,7 @@ static bool decode_glGetTextureLevelParameterfvEXT(const RealGl& rvk_gl, ::av::W
 }
 
 static bool decode_glGetTextureLevelParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureLevelParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37312,6 +38477,7 @@ static bool decode_glGetTextureLevelParameterivEXT(const RealGl& rvk_gl, ::av::W
 }
 
 static bool decode_glTextureImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37394,6 +38560,7 @@ static bool decode_glTextureImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37479,6 +38646,7 @@ static bool decode_glTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glCopyTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyTextureSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37516,6 +38684,7 @@ static bool decode_glCopyTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glBindMultiTextureEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBindMultiTextureEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37532,6 +38701,7 @@ static bool decode_glBindMultiTextureEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glMultiTexCoordPointerEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexCoordPointerEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37555,6 +38725,7 @@ static bool decode_glMultiTexCoordPointerEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMultiTexEnvfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexEnvfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37573,6 +38744,7 @@ static bool decode_glMultiTexEnvfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexEnvfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37615,6 +38787,7 @@ static bool decode_glMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexEnviEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexEnviEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37634,6 +38807,7 @@ static bool decode_glMultiTexEnviEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexEnvivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37676,6 +38850,7 @@ static bool decode_glMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexGendEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGendEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37694,6 +38869,7 @@ static bool decode_glMultiTexGendEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGendvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37736,6 +38912,7 @@ static bool decode_glMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexGenfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGenfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37754,6 +38931,7 @@ static bool decode_glMultiTexGenfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGenfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37796,6 +38974,7 @@ static bool decode_glMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexGeniEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGeniEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37815,6 +38994,7 @@ static bool decode_glMultiTexGeniEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexGenivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37857,6 +39037,7 @@ static bool decode_glMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glGetMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexEnvfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37903,6 +39084,7 @@ static bool decode_glGetMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexEnvivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37949,6 +39131,7 @@ static bool decode_glGetMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexGendvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -37995,6 +39178,7 @@ static bool decode_glGetMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexGenfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38041,6 +39225,7 @@ static bool decode_glGetMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexGenivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38087,6 +39272,7 @@ static bool decode_glGetMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glMultiTexParameteriEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameteriEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38106,6 +39292,7 @@ static bool decode_glMultiTexParameteriEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38148,6 +39335,7 @@ static bool decode_glMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glMultiTexParameterfEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameterfEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38166,6 +39354,7 @@ static bool decode_glMultiTexParameterfEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38208,6 +39397,7 @@ static bool decode_glMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38284,6 +39474,7 @@ static bool decode_glMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38363,6 +39554,7 @@ static bool decode_glMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38436,6 +39628,7 @@ static bool decode_glMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38515,6 +39708,7 @@ static bool decode_glMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyMultiTexImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38546,6 +39740,7 @@ static bool decode_glCopyMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glCopyMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyMultiTexImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38580,6 +39775,7 @@ static bool decode_glCopyMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glCopyMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyMultiTexSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38608,6 +39804,7 @@ static bool decode_glCopyMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glCopyMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyMultiTexSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38642,6 +39839,7 @@ static bool decode_glCopyMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetMultiTexImageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexImageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38711,6 +39909,7 @@ static bool decode_glGetMultiTexImageEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38757,6 +39956,7 @@ static bool decode_glGetMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38803,6 +40003,7 @@ static bool decode_glGetMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetMultiTexLevelParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexLevelParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38852,6 +40053,7 @@ static bool decode_glGetMultiTexLevelParameterfvEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetMultiTexLevelParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexLevelParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38901,6 +40103,7 @@ static bool decode_glGetMultiTexLevelParameterivEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glMultiTexImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -38983,6 +40186,7 @@ static bool decode_glMultiTexImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39068,6 +40272,7 @@ static bool decode_glMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCopyMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCopyMultiTexSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39105,6 +40310,7 @@ static bool decode_glCopyMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glEnableClientStateIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableClientStateIndexedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39119,6 +40325,7 @@ static bool decode_glEnableClientStateIndexedEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glDisableClientStateIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableClientStateIndexedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39132,6 +40339,7 @@ static bool decode_glDisableClientStateIndexedEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glGetFloatIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFloatIndexedvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39175,6 +40383,7 @@ static bool decode_glGetFloatIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetDoubleIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetDoubleIndexedvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39218,6 +40427,7 @@ static bool decode_glGetDoubleIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glEnableIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableIndexedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39231,6 +40441,7 @@ static bool decode_glEnableIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glDisableIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableIndexedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39244,6 +40455,7 @@ static bool decode_glDisableIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glIsEnabledIndexedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glIsEnabledIndexedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39258,6 +40470,7 @@ static bool decode_glIsEnabledIndexedEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glGetIntegerIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetIntegerIndexedvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39301,6 +40514,7 @@ static bool decode_glGetIntegerIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetBooleanIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetBooleanIndexedvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum target{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39344,6 +40558,7 @@ static bool decode_glGetBooleanIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glCompressedTextureImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39412,6 +40627,7 @@ static bool decode_glCompressedTextureImage3DEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCompressedTextureImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39477,6 +40693,7 @@ static bool decode_glCompressedTextureImage2DEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCompressedTextureImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39539,6 +40756,7 @@ static bool decode_glCompressedTextureImage1DEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glCompressedTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39613,6 +40831,7 @@ static bool decode_glCompressedTextureSubImage3DEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glCompressedTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39681,6 +40900,7 @@ static bool decode_glCompressedTextureSubImage2DEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glCompressedTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedTextureSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39743,6 +40963,7 @@ static bool decode_glCompressedTextureSubImage1DEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glGetCompressedTextureImageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetCompressedTextureImageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39806,6 +41027,7 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glCompressedMultiTexImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39874,6 +41096,7 @@ static bool decode_glCompressedMultiTexImage3DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glCompressedMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -39939,6 +41162,7 @@ static bool decode_glCompressedMultiTexImage2DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glCompressedMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40001,6 +41225,7 @@ static bool decode_glCompressedMultiTexImage1DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glCompressedMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexSubImage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40075,6 +41300,7 @@ static bool decode_glCompressedMultiTexSubImage3DEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glCompressedMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexSubImage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40143,6 +41369,7 @@ static bool decode_glCompressedMultiTexSubImage2DEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glCompressedMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCompressedMultiTexSubImage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40205,6 +41432,7 @@ static bool decode_glCompressedMultiTexSubImage1DEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetCompressedMultiTexImageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40268,6 +41496,7 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& rvk_gl, ::av::W
 }
 
 static bool decode_glMatrixLoadTransposefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixLoadTransposefEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40310,6 +41539,7 @@ static bool decode_glMatrixLoadTransposefEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMatrixLoadTransposedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixLoadTransposedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40352,6 +41582,7 @@ static bool decode_glMatrixLoadTransposedEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMatrixMultTransposefEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixMultTransposefEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40394,6 +41625,7 @@ static bool decode_glMatrixMultTransposefEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMatrixMultTransposedEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMatrixMultTransposedEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum mode{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40436,6 +41668,7 @@ static bool decode_glMatrixMultTransposedEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glNamedBufferDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40485,6 +41718,7 @@ static bool decode_glNamedBufferDataEXT(const RealGl& rvk_gl, ::av::WireReader& 
 }
 
 static bool decode_glNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferSubDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40534,6 +41768,7 @@ static bool decode_glNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glGetNamedBufferParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40577,6 +41812,7 @@ static bool decode_glGetNamedBufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glGetNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedBufferSubDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40624,6 +41860,7 @@ static bool decode_glGetNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glProgramUniform1fEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1fEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40639,6 +41876,7 @@ static bool decode_glProgramUniform1fEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform2fEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2fEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40656,6 +41894,7 @@ static bool decode_glProgramUniform2fEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform3fEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3fEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40675,6 +41914,7 @@ static bool decode_glProgramUniform3fEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform4fEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4fEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40696,6 +41936,7 @@ static bool decode_glProgramUniform4fEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform1iEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1iEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40712,6 +41953,7 @@ static bool decode_glProgramUniform1iEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform2iEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2iEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40731,6 +41973,7 @@ static bool decode_glProgramUniform2iEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform3iEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3iEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40753,6 +41996,7 @@ static bool decode_glProgramUniform3iEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform4iEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4iEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40778,6 +42022,7 @@ static bool decode_glProgramUniform4iEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform1fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40827,6 +42072,7 @@ static bool decode_glProgramUniform1fvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform2fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40876,6 +42122,7 @@ static bool decode_glProgramUniform2fvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform3fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40925,6 +42172,7 @@ static bool decode_glProgramUniform3fvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -40974,6 +42222,7 @@ static bool decode_glProgramUniform4fvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform1ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41023,6 +42272,7 @@ static bool decode_glProgramUniform1ivEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform2ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41072,6 +42322,7 @@ static bool decode_glProgramUniform2ivEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform3ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41121,6 +42372,7 @@ static bool decode_glProgramUniform3ivEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform4ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41170,6 +42422,7 @@ static bool decode_glProgramUniform4ivEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniformMatrix2fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41222,6 +42475,7 @@ static bool decode_glProgramUniformMatrix2fvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix3fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41274,6 +42528,7 @@ static bool decode_glProgramUniformMatrix3fvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41326,6 +42581,7 @@ static bool decode_glProgramUniformMatrix4fvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix2x3fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x3fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41378,6 +42634,7 @@ static bool decode_glProgramUniformMatrix2x3fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix3x2fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x2fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41430,6 +42687,7 @@ static bool decode_glProgramUniformMatrix3x2fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix2x4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41482,6 +42740,7 @@ static bool decode_glProgramUniformMatrix2x4fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix4x2fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x2fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41534,6 +42793,7 @@ static bool decode_glProgramUniformMatrix4x2fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix3x4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41586,6 +42846,7 @@ static bool decode_glProgramUniformMatrix3x4fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix4x3fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x3fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41638,6 +42899,7 @@ static bool decode_glProgramUniformMatrix4x3fvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glTextureBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureBufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41657,6 +42919,7 @@ static bool decode_glTextureBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rv
 }
 
 static bool decode_glMultiTexBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexBufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41676,6 +42939,7 @@ static bool decode_glMultiTexBufferEXT(const RealGl& rvk_gl, ::av::WireReader& r
 }
 
 static bool decode_glTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterIivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41718,6 +42982,7 @@ static bool decode_glTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureParameterIuivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41760,6 +43025,7 @@ static bool decode_glTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glGetTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterIivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41806,6 +43072,7 @@ static bool decode_glGetTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetTextureParameterIuivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41852,6 +43119,7 @@ static bool decode_glGetTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameterIivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41894,6 +43162,7 @@ static bool decode_glMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexParameterIuivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41936,6 +43205,7 @@ static bool decode_glMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexParameterIivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -41982,6 +43252,7 @@ static bool decode_glGetMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glGetMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetMultiTexParameterIuivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42028,6 +43299,7 @@ static bool decode_glGetMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glProgramUniform1uiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1uiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42044,6 +43316,7 @@ static bool decode_glProgramUniform1uiEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform2uiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2uiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42063,6 +43336,7 @@ static bool decode_glProgramUniform2uiEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform3uiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3uiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42085,6 +43359,7 @@ static bool decode_glProgramUniform3uiEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform4uiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4uiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42110,6 +43385,7 @@ static bool decode_glProgramUniform4uiEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform1uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42159,6 +43435,7 @@ static bool decode_glProgramUniform1uivEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform2uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42208,6 +43485,7 @@ static bool decode_glProgramUniform2uivEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform3uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42257,6 +43535,7 @@ static bool decode_glProgramUniform3uivEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glProgramUniform4uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42306,6 +43585,7 @@ static bool decode_glProgramUniform4uivEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glNamedProgramLocalParameters4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameters4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42358,6 +43638,7 @@ static bool decode_glNamedProgramLocalParameters4fvEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glNamedProgramLocalParameterI4iEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameterI4iEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42386,6 +43667,7 @@ static bool decode_glNamedProgramLocalParameterI4iEXT(const RealGl& rvk_gl, ::av
 }
 
 static bool decode_glNamedProgramLocalParameterI4ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameterI4ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42434,6 +43716,7 @@ static bool decode_glNamedProgramLocalParameterI4ivEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glNamedProgramLocalParametersI4ivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParametersI4ivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42486,6 +43769,7 @@ static bool decode_glNamedProgramLocalParametersI4ivEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glNamedProgramLocalParameterI4uiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameterI4uiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42514,6 +43798,7 @@ static bool decode_glNamedProgramLocalParameterI4uiEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glNamedProgramLocalParameterI4uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameterI4uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42562,6 +43847,7 @@ static bool decode_glNamedProgramLocalParameterI4uivEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glNamedProgramLocalParametersI4uivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParametersI4uivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42614,6 +43900,7 @@ static bool decode_glNamedProgramLocalParametersI4uivEXT(const RealGl& rvk_gl, :
 }
 
 static bool decode_glGetNamedProgramLocalParameterIivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramLocalParameterIivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42660,6 +43947,7 @@ static bool decode_glGetNamedProgramLocalParameterIivEXT(const RealGl& rvk_gl, :
 }
 
 static bool decode_glGetNamedProgramLocalParameterIuivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramLocalParameterIuivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42706,6 +43994,7 @@ static bool decode_glGetNamedProgramLocalParameterIuivEXT(const RealGl& rvk_gl, 
 }
 
 static bool decode_glEnableClientStateiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableClientStateiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42720,6 +44009,7 @@ static bool decode_glEnableClientStateiEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glDisableClientStateiEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableClientStateiEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum array{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42733,6 +44023,7 @@ static bool decode_glDisableClientStateiEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glGetFloati_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFloati_vEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42776,6 +44067,7 @@ static bool decode_glGetFloati_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
 }
 
 static bool decode_glGetDoublei_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetDoublei_vEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum pname{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42819,6 +44111,7 @@ static bool decode_glGetDoublei_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
 }
 
 static bool decode_glNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramStringEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42871,6 +44164,7 @@ static bool decode_glNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glNamedProgramLocalParameter4dEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameter4dEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42895,6 +44189,7 @@ static bool decode_glNamedProgramLocalParameter4dEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glNamedProgramLocalParameter4dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameter4dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42943,6 +44238,7 @@ static bool decode_glNamedProgramLocalParameter4dvEXT(const RealGl& rvk_gl, ::av
 }
 
 static bool decode_glNamedProgramLocalParameter4fEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameter4fEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -42967,6 +44263,7 @@ static bool decode_glNamedProgramLocalParameter4fEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glNamedProgramLocalParameter4fvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedProgramLocalParameter4fvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43015,6 +44312,7 @@ static bool decode_glNamedProgramLocalParameter4fvEXT(const RealGl& rvk_gl, ::av
 }
 
 static bool decode_glGetNamedProgramLocalParameterdvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramLocalParameterdvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43061,6 +44359,7 @@ static bool decode_glGetNamedProgramLocalParameterdvEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glGetNamedProgramLocalParameterfvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramLocalParameterfvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43107,6 +44406,7 @@ static bool decode_glGetNamedProgramLocalParameterfvEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glGetNamedProgramivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43153,6 +44453,7 @@ static bool decode_glGetNamedProgramivEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glGetNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedProgramStringEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43202,6 +44503,7 @@ static bool decode_glGetNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glNamedRenderbufferStorageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedRenderbufferStorageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43221,6 +44523,7 @@ static bool decode_glNamedRenderbufferStorageEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glGetNamedRenderbufferParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedRenderbufferParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43264,6 +44567,7 @@ static bool decode_glGetNamedRenderbufferParameterivEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glNamedRenderbufferStorageMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedRenderbufferStorageMultisampleEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43286,6 +44590,7 @@ static bool decode_glNamedRenderbufferStorageMultisampleEXT(const RealGl& rvk_gl
 }
 
 static bool decode_glNamedRenderbufferStorageMultisampleCoverageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedRenderbufferStorageMultisampleCoverageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint renderbuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43311,6 +44616,7 @@ static bool decode_glNamedRenderbufferStorageMultisampleCoverageEXT(const RealGl
 }
 
 static bool decode_glCheckNamedFramebufferStatusEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glCheckNamedFramebufferStatusEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43325,6 +44631,7 @@ static bool decode_glCheckNamedFramebufferStatusEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glNamedFramebufferTexture1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTexture1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43347,6 +44654,7 @@ static bool decode_glNamedFramebufferTexture1DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedFramebufferTexture2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTexture2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43369,6 +44677,7 @@ static bool decode_glNamedFramebufferTexture2DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedFramebufferTexture3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTexture3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43394,6 +44703,7 @@ static bool decode_glNamedFramebufferTexture3DEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedFramebufferRenderbufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferRenderbufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43413,6 +44723,7 @@ static bool decode_glNamedFramebufferRenderbufferEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glGetNamedFramebufferAttachmentParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedFramebufferAttachmentParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43459,6 +44770,7 @@ static bool decode_glGetNamedFramebufferAttachmentParameterivEXT(const RealGl& r
 }
 
 static bool decode_glGenerateTextureMipmapEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenerateTextureMipmapEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43472,6 +44784,7 @@ static bool decode_glGenerateTextureMipmapEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGenerateMultiTexMipmapEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGenerateMultiTexMipmapEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43485,6 +44798,7 @@ static bool decode_glGenerateMultiTexMipmapEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glFramebufferDrawBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferDrawBufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43498,6 +44812,7 @@ static bool decode_glFramebufferDrawBufferEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glFramebufferDrawBuffersEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferDrawBuffersEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43544,6 +44859,7 @@ static bool decode_glFramebufferDrawBuffersEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glFramebufferReadBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glFramebufferReadBufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43557,6 +44873,7 @@ static bool decode_glFramebufferReadBufferEXT(const RealGl& rvk_gl, ::av::WireRe
 }
 
 static bool decode_glGetFramebufferParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetFramebufferParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43600,6 +44917,7 @@ static bool decode_glGetFramebufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glNamedCopyBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedCopyBufferSubDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint readBuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43622,6 +44940,7 @@ static bool decode_glNamedCopyBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glNamedFramebufferTextureEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTextureEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43641,6 +44960,7 @@ static bool decode_glNamedFramebufferTextureEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glNamedFramebufferTextureLayerEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTextureLayerEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43663,6 +44983,7 @@ static bool decode_glNamedFramebufferTextureLayerEXT(const RealGl& rvk_gl, ::av:
 }
 
 static bool decode_glNamedFramebufferTextureFaceEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferTextureFaceEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43685,6 +45006,7 @@ static bool decode_glNamedFramebufferTextureFaceEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glTextureRenderbufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureRenderbufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43701,6 +45023,7 @@ static bool decode_glTextureRenderbufferEXT(const RealGl& rvk_gl, ::av::WireRead
 }
 
 static bool decode_glMultiTexRenderbufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glMultiTexRenderbufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLenum texunit{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43717,6 +45040,7 @@ static bool decode_glMultiTexRenderbufferEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glVertexArrayVertexOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43742,6 +45066,7 @@ static bool decode_glVertexArrayVertexOffsetEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glVertexArrayColorOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayColorOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43767,6 +45092,7 @@ static bool decode_glVertexArrayColorOffsetEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glVertexArrayEdgeFlagOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayEdgeFlagOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43786,6 +45112,7 @@ static bool decode_glVertexArrayEdgeFlagOffsetEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glVertexArrayIndexOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayIndexOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43808,6 +45135,7 @@ static bool decode_glVertexArrayIndexOffsetEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glVertexArrayNormalOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayNormalOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43830,6 +45158,7 @@ static bool decode_glVertexArrayNormalOffsetEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glVertexArrayTexCoordOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayTexCoordOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43855,6 +45184,7 @@ static bool decode_glVertexArrayTexCoordOffsetEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glVertexArrayMultiTexCoordOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayMultiTexCoordOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43883,6 +45213,7 @@ static bool decode_glVertexArrayMultiTexCoordOffsetEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glVertexArrayFogCoordOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayFogCoordOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43905,6 +45236,7 @@ static bool decode_glVertexArrayFogCoordOffsetEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glVertexArraySecondaryColorOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArraySecondaryColorOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43930,6 +45262,7 @@ static bool decode_glVertexArraySecondaryColorOffsetEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glVertexArrayVertexAttribOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43961,6 +45294,7 @@ static bool decode_glVertexArrayVertexAttribOffsetEXT(const RealGl& rvk_gl, ::av
 }
 
 static bool decode_glVertexArrayVertexAttribIOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribIOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -43989,6 +45323,7 @@ static bool decode_glVertexArrayVertexAttribIOffsetEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glEnableVertexArrayEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableVertexArrayEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44003,6 +45338,7 @@ static bool decode_glEnableVertexArrayEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glDisableVertexArrayEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableVertexArrayEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44016,6 +45352,7 @@ static bool decode_glDisableVertexArrayEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glEnableVertexArrayAttribEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glEnableVertexArrayAttribEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44029,6 +45366,7 @@ static bool decode_glEnableVertexArrayAttribEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glDisableVertexArrayAttribEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDisableVertexArrayAttribEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44042,6 +45380,7 @@ static bool decode_glDisableVertexArrayAttribEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glGetVertexArrayIntegervEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexArrayIntegervEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44085,6 +45424,7 @@ static bool decode_glGetVertexArrayIntegervEXT(const RealGl& rvk_gl, ::av::WireR
 }
 
 static bool decode_glGetVertexArrayIntegeri_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetVertexArrayIntegeri_vEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44131,6 +45471,7 @@ static bool decode_glGetVertexArrayIntegeri_vEXT(const RealGl& rvk_gl, ::av::Wir
 }
 
 static bool decode_glNamedBufferStorageEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferStorageEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44180,6 +45521,7 @@ static bool decode_glNamedBufferStorageEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glClearNamedBufferDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedBufferDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44243,6 +45585,7 @@ static bool decode_glClearNamedBufferDataEXT(const RealGl& rvk_gl, ::av::WireRea
 }
 
 static bool decode_glClearNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glClearNamedBufferSubDataEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint buffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44312,6 +45655,7 @@ static bool decode_glClearNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glNamedFramebufferParameteriEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedFramebufferParameteriEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44328,6 +45672,7 @@ static bool decode_glNamedFramebufferParameteriEXT(const RealGl& rvk_gl, ::av::W
 }
 
 static bool decode_glGetNamedFramebufferParameterivEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetNamedFramebufferParameterivEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint framebuffer{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44371,6 +45716,7 @@ static bool decode_glGetNamedFramebufferParameterivEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glProgramUniform1dEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1dEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44386,6 +45732,7 @@ static bool decode_glProgramUniform1dEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform2dEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2dEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44403,6 +45750,7 @@ static bool decode_glProgramUniform2dEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform3dEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3dEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44422,6 +45770,7 @@ static bool decode_glProgramUniform3dEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform4dEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4dEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44443,6 +45792,7 @@ static bool decode_glProgramUniform4dEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glProgramUniform1dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform1dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44492,6 +45842,7 @@ static bool decode_glProgramUniform1dvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform2dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform2dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44541,6 +45892,7 @@ static bool decode_glProgramUniform2dvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform3dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform3dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44590,6 +45942,7 @@ static bool decode_glProgramUniform3dvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniform4dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniform4dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44639,6 +45992,7 @@ static bool decode_glProgramUniform4dvEXT(const RealGl& rvk_gl, ::av::WireReader
 }
 
 static bool decode_glProgramUniformMatrix2dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44691,6 +46045,7 @@ static bool decode_glProgramUniformMatrix2dvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix3dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44743,6 +46098,7 @@ static bool decode_glProgramUniformMatrix3dvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix4dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44795,6 +46151,7 @@ static bool decode_glProgramUniformMatrix4dvEXT(const RealGl& rvk_gl, ::av::Wire
 }
 
 static bool decode_glProgramUniformMatrix2x3dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x3dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44847,6 +46204,7 @@ static bool decode_glProgramUniformMatrix2x3dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix2x4dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix2x4dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44899,6 +46257,7 @@ static bool decode_glProgramUniformMatrix2x4dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix3x2dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x2dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -44951,6 +46310,7 @@ static bool decode_glProgramUniformMatrix3x2dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix3x4dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix3x4dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45003,6 +46363,7 @@ static bool decode_glProgramUniformMatrix3x4dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix4x2dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x2dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45055,6 +46416,7 @@ static bool decode_glProgramUniformMatrix4x2dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glProgramUniformMatrix4x3dvEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glProgramUniformMatrix4x3dvEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint program{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45107,6 +46469,7 @@ static bool decode_glProgramUniformMatrix4x3dvEXT(const RealGl& rvk_gl, ::av::Wi
 }
 
 static bool decode_glTextureBufferRangeEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureBufferRangeEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45132,6 +46495,7 @@ static bool decode_glTextureBufferRangeEXT(const RealGl& rvk_gl, ::av::WireReade
 }
 
 static bool decode_glTextureStorage1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage1DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45154,6 +46518,7 @@ static bool decode_glTextureStorage1DEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glTextureStorage2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage2DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45179,6 +46544,7 @@ static bool decode_glTextureStorage2DEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glTextureStorage3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage3DEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45207,6 +46573,7 @@ static bool decode_glTextureStorage3DEXT(const RealGl& rvk_gl, ::av::WireReader&
 }
 
 static bool decode_glTextureStorage2DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage2DMultisampleEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45235,6 +46602,7 @@ static bool decode_glTextureStorage2DMultisampleEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glTextureStorage3DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorage3DMultisampleEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint texture{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45266,6 +46634,7 @@ static bool decode_glTextureStorage3DMultisampleEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glVertexArrayBindVertexBufferEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayBindVertexBufferEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45288,6 +46657,7 @@ static bool decode_glVertexArrayBindVertexBufferEXT(const RealGl& rvk_gl, ::av::
 }
 
 static bool decode_glVertexArrayVertexAttribFormatEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribFormatEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45313,6 +46683,7 @@ static bool decode_glVertexArrayVertexAttribFormatEXT(const RealGl& rvk_gl, ::av
 }
 
 static bool decode_glVertexArrayVertexAttribIFormatEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribIFormatEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45335,6 +46706,7 @@ static bool decode_glVertexArrayVertexAttribIFormatEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glVertexArrayVertexAttribLFormatEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribLFormatEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45357,6 +46729,7 @@ static bool decode_glVertexArrayVertexAttribLFormatEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glVertexArrayVertexAttribBindingEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribBindingEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45373,6 +46746,7 @@ static bool decode_glVertexArrayVertexAttribBindingEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glVertexArrayVertexBindingDivisorEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexBindingDivisorEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45389,6 +46763,7 @@ static bool decode_glVertexArrayVertexBindingDivisorEXT(const RealGl& rvk_gl, ::
 }
 
 static bool decode_glVertexArrayVertexAttribLOffsetEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribLOffsetEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
@@ -45417,6 +46792,7 @@ static bool decode_glVertexArrayVertexAttribLOffsetEXT(const RealGl& rvk_gl, ::a
 }
 
 static bool decode_glVertexArrayVertexAttribDivisorEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glVertexArrayVertexAttribDivisorEXT");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint vaobj{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;

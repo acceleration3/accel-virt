@@ -515,6 +515,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_icd_entries.h"',
         "",
+        '#include "core/trace/function_scope.hpp"',
         '#include "proto/icd_connection.hpp"',
         '#include "proto/icd_handle_registry.hpp"',
         '#include "vk_dispatch_client.h"',
@@ -532,6 +533,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
     ]
     for cmd in cmds:
         s.append(_signature(cmd) + " {")
+        # One trace scope per API call, named as the application called it
+        # (docs/trace.md).
+        s.append(f'    AV_SCOPE("{cmd.name}");')
         s.extend(_emit_wrapper_body(cmd, reg))
         s.append("}")
         s.append("")

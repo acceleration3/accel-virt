@@ -627,6 +627,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          "namespace av::glproto {\n"]
     c = [HEADER, '#include "gl_dispatch_client.h"\n',
          '#include "core/support/status.hpp"',
+         '#include "core/trace/function_scope.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/icd_stub_report.hpp"',
@@ -648,6 +649,8 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             # `answered_by_guest` in gl_profile.toml.
             continue
         c.append(f"{_client_signature(cmd)} {{")
+        # One trace scope per command sent (docs/trace.md).
+        c.append(f'    AV_SCOPE("rvk_{cmd.name}");')
         c.append("    ::av::WireWriter rvk_b = rvk_t.request_writer();")
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
@@ -1685,6 +1688,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_dispatch_server.h"\n',
          "#include <stddef.h>\n",
+         '#include "core/trace/function_scope.hpp"',
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
          '',
@@ -1703,6 +1707,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                  "::av::WireReader& rvk_r, "
                  "::av::WireWriter& rvk_reply, "
                  "::av::WireArena& rvk_arena) {")
+        # One trace scope per decoded command (docs/trace.md).
+        c.append(f'    AV_SCOPE("server:{cmd.name}");')
         c.append("    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;")
         if cmd.name in REFUSED_COMMANDS:
             c.append(f"    (void)rvk_gl;  // Refused: {REFUSED_COMMANDS[cmd.name]}.")
@@ -2158,6 +2164,7 @@ def _reads_buffers(cmd) -> bool:
 def emit_icd(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, '#include "gl_icd_entries.h"\n',
            "#include <stdint.h>\n",
+           '#include "core/trace/function_scope.hpp"',
            '#include "proto/gl_icd_support.hpp"',
            '#include "gl_dispatch_client.h"',
            '#include "gl_helpers.h"\n',
@@ -2173,6 +2180,8 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
             continue
         forwarded.append(cmd.name)
         out.append(f"{_icd_signature(cmd)} {{")
+        # One trace scope per API call (docs/trace.md).
+        out.append(f'    AV_SCOPE("{cmd.name}");')
         args = ", ".join(["*rvk_t"] + _icd_forward_args(cmd))
         out.append("    auto* rvk_t = ::av::glicd::wire();")
         for rewritten in _framebuffer_names(cmd):

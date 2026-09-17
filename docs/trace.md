@@ -115,9 +115,11 @@ names.
 Every writer stamps the machine's interrupt time in 100 ns: `KeQueryInterruptTime`
 in the kernel, the same value read from `KUSER_SHARED_DATA.InterruptTime` in
 Windows user mode (`InterruptClock`; `QueryInterruptTime` is missing from some
-guests' kernel32), `CLOCK_MONOTONIC` on the host. A guest table and the guest kernel's are therefore on one clock, and a
-reader judges a frame's age against the same clock read when it copied the
-table.
+guests' kernel32), `CLOCK_MONOTONIC_COARSE` on the host - the last tick of
+`CLOCK_MONOTONIC`, so never ahead of the `CLOCK_MONOTONIC` a host reader
+compares against. A guest table and the guest kernel's are therefore on one
+clock, and a reader judges a frame's age against the same clock read when it
+copied the table.
 
 ## As built: Windows user mode
 
@@ -235,9 +237,11 @@ table.
   `rvk-state-*-<pid>.sock` whose process no longer exists (`kill(pid, 0)`
   answering `ESRCH`). Crash files are never removed. A process's own files
   stay after it ends, so a crashed QEMU's table can still be read.
-- `PosixTraceHost`: `gettid()` read once per thread (a `thread_local`, since
-  the call is a system call and every scope asks), `CLOCK_MONOTONIC` in
-  100 ns, level 0, `__atomic_compare_exchange_n`.
+- `PosixTraceHost`: `gettid()` read once per thread (an initial-exec
+  `thread_local`, since the call is a system call and every scope asks),
+  `CLOCK_MONOTONIC_COARSE` in 100 ns, level 0, `__atomic_compare_exchange_n`.
+- Cost, release build: ~5 ns per unbound scope, ~22 ns per bound nested one,
+  ~25 ns per bound outermost one.
 - The executor library starts its own `HostTrace` (`executor`) inside
   `rvk_executor_ops()`'s root on the first question. Its `scope_binding` is its
   own: `nm -D` shows neither the library nor the QEMU module exporting it.
@@ -341,3 +345,22 @@ the guest through the run's agent relay (`<work>/agent-relay.sock`, served by
 `run_guest_suite.py` for the run's whole life) or, once the runner has let go,
 the agent socket itself. Register it with
 `claude mcp add rvk-inspect -- python3 tools/mcp/rvk_inspect.py`.
+
+## Generated code
+
+The generator marks one scope per API call on each side, never the helpers
+beneath it (`tools/codegen/rvk_codegen/emit/{icd_entries,client_dispatch,server_dispatch}.py`,
+`opencl/emit.py`, `opengl/emit.py`):
+
+| Where | Scope |
+|---|---|
+| An ICD entry the application calls (`Wrap_vk*`, the OpenGL `gl*` entries) | `vkDestroyInstance` |
+| A client function that encodes and sends one command (`rvk_vk*`, `rvk_cl*`, `rvk_gl*`) | `rvk_vkDestroyInstance` |
+| The server's handling of one decoded command (the Vulkan `dispatch_command` case's own block, the OpenCL and OpenGL `decode_*`) | `server:vkDestroyInstance` |
+
+The serializers and deserializers run once per struct member and per array
+element, so a scope in each would multiply a command's decode cost for frames
+that never block; the frame of the call they serve says where a thread is.
+`tools/scope_marks.py --check` keeps skipping generated files (the generator's
+tests in `tests/tools/test_generated_trace_scopes.py` hold its output to this),
+while `--names` and the MCP server's name map include them.

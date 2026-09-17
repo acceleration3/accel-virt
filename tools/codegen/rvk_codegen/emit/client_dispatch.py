@@ -356,6 +356,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_client.h"',
         "",
+        '#include "core/trace/function_scope.hpp"',
         '#include "proto/sync_call_scope.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "vk_protocol_ids.h"',
@@ -366,6 +367,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
     ]
     for cmd in cmds:
         source.append(_signature(reg, cmd) + " {")
+        # One trace scope per command sent (docs/trace.md); the serializers
+        # it calls run per member and are not marked.
+        source.append(f'    AV_SCOPE("rvk_{cmd.name}");')
         for line in _emit_body(reg, cmd):
             source.append("    " + line)
         source.append("}")

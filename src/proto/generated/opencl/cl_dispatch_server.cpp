@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "cl_protocol_ids.h"
+#include "core/trace/function_scope.hpp"
 
 namespace av::clproto {
 
@@ -232,6 +233,7 @@ static bool resolve_kernel_argument(ServerDispatch& s, ::av::WireArena& arena, c
 
 static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetPlatformIDs");
     (void)r;
     (void)reply;
     (void)arena;
@@ -280,6 +282,7 @@ static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetPlatformInfo(ServerDispatch& s, ::av::WireReader& r,
                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetPlatformInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -338,6 +341,7 @@ static bool decode_clGetPlatformInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetDeviceIDs(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetDeviceIDs");
     (void)r;
     (void)reply;
     (void)arena;
@@ -399,6 +403,7 @@ static bool decode_clGetDeviceIDs(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetDeviceInfo(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetDeviceInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -457,6 +462,7 @@ static bool decode_clGetDeviceInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateContext(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateContext");
     (void)r;
     (void)reply;
     (void)arena;
@@ -535,6 +541,7 @@ static bool decode_clCreateContext(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateContextFromType(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateContextFromType");
     (void)r;
     (void)reply;
     (void)arena;
@@ -592,6 +599,7 @@ static bool decode_clCreateContextFromType(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clRetainContext(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainContext");
     (void)r;
     (void)reply;
     (void)arena;
@@ -610,6 +618,7 @@ static bool decode_clRetainContext(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseContext(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseContext");
     (void)r;
     (void)reply;
     (void)arena;
@@ -628,6 +637,7 @@ static bool decode_clReleaseContext(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetContextInfo(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetContextInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -686,6 +696,7 @@ static bool decode_clGetContextInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateCommandQueue(ServerDispatch& s, ::av::WireReader& r,
                                        ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateCommandQueue");
     (void)r;
     (void)reply;
     (void)arena;
@@ -728,6 +739,7 @@ static bool decode_clCreateCommandQueue(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateCommandQueueWithProperties(ServerDispatch& s, ::av::WireReader& r,
                                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateCommandQueueWithProperties");
     (void)r;
     (void)reply;
     (void)arena;
@@ -783,6 +795,7 @@ static bool decode_clCreateCommandQueueWithProperties(ServerDispatch& s, ::av::W
 
 static bool decode_clRetainCommandQueue(ServerDispatch& s, ::av::WireReader& r,
                                        ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainCommandQueue");
     (void)r;
     (void)reply;
     (void)arena;
@@ -801,6 +814,7 @@ static bool decode_clRetainCommandQueue(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseCommandQueue(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseCommandQueue");
     (void)r;
     (void)reply;
     (void)arena;
@@ -819,6 +833,7 @@ static bool decode_clReleaseCommandQueue(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetCommandQueueInfo(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetCommandQueueInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -877,6 +892,7 @@ static bool decode_clGetCommandQueueInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clFlush(ServerDispatch& s, ::av::WireReader& r,
                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clFlush");
     (void)r;
     (void)reply;
     (void)arena;
@@ -894,6 +910,7 @@ static bool decode_clFlush(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clFinish(ServerDispatch& s, ::av::WireReader& r,
                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clFinish");
     (void)r;
     (void)reply;
     (void)arena;
@@ -911,6 +928,7 @@ static bool decode_clFinish(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateBuffer(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -969,6 +987,7 @@ static bool decode_clCreateBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateSubBuffer(ServerDispatch& s, ::av::WireReader& r,
                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateSubBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1021,6 +1040,7 @@ static bool decode_clCreateSubBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateImage(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1105,6 +1125,7 @@ static bool decode_clCreateImage(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clRetainMemObject(ServerDispatch& s, ::av::WireReader& r,
                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainMemObject");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1123,6 +1144,7 @@ static bool decode_clRetainMemObject(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseMemObject(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseMemObject");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1141,6 +1163,7 @@ static bool decode_clReleaseMemObject(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetMemObjectInfo(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetMemObjectInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1199,6 +1222,7 @@ static bool decode_clGetMemObjectInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetImageInfo(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetImageInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1257,6 +1281,7 @@ static bool decode_clGetImageInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetSupportedImageFormats(ServerDispatch& s, ::av::WireReader& r,
                                              ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetSupportedImageFormats");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1328,6 +1353,7 @@ static bool decode_clGetSupportedImageFormats(ServerDispatch& s, ::av::WireReade
 
 static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
                                       ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueReadBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1435,6 +1461,7 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
                                        ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueWriteBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1533,6 +1560,7 @@ static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueCopyBuffer(ServerDispatch& s, ::av::WireReader& r,
                                       ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueCopyBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1622,6 +1650,7 @@ static bool decode_clEnqueueCopyBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueFillBuffer(ServerDispatch& s, ::av::WireReader& r,
                                       ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueFillBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1720,6 +1749,7 @@ static bool decode_clEnqueueFillBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueReadImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -1871,6 +1901,7 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
                                       ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueWriteImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2013,6 +2044,7 @@ static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueCopyImage(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueCopyImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2144,6 +2176,7 @@ static bool decode_clEnqueueCopyImage(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueCopyImageToBuffer(ServerDispatch& s, ::av::WireReader& r,
                                              ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueCopyImageToBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2261,6 +2294,7 @@ static bool decode_clEnqueueCopyImageToBuffer(ServerDispatch& s, ::av::WireReade
 
 static bool decode_clEnqueueCopyBufferToImage(ServerDispatch& s, ::av::WireReader& r,
                                              ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueCopyBufferToImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2378,6 +2412,7 @@ static bool decode_clEnqueueCopyBufferToImage(ServerDispatch& s, ::av::WireReade
 
 static bool decode_clCreateProgramWithSource(ServerDispatch& s, ::av::WireReader& r,
                                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateProgramWithSource");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2444,6 +2479,7 @@ static bool decode_clCreateProgramWithSource(ServerDispatch& s, ::av::WireReader
 
 static bool decode_clCreateProgramWithBinary(ServerDispatch& s, ::av::WireReader& r,
                                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateProgramWithBinary");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2542,6 +2578,7 @@ static bool decode_clCreateProgramWithBinary(ServerDispatch& s, ::av::WireReader
 
 static bool decode_clRetainProgram(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2560,6 +2597,7 @@ static bool decode_clRetainProgram(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseProgram(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2578,6 +2616,7 @@ static bool decode_clReleaseProgram(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clBuildProgram(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clBuildProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2638,6 +2677,7 @@ static bool decode_clBuildProgram(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetProgramInfo(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetProgramInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2696,6 +2736,7 @@ static bool decode_clGetProgramInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetProgramBuildInfo(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetProgramBuildInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2761,6 +2802,7 @@ static bool decode_clGetProgramBuildInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clUnloadPlatformCompiler(ServerDispatch& s, ::av::WireReader& r,
                                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clUnloadPlatformCompiler");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2778,6 +2820,7 @@ static bool decode_clUnloadPlatformCompiler(ServerDispatch& s, ::av::WireReader&
 
 static bool decode_clCreateKernel(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateKernel");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2821,6 +2864,7 @@ static bool decode_clCreateKernel(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateKernelsInProgram(ServerDispatch& s, ::av::WireReader& r,
                                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateKernelsInProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2876,6 +2920,7 @@ static bool decode_clCreateKernelsInProgram(ServerDispatch& s, ::av::WireReader&
 
 static bool decode_clRetainKernel(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainKernel");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2894,6 +2939,7 @@ static bool decode_clRetainKernel(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseKernel(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseKernel");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2912,6 +2958,7 @@ static bool decode_clReleaseKernel(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clSetKernelArg(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetKernelArg");
     (void)r;
     (void)reply;
     (void)arena;
@@ -2958,6 +3005,7 @@ static bool decode_clSetKernelArg(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetKernelInfo(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetKernelInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3016,6 +3064,7 @@ static bool decode_clGetKernelInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetKernelArgInfo(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetKernelArgInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3080,6 +3129,7 @@ static bool decode_clGetKernelArgInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetKernelWorkGroupInfo(ServerDispatch& s, ::av::WireReader& r,
                                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetKernelWorkGroupInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3145,6 +3195,7 @@ static bool decode_clGetKernelWorkGroupInfo(ServerDispatch& s, ::av::WireReader&
 
 static bool decode_clEnqueueNDRangeKernel(ServerDispatch& s, ::av::WireReader& r,
                                          ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueNDRangeKernel");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3275,6 +3326,7 @@ static bool decode_clEnqueueNDRangeKernel(ServerDispatch& s, ::av::WireReader& r
 
 static bool decode_clEnqueueMarkerWithWaitList(ServerDispatch& s, ::av::WireReader& r,
                                               ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueMarkerWithWaitList");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3332,6 +3384,7 @@ static bool decode_clEnqueueMarkerWithWaitList(ServerDispatch& s, ::av::WireRead
 
 static bool decode_clEnqueueBarrierWithWaitList(ServerDispatch& s, ::av::WireReader& r,
                                                ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueBarrierWithWaitList");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3389,6 +3442,7 @@ static bool decode_clEnqueueBarrierWithWaitList(ServerDispatch& s, ::av::WireRea
 
 static bool decode_clWaitForEvents(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clWaitForEvents");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3426,6 +3480,7 @@ static bool decode_clWaitForEvents(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetEventInfo(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetEventInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3484,6 +3539,7 @@ static bool decode_clGetEventInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateUserEvent(ServerDispatch& s, ::av::WireReader& r,
                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateUserEvent");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3513,6 +3569,7 @@ static bool decode_clCreateUserEvent(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clSetUserEventStatus(ServerDispatch& s, ::av::WireReader& r,
                                        ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetUserEventStatus");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3536,6 +3593,7 @@ static bool decode_clSetUserEventStatus(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clRetainEvent(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainEvent");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3554,6 +3612,7 @@ static bool decode_clRetainEvent(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseEvent(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseEvent");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3572,6 +3631,7 @@ static bool decode_clReleaseEvent(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetEventProfilingInfo(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetEventProfilingInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3630,6 +3690,7 @@ static bool decode_clGetEventProfilingInfo(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clCreateFromGLBuffer(ServerDispatch& s, ::av::WireReader& r,
                                        ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateFromGLBuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3671,6 +3732,7 @@ static bool decode_clCreateFromGLBuffer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateFromGLTexture(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateFromGLTexture");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3724,6 +3786,7 @@ static bool decode_clCreateFromGLTexture(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateFromGLTexture2D(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateFromGLTexture2D");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3777,6 +3840,7 @@ static bool decode_clCreateFromGLTexture2D(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clCreateFromGLTexture3D(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateFromGLTexture3D");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3830,6 +3894,7 @@ static bool decode_clCreateFromGLTexture3D(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clCreateFromGLRenderbuffer(ServerDispatch& s, ::av::WireReader& r,
                                              ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateFromGLRenderbuffer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3871,6 +3936,7 @@ static bool decode_clCreateFromGLRenderbuffer(ServerDispatch& s, ::av::WireReade
 
 static bool decode_clGetGLObjectInfo(ServerDispatch& s, ::av::WireReader& r,
                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetGLObjectInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3910,6 +3976,7 @@ static bool decode_clGetGLObjectInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetGLTextureInfo(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetGLTextureInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -3968,6 +4035,7 @@ static bool decode_clGetGLTextureInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueAcquireGLObjects(ServerDispatch& s, ::av::WireReader& r,
                                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueAcquireGLObjects");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4052,6 +4120,7 @@ static bool decode_clEnqueueAcquireGLObjects(ServerDispatch& s, ::av::WireReader
 
 static bool decode_clEnqueueReleaseGLObjects(ServerDispatch& s, ::av::WireReader& r,
                                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueReleaseGLObjects");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4136,6 +4205,7 @@ static bool decode_clEnqueueReleaseGLObjects(ServerDispatch& s, ::av::WireReader
 
 static bool decode_clGetGLContextInfoKHR(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetGLContextInfoKHR");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4216,6 +4286,7 @@ static bool decode_clGetGLContextInfoKHR(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clRetainDevice(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainDevice");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4234,6 +4305,7 @@ static bool decode_clRetainDevice(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseDevice(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseDevice");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4252,6 +4324,7 @@ static bool decode_clReleaseDevice(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateSubDevices(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateSubDevices");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4326,6 +4399,7 @@ static bool decode_clCreateSubDevices(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueTask(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueTask");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4390,6 +4464,7 @@ static bool decode_clEnqueueTask(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueMarker(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueMarker");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4420,6 +4495,7 @@ static bool decode_clEnqueueMarker(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueBarrier(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueBarrier");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4437,6 +4513,7 @@ static bool decode_clEnqueueBarrier(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clEnqueueWaitForEvents(ServerDispatch& s, ::av::WireReader& r,
                                          ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueWaitForEvents");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4481,6 +4558,7 @@ static bool decode_clEnqueueWaitForEvents(ServerDispatch& s, ::av::WireReader& r
 
 static bool decode_clEnqueueMigrateMemObjects(ServerDispatch& s, ::av::WireReader& r,
                                              ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueMigrateMemObjects");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4571,6 +4649,7 @@ static bool decode_clEnqueueMigrateMemObjects(ServerDispatch& s, ::av::WireReade
 
 static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueReadBufferRect");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4754,6 +4833,7 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader& r,
                                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueWriteBufferRect");
     (void)r;
     (void)reply;
     (void)arena;
@@ -4928,6 +5008,7 @@ static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader&
 
 static bool decode_clEnqueueCopyBufferRect(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueCopyBufferRect");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5083,6 +5164,7 @@ static bool decode_clEnqueueCopyBufferRect(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clEnqueueFillImage(ServerDispatch& s, ::av::WireReader& r,
                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueFillImage");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5203,6 +5285,7 @@ static bool decode_clEnqueueFillImage(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateImage2D(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateImage2D");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5289,6 +5372,7 @@ static bool decode_clCreateImage2D(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateImage3D(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateImage3D");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5387,6 +5471,7 @@ static bool decode_clCreateImage3D(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clUnloadCompiler(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clUnloadCompiler");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5397,6 +5482,7 @@ static bool decode_clUnloadCompiler(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clSetCommandQueueProperty(ServerDispatch& s, ::av::WireReader& r,
                                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetCommandQueueProperty");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5437,6 +5523,7 @@ static bool decode_clSetCommandQueueProperty(ServerDispatch& s, ::av::WireReader
 
 static bool decode_clCreateProgramWithIL(ServerDispatch& s, ::av::WireReader& r,
                                         ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateProgramWithIL");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5488,6 +5575,7 @@ static bool decode_clCreateProgramWithIL(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCompileProgram(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCompileProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5599,6 +5687,7 @@ static bool decode_clCompileProgram(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clLinkProgram(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clLinkProgram");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5696,6 +5785,7 @@ static bool decode_clLinkProgram(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clSetProgramSpecializationConstant(ServerDispatch& s, ::av::WireReader& r,
                                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetProgramSpecializationConstant");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5741,6 +5831,7 @@ static bool decode_clSetProgramSpecializationConstant(ServerDispatch& s, ::av::W
 
 static bool decode_clCloneKernel(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCloneKernel");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5770,6 +5861,7 @@ static bool decode_clCloneKernel(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clSetKernelExecInfo(ServerDispatch& s, ::av::WireReader& r,
                                       ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetKernelExecInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5818,6 +5910,7 @@ static bool decode_clSetKernelExecInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetKernelSubGroupInfo(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetKernelSubGroupInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5905,6 +5998,7 @@ static bool decode_clGetKernelSubGroupInfo(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clGetHostTimer(ServerDispatch& s, ::av::WireReader& r,
                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetHostTimer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5933,6 +6027,7 @@ static bool decode_clGetHostTimer(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetDeviceAndHostTimer(ServerDispatch& s, ::av::WireReader& r,
                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetDeviceAndHostTimer");
     (void)r;
     (void)reply;
     (void)arena;
@@ -5972,6 +6067,7 @@ static bool decode_clGetDeviceAndHostTimer(ServerDispatch& s, ::av::WireReader& 
 
 static bool decode_clCreateBufferWithProperties(ServerDispatch& s, ::av::WireReader& r,
                                                ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateBufferWithProperties");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6052,6 +6148,7 @@ static bool decode_clCreateBufferWithProperties(ServerDispatch& s, ::av::WireRea
 
 static bool decode_clCreateImageWithProperties(ServerDispatch& s, ::av::WireReader& r,
                                               ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateImageWithProperties");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6158,6 +6255,7 @@ static bool decode_clCreateImageWithProperties(ServerDispatch& s, ::av::WireRead
 
 static bool decode_clCreateSamplerWithProperties(ServerDispatch& s, ::av::WireReader& r,
                                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateSamplerWithProperties");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6206,6 +6304,7 @@ static bool decode_clCreateSamplerWithProperties(ServerDispatch& s, ::av::WireRe
 
 static bool decode_clSetDefaultDeviceCommandQueue(ServerDispatch& s, ::av::WireReader& r,
                                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetDefaultDeviceCommandQueue");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6237,6 +6336,7 @@ static bool decode_clSetDefaultDeviceCommandQueue(ServerDispatch& s, ::av::WireR
 
 static bool decode_clCreateSampler(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateSampler");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6284,6 +6384,7 @@ static bool decode_clCreateSampler(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clRetainSampler(ServerDispatch& s, ::av::WireReader& r,
                                   ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clRetainSampler");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6302,6 +6403,7 @@ static bool decode_clRetainSampler(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clReleaseSampler(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clReleaseSampler");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6320,6 +6422,7 @@ static bool decode_clReleaseSampler(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetSamplerInfo(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetSamplerInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6378,6 +6481,7 @@ static bool decode_clGetSamplerInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreatePipe(ServerDispatch& s, ::av::WireReader& r,
                                ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreatePipe");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6444,6 +6548,7 @@ static bool decode_clCreatePipe(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clGetPipeInfo(ServerDispatch& s, ::av::WireReader& r,
                                 ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clGetPipeInfo");
     (void)r;
     (void)reply;
     (void)arena;
@@ -6502,6 +6607,7 @@ static bool decode_clGetPipeInfo(ServerDispatch& s, ::av::WireReader& r,
 
 static bool decode_clCreateProgramWithBuiltInKernels(ServerDispatch& s, ::av::WireReader& r,
                                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clCreateProgramWithBuiltInKernels");
     (void)r;
     (void)reply;
     (void)arena;

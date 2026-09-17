@@ -5,6 +5,7 @@
 
 #include "vk_dispatch_server.h"
 
+#include "core/trace/function_scope.hpp"
 #include "vk_protocol_ids.h"
 #include "vk_serialize.h"
 
@@ -13,6 +14,7 @@ namespace av::vkproto {
 bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     switch (cmd_id) {
     case ::av::vkproto::kCmd_vkDestroyInstance: {
+        AV_SCOPE("server:vkDestroyInstance");
         VkInstance instance = VK_NULL_HANDLE;
         if (!deserialize_VkInstance(r, instance)) return false;
         s.on_vkDestroyInstance(instance, nullptr);
@@ -20,6 +22,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDevice: {
+        AV_SCOPE("server:vkDestroyDevice");
         VkDevice device = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         s.on_vkDestroyDevice(device, nullptr);
@@ -27,6 +30,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceQueue: {
+        AV_SCOPE("server:vkGetDeviceQueue");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t queueFamilyIndex{};
         uint32_t queueIndex{};
@@ -41,6 +45,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDevices: {
+        AV_SCOPE("server:vkEnumeratePhysicalDevices");
         VkInstance instance = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pPhysicalDeviceCount_local = 0;
@@ -73,6 +78,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties2 pProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -84,6 +90,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateInstance: {
+        AV_SCOPE("server:vkCreateInstance");
         VkInstanceCreateInfo pCreateInfo_local{};
         VkInstance pInstance_out = VK_NULL_HANDLE;
         if (!deserialize_VkInstanceCreateInfo(r, &pCreateInfo_local, arena)) return false;
@@ -96,6 +103,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDevice: {
+        AV_SCOPE("server:vkCreateDevice");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkDeviceCreateInfo pCreateInfo_local{};
         VkDevice pDevice_out = VK_NULL_HANDLE;
@@ -111,6 +119,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties pProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -120,6 +129,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFeatures: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFeatures");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceFeatures pFeatures_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -129,6 +139,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFormatProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFormatProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkFormat format{};
         VkFormatProperties pFormatProperties_out{};
@@ -140,6 +151,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceImageFormatProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceImageFormatProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkFormat format{};
         VkImageType type{};
@@ -163,6 +175,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceMemoryProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceMemoryProperties pMemoryProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -172,6 +185,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceQueueFamilyProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pQueueFamilyPropertyCount_local = 0;
@@ -203,6 +217,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceSparseImageFormatProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceSparseImageFormatProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkFormat format{};
         VkImageType type{};
@@ -244,6 +259,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumerateDeviceExtensionProperties: {
+        AV_SCOPE("server:vkEnumerateDeviceExtensionProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         const char* pLayerName = nullptr;
         uint8_t array_present = 0;
@@ -286,6 +302,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumerateDeviceLayerProperties: {
+        AV_SCOPE("server:vkEnumerateDeviceLayerProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pPropertyCount_local = 0;
@@ -317,6 +334,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFeatures2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFeatures2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceFeatures2 pFeatures_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -328,6 +346,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFormatProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFormatProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkFormat format{};
         VkFormatProperties2 pFormatProperties_out{};
@@ -341,6 +360,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceImageFormatProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceImageFormatProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceImageFormatInfo2 pImageFormatInfo_local{};
         VkImageFormatProperties2 pImageFormatProperties_out{};
@@ -359,6 +379,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceMemoryProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceMemoryProperties2 pMemoryProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -370,6 +391,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceQueueFamilyProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pQueueFamilyPropertyCount_local = 0;
@@ -402,6 +424,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceSparseImageFormatProperties2: {
+        AV_SCOPE("server:vkGetPhysicalDeviceSparseImageFormatProperties2");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceSparseImageFormatInfo2 pFormatInfo_local{};
         uint8_t array_present = 0;
@@ -436,6 +459,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDeviceWaitIdle: {
+        AV_SCOPE("server:vkDeviceWaitIdle");
         VkDevice device = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         VkResult result = s.on_vkDeviceWaitIdle(device);
@@ -443,6 +467,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueWaitIdle: {
+        AV_SCOPE("server:vkQueueWaitIdle");
         VkQueue queue = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         VkResult result = s.on_vkQueueWaitIdle(queue);
@@ -450,6 +475,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkAllocateMemory: {
+        AV_SCOPE("server:vkAllocateMemory");
         VkDevice device = VK_NULL_HANDLE;
         VkMemoryAllocateInfo pAllocateInfo_local{};
         VkDeviceMemory pMemory_out = VK_NULL_HANDLE;
@@ -465,6 +491,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkFreeMemory: {
+        AV_SCOPE("server:vkFreeMemory");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -474,6 +501,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindBufferMemory: {
+        AV_SCOPE("server:vkBindBufferMemory");
         VkDevice device = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -487,6 +515,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory: {
+        AV_SCOPE("server:vkBindImageMemory");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -500,6 +529,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements: {
+        AV_SCOPE("server:vkGetBufferMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkMemoryRequirements pMemoryRequirements_out{};
@@ -511,6 +541,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageMemoryRequirements: {
+        AV_SCOPE("server:vkGetImageMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkMemoryRequirements pMemoryRequirements_out{};
@@ -522,6 +553,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateBuffer: {
+        AV_SCOPE("server:vkCreateBuffer");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferCreateInfo pCreateInfo_local{};
         VkBuffer pBuffer_out = VK_NULL_HANDLE;
@@ -537,6 +569,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyBuffer: {
+        AV_SCOPE("server:vkDestroyBuffer");
         VkDevice device = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -546,6 +579,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateImage: {
+        AV_SCOPE("server:vkCreateImage");
         VkDevice device = VK_NULL_HANDLE;
         VkImageCreateInfo pCreateInfo_local{};
         VkImage pImage_out = VK_NULL_HANDLE;
@@ -561,6 +595,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyImage: {
+        AV_SCOPE("server:vkDestroyImage");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -570,6 +605,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateImageView: {
+        AV_SCOPE("server:vkCreateImageView");
         VkDevice device = VK_NULL_HANDLE;
         VkImageViewCreateInfo pCreateInfo_local{};
         VkImageView pView_out = VK_NULL_HANDLE;
@@ -585,6 +621,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyImageView: {
+        AV_SCOPE("server:vkDestroyImageView");
         VkDevice device = VK_NULL_HANDLE;
         VkImageView imageView = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -594,6 +631,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSampler: {
+        AV_SCOPE("server:vkCreateSampler");
         VkDevice device = VK_NULL_HANDLE;
         VkSamplerCreateInfo pCreateInfo_local{};
         VkSampler pSampler_out = VK_NULL_HANDLE;
@@ -609,6 +647,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySampler: {
+        AV_SCOPE("server:vkDestroySampler");
         VkDevice device = VK_NULL_HANDLE;
         VkSampler sampler = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -618,6 +657,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSemaphore: {
+        AV_SCOPE("server:vkCreateSemaphore");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreCreateInfo pCreateInfo_local{};
         VkSemaphore pSemaphore_out = VK_NULL_HANDLE;
@@ -633,6 +673,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySemaphore: {
+        AV_SCOPE("server:vkDestroySemaphore");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphore semaphore = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -642,6 +683,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateFence: {
+        AV_SCOPE("server:vkCreateFence");
         VkDevice device = VK_NULL_HANDLE;
         VkFenceCreateInfo pCreateInfo_local{};
         VkFence pFence_out = VK_NULL_HANDLE;
@@ -657,6 +699,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyFence: {
+        AV_SCOPE("server:vkDestroyFence");
         VkDevice device = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -666,6 +709,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetFences: {
+        AV_SCOPE("server:vkResetFences");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t fenceCount{};
         VkFence* pFences_storage = nullptr;
@@ -686,6 +730,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkWaitForFences: {
+        AV_SCOPE("server:vkWaitForFences");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t fenceCount{};
         VkFence* pFences_storage = nullptr;
@@ -710,6 +755,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetFenceStatus: {
+        AV_SCOPE("server:vkGetFenceStatus");
         VkDevice device = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -719,6 +765,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateCommandPool: {
+        AV_SCOPE("server:vkCreateCommandPool");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPoolCreateInfo pCreateInfo_local{};
         VkCommandPool pCommandPool_out = VK_NULL_HANDLE;
@@ -734,6 +781,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyCommandPool: {
+        AV_SCOPE("server:vkDestroyCommandPool");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -743,6 +791,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetCommandPool: {
+        AV_SCOPE("server:vkResetCommandPool");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandPoolResetFlags flags{};
@@ -754,6 +803,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBeginCommandBuffer: {
+        AV_SCOPE("server:vkBeginCommandBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCommandBufferBeginInfo pBeginInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -763,6 +813,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEndCommandBuffer: {
+        AV_SCOPE("server:vkEndCommandBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         VkResult result = s.on_vkEndCommandBuffer(commandBuffer);
@@ -770,6 +821,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetCommandBuffer: {
+        AV_SCOPE("server:vkResetCommandBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCommandBufferResetFlags flags{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -779,6 +831,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyShaderModule: {
+        AV_SCOPE("server:vkDestroyShaderModule");
         VkDevice device = VK_NULL_HANDLE;
         VkShaderModule shaderModule = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -788,6 +841,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateShaderModule: {
+        AV_SCOPE("server:vkCreateShaderModule");
         VkDevice device = VK_NULL_HANDLE;
         VkShaderModuleCreateInfo pCreateInfo_local{};
         VkShaderModule pShaderModule_out = VK_NULL_HANDLE;
@@ -803,6 +857,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreatePipelineLayout: {
+        AV_SCOPE("server:vkCreatePipelineLayout");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineLayoutCreateInfo pCreateInfo_local{};
         VkPipelineLayout pPipelineLayout_out = VK_NULL_HANDLE;
@@ -818,6 +873,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPipelineLayout: {
+        AV_SCOPE("server:vkDestroyPipelineLayout");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -827,6 +883,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPipeline: {
+        AV_SCOPE("server:vkDestroyPipeline");
         VkDevice device = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -836,6 +893,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreatePipelineCache: {
+        AV_SCOPE("server:vkCreatePipelineCache");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCacheCreateInfo pCreateInfo_local{};
         VkPipelineCache pPipelineCache_out = VK_NULL_HANDLE;
@@ -851,6 +909,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPipelineCache: {
+        AV_SCOPE("server:vkDestroyPipelineCache");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -860,6 +919,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateRenderPass: {
+        AV_SCOPE("server:vkCreateRenderPass");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderPassCreateInfo pCreateInfo_local{};
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
@@ -875,6 +935,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyRenderPass: {
+        AV_SCOPE("server:vkDestroyRenderPass");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderPass renderPass = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -884,6 +945,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateFramebuffer: {
+        AV_SCOPE("server:vkCreateFramebuffer");
         VkDevice device = VK_NULL_HANDLE;
         VkFramebufferCreateInfo pCreateInfo_local{};
         VkFramebuffer pFramebuffer_out = VK_NULL_HANDLE;
@@ -899,6 +961,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyFramebuffer: {
+        AV_SCOPE("server:vkDestroyFramebuffer");
         VkDevice device = VK_NULL_HANDLE;
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -908,6 +971,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorSetLayout: {
+        AV_SCOPE("server:vkCreateDescriptorSetLayout");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetLayoutCreateInfo pCreateInfo_local{};
         VkDescriptorSetLayout pSetLayout_out = VK_NULL_HANDLE;
@@ -923,6 +987,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDescriptorSetLayout: {
+        AV_SCOPE("server:vkDestroyDescriptorSetLayout");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -932,6 +997,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorPool: {
+        AV_SCOPE("server:vkCreateDescriptorPool");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPoolCreateInfo pCreateInfo_local{};
         VkDescriptorPool pDescriptorPool_out = VK_NULL_HANDLE;
@@ -947,6 +1013,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDescriptorPool: {
+        AV_SCOPE("server:vkDestroyDescriptorPool");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -956,6 +1023,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkFreeCommandBuffers: {
+        AV_SCOPE("server:vkFreeCommandBuffers");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         uint32_t commandBufferCount{};
@@ -980,6 +1048,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueSubmit: {
+        AV_SCOPE("server:vkQueueSubmit");
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo* pSubmits_storage = nullptr;
@@ -1002,6 +1071,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindPipeline: {
+        AV_SCOPE("server:vkCmdBindPipeline");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineBindPoint pipelineBindPoint{};
         VkPipeline pipeline = VK_NULL_HANDLE;
@@ -1012,6 +1082,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetViewport: {
+        AV_SCOPE("server:vkCmdSetViewport");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstViewport{};
         uint32_t viewportCount{};
@@ -1033,6 +1104,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetScissor: {
+        AV_SCOPE("server:vkCmdSetScissor");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstScissor{};
         uint32_t scissorCount{};
@@ -1054,6 +1126,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindVertexBuffers: {
+        AV_SCOPE("server:vkCmdBindVertexBuffers");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstBinding{};
         uint32_t bindingCount{};
@@ -1086,6 +1159,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindIndexBuffer: {
+        AV_SCOPE("server:vkCmdBindIndexBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -1098,6 +1172,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindDescriptorSets: {
+        AV_SCOPE("server:vkCmdBindDescriptorSets");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineBindPoint pipelineBindPoint{};
         VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -1136,6 +1211,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDraw: {
+        AV_SCOPE("server:vkCmdDraw");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t vertexCount{};
         uint32_t instanceCount{};
@@ -1150,6 +1226,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndexed: {
+        AV_SCOPE("server:vkCmdDrawIndexed");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t indexCount{};
         uint32_t instanceCount{};
@@ -1166,6 +1243,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPipelineBarrier: {
+        AV_SCOPE("server:vkCmdPipelineBarrier");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineStageFlags srcStageMask{};
         VkPipelineStageFlags dstStageMask{};
@@ -1217,6 +1295,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBuffer: {
+        AV_SCOPE("server:vkCmdCopyBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer srcBuffer = VK_NULL_HANDLE;
         VkBuffer dstBuffer = VK_NULL_HANDLE;
@@ -1240,6 +1319,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginRenderPass: {
+        AV_SCOPE("server:vkCmdBeginRenderPass");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderPassBeginInfo pRenderPassBegin_local{};
         VkSubpassContents contents{};
@@ -1250,12 +1330,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndRenderPass: {
+        AV_SCOPE("server:vkCmdEndRenderPass");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         s.on_vkCmdEndRenderPass(commandBuffer);
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdNextSubpass: {
+        AV_SCOPE("server:vkCmdNextSubpass");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSubpassContents contents{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -1264,6 +1346,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPushConstants: {
+        AV_SCOPE("server:vkCmdPushConstants");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineLayout layout = VK_NULL_HANDLE;
         VkShaderStageFlags stageFlags{};
@@ -1286,6 +1369,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateGraphicsPipelines: {
+        AV_SCOPE("server:vkCreateGraphicsPipelines");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
@@ -1323,6 +1407,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkUpdateDescriptorSets: {
+        AV_SCOPE("server:vkUpdateDescriptorSets");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t descriptorWriteCount{};
         VkWriteDescriptorSet* pDescriptorWrites_storage = nullptr;
@@ -1355,6 +1440,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkAllocateCommandBuffers: {
+        AV_SCOPE("server:vkAllocateCommandBuffers");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandBufferAllocateInfo pAllocateInfo_local{};
         VkCommandBuffer* pCommandBuffers_storage = nullptr;
@@ -1379,6 +1465,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkAllocateDescriptorSets: {
+        AV_SCOPE("server:vkAllocateDescriptorSets");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetAllocateInfo pAllocateInfo_local{};
         VkDescriptorSet* pDescriptorSets_storage = nullptr;
@@ -1403,6 +1490,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkFreeDescriptorSets: {
+        AV_SCOPE("server:vkFreeDescriptorSets");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         uint32_t descriptorSetCount{};
@@ -1428,6 +1516,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateComputePipelines: {
+        AV_SCOPE("server:vkCreateComputePipelines");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
@@ -1465,6 +1554,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetDescriptorPool: {
+        AV_SCOPE("server:vkResetDescriptorPool");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         VkDescriptorPoolResetFlags flags{};
@@ -1477,6 +1567,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateEvent: {
+        AV_SCOPE("server:vkCreateEvent");
         VkDevice device = VK_NULL_HANDLE;
         VkEventCreateInfo pCreateInfo_local{};
         VkEvent pEvent_out = VK_NULL_HANDLE;
@@ -1492,6 +1583,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyEvent: {
+        AV_SCOPE("server:vkDestroyEvent");
         VkDevice device = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -1501,6 +1593,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetEventStatus: {
+        AV_SCOPE("server:vkGetEventStatus");
         VkDevice device = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -1510,6 +1603,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkSetEvent: {
+        AV_SCOPE("server:vkSetEvent");
         VkDevice device = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -1519,6 +1613,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetEvent: {
+        AV_SCOPE("server:vkResetEvent");
         VkDevice device = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -1528,6 +1623,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetEvent: {
+        AV_SCOPE("server:vkCmdSetEvent");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkPipelineStageFlags stageMask{};
@@ -1538,6 +1634,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResetEvent: {
+        AV_SCOPE("server:vkCmdResetEvent");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkPipelineStageFlags stageMask{};
@@ -1548,6 +1645,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWaitEvents: {
+        AV_SCOPE("server:vkCmdWaitEvents");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
@@ -1610,6 +1708,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImage: {
+        AV_SCOPE("server:vkCmdCopyImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage srcImage = VK_NULL_HANDLE;
         VkImageLayout srcImageLayout{};
@@ -1637,6 +1736,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBufferToImage: {
+        AV_SCOPE("server:vkCmdCopyBufferToImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer srcBuffer = VK_NULL_HANDLE;
         VkImage dstImage = VK_NULL_HANDLE;
@@ -1662,6 +1762,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImageToBuffer: {
+        AV_SCOPE("server:vkCmdCopyImageToBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage srcImage = VK_NULL_HANDLE;
         VkImageLayout srcImageLayout{};
@@ -1687,6 +1788,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBlitImage: {
+        AV_SCOPE("server:vkCmdBlitImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage srcImage = VK_NULL_HANDLE;
         VkImageLayout srcImageLayout{};
@@ -1716,6 +1818,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdClearColorImage: {
+        AV_SCOPE("server:vkCmdClearColorImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkImageLayout imageLayout{};
@@ -1741,6 +1844,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdClearDepthStencilImage: {
+        AV_SCOPE("server:vkCmdClearDepthStencilImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkImageLayout imageLayout{};
@@ -1766,6 +1870,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdClearAttachments: {
+        AV_SCOPE("server:vkCmdClearAttachments");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t attachmentCount{};
         VkClearAttachment* pAttachments_storage = nullptr;
@@ -1798,6 +1903,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdFillBuffer: {
+        AV_SCOPE("server:vkCmdFillBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer dstBuffer = VK_NULL_HANDLE;
         VkDeviceSize dstOffset{};
@@ -1812,6 +1918,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdUpdateBuffer: {
+        AV_SCOPE("server:vkCmdUpdateBuffer");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer dstBuffer = VK_NULL_HANDLE;
         VkDeviceSize dstOffset{};
@@ -1832,6 +1939,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLineWidth: {
+        AV_SCOPE("server:vkCmdSetLineWidth");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float lineWidth{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -1840,6 +1948,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBias: {
+        AV_SCOPE("server:vkCmdSetDepthBias");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float depthBiasConstantFactor{};
         float depthBiasClamp{};
@@ -1852,6 +1961,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetBlendConstants: {
+        AV_SCOPE("server:vkCmdSetBlendConstants");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float blendConstants_local[4]{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -1862,6 +1972,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBounds: {
+        AV_SCOPE("server:vkCmdSetDepthBounds");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float minDepthBounds{};
         float maxDepthBounds{};
@@ -1872,6 +1983,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilCompareMask: {
+        AV_SCOPE("server:vkCmdSetStencilCompareMask");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStencilFaceFlags faceMask{};
         uint32_t compareMask{};
@@ -1882,6 +1994,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilWriteMask: {
+        AV_SCOPE("server:vkCmdSetStencilWriteMask");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStencilFaceFlags faceMask{};
         uint32_t writeMask{};
@@ -1892,6 +2005,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilReference: {
+        AV_SCOPE("server:vkCmdSetStencilReference");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStencilFaceFlags faceMask{};
         uint32_t reference{};
@@ -1902,6 +2016,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDispatch: {
+        AV_SCOPE("server:vkCmdDispatch");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t groupCountX{};
         uint32_t groupCountY{};
@@ -1914,6 +2029,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDispatchIndirect: {
+        AV_SCOPE("server:vkCmdDispatchIndirect");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -1924,6 +2040,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndirect: {
+        AV_SCOPE("server:vkCmdDrawIndirect");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -1938,6 +2055,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndexedIndirect: {
+        AV_SCOPE("server:vkCmdDrawIndexedIndirect");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -1952,6 +2070,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdExecuteCommands: {
+        AV_SCOPE("server:vkCmdExecuteCommands");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t commandBufferCount{};
         VkCommandBuffer* pCommandBuffers_storage = nullptr;
@@ -1971,6 +2090,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkAcquireNextImage2KHR: {
+        AV_SCOPE("server:vkAcquireNextImage2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAcquireNextImageInfoKHR pAcquireInfo_local{};
         uint32_t pImageIndex_out{};
@@ -1985,6 +2105,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindBufferMemory2: {
+        AV_SCOPE("server:vkBindBufferMemory2");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindBufferMemoryInfo* pBindInfos_storage = nullptr;
@@ -2005,6 +2126,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory2: {
+        AV_SCOPE("server:vkBindImageMemory2");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindImageMemoryInfo* pBindInfos_storage = nullptr;
@@ -2025,6 +2147,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginQuery: {
+        AV_SCOPE("server:vkCmdBeginQuery");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t query{};
@@ -2037,6 +2160,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginRenderPass2: {
+        AV_SCOPE("server:vkCmdBeginRenderPass2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderPassBeginInfo pRenderPassBegin_local{};
         VkSubpassBeginInfo pSubpassBeginInfo_local{};
@@ -2047,6 +2171,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginRendering: {
+        AV_SCOPE("server:vkCmdBeginRendering");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderingInfo pRenderingInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2055,6 +2180,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindVertexBuffers2: {
+        AV_SCOPE("server:vkCmdBindVertexBuffers2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstBinding{};
         uint32_t bindingCount{};
@@ -2117,6 +2243,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBlitImage2: {
+        AV_SCOPE("server:vkCmdBlitImage2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBlitImageInfo2 pBlitImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2125,6 +2252,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBuffer2: {
+        AV_SCOPE("server:vkCmdCopyBuffer2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyBufferInfo2 pCopyBufferInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2133,6 +2261,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBufferToImage2: {
+        AV_SCOPE("server:vkCmdCopyBufferToImage2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyBufferToImageInfo2 pCopyBufferToImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2141,6 +2270,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImage2: {
+        AV_SCOPE("server:vkCmdCopyImage2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyImageInfo2 pCopyImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2149,6 +2279,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImageToBuffer2: {
+        AV_SCOPE("server:vkCmdCopyImageToBuffer2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyImageToBufferInfo2 pCopyImageToBufferInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2157,6 +2288,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyQueryPoolResults: {
+        AV_SCOPE("server:vkCmdCopyQueryPoolResults");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t firstQuery{};
@@ -2177,6 +2309,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDispatchBase: {
+        AV_SCOPE("server:vkCmdDispatchBase");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t baseGroupX{};
         uint32_t baseGroupY{};
@@ -2195,6 +2328,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndexedIndirectCount: {
+        AV_SCOPE("server:vkCmdDrawIndexedIndirectCount");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -2213,6 +2347,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndirectCount: {
+        AV_SCOPE("server:vkCmdDrawIndirectCount");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -2231,6 +2366,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndQuery: {
+        AV_SCOPE("server:vkCmdEndQuery");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t query{};
@@ -2241,6 +2377,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndRenderPass2: {
+        AV_SCOPE("server:vkCmdEndRenderPass2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSubpassEndInfo pSubpassEndInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2249,12 +2386,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndRendering: {
+        AV_SCOPE("server:vkCmdEndRendering");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         s.on_vkCmdEndRendering(commandBuffer);
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdNextSubpass2: {
+        AV_SCOPE("server:vkCmdNextSubpass2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSubpassBeginInfo pSubpassBeginInfo_local{};
         VkSubpassEndInfo pSubpassEndInfo_local{};
@@ -2265,6 +2404,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPipelineBarrier2: {
+        AV_SCOPE("server:vkCmdPipelineBarrier2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkDependencyInfo pDependencyInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2273,6 +2413,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResetEvent2: {
+        AV_SCOPE("server:vkCmdResetEvent2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkPipelineStageFlags2 stageMask{};
@@ -2283,6 +2424,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResetQueryPool: {
+        AV_SCOPE("server:vkCmdResetQueryPool");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t firstQuery{};
@@ -2295,6 +2437,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResolveImage: {
+        AV_SCOPE("server:vkCmdResolveImage");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkImage srcImage = VK_NULL_HANDLE;
         VkImageLayout srcImageLayout{};
@@ -2322,6 +2465,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResolveImage2: {
+        AV_SCOPE("server:vkCmdResolveImage2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkResolveImageInfo2 pResolveImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2330,6 +2474,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCullMode: {
+        AV_SCOPE("server:vkCmdSetCullMode");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCullModeFlags cullMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2338,6 +2483,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBiasEnable: {
+        AV_SCOPE("server:vkCmdSetDepthBiasEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthBiasEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2346,6 +2492,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBoundsTestEnable: {
+        AV_SCOPE("server:vkCmdSetDepthBoundsTestEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthBoundsTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2354,6 +2501,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthCompareOp: {
+        AV_SCOPE("server:vkCmdSetDepthCompareOp");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCompareOp depthCompareOp{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2362,6 +2510,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthTestEnable: {
+        AV_SCOPE("server:vkCmdSetDepthTestEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2370,6 +2519,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthWriteEnable: {
+        AV_SCOPE("server:vkCmdSetDepthWriteEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthWriteEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2378,6 +2528,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDeviceMask: {
+        AV_SCOPE("server:vkCmdSetDeviceMask");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t deviceMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2386,6 +2537,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetEvent2: {
+        AV_SCOPE("server:vkCmdSetEvent2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkDependencyInfo pDependencyInfo_local{};
@@ -2396,6 +2548,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetFrontFace: {
+        AV_SCOPE("server:vkCmdSetFrontFace");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFrontFace frontFace{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2404,6 +2557,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPrimitiveRestartEnable: {
+        AV_SCOPE("server:vkCmdSetPrimitiveRestartEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 primitiveRestartEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2412,6 +2566,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPrimitiveTopology: {
+        AV_SCOPE("server:vkCmdSetPrimitiveTopology");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPrimitiveTopology primitiveTopology{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2420,6 +2575,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRasterizerDiscardEnable: {
+        AV_SCOPE("server:vkCmdSetRasterizerDiscardEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 rasterizerDiscardEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2428,6 +2584,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetScissorWithCount: {
+        AV_SCOPE("server:vkCmdSetScissorWithCount");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t scissorCount{};
         VkRect2D* pScissors_storage = nullptr;
@@ -2447,6 +2604,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilOp: {
+        AV_SCOPE("server:vkCmdSetStencilOp");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStencilFaceFlags faceMask{};
         VkStencilOp failOp{};
@@ -2463,6 +2621,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilTestEnable: {
+        AV_SCOPE("server:vkCmdSetStencilTestEnable");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 stencilTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -2471,6 +2630,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetViewportWithCount: {
+        AV_SCOPE("server:vkCmdSetViewportWithCount");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t viewportCount{};
         VkViewport* pViewports_storage = nullptr;
@@ -2490,6 +2650,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWaitEvents2: {
+        AV_SCOPE("server:vkCmdWaitEvents2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
@@ -2520,6 +2681,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWriteTimestamp: {
+        AV_SCOPE("server:vkCmdWriteTimestamp");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineStageFlagBits pipelineStage{};
         VkQueryPool queryPool = VK_NULL_HANDLE;
@@ -2532,6 +2694,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWriteTimestamp2: {
+        AV_SCOPE("server:vkCmdWriteTimestamp2");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineStageFlags2 stage{};
         VkQueryPool queryPool = VK_NULL_HANDLE;
@@ -2544,6 +2707,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateBufferView: {
+        AV_SCOPE("server:vkCreateBufferView");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferViewCreateInfo pCreateInfo_local{};
         VkBufferView pView_out = VK_NULL_HANDLE;
@@ -2559,6 +2723,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorUpdateTemplate: {
+        AV_SCOPE("server:vkCreateDescriptorUpdateTemplate");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorUpdateTemplateCreateInfo pCreateInfo_local{};
         VkDescriptorUpdateTemplate pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
@@ -2574,6 +2739,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreatePrivateDataSlot: {
+        AV_SCOPE("server:vkCreatePrivateDataSlot");
         VkDevice device = VK_NULL_HANDLE;
         VkPrivateDataSlotCreateInfo pCreateInfo_local{};
         VkPrivateDataSlot pPrivateDataSlot_out = VK_NULL_HANDLE;
@@ -2589,6 +2755,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateQueryPool: {
+        AV_SCOPE("server:vkCreateQueryPool");
         VkDevice device = VK_NULL_HANDLE;
         VkQueryPoolCreateInfo pCreateInfo_local{};
         VkQueryPool pQueryPool_out = VK_NULL_HANDLE;
@@ -2604,6 +2771,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateRenderPass2: {
+        AV_SCOPE("server:vkCreateRenderPass2");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderPassCreateInfo2 pCreateInfo_local{};
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
@@ -2619,6 +2787,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSamplerYcbcrConversion: {
+        AV_SCOPE("server:vkCreateSamplerYcbcrConversion");
         VkDevice device = VK_NULL_HANDLE;
         VkSamplerYcbcrConversionCreateInfo pCreateInfo_local{};
         VkSamplerYcbcrConversion pYcbcrConversion_out = VK_NULL_HANDLE;
@@ -2634,6 +2803,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyBufferView: {
+        AV_SCOPE("server:vkDestroyBufferView");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferView bufferView = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2643,6 +2813,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDescriptorUpdateTemplate: {
+        AV_SCOPE("server:vkDestroyDescriptorUpdateTemplate");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorUpdateTemplate descriptorUpdateTemplate = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2652,6 +2823,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPrivateDataSlot: {
+        AV_SCOPE("server:vkDestroyPrivateDataSlot");
         VkDevice device = VK_NULL_HANDLE;
         VkPrivateDataSlot privateDataSlot = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2661,6 +2833,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyQueryPool: {
+        AV_SCOPE("server:vkDestroyQueryPool");
         VkDevice device = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2670,6 +2843,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySamplerYcbcrConversion: {
+        AV_SCOPE("server:vkDestroySamplerYcbcrConversion");
         VkDevice device = VK_NULL_HANDLE;
         VkSamplerYcbcrConversion ycbcrConversion = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2679,6 +2853,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroups: {
+        AV_SCOPE("server:vkEnumeratePhysicalDeviceGroups");
         VkInstance instance = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pPhysicalDeviceGroupCount_local = 0;
@@ -2712,6 +2887,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkFlushMappedMemoryRanges: {
+        AV_SCOPE("server:vkFlushMappedMemoryRanges");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t memoryRangeCount{};
         VkMappedMemoryRange* pMemoryRanges_storage = nullptr;
@@ -2732,6 +2908,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferDeviceAddress: {
+        AV_SCOPE("server:vkGetBufferDeviceAddress");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferDeviceAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2741,6 +2918,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements2: {
+        AV_SCOPE("server:vkGetBufferMemoryRequirements2");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferMemoryRequirementsInfo2 pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -2754,6 +2932,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferOpaqueCaptureAddress: {
+        AV_SCOPE("server:vkGetBufferOpaqueCaptureAddress");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferDeviceAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2763,6 +2942,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDescriptorSetLayoutSupport: {
+        AV_SCOPE("server:vkGetDescriptorSetLayoutSupport");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetLayoutCreateInfo pCreateInfo_local{};
         VkDescriptorSetLayoutSupport pSupport_out{};
@@ -2776,6 +2956,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceBufferMemoryRequirements: {
+        AV_SCOPE("server:vkGetDeviceBufferMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceBufferMemoryRequirements pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -2789,6 +2970,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceGroupPeerMemoryFeatures: {
+        AV_SCOPE("server:vkGetDeviceGroupPeerMemoryFeatures");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t heapIndex{};
         uint32_t localDeviceIndex{};
@@ -2804,6 +2986,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceGroupPresentCapabilitiesKHR: {
+        AV_SCOPE("server:vkGetDeviceGroupPresentCapabilitiesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceGroupPresentCapabilitiesKHR pDeviceGroupPresentCapabilities_out{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2820,6 +3003,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceGroupSurfacePresentModesKHR: {
+        AV_SCOPE("server:vkGetDeviceGroupSurfacePresentModesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkDeviceGroupPresentModeFlagsKHR pModes_out{};
@@ -2834,6 +3018,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageMemoryRequirements: {
+        AV_SCOPE("server:vkGetDeviceImageMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -2847,6 +3032,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSparseMemoryRequirements: {
+        AV_SCOPE("server:vkGetDeviceImageSparseMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
         uint8_t array_present = 0;
@@ -2881,6 +3067,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceMemoryCommitment: {
+        AV_SCOPE("server:vkGetDeviceMemoryCommitment");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         VkDeviceSize pCommittedMemoryInBytes_out{};
@@ -2892,6 +3079,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddress: {
+        AV_SCOPE("server:vkGetDeviceMemoryOpaqueCaptureAddress");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceMemoryOpaqueCaptureAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2901,6 +3089,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceQueue2: {
+        AV_SCOPE("server:vkGetDeviceQueue2");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceQueueInfo2 pQueueInfo_local{};
         VkQueue pQueue_out = VK_NULL_HANDLE;
@@ -2913,6 +3102,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageMemoryRequirements2: {
+        AV_SCOPE("server:vkGetImageMemoryRequirements2");
         VkDevice device = VK_NULL_HANDLE;
         VkImageMemoryRequirementsInfo2 pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -2926,6 +3116,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements: {
+        AV_SCOPE("server:vkGetImageSparseMemoryRequirements");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         uint8_t array_present = 0;
@@ -2959,6 +3150,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements2: {
+        AV_SCOPE("server:vkGetImageSparseMemoryRequirements2");
         VkDevice device = VK_NULL_HANDLE;
         VkImageSparseMemoryRequirementsInfo2 pInfo_local{};
         uint8_t array_present = 0;
@@ -2993,6 +3185,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSubresourceLayout: {
+        AV_SCOPE("server:vkGetImageSubresourceLayout");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkImageSubresource pSubresource_local{};
@@ -3006,6 +3199,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalBufferProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalBufferProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalBufferInfo pExternalBufferInfo_local{};
         VkExternalBufferProperties pExternalBufferProperties_out{};
@@ -3019,6 +3213,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalFenceProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalFenceProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalFenceInfo pExternalFenceInfo_local{};
         VkExternalFenceProperties pExternalFenceProperties_out{};
@@ -3032,6 +3227,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalSemaphoreProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalSemaphoreProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalSemaphoreInfo pExternalSemaphoreInfo_local{};
         VkExternalSemaphoreProperties pExternalSemaphoreProperties_out{};
@@ -3045,6 +3241,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDevicePresentRectanglesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDevicePresentRectanglesKHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         uint8_t array_present = 0;
@@ -3078,6 +3275,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceToolProperties: {
+        AV_SCOPE("server:vkGetPhysicalDeviceToolProperties");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pToolCount_local = 0;
@@ -3110,6 +3308,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPrivateData: {
+        AV_SCOPE("server:vkGetPrivateData");
         VkDevice device = VK_NULL_HANDLE;
         VkObjectType objectType{};
         uint64_t objectHandle{};
@@ -3125,6 +3324,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetQueryPoolResults: {
+        AV_SCOPE("server:vkGetQueryPoolResults");
         VkDevice device = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t firstQuery{};
@@ -3162,6 +3362,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetRenderAreaGranularity: {
+        AV_SCOPE("server:vkGetRenderAreaGranularity");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderPass renderPass = VK_NULL_HANDLE;
         VkExtent2D pGranularity_out{};
@@ -3173,6 +3374,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetSemaphoreCounterValue: {
+        AV_SCOPE("server:vkGetSemaphoreCounterValue");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphore semaphore = VK_NULL_HANDLE;
         uint64_t pValue_out{};
@@ -3187,6 +3389,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkInvalidateMappedMemoryRanges: {
+        AV_SCOPE("server:vkInvalidateMappedMemoryRanges");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t memoryRangeCount{};
         VkMappedMemoryRange* pMemoryRanges_storage = nullptr;
@@ -3207,6 +3410,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkMergePipelineCaches: {
+        AV_SCOPE("server:vkMergePipelineCaches");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCache dstCache = VK_NULL_HANDLE;
         uint32_t srcCacheCount{};
@@ -3229,6 +3433,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueBindSparse: {
+        AV_SCOPE("server:vkQueueBindSparse");
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindSparseInfo* pBindInfo_storage = nullptr;
@@ -3251,6 +3456,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueSubmit2: {
+        AV_SCOPE("server:vkQueueSubmit2");
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo2* pSubmits_storage = nullptr;
@@ -3273,6 +3479,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkResetQueryPool: {
+        AV_SCOPE("server:vkResetQueryPool");
         VkDevice device = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t firstQuery{};
@@ -3285,6 +3492,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkSetPrivateData: {
+        AV_SCOPE("server:vkSetPrivateData");
         VkDevice device = VK_NULL_HANDLE;
         VkObjectType objectType{};
         uint64_t objectHandle{};
@@ -3300,6 +3508,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkSignalSemaphore: {
+        AV_SCOPE("server:vkSignalSemaphore");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreSignalInfo pSignalInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3309,6 +3518,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkTrimCommandPool: {
+        AV_SCOPE("server:vkTrimCommandPool");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandPoolTrimFlags flags{};
@@ -3319,6 +3529,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkWaitSemaphores: {
+        AV_SCOPE("server:vkWaitSemaphores");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreWaitInfo pWaitInfo_local{};
         uint64_t timeout{};
@@ -3330,6 +3541,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFeatures2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFeatures2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceFeatures2 pFeatures_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -3341,6 +3553,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFormatProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFormatProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkFormat format{};
         VkFormatProperties2 pFormatProperties_out{};
@@ -3354,6 +3567,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceImageFormatProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceImageFormatProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceImageFormatInfo2 pImageFormatInfo_local{};
         VkImageFormatProperties2 pImageFormatProperties_out{};
@@ -3372,6 +3586,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceMemoryProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceMemoryProperties2 pMemoryProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -3383,6 +3598,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties2 pProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
@@ -3394,6 +3610,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceQueueFamilyProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pQueueFamilyPropertyCount_local = 0;
@@ -3426,6 +3643,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceSparseImageFormatProperties2KHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceSparseImageFormatProperties2KHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceSparseImageFormatInfo2 pFormatInfo_local{};
         uint8_t array_present = 0;
@@ -3460,6 +3678,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindBufferMemory2KHR: {
+        AV_SCOPE("server:vkBindBufferMemory2KHR");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindBufferMemoryInfo* pBindInfos_storage = nullptr;
@@ -3480,6 +3699,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory2KHR: {
+        AV_SCOPE("server:vkBindImageMemory2KHR");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindImageMemoryInfo* pBindInfos_storage = nullptr;
@@ -3500,6 +3720,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements2KHR: {
+        AV_SCOPE("server:vkGetBufferMemoryRequirements2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferMemoryRequirementsInfo2 pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -3513,6 +3734,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageMemoryRequirements2KHR: {
+        AV_SCOPE("server:vkGetImageMemoryRequirements2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkImageMemoryRequirementsInfo2 pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -3526,6 +3748,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements2KHR: {
+        AV_SCOPE("server:vkGetImageSparseMemoryRequirements2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkImageSparseMemoryRequirementsInfo2 pInfo_local{};
         uint8_t array_present = 0;
@@ -3560,6 +3783,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginRenderPass2KHR: {
+        AV_SCOPE("server:vkCmdBeginRenderPass2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderPassBeginInfo pRenderPassBegin_local{};
         VkSubpassBeginInfo pSubpassBeginInfo_local{};
@@ -3570,6 +3794,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginRenderingKHR: {
+        AV_SCOPE("server:vkCmdBeginRenderingKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderingInfo pRenderingInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3578,6 +3803,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBlitImage2KHR: {
+        AV_SCOPE("server:vkCmdBlitImage2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBlitImageInfo2 pBlitImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3586,6 +3812,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBuffer2KHR: {
+        AV_SCOPE("server:vkCmdCopyBuffer2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyBufferInfo2 pCopyBufferInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3594,6 +3821,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyBufferToImage2KHR: {
+        AV_SCOPE("server:vkCmdCopyBufferToImage2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyBufferToImageInfo2 pCopyBufferToImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3602,6 +3830,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImage2KHR: {
+        AV_SCOPE("server:vkCmdCopyImage2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyImageInfo2 pCopyImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3610,6 +3839,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyImageToBuffer2KHR: {
+        AV_SCOPE("server:vkCmdCopyImageToBuffer2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyImageToBufferInfo2 pCopyImageToBufferInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3618,6 +3848,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDispatchBaseKHR: {
+        AV_SCOPE("server:vkCmdDispatchBaseKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t baseGroupX{};
         uint32_t baseGroupY{};
@@ -3636,6 +3867,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndexedIndirectCountKHR: {
+        AV_SCOPE("server:vkCmdDrawIndexedIndirectCountKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -3654,6 +3886,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndirectCountKHR: {
+        AV_SCOPE("server:vkCmdDrawIndirectCountKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -3672,6 +3905,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndRenderPass2KHR: {
+        AV_SCOPE("server:vkCmdEndRenderPass2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSubpassEndInfo pSubpassEndInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3680,12 +3914,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndRenderingKHR: {
+        AV_SCOPE("server:vkCmdEndRenderingKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         s.on_vkCmdEndRenderingKHR(commandBuffer);
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdNextSubpass2KHR: {
+        AV_SCOPE("server:vkCmdNextSubpass2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSubpassBeginInfo pSubpassBeginInfo_local{};
         VkSubpassEndInfo pSubpassEndInfo_local{};
@@ -3696,6 +3932,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPipelineBarrier2KHR: {
+        AV_SCOPE("server:vkCmdPipelineBarrier2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkDependencyInfo pDependencyInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3704,6 +3941,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResetEvent2KHR: {
+        AV_SCOPE("server:vkCmdResetEvent2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkPipelineStageFlags2 stageMask{};
@@ -3714,6 +3952,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdResolveImage2KHR: {
+        AV_SCOPE("server:vkCmdResolveImage2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkResolveImageInfo2 pResolveImageInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3722,6 +3961,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDeviceMaskKHR: {
+        AV_SCOPE("server:vkCmdSetDeviceMaskKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t deviceMask{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -3730,6 +3970,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetEvent2KHR: {
+        AV_SCOPE("server:vkCmdSetEvent2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkEvent event = VK_NULL_HANDLE;
         VkDependencyInfo pDependencyInfo_local{};
@@ -3740,6 +3981,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWaitEvents2KHR: {
+        AV_SCOPE("server:vkCmdWaitEvents2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
@@ -3770,6 +4012,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWriteTimestamp2KHR: {
+        AV_SCOPE("server:vkCmdWriteTimestamp2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineStageFlags2 stage{};
         VkQueryPool queryPool = VK_NULL_HANDLE;
@@ -3782,6 +4025,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorUpdateTemplateKHR: {
+        AV_SCOPE("server:vkCreateDescriptorUpdateTemplateKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorUpdateTemplateCreateInfo pCreateInfo_local{};
         VkDescriptorUpdateTemplate pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
@@ -3797,6 +4041,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateRenderPass2KHR: {
+        AV_SCOPE("server:vkCreateRenderPass2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderPassCreateInfo2 pCreateInfo_local{};
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
@@ -3812,6 +4057,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSamplerYcbcrConversionKHR: {
+        AV_SCOPE("server:vkCreateSamplerYcbcrConversionKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSamplerYcbcrConversionCreateInfo pCreateInfo_local{};
         VkSamplerYcbcrConversion pYcbcrConversion_out = VK_NULL_HANDLE;
@@ -3827,6 +4073,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDescriptorUpdateTemplateKHR: {
+        AV_SCOPE("server:vkDestroyDescriptorUpdateTemplateKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorUpdateTemplate descriptorUpdateTemplate = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3836,6 +4083,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySamplerYcbcrConversionKHR: {
+        AV_SCOPE("server:vkDestroySamplerYcbcrConversionKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSamplerYcbcrConversion ycbcrConversion = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3845,6 +4093,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroupsKHR: {
+        AV_SCOPE("server:vkEnumeratePhysicalDeviceGroupsKHR");
         VkInstance instance = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pPhysicalDeviceGroupCount_local = 0;
@@ -3878,6 +4127,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferDeviceAddressKHR: {
+        AV_SCOPE("server:vkGetBufferDeviceAddressKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferDeviceAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3887,6 +4137,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferOpaqueCaptureAddressKHR: {
+        AV_SCOPE("server:vkGetBufferOpaqueCaptureAddressKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkBufferDeviceAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3896,6 +4147,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDescriptorSetLayoutSupportKHR: {
+        AV_SCOPE("server:vkGetDescriptorSetLayoutSupportKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetLayoutCreateInfo pCreateInfo_local{};
         VkDescriptorSetLayoutSupport pSupport_out{};
@@ -3909,6 +4161,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceBufferMemoryRequirementsKHR: {
+        AV_SCOPE("server:vkGetDeviceBufferMemoryRequirementsKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceBufferMemoryRequirements pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -3922,6 +4175,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceGroupPeerMemoryFeaturesKHR: {
+        AV_SCOPE("server:vkGetDeviceGroupPeerMemoryFeaturesKHR");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t heapIndex{};
         uint32_t localDeviceIndex{};
@@ -3937,6 +4191,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageMemoryRequirementsKHR: {
+        AV_SCOPE("server:vkGetDeviceImageMemoryRequirementsKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
         VkMemoryRequirements2 pMemoryRequirements_out{};
@@ -3950,6 +4205,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSparseMemoryRequirementsKHR: {
+        AV_SCOPE("server:vkGetDeviceImageSparseMemoryRequirementsKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
         uint8_t array_present = 0;
@@ -3984,6 +4240,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceMemoryOpaqueCaptureAddressKHR: {
+        AV_SCOPE("server:vkGetDeviceMemoryOpaqueCaptureAddressKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceMemoryOpaqueCaptureAddressInfo pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -3993,6 +4250,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalBufferPropertiesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalBufferPropertiesKHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalBufferInfo pExternalBufferInfo_local{};
         VkExternalBufferProperties pExternalBufferProperties_out{};
@@ -4006,6 +4264,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalFencePropertiesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalFencePropertiesKHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalFenceInfo pExternalFenceInfo_local{};
         VkExternalFenceProperties pExternalFenceProperties_out{};
@@ -4019,6 +4278,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceExternalSemaphorePropertiesKHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceExternalSemaphoreInfo pExternalSemaphoreInfo_local{};
         VkExternalSemaphoreProperties pExternalSemaphoreProperties_out{};
@@ -4032,6 +4292,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetSemaphoreCounterValueKHR: {
+        AV_SCOPE("server:vkGetSemaphoreCounterValueKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphore semaphore = VK_NULL_HANDLE;
         uint64_t pValue_out{};
@@ -4046,6 +4307,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueSubmit2KHR: {
+        AV_SCOPE("server:vkQueueSubmit2KHR");
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo2* pSubmits_storage = nullptr;
@@ -4068,6 +4330,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkSignalSemaphoreKHR: {
+        AV_SCOPE("server:vkSignalSemaphoreKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreSignalInfo pSignalInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -4077,6 +4340,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkTrimCommandPoolKHR: {
+        AV_SCOPE("server:vkTrimCommandPoolKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkCommandPool commandPool = VK_NULL_HANDLE;
         VkCommandPoolTrimFlags flags{};
@@ -4087,6 +4351,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkWaitSemaphoresKHR: {
+        AV_SCOPE("server:vkWaitSemaphoresKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreWaitInfo pWaitInfo_local{};
         uint64_t timeout{};
@@ -4098,6 +4363,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginConditionalRenderingEXT: {
+        AV_SCOPE("server:vkCmdBeginConditionalRenderingEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkConditionalRenderingBeginInfoEXT pConditionalRenderingBegin_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4106,12 +4372,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndConditionalRenderingEXT: {
+        AV_SCOPE("server:vkCmdEndConditionalRenderingEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         s.on_vkCmdEndConditionalRenderingEXT(commandBuffer);
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetColorWriteEnableEXT: {
+        AV_SCOPE("server:vkCmdSetColorWriteEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t attachmentCount{};
         VkBool32* pColorWriteEnables_storage = nullptr;
@@ -4131,6 +4399,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBiasEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthBiasEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthBiasEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4139,6 +4408,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLogicOpEXT: {
+        AV_SCOPE("server:vkCmdSetLogicOpEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkLogicOp logicOp{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4147,6 +4417,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPatchControlPointsEXT: {
+        AV_SCOPE("server:vkCmdSetPatchControlPointsEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t patchControlPoints{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4155,6 +4426,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPrimitiveRestartEnableEXT: {
+        AV_SCOPE("server:vkCmdSetPrimitiveRestartEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 primitiveRestartEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4163,6 +4435,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRasterizerDiscardEnableEXT: {
+        AV_SCOPE("server:vkCmdSetRasterizerDiscardEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 rasterizerDiscardEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4171,6 +4444,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetVertexInputEXT: {
+        AV_SCOPE("server:vkCmdSetVertexInputEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t vertexBindingDescriptionCount{};
         VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions_storage = nullptr;
@@ -4203,6 +4477,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkBuildAccelerationStructuresKHR: {
+        AV_SCOPE("server:vkBuildAccelerationStructuresKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         uint32_t infoCount{};
@@ -4241,6 +4516,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindShadersEXT: {
+        AV_SCOPE("server:vkCmdBindShadersEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t stageCount{};
         VkShaderStageFlagBits* pStages_storage = nullptr;
@@ -4275,6 +4551,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindVertexBuffers2EXT: {
+        AV_SCOPE("server:vkCmdBindVertexBuffers2EXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstBinding{};
         uint32_t bindingCount{};
@@ -4337,6 +4614,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBuildAccelerationStructuresIndirectKHR: {
+        AV_SCOPE("server:vkCmdBuildAccelerationStructuresIndirectKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t infoCount{};
         VkAccelerationStructureBuildGeometryInfoKHR* pInfos_storage = nullptr;
@@ -4394,6 +4672,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBuildAccelerationStructuresKHR: {
+        AV_SCOPE("server:vkCmdBuildAccelerationStructuresKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t infoCount{};
         VkAccelerationStructureBuildGeometryInfoKHR* pInfos_storage = nullptr;
@@ -4429,6 +4708,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyAccelerationStructureKHR: {
+        AV_SCOPE("server:vkCmdCopyAccelerationStructureKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyAccelerationStructureInfoKHR pInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4437,6 +4717,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyAccelerationStructureToMemoryKHR: {
+        AV_SCOPE("server:vkCmdCopyAccelerationStructureToMemoryKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyAccelerationStructureToMemoryInfoKHR pInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4445,6 +4726,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdCopyMemoryToAccelerationStructureKHR: {
+        AV_SCOPE("server:vkCmdCopyMemoryToAccelerationStructureKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCopyMemoryToAccelerationStructureInfoKHR pInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4453,6 +4735,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawMeshTasksEXT: {
+        AV_SCOPE("server:vkCmdDrawMeshTasksEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t groupCountX{};
         uint32_t groupCountY{};
@@ -4465,6 +4748,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawMeshTasksIndirectCountEXT: {
+        AV_SCOPE("server:vkCmdDrawMeshTasksIndirectCountEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -4483,6 +4767,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawMeshTasksIndirectEXT: {
+        AV_SCOPE("server:vkCmdDrawMeshTasksIndirectEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -4497,6 +4782,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdPushDescriptorSetKHR: {
+        AV_SCOPE("server:vkCmdPushDescriptorSetKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPipelineBindPoint pipelineBindPoint{};
         VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -4522,6 +4808,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetAlphaToCoverageEnableEXT: {
+        AV_SCOPE("server:vkCmdSetAlphaToCoverageEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 alphaToCoverageEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4530,6 +4817,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetAlphaToOneEnableEXT: {
+        AV_SCOPE("server:vkCmdSetAlphaToOneEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 alphaToOneEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4538,6 +4826,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetColorBlendAdvancedEXT: {
+        AV_SCOPE("server:vkCmdSetColorBlendAdvancedEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
@@ -4559,6 +4848,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetColorBlendEnableEXT: {
+        AV_SCOPE("server:vkCmdSetColorBlendEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
@@ -4580,6 +4870,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetColorBlendEquationEXT: {
+        AV_SCOPE("server:vkCmdSetColorBlendEquationEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
@@ -4601,6 +4892,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetColorWriteMaskEXT: {
+        AV_SCOPE("server:vkCmdSetColorWriteMaskEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
@@ -4622,6 +4914,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetConservativeRasterizationModeEXT: {
+        AV_SCOPE("server:vkCmdSetConservativeRasterizationModeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkConservativeRasterizationModeEXT conservativeRasterizationMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4630,6 +4923,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageModulationModeNV: {
+        AV_SCOPE("server:vkCmdSetCoverageModulationModeNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCoverageModulationModeNV coverageModulationMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4638,6 +4932,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageModulationTableEnableNV: {
+        AV_SCOPE("server:vkCmdSetCoverageModulationTableEnableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 coverageModulationTableEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4646,6 +4941,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageModulationTableNV: {
+        AV_SCOPE("server:vkCmdSetCoverageModulationTableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t coverageModulationTableCount{};
         float* pCoverageModulationTable_storage = nullptr;
@@ -4665,6 +4961,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageReductionModeNV: {
+        AV_SCOPE("server:vkCmdSetCoverageReductionModeNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCoverageReductionModeNV coverageReductionMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4673,6 +4970,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageToColorEnableNV: {
+        AV_SCOPE("server:vkCmdSetCoverageToColorEnableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 coverageToColorEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4681,6 +4979,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCoverageToColorLocationNV: {
+        AV_SCOPE("server:vkCmdSetCoverageToColorLocationNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t coverageToColorLocation{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4689,6 +4988,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetCullModeEXT: {
+        AV_SCOPE("server:vkCmdSetCullModeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCullModeFlags cullMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4697,6 +4997,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthBoundsTestEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthBoundsTestEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthBoundsTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4705,6 +5006,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthClampEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthClampEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthClampEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4713,6 +5015,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthClampRangeEXT: {
+        AV_SCOPE("server:vkCmdSetDepthClampRangeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkDepthClampModeEXT depthClampMode{};
         VkDepthClampRangeEXT pDepthClampRange_local{};
@@ -4723,6 +5026,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthClipEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthClipEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthClipEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4731,6 +5035,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthClipNegativeOneToOneEXT: {
+        AV_SCOPE("server:vkCmdSetDepthClipNegativeOneToOneEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 negativeOneToOne{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4739,6 +5044,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthCompareOpEXT: {
+        AV_SCOPE("server:vkCmdSetDepthCompareOpEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkCompareOp depthCompareOp{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4747,6 +5053,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthTestEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthTestEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4755,6 +5062,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetDepthWriteEnableEXT: {
+        AV_SCOPE("server:vkCmdSetDepthWriteEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 depthWriteEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4763,6 +5071,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetExtraPrimitiveOverestimationSizeEXT: {
+        AV_SCOPE("server:vkCmdSetExtraPrimitiveOverestimationSizeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float extraPrimitiveOverestimationSize{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4771,6 +5080,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetFragmentShadingRateKHR: {
+        AV_SCOPE("server:vkCmdSetFragmentShadingRateKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkExtent2D pFragmentSize_local{};
         VkFragmentShadingRateCombinerOpKHR combinerOps_local[2]{};
@@ -4783,6 +5093,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetFrontFaceEXT: {
+        AV_SCOPE("server:vkCmdSetFrontFaceEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkFrontFace frontFace{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4791,6 +5102,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLineRasterizationModeEXT: {
+        AV_SCOPE("server:vkCmdSetLineRasterizationModeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkLineRasterizationModeEXT lineRasterizationMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4799,6 +5111,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLineStippleEXT: {
+        AV_SCOPE("server:vkCmdSetLineStippleEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t lineStippleFactor{};
         uint16_t lineStipplePattern{};
@@ -4809,6 +5122,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLineStippleEnableEXT: {
+        AV_SCOPE("server:vkCmdSetLineStippleEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 stippledLineEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4817,6 +5131,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetLogicOpEnableEXT: {
+        AV_SCOPE("server:vkCmdSetLogicOpEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 logicOpEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4825,6 +5140,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPolygonModeEXT: {
+        AV_SCOPE("server:vkCmdSetPolygonModeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPolygonMode polygonMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4833,6 +5149,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetPrimitiveTopologyEXT: {
+        AV_SCOPE("server:vkCmdSetPrimitiveTopologyEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkPrimitiveTopology primitiveTopology{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4841,6 +5158,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetProvokingVertexModeEXT: {
+        AV_SCOPE("server:vkCmdSetProvokingVertexModeEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkProvokingVertexModeEXT provokingVertexMode{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4849,6 +5167,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRasterizationSamplesEXT: {
+        AV_SCOPE("server:vkCmdSetRasterizationSamplesEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSampleCountFlagBits rasterizationSamples{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4857,6 +5176,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRasterizationStreamEXT: {
+        AV_SCOPE("server:vkCmdSetRasterizationStreamEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t rasterizationStream{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4865,6 +5185,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRayTracingPipelineStackSizeKHR: {
+        AV_SCOPE("server:vkCmdSetRayTracingPipelineStackSizeKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t pipelineStackSize{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4873,6 +5194,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRepresentativeFragmentTestEnableNV: {
+        AV_SCOPE("server:vkCmdSetRepresentativeFragmentTestEnableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 representativeFragmentTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4881,6 +5203,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetSampleLocationsEnableEXT: {
+        AV_SCOPE("server:vkCmdSetSampleLocationsEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 sampleLocationsEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4889,6 +5212,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetSampleMaskEXT: {
+        AV_SCOPE("server:vkCmdSetSampleMaskEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSampleCountFlagBits samples{};
         VkSampleMask* pSampleMask_storage = nullptr;
@@ -4908,6 +5232,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetScissorWithCountEXT: {
+        AV_SCOPE("server:vkCmdSetScissorWithCountEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t scissorCount{};
         VkRect2D* pScissors_storage = nullptr;
@@ -4927,6 +5252,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetShadingRateImageEnableNV: {
+        AV_SCOPE("server:vkCmdSetShadingRateImageEnableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 shadingRateImageEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4935,6 +5261,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilOpEXT: {
+        AV_SCOPE("server:vkCmdSetStencilOpEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStencilFaceFlags faceMask{};
         VkStencilOp failOp{};
@@ -4951,6 +5278,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetStencilTestEnableEXT: {
+        AV_SCOPE("server:vkCmdSetStencilTestEnableEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 stencilTestEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4959,6 +5287,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetTessellationDomainOriginEXT: {
+        AV_SCOPE("server:vkCmdSetTessellationDomainOriginEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkTessellationDomainOrigin domainOrigin{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4967,6 +5296,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetViewportSwizzleNV: {
+        AV_SCOPE("server:vkCmdSetViewportSwizzleNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstViewport{};
         uint32_t viewportCount{};
@@ -4988,6 +5318,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetViewportWScalingEnableNV: {
+        AV_SCOPE("server:vkCmdSetViewportWScalingEnableNV");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBool32 viewportWScalingEnable{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -4996,6 +5327,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetViewportWithCountEXT: {
+        AV_SCOPE("server:vkCmdSetViewportWithCountEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t viewportCount{};
         VkViewport* pViewports_storage = nullptr;
@@ -5015,6 +5347,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdTraceRaysIndirectKHR: {
+        AV_SCOPE("server:vkCmdTraceRaysIndirectKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStridedDeviceAddressRegionKHR pRaygenShaderBindingTable_local{};
         VkStridedDeviceAddressRegionKHR pMissShaderBindingTable_local{};
@@ -5031,6 +5364,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdTraceRaysKHR: {
+        AV_SCOPE("server:vkCmdTraceRaysKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkStridedDeviceAddressRegionKHR pRaygenShaderBindingTable_local{};
         VkStridedDeviceAddressRegionKHR pMissShaderBindingTable_local{};
@@ -5051,6 +5385,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdWriteAccelerationStructuresPropertiesKHR: {
+        AV_SCOPE("server:vkCmdWriteAccelerationStructuresPropertiesKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t accelerationStructureCount{};
         VkAccelerationStructureKHR* pAccelerationStructures_storage = nullptr;
@@ -5076,6 +5411,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyAccelerationStructureKHR: {
+        AV_SCOPE("server:vkCopyAccelerationStructureKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         VkCopyAccelerationStructureInfoKHR pInfo_local{};
@@ -5087,6 +5423,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyAccelerationStructureToMemoryKHR: {
+        AV_SCOPE("server:vkCopyAccelerationStructureToMemoryKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         VkCopyAccelerationStructureToMemoryInfoKHR pInfo_local{};
@@ -5098,6 +5435,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyImageToImageEXT: {
+        AV_SCOPE("server:vkCopyImageToImageEXT");
         VkDevice device = VK_NULL_HANDLE;
         VkCopyImageToImageInfo pCopyImageToImageInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5107,6 +5445,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyImageToMemoryEXT: {
+        AV_SCOPE("server:vkCopyImageToMemoryEXT");
         VkDevice device = VK_NULL_HANDLE;
         VkCopyImageToMemoryInfo pCopyImageToMemoryInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5116,6 +5455,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyMemoryToAccelerationStructureKHR: {
+        AV_SCOPE("server:vkCopyMemoryToAccelerationStructureKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         VkCopyMemoryToAccelerationStructureInfoKHR pInfo_local{};
@@ -5127,6 +5467,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyMemoryToImageEXT: {
+        AV_SCOPE("server:vkCopyMemoryToImageEXT");
         VkDevice device = VK_NULL_HANDLE;
         VkCopyMemoryToImageInfo pCopyMemoryToImageInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5136,6 +5477,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateAccelerationStructureKHR: {
+        AV_SCOPE("server:vkCreateAccelerationStructureKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAccelerationStructureCreateInfoKHR pCreateInfo_local{};
         VkAccelerationStructureKHR pAccelerationStructure_out = VK_NULL_HANDLE;
@@ -5151,6 +5493,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDeferredOperationKHR: {
+        AV_SCOPE("server:vkCreateDeferredOperationKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR pDeferredOperation_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5164,6 +5507,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateRayTracingPipelinesKHR: {
+        AV_SCOPE("server:vkCreateRayTracingPipelinesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
@@ -5203,6 +5547,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateShadersEXT: {
+        AV_SCOPE("server:vkCreateShadersEXT");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
         VkShaderCreateInfoEXT* pCreateInfos_storage = nullptr;
@@ -5238,6 +5583,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDeferredOperationJoinKHR: {
+        AV_SCOPE("server:vkDeferredOperationJoinKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5247,6 +5593,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyAccelerationStructureKHR: {
+        AV_SCOPE("server:vkDestroyAccelerationStructureKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAccelerationStructureKHR accelerationStructure = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5256,6 +5603,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDeferredOperationKHR: {
+        AV_SCOPE("server:vkDestroyDeferredOperationKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5265,6 +5613,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyShaderEXT: {
+        AV_SCOPE("server:vkDestroyShaderEXT");
         VkDevice device = VK_NULL_HANDLE;
         VkShaderEXT shader = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5274,6 +5623,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetAccelerationStructureBuildSizesKHR: {
+        AV_SCOPE("server:vkGetAccelerationStructureBuildSizesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAccelerationStructureBuildTypeKHR buildType{};
         VkAccelerationStructureBuildGeometryInfoKHR pBuildInfo_local{};
@@ -5304,6 +5654,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetAccelerationStructureDeviceAddressKHR: {
+        AV_SCOPE("server:vkGetAccelerationStructureDeviceAddressKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAccelerationStructureDeviceAddressInfoKHR pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5313,6 +5664,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeferredOperationMaxConcurrencyKHR: {
+        AV_SCOPE("server:vkGetDeferredOperationMaxConcurrencyKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5322,6 +5674,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeferredOperationResultKHR: {
+        AV_SCOPE("server:vkGetDeferredOperationResultKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR operation = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5331,6 +5684,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceAccelerationStructureCompatibilityKHR: {
+        AV_SCOPE("server:vkGetDeviceAccelerationStructureCompatibilityKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkAccelerationStructureVersionInfoKHR pVersionInfo_local{};
         VkAccelerationStructureCompatibilityKHR pCompatibility_out{};
@@ -5342,6 +5696,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSubresourceLayout2EXT: {
+        AV_SCOPE("server:vkGetImageSubresourceLayout2EXT");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkImageSubresource2 pSubresource_local{};
@@ -5357,6 +5712,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFragmentShadingRatesKHR: {
+        AV_SCOPE("server:vkGetPhysicalDeviceFragmentShadingRatesKHR");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pFragmentShadingRateCount_local = 0;
@@ -5389,6 +5745,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR: {
+        AV_SCOPE("server:vkGetRayTracingCaptureReplayShaderGroupHandlesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
         uint32_t firstGroup{};
@@ -5422,6 +5779,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetRayTracingShaderGroupHandlesKHR: {
+        AV_SCOPE("server:vkGetRayTracingShaderGroupHandlesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
         uint32_t firstGroup{};
@@ -5455,6 +5813,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetRayTracingShaderGroupStackSizeKHR: {
+        AV_SCOPE("server:vkGetRayTracingShaderGroupStackSizeKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipeline pipeline = VK_NULL_HANDLE;
         uint32_t group{};
@@ -5468,6 +5827,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkTransitionImageLayoutEXT: {
+        AV_SCOPE("server:vkTransitionImageLayoutEXT");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t transitionCount{};
         VkHostImageLayoutTransitionInfo* pTransitions_storage = nullptr;
@@ -5488,6 +5848,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkWriteAccelerationStructuresPropertiesKHR: {
+        AV_SCOPE("server:vkWriteAccelerationStructuresPropertiesKHR");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t accelerationStructureCount{};
         VkAccelerationStructureKHR* pAccelerationStructures_storage = nullptr;
@@ -5536,6 +5897,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetCalibratedTimestampsEXT: {
+        AV_SCOPE("server:vkGetCalibratedTimestampsEXT");
         VkDevice device = VK_NULL_HANDLE;
         uint32_t timestampCount{};
         VkCalibratedTimestampInfoKHR* pTimestampInfos_storage = nullptr;
@@ -5573,6 +5935,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT: {
+        AV_SCOPE("server:vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         uint8_t array_present = 0;
         uint32_t pTimeDomainCount_local = 0;
@@ -5604,6 +5967,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRenderingAttachmentLocationsKHR: {
+        AV_SCOPE("server:vkCmdSetRenderingAttachmentLocationsKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderingAttachmentLocationInfo pLocationInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -5612,6 +5976,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetRenderingInputAttachmentIndicesKHR: {
+        AV_SCOPE("server:vkCmdSetRenderingInputAttachmentIndicesKHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkRenderingInputAttachmentIndexInfo pInputAttachmentIndexInfo_local{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
@@ -5620,6 +5985,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindIndexBuffer2KHR: {
+        AV_SCOPE("server:vkCmdBindIndexBuffer2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceSize offset{};
@@ -5634,6 +6000,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCreatePipelineBinariesKHR: {
+        AV_SCOPE("server:vkCreatePipelineBinariesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineBinaryCreateInfoKHR pCreateInfo_local{};
         VkPipelineBinaryHandlesInfoKHR pBinaries_out{};
@@ -5661,6 +6028,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPipelineBinaryKHR: {
+        AV_SCOPE("server:vkDestroyPipelineBinaryKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineBinaryKHR pipelineBinary = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5670,6 +6038,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSubresourceLayoutKHR: {
+        AV_SCOPE("server:vkGetDeviceImageSubresourceLayoutKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageSubresourceInfo pInfo_local{};
         VkSubresourceLayout2 pLayout_out{};
@@ -5683,6 +6052,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSubresourceLayout2KHR: {
+        AV_SCOPE("server:vkGetImageSubresourceLayout2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkImageSubresource2 pSubresource_local{};
@@ -5698,6 +6068,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPipelineKeyKHR: {
+        AV_SCOPE("server:vkGetPipelineKeyKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkPipelineCreateInfoKHR pPipelineCreateInfo_local{};
         VkPipelineBinaryKeyKHR pPipelineKey_out{};
@@ -5716,6 +6087,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetRenderingAreaGranularityKHR: {
+        AV_SCOPE("server:vkGetRenderingAreaGranularityKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkRenderingAreaInfo pRenderingAreaInfo_local{};
         VkExtent2D pGranularity_out{};
@@ -5727,6 +6099,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkReleaseCapturedPipelineDataKHR: {
+        AV_SCOPE("server:vkReleaseCapturedPipelineDataKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkReleaseCapturedPipelineDataInfoKHR pInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5736,6 +6109,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginQueryIndexedEXT: {
+        AV_SCOPE("server:vkCmdBeginQueryIndexedEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t query{};
@@ -5750,6 +6124,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginTransformFeedbackEXT: {
+        AV_SCOPE("server:vkCmdBeginTransformFeedbackEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstCounterBuffer{};
         uint32_t counterBufferCount{};
@@ -5786,6 +6161,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindTransformFeedbackBuffersEXT: {
+        AV_SCOPE("server:vkCmdBindTransformFeedbackBuffersEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstBinding{};
         uint32_t bindingCount{};
@@ -5833,6 +6209,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdDrawIndirectByteCountEXT: {
+        AV_SCOPE("server:vkCmdDrawIndirectByteCountEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t instanceCount{};
         uint32_t firstInstance{};
@@ -5851,6 +6228,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndQueryIndexedEXT: {
+        AV_SCOPE("server:vkCmdEndQueryIndexedEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t query{};
@@ -5863,6 +6241,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdEndTransformFeedbackEXT: {
+        AV_SCOPE("server:vkCmdEndTransformFeedbackEXT");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t firstCounterBuffer{};
         uint32_t counterBufferCount{};
@@ -5899,6 +6278,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkSetDeviceMemoryPriorityEXT: {
+        AV_SCOPE("server:vkSetDeviceMemoryPriorityEXT");
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         float priority{};
@@ -5909,6 +6289,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetFenceFdKHR: {
+        AV_SCOPE("server:vkGetFenceFdKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkFenceGetFdInfoKHR pGetFdInfo_local{};
         int pFd_out{};
@@ -5923,6 +6304,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetMemoryFdKHR: {
+        AV_SCOPE("server:vkGetMemoryFdKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkMemoryGetFdInfoKHR pGetFdInfo_local{};
         int pFd_out{};
@@ -5937,6 +6319,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetMemoryFdPropertiesKHR: {
+        AV_SCOPE("server:vkGetMemoryFdPropertiesKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkExternalMemoryHandleTypeFlagBits handleType{};
         int fd{};
@@ -5957,6 +6340,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkGetSemaphoreFdKHR: {
+        AV_SCOPE("server:vkGetSemaphoreFdKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkSemaphoreGetFdInfoKHR pGetFdInfo_local{};
         int pFd_out{};
@@ -5971,6 +6355,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkImportFenceFdKHR: {
+        AV_SCOPE("server:vkImportFenceFdKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkImportFenceFdInfoKHR pImportFenceFdInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5980,6 +6365,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkImportSemaphoreFdKHR: {
+        AV_SCOPE("server:vkImportSemaphoreFdKHR");
         VkDevice device = VK_NULL_HANDLE;
         VkImportSemaphoreFdInfoKHR pImportSemaphoreFdInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -5989,6 +6375,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         return true;
     }
     case ::av::vkproto::kCmd_vkUnmapMemory2KHR: {
+        AV_SCOPE("server:vkUnmapMemory2KHR");
         VkDevice device = VK_NULL_HANDLE;
         VkMemoryUnmapInfo pMemoryUnmapInfo_local{};
         if (!deserialize_VkDevice(r, device)) return false;

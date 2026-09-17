@@ -3,6 +3,7 @@
 
 #include "cl_dispatch_client.h"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/sync_call_scope.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -12,6 +13,7 @@
 namespace av::clproto {
 
 cl_int rvk_clGetPlatformIDs(::av::ClientTransport& t, cl_uint num_entries, uint64_t* platforms, cl_uint* num_platforms) {
+    AV_SCOPE("rvk_clGetPlatformIDs");
     ::av::WireWriter b = t.request_writer();
     b.write_varint(static_cast<uint64_t>(num_entries));
     b.write_pod<uint8_t>(platforms != nullptr ? 1 : 0);
@@ -44,6 +46,7 @@ cl_int rvk_clGetPlatformIDs(::av::ClientTransport& t, cl_uint num_entries, uint6
 }
 
 cl_int rvk_clGetPlatformInfo(::av::ClientTransport& t, uint64_t platform, cl_platform_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetPlatformInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(platform);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -78,6 +81,7 @@ cl_int rvk_clGetPlatformInfo(::av::ClientTransport& t, uint64_t platform, cl_pla
 }
 
 cl_int rvk_clGetDeviceIDs(::av::ClientTransport& t, uint64_t platform, cl_device_type device_type, cl_uint num_entries, uint64_t* devices, cl_uint* num_devices) {
+    AV_SCOPE("rvk_clGetDeviceIDs");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(platform);
     b.write_varint(static_cast<uint64_t>(device_type));
@@ -112,6 +116,7 @@ cl_int rvk_clGetDeviceIDs(::av::ClientTransport& t, uint64_t platform, cl_device
 }
 
 cl_int rvk_clGetDeviceInfo(::av::ClientTransport& t, uint64_t device, cl_device_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetDeviceInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -146,6 +151,7 @@ cl_int rvk_clGetDeviceInfo(::av::ClientTransport& t, uint64_t device, cl_device_
 }
 
 uint64_t rvk_clCreateContext(::av::ClientTransport& t, const uint64_t* properties, cl_uint num_devices, const uint64_t* devices, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateContext");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
     if (properties != nullptr) {
@@ -183,6 +189,7 @@ uint64_t rvk_clCreateContext(::av::ClientTransport& t, const uint64_t* propertie
 }
 
 uint64_t rvk_clCreateContextFromType(::av::ClientTransport& t, const uint64_t* properties, cl_device_type device_type, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateContextFromType");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
     if (properties != nullptr) {
@@ -213,6 +220,7 @@ uint64_t rvk_clCreateContextFromType(::av::ClientTransport& t, const uint64_t* p
 }
 
 cl_int rvk_clRetainContext(::av::ClientTransport& t, uint64_t context) {
+    AV_SCOPE("rvk_clRetainContext");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     if (t.send_async(kCmd_clRetainContext, b) != ::av::TransportResult::ok) {
@@ -222,6 +230,7 @@ cl_int rvk_clRetainContext(::av::ClientTransport& t, uint64_t context) {
 }
 
 cl_int rvk_clReleaseContext(::av::ClientTransport& t, uint64_t context) {
+    AV_SCOPE("rvk_clReleaseContext");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     const ::av::SyncCallScope rvk_call{t};
@@ -239,6 +248,7 @@ cl_int rvk_clReleaseContext(::av::ClientTransport& t, uint64_t context) {
 }
 
 cl_int rvk_clGetContextInfo(::av::ClientTransport& t, uint64_t context, cl_context_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetContextInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -273,6 +283,7 @@ cl_int rvk_clGetContextInfo(::av::ClientTransport& t, uint64_t context, cl_conte
 }
 
 uint64_t rvk_clCreateCommandQueue(::av::ClientTransport& t, uint64_t context, uint64_t device, cl_command_queue_properties properties, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateCommandQueue");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint64_t>(device);
@@ -296,6 +307,7 @@ uint64_t rvk_clCreateCommandQueue(::av::ClientTransport& t, uint64_t context, ui
 }
 
 uint64_t rvk_clCreateCommandQueueWithProperties(::av::ClientTransport& t, uint64_t context, uint64_t device, const uint64_t* properties, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateCommandQueueWithProperties");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint64_t>(device);
@@ -327,6 +339,7 @@ uint64_t rvk_clCreateCommandQueueWithProperties(::av::ClientTransport& t, uint64
 }
 
 cl_int rvk_clRetainCommandQueue(::av::ClientTransport& t, uint64_t command_queue) {
+    AV_SCOPE("rvk_clRetainCommandQueue");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     if (t.send_async(kCmd_clRetainCommandQueue, b) != ::av::TransportResult::ok) {
@@ -336,6 +349,7 @@ cl_int rvk_clRetainCommandQueue(::av::ClientTransport& t, uint64_t command_queue
 }
 
 cl_int rvk_clReleaseCommandQueue(::av::ClientTransport& t, uint64_t command_queue) {
+    AV_SCOPE("rvk_clReleaseCommandQueue");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     const ::av::SyncCallScope rvk_call{t};
@@ -353,6 +367,7 @@ cl_int rvk_clReleaseCommandQueue(::av::ClientTransport& t, uint64_t command_queu
 }
 
 cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queue, cl_command_queue_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetCommandQueueInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -387,6 +402,7 @@ cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queu
 }
 
 cl_int rvk_clFlush(::av::ClientTransport& t, uint64_t command_queue) {
+    AV_SCOPE("rvk_clFlush");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     const ::av::SyncCallScope rvk_call{t};
@@ -404,6 +420,7 @@ cl_int rvk_clFlush(::av::ClientTransport& t, uint64_t command_queue) {
 }
 
 cl_int rvk_clFinish(::av::ClientTransport& t, uint64_t command_queue) {
+    AV_SCOPE("rvk_clFinish");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     const ::av::SyncCallScope rvk_call{t};
@@ -421,6 +438,7 @@ cl_int rvk_clFinish(::av::ClientTransport& t, uint64_t command_queue) {
 }
 
 uint64_t rvk_clCreateBuffer(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, size_t size, void* host_ptr, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -449,6 +467,7 @@ uint64_t rvk_clCreateBuffer(::av::ClientTransport& t, uint64_t context, cl_mem_f
 }
 
 uint64_t rvk_clCreateSubBuffer(::av::ClientTransport& t, uint64_t buffer, cl_mem_flags flags, cl_buffer_create_type buffer_create_type, const cl_buffer_region* buffer_create_info, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateSubBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(buffer);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -474,6 +493,7 @@ uint64_t rvk_clCreateSubBuffer(::av::ClientTransport& t, uint64_t buffer, cl_mem
 }
 
 uint64_t rvk_clCreateImage(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, const cl_image_format* image_format, const cl_image_desc* image_desc, void* host_ptr, size_t host_ptr_bytes, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -505,6 +525,7 @@ uint64_t rvk_clCreateImage(::av::ClientTransport& t, uint64_t context, cl_mem_fl
 }
 
 cl_int rvk_clRetainMemObject(::av::ClientTransport& t, uint64_t memobj) {
+    AV_SCOPE("rvk_clRetainMemObject");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
     if (t.send_async(kCmd_clRetainMemObject, b) != ::av::TransportResult::ok) {
@@ -514,6 +535,7 @@ cl_int rvk_clRetainMemObject(::av::ClientTransport& t, uint64_t memobj) {
 }
 
 cl_int rvk_clReleaseMemObject(::av::ClientTransport& t, uint64_t memobj) {
+    AV_SCOPE("rvk_clReleaseMemObject");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
     const ::av::SyncCallScope rvk_call{t};
@@ -531,6 +553,7 @@ cl_int rvk_clReleaseMemObject(::av::ClientTransport& t, uint64_t memobj) {
 }
 
 cl_int rvk_clGetMemObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_mem_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetMemObjectInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -565,6 +588,7 @@ cl_int rvk_clGetMemObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_mem_
 }
 
 cl_int rvk_clGetImageInfo(::av::ClientTransport& t, uint64_t image, cl_image_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetImageInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(image);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -599,6 +623,7 @@ cl_int rvk_clGetImageInfo(::av::ClientTransport& t, uint64_t image, cl_image_inf
 }
 
 cl_int rvk_clGetSupportedImageFormats(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_mem_object_type image_type, cl_uint num_entries, cl_image_format* image_formats, size_t image_formats_bytes, cl_uint* num_image_formats) {
+    AV_SCOPE("rvk_clGetSupportedImageFormats");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -633,6 +658,7 @@ cl_int rvk_clGetSupportedImageFormats(::av::ClientTransport& t, uint64_t context
 }
 
 cl_int rvk_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, cl_bool blocking_read, size_t offset, size_t size, void* ptr, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueReadBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(buffer);
@@ -674,6 +700,7 @@ cl_int rvk_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue,
 }
 
 cl_int rvk_clEnqueueWriteBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, cl_bool blocking_write, size_t offset, size_t size, const void* ptr, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueWriteBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(buffer);
@@ -712,6 +739,7 @@ cl_int rvk_clEnqueueWriteBuffer(::av::ClientTransport& t, uint64_t command_queue
 }
 
 cl_int rvk_clEnqueueCopyBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t src_buffer, uint64_t dst_buffer, size_t src_offset, size_t dst_offset, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueCopyBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(src_buffer);
@@ -746,6 +774,7 @@ cl_int rvk_clEnqueueCopyBuffer(::av::ClientTransport& t, uint64_t command_queue,
 }
 
 cl_int rvk_clEnqueueFillBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, const void* pattern, size_t pattern_size, size_t offset, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueFillBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(buffer);
@@ -784,6 +813,7 @@ cl_int rvk_clEnqueueFillBuffer(::av::ClientTransport& t, uint64_t command_queue,
 }
 
 cl_int rvk_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, uint64_t image, cl_bool blocking_read, const size_t* origin, const size_t* region, size_t row_pitch, size_t slice_pitch, void* ptr, size_t ptr_bytes, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueReadImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(image);
@@ -839,6 +869,7 @@ cl_int rvk_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, 
 }
 
 cl_int rvk_clEnqueueWriteImage(::av::ClientTransport& t, uint64_t command_queue, uint64_t image, cl_bool blocking_write, const size_t* origin, const size_t* region, size_t input_row_pitch, size_t input_slice_pitch, const void* ptr, size_t ptr_bytes, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueWriteImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(image);
@@ -891,6 +922,7 @@ cl_int rvk_clEnqueueWriteImage(::av::ClientTransport& t, uint64_t command_queue,
 }
 
 cl_int rvk_clEnqueueCopyImage(::av::ClientTransport& t, uint64_t command_queue, uint64_t src_image, uint64_t dst_image, const size_t* src_origin, const size_t* dst_origin, const size_t* region, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueCopyImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(src_image);
@@ -943,6 +975,7 @@ cl_int rvk_clEnqueueCopyImage(::av::ClientTransport& t, uint64_t command_queue, 
 }
 
 cl_int rvk_clEnqueueCopyImageToBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t src_image, uint64_t dst_buffer, const size_t* src_origin, const size_t* region, size_t dst_offset, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueCopyImageToBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(src_image);
@@ -989,6 +1022,7 @@ cl_int rvk_clEnqueueCopyImageToBuffer(::av::ClientTransport& t, uint64_t command
 }
 
 cl_int rvk_clEnqueueCopyBufferToImage(::av::ClientTransport& t, uint64_t command_queue, uint64_t src_buffer, uint64_t dst_image, size_t src_offset, const size_t* dst_origin, const size_t* region, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueCopyBufferToImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(src_buffer);
@@ -1035,6 +1069,7 @@ cl_int rvk_clEnqueueCopyBufferToImage(::av::ClientTransport& t, uint64_t command
 }
 
 uint64_t rvk_clCreateProgramWithSource(::av::ClientTransport& t, uint64_t context, cl_uint count, const char** strings, const size_t* lengths, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateProgramWithSource");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(count));
@@ -1068,6 +1103,7 @@ uint64_t rvk_clCreateProgramWithSource(::av::ClientTransport& t, uint64_t contex
 }
 
 uint64_t rvk_clCreateProgramWithBinary(::av::ClientTransport& t, uint64_t context, cl_uint num_devices, const uint64_t* device_list, const size_t* lengths, const unsigned char** binaries, cl_int* binary_status, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateProgramWithBinary");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(num_devices));
@@ -1114,6 +1150,7 @@ uint64_t rvk_clCreateProgramWithBinary(::av::ClientTransport& t, uint64_t contex
 }
 
 cl_int rvk_clRetainProgram(::av::ClientTransport& t, uint64_t program) {
+    AV_SCOPE("rvk_clRetainProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     if (t.send_async(kCmd_clRetainProgram, b) != ::av::TransportResult::ok) {
@@ -1123,6 +1160,7 @@ cl_int rvk_clRetainProgram(::av::ClientTransport& t, uint64_t program) {
 }
 
 cl_int rvk_clReleaseProgram(::av::ClientTransport& t, uint64_t program) {
+    AV_SCOPE("rvk_clReleaseProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     const ::av::SyncCallScope rvk_call{t};
@@ -1140,6 +1178,7 @@ cl_int rvk_clReleaseProgram(::av::ClientTransport& t, uint64_t program) {
 }
 
 cl_int rvk_clBuildProgram(::av::ClientTransport& t, uint64_t program, cl_uint num_devices, const uint64_t* device_list, const char* options) {
+    AV_SCOPE("rvk_clBuildProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_varint(static_cast<uint64_t>(num_devices));
@@ -1171,6 +1210,7 @@ cl_int rvk_clBuildProgram(::av::ClientTransport& t, uint64_t program, cl_uint nu
 }
 
 cl_int rvk_clGetProgramInfo(::av::ClientTransport& t, uint64_t program, cl_program_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetProgramInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -1205,6 +1245,7 @@ cl_int rvk_clGetProgramInfo(::av::ClientTransport& t, uint64_t program, cl_progr
 }
 
 cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uint64_t device, cl_program_build_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetProgramBuildInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_pod<uint64_t>(device);
@@ -1240,6 +1281,7 @@ cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uin
 }
 
 cl_int rvk_clUnloadPlatformCompiler(::av::ClientTransport& t, uint64_t platform) {
+    AV_SCOPE("rvk_clUnloadPlatformCompiler");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(platform);
     const ::av::SyncCallScope rvk_call{t};
@@ -1257,6 +1299,7 @@ cl_int rvk_clUnloadPlatformCompiler(::av::ClientTransport& t, uint64_t platform)
 }
 
 uint64_t rvk_clCreateKernel(::av::ClientTransport& t, uint64_t program, const char* kernel_name, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateKernel");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_pod<uint8_t>(kernel_name != nullptr ? 1 : 0);
@@ -1284,6 +1327,7 @@ uint64_t rvk_clCreateKernel(::av::ClientTransport& t, uint64_t program, const ch
 }
 
 cl_int rvk_clCreateKernelsInProgram(::av::ClientTransport& t, uint64_t program, cl_uint num_kernels, uint64_t* kernels, cl_uint* num_kernels_ret) {
+    AV_SCOPE("rvk_clCreateKernelsInProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_varint(static_cast<uint64_t>(num_kernels));
@@ -1317,6 +1361,7 @@ cl_int rvk_clCreateKernelsInProgram(::av::ClientTransport& t, uint64_t program, 
 }
 
 cl_int rvk_clRetainKernel(::av::ClientTransport& t, uint64_t kernel) {
+    AV_SCOPE("rvk_clRetainKernel");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     if (t.send_async(kCmd_clRetainKernel, b) != ::av::TransportResult::ok) {
@@ -1326,6 +1371,7 @@ cl_int rvk_clRetainKernel(::av::ClientTransport& t, uint64_t kernel) {
 }
 
 cl_int rvk_clReleaseKernel(::av::ClientTransport& t, uint64_t kernel) {
+    AV_SCOPE("rvk_clReleaseKernel");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     const ::av::SyncCallScope rvk_call{t};
@@ -1343,6 +1389,7 @@ cl_int rvk_clReleaseKernel(::av::ClientTransport& t, uint64_t kernel) {
 }
 
 cl_int rvk_clSetKernelArg(::av::ClientTransport& t, uint64_t kernel, cl_uint arg_index, size_t arg_size, const void* arg_value) {
+    AV_SCOPE("rvk_clSetKernelArg");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_varint(static_cast<uint64_t>(arg_index));
@@ -1367,6 +1414,7 @@ cl_int rvk_clSetKernelArg(::av::ClientTransport& t, uint64_t kernel, cl_uint arg
 }
 
 cl_int rvk_clGetKernelInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetKernelInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -1401,6 +1449,7 @@ cl_int rvk_clGetKernelInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_
 }
 
 cl_int rvk_clGetKernelArgInfo(::av::ClientTransport& t, uint64_t kernel, cl_uint arg_index, cl_kernel_arg_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetKernelArgInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_varint(static_cast<uint64_t>(arg_index));
@@ -1436,6 +1485,7 @@ cl_int rvk_clGetKernelArgInfo(::av::ClientTransport& t, uint64_t kernel, cl_uint
 }
 
 cl_int rvk_clGetKernelWorkGroupInfo(::av::ClientTransport& t, uint64_t kernel, uint64_t device, cl_kernel_work_group_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetKernelWorkGroupInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_pod<uint64_t>(device);
@@ -1471,6 +1521,7 @@ cl_int rvk_clGetKernelWorkGroupInfo(::av::ClientTransport& t, uint64_t kernel, u
 }
 
 cl_int rvk_clEnqueueNDRangeKernel(::av::ClientTransport& t, uint64_t command_queue, uint64_t kernel, cl_uint work_dim, const size_t* global_work_offset, const size_t* global_work_size, const size_t* local_work_size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueNDRangeKernel");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(kernel);
@@ -1523,6 +1574,7 @@ cl_int rvk_clEnqueueNDRangeKernel(::av::ClientTransport& t, uint64_t command_que
 }
 
 cl_int rvk_clEnqueueMarkerWithWaitList(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueMarkerWithWaitList");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
@@ -1552,6 +1604,7 @@ cl_int rvk_clEnqueueMarkerWithWaitList(::av::ClientTransport& t, uint64_t comman
 }
 
 cl_int rvk_clEnqueueBarrierWithWaitList(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueBarrierWithWaitList");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
@@ -1581,6 +1634,7 @@ cl_int rvk_clEnqueueBarrierWithWaitList(::av::ClientTransport& t, uint64_t comma
 }
 
 cl_int rvk_clWaitForEvents(::av::ClientTransport& t, cl_uint num_events, const uint64_t* event_list) {
+    AV_SCOPE("rvk_clWaitForEvents");
     ::av::WireWriter b = t.request_writer();
     b.write_varint(static_cast<uint64_t>(num_events));
     b.write_pod<uint8_t>(event_list != nullptr ? 1 : 0);
@@ -1605,6 +1659,7 @@ cl_int rvk_clWaitForEvents(::av::ClientTransport& t, cl_uint num_events, const u
 }
 
 cl_int rvk_clGetEventInfo(::av::ClientTransport& t, uint64_t event, cl_event_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetEventInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -1639,6 +1694,7 @@ cl_int rvk_clGetEventInfo(::av::ClientTransport& t, uint64_t event, cl_event_inf
 }
 
 uint64_t rvk_clCreateUserEvent(::av::ClientTransport& t, uint64_t context, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateUserEvent");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
@@ -1660,6 +1716,7 @@ uint64_t rvk_clCreateUserEvent(::av::ClientTransport& t, uint64_t context, cl_in
 }
 
 cl_int rvk_clSetUserEventStatus(::av::ClientTransport& t, uint64_t event, cl_int execution_status) {
+    AV_SCOPE("rvk_clSetUserEventStatus");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     b.write_varint(static_cast<uint64_t>(execution_status));
@@ -1678,6 +1735,7 @@ cl_int rvk_clSetUserEventStatus(::av::ClientTransport& t, uint64_t event, cl_int
 }
 
 cl_int rvk_clRetainEvent(::av::ClientTransport& t, uint64_t event) {
+    AV_SCOPE("rvk_clRetainEvent");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     if (t.send_async(kCmd_clRetainEvent, b) != ::av::TransportResult::ok) {
@@ -1687,6 +1745,7 @@ cl_int rvk_clRetainEvent(::av::ClientTransport& t, uint64_t event) {
 }
 
 cl_int rvk_clReleaseEvent(::av::ClientTransport& t, uint64_t event) {
+    AV_SCOPE("rvk_clReleaseEvent");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     const ::av::SyncCallScope rvk_call{t};
@@ -1704,6 +1763,7 @@ cl_int rvk_clReleaseEvent(::av::ClientTransport& t, uint64_t event) {
 }
 
 cl_int rvk_clGetEventProfilingInfo(::av::ClientTransport& t, uint64_t event, cl_profiling_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetEventProfilingInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -1738,6 +1798,7 @@ cl_int rvk_clGetEventProfilingInfo(::av::ClientTransport& t, uint64_t event, cl_
 }
 
 uint64_t rvk_clCreateFromGLBuffer(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_GLuint bufobj, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateFromGLBuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -1761,6 +1822,7 @@ uint64_t rvk_clCreateFromGLBuffer(::av::ClientTransport& t, uint64_t context, cl
 }
 
 uint64_t rvk_clCreateFromGLTexture(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel, cl_GLuint texture, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateFromGLTexture");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -1786,6 +1848,7 @@ uint64_t rvk_clCreateFromGLTexture(::av::ClientTransport& t, uint64_t context, c
 }
 
 uint64_t rvk_clCreateFromGLTexture2D(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel, cl_GLuint texture, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateFromGLTexture2D");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -1811,6 +1874,7 @@ uint64_t rvk_clCreateFromGLTexture2D(::av::ClientTransport& t, uint64_t context,
 }
 
 uint64_t rvk_clCreateFromGLTexture3D(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_GLenum target, cl_GLint miplevel, cl_GLuint texture, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateFromGLTexture3D");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -1836,6 +1900,7 @@ uint64_t rvk_clCreateFromGLTexture3D(::av::ClientTransport& t, uint64_t context,
 }
 
 uint64_t rvk_clCreateFromGLRenderbuffer(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_GLuint renderbuffer, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateFromGLRenderbuffer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -1859,6 +1924,7 @@ uint64_t rvk_clCreateFromGLRenderbuffer(::av::ClientTransport& t, uint64_t conte
 }
 
 cl_int rvk_clGetGLObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_object_type* gl_object_type, cl_GLuint* gl_object_name) {
+    AV_SCOPE("rvk_clGetGLObjectInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
     b.write_pod<uint8_t>(gl_object_type != nullptr ? 1 : 0);
@@ -1888,6 +1954,7 @@ cl_int rvk_clGetGLObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_ob
 }
 
 cl_int rvk_clGetGLTextureInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_texture_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetGLTextureInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -1922,6 +1989,7 @@ cl_int rvk_clGetGLTextureInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_t
 }
 
 cl_int rvk_clEnqueueAcquireGLObjects(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_objects, const uint64_t* mem_objects, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueAcquireGLObjects");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_objects));
@@ -1959,6 +2027,7 @@ cl_int rvk_clEnqueueAcquireGLObjects(::av::ClientTransport& t, uint64_t command_
 }
 
 cl_int rvk_clEnqueueReleaseGLObjects(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_objects, const uint64_t* mem_objects, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueReleaseGLObjects");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_objects));
@@ -1996,6 +2065,7 @@ cl_int rvk_clEnqueueReleaseGLObjects(::av::ClientTransport& t, uint64_t command_
 }
 
 cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* properties, cl_gl_context_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetGLContextInfoKHR");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
     if (properties != nullptr) {
@@ -2038,6 +2108,7 @@ cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* prope
 }
 
 cl_int rvk_clRetainDevice(::av::ClientTransport& t, uint64_t device) {
+    AV_SCOPE("rvk_clRetainDevice");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     const ::av::SyncCallScope rvk_call{t};
@@ -2055,6 +2126,7 @@ cl_int rvk_clRetainDevice(::av::ClientTransport& t, uint64_t device) {
 }
 
 cl_int rvk_clReleaseDevice(::av::ClientTransport& t, uint64_t device) {
+    AV_SCOPE("rvk_clReleaseDevice");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     const ::av::SyncCallScope rvk_call{t};
@@ -2072,6 +2144,7 @@ cl_int rvk_clReleaseDevice(::av::ClientTransport& t, uint64_t device) {
 }
 
 cl_int rvk_clCreateSubDevices(::av::ClientTransport& t, uint64_t in_device, const uint64_t* properties, cl_uint num_devices, uint64_t* out_devices, cl_uint* num_devices_ret) {
+    AV_SCOPE("rvk_clCreateSubDevices");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(in_device);
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
@@ -2114,6 +2187,7 @@ cl_int rvk_clCreateSubDevices(::av::ClientTransport& t, uint64_t in_device, cons
 }
 
 cl_int rvk_clEnqueueTask(::av::ClientTransport& t, uint64_t command_queue, uint64_t kernel, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueTask");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(kernel);
@@ -2144,6 +2218,7 @@ cl_int rvk_clEnqueueTask(::av::ClientTransport& t, uint64_t command_queue, uint6
 }
 
 cl_int rvk_clEnqueueMarker(::av::ClientTransport& t, uint64_t command_queue, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueMarker");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
@@ -2165,6 +2240,7 @@ cl_int rvk_clEnqueueMarker(::av::ClientTransport& t, uint64_t command_queue, uin
 }
 
 cl_int rvk_clEnqueueBarrier(::av::ClientTransport& t, uint64_t command_queue) {
+    AV_SCOPE("rvk_clEnqueueBarrier");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     const ::av::SyncCallScope rvk_call{t};
@@ -2182,6 +2258,7 @@ cl_int rvk_clEnqueueBarrier(::av::ClientTransport& t, uint64_t command_queue) {
 }
 
 cl_int rvk_clEnqueueWaitForEvents(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_events, const uint64_t* event_list) {
+    AV_SCOPE("rvk_clEnqueueWaitForEvents");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_events));
@@ -2207,6 +2284,7 @@ cl_int rvk_clEnqueueWaitForEvents(::av::ClientTransport& t, uint64_t command_que
 }
 
 cl_int rvk_clEnqueueMigrateMemObjects(::av::ClientTransport& t, uint64_t command_queue, cl_uint num_mem_objects, const uint64_t* mem_objects, cl_mem_migration_flags flags, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueMigrateMemObjects");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(num_mem_objects));
@@ -2245,6 +2323,7 @@ cl_int rvk_clEnqueueMigrateMemObjects(::av::ClientTransport& t, uint64_t command
 }
 
 cl_int rvk_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, cl_bool blocking_read, const size_t* buffer_origin, const size_t* host_origin, const size_t* region, size_t buffer_row_pitch, size_t buffer_slice_pitch, size_t host_row_pitch, size_t host_slice_pitch, void* ptr, size_t ptr_bytes, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueReadBufferRect");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(buffer);
@@ -2309,6 +2388,7 @@ cl_int rvk_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_qu
 }
 
 cl_int rvk_clEnqueueWriteBufferRect(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, cl_bool blocking_write, const size_t* buffer_origin, const size_t* host_origin, const size_t* region, size_t buffer_row_pitch, size_t buffer_slice_pitch, size_t host_row_pitch, size_t host_slice_pitch, const void* ptr, size_t ptr_bytes, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueWriteBufferRect");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(buffer);
@@ -2370,6 +2450,7 @@ cl_int rvk_clEnqueueWriteBufferRect(::av::ClientTransport& t, uint64_t command_q
 }
 
 cl_int rvk_clEnqueueCopyBufferRect(::av::ClientTransport& t, uint64_t command_queue, uint64_t src_buffer, uint64_t dst_buffer, const size_t* src_origin, const size_t* dst_origin, const size_t* region, size_t src_row_pitch, size_t src_slice_pitch, size_t dst_row_pitch, size_t dst_slice_pitch, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueCopyBufferRect");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(src_buffer);
@@ -2426,6 +2507,7 @@ cl_int rvk_clEnqueueCopyBufferRect(::av::ClientTransport& t, uint64_t command_qu
 }
 
 cl_int rvk_clEnqueueFillImage(::av::ClientTransport& t, uint64_t command_queue, uint64_t image, const void* fill_color, size_t fill_color_bytes, const size_t* origin, const size_t* region, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueFillImage");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint64_t>(image);
@@ -2475,6 +2557,7 @@ cl_int rvk_clEnqueueFillImage(::av::ClientTransport& t, uint64_t command_queue, 
 }
 
 uint64_t rvk_clCreateImage2D(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, const cl_image_format* image_format, size_t image_width, size_t image_height, size_t image_row_pitch, void* host_ptr, size_t host_ptr_bytes, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateImage2D");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -2507,6 +2590,7 @@ uint64_t rvk_clCreateImage2D(::av::ClientTransport& t, uint64_t context, cl_mem_
 }
 
 uint64_t rvk_clCreateImage3D(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, const cl_image_format* image_format, size_t image_width, size_t image_height, size_t image_depth, size_t image_row_pitch, size_t image_slice_pitch, void* host_ptr, size_t host_ptr_bytes, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateImage3D");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -2541,6 +2625,7 @@ uint64_t rvk_clCreateImage3D(::av::ClientTransport& t, uint64_t context, cl_mem_
 }
 
 cl_int rvk_clUnloadCompiler(::av::ClientTransport& t) {
+    AV_SCOPE("rvk_clUnloadCompiler");
     ::av::WireWriter b = t.request_writer();
     const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
@@ -2557,6 +2642,7 @@ cl_int rvk_clUnloadCompiler(::av::ClientTransport& t) {
 }
 
 cl_int rvk_clSetCommandQueueProperty(::av::ClientTransport& t, uint64_t command_queue, cl_command_queue_properties properties, cl_bool enable, cl_command_queue_properties* old_properties) {
+    AV_SCOPE("rvk_clSetCommandQueueProperty");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_varint(static_cast<uint64_t>(properties));
@@ -2582,6 +2668,7 @@ cl_int rvk_clSetCommandQueueProperty(::av::ClientTransport& t, uint64_t command_
 }
 
 uint64_t rvk_clCreateProgramWithIL(::av::ClientTransport& t, uint64_t context, const void* il, size_t length, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateProgramWithIL");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(il != nullptr ? 1 : 0);
@@ -2609,6 +2696,7 @@ uint64_t rvk_clCreateProgramWithIL(::av::ClientTransport& t, uint64_t context, c
 }
 
 cl_int rvk_clCompileProgram(::av::ClientTransport& t, uint64_t program, cl_uint num_devices, const uint64_t* device_list, const char* options, cl_uint num_input_headers, const uint64_t* input_headers, const char** header_include_names) {
+    AV_SCOPE("rvk_clCompileProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_varint(static_cast<uint64_t>(num_devices));
@@ -2657,6 +2745,7 @@ cl_int rvk_clCompileProgram(::av::ClientTransport& t, uint64_t program, cl_uint 
 }
 
 uint64_t rvk_clLinkProgram(::av::ClientTransport& t, uint64_t context, cl_uint num_devices, const uint64_t* device_list, const char* options, cl_uint num_input_programs, const uint64_t* input_programs, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clLinkProgram");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(num_devices));
@@ -2700,6 +2789,7 @@ uint64_t rvk_clLinkProgram(::av::ClientTransport& t, uint64_t context, cl_uint n
 }
 
 cl_int rvk_clSetProgramSpecializationConstant(::av::ClientTransport& t, uint64_t program, cl_uint spec_id, size_t spec_size, const void* spec_value) {
+    AV_SCOPE("rvk_clSetProgramSpecializationConstant");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
     b.write_varint(static_cast<uint64_t>(spec_id));
@@ -2724,6 +2814,7 @@ cl_int rvk_clSetProgramSpecializationConstant(::av::ClientTransport& t, uint64_t
 }
 
 uint64_t rvk_clCloneKernel(::av::ClientTransport& t, uint64_t source_kernel, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCloneKernel");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(source_kernel);
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
@@ -2745,6 +2836,7 @@ uint64_t rvk_clCloneKernel(::av::ClientTransport& t, uint64_t source_kernel, cl_
 }
 
 cl_int rvk_clSetKernelExecInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_exec_info param_name, size_t param_value_size, const void* param_value) {
+    AV_SCOPE("rvk_clSetKernelExecInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -2769,6 +2861,7 @@ cl_int rvk_clSetKernelExecInfo(::av::ClientTransport& t, uint64_t kernel, cl_ker
 }
 
 cl_int rvk_clGetKernelSubGroupInfo(::av::ClientTransport& t, uint64_t kernel, uint64_t device, cl_kernel_sub_group_info param_name, size_t input_value_size, const void* input_value, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetKernelSubGroupInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
     b.write_pod<uint64_t>(device);
@@ -2810,6 +2903,7 @@ cl_int rvk_clGetKernelSubGroupInfo(::av::ClientTransport& t, uint64_t kernel, ui
 }
 
 cl_int rvk_clGetHostTimer(::av::ClientTransport& t, uint64_t device, cl_ulong* host_timestamp) {
+    AV_SCOPE("rvk_clGetHostTimer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     b.write_pod<uint8_t>(host_timestamp != nullptr ? 1 : 0);
@@ -2833,6 +2927,7 @@ cl_int rvk_clGetHostTimer(::av::ClientTransport& t, uint64_t device, cl_ulong* h
 }
 
 cl_int rvk_clGetDeviceAndHostTimer(::av::ClientTransport& t, uint64_t device, cl_ulong* device_timestamp, cl_ulong* host_timestamp) {
+    AV_SCOPE("rvk_clGetDeviceAndHostTimer");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     b.write_pod<uint8_t>(device_timestamp != nullptr ? 1 : 0);
@@ -2862,6 +2957,7 @@ cl_int rvk_clGetDeviceAndHostTimer(::av::ClientTransport& t, uint64_t device, cl
 }
 
 uint64_t rvk_clCreateBufferWithProperties(::av::ClientTransport& t, uint64_t context, const uint64_t* properties, cl_mem_flags flags, size_t size, void* host_ptr, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateBufferWithProperties");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
@@ -2899,6 +2995,7 @@ uint64_t rvk_clCreateBufferWithProperties(::av::ClientTransport& t, uint64_t con
 }
 
 uint64_t rvk_clCreateImageWithProperties(::av::ClientTransport& t, uint64_t context, const uint64_t* properties, cl_mem_flags flags, const cl_image_format* image_format, const cl_image_desc* image_desc, void* host_ptr, size_t host_ptr_bytes, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateImageWithProperties");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(properties != nullptr ? 1 : 0);
@@ -2939,6 +3036,7 @@ uint64_t rvk_clCreateImageWithProperties(::av::ClientTransport& t, uint64_t cont
 }
 
 uint64_t rvk_clCreateSamplerWithProperties(::av::ClientTransport& t, uint64_t context, const uint64_t* sampler_properties, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateSamplerWithProperties");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(sampler_properties != nullptr ? 1 : 0);
@@ -2969,6 +3067,7 @@ uint64_t rvk_clCreateSamplerWithProperties(::av::ClientTransport& t, uint64_t co
 }
 
 cl_int rvk_clSetDefaultDeviceCommandQueue(::av::ClientTransport& t, uint64_t context, uint64_t device, uint64_t command_queue) {
+    AV_SCOPE("rvk_clSetDefaultDeviceCommandQueue");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint64_t>(device);
@@ -2988,6 +3087,7 @@ cl_int rvk_clSetDefaultDeviceCommandQueue(::av::ClientTransport& t, uint64_t con
 }
 
 uint64_t rvk_clCreateSampler(::av::ClientTransport& t, uint64_t context, cl_bool normalized_coords, cl_addressing_mode addressing_mode, cl_filter_mode filter_mode, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateSampler");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(normalized_coords));
@@ -3012,6 +3112,7 @@ uint64_t rvk_clCreateSampler(::av::ClientTransport& t, uint64_t context, cl_bool
 }
 
 cl_int rvk_clRetainSampler(::av::ClientTransport& t, uint64_t sampler) {
+    AV_SCOPE("rvk_clRetainSampler");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(sampler);
     if (t.send_async(kCmd_clRetainSampler, b) != ::av::TransportResult::ok) {
@@ -3021,6 +3122,7 @@ cl_int rvk_clRetainSampler(::av::ClientTransport& t, uint64_t sampler) {
 }
 
 cl_int rvk_clReleaseSampler(::av::ClientTransport& t, uint64_t sampler) {
+    AV_SCOPE("rvk_clReleaseSampler");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(sampler);
     const ::av::SyncCallScope rvk_call{t};
@@ -3038,6 +3140,7 @@ cl_int rvk_clReleaseSampler(::av::ClientTransport& t, uint64_t sampler) {
 }
 
 cl_int rvk_clGetSamplerInfo(::av::ClientTransport& t, uint64_t sampler, cl_sampler_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetSamplerInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(sampler);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -3072,6 +3175,7 @@ cl_int rvk_clGetSamplerInfo(::av::ClientTransport& t, uint64_t sampler, cl_sampl
 }
 
 uint64_t rvk_clCreatePipe(::av::ClientTransport& t, uint64_t context, cl_mem_flags flags, cl_uint pipe_packet_size, cl_uint pipe_max_packets, const uint64_t* properties, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreatePipe");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(flags));
@@ -3105,6 +3209,7 @@ uint64_t rvk_clCreatePipe(::av::ClientTransport& t, uint64_t context, cl_mem_fla
 }
 
 cl_int rvk_clGetPipeInfo(::av::ClientTransport& t, uint64_t pipe, cl_pipe_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) {
+    AV_SCOPE("rvk_clGetPipeInfo");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(pipe);
     b.write_varint(static_cast<uint64_t>(param_name));
@@ -3139,6 +3244,7 @@ cl_int rvk_clGetPipeInfo(::av::ClientTransport& t, uint64_t pipe, cl_pipe_info p
 }
 
 uint64_t rvk_clCreateProgramWithBuiltInKernels(::av::ClientTransport& t, uint64_t context, cl_uint num_devices, const uint64_t* device_list, const char* kernel_names, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clCreateProgramWithBuiltInKernels");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_varint(static_cast<uint64_t>(num_devices));

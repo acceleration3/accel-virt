@@ -5,6 +5,7 @@
 #include "gl_dispatch_client.h"
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/icd_stub_report.hpp"
@@ -20,6 +21,7 @@ namespace av::glproto {
 inline constexpr size_t kPixelBlobFloor = 4096;
 
 void rvk_glActiveShaderProgram(::av::ClientTransport& rvk_t, GLuint pipeline, GLuint program) {
+    AV_SCOPE("rvk_glActiveShaderProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     rvk_b.write_varint(static_cast<uint64_t>(program));
@@ -32,6 +34,7 @@ void rvk_glActiveShaderProgram(::av::ClientTransport& rvk_t, GLuint pipeline, GL
 }
 
 void rvk_glActiveTexture(::av::ClientTransport& rvk_t, GLenum texture) {
+    AV_SCOPE("rvk_glActiveTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -43,6 +46,7 @@ void rvk_glActiveTexture(::av::ClientTransport& rvk_t, GLenum texture) {
 }
 
 void rvk_glAttachShader(::av::ClientTransport& rvk_t, GLuint program, GLuint shader) {
+    AV_SCOPE("rvk_glAttachShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shader));
@@ -55,6 +59,7 @@ void rvk_glAttachShader(::av::ClientTransport& rvk_t, GLuint program, GLuint sha
 }
 
 void rvk_glBeginConditionalRender(::av::ClientTransport& rvk_t, GLuint id, GLenum mode) {
+    AV_SCOPE("rvk_glBeginConditionalRender");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -67,6 +72,7 @@ void rvk_glBeginConditionalRender(::av::ClientTransport& rvk_t, GLuint id, GLenu
 }
 
 void rvk_glBeginQuery(::av::ClientTransport& rvk_t, GLenum target, GLuint id) {
+    AV_SCOPE("rvk_glBeginQuery");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -79,6 +85,7 @@ void rvk_glBeginQuery(::av::ClientTransport& rvk_t, GLenum target, GLuint id) {
 }
 
 void rvk_glBeginQueryIndexed(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLuint id) {
+    AV_SCOPE("rvk_glBeginQueryIndexed");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -92,6 +99,7 @@ void rvk_glBeginQueryIndexed(::av::ClientTransport& rvk_t, GLenum target, GLuint
 }
 
 void rvk_glBeginTransformFeedback(::av::ClientTransport& rvk_t, GLenum primitiveMode) {
+    AV_SCOPE("rvk_glBeginTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(primitiveMode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -103,6 +111,7 @@ void rvk_glBeginTransformFeedback(::av::ClientTransport& rvk_t, GLenum primitive
 }
 
 void rvk_glBindAttribLocation(::av::ClientTransport& rvk_t, GLuint program, GLuint index, const GLchar* name) {
+    AV_SCOPE("rvk_glBindAttribLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -121,6 +130,7 @@ void rvk_glBindAttribLocation(::av::ClientTransport& rvk_t, GLuint program, GLui
 }
 
 void rvk_glBindBuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint buffer) {
+    AV_SCOPE("rvk_glBindBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -133,6 +143,7 @@ void rvk_glBindBuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint buffer
 }
 
 void rvk_glBindBufferBase(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLuint buffer) {
+    AV_SCOPE("rvk_glBindBufferBase");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -146,6 +157,7 @@ void rvk_glBindBufferBase(::av::ClientTransport& rvk_t, GLenum target, GLuint in
 }
 
 void rvk_glBindBufferRange(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glBindBufferRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -161,6 +173,7 @@ void rvk_glBindBufferRange(::av::ClientTransport& rvk_t, GLenum target, GLuint i
 }
 
 void rvk_glBindBuffersBase(::av::ClientTransport& rvk_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers) {
+    AV_SCOPE("rvk_glBindBuffersBase");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -205,6 +218,7 @@ void rvk_glBindBuffersBase(::av::ClientTransport& rvk_t, GLenum target, GLuint f
 }
 
 void rvk_glBindBuffersRange(::av::ClientTransport& rvk_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizeiptr* sizes) {
+    AV_SCOPE("rvk_glBindBuffersRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -311,6 +325,7 @@ void rvk_glBindBuffersRange(::av::ClientTransport& rvk_t, GLenum target, GLuint 
 }
 
 void rvk_glBindFragDataLocation(::av::ClientTransport& rvk_t, GLuint program, GLuint color, const GLchar* name) {
+    AV_SCOPE("rvk_glBindFragDataLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(color));
@@ -329,6 +344,7 @@ void rvk_glBindFragDataLocation(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glBindFragDataLocationIndexed(::av::ClientTransport& rvk_t, GLuint program, GLuint colorNumber, GLuint index, const GLchar* name) {
+    AV_SCOPE("rvk_glBindFragDataLocationIndexed");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(colorNumber));
@@ -348,6 +364,7 @@ void rvk_glBindFragDataLocationIndexed(::av::ClientTransport& rvk_t, GLuint prog
 }
 
 void rvk_glBindFramebuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint framebuffer) {
+    AV_SCOPE("rvk_glBindFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
@@ -360,6 +377,7 @@ void rvk_glBindFramebuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint f
 }
 
 void rvk_glBindImageTexture(::av::ClientTransport& rvk_t, GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format) {
+    AV_SCOPE("rvk_glBindImageTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(unit));
     rvk_b.write_varint(static_cast<uint64_t>(texture));
@@ -377,6 +395,7 @@ void rvk_glBindImageTexture(::av::ClientTransport& rvk_t, GLuint unit, GLuint te
 }
 
 void rvk_glBindImageTextures(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLuint* textures) {
+    AV_SCOPE("rvk_glBindImageTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -420,6 +439,7 @@ void rvk_glBindImageTextures(::av::ClientTransport& rvk_t, GLuint first, GLsizei
 }
 
 void rvk_glBindProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline) {
+    AV_SCOPE("rvk_glBindProgramPipeline");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -431,6 +451,7 @@ void rvk_glBindProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline) {
 }
 
 void rvk_glBindRenderbuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glBindRenderbuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
@@ -443,6 +464,7 @@ void rvk_glBindRenderbuffer(::av::ClientTransport& rvk_t, GLenum target, GLuint 
 }
 
 void rvk_glBindSampler(::av::ClientTransport& rvk_t, GLuint unit, GLuint sampler) {
+    AV_SCOPE("rvk_glBindSampler");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(unit));
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
@@ -455,6 +477,7 @@ void rvk_glBindSampler(::av::ClientTransport& rvk_t, GLuint unit, GLuint sampler
 }
 
 void rvk_glBindSamplers(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLuint* samplers) {
+    AV_SCOPE("rvk_glBindSamplers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -498,6 +521,7 @@ void rvk_glBindSamplers(::av::ClientTransport& rvk_t, GLuint first, GLsizei coun
 }
 
 void rvk_glBindTexture(::av::ClientTransport& rvk_t, GLenum target, GLuint texture) {
+    AV_SCOPE("rvk_glBindTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(texture));
@@ -510,6 +534,7 @@ void rvk_glBindTexture(::av::ClientTransport& rvk_t, GLenum target, GLuint textu
 }
 
 void rvk_glBindTextureUnit(::av::ClientTransport& rvk_t, GLuint unit, GLuint texture) {
+    AV_SCOPE("rvk_glBindTextureUnit");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(unit));
     rvk_b.write_varint(static_cast<uint64_t>(texture));
@@ -522,6 +547,7 @@ void rvk_glBindTextureUnit(::av::ClientTransport& rvk_t, GLuint unit, GLuint tex
 }
 
 void rvk_glBindTextures(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLuint* textures) {
+    AV_SCOPE("rvk_glBindTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -565,6 +591,7 @@ void rvk_glBindTextures(::av::ClientTransport& rvk_t, GLuint first, GLsizei coun
 }
 
 void rvk_glBindTransformFeedback(::av::ClientTransport& rvk_t, GLenum target, GLuint id) {
+    AV_SCOPE("rvk_glBindTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -577,6 +604,7 @@ void rvk_glBindTransformFeedback(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glBindVertexArray(::av::ClientTransport& rvk_t, GLuint array) {
+    AV_SCOPE("rvk_glBindVertexArray");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -588,6 +616,7 @@ void rvk_glBindVertexArray(::av::ClientTransport& rvk_t, GLuint array) {
 }
 
 void rvk_glBindVertexBuffer(::av::ClientTransport& rvk_t, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride) {
+    AV_SCOPE("rvk_glBindVertexBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -602,6 +631,7 @@ void rvk_glBindVertexBuffer(::av::ClientTransport& rvk_t, GLuint bindingindex, G
 }
 
 void rvk_glBindVertexBuffers(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
+    AV_SCOPE("rvk_glBindVertexBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -707,6 +737,7 @@ void rvk_glBindVertexBuffers(::av::ClientTransport& rvk_t, GLuint first, GLsizei
 }
 
 void rvk_glBlendColor(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+    AV_SCOPE("rvk_glBlendColor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -721,6 +752,7 @@ void rvk_glBlendColor(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, 
 }
 
 void rvk_glBlendEquation(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glBlendEquation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -732,6 +764,7 @@ void rvk_glBlendEquation(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glBlendEquationSeparate(::av::ClientTransport& rvk_t, GLenum modeRGB, GLenum modeAlpha) {
+    AV_SCOPE("rvk_glBlendEquationSeparate");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(modeRGB));
     rvk_b.write_varint(static_cast<uint64_t>(modeAlpha));
@@ -744,6 +777,7 @@ void rvk_glBlendEquationSeparate(::av::ClientTransport& rvk_t, GLenum modeRGB, G
 }
 
 void rvk_glBlendEquationSeparatei(::av::ClientTransport& rvk_t, GLuint buf, GLenum modeRGB, GLenum modeAlpha) {
+    AV_SCOPE("rvk_glBlendEquationSeparatei");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buf));
     rvk_b.write_varint(static_cast<uint64_t>(modeRGB));
@@ -757,6 +791,7 @@ void rvk_glBlendEquationSeparatei(::av::ClientTransport& rvk_t, GLuint buf, GLen
 }
 
 void rvk_glBlendEquationi(::av::ClientTransport& rvk_t, GLuint buf, GLenum mode) {
+    AV_SCOPE("rvk_glBlendEquationi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buf));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -769,6 +804,7 @@ void rvk_glBlendEquationi(::av::ClientTransport& rvk_t, GLuint buf, GLenum mode)
 }
 
 void rvk_glBlendFunc(::av::ClientTransport& rvk_t, GLenum sfactor, GLenum dfactor) {
+    AV_SCOPE("rvk_glBlendFunc");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sfactor));
     rvk_b.write_varint(static_cast<uint64_t>(dfactor));
@@ -781,6 +817,7 @@ void rvk_glBlendFunc(::av::ClientTransport& rvk_t, GLenum sfactor, GLenum dfacto
 }
 
 void rvk_glBlendFuncSeparate(::av::ClientTransport& rvk_t, GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha) {
+    AV_SCOPE("rvk_glBlendFuncSeparate");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sfactorRGB));
     rvk_b.write_varint(static_cast<uint64_t>(dfactorRGB));
@@ -795,6 +832,7 @@ void rvk_glBlendFuncSeparate(::av::ClientTransport& rvk_t, GLenum sfactorRGB, GL
 }
 
 void rvk_glBlendFuncSeparatei(::av::ClientTransport& rvk_t, GLuint buf, GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha) {
+    AV_SCOPE("rvk_glBlendFuncSeparatei");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buf));
     rvk_b.write_varint(static_cast<uint64_t>(srcRGB));
@@ -810,6 +848,7 @@ void rvk_glBlendFuncSeparatei(::av::ClientTransport& rvk_t, GLuint buf, GLenum s
 }
 
 void rvk_glBlendFunci(::av::ClientTransport& rvk_t, GLuint buf, GLenum src, GLenum dst) {
+    AV_SCOPE("rvk_glBlendFunci");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buf));
     rvk_b.write_varint(static_cast<uint64_t>(src));
@@ -823,6 +862,7 @@ void rvk_glBlendFunci(::av::ClientTransport& rvk_t, GLuint buf, GLenum src, GLen
 }
 
 void rvk_glBlitFramebuffer(::av::ClientTransport& rvk_t, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter) {
+    AV_SCOPE("rvk_glBlitFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(srcX0));
     rvk_b.write_varint(static_cast<uint64_t>(srcY0));
@@ -843,6 +883,7 @@ void rvk_glBlitFramebuffer(::av::ClientTransport& rvk_t, GLint srcX0, GLint srcY
 }
 
 void rvk_glBlitNamedFramebuffer(::av::ClientTransport& rvk_t, GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter) {
+    AV_SCOPE("rvk_glBlitNamedFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(readFramebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(drawFramebuffer));
@@ -865,6 +906,7 @@ void rvk_glBlitNamedFramebuffer(::av::ClientTransport& rvk_t, GLuint readFramebu
 }
 
 void rvk_glBufferData(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
+    AV_SCOPE("rvk_glBufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -909,6 +951,7 @@ void rvk_glBufferData(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr si
 }
 
 void rvk_glBufferStorage(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr size, const void* data, GLbitfield flags) {
+    AV_SCOPE("rvk_glBufferStorage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -953,6 +996,7 @@ void rvk_glBufferStorage(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr
 }
 
 void rvk_glBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLintptr offset, GLsizeiptr size, const void* data) {
+    AV_SCOPE("rvk_glBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -997,6 +1041,7 @@ void rvk_glBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLintptr o
 }
 
 GLenum rvk_glCheckFramebufferStatus(::av::ClientTransport& rvk_t, GLenum target) {
+    AV_SCOPE("rvk_glCheckFramebufferStatus");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1016,6 +1061,7 @@ GLenum rvk_glCheckFramebufferStatus(::av::ClientTransport& rvk_t, GLenum target)
 }
 
 GLenum rvk_glCheckNamedFramebufferStatus(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum target) {
+    AV_SCOPE("rvk_glCheckNamedFramebufferStatus");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -1036,6 +1082,7 @@ GLenum rvk_glCheckNamedFramebufferStatus(::av::ClientTransport& rvk_t, GLuint fr
 }
 
 void rvk_glClampColor(::av::ClientTransport& rvk_t, GLenum target, GLenum clamp) {
+    AV_SCOPE("rvk_glClampColor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(clamp));
@@ -1048,6 +1095,7 @@ void rvk_glClampColor(::av::ClientTransport& rvk_t, GLenum target, GLenum clamp)
 }
 
 void rvk_glClear(::av::ClientTransport& rvk_t, GLbitfield mask) {
+    AV_SCOPE("rvk_glClear");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1059,6 +1107,7 @@ void rvk_glClear(::av::ClientTransport& rvk_t, GLbitfield mask) {
 }
 
 void rvk_glClearBufferData(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearBufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -1105,6 +1154,7 @@ void rvk_glClearBufferData(::av::ClientTransport& rvk_t, GLenum target, GLenum i
 }
 
 void rvk_glClearBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -1153,6 +1203,7 @@ void rvk_glClearBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLenu
 }
 
 void rvk_glClearBufferfi(::av::ClientTransport& rvk_t, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil) {
+    AV_SCOPE("rvk_glClearBufferfi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1167,6 +1218,7 @@ void rvk_glClearBufferfi(::av::ClientTransport& rvk_t, GLenum buffer, GLint draw
 }
 
 void rvk_glClearBufferfv(::av::ClientTransport& rvk_t, GLenum buffer, GLint drawbuffer, const GLfloat* value) {
+    AV_SCOPE("rvk_glClearBufferfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1210,6 +1262,7 @@ void rvk_glClearBufferfv(::av::ClientTransport& rvk_t, GLenum buffer, GLint draw
 }
 
 void rvk_glClearBufferiv(::av::ClientTransport& rvk_t, GLenum buffer, GLint drawbuffer, const GLint* value) {
+    AV_SCOPE("rvk_glClearBufferiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1253,6 +1306,7 @@ void rvk_glClearBufferiv(::av::ClientTransport& rvk_t, GLenum buffer, GLint draw
 }
 
 void rvk_glClearBufferuiv(::av::ClientTransport& rvk_t, GLenum buffer, GLint drawbuffer, const GLuint* value) {
+    AV_SCOPE("rvk_glClearBufferuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1296,6 +1350,7 @@ void rvk_glClearBufferuiv(::av::ClientTransport& rvk_t, GLenum buffer, GLint dra
 }
 
 void rvk_glClearColor(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+    AV_SCOPE("rvk_glClearColor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -1310,6 +1365,7 @@ void rvk_glClearColor(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, 
 }
 
 void rvk_glClearDepth(::av::ClientTransport& rvk_t, GLdouble depth) {
+    AV_SCOPE("rvk_glClearDepth");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(depth);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1321,6 +1377,7 @@ void rvk_glClearDepth(::av::ClientTransport& rvk_t, GLdouble depth) {
 }
 
 void rvk_glClearDepthf(::av::ClientTransport& rvk_t, GLfloat d) {
+    AV_SCOPE("rvk_glClearDepthf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(d);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1332,6 +1389,7 @@ void rvk_glClearDepthf(::av::ClientTransport& rvk_t, GLfloat d) {
 }
 
 void rvk_glClearNamedBufferData(::av::ClientTransport& rvk_t, GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearNamedBufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -1378,6 +1436,7 @@ void rvk_glClearNamedBufferData(::av::ClientTransport& rvk_t, GLuint buffer, GLe
 }
 
 void rvk_glClearNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearNamedBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -1426,6 +1485,7 @@ void rvk_glClearNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, 
 }
 
 void rvk_glClearNamedFramebufferfi(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil) {
+    AV_SCOPE("rvk_glClearNamedFramebufferfi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -1441,6 +1501,7 @@ void rvk_glClearNamedFramebufferfi(::av::ClientTransport& rvk_t, GLuint framebuf
 }
 
 void rvk_glClearNamedFramebufferfv(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat* value) {
+    AV_SCOPE("rvk_glClearNamedFramebufferfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -1485,6 +1546,7 @@ void rvk_glClearNamedFramebufferfv(::av::ClientTransport& rvk_t, GLuint framebuf
 }
 
 void rvk_glClearNamedFramebufferiv(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint* value) {
+    AV_SCOPE("rvk_glClearNamedFramebufferiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -1529,6 +1591,7 @@ void rvk_glClearNamedFramebufferiv(::av::ClientTransport& rvk_t, GLuint framebuf
 }
 
 void rvk_glClearNamedFramebufferuiv(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint* value) {
+    AV_SCOPE("rvk_glClearNamedFramebufferuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -1573,6 +1636,7 @@ void rvk_glClearNamedFramebufferuiv(::av::ClientTransport& rvk_t, GLuint framebu
 }
 
 void rvk_glClearStencil(::av::ClientTransport& rvk_t, GLint s) {
+    AV_SCOPE("rvk_glClearStencil");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1584,6 +1648,7 @@ void rvk_glClearStencil(::av::ClientTransport& rvk_t, GLint s) {
 }
 
 void rvk_glClearTexImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -1630,6 +1695,7 @@ void rvk_glClearTexImage(::av::ClientTransport& rvk_t, GLuint texture, GLint lev
 }
 
 void rvk_glClearTexSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearTexSubImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -1682,6 +1748,7 @@ void rvk_glClearTexSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint 
 }
 
 GLenum rvk_glClientWaitSync(::av::ClientTransport& rvk_t, uint64_t sync, GLbitfield flags, GLuint64 timeout) {
+    AV_SCOPE("rvk_glClientWaitSync");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(sync);
     rvk_b.write_varint(static_cast<uint64_t>(flags));
@@ -1703,6 +1770,7 @@ GLenum rvk_glClientWaitSync(::av::ClientTransport& rvk_t, uint64_t sync, GLbitfi
 }
 
 void rvk_glClipControl(::av::ClientTransport& rvk_t, GLenum origin, GLenum depth) {
+    AV_SCOPE("rvk_glClipControl");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(origin));
     rvk_b.write_varint(static_cast<uint64_t>(depth));
@@ -1715,6 +1783,7 @@ void rvk_glClipControl(::av::ClientTransport& rvk_t, GLenum origin, GLenum depth
 }
 
 void rvk_glColorMask(::av::ClientTransport& rvk_t, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha) {
+    AV_SCOPE("rvk_glColorMask");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -1729,6 +1798,7 @@ void rvk_glColorMask(::av::ClientTransport& rvk_t, GLboolean red, GLboolean gree
 }
 
 void rvk_glColorMaski(::av::ClientTransport& rvk_t, GLuint index, GLboolean r, GLboolean g, GLboolean b, GLboolean a) {
+    AV_SCOPE("rvk_glColorMaski");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(r));
@@ -1744,6 +1814,7 @@ void rvk_glColorMaski(::av::ClientTransport& rvk_t, GLuint index, GLboolean r, G
 }
 
 void rvk_glColorP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color) {
+    AV_SCOPE("rvk_glColorP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(color));
@@ -1756,6 +1827,7 @@ void rvk_glColorP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color) {
 }
 
 void rvk_glColorP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* color) {
+    AV_SCOPE("rvk_glColorP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
@@ -1798,6 +1870,7 @@ void rvk_glColorP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* c
 }
 
 void rvk_glColorP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color) {
+    AV_SCOPE("rvk_glColorP4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(color));
@@ -1810,6 +1883,7 @@ void rvk_glColorP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color) {
 }
 
 void rvk_glColorP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* color) {
+    AV_SCOPE("rvk_glColorP4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
@@ -1852,6 +1926,7 @@ void rvk_glColorP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* c
 }
 
 void rvk_glCompileShader(::av::ClientTransport& rvk_t, GLuint shader) {
+    AV_SCOPE("rvk_glCompileShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -1863,6 +1938,7 @@ void rvk_glCompileShader(::av::ClientTransport& rvk_t, GLuint shader) {
 }
 
 void rvk_glCompressedTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -1911,6 +1987,7 @@ void rvk_glCompressedTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLi
 }
 
 void rvk_glCompressedTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -1960,6 +2037,7 @@ void rvk_glCompressedTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLi
 }
 
 void rvk_glCompressedTexImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2010,6 +2088,7 @@ void rvk_glCompressedTexImage3D(::av::ClientTransport& rvk_t, GLenum target, GLi
 }
 
 void rvk_glCompressedTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2058,6 +2137,7 @@ void rvk_glCompressedTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glCompressedTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2108,6 +2188,7 @@ void rvk_glCompressedTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glCompressedTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTexSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2160,6 +2241,7 @@ void rvk_glCompressedTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glCompressedTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2208,6 +2290,7 @@ void rvk_glCompressedTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCompressedTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2258,6 +2341,7 @@ void rvk_glCompressedTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCompressedTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2310,6 +2394,7 @@ void rvk_glCompressedTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCopyBufferSubData(::av::ClientTransport& rvk_t, GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glCopyBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(readTarget));
     rvk_b.write_varint(static_cast<uint64_t>(writeTarget));
@@ -2325,6 +2410,7 @@ void rvk_glCopyBufferSubData(::av::ClientTransport& rvk_t, GLenum readTarget, GL
 }
 
 void rvk_glCopyImageSubData(::av::ClientTransport& rvk_t, GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth) {
+    AV_SCOPE("rvk_glCopyImageSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(srcName));
     rvk_b.write_varint(static_cast<uint64_t>(srcTarget));
@@ -2350,6 +2436,7 @@ void rvk_glCopyImageSubData(::av::ClientTransport& rvk_t, GLuint srcName, GLenum
 }
 
 void rvk_glCopyNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glCopyNamedBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(readBuffer));
     rvk_b.write_varint(static_cast<uint64_t>(writeBuffer));
@@ -2365,6 +2452,7 @@ void rvk_glCopyNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint readBuffe
 }
 
 void rvk_glCopyTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLint border) {
+    AV_SCOPE("rvk_glCopyTexImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2382,6 +2470,7 @@ void rvk_glCopyTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint lev
 }
 
 void rvk_glCopyTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border) {
+    AV_SCOPE("rvk_glCopyTexImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2400,6 +2489,7 @@ void rvk_glCopyTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint lev
 }
 
 void rvk_glCopyTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width) {
+    AV_SCOPE("rvk_glCopyTexSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2416,6 +2506,7 @@ void rvk_glCopyTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint 
 }
 
 void rvk_glCopyTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTexSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2434,6 +2525,7 @@ void rvk_glCopyTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint 
 }
 
 void rvk_glCopyTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTexSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2453,6 +2545,7 @@ void rvk_glCopyTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint 
 }
 
 void rvk_glCopyTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width) {
+    AV_SCOPE("rvk_glCopyTextureSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2469,6 +2562,7 @@ void rvk_glCopyTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glCopyTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTextureSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2487,6 +2581,7 @@ void rvk_glCopyTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glCopyTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTextureSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -2506,6 +2601,7 @@ void rvk_glCopyTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glCreateBuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* buffers) {
+    AV_SCOPE("rvk_glCreateBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t buffers_want = buffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2534,6 +2630,7 @@ void rvk_glCreateBuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* buffer
 }
 
 void rvk_glCreateFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* framebuffers) {
+    AV_SCOPE("rvk_glCreateFramebuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t framebuffers_want = framebuffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2562,6 +2659,7 @@ void rvk_glCreateFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* f
 }
 
 GLuint rvk_glCreateProgram(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glCreateProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glCreateProgram",
@@ -2580,6 +2678,7 @@ GLuint rvk_glCreateProgram(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glCreateProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, GLuint* pipelines) {
+    AV_SCOPE("rvk_glCreateProgramPipelines");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t pipelines_want = pipelines != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2608,6 +2707,7 @@ void rvk_glCreateProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, GLuin
 }
 
 void rvk_glCreateQueries(::av::ClientTransport& rvk_t, GLenum target, GLsizei n, GLuint* ids) {
+    AV_SCOPE("rvk_glCreateQueries");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(n));
@@ -2637,6 +2737,7 @@ void rvk_glCreateQueries(::av::ClientTransport& rvk_t, GLenum target, GLsizei n,
 }
 
 void rvk_glCreateRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* renderbuffers) {
+    AV_SCOPE("rvk_glCreateRenderbuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t renderbuffers_want = renderbuffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2665,6 +2766,7 @@ void rvk_glCreateRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* 
 }
 
 void rvk_glCreateSamplers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* samplers) {
+    AV_SCOPE("rvk_glCreateSamplers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t samplers_want = samplers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2693,6 +2795,7 @@ void rvk_glCreateSamplers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* sampl
 }
 
 GLuint rvk_glCreateShader(::av::ClientTransport& rvk_t, GLenum type) {
+    AV_SCOPE("rvk_glCreateShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -2712,6 +2815,7 @@ GLuint rvk_glCreateShader(::av::ClientTransport& rvk_t, GLenum type) {
 }
 
 GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLsizei count, const GLchar** strings) {
+    AV_SCOPE("rvk_glCreateShaderProgramv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -2744,6 +2848,7 @@ GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLs
 }
 
 void rvk_glCreateTextures(::av::ClientTransport& rvk_t, GLenum target, GLsizei n, GLuint* textures) {
+    AV_SCOPE("rvk_glCreateTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(n));
@@ -2773,6 +2878,7 @@ void rvk_glCreateTextures(::av::ClientTransport& rvk_t, GLenum target, GLsizei n
 }
 
 void rvk_glCreateTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ids) {
+    AV_SCOPE("rvk_glCreateTransformFeedbacks");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t ids_want = ids != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2801,6 +2907,7 @@ void rvk_glCreateTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, GLu
 }
 
 void rvk_glCreateVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, GLuint* arrays) {
+    AV_SCOPE("rvk_glCreateVertexArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t arrays_want = arrays != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -2829,6 +2936,7 @@ void rvk_glCreateVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, GLuint* a
 }
 
 void rvk_glCullFace(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glCullFace");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -2840,6 +2948,7 @@ void rvk_glCullFace(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glDebugMessageCallback(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glDebugMessageCallback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glDebugMessageCallback",
@@ -2850,6 +2959,7 @@ void rvk_glDebugMessageCallback(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glDebugMessageControl(::av::ClientTransport& rvk_t, GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint* ids, GLboolean enabled) {
+    AV_SCOPE("rvk_glDebugMessageControl");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(source));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -2896,6 +3006,7 @@ void rvk_glDebugMessageControl(::av::ClientTransport& rvk_t, GLenum source, GLen
 }
 
 void rvk_glDebugMessageInsert(::av::ClientTransport& rvk_t, GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* buf) {
+    AV_SCOPE("rvk_glDebugMessageInsert");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(source));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -2917,6 +3028,7 @@ void rvk_glDebugMessageInsert(::av::ClientTransport& rvk_t, GLenum source, GLenu
 }
 
 void rvk_glDeleteBuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* buffers) {
+    AV_SCOPE("rvk_glDeleteBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t buffers_want = 0;
@@ -2959,6 +3071,7 @@ void rvk_glDeleteBuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* 
 }
 
 void rvk_glDeleteFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* framebuffers) {
+    AV_SCOPE("rvk_glDeleteFramebuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t framebuffers_want = 0;
@@ -3001,6 +3114,7 @@ void rvk_glDeleteFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLu
 }
 
 void rvk_glDeleteProgram(::av::ClientTransport& rvk_t, GLuint program) {
+    AV_SCOPE("rvk_glDeleteProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3012,6 +3126,7 @@ void rvk_glDeleteProgram(::av::ClientTransport& rvk_t, GLuint program) {
 }
 
 void rvk_glDeleteProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* pipelines) {
+    AV_SCOPE("rvk_glDeleteProgramPipelines");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t pipelines_want = 0;
@@ -3054,6 +3169,7 @@ void rvk_glDeleteProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, const
 }
 
 void rvk_glDeleteQueries(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* ids) {
+    AV_SCOPE("rvk_glDeleteQueries");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t ids_want = 0;
@@ -3096,6 +3212,7 @@ void rvk_glDeleteQueries(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* 
 }
 
 void rvk_glDeleteRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* renderbuffers) {
+    AV_SCOPE("rvk_glDeleteRenderbuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t renderbuffers_want = 0;
@@ -3138,6 +3255,7 @@ void rvk_glDeleteRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, const GL
 }
 
 void rvk_glDeleteSamplers(::av::ClientTransport& rvk_t, GLsizei count, const GLuint* samplers) {
+    AV_SCOPE("rvk_glDeleteSamplers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     size_t samplers_want = 0;
@@ -3180,6 +3298,7 @@ void rvk_glDeleteSamplers(::av::ClientTransport& rvk_t, GLsizei count, const GLu
 }
 
 void rvk_glDeleteShader(::av::ClientTransport& rvk_t, GLuint shader) {
+    AV_SCOPE("rvk_glDeleteShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3191,6 +3310,7 @@ void rvk_glDeleteShader(::av::ClientTransport& rvk_t, GLuint shader) {
 }
 
 void rvk_glDeleteSync(::av::ClientTransport& rvk_t, uint64_t sync) {
+    AV_SCOPE("rvk_glDeleteSync");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(sync);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3202,6 +3322,7 @@ void rvk_glDeleteSync(::av::ClientTransport& rvk_t, uint64_t sync) {
 }
 
 void rvk_glDeleteTextures(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* textures) {
+    AV_SCOPE("rvk_glDeleteTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
@@ -3244,6 +3365,7 @@ void rvk_glDeleteTextures(::av::ClientTransport& rvk_t, GLsizei n, const GLuint*
 }
 
 void rvk_glDeleteTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* ids) {
+    AV_SCOPE("rvk_glDeleteTransformFeedbacks");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t ids_want = 0;
@@ -3286,6 +3408,7 @@ void rvk_glDeleteTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, con
 }
 
 void rvk_glDeleteVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* arrays) {
+    AV_SCOPE("rvk_glDeleteVertexArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t arrays_want = 0;
@@ -3328,6 +3451,7 @@ void rvk_glDeleteVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, const GLu
 }
 
 void rvk_glDepthFunc(::av::ClientTransport& rvk_t, GLenum func) {
+    AV_SCOPE("rvk_glDepthFunc");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(func));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3339,6 +3463,7 @@ void rvk_glDepthFunc(::av::ClientTransport& rvk_t, GLenum func) {
 }
 
 void rvk_glDepthMask(::av::ClientTransport& rvk_t, GLboolean flag) {
+    AV_SCOPE("rvk_glDepthMask");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(flag));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3350,6 +3475,7 @@ void rvk_glDepthMask(::av::ClientTransport& rvk_t, GLboolean flag) {
 }
 
 void rvk_glDepthRange(::av::ClientTransport& rvk_t, GLdouble n, GLdouble f) {
+    AV_SCOPE("rvk_glDepthRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(n);
     rvk_b.write_pod<GLdouble>(f);
@@ -3362,6 +3488,7 @@ void rvk_glDepthRange(::av::ClientTransport& rvk_t, GLdouble n, GLdouble f) {
 }
 
 void rvk_glDepthRangeArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLdouble* v) {
+    AV_SCOPE("rvk_glDepthRangeArrayv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3405,6 +3532,7 @@ void rvk_glDepthRangeArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei 
 }
 
 void rvk_glDepthRangeIndexed(::av::ClientTransport& rvk_t, GLuint index, GLdouble n, GLdouble f) {
+    AV_SCOPE("rvk_glDepthRangeIndexed");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(n);
@@ -3418,6 +3546,7 @@ void rvk_glDepthRangeIndexed(::av::ClientTransport& rvk_t, GLuint index, GLdoubl
 }
 
 void rvk_glDepthRangef(::av::ClientTransport& rvk_t, GLfloat n, GLfloat f) {
+    AV_SCOPE("rvk_glDepthRangef");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(n);
     rvk_b.write_pod<GLfloat>(f);
@@ -3430,6 +3559,7 @@ void rvk_glDepthRangef(::av::ClientTransport& rvk_t, GLfloat n, GLfloat f) {
 }
 
 void rvk_glDetachShader(::av::ClientTransport& rvk_t, GLuint program, GLuint shader) {
+    AV_SCOPE("rvk_glDetachShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shader));
@@ -3442,6 +3572,7 @@ void rvk_glDetachShader(::av::ClientTransport& rvk_t, GLuint program, GLuint sha
 }
 
 void rvk_glDisable(::av::ClientTransport& rvk_t, GLenum cap) {
+    AV_SCOPE("rvk_glDisable");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(cap));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3453,6 +3584,7 @@ void rvk_glDisable(::av::ClientTransport& rvk_t, GLenum cap) {
 }
 
 void rvk_glDisableVertexArrayAttrib(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index) {
+    AV_SCOPE("rvk_glDisableVertexArrayAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -3465,6 +3597,7 @@ void rvk_glDisableVertexArrayAttrib(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glDisableVertexAttribArray(::av::ClientTransport& rvk_t, GLuint index) {
+    AV_SCOPE("rvk_glDisableVertexAttribArray");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3476,6 +3609,7 @@ void rvk_glDisableVertexAttribArray(::av::ClientTransport& rvk_t, GLuint index) 
 }
 
 void rvk_glDisablei(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glDisablei");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -3488,6 +3622,7 @@ void rvk_glDisablei(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
 }
 
 void rvk_glDispatchCompute(::av::ClientTransport& rvk_t, GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z) {
+    AV_SCOPE("rvk_glDispatchCompute");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(num_groups_x));
     rvk_b.write_varint(static_cast<uint64_t>(num_groups_y));
@@ -3501,6 +3636,7 @@ void rvk_glDispatchCompute(::av::ClientTransport& rvk_t, GLuint num_groups_x, GL
 }
 
 void rvk_glDispatchComputeIndirect(::av::ClientTransport& rvk_t, GLintptr indirect) {
+    AV_SCOPE("rvk_glDispatchComputeIndirect");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(indirect));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3512,6 +3648,7 @@ void rvk_glDispatchComputeIndirect(::av::ClientTransport& rvk_t, GLintptr indire
 }
 
 void rvk_glDrawArrays(::av::ClientTransport& rvk_t, GLenum mode, GLint first, GLsizei count) {
+    AV_SCOPE("rvk_glDrawArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -3525,6 +3662,7 @@ void rvk_glDrawArrays(::av::ClientTransport& rvk_t, GLenum mode, GLint first, GL
 }
 
 void rvk_glDrawArraysIndirect(::av::ClientTransport& rvk_t, GLenum mode, uint64_t indirect) {
+    AV_SCOPE("rvk_glDrawArraysIndirect");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<uint64_t>(indirect);
@@ -3537,6 +3675,7 @@ void rvk_glDrawArraysIndirect(::av::ClientTransport& rvk_t, GLenum mode, uint64_
 }
 
 void rvk_glDrawArraysInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLint first, GLsizei count, GLsizei instancecount) {
+    AV_SCOPE("rvk_glDrawArraysInstanced");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -3551,6 +3690,7 @@ void rvk_glDrawArraysInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLint 
 }
 
 void rvk_glDrawArraysInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance) {
+    AV_SCOPE("rvk_glDrawArraysInstancedBaseInstance");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -3566,6 +3706,7 @@ void rvk_glDrawArraysInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum 
 }
 
 void rvk_glDrawBuffer(::av::ClientTransport& rvk_t, GLenum buf) {
+    AV_SCOPE("rvk_glDrawBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buf));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3577,6 +3718,7 @@ void rvk_glDrawBuffer(::av::ClientTransport& rvk_t, GLenum buf) {
 }
 
 void rvk_glDrawBuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLenum* bufs) {
+    AV_SCOPE("rvk_glDrawBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t bufs_want = 0;
@@ -3619,6 +3761,7 @@ void rvk_glDrawBuffers(::av::ClientTransport& rvk_t, GLsizei n, const GLenum* bu
 }
 
 void rvk_glDrawElements(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices) {
+    AV_SCOPE("rvk_glDrawElements");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3633,6 +3776,7 @@ void rvk_glDrawElements(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count
 }
 
 void rvk_glDrawElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLint basevertex) {
+    AV_SCOPE("rvk_glDrawElementsBaseVertex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3648,6 +3792,7 @@ void rvk_glDrawElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLs
 }
 
 void rvk_glDrawElementsIndirect(::av::ClientTransport& rvk_t, GLenum mode, GLenum type, uint64_t indirect) {
+    AV_SCOPE("rvk_glDrawElementsIndirect");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -3661,6 +3806,7 @@ void rvk_glDrawElementsIndirect(::av::ClientTransport& rvk_t, GLenum mode, GLenu
 }
 
 void rvk_glDrawElementsInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount) {
+    AV_SCOPE("rvk_glDrawElementsInstanced");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3676,6 +3822,7 @@ void rvk_glDrawElementsInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLsi
 }
 
 void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLuint baseinstance) {
+    AV_SCOPE("rvk_glDrawElementsInstancedBaseInstance");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3692,6 +3839,7 @@ void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenu
 }
 
 void rvk_glDrawElementsInstancedBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex) {
+    AV_SCOPE("rvk_glDrawElementsInstancedBaseVertex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3708,6 +3856,7 @@ void rvk_glDrawElementsInstancedBaseVertex(::av::ClientTransport& rvk_t, GLenum 
 }
 
 void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance) {
+    AV_SCOPE("rvk_glDrawElementsInstancedBaseVertexBaseInstance");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -3725,6 +3874,7 @@ void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rv
 }
 
 void rvk_glDrawRangeElements(::av::ClientTransport& rvk_t, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, uint64_t indices) {
+    AV_SCOPE("rvk_glDrawRangeElements");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(start));
@@ -3741,6 +3891,7 @@ void rvk_glDrawRangeElements(::av::ClientTransport& rvk_t, GLenum mode, GLuint s
 }
 
 void rvk_glDrawRangeElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, uint64_t indices, GLint basevertex) {
+    AV_SCOPE("rvk_glDrawRangeElementsBaseVertex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(start));
@@ -3758,6 +3909,7 @@ void rvk_glDrawRangeElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode
 }
 
 void rvk_glDrawTransformFeedback(::av::ClientTransport& rvk_t, GLenum mode, GLuint id) {
+    AV_SCOPE("rvk_glDrawTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -3770,6 +3922,7 @@ void rvk_glDrawTransformFeedback(::av::ClientTransport& rvk_t, GLenum mode, GLui
 }
 
 void rvk_glDrawTransformFeedbackInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLuint id, GLsizei instancecount) {
+    AV_SCOPE("rvk_glDrawTransformFeedbackInstanced");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -3783,6 +3936,7 @@ void rvk_glDrawTransformFeedbackInstanced(::av::ClientTransport& rvk_t, GLenum m
 }
 
 void rvk_glDrawTransformFeedbackStream(::av::ClientTransport& rvk_t, GLenum mode, GLuint id, GLuint stream) {
+    AV_SCOPE("rvk_glDrawTransformFeedbackStream");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -3796,6 +3950,7 @@ void rvk_glDrawTransformFeedbackStream(::av::ClientTransport& rvk_t, GLenum mode
 }
 
 void rvk_glDrawTransformFeedbackStreamInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLuint id, GLuint stream, GLsizei instancecount) {
+    AV_SCOPE("rvk_glDrawTransformFeedbackStreamInstanced");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -3810,6 +3965,7 @@ void rvk_glDrawTransformFeedbackStreamInstanced(::av::ClientTransport& rvk_t, GL
 }
 
 void rvk_glEnable(::av::ClientTransport& rvk_t, GLenum cap) {
+    AV_SCOPE("rvk_glEnable");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(cap));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3821,6 +3977,7 @@ void rvk_glEnable(::av::ClientTransport& rvk_t, GLenum cap) {
 }
 
 void rvk_glEnableVertexArrayAttrib(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index) {
+    AV_SCOPE("rvk_glEnableVertexArrayAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -3833,6 +3990,7 @@ void rvk_glEnableVertexArrayAttrib(::av::ClientTransport& rvk_t, GLuint vaobj, G
 }
 
 void rvk_glEnableVertexAttribArray(::av::ClientTransport& rvk_t, GLuint index) {
+    AV_SCOPE("rvk_glEnableVertexAttribArray");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3844,6 +4002,7 @@ void rvk_glEnableVertexAttribArray(::av::ClientTransport& rvk_t, GLuint index) {
 }
 
 void rvk_glEnablei(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glEnablei");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -3856,6 +4015,7 @@ void rvk_glEnablei(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
 }
 
 void rvk_glEndConditionalRender(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glEndConditionalRender");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glEndConditionalRender",
@@ -3866,6 +4026,7 @@ void rvk_glEndConditionalRender(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glEndQuery(::av::ClientTransport& rvk_t, GLenum target) {
+    AV_SCOPE("rvk_glEndQuery");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -3877,6 +4038,7 @@ void rvk_glEndQuery(::av::ClientTransport& rvk_t, GLenum target) {
 }
 
 void rvk_glEndQueryIndexed(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glEndQueryIndexed");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -3889,6 +4051,7 @@ void rvk_glEndQueryIndexed(::av::ClientTransport& rvk_t, GLenum target, GLuint i
 }
 
 void rvk_glEndTransformFeedback(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glEndTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glEndTransformFeedback",
@@ -3899,6 +4062,7 @@ void rvk_glEndTransformFeedback(::av::ClientTransport& rvk_t) {
 }
 
 uint64_t rvk_glFenceSync(::av::ClientTransport& rvk_t, GLenum condition, GLbitfield flags) {
+    AV_SCOPE("rvk_glFenceSync");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const uint64_t rvk_token = ::av::glproto::mint_sync_token();
     rvk_b.write_pod<uint64_t>(rvk_token);
@@ -3914,6 +4078,7 @@ uint64_t rvk_glFenceSync(::av::ClientTransport& rvk_t, GLenum condition, GLbitfi
 }
 
 void rvk_glFinish(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glFinish");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glFinish",
@@ -3929,6 +4094,7 @@ void rvk_glFinish(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glFlush(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glFlush");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glFlush",
@@ -3939,6 +4105,7 @@ void rvk_glFlush(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glFramebufferParameteri(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glFramebufferParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -3952,6 +4119,7 @@ void rvk_glFramebufferParameteri(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glFramebufferRenderbuffer(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glFramebufferRenderbuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -3966,6 +4134,7 @@ void rvk_glFramebufferRenderbuffer(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glFramebufferTexture(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glFramebufferTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -3980,6 +4149,7 @@ void rvk_glFramebufferTexture(::av::ClientTransport& rvk_t, GLenum target, GLenu
 }
 
 void rvk_glFramebufferTexture1D(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glFramebufferTexture1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -3995,6 +4165,7 @@ void rvk_glFramebufferTexture1D(::av::ClientTransport& rvk_t, GLenum target, GLe
 }
 
 void rvk_glFramebufferTexture2D(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glFramebufferTexture2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -4010,6 +4181,7 @@ void rvk_glFramebufferTexture2D(::av::ClientTransport& rvk_t, GLenum target, GLe
 }
 
 void rvk_glFramebufferTexture3D(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLint zoffset) {
+    AV_SCOPE("rvk_glFramebufferTexture3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -4026,6 +4198,7 @@ void rvk_glFramebufferTexture3D(::av::ClientTransport& rvk_t, GLenum target, GLe
 }
 
 void rvk_glFramebufferTextureLayer(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer) {
+    AV_SCOPE("rvk_glFramebufferTextureLayer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -4041,6 +4214,7 @@ void rvk_glFramebufferTextureLayer(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glFrontFace(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glFrontFace");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -4052,6 +4226,7 @@ void rvk_glFrontFace(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glGenBuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* buffers) {
+    AV_SCOPE("rvk_glGenBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t buffers_want = buffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4080,6 +4255,7 @@ void rvk_glGenBuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* buffers) 
 }
 
 void rvk_glGenFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* framebuffers) {
+    AV_SCOPE("rvk_glGenFramebuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t framebuffers_want = framebuffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4108,6 +4284,7 @@ void rvk_glGenFramebuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* fram
 }
 
 void rvk_glGenProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, GLuint* pipelines) {
+    AV_SCOPE("rvk_glGenProgramPipelines");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t pipelines_want = pipelines != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4136,6 +4313,7 @@ void rvk_glGenProgramPipelines(::av::ClientTransport& rvk_t, GLsizei n, GLuint* 
 }
 
 void rvk_glGenQueries(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ids) {
+    AV_SCOPE("rvk_glGenQueries");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t ids_want = ids != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4164,6 +4342,7 @@ void rvk_glGenQueries(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ids) {
 }
 
 void rvk_glGenRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* renderbuffers) {
+    AV_SCOPE("rvk_glGenRenderbuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t renderbuffers_want = renderbuffers != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4192,6 +4371,7 @@ void rvk_glGenRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ren
 }
 
 void rvk_glGenSamplers(::av::ClientTransport& rvk_t, GLsizei count, GLuint* samplers) {
+    AV_SCOPE("rvk_glGenSamplers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     const size_t samplers_want = samplers != nullptr ? (static_cast<size_t>(count) * sizeof(GLuint)) : 0u;
@@ -4220,6 +4400,7 @@ void rvk_glGenSamplers(::av::ClientTransport& rvk_t, GLsizei count, GLuint* samp
 }
 
 void rvk_glGenTextures(::av::ClientTransport& rvk_t, GLsizei n, GLuint* textures) {
+    AV_SCOPE("rvk_glGenTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t textures_want = textures != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4248,6 +4429,7 @@ void rvk_glGenTextures(::av::ClientTransport& rvk_t, GLsizei n, GLuint* textures
 }
 
 void rvk_glGenTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ids) {
+    AV_SCOPE("rvk_glGenTransformFeedbacks");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t ids_want = ids != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4276,6 +4458,7 @@ void rvk_glGenTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, GLuint
 }
 
 void rvk_glGenVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, GLuint* arrays) {
+    AV_SCOPE("rvk_glGenVertexArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     const size_t arrays_want = arrays != nullptr ? (static_cast<size_t>(n) * sizeof(GLuint)) : 0u;
@@ -4304,6 +4487,7 @@ void rvk_glGenVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, GLuint* arra
 }
 
 void rvk_glGenerateMipmap(::av::ClientTransport& rvk_t, GLenum target) {
+    AV_SCOPE("rvk_glGenerateMipmap");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -4315,6 +4499,7 @@ void rvk_glGenerateMipmap(::av::ClientTransport& rvk_t, GLenum target) {
 }
 
 void rvk_glGenerateTextureMipmap(::av::ClientTransport& rvk_t, GLuint texture) {
+    AV_SCOPE("rvk_glGenerateTextureMipmap");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -4326,6 +4511,7 @@ void rvk_glGenerateTextureMipmap(::av::ClientTransport& rvk_t, GLuint texture) {
 }
 
 void rvk_glGetActiveAtomicCounterBufferiv(::av::ClientTransport& rvk_t, GLuint program, GLuint bufferIndex, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetActiveAtomicCounterBufferiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(bufferIndex));
@@ -4356,6 +4542,7 @@ void rvk_glGetActiveAtomicCounterBufferiv(::av::ClientTransport& rvk_t, GLuint p
 }
 
 void rvk_glGetActiveAttrib(::av::ClientTransport& rvk_t, GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name) {
+    AV_SCOPE("rvk_glGetActiveAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -4422,6 +4609,7 @@ void rvk_glGetActiveAttrib(::av::ClientTransport& rvk_t, GLuint program, GLuint 
 }
 
 void rvk_glGetActiveSubroutineName(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, GLuint index, GLsizei bufSize, GLsizei* length, GLchar* name) {
+    AV_SCOPE("rvk_glGetActiveSubroutineName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -4465,6 +4653,7 @@ void rvk_glGetActiveSubroutineName(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glGetActiveSubroutineUniformName(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, GLuint index, GLsizei bufSize, GLsizei* length, GLchar* name) {
+    AV_SCOPE("rvk_glGetActiveSubroutineUniformName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -4508,6 +4697,7 @@ void rvk_glGetActiveSubroutineUniformName(::av::ClientTransport& rvk_t, GLuint p
 }
 
 void rvk_glGetActiveSubroutineUniformiv(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, GLuint index, GLenum pname, GLint* values) {
+    AV_SCOPE("rvk_glGetActiveSubroutineUniformiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -4539,6 +4729,7 @@ void rvk_glGetActiveSubroutineUniformiv(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glGetActiveUniform(::av::ClientTransport& rvk_t, GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name) {
+    AV_SCOPE("rvk_glGetActiveUniform");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -4605,6 +4796,7 @@ void rvk_glGetActiveUniform(::av::ClientTransport& rvk_t, GLuint program, GLuint
 }
 
 void rvk_glGetActiveUniformBlockName(::av::ClientTransport& rvk_t, GLuint program, GLuint uniformBlockIndex, GLsizei bufSize, GLsizei* length, GLchar* uniformBlockName) {
+    AV_SCOPE("rvk_glGetActiveUniformBlockName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformBlockIndex));
@@ -4647,6 +4839,7 @@ void rvk_glGetActiveUniformBlockName(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glGetActiveUniformBlockiv(::av::ClientTransport& rvk_t, GLuint program, GLuint uniformBlockIndex, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetActiveUniformBlockiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformBlockIndex));
@@ -4677,6 +4870,7 @@ void rvk_glGetActiveUniformBlockiv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glGetActiveUniformName(::av::ClientTransport& rvk_t, GLuint program, GLuint uniformIndex, GLsizei bufSize, GLsizei* length, GLchar* uniformName) {
+    AV_SCOPE("rvk_glGetActiveUniformName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformIndex));
@@ -4719,6 +4913,7 @@ void rvk_glGetActiveUniformName(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glGetActiveUniformsiv(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLuint* uniformIndices, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetActiveUniformsiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformCount));
@@ -4780,6 +4975,7 @@ void rvk_glGetActiveUniformsiv(::av::ClientTransport& rvk_t, GLuint program, GLs
 }
 
 void rvk_glGetAttachedShaders(::av::ClientTransport& rvk_t, GLuint program, GLsizei maxCount, GLsizei* count, GLuint* shaders) {
+    AV_SCOPE("rvk_glGetAttachedShaders");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(maxCount));
@@ -4821,6 +5017,7 @@ void rvk_glGetAttachedShaders(::av::ClientTransport& rvk_t, GLuint program, GLsi
 }
 
 GLint rvk_glGetAttribLocation(::av::ClientTransport& rvk_t, GLuint program, const GLchar* name) {
+    AV_SCOPE("rvk_glGetAttribLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_pod<uint8_t>(name != nullptr ? 1 : 0);
@@ -4846,6 +5043,7 @@ GLint rvk_glGetAttribLocation(::av::ClientTransport& rvk_t, GLuint program, cons
 }
 
 void rvk_glGetBooleani_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLboolean* data) {
+    AV_SCOPE("rvk_glGetBooleani_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -4875,6 +5073,7 @@ void rvk_glGetBooleani_v(::av::ClientTransport& rvk_t, GLenum target, GLuint ind
 }
 
 void rvk_glGetBooleanv(::av::ClientTransport& rvk_t, GLenum pname, GLboolean* data) {
+    AV_SCOPE("rvk_glGetBooleanv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLboolean)) : 0u;
@@ -4903,6 +5102,7 @@ void rvk_glGetBooleanv(::av::ClientTransport& rvk_t, GLenum pname, GLboolean* da
 }
 
 void rvk_glGetBufferParameteri64v(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint64* params) {
+    AV_SCOPE("rvk_glGetBufferParameteri64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -4932,6 +5132,7 @@ void rvk_glGetBufferParameteri64v(::av::ClientTransport& rvk_t, GLenum target, G
 }
 
 void rvk_glGetBufferParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetBufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -4961,6 +5162,7 @@ void rvk_glGetBufferParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLe
 }
 
 void rvk_glGetBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLintptr offset, GLsizeiptr size, void* data) {
+    AV_SCOPE("rvk_glGetBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -4991,6 +5193,7 @@ void rvk_glGetBufferSubData(::av::ClientTransport& rvk_t, GLenum target, GLintpt
 }
 
 void rvk_glGetCompressedTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint level, void* img, size_t img_bytes, bool img_is_offset) {
+    AV_SCOPE("rvk_glGetCompressedTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -5043,6 +5246,7 @@ void rvk_glGetCompressedTexImage(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glGetCompressedTextureImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetCompressedTextureImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -5096,6 +5300,7 @@ void rvk_glGetCompressedTextureImage(::av::ClientTransport& rvk_t, GLuint textur
 }
 
 void rvk_glGetCompressedTextureSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetCompressedTextureSubImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -5155,6 +5360,7 @@ void rvk_glGetCompressedTextureSubImage(::av::ClientTransport& rvk_t, GLuint tex
 }
 
 GLuint rvk_glGetDebugMessageLog(::av::ClientTransport& rvk_t, GLuint count, GLsizei bufSize, GLenum* sources, GLenum* types, GLuint* ids, GLenum* severities, GLsizei* lengths, GLchar* messageLog) {
+    AV_SCOPE("rvk_glGetDebugMessageLog");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -5247,6 +5453,7 @@ GLuint rvk_glGetDebugMessageLog(::av::ClientTransport& rvk_t, GLuint count, GLsi
 }
 
 void rvk_glGetDoublei_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLdouble* data) {
+    AV_SCOPE("rvk_glGetDoublei_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -5276,6 +5483,7 @@ void rvk_glGetDoublei_v(::av::ClientTransport& rvk_t, GLenum target, GLuint inde
 }
 
 void rvk_glGetDoublev(::av::ClientTransport& rvk_t, GLenum pname, GLdouble* data) {
+    AV_SCOPE("rvk_glGetDoublev");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLdouble)) : 0u;
@@ -5304,6 +5512,7 @@ void rvk_glGetDoublev(::av::ClientTransport& rvk_t, GLenum pname, GLdouble* data
 }
 
 void rvk_glGetFloati_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLfloat* data) {
+    AV_SCOPE("rvk_glGetFloati_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -5333,6 +5542,7 @@ void rvk_glGetFloati_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index
 }
 
 void rvk_glGetFloatv(::av::ClientTransport& rvk_t, GLenum pname, GLfloat* data) {
+    AV_SCOPE("rvk_glGetFloatv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLfloat)) : 0u;
@@ -5361,6 +5571,7 @@ void rvk_glGetFloatv(::av::ClientTransport& rvk_t, GLenum pname, GLfloat* data) 
 }
 
 GLint rvk_glGetFragDataIndex(::av::ClientTransport& rvk_t, GLuint program, const GLchar* name) {
+    AV_SCOPE("rvk_glGetFragDataIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_pod<uint8_t>(name != nullptr ? 1 : 0);
@@ -5386,6 +5597,7 @@ GLint rvk_glGetFragDataIndex(::av::ClientTransport& rvk_t, GLuint program, const
 }
 
 GLint rvk_glGetFragDataLocation(::av::ClientTransport& rvk_t, GLuint program, const GLchar* name) {
+    AV_SCOPE("rvk_glGetFragDataLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_pod<uint8_t>(name != nullptr ? 1 : 0);
@@ -5411,6 +5623,7 @@ GLint rvk_glGetFragDataLocation(::av::ClientTransport& rvk_t, GLuint program, co
 }
 
 void rvk_glGetFramebufferAttachmentParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum attachment, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetFramebufferAttachmentParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -5441,6 +5654,7 @@ void rvk_glGetFramebufferAttachmentParameteriv(::av::ClientTransport& rvk_t, GLe
 }
 
 void rvk_glGetFramebufferParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetFramebufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -5470,6 +5684,7 @@ void rvk_glGetFramebufferParameteriv(::av::ClientTransport& rvk_t, GLenum target
 }
 
 GLenum rvk_glGetGraphicsResetStatus(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glGetGraphicsResetStatus");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glGetGraphicsResetStatus",
@@ -5488,6 +5703,7 @@ GLenum rvk_glGetGraphicsResetStatus(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glGetInteger64i_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLint64* data) {
+    AV_SCOPE("rvk_glGetInteger64i_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -5517,6 +5733,7 @@ void rvk_glGetInteger64i_v(::av::ClientTransport& rvk_t, GLenum target, GLuint i
 }
 
 void rvk_glGetInteger64v(::av::ClientTransport& rvk_t, GLenum pname, GLint64* data) {
+    AV_SCOPE("rvk_glGetInteger64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLint64)) : 0u;
@@ -5545,6 +5762,7 @@ void rvk_glGetInteger64v(::av::ClientTransport& rvk_t, GLenum pname, GLint64* da
 }
 
 void rvk_glGetIntegeri_v(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLint* data) {
+    AV_SCOPE("rvk_glGetIntegeri_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -5574,6 +5792,7 @@ void rvk_glGetIntegeri_v(::av::ClientTransport& rvk_t, GLenum target, GLuint ind
 }
 
 void rvk_glGetIntegerv(::av::ClientTransport& rvk_t, GLenum pname, GLint* data) {
+    AV_SCOPE("rvk_glGetIntegerv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLint)) : 0u;
@@ -5602,6 +5821,7 @@ void rvk_glGetIntegerv(::av::ClientTransport& rvk_t, GLenum pname, GLint* data) 
 }
 
 void rvk_glGetInternalformati64v(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLenum pname, GLsizei count, GLint64* params) {
+    AV_SCOPE("rvk_glGetInternalformati64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -5633,6 +5853,7 @@ void rvk_glGetInternalformati64v(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glGetInternalformativ(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLenum pname, GLsizei count, GLint* params) {
+    AV_SCOPE("rvk_glGetInternalformativ");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -5664,6 +5885,7 @@ void rvk_glGetInternalformativ(::av::ClientTransport& rvk_t, GLenum target, GLen
 }
 
 void rvk_glGetMultisamplefv(::av::ClientTransport& rvk_t, GLenum pname, GLuint index, GLfloat* val) {
+    AV_SCOPE("rvk_glGetMultisamplefv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -5693,6 +5915,7 @@ void rvk_glGetMultisamplefv(::av::ClientTransport& rvk_t, GLenum pname, GLuint i
 }
 
 void rvk_glGetNamedBufferParameteri64v(::av::ClientTransport& rvk_t, GLuint buffer, GLenum pname, GLint64* params) {
+    AV_SCOPE("rvk_glGetNamedBufferParameteri64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -5722,6 +5945,7 @@ void rvk_glGetNamedBufferParameteri64v(::av::ClientTransport& rvk_t, GLuint buff
 }
 
 void rvk_glGetNamedBufferParameteriv(::av::ClientTransport& rvk_t, GLuint buffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedBufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -5751,6 +5975,7 @@ void rvk_glGetNamedBufferParameteriv(::av::ClientTransport& rvk_t, GLuint buffer
 }
 
 void rvk_glGetNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, void* data) {
+    AV_SCOPE("rvk_glGetNamedBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -5781,6 +6006,7 @@ void rvk_glGetNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GL
 }
 
 void rvk_glGetNamedFramebufferAttachmentParameteriv(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedFramebufferAttachmentParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -5811,6 +6037,7 @@ void rvk_glGetNamedFramebufferAttachmentParameteriv(::av::ClientTransport& rvk_t
 }
 
 void rvk_glGetNamedFramebufferParameteriv(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetNamedFramebufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -5840,6 +6067,7 @@ void rvk_glGetNamedFramebufferParameteriv(::av::ClientTransport& rvk_t, GLuint f
 }
 
 void rvk_glGetNamedRenderbufferParameteriv(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedRenderbufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -5869,6 +6097,7 @@ void rvk_glGetNamedRenderbufferParameteriv(::av::ClientTransport& rvk_t, GLuint 
 }
 
 void rvk_glGetObjectLabel(::av::ClientTransport& rvk_t, GLenum identifier, GLuint name, GLsizei bufSize, GLsizei* length, GLchar* label) {
+    AV_SCOPE("rvk_glGetObjectLabel");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(identifier));
     rvk_b.write_varint(static_cast<uint64_t>(name));
@@ -5911,6 +6140,7 @@ void rvk_glGetObjectLabel(::av::ClientTransport& rvk_t, GLenum identifier, GLuin
 }
 
 void rvk_glGetObjectPtrLabel(::av::ClientTransport& rvk_t, uint64_t ptr, GLsizei bufSize, GLsizei* length, GLchar* label) {
+    AV_SCOPE("rvk_glGetObjectPtrLabel");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(ptr);
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -5952,6 +6182,7 @@ void rvk_glGetObjectPtrLabel(::av::ClientTransport& rvk_t, uint64_t ptr, GLsizei
 }
 
 void rvk_glGetProgramBinary(::av::ClientTransport& rvk_t, GLuint program, GLsizei bufSize, GLsizei* length, GLenum* binaryFormat, void* binary) {
+    AV_SCOPE("rvk_glGetProgramBinary");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -6005,6 +6236,7 @@ void rvk_glGetProgramBinary(::av::ClientTransport& rvk_t, GLuint program, GLsize
 }
 
 void rvk_glGetProgramInfoLog(::av::ClientTransport& rvk_t, GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog) {
+    AV_SCOPE("rvk_glGetProgramInfoLog");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -6046,6 +6278,7 @@ void rvk_glGetProgramInfoLog(::av::ClientTransport& rvk_t, GLuint program, GLsiz
 }
 
 void rvk_glGetProgramInterfaceiv(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetProgramInterfaceiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6076,6 +6309,7 @@ void rvk_glGetProgramInterfaceiv(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glGetProgramPipelineInfoLog(::av::ClientTransport& rvk_t, GLuint pipeline, GLsizei bufSize, GLsizei* length, GLchar* infoLog) {
+    AV_SCOPE("rvk_glGetProgramPipelineInfoLog");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -6117,6 +6351,7 @@ void rvk_glGetProgramPipelineInfoLog(::av::ClientTransport& rvk_t, GLuint pipeli
 }
 
 void rvk_glGetProgramPipelineiv(::av::ClientTransport& rvk_t, GLuint pipeline, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetProgramPipelineiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6146,6 +6381,7 @@ void rvk_glGetProgramPipelineiv(::av::ClientTransport& rvk_t, GLuint pipeline, G
 }
 
 GLuint rvk_glGetProgramResourceIndex(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, const GLchar* name) {
+    AV_SCOPE("rvk_glGetProgramResourceIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6172,6 +6408,7 @@ GLuint rvk_glGetProgramResourceIndex(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 GLint rvk_glGetProgramResourceLocation(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, const GLchar* name) {
+    AV_SCOPE("rvk_glGetProgramResourceLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6198,6 +6435,7 @@ GLint rvk_glGetProgramResourceLocation(::av::ClientTransport& rvk_t, GLuint prog
 }
 
 GLint rvk_glGetProgramResourceLocationIndex(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, const GLchar* name) {
+    AV_SCOPE("rvk_glGetProgramResourceLocationIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6224,6 +6462,7 @@ GLint rvk_glGetProgramResourceLocationIndex(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glGetProgramResourceName(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, GLuint index, GLsizei bufSize, GLsizei* length, GLchar* name) {
+    AV_SCOPE("rvk_glGetProgramResourceName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6267,6 +6506,7 @@ void rvk_glGetProgramResourceName(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glGetProgramResourceiv(::av::ClientTransport& rvk_t, GLuint program, GLenum programInterface, GLuint index, GLsizei propCount, const GLenum* props, GLsizei count, GLsizei* length, GLint* params) {
+    AV_SCOPE("rvk_glGetProgramResourceiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -6342,6 +6582,7 @@ void rvk_glGetProgramResourceiv(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glGetProgramStageiv(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, GLenum pname, GLint* values) {
+    AV_SCOPE("rvk_glGetProgramStageiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -6372,6 +6613,7 @@ void rvk_glGetProgramStageiv(::av::ClientTransport& rvk_t, GLuint program, GLenu
 }
 
 void rvk_glGetProgramiv(::av::ClientTransport& rvk_t, GLuint program, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetProgramiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6401,6 +6643,7 @@ void rvk_glGetProgramiv(::av::ClientTransport& rvk_t, GLuint program, GLenum pna
 }
 
 void rvk_glGetQueryBufferObjecti64v(::av::ClientTransport& rvk_t, GLuint id, GLuint buffer, GLenum pname, GLintptr offset) {
+    AV_SCOPE("rvk_glGetQueryBufferObjecti64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -6415,6 +6658,7 @@ void rvk_glGetQueryBufferObjecti64v(::av::ClientTransport& rvk_t, GLuint id, GLu
 }
 
 void rvk_glGetQueryBufferObjectiv(::av::ClientTransport& rvk_t, GLuint id, GLuint buffer, GLenum pname, GLintptr offset) {
+    AV_SCOPE("rvk_glGetQueryBufferObjectiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -6429,6 +6673,7 @@ void rvk_glGetQueryBufferObjectiv(::av::ClientTransport& rvk_t, GLuint id, GLuin
 }
 
 void rvk_glGetQueryBufferObjectui64v(::av::ClientTransport& rvk_t, GLuint id, GLuint buffer, GLenum pname, GLintptr offset) {
+    AV_SCOPE("rvk_glGetQueryBufferObjectui64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -6443,6 +6688,7 @@ void rvk_glGetQueryBufferObjectui64v(::av::ClientTransport& rvk_t, GLuint id, GL
 }
 
 void rvk_glGetQueryBufferObjectuiv(::av::ClientTransport& rvk_t, GLuint id, GLuint buffer, GLenum pname, GLintptr offset) {
+    AV_SCOPE("rvk_glGetQueryBufferObjectuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -6457,6 +6703,7 @@ void rvk_glGetQueryBufferObjectuiv(::av::ClientTransport& rvk_t, GLuint id, GLui
 }
 
 void rvk_glGetQueryIndexediv(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetQueryIndexediv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -6487,6 +6734,7 @@ void rvk_glGetQueryIndexediv(::av::ClientTransport& rvk_t, GLenum target, GLuint
 }
 
 void rvk_glGetQueryObjecti64v(::av::ClientTransport& rvk_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
+    AV_SCOPE("rvk_glGetQueryObjecti64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6539,6 +6787,7 @@ void rvk_glGetQueryObjecti64v(::av::ClientTransport& rvk_t, GLuint id, GLenum pn
 }
 
 void rvk_glGetQueryObjectiv(::av::ClientTransport& rvk_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
+    AV_SCOPE("rvk_glGetQueryObjectiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6591,6 +6840,7 @@ void rvk_glGetQueryObjectiv(::av::ClientTransport& rvk_t, GLuint id, GLenum pnam
 }
 
 void rvk_glGetQueryObjectui64v(::av::ClientTransport& rvk_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
+    AV_SCOPE("rvk_glGetQueryObjectui64v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6643,6 +6893,7 @@ void rvk_glGetQueryObjectui64v(::av::ClientTransport& rvk_t, GLuint id, GLenum p
 }
 
 void rvk_glGetQueryObjectuiv(::av::ClientTransport& rvk_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
+    AV_SCOPE("rvk_glGetQueryObjectuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6695,6 +6946,7 @@ void rvk_glGetQueryObjectuiv(::av::ClientTransport& rvk_t, GLuint id, GLenum pna
 }
 
 void rvk_glGetQueryiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetQueryiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6724,6 +6976,7 @@ void rvk_glGetQueryiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname,
 }
 
 void rvk_glGetRenderbufferParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetRenderbufferParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6753,6 +7006,7 @@ void rvk_glGetRenderbufferParameteriv(::av::ClientTransport& rvk_t, GLenum targe
 }
 
 void rvk_glGetSamplerParameterIiv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetSamplerParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6782,6 +7036,7 @@ void rvk_glGetSamplerParameterIiv(::av::ClientTransport& rvk_t, GLuint sampler, 
 }
 
 void rvk_glGetSamplerParameterIuiv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetSamplerParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6811,6 +7066,7 @@ void rvk_glGetSamplerParameterIuiv(::av::ClientTransport& rvk_t, GLuint sampler,
 }
 
 void rvk_glGetSamplerParameterfv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetSamplerParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6840,6 +7096,7 @@ void rvk_glGetSamplerParameterfv(::av::ClientTransport& rvk_t, GLuint sampler, G
 }
 
 void rvk_glGetSamplerParameteriv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetSamplerParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -6869,6 +7126,7 @@ void rvk_glGetSamplerParameteriv(::av::ClientTransport& rvk_t, GLuint sampler, G
 }
 
 void rvk_glGetShaderInfoLog(::av::ClientTransport& rvk_t, GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog) {
+    AV_SCOPE("rvk_glGetShaderInfoLog");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -6910,6 +7168,7 @@ void rvk_glGetShaderInfoLog(::av::ClientTransport& rvk_t, GLuint shader, GLsizei
 }
 
 void rvk_glGetShaderPrecisionFormat(::av::ClientTransport& rvk_t, GLenum shadertype, GLenum precisiontype, GLint* range, GLint* precision) {
+    AV_SCOPE("rvk_glGetShaderPrecisionFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
     rvk_b.write_varint(static_cast<uint64_t>(precisiontype));
@@ -6951,6 +7210,7 @@ void rvk_glGetShaderPrecisionFormat(::av::ClientTransport& rvk_t, GLenum shadert
 }
 
 void rvk_glGetShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* source) {
+    AV_SCOPE("rvk_glGetShaderSource");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     rvk_b.write_varint(static_cast<uint64_t>(bufSize));
@@ -6992,6 +7252,7 @@ void rvk_glGetShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei 
 }
 
 void rvk_glGetShaderiv(::av::ClientTransport& rvk_t, GLuint shader, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetShaderiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7021,6 +7282,7 @@ void rvk_glGetShaderiv(::av::ClientTransport& rvk_t, GLuint shader, GLenum pname
 }
 
 bool rvk_glGetString(::av::ClientTransport& rvk_t, GLenum name, char* out, size_t out_capacity, size_t* out_length) {
+    AV_SCOPE("rvk_glGetString");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(name));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -7055,6 +7317,7 @@ bool rvk_glGetString(::av::ClientTransport& rvk_t, GLenum name, char* out, size_
 }
 
 bool rvk_glGetStringi(::av::ClientTransport& rvk_t, GLenum name, GLuint index, char* out, size_t out_capacity, size_t* out_length) {
+    AV_SCOPE("rvk_glGetStringi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(name));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -7090,6 +7353,7 @@ bool rvk_glGetStringi(::av::ClientTransport& rvk_t, GLenum name, GLuint index, c
 }
 
 GLuint rvk_glGetSubroutineIndex(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, const GLchar* name) {
+    AV_SCOPE("rvk_glGetSubroutineIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -7116,6 +7380,7 @@ GLuint rvk_glGetSubroutineIndex(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 GLint rvk_glGetSubroutineUniformLocation(::av::ClientTransport& rvk_t, GLuint program, GLenum shadertype, const GLchar* name) {
+    AV_SCOPE("rvk_glGetSubroutineUniformLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
@@ -7142,6 +7407,7 @@ GLint rvk_glGetSubroutineUniformLocation(::av::ClientTransport& rvk_t, GLuint pr
 }
 
 void rvk_glGetSynciv(::av::ClientTransport& rvk_t, uint64_t sync, GLenum pname, GLsizei count, GLsizei* length, GLint* values) {
+    AV_SCOPE("rvk_glGetSynciv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(sync);
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7184,6 +7450,7 @@ void rvk_glGetSynciv(::av::ClientTransport& rvk_t, uint64_t sync, GLenum pname, 
 }
 
 void rvk_glGetTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7238,6 +7505,7 @@ void rvk_glGetTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint level,
 }
 
 void rvk_glGetTexLevelParameterfv(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTexLevelParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7268,6 +7536,7 @@ void rvk_glGetTexLevelParameterfv(::av::ClientTransport& rvk_t, GLenum target, G
 }
 
 void rvk_glGetTexLevelParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTexLevelParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7298,6 +7567,7 @@ void rvk_glGetTexLevelParameteriv(::av::ClientTransport& rvk_t, GLenum target, G
 }
 
 void rvk_glGetTexParameterIiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTexParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7327,6 +7597,7 @@ void rvk_glGetTexParameterIiv(::av::ClientTransport& rvk_t, GLenum target, GLenu
 }
 
 void rvk_glGetTexParameterIuiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetTexParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7356,6 +7627,7 @@ void rvk_glGetTexParameterIuiv(::av::ClientTransport& rvk_t, GLenum target, GLen
 }
 
 void rvk_glGetTexParameterfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTexParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7385,6 +7657,7 @@ void rvk_glGetTexParameterfv(::av::ClientTransport& rvk_t, GLenum target, GLenum
 }
 
 void rvk_glGetTexParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTexParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7414,6 +7687,7 @@ void rvk_glGetTexParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum
 }
 
 void rvk_glGetTextureImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetTextureImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7469,6 +7743,7 @@ void rvk_glGetTextureImage(::av::ClientTransport& rvk_t, GLuint texture, GLint l
 }
 
 void rvk_glGetTextureLevelParameterfv(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTextureLevelParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7499,6 +7774,7 @@ void rvk_glGetTextureLevelParameterfv(::av::ClientTransport& rvk_t, GLuint textu
 }
 
 void rvk_glGetTextureLevelParameteriv(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureLevelParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7529,6 +7805,7 @@ void rvk_glGetTextureLevelParameteriv(::av::ClientTransport& rvk_t, GLuint textu
 }
 
 void rvk_glGetTextureParameterIiv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7558,6 +7835,7 @@ void rvk_glGetTextureParameterIiv(::av::ClientTransport& rvk_t, GLuint texture, 
 }
 
 void rvk_glGetTextureParameterIuiv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetTextureParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7587,6 +7865,7 @@ void rvk_glGetTextureParameterIuiv(::av::ClientTransport& rvk_t, GLuint texture,
 }
 
 void rvk_glGetTextureParameterfv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTextureParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7616,6 +7895,7 @@ void rvk_glGetTextureParameterfv(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glGetTextureParameteriv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7645,6 +7925,7 @@ void rvk_glGetTextureParameteriv(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glGetTextureSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetTextureSubImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -7706,6 +7987,7 @@ void rvk_glGetTextureSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLin
 }
 
 void rvk_glGetTransformFeedbackVarying(::av::ClientTransport& rvk_t, GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLsizei* size, GLenum* type, GLchar* name) {
+    AV_SCOPE("rvk_glGetTransformFeedbackVarying");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -7772,6 +8054,7 @@ void rvk_glGetTransformFeedbackVarying(::av::ClientTransport& rvk_t, GLuint prog
 }
 
 void rvk_glGetTransformFeedbacki64_v(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLuint index, GLint64* param) {
+    AV_SCOPE("rvk_glGetTransformFeedbacki64_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(xfb));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7802,6 +8085,7 @@ void rvk_glGetTransformFeedbacki64_v(::av::ClientTransport& rvk_t, GLuint xfb, G
 }
 
 void rvk_glGetTransformFeedbacki_v(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLuint index, GLint* param) {
+    AV_SCOPE("rvk_glGetTransformFeedbacki_v");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(xfb));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7832,6 +8116,7 @@ void rvk_glGetTransformFeedbacki_v(::av::ClientTransport& rvk_t, GLuint xfb, GLe
 }
 
 void rvk_glGetTransformFeedbackiv(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetTransformFeedbackiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(xfb));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -7861,6 +8146,7 @@ void rvk_glGetTransformFeedbackiv(::av::ClientTransport& rvk_t, GLuint xfb, GLen
 }
 
 GLuint rvk_glGetUniformBlockIndex(::av::ClientTransport& rvk_t, GLuint program, const GLchar* uniformBlockName) {
+    AV_SCOPE("rvk_glGetUniformBlockIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_pod<uint8_t>(uniformBlockName != nullptr ? 1 : 0);
@@ -7886,6 +8172,7 @@ GLuint rvk_glGetUniformBlockIndex(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLchar** uniformNames, GLuint* uniformIndices) {
+    AV_SCOPE("rvk_glGetUniformIndices");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformCount));
@@ -7927,6 +8214,7 @@ void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsiz
 }
 
 GLint rvk_glGetUniformLocation(::av::ClientTransport& rvk_t, GLuint program, const GLchar* name) {
+    AV_SCOPE("rvk_glGetUniformLocation");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_pod<uint8_t>(name != nullptr ? 1 : 0);
@@ -7952,6 +8240,7 @@ GLint rvk_glGetUniformLocation(::av::ClientTransport& rvk_t, GLuint program, con
 }
 
 void rvk_glGetUniformSubroutineuiv(::av::ClientTransport& rvk_t, GLenum shadertype, GLint location, GLuint* params) {
+    AV_SCOPE("rvk_glGetUniformSubroutineuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -7981,6 +8270,7 @@ void rvk_glGetUniformSubroutineuiv(::av::ClientTransport& rvk_t, GLenum shaderty
 }
 
 void rvk_glGetUniformdv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble* params) {
+    AV_SCOPE("rvk_glGetUniformdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8010,6 +8300,7 @@ void rvk_glGetUniformdv(::av::ClientTransport& rvk_t, GLuint program, GLint loca
 }
 
 void rvk_glGetUniformfv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat* params) {
+    AV_SCOPE("rvk_glGetUniformfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8039,6 +8330,7 @@ void rvk_glGetUniformfv(::av::ClientTransport& rvk_t, GLuint program, GLint loca
 }
 
 void rvk_glGetUniformiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint* params) {
+    AV_SCOPE("rvk_glGetUniformiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8068,6 +8360,7 @@ void rvk_glGetUniformiv(::av::ClientTransport& rvk_t, GLuint program, GLint loca
 }
 
 void rvk_glGetUniformuiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint* params) {
+    AV_SCOPE("rvk_glGetUniformuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8097,6 +8390,7 @@ void rvk_glGetUniformuiv(::av::ClientTransport& rvk_t, GLuint program, GLint loc
 }
 
 void rvk_glGetVertexArrayIndexed64iv(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index, GLenum pname, GLint64* param) {
+    AV_SCOPE("rvk_glGetVertexArrayIndexed64iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -8127,6 +8421,7 @@ void rvk_glGetVertexArrayIndexed64iv(::av::ClientTransport& rvk_t, GLuint vaobj,
 }
 
 void rvk_glGetVertexArrayIndexediv(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetVertexArrayIndexediv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -8157,6 +8452,7 @@ void rvk_glGetVertexArrayIndexediv(::av::ClientTransport& rvk_t, GLuint vaobj, G
 }
 
 void rvk_glGetVertexArrayiv(::av::ClientTransport& rvk_t, GLuint vaobj, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetVertexArrayiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8186,6 +8482,7 @@ void rvk_glGetVertexArrayiv(::av::ClientTransport& rvk_t, GLuint vaobj, GLenum p
 }
 
 void rvk_glGetVertexAttribIiv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetVertexAttribIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8215,6 +8512,7 @@ void rvk_glGetVertexAttribIiv(::av::ClientTransport& rvk_t, GLuint index, GLenum
 }
 
 void rvk_glGetVertexAttribIuiv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetVertexAttribIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8244,6 +8542,7 @@ void rvk_glGetVertexAttribIuiv(::av::ClientTransport& rvk_t, GLuint index, GLenu
 }
 
 void rvk_glGetVertexAttribLdv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLdouble* params) {
+    AV_SCOPE("rvk_glGetVertexAttribLdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8273,6 +8572,7 @@ void rvk_glGetVertexAttribLdv(::av::ClientTransport& rvk_t, GLuint index, GLenum
 }
 
 void rvk_glGetVertexAttribdv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLdouble* params) {
+    AV_SCOPE("rvk_glGetVertexAttribdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8302,6 +8602,7 @@ void rvk_glGetVertexAttribdv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glGetVertexAttribfv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetVertexAttribfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8331,6 +8632,7 @@ void rvk_glGetVertexAttribfv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glGetVertexAttribiv(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetVertexAttribiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -8360,6 +8662,7 @@ void rvk_glGetVertexAttribiv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glGetnCompressedTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint lod, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetnCompressedTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(lod));
@@ -8413,6 +8716,7 @@ void rvk_glGetnCompressedTexImage(::av::ClientTransport& rvk_t, GLenum target, G
 }
 
 void rvk_glGetnTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetnTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -8468,6 +8772,7 @@ void rvk_glGetnTexImage(::av::ClientTransport& rvk_t, GLenum target, GLint level
 }
 
 void rvk_glGetnUniformdv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei bufSize, GLdouble* params) {
+    AV_SCOPE("rvk_glGetnUniformdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8498,6 +8803,7 @@ void rvk_glGetnUniformdv(::av::ClientTransport& rvk_t, GLuint program, GLint loc
 }
 
 void rvk_glGetnUniformfv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei bufSize, GLfloat* params) {
+    AV_SCOPE("rvk_glGetnUniformfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8528,6 +8834,7 @@ void rvk_glGetnUniformfv(::av::ClientTransport& rvk_t, GLuint program, GLint loc
 }
 
 void rvk_glGetnUniformiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei bufSize, GLint* params) {
+    AV_SCOPE("rvk_glGetnUniformiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8558,6 +8865,7 @@ void rvk_glGetnUniformiv(::av::ClientTransport& rvk_t, GLuint program, GLint loc
 }
 
 void rvk_glGetnUniformuiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei bufSize, GLuint* params) {
+    AV_SCOPE("rvk_glGetnUniformuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -8588,6 +8896,7 @@ void rvk_glGetnUniformuiv(::av::ClientTransport& rvk_t, GLuint program, GLint lo
 }
 
 void rvk_glHint(::av::ClientTransport& rvk_t, GLenum target, GLenum mode) {
+    AV_SCOPE("rvk_glHint");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -8600,6 +8909,7 @@ void rvk_glHint(::av::ClientTransport& rvk_t, GLenum target, GLenum mode) {
 }
 
 void rvk_glInvalidateBufferData(::av::ClientTransport& rvk_t, GLuint buffer) {
+    AV_SCOPE("rvk_glInvalidateBufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8611,6 +8921,7 @@ void rvk_glInvalidateBufferData(::av::ClientTransport& rvk_t, GLuint buffer) {
 }
 
 void rvk_glInvalidateBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr length) {
+    AV_SCOPE("rvk_glInvalidateBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -8624,6 +8935,7 @@ void rvk_glInvalidateBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, 
 }
 
 void rvk_glInvalidateFramebuffer(::av::ClientTransport& rvk_t, GLenum target, GLsizei numAttachments, const GLenum* attachments) {
+    AV_SCOPE("rvk_glInvalidateFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(numAttachments));
@@ -8667,6 +8979,7 @@ void rvk_glInvalidateFramebuffer(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glInvalidateNamedFramebufferData(::av::ClientTransport& rvk_t, GLuint framebuffer, GLsizei numAttachments, const GLenum* attachments) {
+    AV_SCOPE("rvk_glInvalidateNamedFramebufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(numAttachments));
@@ -8710,6 +9023,7 @@ void rvk_glInvalidateNamedFramebufferData(::av::ClientTransport& rvk_t, GLuint f
 }
 
 void rvk_glInvalidateNamedFramebufferSubData(::av::ClientTransport& rvk_t, GLuint framebuffer, GLsizei numAttachments, const GLenum* attachments, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glInvalidateNamedFramebufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(numAttachments));
@@ -8757,6 +9071,7 @@ void rvk_glInvalidateNamedFramebufferSubData(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glInvalidateSubFramebuffer(::av::ClientTransport& rvk_t, GLenum target, GLsizei numAttachments, const GLenum* attachments, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glInvalidateSubFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(numAttachments));
@@ -8804,6 +9119,7 @@ void rvk_glInvalidateSubFramebuffer(::av::ClientTransport& rvk_t, GLenum target,
 }
 
 void rvk_glInvalidateTexImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glInvalidateTexImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -8816,6 +9132,7 @@ void rvk_glInvalidateTexImage(::av::ClientTransport& rvk_t, GLuint texture, GLin
 }
 
 void rvk_glInvalidateTexSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth) {
+    AV_SCOPE("rvk_glInvalidateTexSubImage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -8834,6 +9151,7 @@ void rvk_glInvalidateTexSubImage(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 GLboolean rvk_glIsBuffer(::av::ClientTransport& rvk_t, GLuint buffer) {
+    AV_SCOPE("rvk_glIsBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8853,6 +9171,7 @@ GLboolean rvk_glIsBuffer(::av::ClientTransport& rvk_t, GLuint buffer) {
 }
 
 GLboolean rvk_glIsEnabled(::av::ClientTransport& rvk_t, GLenum cap) {
+    AV_SCOPE("rvk_glIsEnabled");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(cap));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8872,6 +9191,7 @@ GLboolean rvk_glIsEnabled(::av::ClientTransport& rvk_t, GLenum cap) {
 }
 
 GLboolean rvk_glIsEnabledi(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glIsEnabledi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -8892,6 +9212,7 @@ GLboolean rvk_glIsEnabledi(::av::ClientTransport& rvk_t, GLenum target, GLuint i
 }
 
 GLboolean rvk_glIsFramebuffer(::av::ClientTransport& rvk_t, GLuint framebuffer) {
+    AV_SCOPE("rvk_glIsFramebuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8911,6 +9232,7 @@ GLboolean rvk_glIsFramebuffer(::av::ClientTransport& rvk_t, GLuint framebuffer) 
 }
 
 GLboolean rvk_glIsProgram(::av::ClientTransport& rvk_t, GLuint program) {
+    AV_SCOPE("rvk_glIsProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8930,6 +9252,7 @@ GLboolean rvk_glIsProgram(::av::ClientTransport& rvk_t, GLuint program) {
 }
 
 GLboolean rvk_glIsProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline) {
+    AV_SCOPE("rvk_glIsProgramPipeline");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8949,6 +9272,7 @@ GLboolean rvk_glIsProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline)
 }
 
 GLboolean rvk_glIsQuery(::av::ClientTransport& rvk_t, GLuint id) {
+    AV_SCOPE("rvk_glIsQuery");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8968,6 +9292,7 @@ GLboolean rvk_glIsQuery(::av::ClientTransport& rvk_t, GLuint id) {
 }
 
 GLboolean rvk_glIsRenderbuffer(::av::ClientTransport& rvk_t, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glIsRenderbuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -8987,6 +9312,7 @@ GLboolean rvk_glIsRenderbuffer(::av::ClientTransport& rvk_t, GLuint renderbuffer
 }
 
 GLboolean rvk_glIsSampler(::av::ClientTransport& rvk_t, GLuint sampler) {
+    AV_SCOPE("rvk_glIsSampler");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9006,6 +9332,7 @@ GLboolean rvk_glIsSampler(::av::ClientTransport& rvk_t, GLuint sampler) {
 }
 
 GLboolean rvk_glIsShader(::av::ClientTransport& rvk_t, GLuint shader) {
+    AV_SCOPE("rvk_glIsShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9025,6 +9352,7 @@ GLboolean rvk_glIsShader(::av::ClientTransport& rvk_t, GLuint shader) {
 }
 
 GLboolean rvk_glIsSync(::av::ClientTransport& rvk_t, uint64_t sync) {
+    AV_SCOPE("rvk_glIsSync");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(sync);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9044,6 +9372,7 @@ GLboolean rvk_glIsSync(::av::ClientTransport& rvk_t, uint64_t sync) {
 }
 
 GLboolean rvk_glIsTexture(::av::ClientTransport& rvk_t, GLuint texture) {
+    AV_SCOPE("rvk_glIsTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9063,6 +9392,7 @@ GLboolean rvk_glIsTexture(::av::ClientTransport& rvk_t, GLuint texture) {
 }
 
 GLboolean rvk_glIsTransformFeedback(::av::ClientTransport& rvk_t, GLuint id) {
+    AV_SCOPE("rvk_glIsTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9082,6 +9412,7 @@ GLboolean rvk_glIsTransformFeedback(::av::ClientTransport& rvk_t, GLuint id) {
 }
 
 GLboolean rvk_glIsVertexArray(::av::ClientTransport& rvk_t, GLuint array) {
+    AV_SCOPE("rvk_glIsVertexArray");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9101,6 +9432,7 @@ GLboolean rvk_glIsVertexArray(::av::ClientTransport& rvk_t, GLuint array) {
 }
 
 void rvk_glLineWidth(::av::ClientTransport& rvk_t, GLfloat width) {
+    AV_SCOPE("rvk_glLineWidth");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(width);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9112,6 +9444,7 @@ void rvk_glLineWidth(::av::ClientTransport& rvk_t, GLfloat width) {
 }
 
 void rvk_glLinkProgram(::av::ClientTransport& rvk_t, GLuint program) {
+    AV_SCOPE("rvk_glLinkProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9123,6 +9456,7 @@ void rvk_glLinkProgram(::av::ClientTransport& rvk_t, GLuint program) {
 }
 
 void rvk_glLogicOp(::av::ClientTransport& rvk_t, GLenum opcode) {
+    AV_SCOPE("rvk_glLogicOp");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(opcode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9134,6 +9468,7 @@ void rvk_glLogicOp(::av::ClientTransport& rvk_t, GLenum opcode) {
 }
 
 void rvk_glMemoryBarrier(::av::ClientTransport& rvk_t, GLbitfield barriers) {
+    AV_SCOPE("rvk_glMemoryBarrier");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(barriers));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9145,6 +9480,7 @@ void rvk_glMemoryBarrier(::av::ClientTransport& rvk_t, GLbitfield barriers) {
 }
 
 void rvk_glMemoryBarrierByRegion(::av::ClientTransport& rvk_t, GLbitfield barriers) {
+    AV_SCOPE("rvk_glMemoryBarrierByRegion");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(barriers));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9156,6 +9492,7 @@ void rvk_glMemoryBarrierByRegion(::av::ClientTransport& rvk_t, GLbitfield barrie
 }
 
 void rvk_glMinSampleShading(::av::ClientTransport& rvk_t, GLfloat value) {
+    AV_SCOPE("rvk_glMinSampleShading");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(value);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -9167,6 +9504,7 @@ void rvk_glMinSampleShading(::av::ClientTransport& rvk_t, GLfloat value) {
 }
 
 void rvk_glMultiDrawArrays(::av::ClientTransport& rvk_t, GLenum mode, const GLint* first, const GLsizei* count, GLsizei drawcount) {
+    AV_SCOPE("rvk_glMultiDrawArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t first_want = 0;
@@ -9241,6 +9579,7 @@ void rvk_glMultiDrawArrays(::av::ClientTransport& rvk_t, GLenum mode, const GLin
 }
 
 void rvk_glMultiDrawArraysIndirect(::av::ClientTransport& rvk_t, GLenum mode, uint64_t indirect, GLsizei drawcount, GLsizei stride) {
+    AV_SCOPE("rvk_glMultiDrawArraysIndirect");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<uint64_t>(indirect);
@@ -9255,6 +9594,7 @@ void rvk_glMultiDrawArraysIndirect(::av::ClientTransport& rvk_t, GLenum mode, ui
 }
 
 void rvk_glMultiDrawArraysIndirectCount(::av::ClientTransport& rvk_t, GLenum mode, uint64_t indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride) {
+    AV_SCOPE("rvk_glMultiDrawArraysIndirectCount");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<uint64_t>(indirect);
@@ -9270,6 +9610,7 @@ void rvk_glMultiDrawArraysIndirectCount(::av::ClientTransport& rvk_t, GLenum mod
 }
 
 void rvk_glMultiDrawElements(::av::ClientTransport& rvk_t, GLenum mode, const GLsizei* count, GLenum type, const uint64_t* indices, GLsizei drawcount) {
+    AV_SCOPE("rvk_glMultiDrawElements");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t count_want = 0;
@@ -9322,6 +9663,7 @@ void rvk_glMultiDrawElements(::av::ClientTransport& rvk_t, GLenum mode, const GL
 }
 
 void rvk_glMultiDrawElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, const GLsizei* count, GLenum type, const uint64_t* indices, GLsizei drawcount, const GLint* basevertex) {
+    AV_SCOPE("rvk_glMultiDrawElementsBaseVertex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t count_want = 0;
@@ -9405,6 +9747,7 @@ void rvk_glMultiDrawElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode
 }
 
 void rvk_glMultiDrawElementsIndirect(::av::ClientTransport& rvk_t, GLenum mode, GLenum type, uint64_t indirect, GLsizei drawcount, GLsizei stride) {
+    AV_SCOPE("rvk_glMultiDrawElementsIndirect");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9420,6 +9763,7 @@ void rvk_glMultiDrawElementsIndirect(::av::ClientTransport& rvk_t, GLenum mode, 
 }
 
 void rvk_glMultiDrawElementsIndirectCount(::av::ClientTransport& rvk_t, GLenum mode, GLenum type, uint64_t indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride) {
+    AV_SCOPE("rvk_glMultiDrawElementsIndirectCount");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9436,6 +9780,7 @@ void rvk_glMultiDrawElementsIndirectCount(::av::ClientTransport& rvk_t, GLenum m
 }
 
 void rvk_glMultiTexCoordP1ui(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9449,6 +9794,7 @@ void rvk_glMultiTexCoordP1ui(::av::ClientTransport& rvk_t, GLenum texture, GLenu
 }
 
 void rvk_glMultiTexCoordP1uiv(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9492,6 +9838,7 @@ void rvk_glMultiTexCoordP1uiv(::av::ClientTransport& rvk_t, GLenum texture, GLen
 }
 
 void rvk_glMultiTexCoordP2ui(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9505,6 +9852,7 @@ void rvk_glMultiTexCoordP2ui(::av::ClientTransport& rvk_t, GLenum texture, GLenu
 }
 
 void rvk_glMultiTexCoordP2uiv(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9548,6 +9896,7 @@ void rvk_glMultiTexCoordP2uiv(::av::ClientTransport& rvk_t, GLenum texture, GLen
 }
 
 void rvk_glMultiTexCoordP3ui(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9561,6 +9910,7 @@ void rvk_glMultiTexCoordP3ui(::av::ClientTransport& rvk_t, GLenum texture, GLenu
 }
 
 void rvk_glMultiTexCoordP3uiv(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9604,6 +9954,7 @@ void rvk_glMultiTexCoordP3uiv(::av::ClientTransport& rvk_t, GLenum texture, GLen
 }
 
 void rvk_glMultiTexCoordP4ui(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9617,6 +9968,7 @@ void rvk_glMultiTexCoordP4ui(::av::ClientTransport& rvk_t, GLenum texture, GLenu
 }
 
 void rvk_glMultiTexCoordP4uiv(::av::ClientTransport& rvk_t, GLenum texture, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glMultiTexCoordP4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -9660,6 +10012,7 @@ void rvk_glMultiTexCoordP4uiv(::av::ClientTransport& rvk_t, GLenum texture, GLen
 }
 
 void rvk_glNamedBufferData(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, const void* data, GLenum usage) {
+    AV_SCOPE("rvk_glNamedBufferData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -9704,6 +10057,7 @@ void rvk_glNamedBufferData(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeip
 }
 
 void rvk_glNamedBufferStorage(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, const void* data, GLbitfield flags) {
+    AV_SCOPE("rvk_glNamedBufferStorage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -9748,6 +10102,7 @@ void rvk_glNamedBufferStorage(::av::ClientTransport& rvk_t, GLuint buffer, GLsiz
 }
 
 void rvk_glNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, const void* data) {
+    AV_SCOPE("rvk_glNamedBufferSubData");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -9792,6 +10147,7 @@ void rvk_glNamedBufferSubData(::av::ClientTransport& rvk_t, GLuint buffer, GLint
 }
 
 void rvk_glNamedFramebufferDrawBuffer(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum buf) {
+    AV_SCOPE("rvk_glNamedFramebufferDrawBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(buf));
@@ -9804,6 +10160,7 @@ void rvk_glNamedFramebufferDrawBuffer(::av::ClientTransport& rvk_t, GLuint frame
 }
 
 void rvk_glNamedFramebufferDrawBuffers(::av::ClientTransport& rvk_t, GLuint framebuffer, GLsizei n, const GLenum* bufs) {
+    AV_SCOPE("rvk_glNamedFramebufferDrawBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(n));
@@ -9847,6 +10204,7 @@ void rvk_glNamedFramebufferDrawBuffers(::av::ClientTransport& rvk_t, GLuint fram
 }
 
 void rvk_glNamedFramebufferParameteri(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glNamedFramebufferParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -9860,6 +10218,7 @@ void rvk_glNamedFramebufferParameteri(::av::ClientTransport& rvk_t, GLuint frame
 }
 
 void rvk_glNamedFramebufferReadBuffer(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum src) {
+    AV_SCOPE("rvk_glNamedFramebufferReadBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(src));
@@ -9872,6 +10231,7 @@ void rvk_glNamedFramebufferReadBuffer(::av::ClientTransport& rvk_t, GLuint frame
 }
 
 void rvk_glNamedFramebufferRenderbuffer(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glNamedFramebufferRenderbuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -9886,6 +10246,7 @@ void rvk_glNamedFramebufferRenderbuffer(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedFramebufferTexture(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glNamedFramebufferTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -9900,6 +10261,7 @@ void rvk_glNamedFramebufferTexture(::av::ClientTransport& rvk_t, GLuint framebuf
 }
 
 void rvk_glNamedFramebufferTextureLayer(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer) {
+    AV_SCOPE("rvk_glNamedFramebufferTextureLayer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -9915,6 +10277,7 @@ void rvk_glNamedFramebufferTextureLayer(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedRenderbufferStorage(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glNamedRenderbufferStorage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -9929,6 +10292,7 @@ void rvk_glNamedRenderbufferStorage(::av::ClientTransport& rvk_t, GLuint renderb
 }
 
 void rvk_glNamedRenderbufferStorageMultisample(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glNamedRenderbufferStorageMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -9944,6 +10308,7 @@ void rvk_glNamedRenderbufferStorageMultisample(::av::ClientTransport& rvk_t, GLu
 }
 
 void rvk_glNormalP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glNormalP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(coords));
@@ -9956,6 +10321,7 @@ void rvk_glNormalP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) 
 }
 
 void rvk_glNormalP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glNormalP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -9998,6 +10364,7 @@ void rvk_glNormalP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* 
 }
 
 void rvk_glObjectLabel(::av::ClientTransport& rvk_t, GLenum identifier, GLuint name, GLsizei length, const GLchar* label) {
+    AV_SCOPE("rvk_glObjectLabel");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(identifier));
     rvk_b.write_varint(static_cast<uint64_t>(name));
@@ -10017,6 +10384,7 @@ void rvk_glObjectLabel(::av::ClientTransport& rvk_t, GLenum identifier, GLuint n
 }
 
 void rvk_glObjectPtrLabel(::av::ClientTransport& rvk_t, uint64_t ptr, GLsizei length, const GLchar* label) {
+    AV_SCOPE("rvk_glObjectPtrLabel");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(ptr);
     rvk_b.write_varint(static_cast<uint64_t>(length));
@@ -10035,6 +10403,7 @@ void rvk_glObjectPtrLabel(::av::ClientTransport& rvk_t, uint64_t ptr, GLsizei le
 }
 
 void rvk_glPatchParameterfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloat* values) {
+    AV_SCOPE("rvk_glPatchParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t values_want = 0;
@@ -10077,6 +10446,7 @@ void rvk_glPatchParameterfv(::av::ClientTransport& rvk_t, GLenum pname, const GL
 }
 
 void rvk_glPatchParameteri(::av::ClientTransport& rvk_t, GLenum pname, GLint value) {
+    AV_SCOPE("rvk_glPatchParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -10089,6 +10459,7 @@ void rvk_glPatchParameteri(::av::ClientTransport& rvk_t, GLenum pname, GLint val
 }
 
 void rvk_glPauseTransformFeedback(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPauseTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPauseTransformFeedback",
@@ -10099,6 +10470,7 @@ void rvk_glPauseTransformFeedback(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPixelStoref(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glPixelStoref");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_pod<GLfloat>(param);
@@ -10111,6 +10483,7 @@ void rvk_glPixelStoref(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param
 }
 
 void rvk_glPixelStorei(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glPixelStorei");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(param));
@@ -10123,6 +10496,7 @@ void rvk_glPixelStorei(::av::ClientTransport& rvk_t, GLenum pname, GLint param) 
 }
 
 void rvk_glPointParameterf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glPointParameterf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_pod<GLfloat>(param);
@@ -10135,6 +10509,7 @@ void rvk_glPointParameterf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat p
 }
 
 void rvk_glPointParameterfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glPointParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -10177,6 +10552,7 @@ void rvk_glPointParameterfv(::av::ClientTransport& rvk_t, GLenum pname, const GL
 }
 
 void rvk_glPointParameteri(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glPointParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(param));
@@ -10189,6 +10565,7 @@ void rvk_glPointParameteri(::av::ClientTransport& rvk_t, GLenum pname, GLint par
 }
 
 void rvk_glPointParameteriv(::av::ClientTransport& rvk_t, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glPointParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -10231,6 +10608,7 @@ void rvk_glPointParameteriv(::av::ClientTransport& rvk_t, GLenum pname, const GL
 }
 
 void rvk_glPointSize(::av::ClientTransport& rvk_t, GLfloat size) {
+    AV_SCOPE("rvk_glPointSize");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(size);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -10242,6 +10620,7 @@ void rvk_glPointSize(::av::ClientTransport& rvk_t, GLfloat size) {
 }
 
 void rvk_glPolygonMode(::av::ClientTransport& rvk_t, GLenum face, GLenum mode) {
+    AV_SCOPE("rvk_glPolygonMode");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -10254,6 +10633,7 @@ void rvk_glPolygonMode(::av::ClientTransport& rvk_t, GLenum face, GLenum mode) {
 }
 
 void rvk_glPolygonOffset(::av::ClientTransport& rvk_t, GLfloat factor, GLfloat units) {
+    AV_SCOPE("rvk_glPolygonOffset");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(factor);
     rvk_b.write_pod<GLfloat>(units);
@@ -10266,6 +10646,7 @@ void rvk_glPolygonOffset(::av::ClientTransport& rvk_t, GLfloat factor, GLfloat u
 }
 
 void rvk_glPolygonOffsetClamp(::av::ClientTransport& rvk_t, GLfloat factor, GLfloat units, GLfloat clamp) {
+    AV_SCOPE("rvk_glPolygonOffsetClamp");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(factor);
     rvk_b.write_pod<GLfloat>(units);
@@ -10279,6 +10660,7 @@ void rvk_glPolygonOffsetClamp(::av::ClientTransport& rvk_t, GLfloat factor, GLfl
 }
 
 void rvk_glPopDebugGroup(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPopDebugGroup");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPopDebugGroup",
@@ -10289,6 +10671,7 @@ void rvk_glPopDebugGroup(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPrimitiveRestartIndex(::av::ClientTransport& rvk_t, GLuint index) {
+    AV_SCOPE("rvk_glPrimitiveRestartIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -10300,6 +10683,7 @@ void rvk_glPrimitiveRestartIndex(::av::ClientTransport& rvk_t, GLuint index) {
 }
 
 void rvk_glProgramBinary(::av::ClientTransport& rvk_t, GLuint program, GLenum binaryFormat, const void* binary, GLsizei length) {
+    AV_SCOPE("rvk_glProgramBinary");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(binaryFormat));
@@ -10344,6 +10728,7 @@ void rvk_glProgramBinary(::av::ClientTransport& rvk_t, GLuint program, GLenum bi
 }
 
 void rvk_glProgramParameteri(::av::ClientTransport& rvk_t, GLuint program, GLenum pname, GLint value) {
+    AV_SCOPE("rvk_glProgramParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -10357,6 +10742,7 @@ void rvk_glProgramParameteri(::av::ClientTransport& rvk_t, GLuint program, GLenu
 }
 
 void rvk_glProgramUniform1d(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble v0) {
+    AV_SCOPE("rvk_glProgramUniform1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10370,6 +10756,7 @@ void rvk_glProgramUniform1d(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform1dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10414,6 +10801,7 @@ void rvk_glProgramUniform1dv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform1f(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0) {
+    AV_SCOPE("rvk_glProgramUniform1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10427,6 +10815,7 @@ void rvk_glProgramUniform1f(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform1fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10471,6 +10860,7 @@ void rvk_glProgramUniform1fv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform1i(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0) {
+    AV_SCOPE("rvk_glProgramUniform1i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10484,6 +10874,7 @@ void rvk_glProgramUniform1i(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform1iv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform1iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10528,6 +10919,7 @@ void rvk_glProgramUniform1iv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform1ui(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0) {
+    AV_SCOPE("rvk_glProgramUniform1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10541,6 +10933,7 @@ void rvk_glProgramUniform1ui(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform1uiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10585,6 +10978,7 @@ void rvk_glProgramUniform1uiv(::av::ClientTransport& rvk_t, GLuint program, GLin
 }
 
 void rvk_glProgramUniform2d(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble v0, GLdouble v1) {
+    AV_SCOPE("rvk_glProgramUniform2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10599,6 +10993,7 @@ void rvk_glProgramUniform2d(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform2dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10643,6 +11038,7 @@ void rvk_glProgramUniform2dv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform2f(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1) {
+    AV_SCOPE("rvk_glProgramUniform2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10657,6 +11053,7 @@ void rvk_glProgramUniform2f(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform2fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10701,6 +11098,7 @@ void rvk_glProgramUniform2fv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform2i(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1) {
+    AV_SCOPE("rvk_glProgramUniform2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10715,6 +11113,7 @@ void rvk_glProgramUniform2i(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform2iv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10759,6 +11158,7 @@ void rvk_glProgramUniform2iv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform2ui(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1) {
+    AV_SCOPE("rvk_glProgramUniform2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10773,6 +11173,7 @@ void rvk_glProgramUniform2ui(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform2uiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10817,6 +11218,7 @@ void rvk_glProgramUniform2uiv(::av::ClientTransport& rvk_t, GLuint program, GLin
 }
 
 void rvk_glProgramUniform3d(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble v0, GLdouble v1, GLdouble v2) {
+    AV_SCOPE("rvk_glProgramUniform3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10832,6 +11234,7 @@ void rvk_glProgramUniform3d(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform3dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10876,6 +11279,7 @@ void rvk_glProgramUniform3dv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform3f(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) {
+    AV_SCOPE("rvk_glProgramUniform3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10891,6 +11295,7 @@ void rvk_glProgramUniform3f(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform3fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10935,6 +11340,7 @@ void rvk_glProgramUniform3fv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform3i(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1, GLint v2) {
+    AV_SCOPE("rvk_glProgramUniform3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10950,6 +11356,7 @@ void rvk_glProgramUniform3i(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform3iv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -10994,6 +11401,7 @@ void rvk_glProgramUniform3iv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform3ui(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2) {
+    AV_SCOPE("rvk_glProgramUniform3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11009,6 +11417,7 @@ void rvk_glProgramUniform3ui(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform3uiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11053,6 +11462,7 @@ void rvk_glProgramUniform3uiv(::av::ClientTransport& rvk_t, GLuint program, GLin
 }
 
 void rvk_glProgramUniform4d(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble v0, GLdouble v1, GLdouble v2, GLdouble v3) {
+    AV_SCOPE("rvk_glProgramUniform4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11069,6 +11479,7 @@ void rvk_glProgramUniform4d(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform4dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11113,6 +11524,7 @@ void rvk_glProgramUniform4dv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform4f(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) {
+    AV_SCOPE("rvk_glProgramUniform4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11129,6 +11541,7 @@ void rvk_glProgramUniform4f(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform4fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11173,6 +11586,7 @@ void rvk_glProgramUniform4fv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform4i(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) {
+    AV_SCOPE("rvk_glProgramUniform4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11189,6 +11603,7 @@ void rvk_glProgramUniform4i(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform4iv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11233,6 +11648,7 @@ void rvk_glProgramUniform4iv(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform4ui(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) {
+    AV_SCOPE("rvk_glProgramUniform4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11249,6 +11665,7 @@ void rvk_glProgramUniform4ui(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniform4uiv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11293,6 +11710,7 @@ void rvk_glProgramUniform4uiv(::av::ClientTransport& rvk_t, GLuint program, GLin
 }
 
 void rvk_glProgramUniformMatrix2dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11338,6 +11756,7 @@ void rvk_glProgramUniformMatrix2dv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix2fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11383,6 +11802,7 @@ void rvk_glProgramUniformMatrix2fv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix2x3dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11428,6 +11848,7 @@ void rvk_glProgramUniformMatrix2x3dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix2x3fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11473,6 +11894,7 @@ void rvk_glProgramUniformMatrix2x3fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix2x4dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11518,6 +11940,7 @@ void rvk_glProgramUniformMatrix2x4dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix2x4fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11563,6 +11986,7 @@ void rvk_glProgramUniformMatrix2x4fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix3dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11608,6 +12032,7 @@ void rvk_glProgramUniformMatrix3dv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix3fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11653,6 +12078,7 @@ void rvk_glProgramUniformMatrix3fv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix3x2dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11698,6 +12124,7 @@ void rvk_glProgramUniformMatrix3x2dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix3x2fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11743,6 +12170,7 @@ void rvk_glProgramUniformMatrix3x2fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix3x4dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11788,6 +12216,7 @@ void rvk_glProgramUniformMatrix3x4dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix3x4fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11833,6 +12262,7 @@ void rvk_glProgramUniformMatrix3x4fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix4dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11878,6 +12308,7 @@ void rvk_glProgramUniformMatrix4dv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix4fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11923,6 +12354,7 @@ void rvk_glProgramUniformMatrix4fv(::av::ClientTransport& rvk_t, GLuint program,
 }
 
 void rvk_glProgramUniformMatrix4x2dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -11968,6 +12400,7 @@ void rvk_glProgramUniformMatrix4x2dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix4x2fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -12013,6 +12446,7 @@ void rvk_glProgramUniformMatrix4x2fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix4x3dv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -12058,6 +12492,7 @@ void rvk_glProgramUniformMatrix4x3dv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProgramUniformMatrix4x3fv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -12103,6 +12538,7 @@ void rvk_glProgramUniformMatrix4x3fv(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glProvokingVertex(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glProvokingVertex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -12114,6 +12550,7 @@ void rvk_glProvokingVertex(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glPushDebugGroup(::av::ClientTransport& rvk_t, GLenum source, GLuint id, GLsizei length, const GLchar* message) {
+    AV_SCOPE("rvk_glPushDebugGroup");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(source));
     rvk_b.write_varint(static_cast<uint64_t>(id));
@@ -12133,6 +12570,7 @@ void rvk_glPushDebugGroup(::av::ClientTransport& rvk_t, GLenum source, GLuint id
 }
 
 void rvk_glQueryCounter(::av::ClientTransport& rvk_t, GLuint id, GLenum target) {
+    AV_SCOPE("rvk_glQueryCounter");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(id));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -12145,6 +12583,7 @@ void rvk_glQueryCounter(::av::ClientTransport& rvk_t, GLuint id, GLenum target) 
 }
 
 void rvk_glReadBuffer(::av::ClientTransport& rvk_t, GLenum src) {
+    AV_SCOPE("rvk_glReadBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(src));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -12156,6 +12595,7 @@ void rvk_glReadBuffer(::av::ClientTransport& rvk_t, GLenum src) {
 }
 
 void rvk_glReadPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glReadPixels");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -12212,6 +12652,7 @@ void rvk_glReadPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei wi
 }
 
 void rvk_glReadnPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, void* data, bool data_is_offset) {
+    AV_SCOPE("rvk_glReadnPixels");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -12269,6 +12710,7 @@ void rvk_glReadnPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei w
 }
 
 void rvk_glReleaseShaderCompiler(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glReleaseShaderCompiler");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glReleaseShaderCompiler",
@@ -12279,6 +12721,7 @@ void rvk_glReleaseShaderCompiler(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glRenderbufferStorage(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glRenderbufferStorage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -12293,6 +12736,7 @@ void rvk_glRenderbufferStorage(::av::ClientTransport& rvk_t, GLenum target, GLen
 }
 
 void rvk_glRenderbufferStorageMultisample(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glRenderbufferStorageMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -12308,6 +12752,7 @@ void rvk_glRenderbufferStorageMultisample(::av::ClientTransport& rvk_t, GLenum t
 }
 
 void rvk_glResumeTransformFeedback(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glResumeTransformFeedback");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glResumeTransformFeedback",
@@ -12318,6 +12763,7 @@ void rvk_glResumeTransformFeedback(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glSampleCoverage(::av::ClientTransport& rvk_t, GLfloat value, GLboolean invert) {
+    AV_SCOPE("rvk_glSampleCoverage");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(value);
     rvk_b.write_varint(static_cast<uint64_t>(invert));
@@ -12330,6 +12776,7 @@ void rvk_glSampleCoverage(::av::ClientTransport& rvk_t, GLfloat value, GLboolean
 }
 
 void rvk_glSampleMaski(::av::ClientTransport& rvk_t, GLuint maskNumber, GLbitfield mask) {
+    AV_SCOPE("rvk_glSampleMaski");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(maskNumber));
     rvk_b.write_varint(static_cast<uint64_t>(mask));
@@ -12342,6 +12789,7 @@ void rvk_glSampleMaski(::av::ClientTransport& rvk_t, GLuint maskNumber, GLbitfie
 }
 
 void rvk_glSamplerParameterIiv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, const GLint* param) {
+    AV_SCOPE("rvk_glSamplerParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12385,6 +12833,7 @@ void rvk_glSamplerParameterIiv(::av::ClientTransport& rvk_t, GLuint sampler, GLe
 }
 
 void rvk_glSamplerParameterIuiv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, const GLuint* param) {
+    AV_SCOPE("rvk_glSamplerParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12428,6 +12877,7 @@ void rvk_glSamplerParameterIuiv(::av::ClientTransport& rvk_t, GLuint sampler, GL
 }
 
 void rvk_glSamplerParameterf(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glSamplerParameterf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12441,6 +12891,7 @@ void rvk_glSamplerParameterf(::av::ClientTransport& rvk_t, GLuint sampler, GLenu
 }
 
 void rvk_glSamplerParameterfv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, const GLfloat* param) {
+    AV_SCOPE("rvk_glSamplerParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12484,6 +12935,7 @@ void rvk_glSamplerParameterfv(::av::ClientTransport& rvk_t, GLuint sampler, GLen
 }
 
 void rvk_glSamplerParameteri(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glSamplerParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12497,6 +12949,7 @@ void rvk_glSamplerParameteri(::av::ClientTransport& rvk_t, GLuint sampler, GLenu
 }
 
 void rvk_glSamplerParameteriv(::av::ClientTransport& rvk_t, GLuint sampler, GLenum pname, const GLint* param) {
+    AV_SCOPE("rvk_glSamplerParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -12540,6 +12993,7 @@ void rvk_glSamplerParameteriv(::av::ClientTransport& rvk_t, GLuint sampler, GLen
 }
 
 void rvk_glScissor(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glScissor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -12554,6 +13008,7 @@ void rvk_glScissor(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width
 }
 
 void rvk_glScissorArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLint* v) {
+    AV_SCOPE("rvk_glScissorArrayv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -12597,6 +13052,7 @@ void rvk_glScissorArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei cou
 }
 
 void rvk_glScissorIndexed(::av::ClientTransport& rvk_t, GLuint index, GLint left, GLint bottom, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glScissorIndexed");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(left));
@@ -12612,6 +13068,7 @@ void rvk_glScissorIndexed(::av::ClientTransport& rvk_t, GLuint index, GLint left
 }
 
 void rvk_glScissorIndexedv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glScissorIndexedv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -12654,6 +13111,7 @@ void rvk_glScissorIndexedv(::av::ClientTransport& rvk_t, GLuint index, const GLi
 }
 
 void rvk_glSecondaryColorP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color) {
+    AV_SCOPE("rvk_glSecondaryColorP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(color));
@@ -12666,6 +13124,7 @@ void rvk_glSecondaryColorP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint 
 }
 
 void rvk_glSecondaryColorP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* color) {
+    AV_SCOPE("rvk_glSecondaryColorP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
@@ -12708,6 +13167,7 @@ void rvk_glSecondaryColorP3uiv(::av::ClientTransport& rvk_t, GLenum type, const 
 }
 
 void rvk_glShaderBinary(::av::ClientTransport& rvk_t, GLsizei count, const GLuint* shaders, GLenum binaryFormat, const void* binary, GLsizei length) {
+    AV_SCOPE("rvk_glShaderBinary");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     size_t shaders_want = 0;
@@ -12783,6 +13243,7 @@ void rvk_glShaderBinary(::av::ClientTransport& rvk_t, GLsizei count, const GLuin
 }
 
 void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei count, const GLchar** string, const GLint* length) {
+    AV_SCOPE("rvk_glShaderSource");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -12840,6 +13301,7 @@ void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei cou
 }
 
 void rvk_glShaderStorageBlockBinding(::av::ClientTransport& rvk_t, GLuint program, GLuint storageBlockIndex, GLuint storageBlockBinding) {
+    AV_SCOPE("rvk_glShaderStorageBlockBinding");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(storageBlockIndex));
@@ -12853,6 +13315,7 @@ void rvk_glShaderStorageBlockBinding(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glSpecializeShader(::av::ClientTransport& rvk_t, GLuint shader, const GLchar* pEntryPoint, GLuint numSpecializationConstants, const GLuint* pConstantIndex, const GLuint* pConstantValue) {
+    AV_SCOPE("rvk_glSpecializeShader");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
     rvk_b.write_pod<uint8_t>(pEntryPoint != nullptr ? 1 : 0);
@@ -12933,6 +13396,7 @@ void rvk_glSpecializeShader(::av::ClientTransport& rvk_t, GLuint shader, const G
 }
 
 void rvk_glStencilFunc(::av::ClientTransport& rvk_t, GLenum func, GLint ref, GLuint mask) {
+    AV_SCOPE("rvk_glStencilFunc");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(func));
     rvk_b.write_varint(static_cast<uint64_t>(ref));
@@ -12946,6 +13410,7 @@ void rvk_glStencilFunc(::av::ClientTransport& rvk_t, GLenum func, GLint ref, GLu
 }
 
 void rvk_glStencilFuncSeparate(::av::ClientTransport& rvk_t, GLenum face, GLenum func, GLint ref, GLuint mask) {
+    AV_SCOPE("rvk_glStencilFuncSeparate");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(func));
@@ -12960,6 +13425,7 @@ void rvk_glStencilFuncSeparate(::av::ClientTransport& rvk_t, GLenum face, GLenum
 }
 
 void rvk_glStencilMask(::av::ClientTransport& rvk_t, GLuint mask) {
+    AV_SCOPE("rvk_glStencilMask");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -12971,6 +13437,7 @@ void rvk_glStencilMask(::av::ClientTransport& rvk_t, GLuint mask) {
 }
 
 void rvk_glStencilMaskSeparate(::av::ClientTransport& rvk_t, GLenum face, GLuint mask) {
+    AV_SCOPE("rvk_glStencilMaskSeparate");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(mask));
@@ -12983,6 +13450,7 @@ void rvk_glStencilMaskSeparate(::av::ClientTransport& rvk_t, GLenum face, GLuint
 }
 
 void rvk_glStencilOp(::av::ClientTransport& rvk_t, GLenum fail, GLenum zfail, GLenum zpass) {
+    AV_SCOPE("rvk_glStencilOp");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(fail));
     rvk_b.write_varint(static_cast<uint64_t>(zfail));
@@ -12996,6 +13464,7 @@ void rvk_glStencilOp(::av::ClientTransport& rvk_t, GLenum fail, GLenum zfail, GL
 }
 
 void rvk_glStencilOpSeparate(::av::ClientTransport& rvk_t, GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass) {
+    AV_SCOPE("rvk_glStencilOpSeparate");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(sfail));
@@ -13010,6 +13479,7 @@ void rvk_glStencilOpSeparate(::av::ClientTransport& rvk_t, GLenum face, GLenum s
 }
 
 void rvk_glTexBuffer(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLuint buffer) {
+    AV_SCOPE("rvk_glTexBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -13023,6 +13493,7 @@ void rvk_glTexBuffer(::av::ClientTransport& rvk_t, GLenum target, GLenum interna
 }
 
 void rvk_glTexBufferRange(::av::ClientTransport& rvk_t, GLenum target, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glTexBufferRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -13038,6 +13509,7 @@ void rvk_glTexBufferRange(::av::ClientTransport& rvk_t, GLenum target, GLenum in
 }
 
 void rvk_glTexCoordP1ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glTexCoordP1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(coords));
@@ -13050,6 +13522,7 @@ void rvk_glTexCoordP1ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords
 }
 
 void rvk_glTexCoordP1uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glTexCoordP1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -13092,6 +13565,7 @@ void rvk_glTexCoordP1uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint
 }
 
 void rvk_glTexCoordP2ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glTexCoordP2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(coords));
@@ -13104,6 +13578,7 @@ void rvk_glTexCoordP2ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords
 }
 
 void rvk_glTexCoordP2uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glTexCoordP2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -13146,6 +13621,7 @@ void rvk_glTexCoordP2uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint
 }
 
 void rvk_glTexCoordP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glTexCoordP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(coords));
@@ -13158,6 +13634,7 @@ void rvk_glTexCoordP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords
 }
 
 void rvk_glTexCoordP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glTexCoordP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -13200,6 +13677,7 @@ void rvk_glTexCoordP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint
 }
 
 void rvk_glTexCoordP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords) {
+    AV_SCOPE("rvk_glTexCoordP4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(coords));
@@ -13212,6 +13690,7 @@ void rvk_glTexCoordP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint coords
 }
 
 void rvk_glTexCoordP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* coords) {
+    AV_SCOPE("rvk_glTexCoordP4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -13254,6 +13733,7 @@ void rvk_glTexCoordP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint
 }
 
 void rvk_glTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13303,6 +13783,7 @@ void rvk_glTexImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, 
 }
 
 void rvk_glTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13353,6 +13834,7 @@ void rvk_glTexImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, 
 }
 
 void rvk_glTexImage2DMultisample(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTexImage2DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -13369,6 +13851,7 @@ void rvk_glTexImage2DMultisample(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glTexImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13420,6 +13903,7 @@ void rvk_glTexImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, 
 }
 
 void rvk_glTexImage3DMultisample(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTexImage3DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -13437,6 +13921,7 @@ void rvk_glTexImage3DMultisample(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glTexParameterIiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTexParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13480,6 +13965,7 @@ void rvk_glTexParameterIiv(::av::ClientTransport& rvk_t, GLenum target, GLenum p
 }
 
 void rvk_glTexParameterIuiv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLuint* params) {
+    AV_SCOPE("rvk_glTexParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13523,6 +14009,7 @@ void rvk_glTexParameterIuiv(::av::ClientTransport& rvk_t, GLenum target, GLenum 
 }
 
 void rvk_glTexParameterf(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glTexParameterf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13536,6 +14023,7 @@ void rvk_glTexParameterf(::av::ClientTransport& rvk_t, GLenum target, GLenum pna
 }
 
 void rvk_glTexParameterfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glTexParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13579,6 +14067,7 @@ void rvk_glTexParameterfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pn
 }
 
 void rvk_glTexParameteri(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glTexParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13592,6 +14081,7 @@ void rvk_glTexParameteri(::av::ClientTransport& rvk_t, GLenum target, GLenum pna
 }
 
 void rvk_glTexParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTexParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13635,6 +14125,7 @@ void rvk_glTexParameteriv(::av::ClientTransport& rvk_t, GLenum target, GLenum pn
 }
 
 void rvk_glTexStorage1D(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width) {
+    AV_SCOPE("rvk_glTexStorage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -13649,6 +14140,7 @@ void rvk_glTexStorage1D(::av::ClientTransport& rvk_t, GLenum target, GLsizei lev
 }
 
 void rvk_glTexStorage2D(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glTexStorage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -13664,6 +14156,7 @@ void rvk_glTexStorage2D(::av::ClientTransport& rvk_t, GLenum target, GLsizei lev
 }
 
 void rvk_glTexStorage2DMultisample(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTexStorage2DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -13680,6 +14173,7 @@ void rvk_glTexStorage2DMultisample(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glTexStorage3D(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth) {
+    AV_SCOPE("rvk_glTexStorage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -13696,6 +14190,7 @@ void rvk_glTexStorage3D(::av::ClientTransport& rvk_t, GLenum target, GLsizei lev
 }
 
 void rvk_glTexStorage3DMultisample(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTexStorage3DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -13713,6 +14208,7 @@ void rvk_glTexStorage3DMultisample(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13761,6 +14257,7 @@ void rvk_glTexSubImage1D(::av::ClientTransport& rvk_t, GLenum target, GLint leve
 }
 
 void rvk_glTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13811,6 +14308,7 @@ void rvk_glTexSubImage2D(::av::ClientTransport& rvk_t, GLenum target, GLint leve
 }
 
 void rvk_glTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTexSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -13863,6 +14361,7 @@ void rvk_glTexSubImage3D(::av::ClientTransport& rvk_t, GLenum target, GLint leve
 }
 
 void rvk_glTextureBarrier(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glTextureBarrier");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glTextureBarrier",
@@ -13873,6 +14372,7 @@ void rvk_glTextureBarrier(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glTextureBuffer(::av::ClientTransport& rvk_t, GLuint texture, GLenum internalformat, GLuint buffer) {
+    AV_SCOPE("rvk_glTextureBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -13886,6 +14386,7 @@ void rvk_glTextureBuffer(::av::ClientTransport& rvk_t, GLuint texture, GLenum in
 }
 
 void rvk_glTextureBufferRange(::av::ClientTransport& rvk_t, GLuint texture, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glTextureBufferRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -13901,6 +14402,7 @@ void rvk_glTextureBufferRange(::av::ClientTransport& rvk_t, GLuint texture, GLen
 }
 
 void rvk_glTextureParameterIiv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTextureParameterIiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13944,6 +14446,7 @@ void rvk_glTextureParameterIiv(::av::ClientTransport& rvk_t, GLuint texture, GLe
 }
 
 void rvk_glTextureParameterIuiv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, const GLuint* params) {
+    AV_SCOPE("rvk_glTextureParameterIuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -13987,6 +14490,7 @@ void rvk_glTextureParameterIuiv(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glTextureParameterf(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glTextureParameterf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -14000,6 +14504,7 @@ void rvk_glTextureParameterf(::av::ClientTransport& rvk_t, GLuint texture, GLenu
 }
 
 void rvk_glTextureParameterfv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, const GLfloat* param) {
+    AV_SCOPE("rvk_glTextureParameterfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -14043,6 +14548,7 @@ void rvk_glTextureParameterfv(::av::ClientTransport& rvk_t, GLuint texture, GLen
 }
 
 void rvk_glTextureParameteri(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glTextureParameteri");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -14056,6 +14562,7 @@ void rvk_glTextureParameteri(::av::ClientTransport& rvk_t, GLuint texture, GLenu
 }
 
 void rvk_glTextureParameteriv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, const GLint* param) {
+    AV_SCOPE("rvk_glTextureParameteriv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -14099,6 +14606,7 @@ void rvk_glTextureParameteriv(::av::ClientTransport& rvk_t, GLuint texture, GLen
 }
 
 void rvk_glTextureStorage1D(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width) {
+    AV_SCOPE("rvk_glTextureStorage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -14113,6 +14621,7 @@ void rvk_glTextureStorage1D(::av::ClientTransport& rvk_t, GLuint texture, GLsize
 }
 
 void rvk_glTextureStorage2D(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glTextureStorage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -14128,6 +14637,7 @@ void rvk_glTextureStorage2D(::av::ClientTransport& rvk_t, GLuint texture, GLsize
 }
 
 void rvk_glTextureStorage2DMultisample(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTextureStorage2DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -14144,6 +14654,7 @@ void rvk_glTextureStorage2DMultisample(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glTextureStorage3D(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth) {
+    AV_SCOPE("rvk_glTextureStorage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(levels));
@@ -14160,6 +14671,7 @@ void rvk_glTextureStorage3D(::av::ClientTransport& rvk_t, GLuint texture, GLsize
 }
 
 void rvk_glTextureStorage3DMultisample(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTextureStorage3DMultisample");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -14177,6 +14689,7 @@ void rvk_glTextureStorage3DMultisample(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage1D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -14225,6 +14738,7 @@ void rvk_glTextureSubImage1D(::av::ClientTransport& rvk_t, GLuint texture, GLint
 }
 
 void rvk_glTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage2D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -14275,6 +14789,7 @@ void rvk_glTextureSubImage2D(::av::ClientTransport& rvk_t, GLuint texture, GLint
 }
 
 void rvk_glTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage3D");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -14327,6 +14842,7 @@ void rvk_glTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, GLint
 }
 
 void rvk_glTextureView(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers) {
+    AV_SCOPE("rvk_glTextureView");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -14345,6 +14861,7 @@ void rvk_glTextureView(::av::ClientTransport& rvk_t, GLuint texture, GLenum targ
 }
 
 void rvk_glTransformFeedbackBufferBase(::av::ClientTransport& rvk_t, GLuint xfb, GLuint index, GLuint buffer) {
+    AV_SCOPE("rvk_glTransformFeedbackBufferBase");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(xfb));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -14358,6 +14875,7 @@ void rvk_glTransformFeedbackBufferBase(::av::ClientTransport& rvk_t, GLuint xfb,
 }
 
 void rvk_glTransformFeedbackBufferRange(::av::ClientTransport& rvk_t, GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glTransformFeedbackBufferRange");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(xfb));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -14373,6 +14891,7 @@ void rvk_glTransformFeedbackBufferRange(::av::ClientTransport& rvk_t, GLuint xfb
 }
 
 void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint program, GLsizei count, const GLchar** varyings, GLenum bufferMode) {
+    AV_SCOPE("rvk_glTransformFeedbackVaryings");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14398,6 +14917,7 @@ void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint progra
 }
 
 void rvk_glUniform1d(::av::ClientTransport& rvk_t, GLint location, GLdouble x) {
+    AV_SCOPE("rvk_glUniform1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLdouble>(x);
@@ -14410,6 +14930,7 @@ void rvk_glUniform1d(::av::ClientTransport& rvk_t, GLint location, GLdouble x) {
 }
 
 void rvk_glUniform1dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniform1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14453,6 +14974,7 @@ void rvk_glUniform1dv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform1f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0) {
+    AV_SCOPE("rvk_glUniform1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLfloat>(v0);
@@ -14465,6 +14987,7 @@ void rvk_glUniform1f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0) {
 }
 
 void rvk_glUniform1fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniform1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14508,6 +15031,7 @@ void rvk_glUniform1fv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform1i(::av::ClientTransport& rvk_t, GLint location, GLint v0) {
+    AV_SCOPE("rvk_glUniform1i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -14520,6 +15044,7 @@ void rvk_glUniform1i(::av::ClientTransport& rvk_t, GLint location, GLint v0) {
 }
 
 void rvk_glUniform1iv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glUniform1iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14563,6 +15088,7 @@ void rvk_glUniform1iv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform1ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0) {
+    AV_SCOPE("rvk_glUniform1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -14575,6 +15101,7 @@ void rvk_glUniform1ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0) {
 }
 
 void rvk_glUniform1uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glUniform1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14618,6 +15145,7 @@ void rvk_glUniform1uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei cou
 }
 
 void rvk_glUniform2d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glUniform2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLdouble>(x);
@@ -14631,6 +15159,7 @@ void rvk_glUniform2d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, G
 }
 
 void rvk_glUniform2dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniform2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14674,6 +15203,7 @@ void rvk_glUniform2dv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform2f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, GLfloat v1) {
+    AV_SCOPE("rvk_glUniform2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLfloat>(v0);
@@ -14687,6 +15217,7 @@ void rvk_glUniform2f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, G
 }
 
 void rvk_glUniform2fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniform2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14730,6 +15261,7 @@ void rvk_glUniform2fv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform2i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLint v1) {
+    AV_SCOPE("rvk_glUniform2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -14743,6 +15275,7 @@ void rvk_glUniform2i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLi
 }
 
 void rvk_glUniform2iv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glUniform2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14786,6 +15319,7 @@ void rvk_glUniform2iv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform2ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, GLuint v1) {
+    AV_SCOPE("rvk_glUniform2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -14799,6 +15333,7 @@ void rvk_glUniform2ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, G
 }
 
 void rvk_glUniform2uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glUniform2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14842,6 +15377,7 @@ void rvk_glUniform2uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei cou
 }
 
 void rvk_glUniform3d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glUniform3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLdouble>(x);
@@ -14856,6 +15392,7 @@ void rvk_glUniform3d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, G
 }
 
 void rvk_glUniform3dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniform3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14899,6 +15436,7 @@ void rvk_glUniform3dv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform3f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) {
+    AV_SCOPE("rvk_glUniform3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLfloat>(v0);
@@ -14913,6 +15451,7 @@ void rvk_glUniform3f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, G
 }
 
 void rvk_glUniform3fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniform3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -14956,6 +15495,7 @@ void rvk_glUniform3fv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform3i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLint v1, GLint v2) {
+    AV_SCOPE("rvk_glUniform3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -14970,6 +15510,7 @@ void rvk_glUniform3i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLi
 }
 
 void rvk_glUniform3iv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glUniform3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15013,6 +15554,7 @@ void rvk_glUniform3iv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform3ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, GLuint v1, GLuint v2) {
+    AV_SCOPE("rvk_glUniform3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -15027,6 +15569,7 @@ void rvk_glUniform3ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, G
 }
 
 void rvk_glUniform3uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glUniform3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15070,6 +15613,7 @@ void rvk_glUniform3uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei cou
 }
 
 void rvk_glUniform4d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glUniform4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLdouble>(x);
@@ -15085,6 +15629,7 @@ void rvk_glUniform4d(::av::ClientTransport& rvk_t, GLint location, GLdouble x, G
 }
 
 void rvk_glUniform4dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniform4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15128,6 +15673,7 @@ void rvk_glUniform4dv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform4f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) {
+    AV_SCOPE("rvk_glUniform4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_pod<GLfloat>(v0);
@@ -15143,6 +15689,7 @@ void rvk_glUniform4f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0, G
 }
 
 void rvk_glUniform4fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniform4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15186,6 +15733,7 @@ void rvk_glUniform4fv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform4i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) {
+    AV_SCOPE("rvk_glUniform4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -15201,6 +15749,7 @@ void rvk_glUniform4i(::av::ClientTransport& rvk_t, GLint location, GLint v0, GLi
 }
 
 void rvk_glUniform4iv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glUniform4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15244,6 +15793,7 @@ void rvk_glUniform4iv(::av::ClientTransport& rvk_t, GLint location, GLsizei coun
 }
 
 void rvk_glUniform4ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) {
+    AV_SCOPE("rvk_glUniform4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(v0));
@@ -15259,6 +15809,7 @@ void rvk_glUniform4ui(::av::ClientTransport& rvk_t, GLint location, GLuint v0, G
 }
 
 void rvk_glUniform4uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glUniform4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15302,6 +15853,7 @@ void rvk_glUniform4uiv(::av::ClientTransport& rvk_t, GLint location, GLsizei cou
 }
 
 void rvk_glUniformBlockBinding(::av::ClientTransport& rvk_t, GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding) {
+    AV_SCOPE("rvk_glUniformBlockBinding");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(uniformBlockIndex));
@@ -15315,6 +15867,7 @@ void rvk_glUniformBlockBinding(::av::ClientTransport& rvk_t, GLuint program, GLu
 }
 
 void rvk_glUniformMatrix2dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15359,6 +15912,7 @@ void rvk_glUniformMatrix2dv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix2fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15403,6 +15957,7 @@ void rvk_glUniformMatrix2fv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix2x3dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix2x3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15447,6 +16002,7 @@ void rvk_glUniformMatrix2x3dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix2x3fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix2x3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15491,6 +16047,7 @@ void rvk_glUniformMatrix2x3fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix2x4dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix2x4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15535,6 +16092,7 @@ void rvk_glUniformMatrix2x4dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix2x4fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix2x4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15579,6 +16137,7 @@ void rvk_glUniformMatrix2x4fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix3dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15623,6 +16182,7 @@ void rvk_glUniformMatrix3dv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix3fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15667,6 +16227,7 @@ void rvk_glUniformMatrix3fv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix3x2dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix3x2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15711,6 +16272,7 @@ void rvk_glUniformMatrix3x2dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix3x2fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix3x2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15755,6 +16317,7 @@ void rvk_glUniformMatrix3x2fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix3x4dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix3x4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15799,6 +16362,7 @@ void rvk_glUniformMatrix3x4dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix3x4fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix3x4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15843,6 +16407,7 @@ void rvk_glUniformMatrix3x4fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix4dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15887,6 +16452,7 @@ void rvk_glUniformMatrix4dv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix4fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15931,6 +16497,7 @@ void rvk_glUniformMatrix4fv(::av::ClientTransport& rvk_t, GLint location, GLsize
 }
 
 void rvk_glUniformMatrix4x2dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix4x2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -15975,6 +16542,7 @@ void rvk_glUniformMatrix4x2dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix4x2fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix4x2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -16019,6 +16587,7 @@ void rvk_glUniformMatrix4x2fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix4x3dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glUniformMatrix4x3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -16063,6 +16632,7 @@ void rvk_glUniformMatrix4x3dv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformMatrix4x3fv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glUniformMatrix4x3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -16107,6 +16677,7 @@ void rvk_glUniformMatrix4x3fv(::av::ClientTransport& rvk_t, GLint location, GLsi
 }
 
 void rvk_glUniformSubroutinesuiv(::av::ClientTransport& rvk_t, GLenum shadertype, GLsizei count, const GLuint* indices) {
+    AV_SCOPE("rvk_glUniformSubroutinesuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shadertype));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -16150,6 +16721,7 @@ void rvk_glUniformSubroutinesuiv(::av::ClientTransport& rvk_t, GLenum shadertype
 }
 
 void rvk_glUseProgram(::av::ClientTransport& rvk_t, GLuint program) {
+    AV_SCOPE("rvk_glUseProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -16161,6 +16733,7 @@ void rvk_glUseProgram(::av::ClientTransport& rvk_t, GLuint program) {
 }
 
 void rvk_glUseProgramStages(::av::ClientTransport& rvk_t, GLuint pipeline, GLbitfield stages, GLuint program) {
+    AV_SCOPE("rvk_glUseProgramStages");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     rvk_b.write_varint(static_cast<uint64_t>(stages));
@@ -16174,6 +16747,7 @@ void rvk_glUseProgramStages(::av::ClientTransport& rvk_t, GLuint pipeline, GLbit
 }
 
 void rvk_glValidateProgram(::av::ClientTransport& rvk_t, GLuint program) {
+    AV_SCOPE("rvk_glValidateProgram");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -16185,6 +16759,7 @@ void rvk_glValidateProgram(::av::ClientTransport& rvk_t, GLuint program) {
 }
 
 void rvk_glValidateProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline) {
+    AV_SCOPE("rvk_glValidateProgramPipeline");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pipeline));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -16196,6 +16771,7 @@ void rvk_glValidateProgramPipeline(::av::ClientTransport& rvk_t, GLuint pipeline
 }
 
 void rvk_glVertexArrayAttribBinding(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLuint bindingindex) {
+    AV_SCOPE("rvk_glVertexArrayAttribBinding");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -16209,6 +16785,7 @@ void rvk_glVertexArrayAttribBinding(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glVertexArrayAttribFormat(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayAttribFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -16225,6 +16802,7 @@ void rvk_glVertexArrayAttribFormat(::av::ClientTransport& rvk_t, GLuint vaobj, G
 }
 
 void rvk_glVertexArrayAttribIFormat(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayAttribIFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -16240,6 +16818,7 @@ void rvk_glVertexArrayAttribIFormat(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glVertexArrayAttribLFormat(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayAttribLFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -16255,6 +16834,7 @@ void rvk_glVertexArrayAttribLFormat(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glVertexArrayBindingDivisor(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint bindingindex, GLuint divisor) {
+    AV_SCOPE("rvk_glVertexArrayBindingDivisor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
@@ -16268,6 +16848,7 @@ void rvk_glVertexArrayBindingDivisor(::av::ClientTransport& rvk_t, GLuint vaobj,
 }
 
 void rvk_glVertexArrayElementBuffer(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer) {
+    AV_SCOPE("rvk_glVertexArrayElementBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -16280,6 +16861,7 @@ void rvk_glVertexArrayElementBuffer(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glVertexArrayVertexBuffer(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride) {
+    AV_SCOPE("rvk_glVertexArrayVertexBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
@@ -16295,6 +16877,7 @@ void rvk_glVertexArrayVertexBuffer(::av::ClientTransport& rvk_t, GLuint vaobj, G
 }
 
 void rvk_glVertexArrayVertexBuffers(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
+    AV_SCOPE("rvk_glVertexArrayVertexBuffers");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(first));
@@ -16401,6 +16984,7 @@ void rvk_glVertexArrayVertexBuffers(::av::ClientTransport& rvk_t, GLuint vaobj, 
 }
 
 void rvk_glVertexAttrib1d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x) {
+    AV_SCOPE("rvk_glVertexAttrib1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -16413,6 +16997,7 @@ void rvk_glVertexAttrib1d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x
 }
 
 void rvk_glVertexAttrib1dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttrib1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16455,6 +17040,7 @@ void rvk_glVertexAttrib1dv(::av::ClientTransport& rvk_t, GLuint index, const GLd
 }
 
 void rvk_glVertexAttrib1f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x) {
+    AV_SCOPE("rvk_glVertexAttrib1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLfloat>(x);
@@ -16467,6 +17053,7 @@ void rvk_glVertexAttrib1f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x)
 }
 
 void rvk_glVertexAttrib1fv(::av::ClientTransport& rvk_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertexAttrib1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16509,6 +17096,7 @@ void rvk_glVertexAttrib1fv(::av::ClientTransport& rvk_t, GLuint index, const GLf
 }
 
 void rvk_glVertexAttrib1s(::av::ClientTransport& rvk_t, GLuint index, GLshort x) {
+    AV_SCOPE("rvk_glVertexAttrib1s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -16521,6 +17109,7 @@ void rvk_glVertexAttrib1s(::av::ClientTransport& rvk_t, GLuint index, GLshort x)
 }
 
 void rvk_glVertexAttrib1sv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttrib1sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16563,6 +17152,7 @@ void rvk_glVertexAttrib1sv(::av::ClientTransport& rvk_t, GLuint index, const GLs
 }
 
 void rvk_glVertexAttrib2d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glVertexAttrib2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -16576,6 +17166,7 @@ void rvk_glVertexAttrib2d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x
 }
 
 void rvk_glVertexAttrib2dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttrib2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16618,6 +17209,7 @@ void rvk_glVertexAttrib2dv(::av::ClientTransport& rvk_t, GLuint index, const GLd
 }
 
 void rvk_glVertexAttrib2f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x, GLfloat y) {
+    AV_SCOPE("rvk_glVertexAttrib2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLfloat>(x);
@@ -16631,6 +17223,7 @@ void rvk_glVertexAttrib2f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x,
 }
 
 void rvk_glVertexAttrib2fv(::av::ClientTransport& rvk_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertexAttrib2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16673,6 +17266,7 @@ void rvk_glVertexAttrib2fv(::av::ClientTransport& rvk_t, GLuint index, const GLf
 }
 
 void rvk_glVertexAttrib2s(::av::ClientTransport& rvk_t, GLuint index, GLshort x, GLshort y) {
+    AV_SCOPE("rvk_glVertexAttrib2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -16686,6 +17280,7 @@ void rvk_glVertexAttrib2s(::av::ClientTransport& rvk_t, GLuint index, GLshort x,
 }
 
 void rvk_glVertexAttrib2sv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttrib2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16728,6 +17323,7 @@ void rvk_glVertexAttrib2sv(::av::ClientTransport& rvk_t, GLuint index, const GLs
 }
 
 void rvk_glVertexAttrib3d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glVertexAttrib3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -16742,6 +17338,7 @@ void rvk_glVertexAttrib3d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x
 }
 
 void rvk_glVertexAttrib3dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttrib3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16784,6 +17381,7 @@ void rvk_glVertexAttrib3dv(::av::ClientTransport& rvk_t, GLuint index, const GLd
 }
 
 void rvk_glVertexAttrib3f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glVertexAttrib3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLfloat>(x);
@@ -16798,6 +17396,7 @@ void rvk_glVertexAttrib3f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x,
 }
 
 void rvk_glVertexAttrib3fv(::av::ClientTransport& rvk_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertexAttrib3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16840,6 +17439,7 @@ void rvk_glVertexAttrib3fv(::av::ClientTransport& rvk_t, GLuint index, const GLf
 }
 
 void rvk_glVertexAttrib3s(::av::ClientTransport& rvk_t, GLuint index, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("rvk_glVertexAttrib3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -16854,6 +17454,7 @@ void rvk_glVertexAttrib3s(::av::ClientTransport& rvk_t, GLuint index, GLshort x,
 }
 
 void rvk_glVertexAttrib3sv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttrib3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16896,6 +17497,7 @@ void rvk_glVertexAttrib3sv(::av::ClientTransport& rvk_t, GLuint index, const GLs
 }
 
 void rvk_glVertexAttrib4Nbv(::av::ClientTransport& rvk_t, GLuint index, const GLbyte* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Nbv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16938,6 +17540,7 @@ void rvk_glVertexAttrib4Nbv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttrib4Niv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Niv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -16980,6 +17583,7 @@ void rvk_glVertexAttrib4Niv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttrib4Nsv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Nsv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17022,6 +17626,7 @@ void rvk_glVertexAttrib4Nsv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttrib4Nub(::av::ClientTransport& rvk_t, GLuint index, GLubyte x, GLubyte y, GLubyte z, GLubyte w) {
+    AV_SCOPE("rvk_glVertexAttrib4Nub");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17037,6 +17642,7 @@ void rvk_glVertexAttrib4Nub(::av::ClientTransport& rvk_t, GLuint index, GLubyte 
 }
 
 void rvk_glVertexAttrib4Nubv(::av::ClientTransport& rvk_t, GLuint index, const GLubyte* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Nubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17079,6 +17685,7 @@ void rvk_glVertexAttrib4Nubv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttrib4Nuiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Nuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17121,6 +17728,7 @@ void rvk_glVertexAttrib4Nuiv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttrib4Nusv(::av::ClientTransport& rvk_t, GLuint index, const GLushort* v) {
+    AV_SCOPE("rvk_glVertexAttrib4Nusv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17163,6 +17771,7 @@ void rvk_glVertexAttrib4Nusv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttrib4bv(::av::ClientTransport& rvk_t, GLuint index, const GLbyte* v) {
+    AV_SCOPE("rvk_glVertexAttrib4bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17205,6 +17814,7 @@ void rvk_glVertexAttrib4bv(::av::ClientTransport& rvk_t, GLuint index, const GLb
 }
 
 void rvk_glVertexAttrib4d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glVertexAttrib4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -17220,6 +17830,7 @@ void rvk_glVertexAttrib4d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x
 }
 
 void rvk_glVertexAttrib4dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttrib4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17262,6 +17873,7 @@ void rvk_glVertexAttrib4dv(::av::ClientTransport& rvk_t, GLuint index, const GLd
 }
 
 void rvk_glVertexAttrib4f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("rvk_glVertexAttrib4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLfloat>(x);
@@ -17277,6 +17889,7 @@ void rvk_glVertexAttrib4f(::av::ClientTransport& rvk_t, GLuint index, GLfloat x,
 }
 
 void rvk_glVertexAttrib4fv(::av::ClientTransport& rvk_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertexAttrib4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17319,6 +17932,7 @@ void rvk_glVertexAttrib4fv(::av::ClientTransport& rvk_t, GLuint index, const GLf
 }
 
 void rvk_glVertexAttrib4iv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttrib4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17361,6 +17975,7 @@ void rvk_glVertexAttrib4iv(::av::ClientTransport& rvk_t, GLuint index, const GLi
 }
 
 void rvk_glVertexAttrib4s(::av::ClientTransport& rvk_t, GLuint index, GLshort x, GLshort y, GLshort z, GLshort w) {
+    AV_SCOPE("rvk_glVertexAttrib4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17376,6 +17991,7 @@ void rvk_glVertexAttrib4s(::av::ClientTransport& rvk_t, GLuint index, GLshort x,
 }
 
 void rvk_glVertexAttrib4sv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttrib4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17418,6 +18034,7 @@ void rvk_glVertexAttrib4sv(::av::ClientTransport& rvk_t, GLuint index, const GLs
 }
 
 void rvk_glVertexAttrib4ubv(::av::ClientTransport& rvk_t, GLuint index, const GLubyte* v) {
+    AV_SCOPE("rvk_glVertexAttrib4ubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17460,6 +18077,7 @@ void rvk_glVertexAttrib4ubv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttrib4uiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttrib4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17502,6 +18120,7 @@ void rvk_glVertexAttrib4uiv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttrib4usv(::av::ClientTransport& rvk_t, GLuint index, const GLushort* v) {
+    AV_SCOPE("rvk_glVertexAttrib4usv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17544,6 +18163,7 @@ void rvk_glVertexAttrib4usv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribBinding(::av::ClientTransport& rvk_t, GLuint attribindex, GLuint bindingindex) {
+    AV_SCOPE("rvk_glVertexAttribBinding");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
@@ -17556,6 +18176,7 @@ void rvk_glVertexAttribBinding(::av::ClientTransport& rvk_t, GLuint attribindex,
 }
 
 void rvk_glVertexAttribDivisor(::av::ClientTransport& rvk_t, GLuint index, GLuint divisor) {
+    AV_SCOPE("rvk_glVertexAttribDivisor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(divisor));
@@ -17568,6 +18189,7 @@ void rvk_glVertexAttribDivisor(::av::ClientTransport& rvk_t, GLuint index, GLuin
 }
 
 void rvk_glVertexAttribFormat(::av::ClientTransport& rvk_t, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexAttribFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -17583,6 +18205,7 @@ void rvk_glVertexAttribFormat(::av::ClientTransport& rvk_t, GLuint attribindex, 
 }
 
 void rvk_glVertexAttribI1i(::av::ClientTransport& rvk_t, GLuint index, GLint x) {
+    AV_SCOPE("rvk_glVertexAttribI1i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17595,6 +18218,7 @@ void rvk_glVertexAttribI1i(::av::ClientTransport& rvk_t, GLuint index, GLint x) 
 }
 
 void rvk_glVertexAttribI1iv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttribI1iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17637,6 +18261,7 @@ void rvk_glVertexAttribI1iv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI1ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x) {
+    AV_SCOPE("rvk_glVertexAttribI1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17649,6 +18274,7 @@ void rvk_glVertexAttribI1ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x
 }
 
 void rvk_glVertexAttribI1uiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttribI1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17691,6 +18317,7 @@ void rvk_glVertexAttribI1uiv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribI2i(::av::ClientTransport& rvk_t, GLuint index, GLint x, GLint y) {
+    AV_SCOPE("rvk_glVertexAttribI2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17704,6 +18331,7 @@ void rvk_glVertexAttribI2i(::av::ClientTransport& rvk_t, GLuint index, GLint x, 
 }
 
 void rvk_glVertexAttribI2iv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttribI2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17746,6 +18374,7 @@ void rvk_glVertexAttribI2iv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI2ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x, GLuint y) {
+    AV_SCOPE("rvk_glVertexAttribI2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17759,6 +18388,7 @@ void rvk_glVertexAttribI2ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x
 }
 
 void rvk_glVertexAttribI2uiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttribI2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17801,6 +18431,7 @@ void rvk_glVertexAttribI2uiv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribI3i(::av::ClientTransport& rvk_t, GLuint index, GLint x, GLint y, GLint z) {
+    AV_SCOPE("rvk_glVertexAttribI3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17815,6 +18446,7 @@ void rvk_glVertexAttribI3i(::av::ClientTransport& rvk_t, GLuint index, GLint x, 
 }
 
 void rvk_glVertexAttribI3iv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttribI3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17857,6 +18489,7 @@ void rvk_glVertexAttribI3iv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI3ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x, GLuint y, GLuint z) {
+    AV_SCOPE("rvk_glVertexAttribI3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17871,6 +18504,7 @@ void rvk_glVertexAttribI3ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x
 }
 
 void rvk_glVertexAttribI3uiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttribI3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17913,6 +18547,7 @@ void rvk_glVertexAttribI3uiv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribI4bv(::av::ClientTransport& rvk_t, GLuint index, const GLbyte* v) {
+    AV_SCOPE("rvk_glVertexAttribI4bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -17955,6 +18590,7 @@ void rvk_glVertexAttribI4bv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI4i(::av::ClientTransport& rvk_t, GLuint index, GLint x, GLint y, GLint z, GLint w) {
+    AV_SCOPE("rvk_glVertexAttribI4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -17970,6 +18606,7 @@ void rvk_glVertexAttribI4i(::av::ClientTransport& rvk_t, GLuint index, GLint x, 
 }
 
 void rvk_glVertexAttribI4iv(::av::ClientTransport& rvk_t, GLuint index, const GLint* v) {
+    AV_SCOPE("rvk_glVertexAttribI4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18012,6 +18649,7 @@ void rvk_glVertexAttribI4iv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI4sv(::av::ClientTransport& rvk_t, GLuint index, const GLshort* v) {
+    AV_SCOPE("rvk_glVertexAttribI4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18054,6 +18692,7 @@ void rvk_glVertexAttribI4sv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribI4ubv(::av::ClientTransport& rvk_t, GLuint index, const GLubyte* v) {
+    AV_SCOPE("rvk_glVertexAttribI4ubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18096,6 +18735,7 @@ void rvk_glVertexAttribI4ubv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribI4ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x, GLuint y, GLuint z, GLuint w) {
+    AV_SCOPE("rvk_glVertexAttribI4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -18111,6 +18751,7 @@ void rvk_glVertexAttribI4ui(::av::ClientTransport& rvk_t, GLuint index, GLuint x
 }
 
 void rvk_glVertexAttribI4uiv(::av::ClientTransport& rvk_t, GLuint index, const GLuint* v) {
+    AV_SCOPE("rvk_glVertexAttribI4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18153,6 +18794,7 @@ void rvk_glVertexAttribI4uiv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribI4usv(::av::ClientTransport& rvk_t, GLuint index, const GLushort* v) {
+    AV_SCOPE("rvk_glVertexAttribI4usv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18195,6 +18837,7 @@ void rvk_glVertexAttribI4usv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glVertexAttribIFormat(::av::ClientTransport& rvk_t, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexAttribIFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -18209,6 +18852,7 @@ void rvk_glVertexAttribIFormat(::av::ClientTransport& rvk_t, GLuint attribindex,
 }
 
 void rvk_glVertexAttribIPointer(::av::ClientTransport& rvk_t, GLuint index, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glVertexAttribIPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -18224,6 +18868,7 @@ void rvk_glVertexAttribIPointer(::av::ClientTransport& rvk_t, GLuint index, GLin
 }
 
 void rvk_glVertexAttribL1d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x) {
+    AV_SCOPE("rvk_glVertexAttribL1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -18236,6 +18881,7 @@ void rvk_glVertexAttribL1d(::av::ClientTransport& rvk_t, GLuint index, GLdouble 
 }
 
 void rvk_glVertexAttribL1dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttribL1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18278,6 +18924,7 @@ void rvk_glVertexAttribL1dv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribL2d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glVertexAttribL2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -18291,6 +18938,7 @@ void rvk_glVertexAttribL2d(::av::ClientTransport& rvk_t, GLuint index, GLdouble 
 }
 
 void rvk_glVertexAttribL2dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttribL2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18333,6 +18981,7 @@ void rvk_glVertexAttribL2dv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribL3d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glVertexAttribL3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -18347,6 +18996,7 @@ void rvk_glVertexAttribL3d(::av::ClientTransport& rvk_t, GLuint index, GLdouble 
 }
 
 void rvk_glVertexAttribL3dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttribL3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18389,6 +19039,7 @@ void rvk_glVertexAttribL3dv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribL4d(::av::ClientTransport& rvk_t, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glVertexAttribL4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLdouble>(x);
@@ -18404,6 +19055,7 @@ void rvk_glVertexAttribL4d(::av::ClientTransport& rvk_t, GLuint index, GLdouble 
 }
 
 void rvk_glVertexAttribL4dv(::av::ClientTransport& rvk_t, GLuint index, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertexAttribL4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -18446,6 +19098,7 @@ void rvk_glVertexAttribL4dv(::av::ClientTransport& rvk_t, GLuint index, const GL
 }
 
 void rvk_glVertexAttribLFormat(::av::ClientTransport& rvk_t, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexAttribLFormat");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -18460,6 +19113,7 @@ void rvk_glVertexAttribLFormat(::av::ClientTransport& rvk_t, GLuint attribindex,
 }
 
 void rvk_glVertexAttribLPointer(::av::ClientTransport& rvk_t, GLuint index, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glVertexAttribLPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -18475,6 +19129,7 @@ void rvk_glVertexAttribLPointer(::av::ClientTransport& rvk_t, GLuint index, GLin
 }
 
 void rvk_glVertexAttribP1ui(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, GLuint value) {
+    AV_SCOPE("rvk_glVertexAttribP1ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18489,6 +19144,7 @@ void rvk_glVertexAttribP1ui(::av::ClientTransport& rvk_t, GLuint index, GLenum t
 }
 
 void rvk_glVertexAttribP1uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexAttribP1uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18533,6 +19189,7 @@ void rvk_glVertexAttribP1uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glVertexAttribP2ui(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, GLuint value) {
+    AV_SCOPE("rvk_glVertexAttribP2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18547,6 +19204,7 @@ void rvk_glVertexAttribP2ui(::av::ClientTransport& rvk_t, GLuint index, GLenum t
 }
 
 void rvk_glVertexAttribP2uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexAttribP2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18591,6 +19249,7 @@ void rvk_glVertexAttribP2uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glVertexAttribP3ui(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, GLuint value) {
+    AV_SCOPE("rvk_glVertexAttribP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18605,6 +19264,7 @@ void rvk_glVertexAttribP3ui(::av::ClientTransport& rvk_t, GLuint index, GLenum t
 }
 
 void rvk_glVertexAttribP3uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexAttribP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18649,6 +19309,7 @@ void rvk_glVertexAttribP3uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glVertexAttribP4ui(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, GLuint value) {
+    AV_SCOPE("rvk_glVertexAttribP4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18663,6 +19324,7 @@ void rvk_glVertexAttribP4ui(::av::ClientTransport& rvk_t, GLuint index, GLenum t
 }
 
 void rvk_glVertexAttribP4uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexAttribP4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -18707,6 +19369,7 @@ void rvk_glVertexAttribP4uiv(::av::ClientTransport& rvk_t, GLuint index, GLenum 
 }
 
 void rvk_glVertexAttribPointer(::av::ClientTransport& rvk_t, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glVertexAttribPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -18723,6 +19386,7 @@ void rvk_glVertexAttribPointer(::av::ClientTransport& rvk_t, GLuint index, GLint
 }
 
 void rvk_glVertexBindingDivisor(::av::ClientTransport& rvk_t, GLuint bindingindex, GLuint divisor) {
+    AV_SCOPE("rvk_glVertexBindingDivisor");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
     rvk_b.write_varint(static_cast<uint64_t>(divisor));
@@ -18735,6 +19399,7 @@ void rvk_glVertexBindingDivisor(::av::ClientTransport& rvk_t, GLuint bindinginde
 }
 
 void rvk_glVertexP2ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
+    AV_SCOPE("rvk_glVertexP2ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -18747,6 +19412,7 @@ void rvk_glVertexP2ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
 }
 
 void rvk_glVertexP2uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexP2uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
@@ -18789,6 +19455,7 @@ void rvk_glVertexP2uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* 
 }
 
 void rvk_glVertexP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
+    AV_SCOPE("rvk_glVertexP3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -18801,6 +19468,7 @@ void rvk_glVertexP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
 }
 
 void rvk_glVertexP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexP3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
@@ -18843,6 +19511,7 @@ void rvk_glVertexP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* 
 }
 
 void rvk_glVertexP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
+    AV_SCOPE("rvk_glVertexP4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -18855,6 +19524,7 @@ void rvk_glVertexP4ui(::av::ClientTransport& rvk_t, GLenum type, GLuint value) {
 }
 
 void rvk_glVertexP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* value) {
+    AV_SCOPE("rvk_glVertexP4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
@@ -18897,6 +19567,7 @@ void rvk_glVertexP4uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* 
 }
 
 void rvk_glViewport(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glViewport");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -18911,6 +19582,7 @@ void rvk_glViewport(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei widt
 }
 
 void rvk_glViewportArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLfloat* v) {
+    AV_SCOPE("rvk_glViewportArrayv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -18954,6 +19626,7 @@ void rvk_glViewportArrayv(::av::ClientTransport& rvk_t, GLuint first, GLsizei co
 }
 
 void rvk_glViewportIndexedf(::av::ClientTransport& rvk_t, GLuint index, GLfloat x, GLfloat y, GLfloat w, GLfloat h) {
+    AV_SCOPE("rvk_glViewportIndexedf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_pod<GLfloat>(x);
@@ -18969,6 +19642,7 @@ void rvk_glViewportIndexedf(::av::ClientTransport& rvk_t, GLuint index, GLfloat 
 }
 
 void rvk_glViewportIndexedfv(::av::ClientTransport& rvk_t, GLuint index, const GLfloat* v) {
+    AV_SCOPE("rvk_glViewportIndexedfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -19011,6 +19685,7 @@ void rvk_glViewportIndexedfv(::av::ClientTransport& rvk_t, GLuint index, const G
 }
 
 void rvk_glWaitSync(::av::ClientTransport& rvk_t, uint64_t sync, GLbitfield flags, GLuint64 timeout) {
+    AV_SCOPE("rvk_glWaitSync");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<uint64_t>(sync);
     rvk_b.write_varint(static_cast<uint64_t>(flags));
@@ -19024,6 +19699,7 @@ void rvk_glWaitSync(::av::ClientTransport& rvk_t, uint64_t sync, GLbitfield flag
 }
 
 void rvk_glAccum(::av::ClientTransport& rvk_t, GLenum op, GLfloat value) {
+    AV_SCOPE("rvk_glAccum");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(op));
     rvk_b.write_pod<GLfloat>(value);
@@ -19036,6 +19712,7 @@ void rvk_glAccum(::av::ClientTransport& rvk_t, GLenum op, GLfloat value) {
 }
 
 void rvk_glAlphaFunc(::av::ClientTransport& rvk_t, GLenum func, GLfloat ref) {
+    AV_SCOPE("rvk_glAlphaFunc");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(func));
     rvk_b.write_pod<GLfloat>(ref);
@@ -19048,6 +19725,7 @@ void rvk_glAlphaFunc(::av::ClientTransport& rvk_t, GLenum func, GLfloat ref) {
 }
 
 GLboolean rvk_glAreTexturesResident(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* textures, GLboolean* residences) {
+    AV_SCOPE("rvk_glAreTexturesResident");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
@@ -19110,6 +19788,7 @@ GLboolean rvk_glAreTexturesResident(::av::ClientTransport& rvk_t, GLsizei n, con
 }
 
 void rvk_glArrayElement(::av::ClientTransport& rvk_t, GLint i) {
+    AV_SCOPE("rvk_glArrayElement");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(i));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -19121,6 +19800,7 @@ void rvk_glArrayElement(::av::ClientTransport& rvk_t, GLint i) {
 }
 
 void rvk_glBegin(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glBegin");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -19132,6 +19812,7 @@ void rvk_glBegin(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glBitmap(::av::ClientTransport& rvk_t, GLsizei width, GLsizei height, GLfloat xorig, GLfloat yorig, GLfloat xmove, GLfloat ymove, const GLubyte* bitmap) {
+    AV_SCOPE("rvk_glBitmap");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(width));
     rvk_b.write_varint(static_cast<uint64_t>(height));
@@ -19179,6 +19860,7 @@ void rvk_glBitmap(::av::ClientTransport& rvk_t, GLsizei width, GLsizei height, G
 }
 
 void rvk_glCallList(::av::ClientTransport& rvk_t, GLuint list) {
+    AV_SCOPE("rvk_glCallList");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(list));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -19190,6 +19872,7 @@ void rvk_glCallList(::av::ClientTransport& rvk_t, GLuint list) {
 }
 
 void rvk_glCallLists(::av::ClientTransport& rvk_t, GLsizei n, GLenum type, const void* lists) {
+    AV_SCOPE("rvk_glCallLists");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -19233,6 +19916,7 @@ void rvk_glCallLists(::av::ClientTransport& rvk_t, GLsizei n, GLenum type, const
 }
 
 void rvk_glClearAccum(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+    AV_SCOPE("rvk_glClearAccum");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -19247,6 +19931,7 @@ void rvk_glClearAccum(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, 
 }
 
 void rvk_glClearIndex(::av::ClientTransport& rvk_t, GLfloat c) {
+    AV_SCOPE("rvk_glClearIndex");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(c);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -19258,6 +19943,7 @@ void rvk_glClearIndex(::av::ClientTransport& rvk_t, GLfloat c) {
 }
 
 void rvk_glClientActiveTexture(::av::ClientTransport& rvk_t, GLenum texture) {
+    AV_SCOPE("rvk_glClientActiveTexture");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -19269,6 +19955,7 @@ void rvk_glClientActiveTexture(::av::ClientTransport& rvk_t, GLenum texture) {
 }
 
 void rvk_glClipPlane(::av::ClientTransport& rvk_t, GLenum plane, const GLdouble* equation) {
+    AV_SCOPE("rvk_glClipPlane");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(plane));
     size_t equation_want = 0;
@@ -19311,6 +19998,7 @@ void rvk_glClipPlane(::av::ClientTransport& rvk_t, GLenum plane, const GLdouble*
 }
 
 void rvk_glColor3b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte green, GLbyte blue) {
+    AV_SCOPE("rvk_glColor3b");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19324,6 +20012,7 @@ void rvk_glColor3b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte green, GLbyt
 }
 
 void rvk_glColor3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
+    AV_SCOPE("rvk_glColor3bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
@@ -19365,6 +20054,7 @@ void rvk_glColor3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
 }
 
 void rvk_glColor3d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble green, GLdouble blue) {
+    AV_SCOPE("rvk_glColor3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(red);
     rvk_b.write_pod<GLdouble>(green);
@@ -19378,6 +20068,7 @@ void rvk_glColor3d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble green, G
 }
 
 void rvk_glColor3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glColor3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -19419,6 +20110,7 @@ void rvk_glColor3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glColor3f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue) {
+    AV_SCOPE("rvk_glColor3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -19432,6 +20124,7 @@ void rvk_glColor3f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLf
 }
 
 void rvk_glColor3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glColor3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -19473,6 +20166,7 @@ void rvk_glColor3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glColor3i(::av::ClientTransport& rvk_t, GLint red, GLint green, GLint blue) {
+    AV_SCOPE("rvk_glColor3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19486,6 +20180,7 @@ void rvk_glColor3i(::av::ClientTransport& rvk_t, GLint red, GLint green, GLint b
 }
 
 void rvk_glColor3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glColor3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -19527,6 +20222,7 @@ void rvk_glColor3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glColor3s(::av::ClientTransport& rvk_t, GLshort red, GLshort green, GLshort blue) {
+    AV_SCOPE("rvk_glColor3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19540,6 +20236,7 @@ void rvk_glColor3s(::av::ClientTransport& rvk_t, GLshort red, GLshort green, GLs
 }
 
 void rvk_glColor3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glColor3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -19581,6 +20278,7 @@ void rvk_glColor3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glColor3ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte green, GLubyte blue) {
+    AV_SCOPE("rvk_glColor3ub");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19594,6 +20292,7 @@ void rvk_glColor3ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte green, GL
 }
 
 void rvk_glColor3ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
+    AV_SCOPE("rvk_glColor3ubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLubyte));
@@ -19635,6 +20334,7 @@ void rvk_glColor3ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
 }
 
 void rvk_glColor3ui(::av::ClientTransport& rvk_t, GLuint red, GLuint green, GLuint blue) {
+    AV_SCOPE("rvk_glColor3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19648,6 +20348,7 @@ void rvk_glColor3ui(::av::ClientTransport& rvk_t, GLuint red, GLuint green, GLui
 }
 
 void rvk_glColor3uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
+    AV_SCOPE("rvk_glColor3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLuint));
@@ -19689,6 +20390,7 @@ void rvk_glColor3uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
 }
 
 void rvk_glColor3us(::av::ClientTransport& rvk_t, GLushort red, GLushort green, GLushort blue) {
+    AV_SCOPE("rvk_glColor3us");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19702,6 +20404,7 @@ void rvk_glColor3us(::av::ClientTransport& rvk_t, GLushort red, GLushort green, 
 }
 
 void rvk_glColor3usv(::av::ClientTransport& rvk_t, const GLushort* v) {
+    AV_SCOPE("rvk_glColor3usv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLushort));
@@ -19743,6 +20446,7 @@ void rvk_glColor3usv(::av::ClientTransport& rvk_t, const GLushort* v) {
 }
 
 void rvk_glColor4b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha) {
+    AV_SCOPE("rvk_glColor4b");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19757,6 +20461,7 @@ void rvk_glColor4b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte green, GLbyt
 }
 
 void rvk_glColor4bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
+    AV_SCOPE("rvk_glColor4bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLbyte));
@@ -19798,6 +20503,7 @@ void rvk_glColor4bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
 }
 
 void rvk_glColor4d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble green, GLdouble blue, GLdouble alpha) {
+    AV_SCOPE("rvk_glColor4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(red);
     rvk_b.write_pod<GLdouble>(green);
@@ -19812,6 +20518,7 @@ void rvk_glColor4d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble green, G
 }
 
 void rvk_glColor4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glColor4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -19853,6 +20560,7 @@ void rvk_glColor4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glColor4f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
+    AV_SCOPE("rvk_glColor4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -19867,6 +20575,7 @@ void rvk_glColor4f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLf
 }
 
 void rvk_glColor4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glColor4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -19908,6 +20617,7 @@ void rvk_glColor4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glColor4i(::av::ClientTransport& rvk_t, GLint red, GLint green, GLint blue, GLint alpha) {
+    AV_SCOPE("rvk_glColor4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19922,6 +20632,7 @@ void rvk_glColor4i(::av::ClientTransport& rvk_t, GLint red, GLint green, GLint b
 }
 
 void rvk_glColor4iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glColor4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -19963,6 +20674,7 @@ void rvk_glColor4iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glColor4s(::av::ClientTransport& rvk_t, GLshort red, GLshort green, GLshort blue, GLshort alpha) {
+    AV_SCOPE("rvk_glColor4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -19977,6 +20689,7 @@ void rvk_glColor4s(::av::ClientTransport& rvk_t, GLshort red, GLshort green, GLs
 }
 
 void rvk_glColor4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glColor4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -20018,6 +20731,7 @@ void rvk_glColor4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glColor4ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha) {
+    AV_SCOPE("rvk_glColor4ub");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -20032,6 +20746,7 @@ void rvk_glColor4ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte green, GL
 }
 
 void rvk_glColor4ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
+    AV_SCOPE("rvk_glColor4ubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLubyte));
@@ -20073,6 +20788,7 @@ void rvk_glColor4ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
 }
 
 void rvk_glColor4ui(::av::ClientTransport& rvk_t, GLuint red, GLuint green, GLuint blue, GLuint alpha) {
+    AV_SCOPE("rvk_glColor4ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -20087,6 +20803,7 @@ void rvk_glColor4ui(::av::ClientTransport& rvk_t, GLuint red, GLuint green, GLui
 }
 
 void rvk_glColor4uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
+    AV_SCOPE("rvk_glColor4uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLuint));
@@ -20128,6 +20845,7 @@ void rvk_glColor4uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
 }
 
 void rvk_glColor4us(::av::ClientTransport& rvk_t, GLushort red, GLushort green, GLushort blue, GLushort alpha) {
+    AV_SCOPE("rvk_glColor4us");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -20142,6 +20860,7 @@ void rvk_glColor4us(::av::ClientTransport& rvk_t, GLushort red, GLushort green, 
 }
 
 void rvk_glColor4usv(::av::ClientTransport& rvk_t, const GLushort* v) {
+    AV_SCOPE("rvk_glColor4usv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLushort));
@@ -20183,6 +20902,7 @@ void rvk_glColor4usv(::av::ClientTransport& rvk_t, const GLushort* v) {
 }
 
 void rvk_glColorMaterial(::av::ClientTransport& rvk_t, GLenum face, GLenum mode) {
+    AV_SCOPE("rvk_glColorMaterial");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -20195,6 +20915,7 @@ void rvk_glColorMaterial(::av::ClientTransport& rvk_t, GLenum face, GLenum mode)
 }
 
 void rvk_glColorPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glColorPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -20209,6 +20930,7 @@ void rvk_glColorPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, G
 }
 
 void rvk_glCopyPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height, GLenum type) {
+    AV_SCOPE("rvk_glCopyPixels");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -20224,6 +20946,7 @@ void rvk_glCopyPixels(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei wi
 }
 
 void rvk_glDeleteLists(::av::ClientTransport& rvk_t, GLuint list, GLsizei range) {
+    AV_SCOPE("rvk_glDeleteLists");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(list));
     rvk_b.write_varint(static_cast<uint64_t>(range));
@@ -20236,6 +20959,7 @@ void rvk_glDeleteLists(::av::ClientTransport& rvk_t, GLuint list, GLsizei range)
 }
 
 void rvk_glDisableClientState(::av::ClientTransport& rvk_t, GLenum array) {
+    AV_SCOPE("rvk_glDisableClientState");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20247,6 +20971,7 @@ void rvk_glDisableClientState(::av::ClientTransport& rvk_t, GLenum array) {
 }
 
 void rvk_glDrawPixels(::av::ClientTransport& rvk_t, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glDrawPixels");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(width));
     rvk_b.write_varint(static_cast<uint64_t>(height));
@@ -20293,6 +21018,7 @@ void rvk_glDrawPixels(::av::ClientTransport& rvk_t, GLsizei width, GLsizei heigh
 }
 
 void rvk_glEdgeFlag(::av::ClientTransport& rvk_t, GLboolean flag) {
+    AV_SCOPE("rvk_glEdgeFlag");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(flag));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20304,6 +21030,7 @@ void rvk_glEdgeFlag(::av::ClientTransport& rvk_t, GLboolean flag) {
 }
 
 void rvk_glEdgeFlagPointer(::av::ClientTransport& rvk_t, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glEdgeFlagPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(stride));
     rvk_b.write_pod<uint64_t>(pointer);
@@ -20316,6 +21043,7 @@ void rvk_glEdgeFlagPointer(::av::ClientTransport& rvk_t, GLsizei stride, uint64_
 }
 
 void rvk_glEdgeFlagv(::av::ClientTransport& rvk_t, const GLboolean* flag) {
+    AV_SCOPE("rvk_glEdgeFlagv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t flag_want = 0;
     if (flag != nullptr) flag_want = (1 * sizeof(GLboolean));
@@ -20357,6 +21085,7 @@ void rvk_glEdgeFlagv(::av::ClientTransport& rvk_t, const GLboolean* flag) {
 }
 
 void rvk_glEnableClientState(::av::ClientTransport& rvk_t, GLenum array) {
+    AV_SCOPE("rvk_glEnableClientState");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20368,6 +21097,7 @@ void rvk_glEnableClientState(::av::ClientTransport& rvk_t, GLenum array) {
 }
 
 void rvk_glEnd(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glEnd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glEnd",
@@ -20378,6 +21108,7 @@ void rvk_glEnd(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glEndList(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glEndList");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glEndList",
@@ -20388,6 +21119,7 @@ void rvk_glEndList(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glEvalCoord1d(::av::ClientTransport& rvk_t, GLdouble u) {
+    AV_SCOPE("rvk_glEvalCoord1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(u);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20399,6 +21131,7 @@ void rvk_glEvalCoord1d(::av::ClientTransport& rvk_t, GLdouble u) {
 }
 
 void rvk_glEvalCoord1dv(::av::ClientTransport& rvk_t, const GLdouble* u) {
+    AV_SCOPE("rvk_glEvalCoord1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (1 * sizeof(GLdouble));
@@ -20440,6 +21173,7 @@ void rvk_glEvalCoord1dv(::av::ClientTransport& rvk_t, const GLdouble* u) {
 }
 
 void rvk_glEvalCoord1f(::av::ClientTransport& rvk_t, GLfloat u) {
+    AV_SCOPE("rvk_glEvalCoord1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(u);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20451,6 +21185,7 @@ void rvk_glEvalCoord1f(::av::ClientTransport& rvk_t, GLfloat u) {
 }
 
 void rvk_glEvalCoord1fv(::av::ClientTransport& rvk_t, const GLfloat* u) {
+    AV_SCOPE("rvk_glEvalCoord1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (1 * sizeof(GLfloat));
@@ -20492,6 +21227,7 @@ void rvk_glEvalCoord1fv(::av::ClientTransport& rvk_t, const GLfloat* u) {
 }
 
 void rvk_glEvalCoord2d(::av::ClientTransport& rvk_t, GLdouble u, GLdouble v) {
+    AV_SCOPE("rvk_glEvalCoord2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(u);
     rvk_b.write_pod<GLdouble>(v);
@@ -20504,6 +21240,7 @@ void rvk_glEvalCoord2d(::av::ClientTransport& rvk_t, GLdouble u, GLdouble v) {
 }
 
 void rvk_glEvalCoord2dv(::av::ClientTransport& rvk_t, const GLdouble* u) {
+    AV_SCOPE("rvk_glEvalCoord2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (2 * sizeof(GLdouble));
@@ -20545,6 +21282,7 @@ void rvk_glEvalCoord2dv(::av::ClientTransport& rvk_t, const GLdouble* u) {
 }
 
 void rvk_glEvalCoord2f(::av::ClientTransport& rvk_t, GLfloat u, GLfloat v) {
+    AV_SCOPE("rvk_glEvalCoord2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(u);
     rvk_b.write_pod<GLfloat>(v);
@@ -20557,6 +21295,7 @@ void rvk_glEvalCoord2f(::av::ClientTransport& rvk_t, GLfloat u, GLfloat v) {
 }
 
 void rvk_glEvalCoord2fv(::av::ClientTransport& rvk_t, const GLfloat* u) {
+    AV_SCOPE("rvk_glEvalCoord2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (2 * sizeof(GLfloat));
@@ -20598,6 +21337,7 @@ void rvk_glEvalCoord2fv(::av::ClientTransport& rvk_t, const GLfloat* u) {
 }
 
 void rvk_glEvalMesh1(::av::ClientTransport& rvk_t, GLenum mode, GLint i1, GLint i2) {
+    AV_SCOPE("rvk_glEvalMesh1");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(i1));
@@ -20611,6 +21351,7 @@ void rvk_glEvalMesh1(::av::ClientTransport& rvk_t, GLenum mode, GLint i1, GLint 
 }
 
 void rvk_glEvalMesh2(::av::ClientTransport& rvk_t, GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2) {
+    AV_SCOPE("rvk_glEvalMesh2");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(i1));
@@ -20626,6 +21367,7 @@ void rvk_glEvalMesh2(::av::ClientTransport& rvk_t, GLenum mode, GLint i1, GLint 
 }
 
 void rvk_glEvalPoint1(::av::ClientTransport& rvk_t, GLint i) {
+    AV_SCOPE("rvk_glEvalPoint1");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(i));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20637,6 +21379,7 @@ void rvk_glEvalPoint1(::av::ClientTransport& rvk_t, GLint i) {
 }
 
 void rvk_glEvalPoint2(::av::ClientTransport& rvk_t, GLint i, GLint j) {
+    AV_SCOPE("rvk_glEvalPoint2");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(i));
     rvk_b.write_varint(static_cast<uint64_t>(j));
@@ -20649,6 +21392,7 @@ void rvk_glEvalPoint2(::av::ClientTransport& rvk_t, GLint i, GLint j) {
 }
 
 void rvk_glFeedbackBuffer(::av::ClientTransport& rvk_t, GLsizei size, GLenum type, GLfloat* buffer) {
+    AV_SCOPE("rvk_glFeedbackBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -20678,6 +21422,7 @@ void rvk_glFeedbackBuffer(::av::ClientTransport& rvk_t, GLsizei size, GLenum typ
 }
 
 void rvk_glFogCoordPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glFogCoordPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -20691,6 +21436,7 @@ void rvk_glFogCoordPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei st
 }
 
 void rvk_glFogCoordd(::av::ClientTransport& rvk_t, GLdouble coord) {
+    AV_SCOPE("rvk_glFogCoordd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(coord);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20702,6 +21448,7 @@ void rvk_glFogCoordd(::av::ClientTransport& rvk_t, GLdouble coord) {
 }
 
 void rvk_glFogCoorddv(::av::ClientTransport& rvk_t, const GLdouble* coord) {
+    AV_SCOPE("rvk_glFogCoorddv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t coord_want = 0;
     if (coord != nullptr) coord_want = (1 * sizeof(GLdouble));
@@ -20743,6 +21490,7 @@ void rvk_glFogCoorddv(::av::ClientTransport& rvk_t, const GLdouble* coord) {
 }
 
 void rvk_glFogCoordf(::av::ClientTransport& rvk_t, GLfloat coord) {
+    AV_SCOPE("rvk_glFogCoordf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(coord);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20754,6 +21502,7 @@ void rvk_glFogCoordf(::av::ClientTransport& rvk_t, GLfloat coord) {
 }
 
 void rvk_glFogCoordfv(::av::ClientTransport& rvk_t, const GLfloat* coord) {
+    AV_SCOPE("rvk_glFogCoordfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t coord_want = 0;
     if (coord != nullptr) coord_want = (1 * sizeof(GLfloat));
@@ -20795,6 +21544,7 @@ void rvk_glFogCoordfv(::av::ClientTransport& rvk_t, const GLfloat* coord) {
 }
 
 void rvk_glFogf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glFogf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_pod<GLfloat>(param);
@@ -20807,6 +21557,7 @@ void rvk_glFogf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
 }
 
 void rvk_glFogfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glFogfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -20849,6 +21600,7 @@ void rvk_glFogfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloat* para
 }
 
 void rvk_glFogi(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glFogi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(param));
@@ -20861,6 +21613,7 @@ void rvk_glFogi(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
 }
 
 void rvk_glFogiv(::av::ClientTransport& rvk_t, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glFogiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -20903,6 +21656,7 @@ void rvk_glFogiv(::av::ClientTransport& rvk_t, GLenum pname, const GLint* params
 }
 
 void rvk_glFrustum(::av::ClientTransport& rvk_t, GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
+    AV_SCOPE("rvk_glFrustum");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(left);
     rvk_b.write_pod<GLdouble>(right);
@@ -20919,6 +21673,7 @@ void rvk_glFrustum(::av::ClientTransport& rvk_t, GLdouble left, GLdouble right, 
 }
 
 GLuint rvk_glGenLists(::av::ClientTransport& rvk_t, GLsizei range) {
+    AV_SCOPE("rvk_glGenLists");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(range));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -20938,6 +21693,7 @@ GLuint rvk_glGenLists(::av::ClientTransport& rvk_t, GLsizei range) {
 }
 
 void rvk_glGetClipPlane(::av::ClientTransport& rvk_t, GLenum plane, GLdouble* equation) {
+    AV_SCOPE("rvk_glGetClipPlane");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(plane));
     const size_t equation_want = equation != nullptr ? (4 * sizeof(GLdouble)) : 0u;
@@ -20966,6 +21722,7 @@ void rvk_glGetClipPlane(::av::ClientTransport& rvk_t, GLenum plane, GLdouble* eq
 }
 
 void rvk_glGetLightfv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetLightfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -20995,6 +21752,7 @@ void rvk_glGetLightfv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, 
 }
 
 void rvk_glGetLightiv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetLightiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21024,6 +21782,7 @@ void rvk_glGetLightiv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, 
 }
 
 void rvk_glGetMapdv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, GLdouble* v) {
+    AV_SCOPE("rvk_glGetMapdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(query));
@@ -21053,6 +21812,7 @@ void rvk_glGetMapdv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, G
 }
 
 void rvk_glGetMapfv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, GLfloat* v) {
+    AV_SCOPE("rvk_glGetMapfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(query));
@@ -21082,6 +21842,7 @@ void rvk_glGetMapfv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, G
 }
 
 void rvk_glGetMapiv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, GLint* v) {
+    AV_SCOPE("rvk_glGetMapiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(query));
@@ -21111,6 +21872,7 @@ void rvk_glGetMapiv(::av::ClientTransport& rvk_t, GLenum target, GLenum query, G
 }
 
 void rvk_glGetMaterialfv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetMaterialfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21140,6 +21902,7 @@ void rvk_glGetMaterialfv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname
 }
 
 void rvk_glGetMaterialiv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMaterialiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21169,6 +21932,7 @@ void rvk_glGetMaterialiv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname
 }
 
 void rvk_glGetPixelMapfv(::av::ClientTransport& rvk_t, GLenum map, GLfloat* values) {
+    AV_SCOPE("rvk_glGetPixelMapfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     const size_t values_want = values != nullptr ? (static_cast<size_t>(::av::glproto::pixel_map_size(rvk_t, map)) * sizeof(GLfloat)) : 0u;
@@ -21197,6 +21961,7 @@ void rvk_glGetPixelMapfv(::av::ClientTransport& rvk_t, GLenum map, GLfloat* valu
 }
 
 void rvk_glGetPixelMapuiv(::av::ClientTransport& rvk_t, GLenum map, GLuint* values) {
+    AV_SCOPE("rvk_glGetPixelMapuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     const size_t values_want = values != nullptr ? (static_cast<size_t>(::av::glproto::pixel_map_size(rvk_t, map)) * sizeof(GLuint)) : 0u;
@@ -21225,6 +21990,7 @@ void rvk_glGetPixelMapuiv(::av::ClientTransport& rvk_t, GLenum map, GLuint* valu
 }
 
 void rvk_glGetPixelMapusv(::av::ClientTransport& rvk_t, GLenum map, GLushort* values) {
+    AV_SCOPE("rvk_glGetPixelMapusv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     const size_t values_want = values != nullptr ? (static_cast<size_t>(::av::glproto::pixel_map_size(rvk_t, map)) * sizeof(GLushort)) : 0u;
@@ -21253,6 +22019,7 @@ void rvk_glGetPixelMapusv(::av::ClientTransport& rvk_t, GLenum map, GLushort* va
 }
 
 void rvk_glGetPolygonStipple(::av::ClientTransport& rvk_t, GLubyte* mask) {
+    AV_SCOPE("rvk_glGetPolygonStipple");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t mask_want = mask != nullptr ? (static_cast<size_t>(::av::glproto::stipple_bytes(rvk_t, true)) * sizeof(GLubyte)) : 0u;
     rvk_b.write_pod<uint8_t>(mask != nullptr ? 1 : 0);
@@ -21280,6 +22047,7 @@ void rvk_glGetPolygonStipple(::av::ClientTransport& rvk_t, GLubyte* mask) {
 }
 
 void rvk_glGetTexEnvfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTexEnvfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21309,6 +22077,7 @@ void rvk_glGetTexEnvfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname
 }
 
 void rvk_glGetTexEnviv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTexEnviv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21338,6 +22107,7 @@ void rvk_glGetTexEnviv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname
 }
 
 void rvk_glGetTexGendv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLdouble* params) {
+    AV_SCOPE("rvk_glGetTexGendv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21367,6 +22137,7 @@ void rvk_glGetTexGendv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname,
 }
 
 void rvk_glGetTexGenfv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTexGenfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21396,6 +22167,7 @@ void rvk_glGetTexGenfv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname,
 }
 
 void rvk_glGetTexGeniv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTexGeniv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21425,6 +22197,7 @@ void rvk_glGetTexGeniv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname,
 }
 
 void rvk_glIndexMask(::av::ClientTransport& rvk_t, GLuint mask) {
+    AV_SCOPE("rvk_glIndexMask");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21436,6 +22209,7 @@ void rvk_glIndexMask(::av::ClientTransport& rvk_t, GLuint mask) {
 }
 
 void rvk_glIndexPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glIndexPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -21449,6 +22223,7 @@ void rvk_glIndexPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei strid
 }
 
 void rvk_glIndexd(::av::ClientTransport& rvk_t, GLdouble c) {
+    AV_SCOPE("rvk_glIndexd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(c);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21460,6 +22235,7 @@ void rvk_glIndexd(::av::ClientTransport& rvk_t, GLdouble c) {
 }
 
 void rvk_glIndexdv(::av::ClientTransport& rvk_t, GLdouble* c) {
+    AV_SCOPE("rvk_glIndexdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t c_want = c != nullptr ? (1 * sizeof(GLdouble)) : 0u;
     rvk_b.write_pod<uint8_t>(c != nullptr ? 1 : 0);
@@ -21487,6 +22263,7 @@ void rvk_glIndexdv(::av::ClientTransport& rvk_t, GLdouble* c) {
 }
 
 void rvk_glIndexf(::av::ClientTransport& rvk_t, GLfloat c) {
+    AV_SCOPE("rvk_glIndexf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(c);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21498,6 +22275,7 @@ void rvk_glIndexf(::av::ClientTransport& rvk_t, GLfloat c) {
 }
 
 void rvk_glIndexfv(::av::ClientTransport& rvk_t, GLfloat* c) {
+    AV_SCOPE("rvk_glIndexfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t c_want = c != nullptr ? (1 * sizeof(GLfloat)) : 0u;
     rvk_b.write_pod<uint8_t>(c != nullptr ? 1 : 0);
@@ -21525,6 +22303,7 @@ void rvk_glIndexfv(::av::ClientTransport& rvk_t, GLfloat* c) {
 }
 
 void rvk_glIndexi(::av::ClientTransport& rvk_t, GLint c) {
+    AV_SCOPE("rvk_glIndexi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(c));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21536,6 +22315,7 @@ void rvk_glIndexi(::av::ClientTransport& rvk_t, GLint c) {
 }
 
 void rvk_glIndexiv(::av::ClientTransport& rvk_t, GLint* c) {
+    AV_SCOPE("rvk_glIndexiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t c_want = c != nullptr ? (1 * sizeof(GLint)) : 0u;
     rvk_b.write_pod<uint8_t>(c != nullptr ? 1 : 0);
@@ -21563,6 +22343,7 @@ void rvk_glIndexiv(::av::ClientTransport& rvk_t, GLint* c) {
 }
 
 void rvk_glIndexs(::av::ClientTransport& rvk_t, GLshort c) {
+    AV_SCOPE("rvk_glIndexs");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(c));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21574,6 +22355,7 @@ void rvk_glIndexs(::av::ClientTransport& rvk_t, GLshort c) {
 }
 
 void rvk_glIndexsv(::av::ClientTransport& rvk_t, GLshort* c) {
+    AV_SCOPE("rvk_glIndexsv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t c_want = c != nullptr ? (1 * sizeof(GLshort)) : 0u;
     rvk_b.write_pod<uint8_t>(c != nullptr ? 1 : 0);
@@ -21601,6 +22383,7 @@ void rvk_glIndexsv(::av::ClientTransport& rvk_t, GLshort* c) {
 }
 
 void rvk_glIndexub(::av::ClientTransport& rvk_t, GLubyte c) {
+    AV_SCOPE("rvk_glIndexub");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(c));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21612,6 +22395,7 @@ void rvk_glIndexub(::av::ClientTransport& rvk_t, GLubyte c) {
 }
 
 void rvk_glIndexubv(::av::ClientTransport& rvk_t, GLubyte* c) {
+    AV_SCOPE("rvk_glIndexubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const size_t c_want = c != nullptr ? (1 * sizeof(GLubyte)) : 0u;
     rvk_b.write_pod<uint8_t>(c != nullptr ? 1 : 0);
@@ -21639,6 +22423,7 @@ void rvk_glIndexubv(::av::ClientTransport& rvk_t, GLubyte* c) {
 }
 
 void rvk_glInitNames(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glInitNames");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glInitNames",
@@ -21649,6 +22434,7 @@ void rvk_glInitNames(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glInterleavedArrays(::av::ClientTransport& rvk_t, GLenum format, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glInterleavedArrays");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(format));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -21662,6 +22448,7 @@ void rvk_glInterleavedArrays(::av::ClientTransport& rvk_t, GLenum format, GLsize
 }
 
 GLboolean rvk_glIsList(::av::ClientTransport& rvk_t, GLuint list) {
+    AV_SCOPE("rvk_glIsList");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(list));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21681,6 +22468,7 @@ GLboolean rvk_glIsList(::av::ClientTransport& rvk_t, GLuint list) {
 }
 
 void rvk_glLightModelf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glLightModelf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_pod<GLfloat>(param);
@@ -21693,6 +22481,7 @@ void rvk_glLightModelf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param
 }
 
 void rvk_glLightModelfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glLightModelfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -21735,6 +22524,7 @@ void rvk_glLightModelfv(::av::ClientTransport& rvk_t, GLenum pname, const GLfloa
 }
 
 void rvk_glLightModeli(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glLightModeli");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(param));
@@ -21747,6 +22537,7 @@ void rvk_glLightModeli(::av::ClientTransport& rvk_t, GLenum pname, GLint param) 
 }
 
 void rvk_glLightModeliv(::av::ClientTransport& rvk_t, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glLightModeliv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -21789,6 +22580,7 @@ void rvk_glLightModeliv(::av::ClientTransport& rvk_t, GLenum pname, const GLint*
 }
 
 void rvk_glLightf(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glLightf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21802,6 +22594,7 @@ void rvk_glLightf(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLfl
 }
 
 void rvk_glLightfv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glLightfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21845,6 +22638,7 @@ void rvk_glLightfv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, con
 }
 
 void rvk_glLighti(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glLighti");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21858,6 +22652,7 @@ void rvk_glLighti(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, GLin
 }
 
 void rvk_glLightiv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glLightiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(light));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -21901,6 +22696,7 @@ void rvk_glLightiv(::av::ClientTransport& rvk_t, GLenum light, GLenum pname, con
 }
 
 void rvk_glLineStipple(::av::ClientTransport& rvk_t, GLint factor, GLushort pattern) {
+    AV_SCOPE("rvk_glLineStipple");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(factor));
     rvk_b.write_varint(static_cast<uint64_t>(pattern));
@@ -21913,6 +22709,7 @@ void rvk_glLineStipple(::av::ClientTransport& rvk_t, GLint factor, GLushort patt
 }
 
 void rvk_glListBase(::av::ClientTransport& rvk_t, GLuint base) {
+    AV_SCOPE("rvk_glListBase");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(base));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -21924,6 +22721,7 @@ void rvk_glListBase(::av::ClientTransport& rvk_t, GLuint base) {
 }
 
 void rvk_glLoadIdentity(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glLoadIdentity");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glLoadIdentity",
@@ -21934,6 +22732,7 @@ void rvk_glLoadIdentity(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glLoadMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
+    AV_SCOPE("rvk_glLoadMatrixd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -21975,6 +22774,7 @@ void rvk_glLoadMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
 }
 
 void rvk_glLoadMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
+    AV_SCOPE("rvk_glLoadMatrixf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -22016,6 +22816,7 @@ void rvk_glLoadMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
 }
 
 void rvk_glLoadName(::av::ClientTransport& rvk_t, GLuint name) {
+    AV_SCOPE("rvk_glLoadName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(name));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -22027,6 +22828,7 @@ void rvk_glLoadName(::av::ClientTransport& rvk_t, GLuint name) {
 }
 
 void rvk_glLoadTransposeMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
+    AV_SCOPE("rvk_glLoadTransposeMatrixd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -22068,6 +22870,7 @@ void rvk_glLoadTransposeMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m)
 }
 
 void rvk_glLoadTransposeMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
+    AV_SCOPE("rvk_glLoadTransposeMatrixf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -22109,6 +22912,7 @@ void rvk_glLoadTransposeMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) 
 }
 
 void rvk_glMap1d(::av::ClientTransport& rvk_t, GLenum target, GLdouble u1, GLdouble u2, GLint stride, GLint order, const GLdouble* points) {
+    AV_SCOPE("rvk_glMap1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(u1);
@@ -22155,6 +22959,7 @@ void rvk_glMap1d(::av::ClientTransport& rvk_t, GLenum target, GLdouble u1, GLdou
 }
 
 void rvk_glMap1f(::av::ClientTransport& rvk_t, GLenum target, GLfloat u1, GLfloat u2, GLint stride, GLint order, const GLfloat* points) {
+    AV_SCOPE("rvk_glMap1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(u1);
@@ -22201,6 +23006,7 @@ void rvk_glMap1f(::av::ClientTransport& rvk_t, GLenum target, GLfloat u1, GLfloa
 }
 
 void rvk_glMap2d(::av::ClientTransport& rvk_t, GLenum target, GLdouble u1, GLdouble u2, GLint ustride, GLint uorder, GLdouble v1, GLdouble v2, GLint vstride, GLint vorder, const GLdouble* points) {
+    AV_SCOPE("rvk_glMap2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(u1);
@@ -22251,6 +23057,7 @@ void rvk_glMap2d(::av::ClientTransport& rvk_t, GLenum target, GLdouble u1, GLdou
 }
 
 void rvk_glMap2f(::av::ClientTransport& rvk_t, GLenum target, GLfloat u1, GLfloat u2, GLint ustride, GLint uorder, GLfloat v1, GLfloat v2, GLint vstride, GLint vorder, const GLfloat* points) {
+    AV_SCOPE("rvk_glMap2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(u1);
@@ -22301,6 +23108,7 @@ void rvk_glMap2f(::av::ClientTransport& rvk_t, GLenum target, GLfloat u1, GLfloa
 }
 
 void rvk_glMapGrid1d(::av::ClientTransport& rvk_t, GLint un, GLdouble u1, GLdouble u2) {
+    AV_SCOPE("rvk_glMapGrid1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(un));
     rvk_b.write_pod<GLdouble>(u1);
@@ -22314,6 +23122,7 @@ void rvk_glMapGrid1d(::av::ClientTransport& rvk_t, GLint un, GLdouble u1, GLdoub
 }
 
 void rvk_glMapGrid1f(::av::ClientTransport& rvk_t, GLint un, GLfloat u1, GLfloat u2) {
+    AV_SCOPE("rvk_glMapGrid1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(un));
     rvk_b.write_pod<GLfloat>(u1);
@@ -22327,6 +23136,7 @@ void rvk_glMapGrid1f(::av::ClientTransport& rvk_t, GLint un, GLfloat u1, GLfloat
 }
 
 void rvk_glMapGrid2d(::av::ClientTransport& rvk_t, GLint un, GLdouble u1, GLdouble u2, GLint vn, GLdouble v1, GLdouble v2) {
+    AV_SCOPE("rvk_glMapGrid2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(un));
     rvk_b.write_pod<GLdouble>(u1);
@@ -22343,6 +23153,7 @@ void rvk_glMapGrid2d(::av::ClientTransport& rvk_t, GLint un, GLdouble u1, GLdoub
 }
 
 void rvk_glMapGrid2f(::av::ClientTransport& rvk_t, GLint un, GLfloat u1, GLfloat u2, GLint vn, GLfloat v1, GLfloat v2) {
+    AV_SCOPE("rvk_glMapGrid2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(un));
     rvk_b.write_pod<GLfloat>(u1);
@@ -22359,6 +23170,7 @@ void rvk_glMapGrid2f(::av::ClientTransport& rvk_t, GLint un, GLfloat u1, GLfloat
 }
 
 void rvk_glMaterialf(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glMaterialf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -22372,6 +23184,7 @@ void rvk_glMaterialf(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GL
 }
 
 void rvk_glMaterialfv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glMaterialfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -22415,6 +23228,7 @@ void rvk_glMaterialfv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, c
 }
 
 void rvk_glMateriali(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glMateriali");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -22428,6 +23242,7 @@ void rvk_glMateriali(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, GL
 }
 
 void rvk_glMaterialiv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glMaterialiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(face));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -22471,6 +23286,7 @@ void rvk_glMaterialiv(::av::ClientTransport& rvk_t, GLenum face, GLenum pname, c
 }
 
 void rvk_glMatrixMode(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glMatrixMode");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -22482,6 +23298,7 @@ void rvk_glMatrixMode(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glMultMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
+    AV_SCOPE("rvk_glMultMatrixd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -22523,6 +23340,7 @@ void rvk_glMultMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
 }
 
 void rvk_glMultMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
+    AV_SCOPE("rvk_glMultMatrixf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -22564,6 +23382,7 @@ void rvk_glMultMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
 }
 
 void rvk_glMultTransposeMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m) {
+    AV_SCOPE("rvk_glMultTransposeMatrixd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -22605,6 +23424,7 @@ void rvk_glMultTransposeMatrixd(::av::ClientTransport& rvk_t, const GLdouble* m)
 }
 
 void rvk_glMultTransposeMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) {
+    AV_SCOPE("rvk_glMultTransposeMatrixf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -22646,6 +23466,7 @@ void rvk_glMultTransposeMatrixf(::av::ClientTransport& rvk_t, const GLfloat* m) 
 }
 
 void rvk_glMultiTexCoord1d(::av::ClientTransport& rvk_t, GLenum target, GLdouble s) {
+    AV_SCOPE("rvk_glMultiTexCoord1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(s);
@@ -22658,6 +23479,7 @@ void rvk_glMultiTexCoord1d(::av::ClientTransport& rvk_t, GLenum target, GLdouble
 }
 
 void rvk_glMultiTexCoord1dv(::av::ClientTransport& rvk_t, GLenum target, const GLdouble* v) {
+    AV_SCOPE("rvk_glMultiTexCoord1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22700,6 +23522,7 @@ void rvk_glMultiTexCoord1dv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord1f(::av::ClientTransport& rvk_t, GLenum target, GLfloat s) {
+    AV_SCOPE("rvk_glMultiTexCoord1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(s);
@@ -22712,6 +23535,7 @@ void rvk_glMultiTexCoord1f(::av::ClientTransport& rvk_t, GLenum target, GLfloat 
 }
 
 void rvk_glMultiTexCoord1fv(::av::ClientTransport& rvk_t, GLenum target, const GLfloat* v) {
+    AV_SCOPE("rvk_glMultiTexCoord1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22754,6 +23578,7 @@ void rvk_glMultiTexCoord1fv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord1i(::av::ClientTransport& rvk_t, GLenum target, GLint s) {
+    AV_SCOPE("rvk_glMultiTexCoord1i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -22766,6 +23591,7 @@ void rvk_glMultiTexCoord1i(::av::ClientTransport& rvk_t, GLenum target, GLint s)
 }
 
 void rvk_glMultiTexCoord1iv(::av::ClientTransport& rvk_t, GLenum target, const GLint* v) {
+    AV_SCOPE("rvk_glMultiTexCoord1iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22808,6 +23634,7 @@ void rvk_glMultiTexCoord1iv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord1s(::av::ClientTransport& rvk_t, GLenum target, GLshort s) {
+    AV_SCOPE("rvk_glMultiTexCoord1s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -22820,6 +23647,7 @@ void rvk_glMultiTexCoord1s(::av::ClientTransport& rvk_t, GLenum target, GLshort 
 }
 
 void rvk_glMultiTexCoord1sv(::av::ClientTransport& rvk_t, GLenum target, const GLshort* v) {
+    AV_SCOPE("rvk_glMultiTexCoord1sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22862,6 +23690,7 @@ void rvk_glMultiTexCoord1sv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord2d(::av::ClientTransport& rvk_t, GLenum target, GLdouble s, GLdouble t) {
+    AV_SCOPE("rvk_glMultiTexCoord2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(s);
@@ -22875,6 +23704,7 @@ void rvk_glMultiTexCoord2d(::av::ClientTransport& rvk_t, GLenum target, GLdouble
 }
 
 void rvk_glMultiTexCoord2dv(::av::ClientTransport& rvk_t, GLenum target, const GLdouble* v) {
+    AV_SCOPE("rvk_glMultiTexCoord2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22917,6 +23747,7 @@ void rvk_glMultiTexCoord2dv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord2f(::av::ClientTransport& rvk_t, GLenum target, GLfloat s, GLfloat t) {
+    AV_SCOPE("rvk_glMultiTexCoord2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(s);
@@ -22930,6 +23761,7 @@ void rvk_glMultiTexCoord2f(::av::ClientTransport& rvk_t, GLenum target, GLfloat 
 }
 
 void rvk_glMultiTexCoord2fv(::av::ClientTransport& rvk_t, GLenum target, const GLfloat* v) {
+    AV_SCOPE("rvk_glMultiTexCoord2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -22972,6 +23804,7 @@ void rvk_glMultiTexCoord2fv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord2i(::av::ClientTransport& rvk_t, GLenum target, GLint s, GLint t) {
+    AV_SCOPE("rvk_glMultiTexCoord2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -22985,6 +23818,7 @@ void rvk_glMultiTexCoord2i(::av::ClientTransport& rvk_t, GLenum target, GLint s,
 }
 
 void rvk_glMultiTexCoord2iv(::av::ClientTransport& rvk_t, GLenum target, const GLint* v) {
+    AV_SCOPE("rvk_glMultiTexCoord2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23027,6 +23861,7 @@ void rvk_glMultiTexCoord2iv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord2s(::av::ClientTransport& rvk_t, GLenum target, GLshort s, GLshort t) {
+    AV_SCOPE("rvk_glMultiTexCoord2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -23040,6 +23875,7 @@ void rvk_glMultiTexCoord2s(::av::ClientTransport& rvk_t, GLenum target, GLshort 
 }
 
 void rvk_glMultiTexCoord2sv(::av::ClientTransport& rvk_t, GLenum target, const GLshort* v) {
+    AV_SCOPE("rvk_glMultiTexCoord2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23082,6 +23918,7 @@ void rvk_glMultiTexCoord2sv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord3d(::av::ClientTransport& rvk_t, GLenum target, GLdouble s, GLdouble t, GLdouble r) {
+    AV_SCOPE("rvk_glMultiTexCoord3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(s);
@@ -23096,6 +23933,7 @@ void rvk_glMultiTexCoord3d(::av::ClientTransport& rvk_t, GLenum target, GLdouble
 }
 
 void rvk_glMultiTexCoord3dv(::av::ClientTransport& rvk_t, GLenum target, const GLdouble* v) {
+    AV_SCOPE("rvk_glMultiTexCoord3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23138,6 +23976,7 @@ void rvk_glMultiTexCoord3dv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord3f(::av::ClientTransport& rvk_t, GLenum target, GLfloat s, GLfloat t, GLfloat r) {
+    AV_SCOPE("rvk_glMultiTexCoord3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(s);
@@ -23152,6 +23991,7 @@ void rvk_glMultiTexCoord3f(::av::ClientTransport& rvk_t, GLenum target, GLfloat 
 }
 
 void rvk_glMultiTexCoord3fv(::av::ClientTransport& rvk_t, GLenum target, const GLfloat* v) {
+    AV_SCOPE("rvk_glMultiTexCoord3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23194,6 +24034,7 @@ void rvk_glMultiTexCoord3fv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord3i(::av::ClientTransport& rvk_t, GLenum target, GLint s, GLint t, GLint r) {
+    AV_SCOPE("rvk_glMultiTexCoord3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -23208,6 +24049,7 @@ void rvk_glMultiTexCoord3i(::av::ClientTransport& rvk_t, GLenum target, GLint s,
 }
 
 void rvk_glMultiTexCoord3iv(::av::ClientTransport& rvk_t, GLenum target, const GLint* v) {
+    AV_SCOPE("rvk_glMultiTexCoord3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23250,6 +24092,7 @@ void rvk_glMultiTexCoord3iv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord3s(::av::ClientTransport& rvk_t, GLenum target, GLshort s, GLshort t, GLshort r) {
+    AV_SCOPE("rvk_glMultiTexCoord3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -23264,6 +24107,7 @@ void rvk_glMultiTexCoord3s(::av::ClientTransport& rvk_t, GLenum target, GLshort 
 }
 
 void rvk_glMultiTexCoord3sv(::av::ClientTransport& rvk_t, GLenum target, const GLshort* v) {
+    AV_SCOPE("rvk_glMultiTexCoord3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23306,6 +24150,7 @@ void rvk_glMultiTexCoord3sv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord4d(::av::ClientTransport& rvk_t, GLenum target, GLdouble s, GLdouble t, GLdouble r, GLdouble q) {
+    AV_SCOPE("rvk_glMultiTexCoord4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLdouble>(s);
@@ -23321,6 +24166,7 @@ void rvk_glMultiTexCoord4d(::av::ClientTransport& rvk_t, GLenum target, GLdouble
 }
 
 void rvk_glMultiTexCoord4dv(::av::ClientTransport& rvk_t, GLenum target, const GLdouble* v) {
+    AV_SCOPE("rvk_glMultiTexCoord4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23363,6 +24209,7 @@ void rvk_glMultiTexCoord4dv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord4f(::av::ClientTransport& rvk_t, GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
+    AV_SCOPE("rvk_glMultiTexCoord4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_pod<GLfloat>(s);
@@ -23378,6 +24225,7 @@ void rvk_glMultiTexCoord4f(::av::ClientTransport& rvk_t, GLenum target, GLfloat 
 }
 
 void rvk_glMultiTexCoord4fv(::av::ClientTransport& rvk_t, GLenum target, const GLfloat* v) {
+    AV_SCOPE("rvk_glMultiTexCoord4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23420,6 +24268,7 @@ void rvk_glMultiTexCoord4fv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord4i(::av::ClientTransport& rvk_t, GLenum target, GLint s, GLint t, GLint r, GLint q) {
+    AV_SCOPE("rvk_glMultiTexCoord4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -23435,6 +24284,7 @@ void rvk_glMultiTexCoord4i(::av::ClientTransport& rvk_t, GLenum target, GLint s,
 }
 
 void rvk_glMultiTexCoord4iv(::av::ClientTransport& rvk_t, GLenum target, const GLint* v) {
+    AV_SCOPE("rvk_glMultiTexCoord4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23477,6 +24327,7 @@ void rvk_glMultiTexCoord4iv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glMultiTexCoord4s(::av::ClientTransport& rvk_t, GLenum target, GLshort s, GLshort t, GLshort r, GLshort q) {
+    AV_SCOPE("rvk_glMultiTexCoord4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(s));
@@ -23492,6 +24343,7 @@ void rvk_glMultiTexCoord4s(::av::ClientTransport& rvk_t, GLenum target, GLshort 
 }
 
 void rvk_glMultiTexCoord4sv(::av::ClientTransport& rvk_t, GLenum target, const GLshort* v) {
+    AV_SCOPE("rvk_glMultiTexCoord4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
@@ -23534,6 +24386,7 @@ void rvk_glMultiTexCoord4sv(::av::ClientTransport& rvk_t, GLenum target, const G
 }
 
 void rvk_glNewList(::av::ClientTransport& rvk_t, GLuint list, GLenum mode) {
+    AV_SCOPE("rvk_glNewList");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(list));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -23546,6 +24399,7 @@ void rvk_glNewList(::av::ClientTransport& rvk_t, GLuint list, GLenum mode) {
 }
 
 void rvk_glNormal3b(::av::ClientTransport& rvk_t, GLbyte nx, GLbyte ny, GLbyte nz) {
+    AV_SCOPE("rvk_glNormal3b");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(nx));
     rvk_b.write_varint(static_cast<uint64_t>(ny));
@@ -23559,6 +24413,7 @@ void rvk_glNormal3b(::av::ClientTransport& rvk_t, GLbyte nx, GLbyte ny, GLbyte n
 }
 
 void rvk_glNormal3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
+    AV_SCOPE("rvk_glNormal3bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
@@ -23600,6 +24455,7 @@ void rvk_glNormal3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
 }
 
 void rvk_glNormal3d(::av::ClientTransport& rvk_t, GLdouble nx, GLdouble ny, GLdouble nz) {
+    AV_SCOPE("rvk_glNormal3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(nx);
     rvk_b.write_pod<GLdouble>(ny);
@@ -23613,6 +24469,7 @@ void rvk_glNormal3d(::av::ClientTransport& rvk_t, GLdouble nx, GLdouble ny, GLdo
 }
 
 void rvk_glNormal3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glNormal3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -23654,6 +24511,7 @@ void rvk_glNormal3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glNormal3f(::av::ClientTransport& rvk_t, GLfloat nx, GLfloat ny, GLfloat nz) {
+    AV_SCOPE("rvk_glNormal3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(nx);
     rvk_b.write_pod<GLfloat>(ny);
@@ -23667,6 +24525,7 @@ void rvk_glNormal3f(::av::ClientTransport& rvk_t, GLfloat nx, GLfloat ny, GLfloa
 }
 
 void rvk_glNormal3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glNormal3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -23708,6 +24567,7 @@ void rvk_glNormal3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glNormal3i(::av::ClientTransport& rvk_t, GLint nx, GLint ny, GLint nz) {
+    AV_SCOPE("rvk_glNormal3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(nx));
     rvk_b.write_varint(static_cast<uint64_t>(ny));
@@ -23721,6 +24581,7 @@ void rvk_glNormal3i(::av::ClientTransport& rvk_t, GLint nx, GLint ny, GLint nz) 
 }
 
 void rvk_glNormal3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glNormal3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -23762,6 +24623,7 @@ void rvk_glNormal3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glNormal3s(::av::ClientTransport& rvk_t, GLshort nx, GLshort ny, GLshort nz) {
+    AV_SCOPE("rvk_glNormal3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(nx));
     rvk_b.write_varint(static_cast<uint64_t>(ny));
@@ -23775,6 +24637,7 @@ void rvk_glNormal3s(::av::ClientTransport& rvk_t, GLshort nx, GLshort ny, GLshor
 }
 
 void rvk_glNormal3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glNormal3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -23816,6 +24679,7 @@ void rvk_glNormal3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glNormalPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glNormalPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -23829,6 +24693,7 @@ void rvk_glNormalPointer(::av::ClientTransport& rvk_t, GLenum type, GLsizei stri
 }
 
 void rvk_glOrtho(::av::ClientTransport& rvk_t, GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
+    AV_SCOPE("rvk_glOrtho");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(left);
     rvk_b.write_pod<GLdouble>(right);
@@ -23845,6 +24710,7 @@ void rvk_glOrtho(::av::ClientTransport& rvk_t, GLdouble left, GLdouble right, GL
 }
 
 void rvk_glPassThrough(::av::ClientTransport& rvk_t, GLfloat token) {
+    AV_SCOPE("rvk_glPassThrough");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(token);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -23856,6 +24722,7 @@ void rvk_glPassThrough(::av::ClientTransport& rvk_t, GLfloat token) {
 }
 
 void rvk_glPixelMapfv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize, const GLfloat* values) {
+    AV_SCOPE("rvk_glPixelMapfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     rvk_b.write_varint(static_cast<uint64_t>(mapsize));
@@ -23899,6 +24766,7 @@ void rvk_glPixelMapfv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize,
 }
 
 void rvk_glPixelMapuiv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize, const GLuint* values) {
+    AV_SCOPE("rvk_glPixelMapuiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     rvk_b.write_varint(static_cast<uint64_t>(mapsize));
@@ -23942,6 +24810,7 @@ void rvk_glPixelMapuiv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize
 }
 
 void rvk_glPixelMapusv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize, const GLushort* values) {
+    AV_SCOPE("rvk_glPixelMapusv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(map));
     rvk_b.write_varint(static_cast<uint64_t>(mapsize));
@@ -23985,6 +24854,7 @@ void rvk_glPixelMapusv(::av::ClientTransport& rvk_t, GLenum map, GLsizei mapsize
 }
 
 void rvk_glPixelTransferf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glPixelTransferf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_pod<GLfloat>(param);
@@ -23997,6 +24867,7 @@ void rvk_glPixelTransferf(::av::ClientTransport& rvk_t, GLenum pname, GLfloat pa
 }
 
 void rvk_glPixelTransferi(::av::ClientTransport& rvk_t, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glPixelTransferi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(param));
@@ -24009,6 +24880,7 @@ void rvk_glPixelTransferi(::av::ClientTransport& rvk_t, GLenum pname, GLint para
 }
 
 void rvk_glPixelZoom(::av::ClientTransport& rvk_t, GLfloat xfactor, GLfloat yfactor) {
+    AV_SCOPE("rvk_glPixelZoom");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(xfactor);
     rvk_b.write_pod<GLfloat>(yfactor);
@@ -24021,6 +24893,7 @@ void rvk_glPixelZoom(::av::ClientTransport& rvk_t, GLfloat xfactor, GLfloat yfac
 }
 
 void rvk_glPolygonStipple(::av::ClientTransport& rvk_t, const GLubyte* mask) {
+    AV_SCOPE("rvk_glPolygonStipple");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t mask_want = 0;
     if (mask != nullptr) mask_want = (static_cast<size_t>(::av::glproto::stipple_bytes(rvk_t, false)) * sizeof(GLubyte));
@@ -24062,6 +24935,7 @@ void rvk_glPolygonStipple(::av::ClientTransport& rvk_t, const GLubyte* mask) {
 }
 
 void rvk_glPopAttrib(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPopAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPopAttrib",
@@ -24072,6 +24946,7 @@ void rvk_glPopAttrib(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPopClientAttrib(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPopClientAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPopClientAttrib",
@@ -24082,6 +24957,7 @@ void rvk_glPopClientAttrib(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPopMatrix(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPopMatrix");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPopMatrix",
@@ -24092,6 +24968,7 @@ void rvk_glPopMatrix(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPopName(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPopName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPopName",
@@ -24102,6 +24979,7 @@ void rvk_glPopName(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPrioritizeTextures(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* textures, const GLfloat* priorities) {
+    AV_SCOPE("rvk_glPrioritizeTextures");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
@@ -24175,6 +25053,7 @@ void rvk_glPrioritizeTextures(::av::ClientTransport& rvk_t, GLsizei n, const GLu
 }
 
 void rvk_glPushAttrib(::av::ClientTransport& rvk_t, GLbitfield mask) {
+    AV_SCOPE("rvk_glPushAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -24186,6 +25065,7 @@ void rvk_glPushAttrib(::av::ClientTransport& rvk_t, GLbitfield mask) {
 }
 
 void rvk_glPushClientAttrib(::av::ClientTransport& rvk_t, GLbitfield mask) {
+    AV_SCOPE("rvk_glPushClientAttrib");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -24197,6 +25077,7 @@ void rvk_glPushClientAttrib(::av::ClientTransport& rvk_t, GLbitfield mask) {
 }
 
 void rvk_glPushMatrix(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glPushMatrix");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glPushMatrix",
@@ -24207,6 +25088,7 @@ void rvk_glPushMatrix(::av::ClientTransport& rvk_t) {
 }
 
 void rvk_glPushName(::av::ClientTransport& rvk_t, GLuint name) {
+    AV_SCOPE("rvk_glPushName");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(name));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -24218,6 +25100,7 @@ void rvk_glPushName(::av::ClientTransport& rvk_t, GLuint name) {
 }
 
 void rvk_glRasterPos2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glRasterPos2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -24230,6 +25113,7 @@ void rvk_glRasterPos2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
 }
 
 void rvk_glRasterPos2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glRasterPos2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -24271,6 +25155,7 @@ void rvk_glRasterPos2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glRasterPos2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
+    AV_SCOPE("rvk_glRasterPos2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -24283,6 +25168,7 @@ void rvk_glRasterPos2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
 }
 
 void rvk_glRasterPos2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glRasterPos2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -24324,6 +25210,7 @@ void rvk_glRasterPos2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glRasterPos2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
+    AV_SCOPE("rvk_glRasterPos2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24336,6 +25223,7 @@ void rvk_glRasterPos2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
 }
 
 void rvk_glRasterPos2iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glRasterPos2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -24377,6 +25265,7 @@ void rvk_glRasterPos2iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glRasterPos2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
+    AV_SCOPE("rvk_glRasterPos2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24389,6 +25278,7 @@ void rvk_glRasterPos2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
 }
 
 void rvk_glRasterPos2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glRasterPos2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -24430,6 +25320,7 @@ void rvk_glRasterPos2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glRasterPos3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glRasterPos3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -24443,6 +25334,7 @@ void rvk_glRasterPos3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLd
 }
 
 void rvk_glRasterPos3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glRasterPos3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -24484,6 +25376,7 @@ void rvk_glRasterPos3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glRasterPos3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glRasterPos3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -24497,6 +25390,7 @@ void rvk_glRasterPos3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLflo
 }
 
 void rvk_glRasterPos3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glRasterPos3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -24538,6 +25432,7 @@ void rvk_glRasterPos3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glRasterPos3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) {
+    AV_SCOPE("rvk_glRasterPos3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24551,6 +25446,7 @@ void rvk_glRasterPos3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) 
 }
 
 void rvk_glRasterPos3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glRasterPos3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -24592,6 +25488,7 @@ void rvk_glRasterPos3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glRasterPos3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("rvk_glRasterPos3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24605,6 +25502,7 @@ void rvk_glRasterPos3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLsho
 }
 
 void rvk_glRasterPos3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glRasterPos3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -24646,6 +25544,7 @@ void rvk_glRasterPos3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glRasterPos4d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glRasterPos4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -24660,6 +25559,7 @@ void rvk_glRasterPos4d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLd
 }
 
 void rvk_glRasterPos4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glRasterPos4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -24701,6 +25601,7 @@ void rvk_glRasterPos4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glRasterPos4f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("rvk_glRasterPos4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -24715,6 +25616,7 @@ void rvk_glRasterPos4f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLflo
 }
 
 void rvk_glRasterPos4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glRasterPos4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -24756,6 +25658,7 @@ void rvk_glRasterPos4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glRasterPos4i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z, GLint w) {
+    AV_SCOPE("rvk_glRasterPos4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24770,6 +25673,7 @@ void rvk_glRasterPos4i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z, 
 }
 
 void rvk_glRasterPos4iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glRasterPos4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -24811,6 +25715,7 @@ void rvk_glRasterPos4iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glRasterPos4s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort z, GLshort w) {
+    AV_SCOPE("rvk_glRasterPos4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -24825,6 +25730,7 @@ void rvk_glRasterPos4s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLsho
 }
 
 void rvk_glRasterPos4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glRasterPos4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -24866,6 +25772,7 @@ void rvk_glRasterPos4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glRectd(::av::ClientTransport& rvk_t, GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2) {
+    AV_SCOPE("rvk_glRectd");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x1);
     rvk_b.write_pod<GLdouble>(y1);
@@ -24880,6 +25787,7 @@ void rvk_glRectd(::av::ClientTransport& rvk_t, GLdouble x1, GLdouble y1, GLdoubl
 }
 
 void rvk_glRectdv(::av::ClientTransport& rvk_t, const GLdouble* v1, const GLdouble* v2) {
+    AV_SCOPE("rvk_glRectdv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLdouble));
@@ -24952,6 +25860,7 @@ void rvk_glRectdv(::av::ClientTransport& rvk_t, const GLdouble* v1, const GLdoub
 }
 
 void rvk_glRectf(::av::ClientTransport& rvk_t, GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2) {
+    AV_SCOPE("rvk_glRectf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x1);
     rvk_b.write_pod<GLfloat>(y1);
@@ -24966,6 +25875,7 @@ void rvk_glRectf(::av::ClientTransport& rvk_t, GLfloat x1, GLfloat y1, GLfloat x
 }
 
 void rvk_glRectfv(::av::ClientTransport& rvk_t, const GLfloat* v1, const GLfloat* v2) {
+    AV_SCOPE("rvk_glRectfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLfloat));
@@ -25038,6 +25948,7 @@ void rvk_glRectfv(::av::ClientTransport& rvk_t, const GLfloat* v1, const GLfloat
 }
 
 void rvk_glRecti(::av::ClientTransport& rvk_t, GLint x1, GLint y1, GLint x2, GLint y2) {
+    AV_SCOPE("rvk_glRecti");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x1));
     rvk_b.write_varint(static_cast<uint64_t>(y1));
@@ -25052,6 +25963,7 @@ void rvk_glRecti(::av::ClientTransport& rvk_t, GLint x1, GLint y1, GLint x2, GLi
 }
 
 void rvk_glRectiv(::av::ClientTransport& rvk_t, const GLint* v1, const GLint* v2) {
+    AV_SCOPE("rvk_glRectiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLint));
@@ -25124,6 +26036,7 @@ void rvk_glRectiv(::av::ClientTransport& rvk_t, const GLint* v1, const GLint* v2
 }
 
 void rvk_glRects(::av::ClientTransport& rvk_t, GLshort x1, GLshort y1, GLshort x2, GLshort y2) {
+    AV_SCOPE("rvk_glRects");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x1));
     rvk_b.write_varint(static_cast<uint64_t>(y1));
@@ -25138,6 +26051,7 @@ void rvk_glRects(::av::ClientTransport& rvk_t, GLshort x1, GLshort y1, GLshort x
 }
 
 void rvk_glRectsv(::av::ClientTransport& rvk_t, const GLshort* v1, const GLshort* v2) {
+    AV_SCOPE("rvk_glRectsv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLshort));
@@ -25210,6 +26124,7 @@ void rvk_glRectsv(::av::ClientTransport& rvk_t, const GLshort* v1, const GLshort
 }
 
 GLint rvk_glRenderMode(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glRenderMode");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25229,6 +26144,7 @@ GLint rvk_glRenderMode(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glRotated(::av::ClientTransport& rvk_t, GLdouble angle, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glRotated");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(angle);
     rvk_b.write_pod<GLdouble>(x);
@@ -25243,6 +26159,7 @@ void rvk_glRotated(::av::ClientTransport& rvk_t, GLdouble angle, GLdouble x, GLd
 }
 
 void rvk_glRotatef(::av::ClientTransport& rvk_t, GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glRotatef");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(angle);
     rvk_b.write_pod<GLfloat>(x);
@@ -25257,6 +26174,7 @@ void rvk_glRotatef(::av::ClientTransport& rvk_t, GLfloat angle, GLfloat x, GLflo
 }
 
 void rvk_glScaled(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glScaled");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -25270,6 +26188,7 @@ void rvk_glScaled(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble
 }
 
 void rvk_glScalef(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glScalef");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -25283,6 +26202,7 @@ void rvk_glScalef(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z)
 }
 
 void rvk_glSecondaryColor3b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte green, GLbyte blue) {
+    AV_SCOPE("rvk_glSecondaryColor3b");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25296,6 +26216,7 @@ void rvk_glSecondaryColor3b(::av::ClientTransport& rvk_t, GLbyte red, GLbyte gre
 }
 
 void rvk_glSecondaryColor3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
+    AV_SCOPE("rvk_glSecondaryColor3bv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
@@ -25337,6 +26258,7 @@ void rvk_glSecondaryColor3bv(::av::ClientTransport& rvk_t, const GLbyte* v) {
 }
 
 void rvk_glSecondaryColor3d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble green, GLdouble blue) {
+    AV_SCOPE("rvk_glSecondaryColor3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(red);
     rvk_b.write_pod<GLdouble>(green);
@@ -25350,6 +26272,7 @@ void rvk_glSecondaryColor3d(::av::ClientTransport& rvk_t, GLdouble red, GLdouble
 }
 
 void rvk_glSecondaryColor3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glSecondaryColor3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -25391,6 +26314,7 @@ void rvk_glSecondaryColor3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glSecondaryColor3f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat green, GLfloat blue) {
+    AV_SCOPE("rvk_glSecondaryColor3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(red);
     rvk_b.write_pod<GLfloat>(green);
@@ -25404,6 +26328,7 @@ void rvk_glSecondaryColor3f(::av::ClientTransport& rvk_t, GLfloat red, GLfloat g
 }
 
 void rvk_glSecondaryColor3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glSecondaryColor3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -25445,6 +26370,7 @@ void rvk_glSecondaryColor3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glSecondaryColor3i(::av::ClientTransport& rvk_t, GLint red, GLint green, GLint blue) {
+    AV_SCOPE("rvk_glSecondaryColor3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25458,6 +26384,7 @@ void rvk_glSecondaryColor3i(::av::ClientTransport& rvk_t, GLint red, GLint green
 }
 
 void rvk_glSecondaryColor3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glSecondaryColor3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -25499,6 +26426,7 @@ void rvk_glSecondaryColor3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glSecondaryColor3s(::av::ClientTransport& rvk_t, GLshort red, GLshort green, GLshort blue) {
+    AV_SCOPE("rvk_glSecondaryColor3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25512,6 +26440,7 @@ void rvk_glSecondaryColor3s(::av::ClientTransport& rvk_t, GLshort red, GLshort g
 }
 
 void rvk_glSecondaryColor3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glSecondaryColor3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -25553,6 +26482,7 @@ void rvk_glSecondaryColor3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glSecondaryColor3ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte green, GLubyte blue) {
+    AV_SCOPE("rvk_glSecondaryColor3ub");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25566,6 +26496,7 @@ void rvk_glSecondaryColor3ub(::av::ClientTransport& rvk_t, GLubyte red, GLubyte 
 }
 
 void rvk_glSecondaryColor3ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
+    AV_SCOPE("rvk_glSecondaryColor3ubv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLubyte));
@@ -25607,6 +26538,7 @@ void rvk_glSecondaryColor3ubv(::av::ClientTransport& rvk_t, const GLubyte* v) {
 }
 
 void rvk_glSecondaryColor3ui(::av::ClientTransport& rvk_t, GLuint red, GLuint green, GLuint blue) {
+    AV_SCOPE("rvk_glSecondaryColor3ui");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25620,6 +26552,7 @@ void rvk_glSecondaryColor3ui(::av::ClientTransport& rvk_t, GLuint red, GLuint gr
 }
 
 void rvk_glSecondaryColor3uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
+    AV_SCOPE("rvk_glSecondaryColor3uiv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLuint));
@@ -25661,6 +26594,7 @@ void rvk_glSecondaryColor3uiv(::av::ClientTransport& rvk_t, const GLuint* v) {
 }
 
 void rvk_glSecondaryColor3us(::av::ClientTransport& rvk_t, GLushort red, GLushort green, GLushort blue) {
+    AV_SCOPE("rvk_glSecondaryColor3us");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(red));
     rvk_b.write_varint(static_cast<uint64_t>(green));
@@ -25674,6 +26608,7 @@ void rvk_glSecondaryColor3us(::av::ClientTransport& rvk_t, GLushort red, GLushor
 }
 
 void rvk_glSecondaryColor3usv(::av::ClientTransport& rvk_t, const GLushort* v) {
+    AV_SCOPE("rvk_glSecondaryColor3usv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLushort));
@@ -25715,6 +26650,7 @@ void rvk_glSecondaryColor3usv(::av::ClientTransport& rvk_t, const GLushort* v) {
 }
 
 void rvk_glSecondaryColorPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glSecondaryColorPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -25729,6 +26665,7 @@ void rvk_glSecondaryColorPointer(::av::ClientTransport& rvk_t, GLint size, GLenu
 }
 
 void rvk_glSelectBuffer(::av::ClientTransport& rvk_t, GLsizei size, GLuint* buffer) {
+    AV_SCOPE("rvk_glSelectBuffer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     const size_t buffer_want = buffer != nullptr ? (static_cast<size_t>(size) * sizeof(GLuint)) : 0u;
@@ -25757,6 +26694,7 @@ void rvk_glSelectBuffer(::av::ClientTransport& rvk_t, GLsizei size, GLuint* buff
 }
 
 void rvk_glShadeModel(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glShadeModel");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25768,6 +26706,7 @@ void rvk_glShadeModel(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glTexCoord1d(::av::ClientTransport& rvk_t, GLdouble s) {
+    AV_SCOPE("rvk_glTexCoord1d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(s);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25779,6 +26718,7 @@ void rvk_glTexCoord1d(::av::ClientTransport& rvk_t, GLdouble s) {
 }
 
 void rvk_glTexCoord1dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glTexCoord1dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLdouble));
@@ -25820,6 +26760,7 @@ void rvk_glTexCoord1dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glTexCoord1f(::av::ClientTransport& rvk_t, GLfloat s) {
+    AV_SCOPE("rvk_glTexCoord1f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(s);
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25831,6 +26772,7 @@ void rvk_glTexCoord1f(::av::ClientTransport& rvk_t, GLfloat s) {
 }
 
 void rvk_glTexCoord1fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glTexCoord1fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLfloat));
@@ -25872,6 +26814,7 @@ void rvk_glTexCoord1fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glTexCoord1i(::av::ClientTransport& rvk_t, GLint s) {
+    AV_SCOPE("rvk_glTexCoord1i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25883,6 +26826,7 @@ void rvk_glTexCoord1i(::av::ClientTransport& rvk_t, GLint s) {
 }
 
 void rvk_glTexCoord1iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glTexCoord1iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLint));
@@ -25924,6 +26868,7 @@ void rvk_glTexCoord1iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glTexCoord1s(::av::ClientTransport& rvk_t, GLshort s) {
+    AV_SCOPE("rvk_glTexCoord1s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -25935,6 +26880,7 @@ void rvk_glTexCoord1s(::av::ClientTransport& rvk_t, GLshort s) {
 }
 
 void rvk_glTexCoord1sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glTexCoord1sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLshort));
@@ -25976,6 +26922,7 @@ void rvk_glTexCoord1sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glTexCoord2d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t) {
+    AV_SCOPE("rvk_glTexCoord2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(s);
     rvk_b.write_pod<GLdouble>(t);
@@ -25988,6 +26935,7 @@ void rvk_glTexCoord2d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t) {
 }
 
 void rvk_glTexCoord2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glTexCoord2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -26029,6 +26977,7 @@ void rvk_glTexCoord2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glTexCoord2f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t) {
+    AV_SCOPE("rvk_glTexCoord2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(s);
     rvk_b.write_pod<GLfloat>(t);
@@ -26041,6 +26990,7 @@ void rvk_glTexCoord2f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t) {
 }
 
 void rvk_glTexCoord2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glTexCoord2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -26082,6 +27032,7 @@ void rvk_glTexCoord2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glTexCoord2i(::av::ClientTransport& rvk_t, GLint s, GLint t) {
+    AV_SCOPE("rvk_glTexCoord2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26094,6 +27045,7 @@ void rvk_glTexCoord2i(::av::ClientTransport& rvk_t, GLint s, GLint t) {
 }
 
 void rvk_glTexCoord2iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glTexCoord2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -26135,6 +27087,7 @@ void rvk_glTexCoord2iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glTexCoord2s(::av::ClientTransport& rvk_t, GLshort s, GLshort t) {
+    AV_SCOPE("rvk_glTexCoord2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26147,6 +27100,7 @@ void rvk_glTexCoord2s(::av::ClientTransport& rvk_t, GLshort s, GLshort t) {
 }
 
 void rvk_glTexCoord2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glTexCoord2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -26188,6 +27142,7 @@ void rvk_glTexCoord2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glTexCoord3d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t, GLdouble r) {
+    AV_SCOPE("rvk_glTexCoord3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(s);
     rvk_b.write_pod<GLdouble>(t);
@@ -26201,6 +27156,7 @@ void rvk_glTexCoord3d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t, GLdo
 }
 
 void rvk_glTexCoord3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glTexCoord3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -26242,6 +27198,7 @@ void rvk_glTexCoord3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glTexCoord3f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t, GLfloat r) {
+    AV_SCOPE("rvk_glTexCoord3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(s);
     rvk_b.write_pod<GLfloat>(t);
@@ -26255,6 +27212,7 @@ void rvk_glTexCoord3f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t, GLfloa
 }
 
 void rvk_glTexCoord3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glTexCoord3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -26296,6 +27254,7 @@ void rvk_glTexCoord3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glTexCoord3i(::av::ClientTransport& rvk_t, GLint s, GLint t, GLint r) {
+    AV_SCOPE("rvk_glTexCoord3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26309,6 +27268,7 @@ void rvk_glTexCoord3i(::av::ClientTransport& rvk_t, GLint s, GLint t, GLint r) {
 }
 
 void rvk_glTexCoord3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glTexCoord3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -26350,6 +27310,7 @@ void rvk_glTexCoord3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glTexCoord3s(::av::ClientTransport& rvk_t, GLshort s, GLshort t, GLshort r) {
+    AV_SCOPE("rvk_glTexCoord3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26363,6 +27324,7 @@ void rvk_glTexCoord3s(::av::ClientTransport& rvk_t, GLshort s, GLshort t, GLshor
 }
 
 void rvk_glTexCoord3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glTexCoord3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -26404,6 +27366,7 @@ void rvk_glTexCoord3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glTexCoord4d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t, GLdouble r, GLdouble q) {
+    AV_SCOPE("rvk_glTexCoord4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(s);
     rvk_b.write_pod<GLdouble>(t);
@@ -26418,6 +27381,7 @@ void rvk_glTexCoord4d(::av::ClientTransport& rvk_t, GLdouble s, GLdouble t, GLdo
 }
 
 void rvk_glTexCoord4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glTexCoord4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -26459,6 +27423,7 @@ void rvk_glTexCoord4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glTexCoord4f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
+    AV_SCOPE("rvk_glTexCoord4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(s);
     rvk_b.write_pod<GLfloat>(t);
@@ -26473,6 +27438,7 @@ void rvk_glTexCoord4f(::av::ClientTransport& rvk_t, GLfloat s, GLfloat t, GLfloa
 }
 
 void rvk_glTexCoord4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glTexCoord4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -26514,6 +27480,7 @@ void rvk_glTexCoord4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glTexCoord4i(::av::ClientTransport& rvk_t, GLint s, GLint t, GLint r, GLint q) {
+    AV_SCOPE("rvk_glTexCoord4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26528,6 +27495,7 @@ void rvk_glTexCoord4i(::av::ClientTransport& rvk_t, GLint s, GLint t, GLint r, G
 }
 
 void rvk_glTexCoord4iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glTexCoord4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -26569,6 +27537,7 @@ void rvk_glTexCoord4iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glTexCoord4s(::av::ClientTransport& rvk_t, GLshort s, GLshort t, GLshort r, GLshort q) {
+    AV_SCOPE("rvk_glTexCoord4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(s));
     rvk_b.write_varint(static_cast<uint64_t>(t));
@@ -26583,6 +27552,7 @@ void rvk_glTexCoord4s(::av::ClientTransport& rvk_t, GLshort s, GLshort t, GLshor
 }
 
 void rvk_glTexCoord4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glTexCoord4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -26624,6 +27594,7 @@ void rvk_glTexCoord4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glTexCoordPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glTexCoordPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -26638,6 +27609,7 @@ void rvk_glTexCoordPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type
 }
 
 void rvk_glTexEnvf(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glTexEnvf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26651,6 +27623,7 @@ void rvk_glTexEnvf(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GL
 }
 
 void rvk_glTexEnvfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glTexEnvfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26694,6 +27667,7 @@ void rvk_glTexEnvfv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, c
 }
 
 void rvk_glTexEnvi(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glTexEnvi");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26707,6 +27681,7 @@ void rvk_glTexEnvi(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GL
 }
 
 void rvk_glTexEnviv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTexEnviv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26750,6 +27725,7 @@ void rvk_glTexEnviv(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, c
 }
 
 void rvk_glTexGend(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLdouble param) {
+    AV_SCOPE("rvk_glTexGend");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26763,6 +27739,7 @@ void rvk_glTexGend(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLd
 }
 
 void rvk_glTexGendv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, const GLdouble* params) {
+    AV_SCOPE("rvk_glTexGendv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26806,6 +27783,7 @@ void rvk_glTexGendv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, co
 }
 
 void rvk_glTexGenf(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glTexGenf");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26819,6 +27797,7 @@ void rvk_glTexGenf(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLf
 }
 
 void rvk_glTexGenfv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glTexGenfv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26862,6 +27841,7 @@ void rvk_glTexGenfv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, co
 }
 
 void rvk_glTexGeni(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glTexGeni");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26875,6 +27855,7 @@ void rvk_glTexGeni(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, GLi
 }
 
 void rvk_glTexGeniv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTexGeniv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(coord));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -26918,6 +27899,7 @@ void rvk_glTexGeniv(::av::ClientTransport& rvk_t, GLenum coord, GLenum pname, co
 }
 
 void rvk_glTranslated(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glTranslated");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -26931,6 +27913,7 @@ void rvk_glTranslated(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdo
 }
 
 void rvk_glTranslatef(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glTranslatef");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -26944,6 +27927,7 @@ void rvk_glTranslatef(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloa
 }
 
 void rvk_glVertex2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glVertex2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -26956,6 +27940,7 @@ void rvk_glVertex2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
 }
 
 void rvk_glVertex2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertex2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -26997,6 +27982,7 @@ void rvk_glVertex2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glVertex2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
+    AV_SCOPE("rvk_glVertex2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -27009,6 +27995,7 @@ void rvk_glVertex2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
 }
 
 void rvk_glVertex2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertex2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -27050,6 +28037,7 @@ void rvk_glVertex2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glVertex2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
+    AV_SCOPE("rvk_glVertex2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27062,6 +28050,7 @@ void rvk_glVertex2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
 }
 
 void rvk_glVertex2iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glVertex2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -27103,6 +28092,7 @@ void rvk_glVertex2iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glVertex2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
+    AV_SCOPE("rvk_glVertex2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27115,6 +28105,7 @@ void rvk_glVertex2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
 }
 
 void rvk_glVertex2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glVertex2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -27156,6 +28147,7 @@ void rvk_glVertex2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glVertex3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glVertex3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -27169,6 +28161,7 @@ void rvk_glVertex3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdoub
 }
 
 void rvk_glVertex3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertex3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -27210,6 +28203,7 @@ void rvk_glVertex3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glVertex3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glVertex3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -27223,6 +28217,7 @@ void rvk_glVertex3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat 
 }
 
 void rvk_glVertex3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertex3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -27264,6 +28259,7 @@ void rvk_glVertex3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glVertex3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) {
+    AV_SCOPE("rvk_glVertex3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27277,6 +28273,7 @@ void rvk_glVertex3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) {
 }
 
 void rvk_glVertex3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glVertex3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -27318,6 +28315,7 @@ void rvk_glVertex3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glVertex3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("rvk_glVertex3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27331,6 +28329,7 @@ void rvk_glVertex3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort 
 }
 
 void rvk_glVertex3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glVertex3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -27372,6 +28371,7 @@ void rvk_glVertex3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glVertex4d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glVertex4d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -27386,6 +28386,7 @@ void rvk_glVertex4d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdoub
 }
 
 void rvk_glVertex4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glVertex4dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -27427,6 +28428,7 @@ void rvk_glVertex4dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glVertex4f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("rvk_glVertex4f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -27441,6 +28443,7 @@ void rvk_glVertex4f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat 
 }
 
 void rvk_glVertex4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glVertex4fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -27482,6 +28485,7 @@ void rvk_glVertex4fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glVertex4i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z, GLint w) {
+    AV_SCOPE("rvk_glVertex4i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27496,6 +28500,7 @@ void rvk_glVertex4i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z, GLi
 }
 
 void rvk_glVertex4iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glVertex4iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -27537,6 +28542,7 @@ void rvk_glVertex4iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glVertex4s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort z, GLshort w) {
+    AV_SCOPE("rvk_glVertex4s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27551,6 +28557,7 @@ void rvk_glVertex4s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort 
 }
 
 void rvk_glVertex4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glVertex4sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -27592,6 +28599,7 @@ void rvk_glVertex4sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glVertexPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glVertexPointer");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -27606,6 +28614,7 @@ void rvk_glVertexPointer(::av::ClientTransport& rvk_t, GLint size, GLenum type, 
 }
 
 void rvk_glWindowPos2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glWindowPos2d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -27618,6 +28627,7 @@ void rvk_glWindowPos2d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y) {
 }
 
 void rvk_glWindowPos2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glWindowPos2dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -27659,6 +28669,7 @@ void rvk_glWindowPos2dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glWindowPos2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
+    AV_SCOPE("rvk_glWindowPos2f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -27671,6 +28682,7 @@ void rvk_glWindowPos2f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y) {
 }
 
 void rvk_glWindowPos2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glWindowPos2fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -27712,6 +28724,7 @@ void rvk_glWindowPos2fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glWindowPos2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
+    AV_SCOPE("rvk_glWindowPos2i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27724,6 +28737,7 @@ void rvk_glWindowPos2i(::av::ClientTransport& rvk_t, GLint x, GLint y) {
 }
 
 void rvk_glWindowPos2iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glWindowPos2iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -27765,6 +28779,7 @@ void rvk_glWindowPos2iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glWindowPos2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
+    AV_SCOPE("rvk_glWindowPos2s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27777,6 +28792,7 @@ void rvk_glWindowPos2s(::av::ClientTransport& rvk_t, GLshort x, GLshort y) {
 }
 
 void rvk_glWindowPos2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glWindowPos2sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -27818,6 +28834,7 @@ void rvk_glWindowPos2sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glWindowPos3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glWindowPos3d");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLdouble>(x);
     rvk_b.write_pod<GLdouble>(y);
@@ -27831,6 +28848,7 @@ void rvk_glWindowPos3d(::av::ClientTransport& rvk_t, GLdouble x, GLdouble y, GLd
 }
 
 void rvk_glWindowPos3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
+    AV_SCOPE("rvk_glWindowPos3dv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -27872,6 +28890,7 @@ void rvk_glWindowPos3dv(::av::ClientTransport& rvk_t, const GLdouble* v) {
 }
 
 void rvk_glWindowPos3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glWindowPos3f");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_pod<GLfloat>(x);
     rvk_b.write_pod<GLfloat>(y);
@@ -27885,6 +28904,7 @@ void rvk_glWindowPos3f(::av::ClientTransport& rvk_t, GLfloat x, GLfloat y, GLflo
 }
 
 void rvk_glWindowPos3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
+    AV_SCOPE("rvk_glWindowPos3fv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -27926,6 +28946,7 @@ void rvk_glWindowPos3fv(::av::ClientTransport& rvk_t, const GLfloat* v) {
 }
 
 void rvk_glWindowPos3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) {
+    AV_SCOPE("rvk_glWindowPos3i");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27939,6 +28960,7 @@ void rvk_glWindowPos3i(::av::ClientTransport& rvk_t, GLint x, GLint y, GLint z) 
 }
 
 void rvk_glWindowPos3iv(::av::ClientTransport& rvk_t, const GLint* v) {
+    AV_SCOPE("rvk_glWindowPos3iv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -27980,6 +29002,7 @@ void rvk_glWindowPos3iv(::av::ClientTransport& rvk_t, const GLint* v) {
 }
 
 void rvk_glWindowPos3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLshort z) {
+    AV_SCOPE("rvk_glWindowPos3s");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -27993,6 +29016,7 @@ void rvk_glWindowPos3s(::av::ClientTransport& rvk_t, GLshort x, GLshort y, GLsho
 }
 
 void rvk_glWindowPos3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
+    AV_SCOPE("rvk_glWindowPos3sv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -28034,6 +29058,7 @@ void rvk_glWindowPos3sv(::av::ClientTransport& rvk_t, const GLshort* v) {
 }
 
 void rvk_glDeleteObjectARB(::av::ClientTransport& rvk_t, GLhandleARB obj) {
+    AV_SCOPE("rvk_glDeleteObjectARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(obj));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28045,6 +29070,7 @@ void rvk_glDeleteObjectARB(::av::ClientTransport& rvk_t, GLhandleARB obj) {
 }
 
 GLhandleARB rvk_glGetHandleARB(::av::ClientTransport& rvk_t, GLenum pname) {
+    AV_SCOPE("rvk_glGetHandleARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28064,6 +29090,7 @@ GLhandleARB rvk_glGetHandleARB(::av::ClientTransport& rvk_t, GLenum pname) {
 }
 
 void rvk_glGetObjectParameterfvARB(::av::ClientTransport& rvk_t, GLhandleARB obj, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetObjectParameterfvARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(obj));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -28093,6 +29120,7 @@ void rvk_glGetObjectParameterfvARB(::av::ClientTransport& rvk_t, GLhandleARB obj
 }
 
 void rvk_glGetObjectParameterivARB(::av::ClientTransport& rvk_t, GLhandleARB obj, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetObjectParameterivARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(obj));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -28122,6 +29150,7 @@ void rvk_glGetObjectParameterivARB(::av::ClientTransport& rvk_t, GLhandleARB obj
 }
 
 void rvk_glGetInfoLogARB(::av::ClientTransport& rvk_t, GLhandleARB obj, GLsizei maxLength, GLsizei* length, GLcharARB* infoLog) {
+    AV_SCOPE("rvk_glGetInfoLogARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(obj));
     rvk_b.write_varint(static_cast<uint64_t>(maxLength));
@@ -28163,6 +29192,7 @@ void rvk_glGetInfoLogARB(::av::ClientTransport& rvk_t, GLhandleARB obj, GLsizei 
 }
 
 void rvk_glGetAttachedObjectsARB(::av::ClientTransport& rvk_t, GLhandleARB containerObj, GLsizei maxCount, GLsizei* count, GLhandleARB* obj) {
+    AV_SCOPE("rvk_glGetAttachedObjectsARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(containerObj));
     rvk_b.write_varint(static_cast<uint64_t>(maxCount));
@@ -28204,6 +29234,7 @@ void rvk_glGetAttachedObjectsARB(::av::ClientTransport& rvk_t, GLhandleARB conta
 }
 
 void rvk_glTexPageCommitmentARB(::av::ClientTransport& rvk_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLboolean commit) {
+    AV_SCOPE("rvk_glTexPageCommitmentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -28223,6 +29254,7 @@ void rvk_glTexPageCommitmentARB(::av::ClientTransport& rvk_t, GLenum target, GLi
 }
 
 void rvk_glBufferPageCommitmentARB(::av::ClientTransport& rvk_t, GLenum target, GLintptr offset, GLsizeiptr size, GLboolean commit) {
+    AV_SCOPE("rvk_glBufferPageCommitmentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -28237,6 +29269,7 @@ void rvk_glBufferPageCommitmentARB(::av::ClientTransport& rvk_t, GLenum target, 
 }
 
 void rvk_glNamedBufferPageCommitmentEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, GLboolean commit) {
+    AV_SCOPE("rvk_glNamedBufferPageCommitmentEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -28251,6 +29284,7 @@ void rvk_glNamedBufferPageCommitmentEXT(::av::ClientTransport& rvk_t, GLuint buf
 }
 
 void rvk_glNamedBufferPageCommitmentARB(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, GLboolean commit) {
+    AV_SCOPE("rvk_glNamedBufferPageCommitmentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -28265,6 +29299,7 @@ void rvk_glNamedBufferPageCommitmentARB(::av::ClientTransport& rvk_t, GLuint buf
 }
 
 void rvk_glTexturePageCommitmentEXT(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLboolean commit) {
+    AV_SCOPE("rvk_glTexturePageCommitmentEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -28284,6 +29319,7 @@ void rvk_glTexturePageCommitmentEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glMaxShaderCompilerThreadsARB(::av::ClientTransport& rvk_t, GLuint count) {
+    AV_SCOPE("rvk_glMaxShaderCompilerThreadsARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28295,6 +29331,7 @@ void rvk_glMaxShaderCompilerThreadsARB(::av::ClientTransport& rvk_t, GLuint coun
 }
 
 void rvk_glMaxShaderCompilerThreadsKHR(::av::ClientTransport& rvk_t, GLuint count) {
+    AV_SCOPE("rvk_glMaxShaderCompilerThreadsKHR");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(count));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28306,6 +29343,7 @@ void rvk_glMaxShaderCompilerThreadsKHR(::av::ClientTransport& rvk_t, GLuint coun
 }
 
 void rvk_glScissorExclusiveNV(::av::ClientTransport& rvk_t, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glScissorExclusiveNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(x));
     rvk_b.write_varint(static_cast<uint64_t>(y));
@@ -28320,6 +29358,7 @@ void rvk_glScissorExclusiveNV(::av::ClientTransport& rvk_t, GLint x, GLint y, GL
 }
 
 void rvk_glScissorExclusiveArrayvNV(::av::ClientTransport& rvk_t, GLuint first, GLsizei count, const GLint* v) {
+    AV_SCOPE("rvk_glScissorExclusiveArrayvNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(first));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -28363,6 +29402,7 @@ void rvk_glScissorExclusiveArrayvNV(::av::ClientTransport& rvk_t, GLuint first, 
 }
 
 void rvk_glFramebufferSampleLocationsfvNV(::av::ClientTransport& rvk_t, GLenum target, GLuint start, GLsizei count, const GLfloat* v) {
+    AV_SCOPE("rvk_glFramebufferSampleLocationsfvNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(start));
@@ -28407,6 +29447,7 @@ void rvk_glFramebufferSampleLocationsfvNV(::av::ClientTransport& rvk_t, GLenum t
 }
 
 void rvk_glNamedFramebufferSampleLocationsfvNV(::av::ClientTransport& rvk_t, GLuint framebuffer, GLuint start, GLsizei count, const GLfloat* v) {
+    AV_SCOPE("rvk_glNamedFramebufferSampleLocationsfvNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(start));
@@ -28451,6 +29492,7 @@ void rvk_glNamedFramebufferSampleLocationsfvNV(::av::ClientTransport& rvk_t, GLu
 }
 
 void rvk_glResolveDepthValuesNV(::av::ClientTransport& rvk_t) {
+    AV_SCOPE("rvk_glResolveDepthValuesNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glResolveDepthValuesNV",
@@ -28461,6 +29503,7 @@ void rvk_glResolveDepthValuesNV(::av::ClientTransport& rvk_t) {
 }
 
 GLuint64 rvk_glGetTextureHandleARB(::av::ClientTransport& rvk_t, GLuint texture) {
+    AV_SCOPE("rvk_glGetTextureHandleARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28480,6 +29523,7 @@ GLuint64 rvk_glGetTextureHandleARB(::av::ClientTransport& rvk_t, GLuint texture)
 }
 
 GLuint64 rvk_glGetTextureSamplerHandleARB(::av::ClientTransport& rvk_t, GLuint texture, GLuint sampler) {
+    AV_SCOPE("rvk_glGetTextureSamplerHandleARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
@@ -28500,6 +29544,7 @@ GLuint64 rvk_glGetTextureSamplerHandleARB(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glMakeTextureHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeTextureHandleResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28511,6 +29556,7 @@ void rvk_glMakeTextureHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 h
 }
 
 void rvk_glMakeTextureHandleNonResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeTextureHandleNonResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28522,6 +29568,7 @@ void rvk_glMakeTextureHandleNonResidentARB(::av::ClientTransport& rvk_t, GLuint6
 }
 
 GLuint64 rvk_glGetImageHandleARB(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum format) {
+    AV_SCOPE("rvk_glGetImageHandleARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -28545,6 +29592,7 @@ GLuint64 rvk_glGetImageHandleARB(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glMakeImageHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle, GLenum access) {
+    AV_SCOPE("rvk_glMakeImageHandleResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     rvk_b.write_varint(static_cast<uint64_t>(access));
@@ -28557,6 +29605,7 @@ void rvk_glMakeImageHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 han
 }
 
 void rvk_glMakeImageHandleNonResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeImageHandleNonResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28568,6 +29617,7 @@ void rvk_glMakeImageHandleNonResidentARB(::av::ClientTransport& rvk_t, GLuint64 
 }
 
 void rvk_glUniformHandleui64ARB(::av::ClientTransport& rvk_t, GLint location, GLuint64 value) {
+    AV_SCOPE("rvk_glUniformHandleui64ARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -28580,6 +29630,7 @@ void rvk_glUniformHandleui64ARB(::av::ClientTransport& rvk_t, GLint location, GL
 }
 
 void rvk_glUniformHandleui64vARB(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64* value) {
+    AV_SCOPE("rvk_glUniformHandleui64vARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -28623,6 +29674,7 @@ void rvk_glUniformHandleui64vARB(::av::ClientTransport& rvk_t, GLint location, G
 }
 
 void rvk_glProgramUniformHandleui64ARB(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64 value) {
+    AV_SCOPE("rvk_glProgramUniformHandleui64ARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -28636,6 +29688,7 @@ void rvk_glProgramUniformHandleui64ARB(::av::ClientTransport& rvk_t, GLuint prog
 }
 
 void rvk_glProgramUniformHandleui64vARB(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64* values) {
+    AV_SCOPE("rvk_glProgramUniformHandleui64vARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -28680,6 +29733,7 @@ void rvk_glProgramUniformHandleui64vARB(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 GLboolean rvk_glIsTextureHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glIsTextureHandleResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28699,6 +29753,7 @@ GLboolean rvk_glIsTextureHandleResidentARB(::av::ClientTransport& rvk_t, GLuint6
 }
 
 GLboolean rvk_glIsImageHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glIsImageHandleResidentARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28718,6 +29773,7 @@ GLboolean rvk_glIsImageHandleResidentARB(::av::ClientTransport& rvk_t, GLuint64 
 }
 
 void rvk_glVertexAttribL1ui64ARB(::av::ClientTransport& rvk_t, GLuint index, GLuint64EXT x) {
+    AV_SCOPE("rvk_glVertexAttribL1ui64ARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -28730,6 +29786,7 @@ void rvk_glVertexAttribL1ui64ARB(::av::ClientTransport& rvk_t, GLuint index, GLu
 }
 
 void rvk_glVertexAttribL1ui64vARB(::av::ClientTransport& rvk_t, GLuint index, const GLuint64EXT* v) {
+    AV_SCOPE("rvk_glVertexAttribL1ui64vARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
@@ -28772,6 +29829,7 @@ void rvk_glVertexAttribL1ui64vARB(::av::ClientTransport& rvk_t, GLuint index, co
 }
 
 void rvk_glGetVertexAttribLui64vARB(::av::ClientTransport& rvk_t, GLuint index, GLenum pname, GLuint64EXT* params) {
+    AV_SCOPE("rvk_glGetVertexAttribLui64vARB");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -28801,6 +29859,7 @@ void rvk_glGetVertexAttribLui64vARB(::av::ClientTransport& rvk_t, GLuint index, 
 }
 
 GLuint64 rvk_glGetTextureHandleNV(::av::ClientTransport& rvk_t, GLuint texture) {
+    AV_SCOPE("rvk_glGetTextureHandleNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28820,6 +29879,7 @@ GLuint64 rvk_glGetTextureHandleNV(::av::ClientTransport& rvk_t, GLuint texture) 
 }
 
 GLuint64 rvk_glGetTextureSamplerHandleNV(::av::ClientTransport& rvk_t, GLuint texture, GLuint sampler) {
+    AV_SCOPE("rvk_glGetTextureSamplerHandleNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(sampler));
@@ -28840,6 +29900,7 @@ GLuint64 rvk_glGetTextureSamplerHandleNV(::av::ClientTransport& rvk_t, GLuint te
 }
 
 void rvk_glMakeTextureHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeTextureHandleResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28851,6 +29912,7 @@ void rvk_glMakeTextureHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 ha
 }
 
 void rvk_glMakeTextureHandleNonResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeTextureHandleNonResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28862,6 +29924,7 @@ void rvk_glMakeTextureHandleNonResidentNV(::av::ClientTransport& rvk_t, GLuint64
 }
 
 GLuint64 rvk_glGetImageHandleNV(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum format) {
+    AV_SCOPE("rvk_glGetImageHandleNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(level));
@@ -28885,6 +29948,7 @@ GLuint64 rvk_glGetImageHandleNV(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glMakeImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle, GLenum access) {
+    AV_SCOPE("rvk_glMakeImageHandleResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     rvk_b.write_varint(static_cast<uint64_t>(access));
@@ -28897,6 +29961,7 @@ void rvk_glMakeImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 hand
 }
 
 void rvk_glMakeImageHandleNonResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glMakeImageHandleNonResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -28908,6 +29973,7 @@ void rvk_glMakeImageHandleNonResidentNV(::av::ClientTransport& rvk_t, GLuint64 h
 }
 
 void rvk_glUniformHandleui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64 value) {
+    AV_SCOPE("rvk_glUniformHandleui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -28920,6 +29986,7 @@ void rvk_glUniformHandleui64NV(::av::ClientTransport& rvk_t, GLint location, GLu
 }
 
 void rvk_glUniformHandleui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64* value) {
+    AV_SCOPE("rvk_glUniformHandleui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -28963,6 +30030,7 @@ void rvk_glUniformHandleui64vNV(::av::ClientTransport& rvk_t, GLint location, GL
 }
 
 void rvk_glProgramUniformHandleui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64 value) {
+    AV_SCOPE("rvk_glProgramUniformHandleui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -28976,6 +30044,7 @@ void rvk_glProgramUniformHandleui64NV(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformHandleui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64* values) {
+    AV_SCOPE("rvk_glProgramUniformHandleui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -29020,6 +30089,7 @@ void rvk_glProgramUniformHandleui64vNV(::av::ClientTransport& rvk_t, GLuint prog
 }
 
 GLboolean rvk_glIsTextureHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glIsTextureHandleResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29039,6 +30109,7 @@ GLboolean rvk_glIsTextureHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64
 }
 
 GLboolean rvk_glIsImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle) {
+    AV_SCOPE("rvk_glIsImageHandleResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(handle));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29058,6 +30129,7 @@ GLboolean rvk_glIsImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 h
 }
 
 void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLenum access) {
+    AV_SCOPE("rvk_glMakeBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(access));
@@ -29070,6 +30142,7 @@ void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLe
 }
 
 void rvk_glMakeBufferNonResidentNV(::av::ClientTransport& rvk_t, GLenum target) {
+    AV_SCOPE("rvk_glMakeBufferNonResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29081,6 +30154,7 @@ void rvk_glMakeBufferNonResidentNV(::av::ClientTransport& rvk_t, GLenum target) 
 }
 
 GLboolean rvk_glIsBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target) {
+    AV_SCOPE("rvk_glIsBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29100,6 +30174,7 @@ GLboolean rvk_glIsBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target) 
 }
 
 void rvk_glMakeNamedBufferResidentNV(::av::ClientTransport& rvk_t, GLuint buffer, GLenum access) {
+    AV_SCOPE("rvk_glMakeNamedBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(access));
@@ -29112,6 +30187,7 @@ void rvk_glMakeNamedBufferResidentNV(::av::ClientTransport& rvk_t, GLuint buffer
 }
 
 void rvk_glMakeNamedBufferNonResidentNV(::av::ClientTransport& rvk_t, GLuint buffer) {
+    AV_SCOPE("rvk_glMakeNamedBufferNonResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29123,6 +30199,7 @@ void rvk_glMakeNamedBufferNonResidentNV(::av::ClientTransport& rvk_t, GLuint buf
 }
 
 GLboolean rvk_glIsNamedBufferResidentNV(::av::ClientTransport& rvk_t, GLuint buffer) {
+    AV_SCOPE("rvk_glIsNamedBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29142,6 +30219,7 @@ GLboolean rvk_glIsNamedBufferResidentNV(::av::ClientTransport& rvk_t, GLuint buf
 }
 
 void rvk_glGetBufferParameterui64vNV(::av::ClientTransport& rvk_t, GLenum target, GLenum pname, GLuint64EXT* params) {
+    AV_SCOPE("rvk_glGetBufferParameterui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -29171,6 +30249,7 @@ void rvk_glGetBufferParameterui64vNV(::av::ClientTransport& rvk_t, GLenum target
 }
 
 void rvk_glGetNamedBufferParameterui64vNV(::av::ClientTransport& rvk_t, GLuint buffer, GLenum pname, GLuint64EXT* params) {
+    AV_SCOPE("rvk_glGetNamedBufferParameterui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -29200,6 +30279,7 @@ void rvk_glGetNamedBufferParameterui64vNV(::av::ClientTransport& rvk_t, GLuint b
 }
 
 void rvk_glGetIntegerui64vNV(::av::ClientTransport& rvk_t, GLenum value, GLuint64EXT* result) {
+    AV_SCOPE("rvk_glGetIntegerui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(value));
     const size_t result_want = result != nullptr ? (static_cast<size_t>(::av::glproto::pname_count(rvk_t, value)) * sizeof(GLuint64EXT)) : 0u;
@@ -29228,6 +30308,7 @@ void rvk_glGetIntegerui64vNV(::av::ClientTransport& rvk_t, GLenum value, GLuint6
 }
 
 void rvk_glUniformui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64EXT value) {
+    AV_SCOPE("rvk_glUniformui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(value));
@@ -29240,6 +30321,7 @@ void rvk_glUniformui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64E
 }
 
 void rvk_glUniformui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glUniformui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29283,6 +30365,7 @@ void rvk_glUniformui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei 
 }
 
 void rvk_glGetUniformui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT* params) {
+    AV_SCOPE("rvk_glGetUniformui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -29312,6 +30395,7 @@ void rvk_glGetUniformui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint
 }
 
 void rvk_glProgramUniformui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT value) {
+    AV_SCOPE("rvk_glProgramUniformui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -29325,6 +30409,7 @@ void rvk_glProgramUniformui64NV(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniformui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniformui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -29369,6 +30454,7 @@ void rvk_glProgramUniformui64vNV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glBufferAddressRangeNV(::av::ClientTransport& rvk_t, GLenum pname, GLuint index, GLuint64EXT address, GLsizeiptr length) {
+    AV_SCOPE("rvk_glBufferAddressRangeNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -29383,6 +30469,7 @@ void rvk_glBufferAddressRangeNV(::av::ClientTransport& rvk_t, GLenum pname, GLui
 }
 
 void rvk_glVertexFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glVertexFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -29396,6 +30483,7 @@ void rvk_glVertexFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type,
 }
 
 void rvk_glNormalFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glNormalFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -29408,6 +30496,7 @@ void rvk_glNormalFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei str
 }
 
 void rvk_glColorFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glColorFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -29421,6 +30510,7 @@ void rvk_glColorFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type, 
 }
 
 void rvk_glIndexFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glIndexFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -29433,6 +30523,7 @@ void rvk_glIndexFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei stri
 }
 
 void rvk_glTexCoordFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glTexCoordFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -29446,6 +30537,7 @@ void rvk_glTexCoordFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum typ
 }
 
 void rvk_glEdgeFlagFormatNV(::av::ClientTransport& rvk_t, GLsizei stride) {
+    AV_SCOPE("rvk_glEdgeFlagFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(stride));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -29457,6 +30549,7 @@ void rvk_glEdgeFlagFormatNV(::av::ClientTransport& rvk_t, GLsizei stride) {
 }
 
 void rvk_glSecondaryColorFormatNV(::av::ClientTransport& rvk_t, GLint size, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glSecondaryColorFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(size));
     rvk_b.write_varint(static_cast<uint64_t>(type));
@@ -29470,6 +30563,7 @@ void rvk_glSecondaryColorFormatNV(::av::ClientTransport& rvk_t, GLint size, GLen
 }
 
 void rvk_glFogCoordFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glFogCoordFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(type));
     rvk_b.write_varint(static_cast<uint64_t>(stride));
@@ -29482,6 +30576,7 @@ void rvk_glFogCoordFormatNV(::av::ClientTransport& rvk_t, GLenum type, GLsizei s
 }
 
 void rvk_glVertexAttribFormatNV(::av::ClientTransport& rvk_t, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride) {
+    AV_SCOPE("rvk_glVertexAttribFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -29497,6 +30592,7 @@ void rvk_glVertexAttribFormatNV(::av::ClientTransport& rvk_t, GLuint index, GLin
 }
 
 void rvk_glVertexAttribIFormatNV(::av::ClientTransport& rvk_t, GLuint index, GLint size, GLenum type, GLsizei stride) {
+    AV_SCOPE("rvk_glVertexAttribIFormatNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(index));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -29511,6 +30607,7 @@ void rvk_glVertexAttribIFormatNV(::av::ClientTransport& rvk_t, GLuint index, GLi
 }
 
 void rvk_glGetIntegerui64i_vNV(::av::ClientTransport& rvk_t, GLenum value, GLuint index, GLuint64EXT* result) {
+    AV_SCOPE("rvk_glGetIntegerui64i_vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(value));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -29540,6 +30637,7 @@ void rvk_glGetIntegerui64i_vNV(::av::ClientTransport& rvk_t, GLenum value, GLuin
 }
 
 void rvk_glUniform1i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EXT x) {
+    AV_SCOPE("rvk_glUniform1i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29552,6 +30650,7 @@ void rvk_glUniform1i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EX
 }
 
 void rvk_glUniform2i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EXT x, GLint64EXT y) {
+    AV_SCOPE("rvk_glUniform2i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29565,6 +30664,7 @@ void rvk_glUniform2i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EX
 }
 
 void rvk_glUniform3i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EXT x, GLint64EXT y, GLint64EXT z) {
+    AV_SCOPE("rvk_glUniform3i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29579,6 +30679,7 @@ void rvk_glUniform3i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EX
 }
 
 void rvk_glUniform4i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EXT x, GLint64EXT y, GLint64EXT z, GLint64EXT w) {
+    AV_SCOPE("rvk_glUniform4i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29594,6 +30695,7 @@ void rvk_glUniform4i64NV(::av::ClientTransport& rvk_t, GLint location, GLint64EX
 }
 
 void rvk_glUniform1i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glUniform1i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29637,6 +30739,7 @@ void rvk_glUniform1i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei 
 }
 
 void rvk_glUniform2i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glUniform2i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29680,6 +30783,7 @@ void rvk_glUniform2i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei 
 }
 
 void rvk_glUniform3i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glUniform3i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29723,6 +30827,7 @@ void rvk_glUniform3i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei 
 }
 
 void rvk_glUniform4i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glUniform4i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29766,6 +30871,7 @@ void rvk_glUniform4i64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei 
 }
 
 void rvk_glUniform1ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64EXT x) {
+    AV_SCOPE("rvk_glUniform1ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29778,6 +30884,7 @@ void rvk_glUniform1ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64
 }
 
 void rvk_glUniform2ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64EXT x, GLuint64EXT y) {
+    AV_SCOPE("rvk_glUniform2ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29791,6 +30898,7 @@ void rvk_glUniform2ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64
 }
 
 void rvk_glUniform3ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64EXT x, GLuint64EXT y, GLuint64EXT z) {
+    AV_SCOPE("rvk_glUniform3ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29805,6 +30913,7 @@ void rvk_glUniform3ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64
 }
 
 void rvk_glUniform4ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64EXT x, GLuint64EXT y, GLuint64EXT z, GLuint64EXT w) {
+    AV_SCOPE("rvk_glUniform4ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(x));
@@ -29820,6 +30929,7 @@ void rvk_glUniform4ui64NV(::av::ClientTransport& rvk_t, GLint location, GLuint64
 }
 
 void rvk_glUniform1ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glUniform1ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29863,6 +30973,7 @@ void rvk_glUniform1ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei
 }
 
 void rvk_glUniform2ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glUniform2ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29906,6 +31017,7 @@ void rvk_glUniform2ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei
 }
 
 void rvk_glUniform3ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glUniform3ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29949,6 +31061,7 @@ void rvk_glUniform3ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei
 }
 
 void rvk_glUniform4ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glUniform4ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(location));
     rvk_b.write_varint(static_cast<uint64_t>(count));
@@ -29992,6 +31105,7 @@ void rvk_glUniform4ui64vNV(::av::ClientTransport& rvk_t, GLint location, GLsizei
 }
 
 void rvk_glGetUniformi64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint64EXT* params) {
+    AV_SCOPE("rvk_glGetUniformi64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30021,6 +31135,7 @@ void rvk_glGetUniformi64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint 
 }
 
 void rvk_glProgramUniform1i64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint64EXT x) {
+    AV_SCOPE("rvk_glProgramUniform1i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30034,6 +31149,7 @@ void rvk_glProgramUniform1i64NV(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform2i64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint64EXT x, GLint64EXT y) {
+    AV_SCOPE("rvk_glProgramUniform2i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30048,6 +31164,7 @@ void rvk_glProgramUniform2i64NV(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform3i64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint64EXT x, GLint64EXT y, GLint64EXT z) {
+    AV_SCOPE("rvk_glProgramUniform3i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30063,6 +31180,7 @@ void rvk_glProgramUniform3i64NV(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform4i64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint64EXT x, GLint64EXT y, GLint64EXT z, GLint64EXT w) {
+    AV_SCOPE("rvk_glProgramUniform4i64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30079,6 +31197,7 @@ void rvk_glProgramUniform4i64NV(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform1i64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform1i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30123,6 +31242,7 @@ void rvk_glProgramUniform1i64vNV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform2i64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform2i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30167,6 +31287,7 @@ void rvk_glProgramUniform2i64vNV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform3i64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform3i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30211,6 +31332,7 @@ void rvk_glProgramUniform3i64vNV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform4i64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform4i64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30255,6 +31377,7 @@ void rvk_glProgramUniform4i64vNV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform1ui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT x) {
+    AV_SCOPE("rvk_glProgramUniform1ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30268,6 +31391,7 @@ void rvk_glProgramUniform1ui64NV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform2ui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT x, GLuint64EXT y) {
+    AV_SCOPE("rvk_glProgramUniform2ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30282,6 +31406,7 @@ void rvk_glProgramUniform2ui64NV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform3ui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT x, GLuint64EXT y, GLuint64EXT z) {
+    AV_SCOPE("rvk_glProgramUniform3ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30297,6 +31422,7 @@ void rvk_glProgramUniform3ui64NV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform4ui64NV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint64EXT x, GLuint64EXT y, GLuint64EXT z, GLuint64EXT w) {
+    AV_SCOPE("rvk_glProgramUniform4ui64NV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30313,6 +31439,7 @@ void rvk_glProgramUniform4ui64NV(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform1ui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform1ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30357,6 +31484,7 @@ void rvk_glProgramUniform1ui64vNV(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glProgramUniform2ui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform2ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30401,6 +31529,7 @@ void rvk_glProgramUniform2ui64vNV(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glProgramUniform3ui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform3ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30445,6 +31574,7 @@ void rvk_glProgramUniform3ui64vNV(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glProgramUniform4ui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
+    AV_SCOPE("rvk_glProgramUniform4ui64vNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -30489,6 +31619,7 @@ void rvk_glProgramUniform4ui64vNV(::av::ClientTransport& rvk_t, GLuint program, 
 }
 
 void rvk_glMatrixLoadfEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLfloat* m) {
+    AV_SCOPE("rvk_glMatrixLoadfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -30531,6 +31662,7 @@ void rvk_glMatrixLoadfEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLflo
 }
 
 void rvk_glMatrixLoaddEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdouble* m) {
+    AV_SCOPE("rvk_glMatrixLoaddEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -30573,6 +31705,7 @@ void rvk_glMatrixLoaddEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdou
 }
 
 void rvk_glMatrixMultfEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLfloat* m) {
+    AV_SCOPE("rvk_glMatrixMultfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -30615,6 +31748,7 @@ void rvk_glMatrixMultfEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLflo
 }
 
 void rvk_glMatrixMultdEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdouble* m) {
+    AV_SCOPE("rvk_glMatrixMultdEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -30657,6 +31791,7 @@ void rvk_glMatrixMultdEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdou
 }
 
 void rvk_glMatrixLoadIdentityEXT(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glMatrixLoadIdentityEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -30668,6 +31803,7 @@ void rvk_glMatrixLoadIdentityEXT(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glMatrixRotatefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glMatrixRotatefEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLfloat>(angle);
@@ -30683,6 +31819,7 @@ void rvk_glMatrixRotatefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloat a
 }
 
 void rvk_glMatrixRotatedEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble angle, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glMatrixRotatedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLdouble>(angle);
@@ -30698,6 +31835,7 @@ void rvk_glMatrixRotatedEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble 
 }
 
 void rvk_glMatrixScalefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glMatrixScalefEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLfloat>(x);
@@ -30712,6 +31850,7 @@ void rvk_glMatrixScalefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloat x,
 }
 
 void rvk_glMatrixScaledEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glMatrixScaledEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLdouble>(x);
@@ -30726,6 +31865,7 @@ void rvk_glMatrixScaledEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble x
 }
 
 void rvk_glMatrixTranslatefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloat x, GLfloat y, GLfloat z) {
+    AV_SCOPE("rvk_glMatrixTranslatefEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLfloat>(x);
@@ -30740,6 +31880,7 @@ void rvk_glMatrixTranslatefEXT(::av::ClientTransport& rvk_t, GLenum mode, GLfloa
 }
 
 void rvk_glMatrixTranslatedEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glMatrixTranslatedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLdouble>(x);
@@ -30754,6 +31895,7 @@ void rvk_glMatrixTranslatedEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdoub
 }
 
 void rvk_glMatrixFrustumEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
+    AV_SCOPE("rvk_glMatrixFrustumEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLdouble>(left);
@@ -30771,6 +31913,7 @@ void rvk_glMatrixFrustumEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble 
 }
 
 void rvk_glMatrixOrthoEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
+    AV_SCOPE("rvk_glMatrixOrthoEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_pod<GLdouble>(left);
@@ -30788,6 +31931,7 @@ void rvk_glMatrixOrthoEXT(::av::ClientTransport& rvk_t, GLenum mode, GLdouble le
 }
 
 void rvk_glMatrixPopEXT(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glMatrixPopEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -30799,6 +31943,7 @@ void rvk_glMatrixPopEXT(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glMatrixPushEXT(::av::ClientTransport& rvk_t, GLenum mode) {
+    AV_SCOPE("rvk_glMatrixPushEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -30810,6 +31955,7 @@ void rvk_glMatrixPushEXT(::av::ClientTransport& rvk_t, GLenum mode) {
 }
 
 void rvk_glClientAttribDefaultEXT(::av::ClientTransport& rvk_t, GLbitfield mask) {
+    AV_SCOPE("rvk_glClientAttribDefaultEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -30821,6 +31967,7 @@ void rvk_glClientAttribDefaultEXT(::av::ClientTransport& rvk_t, GLbitfield mask)
 }
 
 void rvk_glPushClientAttribDefaultEXT(::av::ClientTransport& rvk_t, GLbitfield mask) {
+    AV_SCOPE("rvk_glPushClientAttribDefaultEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mask));
     if (rvk_b.status() != ::av::Status::ok) {
@@ -30832,6 +31979,7 @@ void rvk_glPushClientAttribDefaultEXT(::av::ClientTransport& rvk_t, GLbitfield m
 }
 
 void rvk_glTextureParameterfEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glTextureParameterfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -30846,6 +31994,7 @@ void rvk_glTextureParameterfEXT(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glTextureParameterfvEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glTextureParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -30890,6 +32039,7 @@ void rvk_glTextureParameterfvEXT(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glTextureParameteriEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glTextureParameteriEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -30904,6 +32054,7 @@ void rvk_glTextureParameteriEXT(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glTextureParameterivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTextureParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -30948,6 +32099,7 @@ void rvk_glTextureParameterivEXT(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -30998,6 +32150,7 @@ void rvk_glTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenu
 }
 
 void rvk_glTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31049,6 +32202,7 @@ void rvk_glTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenu
 }
 
 void rvk_glTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31098,6 +32252,7 @@ void rvk_glTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31149,6 +32304,7 @@ void rvk_glTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glCopyTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLint border) {
+    AV_SCOPE("rvk_glCopyTextureImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31167,6 +32323,7 @@ void rvk_glCopyTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glCopyTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border) {
+    AV_SCOPE("rvk_glCopyTextureImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31186,6 +32343,7 @@ void rvk_glCopyTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glCopyTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width) {
+    AV_SCOPE("rvk_glCopyTextureSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31203,6 +32361,7 @@ void rvk_glCopyTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glCopyTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTextureSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31222,6 +32381,7 @@ void rvk_glCopyTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glGetTextureImageEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetTextureImageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31277,6 +32437,7 @@ void rvk_glGetTextureImageEXT(::av::ClientTransport& rvk_t, GLuint texture, GLen
 }
 
 void rvk_glGetTextureParameterfvEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTextureParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31307,6 +32468,7 @@ void rvk_glGetTextureParameterfvEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glGetTextureParameterivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31337,6 +32499,7 @@ void rvk_glGetTextureParameterivEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glGetTextureLevelParameterfvEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetTextureLevelParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31368,6 +32531,7 @@ void rvk_glGetTextureLevelParameterfvEXT(::av::ClientTransport& rvk_t, GLuint te
 }
 
 void rvk_glGetTextureLevelParameterivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureLevelParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31399,6 +32563,7 @@ void rvk_glGetTextureLevelParameterivEXT(::av::ClientTransport& rvk_t, GLuint te
 }
 
 void rvk_glTextureImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31451,6 +32616,7 @@ void rvk_glTextureImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenu
 }
 
 void rvk_glTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glTextureSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31504,6 +32670,7 @@ void rvk_glTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GL
 }
 
 void rvk_glCopyTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyTextureSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31524,6 +32691,7 @@ void rvk_glCopyTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glBindMultiTextureEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLuint texture) {
+    AV_SCOPE("rvk_glBindMultiTextureEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31537,6 +32705,7 @@ void rvk_glBindMultiTextureEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glMultiTexCoordPointerEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLint size, GLenum type, GLsizei stride, uint64_t pointer) {
+    AV_SCOPE("rvk_glMultiTexCoordPointerEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -31552,6 +32721,7 @@ void rvk_glMultiTexCoordPointerEXT(::av::ClientTransport& rvk_t, GLenum texunit,
 }
 
 void rvk_glMultiTexEnvfEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glMultiTexEnvfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31566,6 +32736,7 @@ void rvk_glMultiTexEnvfEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum 
 }
 
 void rvk_glMultiTexEnvfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glMultiTexEnvfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31610,6 +32781,7 @@ void rvk_glMultiTexEnvfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum
 }
 
 void rvk_glMultiTexEnviEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glMultiTexEnviEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31624,6 +32796,7 @@ void rvk_glMultiTexEnviEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum 
 }
 
 void rvk_glMultiTexEnvivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glMultiTexEnvivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31668,6 +32841,7 @@ void rvk_glMultiTexEnvivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum
 }
 
 void rvk_glMultiTexGendEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLdouble param) {
+    AV_SCOPE("rvk_glMultiTexGendEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31682,6 +32856,7 @@ void rvk_glMultiTexGendEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum 
 }
 
 void rvk_glMultiTexGendvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, const GLdouble* params) {
+    AV_SCOPE("rvk_glMultiTexGendvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31726,6 +32901,7 @@ void rvk_glMultiTexGendvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum
 }
 
 void rvk_glMultiTexGenfEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glMultiTexGenfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31740,6 +32916,7 @@ void rvk_glMultiTexGenfEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum 
 }
 
 void rvk_glMultiTexGenfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glMultiTexGenfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31784,6 +32961,7 @@ void rvk_glMultiTexGenfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum
 }
 
 void rvk_glMultiTexGeniEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glMultiTexGeniEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31798,6 +32976,7 @@ void rvk_glMultiTexGeniEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum 
 }
 
 void rvk_glMultiTexGenivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glMultiTexGenivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31842,6 +33021,7 @@ void rvk_glMultiTexGenivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum
 }
 
 void rvk_glGetMultiTexEnvfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetMultiTexEnvfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31872,6 +33052,7 @@ void rvk_glGetMultiTexEnvfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glGetMultiTexEnvivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMultiTexEnvivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -31902,6 +33083,7 @@ void rvk_glGetMultiTexEnvivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glGetMultiTexGendvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLdouble* params) {
+    AV_SCOPE("rvk_glGetMultiTexGendvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31932,6 +33114,7 @@ void rvk_glGetMultiTexGendvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glGetMultiTexGenfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetMultiTexGenfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31962,6 +33145,7 @@ void rvk_glGetMultiTexGenfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glGetMultiTexGenivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum coord, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMultiTexGenivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(coord));
@@ -31992,6 +33176,7 @@ void rvk_glGetMultiTexGenivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glMultiTexParameteriEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glMultiTexParameteriEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32006,6 +33191,7 @@ void rvk_glMultiTexParameteriEXT(::av::ClientTransport& rvk_t, GLenum texunit, G
 }
 
 void rvk_glMultiTexParameterivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glMultiTexParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32050,6 +33236,7 @@ void rvk_glMultiTexParameterivEXT(::av::ClientTransport& rvk_t, GLenum texunit, 
 }
 
 void rvk_glMultiTexParameterfEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLfloat param) {
+    AV_SCOPE("rvk_glMultiTexParameterfEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32064,6 +33251,7 @@ void rvk_glMultiTexParameterfEXT(::av::ClientTransport& rvk_t, GLenum texunit, G
 }
 
 void rvk_glMultiTexParameterfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLfloat* params) {
+    AV_SCOPE("rvk_glMultiTexParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32108,6 +33296,7 @@ void rvk_glMultiTexParameterfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, 
 }
 
 void rvk_glMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32158,6 +33347,7 @@ void rvk_glMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLen
 }
 
 void rvk_glMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32209,6 +33399,7 @@ void rvk_glMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLen
 }
 
 void rvk_glMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32258,6 +33449,7 @@ void rvk_glMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, G
 }
 
 void rvk_glMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32309,6 +33501,7 @@ void rvk_glMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, G
 }
 
 void rvk_glCopyMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLint border) {
+    AV_SCOPE("rvk_glCopyMultiTexImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32327,6 +33520,7 @@ void rvk_glCopyMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, 
 }
 
 void rvk_glCopyMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width, GLsizei height, GLint border) {
+    AV_SCOPE("rvk_glCopyMultiTexImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32346,6 +33540,7 @@ void rvk_glCopyMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, 
 }
 
 void rvk_glCopyMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint x, GLint y, GLsizei width) {
+    AV_SCOPE("rvk_glCopyMultiTexSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32363,6 +33558,7 @@ void rvk_glCopyMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glCopyMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyMultiTexSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32382,6 +33578,7 @@ void rvk_glCopyMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glGetMultiTexImageEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glGetMultiTexImageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32437,6 +33634,7 @@ void rvk_glGetMultiTexImageEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLe
 }
 
 void rvk_glGetMultiTexParameterfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetMultiTexParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32467,6 +33665,7 @@ void rvk_glGetMultiTexParameterfvEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glGetMultiTexParameterivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMultiTexParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32497,6 +33696,7 @@ void rvk_glGetMultiTexParameterivEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glGetMultiTexLevelParameterfvEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum pname, GLfloat* params) {
+    AV_SCOPE("rvk_glGetMultiTexLevelParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32528,6 +33728,7 @@ void rvk_glGetMultiTexLevelParameterfvEXT(::av::ClientTransport& rvk_t, GLenum t
 }
 
 void rvk_glGetMultiTexLevelParameterivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMultiTexLevelParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32559,6 +33760,7 @@ void rvk_glGetMultiTexLevelParameterivEXT(::av::ClientTransport& rvk_t, GLenum t
 }
 
 void rvk_glMultiTexImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32611,6 +33813,7 @@ void rvk_glMultiTexImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLen
 }
 
 void rvk_glMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
+    AV_SCOPE("rvk_glMultiTexSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32664,6 +33867,7 @@ void rvk_glMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, G
 }
 
 void rvk_glCopyMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glCopyMultiTexSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32684,6 +33888,7 @@ void rvk_glCopyMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glEnableClientStateIndexedEXT(::av::ClientTransport& rvk_t, GLenum array, GLuint index) {
+    AV_SCOPE("rvk_glEnableClientStateIndexedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32696,6 +33901,7 @@ void rvk_glEnableClientStateIndexedEXT(::av::ClientTransport& rvk_t, GLenum arra
 }
 
 void rvk_glDisableClientStateIndexedEXT(::av::ClientTransport& rvk_t, GLenum array, GLuint index) {
+    AV_SCOPE("rvk_glDisableClientStateIndexedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32708,6 +33914,7 @@ void rvk_glDisableClientStateIndexedEXT(::av::ClientTransport& rvk_t, GLenum arr
 }
 
 void rvk_glGetFloatIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLfloat* data) {
+    AV_SCOPE("rvk_glGetFloatIndexedvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32737,6 +33944,7 @@ void rvk_glGetFloatIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLui
 }
 
 void rvk_glGetDoubleIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLdouble* data) {
+    AV_SCOPE("rvk_glGetDoubleIndexedvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32766,6 +33974,7 @@ void rvk_glGetDoubleIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLu
 }
 
 void rvk_glEnableIndexedEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glEnableIndexedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32778,6 +33987,7 @@ void rvk_glEnableIndexedEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint 
 }
 
 void rvk_glDisableIndexedEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glDisableIndexedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32790,6 +34000,7 @@ void rvk_glDisableIndexedEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint
 }
 
 GLboolean rvk_glIsEnabledIndexedEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index) {
+    AV_SCOPE("rvk_glIsEnabledIndexedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32810,6 +34021,7 @@ GLboolean rvk_glIsEnabledIndexedEXT(::av::ClientTransport& rvk_t, GLenum target,
 }
 
 void rvk_glGetIntegerIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLint* data) {
+    AV_SCOPE("rvk_glGetIntegerIndexedvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32839,6 +34051,7 @@ void rvk_glGetIntegerIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glGetBooleanIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLboolean* data) {
+    AV_SCOPE("rvk_glGetBooleanIndexedvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(target));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -32868,6 +34081,7 @@ void rvk_glGetBooleanIndexedvEXT(::av::ClientTransport& rvk_t, GLenum target, GL
 }
 
 void rvk_glCompressedTextureImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32918,6 +34132,7 @@ void rvk_glCompressedTextureImage3DEXT(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCompressedTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -32967,6 +34182,7 @@ void rvk_glCompressedTextureImage2DEXT(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCompressedTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33015,6 +34231,7 @@ void rvk_glCompressedTextureImage1DEXT(::av::ClientTransport& rvk_t, GLuint text
 }
 
 void rvk_glCompressedTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33067,6 +34284,7 @@ void rvk_glCompressedTextureSubImage3DEXT(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glCompressedTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33117,6 +34335,7 @@ void rvk_glCompressedTextureSubImage2DEXT(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glCompressedTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedTextureSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33165,6 +34384,7 @@ void rvk_glCompressedTextureSubImage1DEXT(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glGetCompressedTextureImageEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLint lod, void* img, size_t img_bytes, bool img_is_offset) {
+    AV_SCOPE("rvk_glGetCompressedTextureImageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33218,6 +34438,7 @@ void rvk_glGetCompressedTextureImageEXT(::av::ClientTransport& rvk_t, GLuint tex
 }
 
 void rvk_glCompressedMultiTexImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33268,6 +34489,7 @@ void rvk_glCompressedMultiTexImage3DEXT(::av::ClientTransport& rvk_t, GLenum tex
 }
 
 void rvk_glCompressedMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33317,6 +34539,7 @@ void rvk_glCompressedMultiTexImage2DEXT(::av::ClientTransport& rvk_t, GLenum tex
 }
 
 void rvk_glCompressedMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33365,6 +34588,7 @@ void rvk_glCompressedMultiTexImage1DEXT(::av::ClientTransport& rvk_t, GLenum tex
 }
 
 void rvk_glCompressedMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexSubImage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33417,6 +34641,7 @@ void rvk_glCompressedMultiTexSubImage3DEXT(::av::ClientTransport& rvk_t, GLenum 
 }
 
 void rvk_glCompressedMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexSubImage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33467,6 +34692,7 @@ void rvk_glCompressedMultiTexSubImage2DEXT(::av::ClientTransport& rvk_t, GLenum 
 }
 
 void rvk_glCompressedMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* bits) {
+    AV_SCOPE("rvk_glCompressedMultiTexSubImage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33515,6 +34741,7 @@ void rvk_glCompressedMultiTexSubImage1DEXT(::av::ClientTransport& rvk_t, GLenum 
 }
 
 void rvk_glGetCompressedMultiTexImageEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLint lod, void* img, size_t img_bytes, bool img_is_offset) {
+    AV_SCOPE("rvk_glGetCompressedMultiTexImageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -33568,6 +34795,7 @@ void rvk_glGetCompressedMultiTexImageEXT(::av::ClientTransport& rvk_t, GLenum te
 }
 
 void rvk_glMatrixLoadTransposefEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLfloat* m) {
+    AV_SCOPE("rvk_glMatrixLoadTransposefEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -33610,6 +34838,7 @@ void rvk_glMatrixLoadTransposefEXT(::av::ClientTransport& rvk_t, GLenum mode, co
 }
 
 void rvk_glMatrixLoadTransposedEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdouble* m) {
+    AV_SCOPE("rvk_glMatrixLoadTransposedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -33652,6 +34881,7 @@ void rvk_glMatrixLoadTransposedEXT(::av::ClientTransport& rvk_t, GLenum mode, co
 }
 
 void rvk_glMatrixMultTransposefEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLfloat* m) {
+    AV_SCOPE("rvk_glMatrixMultTransposefEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -33694,6 +34924,7 @@ void rvk_glMatrixMultTransposefEXT(::av::ClientTransport& rvk_t, GLenum mode, co
 }
 
 void rvk_glMatrixMultTransposedEXT(::av::ClientTransport& rvk_t, GLenum mode, const GLdouble* m) {
+    AV_SCOPE("rvk_glMatrixMultTransposedEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
@@ -33736,6 +34967,7 @@ void rvk_glMatrixMultTransposedEXT(::av::ClientTransport& rvk_t, GLenum mode, co
 }
 
 void rvk_glNamedBufferDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, const void* data, GLenum usage) {
+    AV_SCOPE("rvk_glNamedBufferDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -33780,6 +35012,7 @@ void rvk_glNamedBufferDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLsiz
 }
 
 void rvk_glNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, const void* data) {
+    AV_SCOPE("rvk_glNamedBufferSubDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -33824,6 +35057,7 @@ void rvk_glNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GL
 }
 
 void rvk_glGetNamedBufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedBufferParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -33853,6 +35087,7 @@ void rvk_glGetNamedBufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint buf
 }
 
 void rvk_glGetNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLintptr offset, GLsizeiptr size, void* data) {
+    AV_SCOPE("rvk_glGetNamedBufferSubDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(offset));
@@ -33883,6 +35118,7 @@ void rvk_glGetNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffer,
 }
 
 void rvk_glProgramUniform1fEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0) {
+    AV_SCOPE("rvk_glProgramUniform1fEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33896,6 +35132,7 @@ void rvk_glProgramUniform1fEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform2fEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1) {
+    AV_SCOPE("rvk_glProgramUniform2fEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33910,6 +35147,7 @@ void rvk_glProgramUniform2fEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform3fEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2) {
+    AV_SCOPE("rvk_glProgramUniform3fEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33925,6 +35163,7 @@ void rvk_glProgramUniform3fEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform4fEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) {
+    AV_SCOPE("rvk_glProgramUniform4fEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33941,6 +35180,7 @@ void rvk_glProgramUniform4fEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform1iEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0) {
+    AV_SCOPE("rvk_glProgramUniform1iEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33954,6 +35194,7 @@ void rvk_glProgramUniform1iEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform2iEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1) {
+    AV_SCOPE("rvk_glProgramUniform2iEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33968,6 +35209,7 @@ void rvk_glProgramUniform2iEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform3iEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1, GLint v2) {
+    AV_SCOPE("rvk_glProgramUniform3iEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33983,6 +35225,7 @@ void rvk_glProgramUniform3iEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform4iEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLint v0, GLint v1, GLint v2, GLint v3) {
+    AV_SCOPE("rvk_glProgramUniform4iEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -33999,6 +35242,7 @@ void rvk_glProgramUniform4iEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform1fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform1fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34043,6 +35287,7 @@ void rvk_glProgramUniform1fvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform2fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform2fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34087,6 +35332,7 @@ void rvk_glProgramUniform2fvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform3fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform3fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34131,6 +35377,7 @@ void rvk_glProgramUniform3fvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniform4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34175,6 +35422,7 @@ void rvk_glProgramUniform4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform1ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform1ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34219,6 +35467,7 @@ void rvk_glProgramUniform1ivEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform2ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform2ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34263,6 +35512,7 @@ void rvk_glProgramUniform2ivEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform3ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform3ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34307,6 +35557,7 @@ void rvk_glProgramUniform3ivEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform4ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
+    AV_SCOPE("rvk_glProgramUniform4ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34351,6 +35602,7 @@ void rvk_glProgramUniform4ivEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniformMatrix2fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34396,6 +35648,7 @@ void rvk_glProgramUniformMatrix2fvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix3fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34441,6 +35694,7 @@ void rvk_glProgramUniformMatrix3fvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34486,6 +35740,7 @@ void rvk_glProgramUniformMatrix4fvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix2x3fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x3fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34531,6 +35786,7 @@ void rvk_glProgramUniformMatrix2x3fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix3x2fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x2fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34576,6 +35832,7 @@ void rvk_glProgramUniformMatrix3x2fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix2x4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34621,6 +35878,7 @@ void rvk_glProgramUniformMatrix2x4fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix4x2fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x2fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34666,6 +35924,7 @@ void rvk_glProgramUniformMatrix4x2fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix3x4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34711,6 +35970,7 @@ void rvk_glProgramUniformMatrix3x4fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix4x3fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x3fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -34756,6 +36016,7 @@ void rvk_glProgramUniformMatrix4x3fvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glTextureBufferEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum internalformat, GLuint buffer) {
+    AV_SCOPE("rvk_glTextureBufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34770,6 +36031,7 @@ void rvk_glTextureBufferEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum
 }
 
 void rvk_glMultiTexBufferEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum internalformat, GLuint buffer) {
+    AV_SCOPE("rvk_glMultiTexBufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34784,6 +36046,7 @@ void rvk_glMultiTexBufferEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenu
 }
 
 void rvk_glTextureParameterIivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glTextureParameterIivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34828,6 +36091,7 @@ void rvk_glTextureParameterIivEXT(::av::ClientTransport& rvk_t, GLuint texture, 
 }
 
 void rvk_glTextureParameterIuivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, const GLuint* params) {
+    AV_SCOPE("rvk_glTextureParameterIuivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34872,6 +36136,7 @@ void rvk_glTextureParameterIuivEXT(::av::ClientTransport& rvk_t, GLuint texture,
 }
 
 void rvk_glGetTextureParameterIivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetTextureParameterIivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34902,6 +36167,7 @@ void rvk_glGetTextureParameterIivEXT(::av::ClientTransport& rvk_t, GLuint textur
 }
 
 void rvk_glGetTextureParameterIuivEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetTextureParameterIuivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34932,6 +36198,7 @@ void rvk_glGetTextureParameterIuivEXT(::av::ClientTransport& rvk_t, GLuint textu
 }
 
 void rvk_glMultiTexParameterIivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
+    AV_SCOPE("rvk_glMultiTexParameterIivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -34976,6 +36243,7 @@ void rvk_glMultiTexParameterIivEXT(::av::ClientTransport& rvk_t, GLenum texunit,
 }
 
 void rvk_glMultiTexParameterIuivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, const GLuint* params) {
+    AV_SCOPE("rvk_glMultiTexParameterIuivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35020,6 +36288,7 @@ void rvk_glMultiTexParameterIuivEXT(::av::ClientTransport& rvk_t, GLenum texunit
 }
 
 void rvk_glGetMultiTexParameterIivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetMultiTexParameterIivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35050,6 +36319,7 @@ void rvk_glGetMultiTexParameterIivEXT(::av::ClientTransport& rvk_t, GLenum texun
 }
 
 void rvk_glGetMultiTexParameterIuivEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLenum pname, GLuint* params) {
+    AV_SCOPE("rvk_glGetMultiTexParameterIuivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35080,6 +36350,7 @@ void rvk_glGetMultiTexParameterIuivEXT(::av::ClientTransport& rvk_t, GLenum texu
 }
 
 void rvk_glProgramUniform1uiEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0) {
+    AV_SCOPE("rvk_glProgramUniform1uiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35093,6 +36364,7 @@ void rvk_glProgramUniform1uiEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform2uiEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1) {
+    AV_SCOPE("rvk_glProgramUniform2uiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35107,6 +36379,7 @@ void rvk_glProgramUniform2uiEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform3uiEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2) {
+    AV_SCOPE("rvk_glProgramUniform3uiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35122,6 +36395,7 @@ void rvk_glProgramUniform3uiEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform4uiEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLuint v0, GLuint v1, GLuint v2, GLuint v3) {
+    AV_SCOPE("rvk_glProgramUniform4uiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35138,6 +36412,7 @@ void rvk_glProgramUniform4uiEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform1uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform1uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35182,6 +36457,7 @@ void rvk_glProgramUniform1uivEXT(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform2uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform2uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35226,6 +36502,7 @@ void rvk_glProgramUniform2uivEXT(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform3uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform3uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35270,6 +36547,7 @@ void rvk_glProgramUniform3uivEXT(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glProgramUniform4uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
+    AV_SCOPE("rvk_glProgramUniform4uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -35314,6 +36592,7 @@ void rvk_glProgramUniform4uivEXT(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glNamedProgramLocalParameters4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLfloat* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameters4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35359,6 +36638,7 @@ void rvk_glNamedProgramLocalParameters4fvEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glNamedProgramLocalParameterI4iEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLint x, GLint y, GLint z, GLint w) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameterI4iEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35376,6 +36656,7 @@ void rvk_glNamedProgramLocalParameterI4iEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glNamedProgramLocalParameterI4ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, const GLint* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameterI4ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35420,6 +36701,7 @@ void rvk_glNamedProgramLocalParameterI4ivEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glNamedProgramLocalParametersI4ivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLint* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParametersI4ivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35465,6 +36747,7 @@ void rvk_glNamedProgramLocalParametersI4ivEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glNamedProgramLocalParameterI4uiEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLuint x, GLuint y, GLuint z, GLuint w) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameterI4uiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35482,6 +36765,7 @@ void rvk_glNamedProgramLocalParameterI4uiEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glNamedProgramLocalParameterI4uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, const GLuint* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameterI4uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35526,6 +36810,7 @@ void rvk_glNamedProgramLocalParameterI4uivEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glNamedProgramLocalParametersI4uivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLuint* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParametersI4uivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35571,6 +36856,7 @@ void rvk_glNamedProgramLocalParametersI4uivEXT(::av::ClientTransport& rvk_t, GLu
 }
 
 void rvk_glGetNamedProgramLocalParameterIivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedProgramLocalParameterIivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35601,6 +36887,7 @@ void rvk_glGetNamedProgramLocalParameterIivEXT(::av::ClientTransport& rvk_t, GLu
 }
 
 void rvk_glGetNamedProgramLocalParameterIuivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLuint* params) {
+    AV_SCOPE("rvk_glGetNamedProgramLocalParameterIuivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35631,6 +36918,7 @@ void rvk_glGetNamedProgramLocalParameterIuivEXT(::av::ClientTransport& rvk_t, GL
 }
 
 void rvk_glEnableClientStateiEXT(::av::ClientTransport& rvk_t, GLenum array, GLuint index) {
+    AV_SCOPE("rvk_glEnableClientStateiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -35643,6 +36931,7 @@ void rvk_glEnableClientStateiEXT(::av::ClientTransport& rvk_t, GLenum array, GLu
 }
 
 void rvk_glDisableClientStateiEXT(::av::ClientTransport& rvk_t, GLenum array, GLuint index) {
+    AV_SCOPE("rvk_glDisableClientStateiEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(array));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -35655,6 +36944,7 @@ void rvk_glDisableClientStateiEXT(::av::ClientTransport& rvk_t, GLenum array, GL
 }
 
 void rvk_glGetFloati_vEXT(::av::ClientTransport& rvk_t, GLenum pname, GLuint index, GLfloat* params) {
+    AV_SCOPE("rvk_glGetFloati_vEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -35684,6 +36974,7 @@ void rvk_glGetFloati_vEXT(::av::ClientTransport& rvk_t, GLenum pname, GLuint ind
 }
 
 void rvk_glGetDoublei_vEXT(::av::ClientTransport& rvk_t, GLenum pname, GLuint index, GLdouble* params) {
+    AV_SCOPE("rvk_glGetDoublei_vEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(pname));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -35713,6 +37004,7 @@ void rvk_glGetDoublei_vEXT(::av::ClientTransport& rvk_t, GLenum pname, GLuint in
 }
 
 void rvk_glNamedProgramStringEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLenum format, GLsizei len, const void* string) {
+    AV_SCOPE("rvk_glNamedProgramStringEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35758,6 +37050,7 @@ void rvk_glNamedProgramStringEXT(::av::ClientTransport& rvk_t, GLuint program, G
 }
 
 void rvk_glNamedProgramLocalParameter4dEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameter4dEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35775,6 +37068,7 @@ void rvk_glNamedProgramLocalParameter4dEXT(::av::ClientTransport& rvk_t, GLuint 
 }
 
 void rvk_glNamedProgramLocalParameter4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, const GLdouble* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameter4dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35819,6 +37113,7 @@ void rvk_glNamedProgramLocalParameter4dvEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glNamedProgramLocalParameter4fEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameter4fEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35836,6 +37131,7 @@ void rvk_glNamedProgramLocalParameter4fEXT(::av::ClientTransport& rvk_t, GLuint 
 }
 
 void rvk_glNamedProgramLocalParameter4fvEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, const GLfloat* params) {
+    AV_SCOPE("rvk_glNamedProgramLocalParameter4fvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35880,6 +37176,7 @@ void rvk_glNamedProgramLocalParameter4fvEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glGetNamedProgramLocalParameterdvEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLdouble* params) {
+    AV_SCOPE("rvk_glGetNamedProgramLocalParameterdvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35910,6 +37207,7 @@ void rvk_glGetNamedProgramLocalParameterdvEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glGetNamedProgramLocalParameterfvEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLuint index, GLfloat* params) {
+    AV_SCOPE("rvk_glGetNamedProgramLocalParameterfvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35940,6 +37238,7 @@ void rvk_glGetNamedProgramLocalParameterfvEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glGetNamedProgramivEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedProgramivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -35970,6 +37269,7 @@ void rvk_glGetNamedProgramivEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glGetNamedProgramStringEXT(::av::ClientTransport& rvk_t, GLuint program, GLenum target, GLenum pname, void* string) {
+    AV_SCOPE("rvk_glGetNamedProgramStringEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36000,6 +37300,7 @@ void rvk_glGetNamedProgramStringEXT(::av::ClientTransport& rvk_t, GLuint program
 }
 
 void rvk_glNamedRenderbufferStorageEXT(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glNamedRenderbufferStorageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -36014,6 +37315,7 @@ void rvk_glNamedRenderbufferStorageEXT(::av::ClientTransport& rvk_t, GLuint rend
 }
 
 void rvk_glGetNamedRenderbufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedRenderbufferParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -36043,6 +37345,7 @@ void rvk_glGetNamedRenderbufferParameterivEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glNamedRenderbufferStorageMultisampleEXT(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glNamedRenderbufferStorageMultisampleEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(samples));
@@ -36058,6 +37361,7 @@ void rvk_glNamedRenderbufferStorageMultisampleEXT(::av::ClientTransport& rvk_t, 
 }
 
 void rvk_glNamedRenderbufferStorageMultisampleCoverageEXT(::av::ClientTransport& rvk_t, GLuint renderbuffer, GLsizei coverageSamples, GLsizei colorSamples, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glNamedRenderbufferStorageMultisampleCoverageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(renderbuffer));
     rvk_b.write_varint(static_cast<uint64_t>(coverageSamples));
@@ -36074,6 +37378,7 @@ void rvk_glNamedRenderbufferStorageMultisampleCoverageEXT(::av::ClientTransport&
 }
 
 GLenum rvk_glCheckNamedFramebufferStatusEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum target) {
+    AV_SCOPE("rvk_glCheckNamedFramebufferStatusEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36094,6 +37399,7 @@ GLenum rvk_glCheckNamedFramebufferStatusEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glNamedFramebufferTexture1DEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glNamedFramebufferTexture1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36109,6 +37415,7 @@ void rvk_glNamedFramebufferTexture1DEXT(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedFramebufferTexture2DEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum textarget, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glNamedFramebufferTexture2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36124,6 +37431,7 @@ void rvk_glNamedFramebufferTexture2DEXT(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedFramebufferTexture3DEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLint zoffset) {
+    AV_SCOPE("rvk_glNamedFramebufferTexture3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36140,6 +37448,7 @@ void rvk_glNamedFramebufferTexture3DEXT(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedFramebufferRenderbufferEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glNamedFramebufferRenderbufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36154,6 +37463,7 @@ void rvk_glNamedFramebufferRenderbufferEXT(::av::ClientTransport& rvk_t, GLuint 
 }
 
 void rvk_glGetNamedFramebufferAttachmentParameterivEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedFramebufferAttachmentParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36184,6 +37494,7 @@ void rvk_glGetNamedFramebufferAttachmentParameterivEXT(::av::ClientTransport& rv
 }
 
 void rvk_glGenerateTextureMipmapEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target) {
+    AV_SCOPE("rvk_glGenerateTextureMipmapEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36196,6 +37507,7 @@ void rvk_glGenerateTextureMipmapEXT(::av::ClientTransport& rvk_t, GLuint texture
 }
 
 void rvk_glGenerateMultiTexMipmapEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target) {
+    AV_SCOPE("rvk_glGenerateMultiTexMipmapEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36208,6 +37520,7 @@ void rvk_glGenerateMultiTexMipmapEXT(::av::ClientTransport& rvk_t, GLenum texuni
 }
 
 void rvk_glFramebufferDrawBufferEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum mode) {
+    AV_SCOPE("rvk_glFramebufferDrawBufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -36220,6 +37533,7 @@ void rvk_glFramebufferDrawBufferEXT(::av::ClientTransport& rvk_t, GLuint framebu
 }
 
 void rvk_glFramebufferDrawBuffersEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLsizei n, const GLenum* bufs) {
+    AV_SCOPE("rvk_glFramebufferDrawBuffersEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(n));
@@ -36263,6 +37577,7 @@ void rvk_glFramebufferDrawBuffersEXT(::av::ClientTransport& rvk_t, GLuint frameb
 }
 
 void rvk_glFramebufferReadBufferEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum mode) {
+    AV_SCOPE("rvk_glFramebufferReadBufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(mode));
@@ -36275,6 +37590,7 @@ void rvk_glFramebufferReadBufferEXT(::av::ClientTransport& rvk_t, GLuint framebu
 }
 
 void rvk_glGetFramebufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetFramebufferParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -36304,6 +37620,7 @@ void rvk_glGetFramebufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint fra
 }
 
 void rvk_glNamedCopyBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint readBuffer, GLuint writeBuffer, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glNamedCopyBufferSubDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(readBuffer));
     rvk_b.write_varint(static_cast<uint64_t>(writeBuffer));
@@ -36319,6 +37636,7 @@ void rvk_glNamedCopyBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint readBu
 }
 
 void rvk_glNamedFramebufferTextureEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLuint texture, GLint level) {
+    AV_SCOPE("rvk_glNamedFramebufferTextureEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36333,6 +37651,7 @@ void rvk_glNamedFramebufferTextureEXT(::av::ClientTransport& rvk_t, GLuint frame
 }
 
 void rvk_glNamedFramebufferTextureLayerEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer) {
+    AV_SCOPE("rvk_glNamedFramebufferTextureLayerEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36348,6 +37667,7 @@ void rvk_glNamedFramebufferTextureLayerEXT(::av::ClientTransport& rvk_t, GLuint 
 }
 
 void rvk_glNamedFramebufferTextureFaceEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLenum face) {
+    AV_SCOPE("rvk_glNamedFramebufferTextureFaceEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(attachment));
@@ -36363,6 +37683,7 @@ void rvk_glNamedFramebufferTextureFaceEXT(::av::ClientTransport& rvk_t, GLuint f
 }
 
 void rvk_glTextureRenderbufferEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glTextureRenderbufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36376,6 +37697,7 @@ void rvk_glTextureRenderbufferEXT(::av::ClientTransport& rvk_t, GLuint texture, 
 }
 
 void rvk_glMultiTexRenderbufferEXT(::av::ClientTransport& rvk_t, GLenum texunit, GLenum target, GLuint renderbuffer) {
+    AV_SCOPE("rvk_glMultiTexRenderbufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texunit));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -36389,6 +37711,7 @@ void rvk_glMultiTexRenderbufferEXT(::av::ClientTransport& rvk_t, GLenum texunit,
 }
 
 void rvk_glVertexArrayVertexOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayVertexOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36405,6 +37728,7 @@ void rvk_glVertexArrayVertexOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj
 }
 
 void rvk_glVertexArrayColorOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayColorOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36421,6 +37745,7 @@ void rvk_glVertexArrayColorOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj,
 }
 
 void rvk_glVertexArrayEdgeFlagOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayEdgeFlagOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36435,6 +37760,7 @@ void rvk_glVertexArrayEdgeFlagOffsetEXT(::av::ClientTransport& rvk_t, GLuint vao
 }
 
 void rvk_glVertexArrayIndexOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayIndexOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36450,6 +37776,7 @@ void rvk_glVertexArrayIndexOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj,
 }
 
 void rvk_glVertexArrayNormalOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayNormalOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36465,6 +37792,7 @@ void rvk_glVertexArrayNormalOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj
 }
 
 void rvk_glVertexArrayTexCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayTexCoordOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36481,6 +37809,7 @@ void rvk_glVertexArrayTexCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuint vao
 }
 
 void rvk_glVertexArrayMultiTexCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLenum texunit, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayMultiTexCoordOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36498,6 +37827,7 @@ void rvk_glVertexArrayMultiTexCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glVertexArrayFogCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayFogCoordOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36513,6 +37843,7 @@ void rvk_glVertexArrayFogCoordOffsetEXT(::av::ClientTransport& rvk_t, GLuint vao
 }
 
 void rvk_glVertexArraySecondaryColorOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArraySecondaryColorOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36529,6 +37860,7 @@ void rvk_glVertexArraySecondaryColorOffsetEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glVertexArrayVertexAttribOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36547,6 +37879,7 @@ void rvk_glVertexArrayVertexAttribOffsetEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glVertexArrayVertexAttribIOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLuint index, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribIOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -36564,6 +37897,7 @@ void rvk_glVertexArrayVertexAttribIOffsetEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glEnableVertexArrayEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLenum array) {
+    AV_SCOPE("rvk_glEnableVertexArrayEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(array));
@@ -36576,6 +37910,7 @@ void rvk_glEnableVertexArrayEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLen
 }
 
 void rvk_glDisableVertexArrayEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLenum array) {
+    AV_SCOPE("rvk_glDisableVertexArrayEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(array));
@@ -36588,6 +37923,7 @@ void rvk_glDisableVertexArrayEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLe
 }
 
 void rvk_glEnableVertexArrayAttribEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index) {
+    AV_SCOPE("rvk_glEnableVertexArrayAttribEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -36600,6 +37936,7 @@ void rvk_glEnableVertexArrayAttribEXT(::av::ClientTransport& rvk_t, GLuint vaobj
 }
 
 void rvk_glDisableVertexArrayAttribEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index) {
+    AV_SCOPE("rvk_glDisableVertexArrayAttribEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -36612,6 +37949,7 @@ void rvk_glDisableVertexArrayAttribEXT(::av::ClientTransport& rvk_t, GLuint vaob
 }
 
 void rvk_glGetVertexArrayIntegervEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetVertexArrayIntegervEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -36641,6 +37979,7 @@ void rvk_glGetVertexArrayIntegervEXT(::av::ClientTransport& rvk_t, GLuint vaobj,
 }
 
 void rvk_glGetVertexArrayIntegeri_vEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index, GLenum pname, GLint* param) {
+    AV_SCOPE("rvk_glGetVertexArrayIntegeri_vEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
@@ -36671,6 +38010,7 @@ void rvk_glGetVertexArrayIntegeri_vEXT(::av::ClientTransport& rvk_t, GLuint vaob
 }
 
 void rvk_glNamedBufferStorageEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, const void* data, GLbitfield flags) {
+    AV_SCOPE("rvk_glNamedBufferStorageEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(size));
@@ -36715,6 +38055,7 @@ void rvk_glNamedBufferStorageEXT(::av::ClientTransport& rvk_t, GLuint buffer, GL
 }
 
 void rvk_glClearNamedBufferDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearNamedBufferDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -36761,6 +38102,7 @@ void rvk_glClearNamedBufferDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, 
 }
 
 void rvk_glClearNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLenum internalformat, GLsizeiptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
+    AV_SCOPE("rvk_glClearNamedBufferSubDataEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
     rvk_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -36809,6 +38151,7 @@ void rvk_glClearNamedBufferSubDataEXT(::av::ClientTransport& rvk_t, GLuint buffe
 }
 
 void rvk_glNamedFramebufferParameteriEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum pname, GLint param) {
+    AV_SCOPE("rvk_glNamedFramebufferParameteriEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -36822,6 +38165,7 @@ void rvk_glNamedFramebufferParameteriEXT(::av::ClientTransport& rvk_t, GLuint fr
 }
 
 void rvk_glGetNamedFramebufferParameterivEXT(::av::ClientTransport& rvk_t, GLuint framebuffer, GLenum pname, GLint* params) {
+    AV_SCOPE("rvk_glGetNamedFramebufferParameterivEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(framebuffer));
     rvk_b.write_varint(static_cast<uint64_t>(pname));
@@ -36851,6 +38195,7 @@ void rvk_glGetNamedFramebufferParameterivEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glProgramUniform1dEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble x) {
+    AV_SCOPE("rvk_glProgramUniform1dEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36864,6 +38209,7 @@ void rvk_glProgramUniform1dEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform2dEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble x, GLdouble y) {
+    AV_SCOPE("rvk_glProgramUniform2dEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36878,6 +38224,7 @@ void rvk_glProgramUniform2dEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform3dEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z) {
+    AV_SCOPE("rvk_glProgramUniform3dEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36893,6 +38240,7 @@ void rvk_glProgramUniform3dEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform4dEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
+    AV_SCOPE("rvk_glProgramUniform4dEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36909,6 +38257,7 @@ void rvk_glProgramUniform4dEXT(::av::ClientTransport& rvk_t, GLuint program, GLi
 }
 
 void rvk_glProgramUniform1dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform1dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36953,6 +38302,7 @@ void rvk_glProgramUniform1dvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform2dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform2dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -36997,6 +38347,7 @@ void rvk_glProgramUniform2dvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform3dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform3dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37041,6 +38392,7 @@ void rvk_glProgramUniform3dvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniform4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniform4dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37085,6 +38437,7 @@ void rvk_glProgramUniform4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GL
 }
 
 void rvk_glProgramUniformMatrix2dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37130,6 +38483,7 @@ void rvk_glProgramUniformMatrix2dvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix3dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37175,6 +38529,7 @@ void rvk_glProgramUniformMatrix3dvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37220,6 +38575,7 @@ void rvk_glProgramUniformMatrix4dvEXT(::av::ClientTransport& rvk_t, GLuint progr
 }
 
 void rvk_glProgramUniformMatrix2x3dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x3dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37265,6 +38621,7 @@ void rvk_glProgramUniformMatrix2x3dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix2x4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix2x4dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37310,6 +38667,7 @@ void rvk_glProgramUniformMatrix2x4dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix3x2dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x2dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37355,6 +38713,7 @@ void rvk_glProgramUniformMatrix3x2dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix3x4dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix3x4dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37400,6 +38759,7 @@ void rvk_glProgramUniformMatrix3x4dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix4x2dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x2dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37445,6 +38805,7 @@ void rvk_glProgramUniformMatrix4x2dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glProgramUniformMatrix4x3dvEXT(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
+    AV_SCOPE("rvk_glProgramUniformMatrix4x3dvEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));
     rvk_b.write_varint(static_cast<uint64_t>(location));
@@ -37490,6 +38851,7 @@ void rvk_glProgramUniformMatrix4x3dvEXT(::av::ClientTransport& rvk_t, GLuint pro
 }
 
 void rvk_glTextureBufferRangeEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLenum internalformat, GLuint buffer, GLintptr offset, GLsizeiptr size) {
+    AV_SCOPE("rvk_glTextureBufferRangeEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37506,6 +38868,7 @@ void rvk_glTextureBufferRangeEXT(::av::ClientTransport& rvk_t, GLuint texture, G
 }
 
 void rvk_glTextureStorage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width) {
+    AV_SCOPE("rvk_glTextureStorage1DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37521,6 +38884,7 @@ void rvk_glTextureStorage1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLe
 }
 
 void rvk_glTextureStorage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height) {
+    AV_SCOPE("rvk_glTextureStorage2DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37537,6 +38901,7 @@ void rvk_glTextureStorage2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLe
 }
 
 void rvk_glTextureStorage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth) {
+    AV_SCOPE("rvk_glTextureStorage3DEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37554,6 +38919,7 @@ void rvk_glTextureStorage3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLe
 }
 
 void rvk_glTextureStorage2DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTextureStorage2DMultisampleEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37571,6 +38937,7 @@ void rvk_glTextureStorage2DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glTextureStorage3DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations) {
+    AV_SCOPE("rvk_glTextureStorage3DMultisampleEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(texture));
     rvk_b.write_varint(static_cast<uint64_t>(target));
@@ -37589,6 +38956,7 @@ void rvk_glTextureStorage3DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint t
 }
 
 void rvk_glVertexArrayBindVertexBufferEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride) {
+    AV_SCOPE("rvk_glVertexArrayBindVertexBufferEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
@@ -37604,6 +38972,7 @@ void rvk_glVertexArrayBindVertexBufferEXT(::av::ClientTransport& rvk_t, GLuint v
 }
 
 void rvk_glVertexArrayVertexAttribFormatEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribFormatEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -37620,6 +38989,7 @@ void rvk_glVertexArrayVertexAttribFormatEXT(::av::ClientTransport& rvk_t, GLuint
 }
 
 void rvk_glVertexArrayVertexAttribIFormatEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribIFormatEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -37635,6 +39005,7 @@ void rvk_glVertexArrayVertexAttribIFormatEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glVertexArrayVertexAttribLFormatEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribLFormatEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -37650,6 +39021,7 @@ void rvk_glVertexArrayVertexAttribLFormatEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glVertexArrayVertexAttribBindingEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint attribindex, GLuint bindingindex) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribBindingEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(attribindex));
@@ -37663,6 +39035,7 @@ void rvk_glVertexArrayVertexAttribBindingEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glVertexArrayVertexBindingDivisorEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint bindingindex, GLuint divisor) {
+    AV_SCOPE("rvk_glVertexArrayVertexBindingDivisorEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(bindingindex));
@@ -37676,6 +39049,7 @@ void rvk_glVertexArrayVertexBindingDivisorEXT(::av::ClientTransport& rvk_t, GLui
 }
 
 void rvk_glVertexArrayVertexAttribLOffsetEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint buffer, GLuint index, GLint size, GLenum type, GLsizei stride, GLintptr offset) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribLOffsetEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(buffer));
@@ -37693,6 +39067,7 @@ void rvk_glVertexArrayVertexAttribLOffsetEXT(::av::ClientTransport& rvk_t, GLuin
 }
 
 void rvk_glVertexArrayVertexAttribDivisorEXT(::av::ClientTransport& rvk_t, GLuint vaobj, GLuint index, GLuint divisor) {
+    AV_SCOPE("rvk_glVertexArrayVertexAttribDivisorEXT");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(vaobj));
     rvk_b.write_varint(static_cast<uint64_t>(index));
