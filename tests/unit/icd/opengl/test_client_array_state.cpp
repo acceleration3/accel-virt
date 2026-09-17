@@ -212,3 +212,15 @@ TEST(client_array_state_invariants, fail_for_state_no_call_makes)
   ClientArrayState unpack;
   av::glicd::ClientArrayStateProbe::break_store(unpack, false);
   CHECK(!unpack.invariants_hold()); }
+
+TEST(client_array_state, answers_the_pixel_store_values_it_keeps)
+{ ClientArrayState state;
+  CHECK_EQ(state.pixel_value(0x0D05u), 4);
+  CHECK_EQ(state.pixel_value(0x0CF5u), 4);
+  CHECK(state.store_pixel(0x0D05u, 8));
+  CHECK(state.store_pixel(0x0D04u, 3));
+  CHECK_EQ(state.pixel_value(0x0D05u), 8);
+  CHECK_EQ(state.pixel_value(0x0D04u), 3);
+  CHECK_EQ(state.pixel_value(0x0CF5u), 4);
+  CHECK_EQ(state.pixel_value(0x1234u), 0);
+  CHECK(state.invariants_hold()); }

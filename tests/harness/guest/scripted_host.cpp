@@ -151,6 +151,17 @@ void ScriptedHost::gl_make(const char *renderer, const char *version)
     gl_integer(0);
 }
 
+void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first)
+{
+    /* Two framebuffers, a texture and two renderbuffers at most. */
+    std::uint32_t names[5] = {};
+    for (std::uint32_t index = 0u; index < 5u; index++) names[index] = first + index;
+    gl_bytes(reinterpret_cast<const std::uint8_t *>(names), framebuffers * sizeof names[0]);
+    gl_bytes(reinterpret_cast<const std::uint8_t *>(names + framebuffers), sizeof names[0]);
+    if (renderbuffers != 0u)
+        gl_bytes(reinterpret_cast<const std::uint8_t *>(names + framebuffers + 1u), renderbuffers * sizeof names[0]);
+}
+
 void ScriptedHost::blob_import(std::uint32_t status, std::uint64_t memory)
 {
     WireWriter writer(answer_, sizeof answer_);

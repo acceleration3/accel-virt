@@ -22,6 +22,12 @@ void APIENTRY Wrap_glBindBuffer(GLenum target, GLuint buffer)
     ::av::glicd::gl_icd_binding.root().manual().bind_buffer(target, buffer);
 }
 
+void APIENTRY Wrap_glBindFramebuffer(GLenum target, GLuint framebuffer)
+{
+    AV_SCOPE("Wrap_glBindFramebuffer");
+    ::av::glicd::gl_icd_binding.root().manual().bind_framebuffer(target, framebuffer);
+}
+
 void APIENTRY Wrap_glBindVertexArray(GLuint array)
 {
     AV_SCOPE("Wrap_glBindVertexArray");
@@ -104,6 +110,12 @@ void APIENTRY Wrap_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei count
 {
     AV_SCOPE("Wrap_glDrawArraysInstanced");
     ::av::glicd::gl_icd_binding.root().manual().draw_arrays(mode, first, count, instancecount);
+}
+
+void APIENTRY Wrap_glDrawBuffer(GLenum buf)
+{
+    AV_SCOPE("Wrap_glDrawBuffer");
+    ::av::glicd::gl_icd_binding.root().manual().draw_buffer(buf);
 }
 
 void APIENTRY Wrap_glDrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices)
@@ -350,6 +362,12 @@ void APIENTRY Wrap_glPixelStorei(GLenum pname, GLint param)
 {
     AV_SCOPE("Wrap_glPixelStorei");
     ::av::glicd::gl_icd_binding.root().manual().pixel_store(pname, param);
+}
+
+void APIENTRY Wrap_glReadBuffer(GLenum src)
+{
+    AV_SCOPE("Wrap_glReadBuffer");
+    ::av::glicd::gl_icd_binding.root().manual().read_buffer(src);
 }
 
 void APIENTRY Wrap_glSecondaryColorPointer(GLint, GLenum, GLsizei, const void*)

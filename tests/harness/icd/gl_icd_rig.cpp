@@ -51,6 +51,8 @@ void *GlIcdRig::current_context(const char *renderer, const char *version)
     void *const context = opengl32_.create_context(dc());
     if (context == nullptr) return nullptr;
     host_.gl_make(renderer, version);
+    /* Format 1 is double-buffered D24S8 with no samples. */
+    host_.gl_window(1u, 1u);
     return opengl32_.make_current(dc(), context) ? context : nullptr;
 }
 

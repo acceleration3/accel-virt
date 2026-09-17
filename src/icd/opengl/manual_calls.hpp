@@ -63,6 +63,11 @@ public:
     void draw_range_elements(uint32_t mode, uint32_t start, uint32_t end, int32_t count, uint32_t type,
                              const void *indices);
     void flush();
+    /* The window's framebuffer and buffers, translated for the host
+     * (WindowFramebuffers). */
+    void bind_framebuffer(uint32_t target, uint32_t framebuffer);
+    void draw_buffer(uint32_t buffer);
+    void read_buffer(uint32_t buffer);
     uint32_t client_wait_sync(void *sync, uint32_t flags, uint64_t timeout);
     void debug_message_callback(void *callback, const void *user);
     void link_program(uint32_t program);

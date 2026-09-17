@@ -34,8 +34,17 @@ bool ClientArrayState::store_pixel(uint32_t pname, int32_t value)
 {
     AV_SCOPE("ClientArrayState::store_pixel");
     PixelStore::Field field = PixelStore::Field::alignment;
-    PixelStore *const store = store_for(pname, field);
+    /* The store found is one of this object's own, which this call may change. */
+    PixelStore *const store = const_cast<PixelStore *>(store_for(pname, field));
     return store != nullptr && store->set(field, value);
+}
+
+int32_t ClientArrayState::pixel_value(uint32_t pname) const
+{
+    AV_SCOPE("ClientArrayState::pixel_value");
+    PixelStore::Field       field = PixelStore::Field::alignment;
+    const PixelStore *const store = store_for(pname, field);
+    return store != nullptr ? store->get(field) : 0;
 }
 
 size_t ClientArrayState::pixel_bytes(uint32_t format, uint32_t type, int32_t width, int32_t height, int32_t depth,
@@ -234,7 +243,7 @@ uint32_t ClientArrayState::texture_slot(uint32_t target) const
     return slot;
 }
 
-PixelStore *ClientArrayState::store_for(uint32_t pname, PixelStore::Field &field)
+const PixelStore *ClientArrayState::store_for(uint32_t pname, PixelStore::Field &field) const
 {
     AV_SCOPE("ClientArrayState::store_for");
     using Field = PixelStore::Field;

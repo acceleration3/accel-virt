@@ -35,6 +35,8 @@ constexpr icd::ExtensionPolicy::Row reported_wgl_extensions[] = {
     {"WGL_ARB_create_context", 1u, "gl_icd_root.a_create_with_attributes_makes_the_context_and_opengl32s_hglrc_names_it"},
     {"WGL_ARB_create_context_profile", 1u, "gl_icd_root.a_create_with_attributes_answers_the_arb_errors"},
     {"WGL_ARB_create_context_robustness", 1u, "context_attributes.flags_and_the_reset_strategy_become_option_flags"},
+    {"WGL_ARB_multisample", 1u, "back_buffer_presenter.a_multisampled_frame_is_resolved_before_it_is_read"},
+    {"WGL_ARB_framebuffer_sRGB", 1u, "back_buffer_presenter.an_srgb_format_stores_srgb_colour"},
 };
 constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof reported_wgl_extensions[0];
 
@@ -176,6 +178,17 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
             return nullptr;
         }
     }
+    ClientTransport *const transport = context->wire();
+    if (transport != nullptr) {
+        const Status on_window = context->framebuffers().make_current_on(
+            *transport, surface_.window_of(dc), formats_.format(context->pixel_format()), surface_);
+        /* A context the host lost meanwhile is made current all the same, as
+         * a lost context is: every call on it then does nothing. */
+        if (on_window != Status::ok && context->wire() != nullptr) {
+            fail(on_window == Status::invalid_parameter ? error_invalid_pixel_format : error_not_enough_memory);
+            return nullptr;
+        }
+    }
     static_cast<void>(currents_.make_current(*context));
     return &proc_table_;
 }
@@ -239,8 +252,7 @@ bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
     return (planes & swap_main_plane) != 0u && swap_buffers(dc);
 }
 
-/* Presentation arrives with T035: until then a swap finishes the frame's
- * commands on the host and puts nothing on the window. */
+/* The calling thread's context puts its frame for the DC's window there. */
 bool GlIcdRoot::swap_buffers(void *dc)
 {
     AV_SCOPE("GlIcdRoot::swap_buffers");
@@ -248,10 +260,15 @@ bool GlIcdRoot::swap_buffers(void *dc)
     windows_.drop_gone(surface_);
     lock_.release();
     GuestGlContext *const context = currents_.current();
-    if (context == nullptr || windows_.format_of(surface_.window_of(dc)) != context->pixel_format()) return false;
+    void *const           window = surface_.window_of(dc);
+    if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return false;
     ClientTransport *const transport = context->wire();
-    if (transport != nullptr) glproto::rvk_glFlush(*transport);
-    return true;
+    /* A lost context has nothing to show and fails nothing by swapping. */
+    if (transport == nullptr) return true;
+    WindowFramebuffers &framebuffers = context->framebuffers();
+    framebuffers.drop_gone(*transport, surface_);
+    return framebuffers.present(*transport, context->arrays(), dc, window,
+                                formats_.format(context->pixel_format()), surface_);
 }
 
 void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *attributes)

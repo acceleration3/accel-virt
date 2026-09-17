@@ -39,6 +39,8 @@ public:
     /* glPixelStore: false for a name it does not keep or a value the host
      * would refuse - either is still sent. */
     bool   store_pixel(uint32_t pname, int32_t value);
+    /* What a glPixelStore name holds now; 0 for a name it does not keep. */
+    int32_t pixel_value(uint32_t pname) const;
     size_t pixel_bytes(uint32_t format, uint32_t type, int32_t width, int32_t height, int32_t depth,
                        bool packing) const;
     /* A compressed upload's bytes: its image size; 0 for a negative one and
@@ -89,7 +91,7 @@ private:
 
     uint32_t    buffer_slot(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
-    PixelStore *store_for(uint32_t pname, PixelStore::Field &field);
+    const PixelStore *store_for(uint32_t pname, PixelStore::Field &field) const;
     /* The row of `array` in the vertex array table, or max_vertex_arrays. */
     uint32_t    vertex_array_row(uint32_t array) const;
 

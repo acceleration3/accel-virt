@@ -195,6 +195,7 @@ TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   rig.host().gl_make("host gpu", "4.6.0");
+  rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
   CHECK(rig.kmt().open_objects() > 0u);
   CHECK_EQ(rig.opengl32().table_entries(), 336u);
@@ -283,6 +284,7 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().current() == nullptr);
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_window(1u, 1u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) != nullptr);
   CHECK(rig.root().invariants_hold()); }
 
@@ -320,7 +322,8 @@ TEST(gl_icd_root, answers_gl_and_wgl_names_it_implements)
   CHECK(rig.root().get_proc_address(nullptr) == nullptr);
   const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().get_proc_address("wglGetExtensionsStringARB"));
   CHECK(std::strcmp(extensions(rig.dc()), "WGL_ARB_extensions_string WGL_ARB_pixel_format WGL_ARB_create_context "
-                                          "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness") == 0);
+                                          "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness "
+                                          "WGL_ARB_multisample WGL_ARB_framebuffer_sRGB") == 0);
   CHECK(rig.root().extensions_string(rig.memory_dc()) == extensions(rig.dc())); }
 
 TEST(gl_icd_root, a_gl_call_with_nothing_current_does_nothing)
@@ -385,7 +388,10 @@ TEST(gl_icd_root, a_lost_context_answers_no_error_and_sends_nothing)
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
   CHECK_EQ(rig.kmt().commands(), commands); }
 
-TEST(gl_icd_root, a_swap_finishes_the_frame_for_the_current_contexts_window)
+/* A swap puts the calling thread's context's frame on the DC's window: a DC of
+ * a window with another format, a memory DC and a thread with nothing current
+ * swap nothing, and only the main plane is a layer that swaps. */
+TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
 { GlIcdRig rig;
   rig.load_with_format();
   CHECK(!rig.opengl32().swap_buffers(rig.dc()));
@@ -393,12 +399,32 @@ TEST(gl_icd_root, a_swap_finishes_the_frame_for_the_current_contexts_window)
   CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 2));
   CHECK(!rig.opengl32().swap_buffers(rig.other_dc()));
   CHECK(!rig.opengl32().swap_buffers(rig.memory_dc()));
+  rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
-  CHECK_EQ(sent(rig, av::glproto::kCmd_glFlush), 1u);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 1u);
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.surface().last_blit_dc() == rig.dc());
+  CHECK_EQ(rig.surface().last_blit_width(), GlIcdRig::window_width);
+  CHECK_EQ(rig.surface().last_blit_height(), GlIcdRig::window_height);
+  rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.root().swap_layer_buffers(rig.dc(), Root::swap_main_plane | 2u));
   CHECK(!rig.root().swap_layer_buffers(rig.memory_dc(), Root::swap_main_plane));
   CHECK(!rig.root().swap_layer_buffers(rig.dc(), 2u));
-  CHECK_EQ(sent(rig, av::glproto::kCmd_glFlush), 2u); }
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 2u);
+  CHECK_EQ(rig.surface().blits(), 2u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A context the host lost swaps nothing and fails nothing. */
+TEST(gl_icd_root, a_lost_context_swaps_without_a_host_call)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
+  const std::uint32_t commands = rig.kmt().commands();
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK_EQ(rig.surface().blits(), 0u); }
 
 TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc_names_it)
 { GlIcdRig rig;
@@ -414,7 +440,8 @@ TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc
   CHECK_EQ(record.options().major(), 4u);
   CHECK_EQ(record.options().minor(), 5u);
   CHECK(record.options().profile() == av::GlContextOptions::Profile::core);
-  /* Already made: current with no further host call. */
+  /* Already made: current once its window's framebuffer is made. */
+  rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
   CHECK(rig.root().current() != nullptr);
   CHECK(rig.root().invariants_hold()); }
@@ -570,6 +597,7 @@ TEST(gl_icd_root, a_create_and_a_call_take_the_root_lock_then_the_send_lock)
   void *const context = rig.opengl32().create_context(rig.dc());
   rig.trace().clear();
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
   const char *const made = rig.trace().text();
   CHECK_EQ(made[0], 'H');

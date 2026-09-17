@@ -12,6 +12,8 @@
 #include "icd/opengl/gl_error_query.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/manual_calls.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include "gl_icd_entries.h"
 #include "gl_protocol_ids.h"
@@ -42,6 +44,15 @@ public:
     av::glicd::GuestGlContext &context() { return *rig_.root().current(); }
     /* The ids sent since the context was made, in order, as one comparable number list. */
     std::uint32_t sent_since(std::uint32_t index) { return rig_.kmt().command_id(commands_ + index); }
+    /* The `nth` varint argument of the command sent `index`-th since the make. */
+    std::uint64_t argument_since(std::uint32_t index, std::uint32_t nth)
+    {
+        av::WireReader reader(rig_.kmt().command_bytes(commands_ + index) + av::CommandHeader::encoded_size,
+                              av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+        std::uint64_t  value = 0u;
+        for (std::uint32_t at = 0u; at <= nth; at++) CHECK(reader.read_varint(value));
+        return value;
+    }
     std::uint32_t sent() { return rig_.kmt().commands() - commands_; }
     /* glGetError as opengl32's table holds it: the ICD's own entry. */
     std::uint32_t error() { return av::glicd::entry::get_error(); }
@@ -404,3 +415,48 @@ TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
   CHECK(calls.string_i(0x1F00u, 0u) == nullptr);
   CHECK_EQ(context.take_error(), gl_invalid_enum);
   currents.release(); }
+
+/* bind_framebuffer sends framebuffer 0 as the window's framebuffer object (100
+ * in GlIcdRig); draw_buffer and read_buffer send GL_BACK as its colour
+ * attachment while the window is bound; a query answers as the window would. */
+TEST(manual_calls, the_window_is_translated_on_the_way_to_the_host_and_back)
+{ Current current;
+  constexpr GLenum gl_framebuffer = 0x8D40u, gl_draw_framebuffer = 0x8CA9u, gl_back = 0x0405u;
+  constexpr GLenum gl_color_attachment0 = 0x8CE0u, gl_draw_framebuffer_binding = 0x8CA6u, gl_draw_buffer = 0x0C01u;
+  gen::Wrap_glBindFramebuffer(gl_framebuffer, 0u);
+  gen::Wrap_glDrawBuffer(gl_back);
+  gen::Wrap_glReadBuffer(gl_back);
+  gen::Wrap_glBindFramebuffer(gl_draw_framebuffer, 7u);
+  gen::Wrap_glDrawBuffer(gl_back);
+  gen::Wrap_glReadBuffer(gl_back);
+  CHECK_EQ(current.sent(), 6u);
+  CHECK_EQ(current.sent_since(0u), ids::kCmd_glBindFramebuffer);
+  CHECK_EQ(current.argument_since(0u, 1u), 100u);
+  CHECK_EQ(current.sent_since(1u), ids::kCmd_glDrawBuffer);
+  CHECK_EQ(current.argument_since(1u, 0u), gl_color_attachment0);
+  CHECK_EQ(current.sent_since(2u), ids::kCmd_glReadBuffer);
+  CHECK_EQ(current.argument_since(2u, 0u), gl_color_attachment0);
+  CHECK_EQ(current.argument_since(3u, 1u), 7u);
+  CHECK_EQ(current.argument_since(4u, 0u), gl_back);
+  CHECK_EQ(current.argument_since(5u, 0u), gl_color_attachment0);
+  current.rig().host().gl_integer(7);
+  GLint answer = -1;
+  av::glicd::entry::get_integerv(gl_draw_framebuffer_binding, &answer);
+  CHECK_EQ(answer, 7);
+  gen::Wrap_glBindFramebuffer(gl_framebuffer, 0u);
+  current.rig().host().gl_integer(100);
+  av::glicd::entry::get_integerv(gl_draw_framebuffer_binding, &answer);
+  CHECK_EQ(answer, 0);
+  current.rig().host().gl_integer(static_cast<std::int32_t>(gl_color_attachment0));
+  av::glicd::entry::get_integerv(gl_draw_buffer, &answer);
+  CHECK_EQ(answer, static_cast<GLint>(gl_back));
+  av::glicd::entry::get_integerv(gl_draw_buffer, nullptr);
+  CHECK_EQ(current.error(), 0u); }
+
+TEST(manual_calls, window_calls_with_nothing_current_send_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  gen::Wrap_glBindFramebuffer(0x8D40u, 0u);
+  gen::Wrap_glDrawBuffer(0x0405u);
+  gen::Wrap_glReadBuffer(0x0405u);
+  CHECK_EQ(rig.kmt().commands(), 0u); }

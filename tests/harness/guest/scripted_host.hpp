@@ -102,6 +102,11 @@ public:
      * renderer, version and shading language strings, and the three list
      * lengths. */
     void gl_make(const char *renderer, const char *version);
+    /* What the first make-current of a context on a window waits for: the
+     * names of its framebuffer objects (two when multisampled), its colour
+     * texture and its renderbuffers (a multisampled colour one, then the
+     * depth one), numbered from `first`. */
+    void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
     /* Waits a GL make takes. */
     static constexpr std::uint32_t gl_make_waits = 8u;
 

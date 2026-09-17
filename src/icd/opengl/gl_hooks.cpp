@@ -95,12 +95,12 @@ bool query_buffer_bound() noexcept
     return state != nullptr && state->query_buffer_bound();
 }
 
-/* The window's back buffer arrives with presentation (T035): until then the
- * application's names are the host's. */
+/* Framebuffer 0 is the calling context's current window. */
 GLuint framebuffer_name(GLuint name) noexcept
 {
     AV_SCOPE("framebuffer_name");
-    return name;
+    GuestGlContext *const context = current_context();
+    return context != nullptr ? context->framebuffers().name_of(name) : name;
 }
 
 /* Persistent mappings arrive with T036. */

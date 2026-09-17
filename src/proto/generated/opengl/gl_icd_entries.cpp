@@ -113,13 +113,6 @@ void APIENTRY Wrap_glBindFragDataLocationIndexed(GLuint program, GLuint colorNum
     ::av::glproto::rvk_glBindFragDataLocationIndexed(*rvk_t, program, colorNumber, index, name);
 }
 
-void APIENTRY Wrap_glBindFramebuffer(GLenum target, GLuint framebuffer) {
-    AV_SCOPE("glBindFramebuffer");
-    auto* rvk_t = ::av::glicd::wire();
-    if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glBindFramebuffer(*rvk_t, target, framebuffer);
-}
-
 void APIENTRY Wrap_glBindImageTexture(GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format) {
     AV_SCOPE("glBindImageTexture");
     auto* rvk_t = ::av::glicd::wire();
@@ -935,14 +928,6 @@ void APIENTRY Wrap_glDrawArraysInstancedBaseInstance(GLenum mode, GLint first, G
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glDrawArraysInstancedBaseInstance(*rvk_t, mode, first, count, instancecount, baseinstance);
-}
-
-void APIENTRY Wrap_glDrawBuffer(GLenum buf) {
-    AV_SCOPE("glDrawBuffer");
-    auto* rvk_t = ::av::glicd::wire();
-    ::av::glicd::flush_persistent_mappings();
-    if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawBuffer(*rvk_t, buf);
 }
 
 void APIENTRY Wrap_glDrawBuffers(GLsizei n, const GLenum* bufs) {
@@ -2951,13 +2936,6 @@ void APIENTRY Wrap_glQueryCounter(GLuint id, GLenum target) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glQueryCounter(*rvk_t, id, target);
-}
-
-void APIENTRY Wrap_glReadBuffer(GLenum src) {
-    AV_SCOPE("glReadBuffer");
-    auto* rvk_t = ::av::glicd::wire();
-    if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glReadBuffer(*rvk_t, src);
 }
 
 void APIENTRY Wrap_glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels) {

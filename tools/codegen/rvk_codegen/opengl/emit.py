@@ -1958,6 +1958,11 @@ HANDWRITTEN = {
     # "Start working on what I have given you" — which means the
     # commands gathered here go out, not just the ones already sent.
     "glFlush",
+    # The window. Framebuffer zero is a framebuffer object on this host,
+    # and the buffers an application names for it - GL_BACK, GL_FRONT -
+    # are that object's colour attachment; only the guest knows which
+    # window the calling context is current on (back_buffer_presenter).
+    "glBindFramebuffer", "glDrawBuffer", "glReadBuffer",
 
     # The array pointers and the draws that read them. A pointer taken
     # with no buffer bound is an address in the guest, and the rows it

@@ -28,7 +28,8 @@ GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, ic
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), error_(no_error), connected_(false),
-      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), strings_{},
+      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), framebuffers_(memory, log),
+      strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
     AV_SCOPE("GuestGlContext::GuestGlContext");
@@ -120,6 +121,12 @@ const GlExtensionList &GuestGlContext::extensions() const
     return extensions_;
 }
 
+WindowFramebuffers &GuestGlContext::framebuffers()
+{
+    AV_SCOPE("GuestGlContext::framebuffers");
+    return framebuffers_;
+}
+
 void GuestGlContext::record(uint32_t error)
 {
     AV_SCOPE("GuestGlContext::record");
@@ -177,6 +184,8 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("error", error_);
     writer.flag("arena", arena_.constructed() && arena_.object().lending());
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
+    writer.number("extensions", extensions_.count());
+    framebuffers_.report(writer);
     writer.close();
 }
 
@@ -261,6 +270,8 @@ void GuestGlContext::cap_version()
 void GuestGlContext::teardown()
 {
     AV_SCOPE("GuestGlContext::teardown");
+    /* The host's framebuffer objects go with its context. */
+    framebuffers_.release(nullptr);
     if (arena_.constructed()) {
         if (arena_.object().close() != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
         arena_.destroy();

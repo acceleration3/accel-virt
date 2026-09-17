@@ -308,8 +308,38 @@ void ManualCalls::integers(uint32_t pname, int32_t *data)
     AV_SCOPE("ManualCalls::integers");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    if (pname != gl_num_extensions) return glproto::rvk_glGetIntegerv(*context->wire(), pname, data);
-    if (data != nullptr) *data = static_cast<int32_t>(context->extensions().count());
+    if (pname == gl_num_extensions) {
+        if (data != nullptr) *data = static_cast<int32_t>(context->extensions().count());
+        return;
+    }
+    glproto::rvk_glGetIntegerv(*context->wire(), pname, data);
+    if (data != nullptr) *data = context->framebuffers().answer(pname, *data);
+}
+
+void ManualCalls::bind_framebuffer(uint32_t target, uint32_t framebuffer)
+{
+    AV_SCOPE("ManualCalls::bind_framebuffer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    WindowFramebuffers &framebuffers = context->framebuffers();
+    framebuffers.bound(target, framebuffer);
+    glproto::rvk_glBindFramebuffer(*context->wire(), target, framebuffers.name_of(framebuffer));
+}
+
+void ManualCalls::draw_buffer(uint32_t buffer)
+{
+    AV_SCOPE("ManualCalls::draw_buffer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    glproto::rvk_glDrawBuffer(*context->wire(), context->framebuffers().buffer_for(buffer, true));
+}
+
+void ManualCalls::read_buffer(uint32_t buffer)
+{
+    AV_SCOPE("ManualCalls::read_buffer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    glproto::rvk_glReadBuffer(*context->wire(), context->framebuffers().buffer_for(buffer, false));
 }
 
 const uint8_t *ManualCalls::string(uint32_t name)
