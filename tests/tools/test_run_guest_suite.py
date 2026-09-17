@@ -806,7 +806,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: sign.reset failed: timed out waiting for an answer", result.stdout)
         self.assert_clean()
 
-    def start_suite(self, *extra):
+    def start_suite(self, *extra, stdin=subprocess.DEVNULL):
         """run_suite's command, left running for a test to act on the guest meanwhile."""
         arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
                      "--qemu", FAKES / "fake_qemu.py",
@@ -818,7 +818,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True, env=self.environment,
-                                  stdin=subprocess.DEVNULL)
+                                  stdin=stdin)
         self.addCleanup(lambda: runner.poll() is None and runner.kill())
         return runner
 
@@ -913,6 +913,25 @@ class GuestSuiteRun(unittest.TestCase):
         guest.close()
         output, _ = runner.communicate("\n", timeout=120)
         self.assertEqual(runner.returncode, 1, output)
+        self.assertIn("guest: hold.agent ok", output)
+        self.assert_clean()
+
+    def test_a_kept_guest_is_held_after_a_passing_run(self):
+        """--keep holds whatever the verdict, so a passing guest can be inspected
+        (docs/trace.md); the run still answers its verdict."""
+        self.script()
+        runner = self.start_suite("--keep", stdin=subprocess.PIPE)
+        self.addCleanup(lambda: runner.poll() is None and runner.kill())
+        held = []
+        while True:
+            line = runner.stdout.readline()
+            self.assertTrue(line, "the run ended without holding: " + "".join(held))
+            held.append(line)
+            if "press Enter" in line:
+                break
+        self.assertIn("guest: hold: the guest is left running\n", held)
+        output, _ = runner.communicate("\n", timeout=120)
+        self.assertEqual(runner.returncode, 0, "".join(held) + output)
         self.assertIn("guest: hold.agent ok", output)
         self.assert_clean()
 

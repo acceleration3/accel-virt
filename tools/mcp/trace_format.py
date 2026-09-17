@@ -142,8 +142,19 @@ def describe_threads(table, names, now=None, stall_seconds=5.0):
                                          if thread != slot["thread"]]
         if slot["active"] and slot["holding"]:
             described["holding"] = f"{slot['holding']:#x}"
-        described["stalled"] = bool(slot["active"] and frames and frames[-1]["age_ms"] is not None
-                                    and frames[-1]["age_ms"] >= stall_seconds * 1000)
+        old = bool(slot["active"] and frames and frames[-1]["age_ms"] is not None
+                   and frames[-1]["age_ms"] >= stall_seconds * 1000)
+        # A wait on something no traced thread holds - an event, a service's
+        # doorbell - is how an idle thread looks; a wait on a lock another
+        # thread holds is the start of a deadlock.
+        parked = bool(slot["active"] and slot["waiting_on"] and not described["lock_held_by"])
+        described["stalled"] = old and not parked
+        if not slot["active"]:
+            described["state"] = "idle"
+        elif slot["waiting_on"]:
+            described["state"] = "blocked" if described["lock_held_by"] else "waiting"
+        else:
+            described["state"] = "stalled" if old else "running"
         threads.append(described)
     result = {"module": table["module"], "process": table["process"], "threads": threads}
     if "crash" in table:

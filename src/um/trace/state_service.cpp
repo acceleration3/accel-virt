@@ -1,5 +1,6 @@
 #include "um/trace/state_service.hpp"
 
+#include "core/platform/lock_marks.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
@@ -51,7 +52,14 @@ Status StateService::start(const char *module, uint32_t pid, StateReporter &repo
 void StateService::serve()
 {
     AV_SCOPE("StateService::serve");
-    while (WaitForSingleObject(dump_, INFINITE) == WAIT_OBJECT_0) {
+    /* The wait is marked so a reader sees this thread parked on its doorbell,
+     * not stuck inside serve. */
+    const LockMarks doorbell(dump_);
+    for (;;) {
+        doorbell.waiting();
+        const DWORD woke = WaitForSingleObject(dump_, INFINITE);
+        doorbell.woken();
+        if (woke != WAIT_OBJECT_0) return;
         StateWriter writer(static_cast<char *>(static_cast<void *>(view_ + length_bytes)),
                            section_bytes - length_bytes);
         reporter_->report(writer);

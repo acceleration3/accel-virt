@@ -115,12 +115,30 @@ TEST(lock_marks, name_the_lock_while_waiting_then_while_held_then_nothing)
   CHECK(marked.table.invariants_hold());
   CHECK_EQ(platform.locks_held(), 0u); }
 
+/* A thread parked on an event it does not take - a service waiting to be
+ * asked - names the event while it waits and holds nothing after. */
+TEST(lock_marks, a_wait_that_takes_nothing_clears_the_wait_and_keeps_the_hold)
+{ Marked marked;
+  const av::FunctionScope scope(av::scope_binding, ScopeName("test::park"));
+  int event = 0;
+  int lock = 0;
+  const LockMarks held(&lock);
+  held.acquired();
+  const LockMarks parked(&event);
+  parked.waiting();
+  CHECK_EQ(marked.waiting(), address_of(&event));
+  parked.woken();
+  CHECK_EQ(marked.waiting(), 0u);
+  CHECK_EQ(marked.holding(), address_of(&lock));
+  CHECK(marked.table.invariants_hold()); }
+
 TEST(lock_marks, unbound_write_nothing)
 { MockPlatform platform;
   const LockMarks marks(&platform);
   marks.waiting();
   marks.acquired();
   marks.released();
+  marks.woken();
   SpinLock spin(platform, LockRank{10});
   spin.release(spin.acquire());
   CHECK(av::scope_binding.table() == nullptr);

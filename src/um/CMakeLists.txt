@@ -13,6 +13,7 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # rvkvk.dll's, rvkvkprobe.exe's and rvkinspect.exe's shims are their own
 # targets below.
@@ -77,6 +78,7 @@ file(GLOB_RECURSE RVKVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/*.cpp)
 list(REMOVE_ITEM RVKVK_SOURCES ${RVKTEST_GENERATED})

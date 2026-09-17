@@ -29,4 +29,10 @@ void LockMarks::released() const
     if (TraceTable *const table = scope_binding.table(); table != nullptr) table->released(lock_);
 }
 
+void LockMarks::woken() const
+{
+    AV_SCOPE("LockMarks::woken");
+    if (TraceTable *const table = scope_binding.table(); table != nullptr) table->waiting(0u);
+}
+
 }  // namespace av

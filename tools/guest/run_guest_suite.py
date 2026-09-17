@@ -223,6 +223,9 @@ def arguments():
                              "pause: stop the guest at the bugcheck for --gdb")
     parser.add_argument("--hold", action="store_true",
                         help="on failure, keep the guest running until Enter is pressed")
+    parser.add_argument("--keep", action="store_true",
+                        help="keep the guest running until Enter is pressed whatever the verdict, to inspect it "
+                             "(tools/mcp/rvk_inspect.py)")
     parser.add_argument("--gdb", type=int, metavar="PORT", help="QEMU's gdbstub on 127.0.0.1:PORT")
     parser.add_argument("--vnc", type=int, metavar="DISPLAY", help="the guest's display on 127.0.0.1:5900+DISPLAY")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
@@ -1387,7 +1390,7 @@ class GuestRun:
             self.say("panic: the guest is paused at the bugcheck")
         elif not self.args.prepare_image:
             self.collect_evidence(panicked)
-        if failure is not None and self.args.hold:
+        if (failure is not None and self.args.hold) or self.args.keep:
             self.hold()
         if not paused:
             self.power_off()

@@ -145,7 +145,21 @@ class TraceFormat(unittest.TestCase):
         self.assertNotIn("waiting_on", holding)
         self.assertEqual((idle["active"], idle["last_left"], idle["left_ms_ago"], idle["stalled"]),
                          (False, "IcdRoot::destroy_instance", 2_000, False))
+        self.assertEqual((waiting["state"], holding["state"], idle["state"]), ("blocked", "running", "idle"))
         self.assertEqual(described["module"], "rvkvk")
+
+    def test_a_thread_parked_on_something_no_thread_holds_is_waiting_not_stalled(self):
+        """A service thread waits on its own event for as long as nobody asks:
+        old frames with a wait nobody in the table holds are a wait, while the
+        same frames with no wait are a stall."""
+        parked = trace_format.parse_table(header(2)
+                                          + slot(owner=0x5 | ACTIVE, depth=1, thread=5, waiting=0x7000,
+                                                 frames=[(RUN, 0, 1_000 * MS)])
+                                          + slot(owner=0x6 | ACTIVE, depth=1, thread=6,
+                                                 frames=[(RUN, 0, 1_000 * MS)]))
+        waiting, busy = trace_format.describe_threads(parked, NAMES, now=10_000 * MS, stall_seconds=5)["threads"]
+        self.assertEqual((waiting["state"], waiting["stalled"], waiting["lock_held_by"]), ("waiting", False, []))
+        self.assertEqual((busy["state"], busy["stalled"]), ("stalled", True))
 
     def test_a_stall_is_judged_at_the_threshold_and_unknown_names_and_times_are_shown(self):
         table = trace_format.parse_table(header(1, crash=(11, 0x10, 5, 1_000 * MS))

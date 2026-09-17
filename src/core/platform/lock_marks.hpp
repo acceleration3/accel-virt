@@ -15,6 +15,8 @@ public:
     void waiting() const;
     void acquired() const;
     void released() const;
+    /* The wait ended without taking the object: an event, not a lock. */
+    void woken() const;
 
 private:
     uint64_t lock_;
