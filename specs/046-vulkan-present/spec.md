@@ -83,6 +83,12 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
   present commands is part of this feature (FR-004), as `PresentBlit` in the
   KMD at `DxgkDdiPresent`, since every source DWM presents from on this
   adapter is CPU-backed.
+  **Measured afterwards (T012) and half wrong**: `PresentBlit` is built and
+  proven, but on this adapter dxgkrnl issues two `DxgkDdiPresent` calls a boot
+  and both name *no* allocations, and the primary's pages are never written by
+  anyone, so the desktop stays black until guest GPU work executes on the host
+  (features 049 and 055-057). The evidence is in
+  `docs/kb/07-usermode.md`.
 - **Can a windowed Vulkan present go through D3DKMT and be composed by DWM
   now?** No. A windowed present composed by DWM needs a redirection surface,
   which a D3D UMD makes (feature 055), and dxgkrnl's legacy present is allowed

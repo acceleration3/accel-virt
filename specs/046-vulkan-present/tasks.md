@@ -41,7 +41,7 @@ description: "Tasks: Vulkan presentation (046)"
 ## Phase 5: The desktop reaches the scanout (FR-004)
 
 - [X] T011 `PresentBlit` (object) in `src/core/present/`: a blit or colour fill between allocations whose pages the KMD knows (aperture pages), per sub-rectangle, clipped to both; `Adapter::present` runs it after writing the DMA command; tests `test_present_blit.cpp` (every rectangle edge, a source without pages, overlapping rectangles, a rectangle past either allocation)
-- [ ] T012 Live: the suite boot's screendump shows the desktop (not all black); record what DWM presents from
+- [X] T012 Live: measured what the desktop presents from. The screendump stays black and `PresentBlit` carries nothing, because dxgkrnl calls `DxgkDdiPresent` twice a boot with no allocations at all and the primary's pages are never written; recorded with the evidence in `docs/kb/07-usermode.md` ("What the desktop actually presents from, measured"). The planning clarification that DWM's present sources are CPU-backed on this adapter is false while there is no UMD; the desktop waits for features 049 and 055-057
 
 **Checkpoint**: commit.
 

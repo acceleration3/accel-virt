@@ -700,8 +700,11 @@ can leave the guest with no display.
     for a working scanout. It then reads the driver's own log for the rest: the
     primary's aperture pages were recorded, and no frame was refused for want of
     a backing. What a dump cannot prove yet is that the picture is a desktop:
-    DWM composites with the GPU and nothing executes GPU work until features
-    042-044, so the primary's pages are still zeros.
+    the primary's pages are still zeros, and feature 046 measured why - with no
+    D3D user-mode driver DWM composes with WARP and never presents through
+    `DxgkDdiPresent`, which a boot calls twice with no allocations at all
+    (docs/kb/07-usermode.md). A desktop on the scanout waits for guest GPU work
+    to execute on the host (features 049 and 055-057).
   - `modes`: `EnumDisplaySettings` lists at least the modes the driver offers,
     and the mode in force is one of them.
   - `setmode`: **the mode switch**. `ChangeDisplaySettings` to a second offered

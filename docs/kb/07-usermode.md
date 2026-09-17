@@ -242,3 +242,35 @@ anything that is not an rvk context as a loopback, so nothing ever executed the
 blits. `PresentBlit` (`src/core/present/`) now moves those pixels in the
 miniport, between allocations whose guest pages the aperture mapping recorded,
 and `adapter/0 present_rows` in a state dump says how many rows it moved.
+
+### What the desktop actually presents from, measured (feature 046, T012)
+
+`PresentBlit` moves what a present names. The live guest says a present names
+nothing. Measured on the 046 image (driver 0.35, Windows 11 26100, session 1
+active with `dwm.exe`, `explorer.exe` and `winlogon.exe` running):
+
+- In a whole boot `DxgkDdiPresent` is called **twice**, both with
+  `Flags = Blt` and `NumSrcAllocations = NumDstAllocations = 0` - no allocation
+  list at all, so there is nothing to move. The driver says so once per present:
+  `rvkgpu: present unmoved list flags 0x00000001 sources 0 destinations 0`.
+- `DxgkDdiSetVidPnSourceAddress` only ever names `0xC0000000`, the shared
+  primary (`kind=1`); the adapter holds exactly two allocations, that primary
+  and a shadow (`kind=2`) of the same 1280x800x4 bytes, both CPU-visible.
+- QMP `pmemsave` of the primary's 4096000 bytes is **all zeros** - at the
+  desktop, and while a full-screen red window ran on the console desktop
+  (a scheduled task with `/it`, so session 1, not the runner's session 0).
+  The screendump is black in both cases and no further present arrives.
+- The display class key has no `UserModeDriverName`: there is no D3D UMD, so
+  DWM composes with WARP and its output never becomes bytes in an allocation
+  this miniport has pages for. The 35 DMA buffers the two non-rvk contexts
+  submit are loopback-completed by `ExecutionNode` as before.
+
+So the clarification this feature planned against - "every source DWM presents
+from on this adapter is CPU-backed" - is wrong: on a miniport with no UMD, DWM
+does not present through `DxgkDdiPresent` at all. The desktop reaching the
+scanout waits for guest GPU work to be executed on the host (user-mode
+submission, feature 049, and the D3D UMD of features 055-057), not for anything
+else in the present path. `PresentBlit` stays, proven at L1 and L2 and ready
+for the presents that will name allocations; `adapter/0 present_rows` and
+`presents_unmoved` in a state dump are how a later feature will see it start to
+carry frames.

@@ -789,9 +789,12 @@ class GuestRun:
         What a screendump can prove today is that the host reads *our* resource:
         the dump is the committed mode's size, and it is no longer QEMU's "no
         output" placeholder. What it cannot prove is that the picture is a
-        desktop - DWM composites with the GPU, and nothing executes GPU work
-        until the host executor and the guest transport land (features 042-044),
-        so the primary's pages are still all zeros. The driver's own log carries
+        desktop: the primary's pages are still all zeros. Feature 046 measured
+        why (docs/kb/07-usermode.md): with no D3D user-mode driver, DWM composes
+        with WARP and never presents through DxgkDdiPresent - the two presents a
+        boot makes name no allocations - so nothing writes the primary. The
+        desktop waits for guest GPU work to execute on the host (features 049
+        and 055-057). The driver's own log carries
         the rest of the proof: the primary's aperture pages were recorded, and no
         frame was refused for want of a backing.
         """
