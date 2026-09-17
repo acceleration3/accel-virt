@@ -86,10 +86,10 @@ tools/gate.sh                   # the full verdict, four configurations
 
 | Configuration | Directory | Gates in its `ctest` |
 |---|---|---|
-| default | `build/` | unit tests under ASan+UBSan, `design_rules`, `symbol_tests`, `driver_image`, `self_contained`, `tools_tests` |
-| coverage | `build-coverage/` | the above, plus `coverage_gate`: 100% branches of `src/core`, `src/device`, `src/proto`, and the `AV_UNTESTABLE` ratchet |
-| fuzz | `build-fuzz/` | the above, plus `fuzz_<target>_smoke`: 60 s per target (`AV_FUZZ_SECONDS`) |
-| guest | `build-guest/` | `run_guest_suite.py` in a real Windows guest when `AV_GUEST_IMAGE` names a prepared image: the package installed under Driver Verifier, the adapter started on `rvkgpu`, and `rvktest.exe`'s 23 scenarios. Required before a merge (feature 037) |
+| default | `build/` | unit tests under ASan+UBSan, `design_rules`, `symbol_tests`, `driver_image`, `self_contained`, and one `tools_<module>` per `tests/tools` module (label `tools`; the guest runner's in 12 shards) - `ctest -LE tools` is the fast loop |
+| coverage | `build-coverage/` | the unit tests again for their profiles, plus `coverage_gate`: 100% branches of `src/core`, `src/device`, `src/proto`, and the `AV_UNTESTABLE` ratchet |
+| fuzz | `build-fuzz/` | the gate runs only `fuzz_<target>_smoke` (label `fuzz`): 60 s per target (`AV_FUZZ_SECONDS`) |
+| guest | `build-guest/` | `run_guest_suite.py` in a real Windows guest when `AV_GUEST_IMAGE` names a prepared image: the package installed under Driver Verifier, the adapter started on `rvkgpu`, and `rvktest.exe`'s 23 scenarios on the echo executor; then one more boot, `build-guest-real/`, on the real executor for `--rvk --vulkan --opengl`. Required before a merge (feature 037) |
 | qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), `qemu_smoke` (the PCI function a guest sees, the realize failures) and `qemu_virtio_gpu` (the virtio-gpu suites, stock and rvk side by side) |
 
 ### Running the device

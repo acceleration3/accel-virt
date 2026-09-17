@@ -470,9 +470,33 @@ add_test(NAME rvkglprobe_image
                  --require-import wglCreateContext --require-import D3DKMTOpenAdapterFromHdc)
 
 # ---- gate scripts are tested like any other code ---------------------------
-add_test(NAME tools_tests
-         COMMAND python3 -B -m unittest discover
-                 -s ${CMAKE_SOURCE_DIR}/tests/tools -p "test_*.py")
+# One ctest per module, labelled `tools`, so `ctest -j` runs them side by side
+# and `ctest -LE tools` is the fast loop. The guest runner's module drives a
+# scripted QEMU per test and is most of the time, so it runs in shards. They
+# are Python and the same in every configuration, so only the default one
+# registers them.
+if(NOT AV_COVERAGE AND NOT AV_FUZZ)
+  set(AV_TOOLS_SHARDED test_run_guest_suite)
+  set(AV_TOOLS_SHARDS 12)
+  file(GLOB AV_TOOLS_TESTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/tools/test_*.py)
+  foreach(module_file ${AV_TOOLS_TESTS})
+    get_filename_component(module ${module_file} NAME_WE)
+    if(module IN_LIST AV_TOOLS_SHARDED)
+      math(EXPR last "${AV_TOOLS_SHARDS} - 1")
+      foreach(shard RANGE ${last})
+        add_test(NAME tools_${module}_${shard}
+                 COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/run_test_shard.py
+                         ${CMAKE_SOURCE_DIR}/tests/tools ${module} ${shard} ${AV_TOOLS_SHARDS})
+        set_tests_properties(tools_${module}_${shard} PROPERTIES LABELS tools)
+      endforeach()
+    else()
+      add_test(NAME tools_${module}
+               COMMAND python3 -B -m unittest ${module}
+               WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/tools)
+      set_tests_properties(tools_${module} PROPERTIES LABELS tools)
+    endif()
+  endforeach()
+endif()
 
 # ---- the committed generated sources are what the generators write --------
 add_test(NAME generated_sources
@@ -566,5 +590,7 @@ if(AV_FUZZ)
                      ${CMAKE_SOURCE_DIR}/tests/corpus/${name}
                      -max_total_time=$ENV{AV_FUZZ_SECONDS} -print_final_stats=1
                      -artifact_prefix=${CMAKE_BINARY_DIR}/corpus/${name}-)
+    # The fuzz configuration's own work; its unit tests are the default one's.
+    set_tests_properties(${name}_smoke PROPERTIES LABELS fuzz)
   endforeach()
 endif()

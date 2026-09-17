@@ -570,10 +570,10 @@ class GuestSuiteRun(unittest.TestCase):
 
     def test_opengl_discovery_is_its_own_boot(self):
         self.discovery_script()
-        for other in ("--rvk", "--vulkan"):
+        for other in ("--rvk", "--vulkan", "--opengl"):
             refused = self.run_suite("--opengl-discovery", other)
             self.assertEqual(refused.returncode, 2)
-            self.assertIn("separate boots", refused.stderr)
+            self.assertIn("--opengl-discovery is its own boot", refused.stderr)
         missing = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "noprobe.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
@@ -667,12 +667,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: vulkan.images failed: guest agent error: no file C:\\rvk\\vulkan-draw.bmp",
                       result.stdout)
 
-    def test_an_opengl_run_is_its_own_boot_and_needs_the_real_executor_and_the_probe(self):
+    def test_an_opengl_run_needs_the_probe(self):
         self.opengl_script()
-        for other in ("--rvk", "--vulkan", "--opengl-discovery"):
-            refused = self.run_suite("--opengl", other)
-            self.assertEqual(refused.returncode, 2)
-            self.assertIn("separate boots", refused.stderr)
         missing = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
                                  "--gl-probe", self.scratch / "noprobe.exe")
         self.assertEqual(missing.returncode, 1)
@@ -697,10 +693,53 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
         self.assert_clean()
 
-    def test_rvk_and_vulkan_are_separate_boots(self):
-        result = self.run_suite("--rvk", "--vulkan")
+    def real_executor_script(self, rvk_report=None, gl_report=None):
+        """One boot's answers for --rvk --vulkan --opengl together."""
+        rvk = rvk_report or "ok transport.nop\nok transport.latency 812\nrvktest: 12 passed, 0 failed\n"
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "rvkvkprobe": PROBE_REPORT, "rvktest": rvk,
+                   "rvkglprobe": gl_report or self.GL_REPORT, "collect": COLLECTED}
+        pictures = {VULKAN_PICTURE: "BM vulkan"}
+        pictures.update({f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES})
+        self.script(outputs=outputs, reg=1, files=dict(GUEST_FILES, **pictures))
+
+    def real_executor_run(self):
+        return self.run_suite("--rvk", "--vulkan", "--opengl", "--executor", "/nowhere/librvk_executor.so",
+                              *self.vulkan_runtime(), "--gl-probe", self.scratch / "rvkglprobe.exe")
+
+    def test_the_real_executor_scenarios_share_one_boot(self):
+        """The rvk scenarios, the Vulkan ICD and the OpenGL ICD all need the real
+        executor and none needs a fresh machine, so the gate runs them in one
+        boot: one install, each scenario in turn."""
+        self.real_executor_script()
+        result = self.real_executor_run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        order = [line.split(": ", 1)[1] for line in result.stdout.splitlines()
+                 if line.startswith(("guest: rvk ok", "guest: vulkan ok", "guest: opengl ok"))]
+        self.assertEqual(list(dict.fromkeys(entry.split(" ok")[0] for entry in order)), ["rvk", "vulkan", "opengl"])
+        lines = self.journal_lines()
+        for pushed in ("C:\\rvk\\rvkvkprobe.exe", "C:\\rvk\\rvkglprobe.exe", "C:\\rvk\\vulkaninfo.exe"):
+            self.assertTrue(any(line.startswith(f"file {pushed} ") for line in lines), pushed)
+        self.assertTrue((self.work / "rvk.txt").exists())
+        self.assertTrue((self.work / "vulkan.txt").exists())
+        self.assertTrue((self.work / "opengl.txt").exists())
+        self.assert_clean()
+
+    def test_a_failed_scenario_in_the_shared_boot_still_runs_the_others(self):
+        self.real_executor_script(rvk_report="FAIL vulkan.instance\nrvktest: 11 passed, 1 failed\n")
+        result = self.real_executor_run()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("guest: rvk failed: 1 step(s) failed", result.stdout)
+        self.assertIn("guest: vulkan ok: 8 passed", result.stdout)
+        self.assertIn("guest: opengl ok: 9 passed", result.stdout)
+        self.assertIn("guest: scenarios failed: 1 of 3 failed: rvk", result.stdout)
+        self.assertIn("rvk failed", (self.work / "verdict.txt").read_text())
+
+    def test_opengl_discovery_cannot_share_a_boot(self):
+        result = self.run_suite("--rvk", "--opengl-discovery")
         self.assertEqual(result.returncode, 2)
-        self.assertIn("--rvk, --vulkan, --opengl-discovery and --opengl are separate boots", result.stderr)
+        self.assertIn("--opengl-discovery is its own boot", result.stderr)
 
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
         """US3: with the host holding one context, every other scenario would be

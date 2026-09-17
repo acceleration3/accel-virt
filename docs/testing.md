@@ -172,7 +172,7 @@ over MockKmt and a scripted host; `GlProbe` runs its nine steps
 `lost`, `recreated`) over `ScriptedGl` in unit tests, over `FakeOpengl32` on
 `FullStackRig` and the host GPU in `test_fullstack_opengl_icd.cpp`, and over the
 system `opengl32.dll` in the guest as `rvkglprobe.exe`, which
-`run_guest_suite.py --opengl` runs as the gate's fourth boot. The GL and WGL
+`run_guest_suite.py --opengl` runs in the gate's real-executor boot. The GL and WGL
 parsers that read application bytes have hostile tables and fuzz targets
 (`fuzz_context_attributes`, `fuzz_pixel_format_query`).
 
@@ -750,9 +750,12 @@ can leave the guest with no display.
   worst wait. It is not part of an ordinary run: a gate run asks for no stress
   and gets none.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
-  image, then boots the guest a second time with `--rvk` and the real executor
-  (the suite's timeout scenario needs the echo library's stall, the rvk
-  scenarios a host GPU), and says it skipped the guest otherwise. From feature 037 on a skipped
+  image, then boots the guest a second time on the real executor with
+  `--rvk --vulkan --opengl` (the suite's timeout scenario needs the echo
+  library's stall, the others a host GPU); the three run in turn in that one
+  boot, each whatever an earlier one answered, since each is a process of its
+  own. It says it skipped the guest otherwise. `AV_GATE_JOBS` sets the gate's
+  parallelism for a host short of memory. From feature 037 on a skipped
   guest is not a pass: no feature merges until the suite has run live, because
   every defect in that feature - a VidPn dxgkrnl would not commit, a segment set
   VidMm could not place, a handle callback WDDM 2.0 had replaced - was invisible

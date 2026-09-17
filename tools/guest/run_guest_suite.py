@@ -258,8 +258,8 @@ def arguments():
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
-    if sum((parsed.rvk, parsed.vulkan, parsed.opengl_discovery, parsed.opengl)) > 1:
-        parser.error("--rvk, --vulkan, --opengl-discovery and --opengl are separate boots: pass one")
+    if parsed.opengl_discovery and (parsed.rvk or parsed.vulkan or parsed.opengl):
+        parser.error("--opengl-discovery is its own boot: pass it without --rvk, --vulkan and --opengl")
     return parsed
 
 
@@ -1242,17 +1242,13 @@ class GuestRun:
         self.segments()
         # The display and power scenarios are the echo run's; these boots are
         # for the work the real executor does (features 044 and 045).
-        if self.args.vulkan:
-            self.vulkan()
-            return
         if self.args.opengl_discovery:
             self.opengl_discovery()
             return
-        if self.args.opengl:
-            self.opengl()
-            return
-        if self.args.rvk:
-            self.rvk()
+        scenarios = [scenario for chosen, scenario in ((self.args.rvk, self.rvk), (self.args.vulkan, self.vulkan),
+                                                        (self.args.opengl, self.opengl)) if chosen]
+        if scenarios:
+            self.real_executor(scenarios)
             return
         if self.args.quick:
             self.say("quick: the display, power, cycle, upgrade, sleep and hibernate scenarios are left to the gate")
@@ -1263,6 +1259,21 @@ class GuestRun:
         else:
             self.host_visible(self.suite())
             self.vsync()
+
+    def real_executor(self, scenarios):
+        """The scenarios that need the real executor share one boot - each is a
+        process of its own and leaves the machine as it found it - and each runs
+        whatever an earlier one answered, so one boot reports them all; the run
+        fails naming every scenario that failed."""
+        failed_steps = []
+        for scenario in scenarios:
+            try:
+                scenario()
+            except StepFailed as failed:
+                self.say(f"{failed.step} failed: {failed.reason}")
+                failed_steps.append(failed.step)
+        if failed_steps:
+            raise StepFailed("scenarios", f"{len(failed_steps)} of {len(scenarios)} failed: {', '.join(failed_steps)}")
 
     def opengl_discovery(self):
         """Feature 050, T008-T009: what the system opengl32.dll does for a window

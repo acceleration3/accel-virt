@@ -140,7 +140,7 @@ class CommittedTreesMarkEveryCall(unittest.TestCase):
     def test_opengl(self):
         self.scopes_of("opengl/gl_dispatch_client.cpp", r"^\S.* rvk_(gl\w+)\(", "rvk_{}")
         self.scopes_of("opengl/gl_dispatch_server.cpp", r"^static bool decode_(gl\w+)\(", "server:{}")
-        self.scopes_of("opengl/gl_icd_entries.cpp", r"^\S.* APIENTRY (gl\w+)\(", "{}")
+        self.scopes_of("opengl/gl_icd_entries.cpp", r"^\S.* APIENTRY Wrap_(gl\w+)\(", "{}")
 
     def test_opencl(self):
         self.scopes_of("opencl/cl_dispatch_client.cpp", r"^\S.* rvk_(cl\w+)\(", "rvk_{}")

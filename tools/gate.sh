@@ -4,43 +4,56 @@
 # each configuration has its own build directory and its own ctest run.
 #
 #   default   build/           unit tests (ASan+UBSan), design_rules, symbol_tests,
-#                              driver_image, self_contained, tools_tests
-#   coverage  build-coverage/  the above plus coverage_gate
-#   fuzz      build-fuzz/      the above plus fuzz_<target>_smoke
+#                              driver_image, self_contained, and the tools
+#                              modules (label tools, the guest runner sharded)
+#   coverage  build-coverage/  the unit tests again for their profiles, and
+#                              coverage_gate
+#   fuzz      build-fuzz/      the fuzz_<target>_smoke runs only (label fuzz):
+#                              its unit tests are the default configuration's
 #   qemu      build-qemu/      QEMU patched with the device, and qemu_smoke
-#   guest     build-guest/     the in-guest suite in the image $AV_GUEST_IMAGE names,
-#                              skipped when it names none
-#   guest rvk build-guest-rvk/ the rvk scenarios on the real executor, after it
-#   guest vulkan build-guest-vulkan/  the ICD through the Khronos loader, after
-#                              that, when tools/fetch_vulkan_runtime.py has run
-#   guest opengl build-guest-opengl/  the OpenGL ICD through the system
-#                              opengl32.dll on the real executor, last
+#   guest     build-guest/     the in-guest suite in the image $AV_GUEST_IMAGE
+#                              names on the echo executor, skipped when it
+#                              names none
+#   guest real build-guest-real/  one boot on the real executor for the rvk
+#                              scenarios, the Vulkan ICD through the Khronos
+#                              loader (when tools/fetch_vulkan_runtime.py has
+#                              run) and the OpenGL ICD through opengl32.dll
+#
+# AV_GATE_JOBS sets the parallelism of every build and ctest run (default: the
+# processor count); a host short of memory runs the gate with fewer.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+JOBS="${AV_GATE_JOBS:-$(nproc)}"
 CONFIGURATIONS=(
-    "default build"
-    "coverage build-coverage -DAV_COVERAGE=ON"
-    "fuzz build-fuzz -DAV_FUZZ=ON"
-    "qemu build-qemu -DAV_QEMU=ON"
+    "default build all"
+    "coverage build-coverage all -DAV_COVERAGE=ON"
+    "fuzz build-fuzz fuzz -DAV_FUZZ=ON"
+    "qemu build-qemu all -DAV_QEMU=ON"
 )
 
+started=$SECONDS
 for entry in "${CONFIGURATIONS[@]}"; do
-    read -r name directory options <<< "$entry"
+    read -r name directory selection options <<< "$entry"
     echo "== gate: $name ($directory)"
     # shellcheck disable=SC2086 # options is a word list on purpose
     if ! cmake -S . -B "$directory" -G Ninja -DCMAKE_CXX_COMPILER=clang++ $options >/dev/null; then
         echo "gate: $name failed to configure" >&2
         exit 1
     fi
-    if ! cmake --build "$directory"; then
+    if ! cmake --build "$directory" -j"$JOBS"; then
         echo "gate: $name failed to build" >&2
         exit 1
     fi
-    if ! ctest --test-dir "$directory" --output-on-failure -j"$(nproc)"; then
+    labels=()
+    if [ "$selection" != all ]; then
+        labels=(-L "$selection")
+    fi
+    if ! ctest --test-dir "$directory" --output-on-failure -j"$JOBS" "${labels[@]}"; then
         echo "gate: $name failed" >&2
         exit 1
     fi
+    echo "gate: $name passed after $((SECONDS - started)) s"
 done
 if [ -n "${AV_GUEST_IMAGE:-}" ]; then
     echo "== gate: guest ($AV_GUEST_IMAGE)"
@@ -48,43 +61,30 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         echo "gate: guest failed" >&2
         exit 1
     fi
-    # The rvk scenarios need the real executor on a host GPU, and the suite's
-    # timeout scenario the echo library's stall, so they are a second boot
-    # (feature 044).
-    if [ -f build-qemu/librvk_executor.so ]; then
-        echo "== gate: guest rvk (build-qemu/librvk_executor.so)"
-        if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-rvk --rvk \
-                --executor build-qemu/librvk_executor.so; then
-            echo "gate: guest rvk failed" >&2
-            exit 1
-        fi
-    else
-        echo "gate: guest rvk skipped: build-qemu/librvk_executor.so was not built" >&2
+    echo "gate: guest passed after $((SECONDS - started)) s"
+    # The rvk scenarios and both ICDs need the real executor on a host GPU, and
+    # the suite's timeout scenario the echo library's stall, so they are a
+    # second boot - one for all three, since each is a process of its own that
+    # leaves the machine as it found it.
+    if [ ! -f build-qemu/librvk_executor.so ]; then
+        echo "gate: guest real skipped: build-qemu/librvk_executor.so was not built" >&2
         exit 1
     fi
-    # The Vulkan ICD through the Khronos loader, which Windows does not ship:
-    # the runtime is fetched by pin, never committed, so a checkout without it
-    # says so instead of failing (feature 045).
+    real=(--rvk --opengl)
     if python3 -B tools/fetch_vulkan_runtime.py --check >/dev/null 2>&1; then
-        echo "== gate: guest vulkan (third_party/vulkan-runtime)"
-        if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-vulkan --vulkan \
-                --executor build-qemu/librvk_executor.so; then
-            echo "gate: guest vulkan failed" >&2
-            exit 1
-        fi
+        real+=(--vulkan)
     else
         echo "gate: guest vulkan skipped: the Vulkan runtime is not fetched (tools/fetch_vulkan_runtime.py)" >&2
     fi
-    # The OpenGL ICD through Windows' own opengl32.dll (feature 050): its own
-    # boot, since the probe's forced loss takes the device's contexts with it.
-    echo "== gate: guest opengl (build-qemu/librvk_executor.so)"
-    if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-opengl --opengl \
+    echo "== gate: guest real (${real[*]}, build-qemu/librvk_executor.so)"
+    if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-real "${real[@]}" \
             --executor build-qemu/librvk_executor.so; then
-        echo "gate: guest opengl failed" >&2
+        echo "gate: guest real failed" >&2
         exit 1
     fi
+    echo "gate: guest real passed after $((SECONDS - started)) s"
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"
     echo "gate: a feature does not merge on a skipped guest (feature 037, FR-006)"
 fi
-echo "gate: every configuration passed"
+echo "gate: every configuration passed in $((SECONDS - started)) s"
