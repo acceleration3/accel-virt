@@ -47,6 +47,8 @@ public:
     /* wglMakeCurrent; a null context releases the thread's. */
     bool         make_current(void *dc, void *context);
     bool         delete_context(void *context);
+    /* wglShareLists: `second` shares `first`'s objects. */
+    bool         share_lists(void *first, void *second);
     bool         swap_buffers(void *dc);
     void        *get_proc_address(const char *name);
     /* The DHGLRC an HGLRC names, as wglCbGetDhglrc answers. */

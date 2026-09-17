@@ -77,6 +77,16 @@ public:
     /* The ring allocation another context names to share with this one; 0
      * unless made. */
     uint32_t             share_name() const;
+    /* wglShareLists: the context whose objects this one is to share, by its
+     * handle, looked up when this one is made. invalid_state once made or
+     * with a target recorded already. */
+    [[nodiscard]] Status share_after(uint64_t target);
+    uint64_t             share_target() const;
+    /* The options name `share_name`'s context to share with, and, when they
+     * ask no version, 1.0 - a share needs one on the wire
+     * (contracts/context_options.md) and it is what an empty
+     * WGL_ARB_create_context list asks. invalid_state once made. */
+    [[nodiscard]] Status share(uint32_t share_name);
     /* What a GL call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here. */
     ClientTransport     *wire();
@@ -128,6 +138,7 @@ private:
     State                          state_;
     uint32_t                       owner_;
     uint32_t                       error_;
+    uint64_t                       share_target_;
     bool                           connected_;
     uint8_t                       *staging_;
     ObjectStorage<KmtTransport>    transport_;

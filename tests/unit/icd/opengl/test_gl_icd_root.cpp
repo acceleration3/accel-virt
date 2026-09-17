@@ -301,11 +301,9 @@ TEST(gl_icd_root, deleting_the_current_context_releases_it_and_the_last_closes_t
   CHECK(rig.root().wire() == nullptr);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-TEST(gl_icd_root, copy_share_and_layer_planes_are_declined)
+TEST(gl_icd_root, copy_and_layer_planes_are_declined)
 { GlIcdRig rig;
   CHECK(!rig.root().copy_context(1u, 2u, 0u));
-  check_error(rig, Root::error_not_supported);
-  CHECK(!rig.root().share_lists(1u, 2u));
   check_error(rig, Root::error_not_supported);
   CHECK(!rig.root().describe_layer_plane(rig.dc(), 1, 1, 32u, nullptr)); }
 

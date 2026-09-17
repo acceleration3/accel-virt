@@ -27,7 +27,7 @@ GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, ic
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), error_(no_error), connected_(false),
+      options_(options), state_(State::created), owner_(0u), error_(no_error), share_target_(0u), connected_(false),
       staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
@@ -87,6 +87,29 @@ uint32_t GuestGlContext::share_name() const
 {
     AV_SCOPE("GuestGlContext::share_name");
     return state_ == State::created ? 0u : transport_.object().ring();
+}
+
+Status GuestGlContext::share_after(uint64_t target)
+{
+    AV_SCOPE("GuestGlContext::share_after");
+    if (state_ != State::created || share_target_ != 0u) return Status::invalid_state;
+    share_target_ = target;
+    return Status::ok;
+}
+
+uint64_t GuestGlContext::share_target() const
+{
+    AV_SCOPE("GuestGlContext::share_target");
+    return share_target_;
+}
+
+Status GuestGlContext::share(uint32_t share_name)
+{
+    AV_SCOPE("GuestGlContext::share");
+    if (state_ != State::created) return Status::invalid_state;
+    if (options_.major() == 0u) options_ = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
+    options_ = options_.sharing(share_name);
+    return Status::ok;
 }
 
 ClientTransport *GuestGlContext::wire()
@@ -187,6 +210,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("profile", static_cast<uint32_t>(options_.profile()));
     writer.number("flags", options_.flags());
     writer.number("share", options_.share_context());
+    writer.number("share_target", share_target_);
     writer.number("error", error_);
     writer.flag("arena", arena_.constructed() && arena_.object().lending());
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
@@ -206,7 +230,8 @@ bool GuestGlContext::invariants_hold() const
     if (held != (staging_ != nullptr)) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
-    return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold();
+    return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
+           framebuffers_.invariants_hold() && mappings_.invariants_hold();
 }
 
 Status GuestGlContext::build()

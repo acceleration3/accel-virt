@@ -126,6 +126,9 @@ private:
     uint32_t make_error(Status status, const GlContextOptions &options) const;
     /* The live context an HGLRC names, through opengl32's callback. */
     GuestGlContext *shared_context(void *share);
+    bool            shares_into(uint64_t first, uint64_t second) const;
+    /* Makes `context` after the unmade contexts it shares through. */
+    [[nodiscard]] Status make_chain(GuestGlContext &context);
 
     icd::ThreadLock  &lock_;
     icd::LogSink     &log_;

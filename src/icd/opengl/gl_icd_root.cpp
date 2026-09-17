@@ -172,7 +172,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
         return nullptr;
     }
     if (context->state() == GuestGlContext::State::created) {
-        const Status made = context->make();
+        const Status made = make_chain(*context);
         if (made != Status::ok) {
             fail(made_error(made));
             return nullptr;
@@ -211,13 +211,26 @@ bool GlIcdRoot::copy_context(uint64_t, uint64_t, uint32_t)
     return false;
 }
 
-/* Share lists arrive with T037: a context's share target has to be made
- * before it, which this ICD does not arrange yet. */
-bool GlIcdRoot::share_lists(uint64_t, uint64_t)
+/* `second` is to share `first`'s objects. The host shares at creation, so
+ * both must still be unmade; `second` is made after `first` (make_chain). */
+bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
 {
     AV_SCOPE("GlIcdRoot::share_lists");
-    fail(error_not_supported);
-    return false;
+    lock_.acquire();
+    ScopeExit             release([&] { lock_.release(); });
+    GuestGlContext *const target = contexts_.resolve(first);
+    GuestGlContext *const sharer = contexts_.resolve(second);
+    if (target == nullptr || sharer == nullptr) {
+        fail(error_invalid_handle);
+        return false;
+    }
+    const bool unmade = target->state() == GuestGlContext::State::created &&
+                        sharer->state() == GuestGlContext::State::created;
+    if (!unmade || shares_into(first, second) || sharer->share_after(first) != Status::ok) {
+        fail(error_invalid_operation);
+        return false;
+    }
+    return true;
 }
 
 void *GlIcdRoot::get_proc_address(const char *name)
@@ -285,17 +298,15 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
         fail(error_invalid_pixel_format);
         return nullptr;
     }
-    GlContextOptions options = attribs.options();
+    const GlContextOptions options = attribs.options();
+    uint32_t               share_name = 0u;
     if (share != nullptr) {
         GuestGlContext *const target = shared_context(share);
         if (target == nullptr) {
             fail(error_invalid_operation);
             return nullptr;
         }
-        /* A share needs a version on the wire (contracts/context_options.md),
-         * and 1.0 is what WGL_ARB_create_context takes an empty list to ask. */
-        if (options.major() == 0u) options = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
-        options = options.sharing(target->share_name());
+        share_name = target->share_name();
     }
     const uint32_t thread = slot_.thread_id();
     uint64_t       handle = 0u;
@@ -307,7 +318,9 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
         return nullptr;
     }
     GuestGlContext *const context = contexts_.resolve(handle);
-    const Status          made = context->make();
+    /* A context just created takes a share. */
+    if (share_name != 0u) static_cast<void>(context->share(share_name));
+    const Status made = context->make();
     lock_.acquire();
     const bool pended = made == Status::ok && put_pending(thread, handle);
     lock_.release();
@@ -493,6 +506,43 @@ uint32_t GlIcdRoot::make_error(Status status, const GlContextOptions &options) c
                                                                           : error_invalid_version_arb;
 }
 
+/* Whether `first` already shares, through its recorded targets, into `second`
+ * - a share that would close a loop. */
+bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
+{
+    AV_SCOPE("GlIcdRoot::shares_into");
+    uint64_t at = first;
+    for (uint32_t step = 0u; step < GlContextTable::max_contexts && at != 0u; step++) {
+        if (at == second) return true;
+        const GuestGlContext *const context = contexts_.resolve(at);
+        at = context != nullptr ? context->share_target() : 0u;
+    }
+    return false;
+}
+
+/* The unmade contexts `context` shares through, made from the far end so each
+ * names a made context to share; a target deleted meanwhile shares nothing,
+ * and a lost one fails the make. */
+Status GlIcdRoot::make_chain(GuestGlContext &context)
+{
+    AV_SCOPE("GlIcdRoot::make_chain");
+    GuestGlContext *chain[GlContextTable::max_contexts];
+    uint32_t        length = 0u;
+    for (GuestGlContext *at = &context;
+         at != nullptr && at->state() == GuestGlContext::State::created && length < GlContextTable::max_contexts;
+         at = contexts_.resolve(at->share_target()))
+        chain[length++] = at;
+    while (length != 0u) {
+        GuestGlContext &link = *chain[--length];
+        GuestGlContext *const target = contexts_.resolve(link.share_target());
+        if (target != nullptr && target->wire() == nullptr) return Status::invalid_state;
+        if (target != nullptr) static_cast<void>(link.share(target->share_name()));
+        const Status made = link.make();
+        if (made != Status::ok) return made;
+    }
+    return Status::ok;
+}
+
 GuestGlContext *GlIcdRoot::shared_context(void *share)
 {
     AV_SCOPE("GlIcdRoot::shared_context");
@@ -503,7 +553,7 @@ GuestGlContext *GlIcdRoot::shared_context(void *share)
     ScopeExit             release([&] { lock_.release(); });
     GuestGlContext *const target = contexts_.resolve(handle);
     if (target == nullptr) return nullptr;
-    if (target->state() == GuestGlContext::State::created && target->make() != Status::ok) return nullptr;
+    if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;
     /* wire() is what notices a transport that faulted since. */
     return target->wire() != nullptr ? target : nullptr;
 }

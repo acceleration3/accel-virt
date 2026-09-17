@@ -28,6 +28,7 @@ using Delete = std::int32_t (APIENTRY *)(std::uintptr_t);
 using SetContext = void *(APIENTRY *)(void *, std::uintptr_t, void *);
 using Release = std::int32_t (APIENTRY *)(std::uintptr_t);
 using Swap = std::int32_t (APIENTRY *)(void *);
+using Share = std::int32_t (APIENTRY *)(std::uintptr_t, std::uintptr_t);
 using GetProc = void *(APIENTRY *)(const char *);
 
 /* The HGLRC for context row n: a value no pointer the test holds is. */
@@ -130,6 +131,11 @@ bool FakeOpengl32::delete_context(void *context)
     const bool deleted = reinterpret_cast<Delete>(resolve("DrvDeleteContext"))(driver) != 0;
     if (deleted) contexts_[row] = 0u;
     return deleted;
+}
+
+bool FakeOpengl32::share_lists(void *first, void *second)
+{
+    return reinterpret_cast<Share>(resolve("DrvShareLists"))(driver_context(first), driver_context(second)) != 0;
 }
 
 bool FakeOpengl32::swap_buffers(void *dc) { return reinterpret_cast<Swap>(resolve("DrvSwapBuffers"))(dc) != 0; }

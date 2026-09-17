@@ -1,0 +1,161 @@
+/* wglShareLists through opengl32 over MockKmt (contracts/icd_interface.md): a
+ * share is recorded while both contexts are unmade and becomes the share
+ * handle of the record the later one is made with; a chain is made from its
+ * far end; a share after a make, onto a deleted context, into a loop or twice
+ * is refused. */
+#include "harness/framework/test_registry.hpp"
+#include "harness/icd/gl_icd_rig.hpp"
+#include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/guest_gl_context.hpp"
+#include "proto/context/gl_context_options.hpp"
+#include "proto/context/rvk_context_record.hpp"
+
+#include <cstdint>
+
+using av::GlIcdRig;
+using av::MockKmt;
+using av::Status;
+using av::glicd::GuestGlContext;
+using Root = av::glicd::GlIcdRoot;
+
+namespace {
+
+using GetErrorFn = std::uint32_t (APIENTRY *)();
+constexpr std::uint32_t slot_get_error = 261u;
+
+void check_error(GlIcdRig &rig, std::uint32_t expected)
+{
+    CHECK_EQ(rig.threads().last_error(), expected);
+    rig.threads().clear_last_error();
+}
+
+/* `context` current on the rig's DC, its window's framebuffer answered; the
+ * root's context for it. */
+GuestGlContext *current_on(GlIcdRig &rig, void *context)
+{
+    rig.host().gl_window(1u, 1u);
+    CHECK(rig.opengl32().make_current(rig.dc(), context));
+    return rig.root().current();
+}
+
+std::uint32_t last_record_share(GlIcdRig &rig)
+{
+    av::RvkContextRecord record;
+    CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
+    return record.options().share_context();
+}
+
+}  // namespace
+
+TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  void *const c = rig.opengl32().create_context(rig.dc());
+  CHECK(rig.opengl32().share_lists(a, b));
+  CHECK(rig.opengl32().share_lists(b, c));
+  CHECK(rig.root().invariants_hold());
+  for (int made = 0; made < 3; made++) rig.host().gl_make("host gpu", "4.6");
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  const GuestGlContext *const third = current_on(rig, c);
+  CHECK(third != nullptr);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 3u);
+  /* c was made last. */
+  CHECK_EQ(last_record_share(rig), third->options().share_context());
+  const GuestGlContext *const second = current_on(rig, b);
+  const GuestGlContext *const first = current_on(rig, a);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 3u);
+  CHECK(second->share_name() != 0u);
+  CHECK_EQ(third->options().share_context(), second->share_name());
+  CHECK_EQ(second->options().share_context(), first->share_name());
+  CHECK_EQ(first->options().share_context(), 0u);
+  /* A share asks a version: 1.0 when none was asked. */
+  CHECK_EQ(second->options().major(), 1u);
+  CHECK_EQ(first->options().major(), 0u);
+  CHECK_EQ(third->share_target(), rig.opengl32().driver_context(b));
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_share_lists, a_share_with_a_made_unknown_or_same_context_or_into_a_loop_is_refused)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  void *const c = rig.opengl32().create_context(rig.dc());
+  CHECK(!rig.opengl32().share_lists(a, reinterpret_cast<void *>(0x5u)));
+  check_error(rig, Root::error_invalid_handle);
+  CHECK(!rig.opengl32().share_lists(reinterpret_cast<void *>(0x5u), a));
+  check_error(rig, Root::error_invalid_handle);
+  CHECK(!rig.opengl32().share_lists(a, a));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.opengl32().share_lists(a, b));
+  CHECK(rig.opengl32().share_lists(b, c));
+  /* c -> ... -> a would close a loop; b already shares. */
+  CHECK(!rig.opengl32().share_lists(c, a));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(!rig.opengl32().share_lists(c, b));
+  check_error(rig, Root::error_invalid_operation);
+  void *const d = rig.opengl32().create_context(rig.dc());
+  CHECK(!rig.opengl32().share_lists(d, b));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.opengl32().share_lists(d, a));
+  /* After DrvSetContext either way round. */
+  void *const made = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK(current_on(rig, made) != nullptr);
+  void *const fresh = rig.opengl32().create_context(rig.dc());
+  CHECK(!rig.opengl32().share_lists(made, fresh));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(!rig.opengl32().share_lists(fresh, made));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_share_lists, a_deleted_target_shares_nothing_and_a_deleted_context_is_no_target)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  CHECK(rig.opengl32().share_lists(a, b));
+  const std::uintptr_t deleted = rig.opengl32().driver_context(a);
+  CHECK(rig.opengl32().delete_context(a));
+  CHECK(!rig.root().share_lists(deleted, rig.opengl32().driver_context(b)));
+  check_error(rig, Root::error_invalid_handle);
+  rig.host().gl_make("host gpu", "4.6");
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  const GuestGlContext *const alone = current_on(rig, b);
+  CHECK(alone != nullptr);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
+  CHECK_EQ(alone->options().share_context(), 0u);
+  CHECK_EQ(last_record_share(rig), 0u); }
+
+TEST(gl_share_lists, a_target_that_cannot_be_made_or_was_lost_fails_the_make)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  CHECK(rig.opengl32().share_lists(a, b));
+  rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
+  CHECK(!rig.opengl32().make_current(rig.dc(), b));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.root().current() == nullptr);
+  /* a made and then lost: b cannot share it. */
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK(current_on(rig, a) != nullptr);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
+  CHECK(rig.root().current()->wire() == nullptr);
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  CHECK(!rig.opengl32().make_current(rig.dc(), b));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), opened);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_share_lists, a_context_records_one_target_and_only_while_unmade)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  GuestGlContext *const context = current_on(rig, a);
+  CHECK_STATUS(context->share_after(9u), Status::invalid_state);
+  CHECK_STATUS(context->share(9u), Status::invalid_state);
+  CHECK_EQ(context->share_target(), 0u); }

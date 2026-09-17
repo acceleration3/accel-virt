@@ -282,7 +282,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter created(bytes, sizeof bytes);
   context->report(created, 0x10001u);
   CHECK(std::strcmp(created.dump(), "context/65537 state=created owner=0 pixel_format=7 major=3 minor=3 "
-                                    "profile=2 flags=0 share=0 error=0 arena=false renderer= extensions=0\n"
+                                    "profile=2 flags=0 share=0 share_target=0 error=0 arena=false renderer= extensions=0\n"
                                     "context/65537/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/65537/mappings/0 held=0 persistent_writers=0") == 0);
   rig.host().gl_make(renderer, "4.6");
@@ -292,7 +292,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter made(bytes, sizeof bytes);
   context->report(made, 1u);
   CHECK(std::strcmp(made.dump(), "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
-                                 "share=0 error=1282 arena=true renderer=rvk host renderer extensions=0\n"
+                                 "share=0 share_target=0 error=1282 arena=true renderer=rvk host renderer extensions=0\n"
                                  "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/1/mappings/0 held=0 persistent_writers=0") == 0); }
 
