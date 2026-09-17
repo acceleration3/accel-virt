@@ -1,6 +1,5 @@
 #include "device/shim/device_trace.hpp"
 
-#include "core/platform/lock_marks.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/crash_event.hpp"
 #include "core/trace/crash_report.hpp"
@@ -10,11 +9,7 @@
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_text.hpp"
 
-#include <cerrno>
 #include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 #include <unwind.h>
@@ -24,10 +19,7 @@ namespace av {
 namespace {
 
 constexpr size_t   line_bytes = 512u;
-constexpr size_t   request_bytes = 16u;
 constexpr uint64_t written = 1u;
-constexpr char     state_request[] = "state\n";
-constexpr char     unknown_request[] = "error unknown request\n";
 constexpr char     main_loop_silent[] = "error the main loop did not answer within 2 s\n";
 constexpr char     still_answering[] = "error the main loop has not finished the previous request\n";
 
@@ -46,13 +38,6 @@ _Unwind_Reason_Code record_frame(_Unwind_Context *context, void *argument)
     return _URC_NO_REASON;
 }
 
-void *serve_thread(void *trace)
-{
-    AV_SCOPE("serve_thread");
-    static_cast<DeviceTrace *>(trace)->serve();
-    return nullptr;
-}
-
 void answer_routine(void *trace)
 {
     AV_SCOPE("answer_routine");
@@ -62,8 +47,8 @@ void answer_routine(void *trace)
 }  // namespace
 
 DeviceTrace::DeviceTrace()
-    : trace_(), modules_(), root_(nullptr), schedule_(nullptr), previous_{}, alternate_stack_{},
-      crash_written_(0u), listener_(-1), socket_path_{}, thread_(), lock_(PTHREAD_MUTEX_INITIALIZER),
+    : trace_(), modules_(), root_(nullptr), schedule_(nullptr), previous_{},
+      crash_written_(0u), socket_(), lock_(PTHREAD_MUTEX_INITIALIZER),
       answered_(PTHREAD_COND_INITIALIZER), request_(Request::idle), length_(0u), dump_{}
 {
     AV_SCOPE("DeviceTrace::DeviceTrace");
@@ -81,14 +66,8 @@ void DeviceTrace::start(StateReporter &root, RvkMainLoopScheduler schedule, Cras
     root_ = &root;
     schedule_ = schedule;
     install(handler);
-    if (schedule_ == nullptr || !listen_on_socket()) return;
-    if (pthread_create(&thread_, nullptr, &serve_thread, this) == 0) {
-        static_cast<void>(pthread_detach(thread_));
-        return;
-    }
-    static_cast<void>(close(listener_));
-    static_cast<void>(unlink(socket_path_));
-    listener_ = -1;
+    if (schedule_ == nullptr) return;
+    static_cast<void>(socket_.start("device", trace_.process(), *this));
 }
 
 void DeviceTrace::crashed(int signal, siginfo_t *info, void *context)
@@ -133,58 +112,18 @@ void DeviceTrace::answer_on_main_loop()
     static_cast<void>(pthread_mutex_unlock(&lock_));
 }
 
-void DeviceTrace::serve()
-{
-    AV_SCOPE("DeviceTrace::serve");
-    const LockMarks doorbell(&listener_);
-    for (;;) {
-        doorbell.waiting();
-        const int client = accept4(listener_, nullptr, nullptr, SOCK_CLOEXEC);
-        doorbell.woken();
-        if (client >= 0) {
-            answer(client);
-            static_cast<void>(close(client));
-        } else if (errno != EINTR && errno != ECONNABORTED) {
-            return;
-        }
-    }
-}
-
 void DeviceTrace::install(CrashHandler handler)
 {
     AV_SCOPE("DeviceTrace::install");
-    stack_t alternate = {};
-    alternate.ss_sp = alternate_stack_;
-    alternate.ss_size = sizeof alternate_stack_;
-    static_cast<void>(sigaltstack(&alternate, nullptr));
+    /* The handler runs on the thread's alternate stack, which the trace host
+     * gives each thread the first time it asks who is calling. */
+    static_cast<void>(trace_.host().thread_number());
     struct sigaction action = {};
     action.sa_sigaction = handler;
     action.sa_flags = SA_SIGINFO | SA_ONSTACK;
     static_cast<void>(sigemptyset(&action.sa_mask));
     for (uint32_t index = 0u; index < fatal_count; index++)
         static_cast<void>(sigaction(fatal[index], &action, &previous_[index]));
-}
-
-bool DeviceTrace::listen_on_socket()
-{
-    AV_SCOPE("DeviceTrace::listen_on_socket");
-    TextBuffer path(socket_path_, sizeof socket_path_);
-    path.append("/dev/shm/rvk-state-device-");
-    path.append_decimal(trace_.process());
-    path.append(".sock");
-    static_cast<void>(unlink(socket_path_));
-    listener_ = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (listener_ < 0) return false;
-    sockaddr_un address = {};
-    address.sun_family = AF_UNIX;
-    for (size_t index = 0u; socket_path_[index] != '\0'; index++) address.sun_path[index] = socket_path_[index];
-    if (bind(listener_, reinterpret_cast<sockaddr *>(&address), sizeof address) == 0 &&
-        chmod(socket_path_, 0600) == 0 && listen(listener_, 4) == 0)
-        return true;
-    static_cast<void>(close(listener_));
-    static_cast<void>(unlink(socket_path_));
-    listener_ = -1;
-    return false;
 }
 
 void DeviceTrace::write_crash(int signal, uint64_t address)
@@ -236,38 +175,27 @@ void DeviceTrace::chain(int signal, siginfo_t *info, void *context)
     }
 }
 
-void DeviceTrace::answer(int client)
+size_t DeviceTrace::dump(char *buffer, size_t capacity, const char *&error)
 {
-    AV_SCOPE("DeviceTrace::answer");
-    const timeval patience{static_cast<time_t>(answer_seconds), 0};
-    static_cast<void>(setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &patience, sizeof patience));
-    char   request[request_bytes] = {};
-    size_t received = 0u;
-    while (received < sizeof request - 1u) {
-        const ssize_t got = recv(client, request + received, 1u, 0);
-        if (got <= 0) break;
-        if (request[received++] == '\n') break;
-    }
-    if (received != sizeof state_request - 1u || __builtin_memcmp(request, state_request, received) != 0) {
-        send(client, unknown_request, sizeof unknown_request - 1u);
-        return;
-    }
+    AV_SCOPE("DeviceTrace::dump");
+    error = nullptr;
     static_cast<void>(pthread_mutex_lock(&lock_));
     const bool ready = request_ == Request::idle;
     if (ready) request_ = Request::pending;
     static_cast<void>(pthread_mutex_unlock(&lock_));
     if (!ready) {
-        send(client, still_answering, sizeof still_answering - 1u);
-        return;
+        error = still_answering;
+        return 0u;
     }
     schedule_(&answer_routine, this);
     size_t length = 0u;
     if (!await_dump(length)) {
-        send(client, main_loop_silent, sizeof main_loop_silent - 1u);
-        return;
+        error = main_loop_silent;
+        return 0u;
     }
-    send(client, dump_, length);
-    send(client, "\n", 1u);
+    const size_t copied = length < capacity ? length : capacity;
+    __builtin_memcpy(buffer, dump_, copied);
+    return copied;
 }
 
 bool DeviceTrace::await_dump(size_t &length)
@@ -285,17 +213,6 @@ bool DeviceTrace::await_dump(size_t &length)
     length = length_;
     static_cast<void>(pthread_mutex_unlock(&lock_));
     return answered;
-}
-
-void DeviceTrace::send(int client, const char *text, size_t length) const
-{
-    AV_SCOPE("DeviceTrace::send");
-    size_t sent = 0u;
-    while (sent < length) {
-        const ssize_t wrote = ::send(client, text + sent, length - sent, MSG_NOSIGNAL);
-        if (wrote <= 0) return;
-        sent += static_cast<size_t>(wrote);
-    }
 }
 
 void DeviceTraceRoot::start(StateReporter &root, RvkMainLoopScheduler schedule, CrashHandler handler)

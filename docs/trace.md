@@ -29,7 +29,7 @@ another function.
 | `rvkgpu.sys` | non-paged contiguous memory, its physical address logged at DriverEntry | bugcheck callback writes the table to the debug port | `D3DKMTEscape` `RVKD` | `rvkinspect.exe kernel ...`, or QMP `pmemsave` when the guest is wedged |
 | `rvkvk.dll`, `rvkgl.dll`, `rvktest.exe` | named section `Global\rvk-trace-<module>-<pid>` (`Local\` when the process may not create a global one) | unhandled-exception filter writes `C:\ProgramData\rvk\crash-<module>-<pid>.txt` | a service thread answers `rvk-dump-<module>-<pid>` into `rvk-state-<module>-<pid>` | `rvkinspect.exe` |
 | QEMU with `virtio-gpu-rvk-pci` | `/dev/shm/rvk-trace-device-<pid>`, left behind on a crash | signal handler writes `crash-device-<pid>.txt` beside it | a service thread on `/dev/shm/rvk-state-device-<pid>.sock` | the MCP server, directly |
-| `librvk_executor.so` | `/dev/shm/rvk-trace-executor-<pid>` | the device's handler | through the device's socket | the MCP server, directly |
+| `librvk_executor.so` | `/dev/shm/rvk-trace-executor-<pid>` | the device's handler | its own socket, `/dev/shm/rvk-state-executor-<pid>.sock` | the MCP server, directly |
 
 Where a table is not bound - unit tests, fuzz targets, a binary before its
 root exists - `AV_SCOPE` does nothing.
@@ -245,11 +245,22 @@ copied the table.
 - The executor library starts its own `HostTrace` (`executor`) inside
   `rvk_executor_ops()`'s root on the first question. Its `scope_binding` is its
   own: `nm -D` shows neither the library nor the QEMU module exporting it.
-  Its state is not in the dump, because the executor ABI has no call a device
-  could ask it with.
+  The executor ABI has no call a device could ask for its state with, so the
+  library serves its own dump on `/dev/shm/rvk-state-executor-<pid>.sock`
+  (`StateSocket` over `ReporterStateSource`, with `ExecutorRoot` reporting the
+  GPUs it asked about and each live session's API and GPU, without a lock).
+  Before it does, it pins itself with `RTLD_NODELETE`: QEMU closes an executor
+  it no longer needs, and the socket's thread and every traced thread's signal
+  stack destructor run code in the library for the rest of the process.
 - **Crash.** `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGABRT` go to a
-  one-line `extern "C"` handler on a 64 KiB alternate stack; the stack is set
-  for the thread that started tracing only. The handler records the crash in
+  one-line `extern "C"` handler on the thread's alternate signal stack.
+  `PosixTraceHost` gives every thread one the first time it asks who is
+  calling - so every thread that enters device or executor code, vCPU threads
+  included - unless the thread already has one, which is kept: at least
+  64 KiB and four times `_SC_SIGSTKSZ`, mapped with a no-access guard page
+  below it, and unmapped by a thread-exit destructor. A stack overflow on a
+  worker thread therefore still writes the file (tested for real in a forked
+  process). The handler records the crash in
   the table and writes `/dev/shm/crash-device-<pid>.txt` once, with
   `CrashReport`, `TraceText` and `_Unwind_Backtrace`. `CrashReport`,
   `CrashEvent` and `ModuleResolver` moved to `src/core/trace/` so both sides
@@ -329,9 +340,11 @@ A snapshot file: magic `RVKSNAP1` (8 bytes), the clock when the copy was taken
 (u32), then the payload.
 
 On the host, the device and executor tables are read straight from
-`/dev/shm`, and the device's state dump from the socket
-`/dev/shm/rvk-state-device-<pid>.sock`: connect, send `state\n`, read text
-until the device closes the connection.
+`/dev/shm`, and their state dumps from the sockets
+`/dev/shm/rvk-state-device-<pid>.sock` and
+`/dev/shm/rvk-state-executor-<pid>.sock`: connect, send `state\n`, read text
+until the binary closes the connection. A binary that has no dump to give
+answers one line starting `error `.
 
 When the guest is wedged, the driver's table is read from guest memory: the
 driver logs `rvkgpu: trace table at physical 0x<address> bytes <n>` at

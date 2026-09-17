@@ -11,6 +11,7 @@
 #define AV_EXECUTOR_ROOT_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/state_reporter.hpp"
 #include "device/executor/context_session.hpp"
 #include "device/executor/host_gpu_set.hpp"
 #include "device/executor/opencl_backend.hpp"
@@ -26,7 +27,7 @@ class HostApis;
 class HostGpu;
 class SessionBackend;
 
-class ExecutorRoot {
+class ExecutorRoot final : public StateReporter {
 public:
     /* Sessions this library will hand out at once. */
     static constexpr uint32_t sessions = 64u;
@@ -67,6 +68,10 @@ public:
      * the only thing the ABI gives to tell them apart. */
     uint64_t        imported_handle(ContextSession *session, uint64_t blob_id);
     uint32_t        live() const;
+    /* The library's state dump (docs/trace.md): the GPUs asked about and each
+     * live session's API and GPU. Takes no lock: everything it reads is a
+     * plain word a session's own thread writes. */
+    void            report(StateWriter &writer) override;
 
     bool invariants_hold() const;
 
@@ -87,6 +92,8 @@ private:
     /* Whether `session` is one of ours rather than a pointer the device
      * invented or already gave back. */
     bool owns(const ContextSession *session) const;
+    /* What a dump calls a sub-API. */
+    const char *api_name(uint32_t sub_api) const;
 
     HostGpuSet     gpus_;
     ContextSession sessions_[max_sessions];
@@ -96,6 +103,9 @@ private:
     /* The host that was asked, which keeps what a context runs on - its
      * display, its OpenCL device - for as long as this root. Null until then. */
     HostApis      *apis_;
+    /* What each slot was opened for, for the dump. */
+    uint32_t       slot_api_[max_sessions];
+    uint32_t       slot_gpu_[max_sessions];
 };
 
 }  // namespace av

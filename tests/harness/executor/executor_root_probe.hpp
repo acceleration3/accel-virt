@@ -19,6 +19,9 @@ struct ExecutorRootProbe {
     HostGpuSet &gpus();
     void        forget_host();
     ContextSession &session_at(uint32_t slot);
+    /* What the root remembers of a session it opened, set directly: a mock
+     * host has no OpenCL device or display to open one on. */
+    void            remember(uint32_t slot, uint32_t sub_api, uint32_t gpu);
 
     ExecutorRoot &root;
 };

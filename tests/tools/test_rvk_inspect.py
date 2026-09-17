@@ -355,6 +355,36 @@ class ServerLoop(unittest.TestCase):
         self.assertTrue(failed)
         self.assertIn("rvk-state-device-78.sock", text)
 
+    def serve_once(self, name, answer_bytes):
+        path = self.shm / name
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(str(path))
+        server.listen(1)
+
+        def answer():
+            connection, _ = server.accept()
+            with connection:
+                connection.recv(64)
+                connection.sendall(answer_bytes)
+        worker = threading.Thread(target=answer)
+        worker.start()
+        self.addCleanup(server.close)
+        return worker
+
+    def test_host_state_asks_the_executor_s_socket_and_reports_a_refusal_as_one(self):
+        worker = self.serve_once("rvk-state-executor-77.sock", b"executor/0 live=1\nexecutor/0/session/3 api=vulkan\n")
+        failed, entries = self.call("host_state", pid=77, module="executor")
+        worker.join()
+        self.assertFalse(failed, entries)
+        self.assertEqual([entry["path"] for entry in entries], ["executor/0", "executor/0/session/3"])
+        worker = self.serve_once("rvk-state-device-79.sock", b"error the main loop did not answer within 2 s\n")
+        failed, text = self.call("host_state", pid=79)
+        worker.join()
+        self.assertTrue(failed)
+        self.assertIn("the main loop did not answer within 2 s", text)
+        failed, text = self.call("host_state", pid=77, module="kernel")
+        self.assertTrue(failed)
+
     def test_the_run_s_logs_and_verdict_are_read_from_its_directory(self):
         self.assertEqual(self.call("driver_log", work="build-guest-x", lines=2),
                          (False, "rvkgpu: vsync 1\nrvkgpu: a"))

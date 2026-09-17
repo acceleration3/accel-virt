@@ -7,6 +7,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class HostApis;
 
 class HostGpu {
@@ -33,6 +35,9 @@ public:
     /* Where this GPU sat in the host's enumeration, which is what a backend
      * needs to open it again. */
     uint32_t index() const;
+    /* Its line in the executor's state dump: where it sat, its deviceUUID and
+     * what it runs. */
+    void     report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 

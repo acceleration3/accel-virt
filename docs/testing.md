@@ -139,6 +139,18 @@ The POSIX shims are tested for real in
 
 Mutating the machine-check guard or the chaining fails it.
 
+`tests/unit/device/shim/test_thread_signal_stack.cpp` (with ASan's own SEGV
+handling and signal stacks off, so they cannot stand in for the code under
+test): a thread's first question to `PosixTraceHost` gives it a guarded
+alternate stack of at least 64 KiB, a thread's own stack is kept, the mapping
+is gone when the thread ends, and a forked process whose worker thread
+overflows its stack inside traced frames dies of `SIGSEGV` leaving the crash
+file with those frames and a native stack. Skipping the install fails it.
+`tests/unit/device/shim/test_state_socket.cpp` serves a reporter's dump, a
+source's refusal, an unknown request and a name too long for a socket path;
+`tests/unit/device/executor/test_executor_state.cpp` checks `ExecutorRoot`'s
+exact dump.
+
 Live, `qemu_smoke` and `qemu_virtio_gpu` still pass with tracing started in
 realize. A qtest QEMU answers `host_threads` and `host_state` through
 `tools/mcp/rvk_inspect.py`. A `kill -SEGV` leaves a crash file whose native

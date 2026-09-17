@@ -1,6 +1,7 @@
 #include "device/executor/host_gpu_set.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/executor/host_apis.hpp"
 
 namespace av {
@@ -57,6 +58,12 @@ bool HostGpuSet::invariants_hold() const
         if (!gpus_[i].invariants_hold()) return false;
     }
     return true;
+}
+
+void HostGpuSet::report(StateWriter &writer) const
+{
+    AV_SCOPE("HostGpuSet::report");
+    for (uint32_t index = 0u; index < count_; index++) gpus_[index].report(writer);
 }
 
 }  // namespace av

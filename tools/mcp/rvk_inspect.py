@@ -294,8 +294,8 @@ class Inspector:
             tool("host_threads", "Threads inside the device or the executor of a host QEMU process.",
                  {"pid": {"type": "integer"}, "module": {"type": "string", "enum": list(HOST_MODULES)},
                   "stall_seconds": stall}, ["pid"]),
-            tool("host_state", "The device's state dump from a host QEMU process.", {"pid": {"type": "integer"}},
-                 ["pid"]),
+            tool("host_state", "The device's or the executor's state dump from a host QEMU process.",
+                 {"pid": {"type": "integer"}, "module": {"type": "string", "enum": list(HOST_MODULES)}}, ["pid"]),
             tool("scope_names", "Every traced function name and its id, optionally filtered by a substring.",
                  {"pattern": {"type": "string"}}),
             tool("scope_name", "The function a name id stands for.",
@@ -499,8 +499,10 @@ class Inspector:
         described["alive"] = pathlib.Path(f"/proc/{int(pid)}").exists()
         return described
 
-    def host_state(self, pid):
-        path = shm_directory() / f"rvk-state-device-{int(pid)}.sock"
+    def host_state(self, pid, module="device"):
+        if module not in HOST_MODULES:
+            raise ToolError(f"module must be one of {', '.join(HOST_MODULES)}, not {module}")
+        path = shm_directory() / f"rvk-state-{module}-{int(pid)}.sock"
         received = bytearray()
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
@@ -513,8 +515,12 @@ class Inspector:
                         break
                     received += data
         except OSError as error:
-            raise ToolError(f"cannot read the device's state from {path}: {error}") from error
-        return trace_format.parse_state(received.decode(errors="replace"))
+            raise ToolError(f"cannot read the {module}'s state from {path}: {error}") from error
+        text = received.decode(errors="replace")
+        # A binary that cannot dump says why on one line of its own.
+        if text.startswith("error "):
+            raise ToolError(text.strip())
+        return trace_format.parse_state(text)
 
     def scope_names(self, pattern=None):
         names = self.scopes.load()

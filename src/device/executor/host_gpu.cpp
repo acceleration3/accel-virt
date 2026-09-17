@@ -1,6 +1,8 @@
 #include "device/executor/host_gpu.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_apis.hpp"
 
@@ -81,6 +83,18 @@ bool HostGpu::invariants_hold() const
         if (kinds_[slot] != 0u && (sub_apis_ & sub_api_bits[slot]) == 0u) return false;
     }
     return true;
+}
+
+void HostGpu::report(StateWriter &writer) const
+{
+    AV_SCOPE("HostGpu::report");
+    char       text[uuid_bytes * 2u + 1u];
+    TextBuffer uuid(text, sizeof text);
+    for (const uint8_t byte : uuid_) uuid.append_hex(byte, 2u);
+    writer.open("gpu", index_);
+    writer.text("uuid", uuid.text());
+    writer.hex("sub_apis", sub_apis_);
+    writer.close();
 }
 
 }  // namespace av

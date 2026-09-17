@@ -19,6 +19,10 @@
 #include "device/executor/executor_root.hpp"
 #include "device/shim/host_trace.hpp"
 #include "device/shim/loader_host_apis.hpp"
+#include "device/shim/reporter_state_source.hpp"
+#include "device/shim/state_socket.hpp"
+
+#include <dlfcn.h>
 
 namespace {
 
@@ -60,15 +64,32 @@ public:
              * root then offers no sub-API and the device describes no capset,
              * which is the honest outcome rather than a failed realize. */
             (void)root_.object().initialize(apis_.object());
+            if (trace_.object().started()) serve_state();
         }
         return root_.object();
     }
 
 private:
+    /* The root's dump on /dev/shm/rvk-state-executor-<pid>.sock. The library
+     * pins itself first: the socket's thread and each traced thread's signal
+     * stack run or free code in this object for the rest of the process, and
+     * QEMU closes an executor it no longer needs. */
+    void serve_state()
+    {
+        AV_SCOPE("Library::serve_state");
+        Dl_info self = {};
+        if (dladdr(static_cast<void *>(this), &self) == 0 || self.dli_fname == nullptr) return;
+        if (dlopen(self.dli_fname, RTLD_NOW | RTLD_NOLOAD | RTLD_NODELETE) == nullptr) return;
+        (void)source_.construct(root_.object());
+        (void)socket_.construct();
+        (void)socket_.object().start("executor", trace_.object().process(), source_.object());
+    }
 
     av::ObjectStorage<av::HostTrace>      trace_;
     av::ObjectStorage<av::LoaderHostApis> apis_;
     av::ObjectStorage<av::ExecutorRoot>   root_;
+    av::ObjectStorage<av::ReporterStateSource> source_;
+    av::ObjectStorage<av::StateSocket>    socket_;
     bool                                  asked_ = false;
 };
 

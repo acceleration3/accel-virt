@@ -12,12 +12,13 @@
 #include "device/abi/rvk_device.h"
 #include "device/shim/host_trace.hpp"
 #include "device/shim/posix_module_resolver.hpp"
+#include "device/shim/state_socket.hpp"
+#include "device/shim/state_source.hpp"
 
 #include <pthread.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/un.h>
 
 namespace av {
 
@@ -25,7 +26,7 @@ class StateReporter;
 
 using CrashHandler = void (*)(int signal, siginfo_t *info, void *context);
 
-class DeviceTrace {
+class DeviceTrace final : public StateSource {
 public:
     static constexpr size_t   dump_bytes = 256u * 1024u;
     static constexpr uint32_t answer_seconds = 2u;
@@ -41,36 +42,29 @@ public:
     void crashed(int signal, siginfo_t *info, void *context);
     /* The scheduled main-loop routine: the dump a socket client waits for. */
     void answer_on_main_loop();
-    /* The socket's thread. */
-    void serve();
+    /* The socket's question, handed to the main loop and waited for. */
+    size_t dump(char *buffer, size_t capacity, const char *&error) override;
 
 private:
     enum class Request : uint8_t { idle, pending, answered, abandoned };
     static constexpr int      fatal[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
     static constexpr uint32_t fatal_count = sizeof fatal / sizeof fatal[0];
-    static constexpr size_t   alternate_stack_bytes = 64u * 1024u;
     static constexpr size_t   path_bytes = 108u;
     static constexpr size_t   max_frames = 48u;
 
     void install(CrashHandler handler);
-    bool listen_on_socket();
     void write_crash(int signal, uint64_t address);
     void chain(int signal, siginfo_t *info, void *context);
-    void answer(int client);
     /* The dump's length once the main loop wrote it, or false after the wait. */
     bool await_dump(size_t &length);
-    void send(int client, const char *text, size_t length) const;
 
     HostTrace            trace_;
     PosixModuleResolver  modules_;
     StateReporter       *root_;
     RvkMainLoopScheduler schedule_;
     struct sigaction     previous_[fatal_count];
-    char                 alternate_stack_[alternate_stack_bytes];
     uint64_t             crash_written_;
-    int                  listener_;
-    char                 socket_path_[path_bytes];
-    pthread_t            thread_;
+    StateSocket          socket_;
     pthread_mutex_t      lock_;
     pthread_cond_t       answered_;
     Request              request_;

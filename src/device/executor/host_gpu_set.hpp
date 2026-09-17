@@ -12,6 +12,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class HostApis;
 
 class HostGpuSet {
@@ -33,6 +35,8 @@ public:
     bool overflowed() const;
 
     uint32_t       count() const;
+    /* A line per GPU kept, inside the line the caller opened. */
+    void           report(StateWriter &writer) const;
     /* The GPU whose deviceUUID is `uuid`, or null. */
     const HostGpu *find(const uint8_t *uuid) const;
     /* Every sub-API any GPU here can run, which is what the ABI's sub_apis

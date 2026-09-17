@@ -1,6 +1,7 @@
 #include "device/executor/executor_root.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu.hpp"
@@ -16,7 +17,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr)
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr), slot_api_{}, slot_gpu_{}
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
 }
@@ -75,6 +76,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
             sessions_[slot].release();
             return nullptr;
         }
+        slot_api_[slot] = sub_api;
+        slot_gpu_[slot] = gpu->index();
         return &sessions_[slot];
     }
     return nullptr;
@@ -121,6 +124,36 @@ uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id
 {
     AV_SCOPE("ExecutorRoot::imported_handle");
     return owns(session) ? session->imported_handle(blob_id) : 0u;
+}
+
+void ExecutorRoot::report(StateWriter &writer)
+{
+    AV_SCOPE("ExecutorRoot::report");
+    writer.open("executor", 0u);
+    writer.number("sessions", max_sessions);
+    writer.number("live", live());
+    writer.number("gpus", gpus_.count());
+    writer.flag("overflowed", gpus_.overflowed());
+    gpus_.report(writer);
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        if (!sessions_[slot].live()) continue;
+        writer.open("session", slot);
+        writer.text("api", api_name(slot_api_[slot]));
+        writer.number("gpu", slot_gpu_[slot]);
+        writer.close();
+    }
+    writer.close();
+}
+
+const char *ExecutorRoot::api_name(uint32_t sub_api) const
+{
+    AV_SCOPE("ExecutorRoot::api_name");
+    switch (sub_api) {
+    case RVK_EXECUTOR_SUB_API_VULKAN: return "vulkan";
+    case RVK_EXECUTOR_SUB_API_OPENCL: return "opencl";
+    case RVK_EXECUTOR_SUB_API_OPENGL: return "opengl";
+    default: return "unknown";
+    }
 }
 
 uint32_t ExecutorRoot::live() const
