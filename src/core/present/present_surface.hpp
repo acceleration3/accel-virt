@@ -24,8 +24,8 @@ public:
     /* The bytes at `offset`, up to the end of their page, and how many there
      * are; the frame is 0 when the offset is past the pages. */
     uint64_t             frame_at(uint64_t offset, uint32_t &within) const;
-    /* A surface of four-byte pixels, with a pitch wide enough for its own
-     * width, every page of it mapped, and room for every row. */
+    /* A surface of four-byte pixels, with a pitch of whole pixels wide enough
+     * for its own width, every page of it mapped, and room for every row. */
     bool                 reachable() const;
 
 private:

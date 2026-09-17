@@ -29,6 +29,9 @@ bool PresentSurface::reachable() const
 {
     AV_SCOPE("PresentSurface::reachable");
     if (!layout_.is_surface() || layout_.pitch() < layout_.width() * pixel_bytes) return false;
+    /* A pitch of whole pixels keeps every row's bytes four-aligned, so no pixel
+     * straddles a page and a fill never writes past the page it mapped. */
+    if (layout_.pitch() % pixel_bytes != 0u) return false;
     if (!pages_.complete()) return false;
     return layout_.bytes() <= uint64_t{pages_.count()} * GuestPageList::page_bytes;
 }

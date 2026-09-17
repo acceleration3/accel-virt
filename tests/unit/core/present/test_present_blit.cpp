@@ -287,3 +287,27 @@ TEST(present_blit, a_row_past_the_pages_is_not_moved)
   CHECK_STATUS(blit.blit(Rectangle(0, 0, side, side * 2u), Rectangle(0, 0, side, side * 2u), nullptr, 0u),
                Status::not_supported);
   CHECK_EQ(blit.rows(), 0u); }
+
+/* A pitch that is not a whole number of pixels puts a pixel across a page
+ * boundary, and a fill writing four bytes at a time would write past the page
+ * it mapped. No surface this driver presents is laid out that way, and one
+ * that claims to be is refused before a byte moves. */
+TEST(present_blit, a_pitch_that_is_not_whole_pixels_is_refused)
+{ MockPlatform platform;
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  source.paint_all(0x66u);
+  destination.paint_all(0u);
+  const SurfaceLayout  ragged(side, side, format, pitch + 1u);
+  const PresentSurface into(ragged, destination.pages());
+  const PresentSurface from(ragged, source.pages());
+  const PresentSurface whole = destination.present();
+  { PresentBlit blit(platform, nullptr, into);
+    CHECK_STATUS(blit.fill(0xFFFFFFFFu, Rectangle(0, 0, side, side), nullptr, 0u), Status::not_supported);
+    CHECK_EQ(blit.rows(), 0u); }
+  { PresentBlit blit(platform, &from, whole);
+    CHECK_STATUS(blit.blit(Rectangle(0, 0, side, side), Rectangle(0, 0, side, side), nullptr, 0u),
+                 Status::not_supported);
+    CHECK_EQ(blit.rows(), 0u); }
+  CHECK_EQ(destination.count(0xFFFFFFFFu), 0u);
+  CHECK_EQ(platform.mapped_frames(), 0u); }
