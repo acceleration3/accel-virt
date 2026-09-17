@@ -76,6 +76,12 @@ using GetStringFn = const GLubyte *(APIENTRY *)(GLenum);
 using GetIntegervFn = void (APIENTRY *)(GLenum, GLint *);
 using AttribsFn = void *(APIENTRY *)(void *, void *, const std::int32_t *);
 using ExtensionsFn = const char *(APIENTRY *)(void *);
+using AttribivFn = std::int32_t (APIENTRY *)(void *, std::int32_t, std::int32_t, std::uint32_t, const std::int32_t *,
+                                             std::int32_t *);
+using AttribfvFn = std::int32_t (APIENTRY *)(void *, std::int32_t, std::int32_t, std::uint32_t, const std::int32_t *,
+                                             float *);
+using ChooseFn = std::int32_t (APIENTRY *)(void *, const std::int32_t *, const float *, std::uint32_t,
+                                           std::int32_t *, std::uint32_t *);
 
 constexpr std::uint32_t slot_new_list = 0u;
 constexpr std::uint32_t slot_clear = 203u;
@@ -600,3 +606,49 @@ TEST(gl_icd_root_invariants, fail_when_a_thread_names_a_context_another_thread_o
   rig.threads().set(nullptr);
   CHECK(rig.root().invariants_hold());
   rig.threads().switch_to(1u); }
+
+/* WGL_ARB_pixel_format through DrvGetProcAddress: the answers of
+ * PixelFormatQuery, with its refusals reported as the ARB's errors, and a DC
+ * with no window - a memory DC - offered no format. */
+TEST(gl_icd_root, answers_pixel_format_attributes_and_choices_through_wgl)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  const auto attribiv = reinterpret_cast<AttribivFn>(rig.opengl32().get_proc_address("wglGetPixelFormatAttribivARB"));
+  const auto attribfv = reinterpret_cast<AttribfvFn>(rig.opengl32().get_proc_address("wglGetPixelFormatAttribfvARB"));
+  const auto choose = reinterpret_cast<ChooseFn>(rig.opengl32().get_proc_address("wglChoosePixelFormatARB"));
+  CHECK(attribiv == reinterpret_cast<AttribivFn>(&av::glicd::entry::wglGetPixelFormatAttribivARB));
+  CHECK(attribfv == reinterpret_cast<AttribfvFn>(&av::glicd::entry::wglGetPixelFormatAttribfvARB));
+  CHECK(choose == reinterpret_cast<ChooseFn>(&av::glicd::entry::wglChoosePixelFormatARB));
+  const std::int32_t names[] = {0x2022, 0x2011};
+  std::int32_t values[2] = {-1, -1};
+  CHECK_EQ(attribiv(rig.dc(), 1, 0, 2u, names, values), 1);
+  CHECK_EQ(values[0], 24);
+  CHECK_EQ(values[1], 1);
+  float floats[2] = {-1.0f, -1.0f};
+  CHECK_EQ(attribfv(rig.dc(), 3, 0, 2u, names, floats), 1);
+  CHECK(floats[0] == 32.0f);
+  CHECK_EQ(attribiv(rig.dc(), 25, 0, 2u, names, values), 0);
+  check_error(rig, Root::error_invalid_pixel_format);
+  const std::int32_t unknown[] = {0x1234};
+  CHECK_EQ(attribfv(rig.dc(), 1, 0, 1u, unknown, floats), 0);
+  check_error(rig, Root::error_invalid_parameter);
+  CHECK_EQ(attribiv(rig.memory_dc(), 1, 0, 2u, names, values), 0);
+  check_error(rig, Root::error_invalid_pixel_format);
+  CHECK_EQ(values[0], 24);
+  const std::int32_t asked[] = {0x2022, 32, 0x2011, 1, 0};
+  std::int32_t formats[4] = {-1, -1, -1, -1};
+  std::uint32_t count = 99u;
+  CHECK_EQ(choose(rig.dc(), asked, nullptr, 4u, formats, &count), 1);
+  CHECK_EQ(count, 4u);
+  CHECK_EQ(formats[0], 3);
+  CHECK_EQ(choose(rig.memory_dc(), asked, nullptr, 4u, formats, &count), 1);
+  CHECK_EQ(count, 0u);
+  CHECK_EQ(formats[0], 3);
+  const std::int32_t refused[] = {0x1234, 1, 0};
+  count = 99u;
+  CHECK_EQ(choose(rig.dc(), refused, nullptr, 4u, formats, &count), 0);
+  check_error(rig, Root::error_invalid_parameter);
+  CHECK_EQ(count, 99u);
+  CHECK_EQ(choose(rig.memory_dc(), asked, nullptr, 4u, formats, nullptr), 0);
+  check_error(rig, Root::error_invalid_parameter);
+  CHECK(rig.root().invariants_hold()); }

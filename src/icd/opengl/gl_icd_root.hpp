@@ -17,6 +17,7 @@
 #include "icd/opengl/gl_connection.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/manual_calls.hpp"
+#include "icd/opengl/pixel_format_query.hpp"
 #include "icd/opengl/pixel_format_table.hpp"
 #include "icd/opengl/window_table.hpp"
 
@@ -89,6 +90,13 @@ public:
      * ARB's error set. */
     void       *create_context_attribs(void *dc, void *share, const int32_t *attributes);
     const char *extensions_string(void *dc);
+    /* WGL_ARB_pixel_format: PixelFormatQuery's answers, false with the ARB's
+     * error set for its refusals. A DC with no window has no format to
+     * describe and chooses none. */
+    bool        pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
+                                     int32_t *ints, float *floats);
+    bool        choose_pixel_format(void *dc, const int32_t *ints, const float *floats, uint32_t max,
+                                    int32_t *formats, uint32_t *count);
 
     /* What the entries and hooks reach: the calling thread's context. */
     GuestGlContext  *current();
@@ -125,6 +133,7 @@ private:
     SystemOpengl     &system_;
     GlIcdBinding     &binding_;
     PixelFormatTable  formats_;
+    PixelFormatQuery  query_;
     WindowTable       windows_;
     CurrentContexts   currents_;
     GlConnection      connection_;

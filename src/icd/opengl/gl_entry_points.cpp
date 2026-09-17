@@ -109,6 +109,27 @@ const char *APIENTRY wglGetExtensionsStringARB(void *dc)
     return gl_icd_binding.root().extensions_string(dc);
 }
 
+int32_t APIENTRY wglGetPixelFormatAttribivARB(void *dc, int32_t format, int32_t layer, uint32_t count,
+                                              const int32_t *names, int32_t *values)
+{
+    AV_SCOPE("wglGetPixelFormatAttribivARB");
+    return gl_icd_binding.root().pixel_format_attribs(dc, format, layer, count, names, values, nullptr);
+}
+
+int32_t APIENTRY wglGetPixelFormatAttribfvARB(void *dc, int32_t format, int32_t layer, uint32_t count,
+                                              const int32_t *names, float *values)
+{
+    AV_SCOPE("wglGetPixelFormatAttribfvARB");
+    return gl_icd_binding.root().pixel_format_attribs(dc, format, layer, count, names, nullptr, values);
+}
+
+int32_t APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, const float *floats, uint32_t max,
+                                         int32_t *formats, uint32_t *count)
+{
+    AV_SCOPE("wglChoosePixelFormatARB");
+    return gl_icd_binding.root().choose_pixel_format(dc, ints, floats, max, formats, count);
+}
+
 uintptr_t APIENTRY legacy_call()
 {
     AV_SCOPE("legacy_call");

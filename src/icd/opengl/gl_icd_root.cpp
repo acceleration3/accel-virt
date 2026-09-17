@@ -38,7 +38,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
                      icd::LogSink &log, WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlIcdBinding &binding)
     : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
-      windows_(), currents_(slot), connection_(kmt), contexts_(memory, connection_, send_lock, log),
+      query_(formats_), windows_(), currents_(slot), connection_(kmt), contexts_(memory, connection_, send_lock, log),
       manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
@@ -203,6 +203,12 @@ void *GlIcdRoot::get_proc_address(const char *name)
         return reinterpret_cast<void *>(&entry::wglCreateContextAttribsARB);
     if (__builtin_strcmp(name, "wglGetExtensionsStringARB") == 0)
         return reinterpret_cast<void *>(&entry::wglGetExtensionsStringARB);
+    if (__builtin_strcmp(name, "wglGetPixelFormatAttribivARB") == 0)
+        return reinterpret_cast<void *>(&entry::wglGetPixelFormatAttribivARB);
+    if (__builtin_strcmp(name, "wglGetPixelFormatAttribfvARB") == 0)
+        return reinterpret_cast<void *>(&entry::wglGetPixelFormatAttribfvARB);
+    if (__builtin_strcmp(name, "wglChoosePixelFormatARB") == 0)
+        return reinterpret_cast<void *>(&entry::wglChoosePixelFormatARB);
     for (uint32_t row = 0u; row < generated::kNamedEntryCount; row++)
         if (__builtin_strcmp(generated::kNamedEntries[row].name, name) == 0)
             return reinterpret_cast<void *>(generated::kNamedEntries[row].address);
@@ -287,6 +293,33 @@ const char *GlIcdRoot::extensions_string(void *)
 {
     AV_SCOPE("GlIcdRoot::extensions_string");
     return wgl_extensions;
+}
+
+bool GlIcdRoot::pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
+                                     int32_t *ints, float *floats)
+{
+    AV_SCOPE("GlIcdRoot::pixel_format_attribs");
+    const Status answered = surface_.window_of(dc) != nullptr
+                                ? query_.attribs(format, layer, count, names, ints, floats)
+                                : Status::not_found;
+    if (answered == Status::ok) return true;
+    fail(answered == Status::not_found ? error_invalid_pixel_format : error_invalid_parameter);
+    return false;
+}
+
+bool GlIcdRoot::choose_pixel_format(void *dc, const int32_t *ints, const float *floats, uint32_t max,
+                                    int32_t *formats, uint32_t *count)
+{
+    AV_SCOPE("GlIcdRoot::choose_pixel_format");
+    const bool   windowed = surface_.window_of(dc) != nullptr;
+    const Status chosen = windowed ? query_.choose(ints, floats, max, formats, count)
+                                   : query_.choose(ints, floats, 0u, nullptr, count);
+    if (chosen != Status::ok) {
+        fail(error_invalid_parameter);
+        return false;
+    }
+    if (!windowed) *count = 0u;
+    return true;
 }
 
 GuestGlContext *GlIcdRoot::current()
@@ -374,7 +407,7 @@ bool GlIcdRoot::invariants_hold() const
         if (slot == nullptr) return false;
     for (uint32_t row = 0u; row < max_pending; row++)
         if ((pending_threads_[row] == 0u) != (pending_handles_[row] == 0u)) return false;
-    return manual_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
+    return manual_.invariants_hold() && query_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
            connection_.invariants_hold() && contexts_.invariants_hold();
 }
 
