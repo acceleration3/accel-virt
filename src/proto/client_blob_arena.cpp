@@ -90,6 +90,12 @@ size_t ClientBlobArena::used() const
     return used_;
 }
 
+size_t ClientBlobArena::room() const
+{
+    AV_SCOPE("ClientBlobArena::room");
+    return capacity_ - used_;
+}
+
 bool ClientBlobArena::invariants_hold() const
 {
     AV_SCOPE("ClientBlobArena::invariants_hold");

@@ -53,7 +53,12 @@ TEST(client_blob_arena, a_take_past_the_end_or_of_nothing_is_denied)
   ClientBlobArena arena(block, sizeof block);
   CHECK(!arena.take(65u).taken());
   CHECK(!arena.take(0u).taken());
-  CHECK(arena.take(64u).taken());
+  CHECK_EQ(arena.room(), 64u);
+  CHECK(arena.take(60u).taken());
+  CHECK_EQ(arena.room(), 4u);
+  CHECK(!arena.take(5u).taken());
+  CHECK(arena.take(4u).taken());
+  CHECK_EQ(arena.room(), 0u);
   CHECK(!arena.take(1u).taken());
   CHECK(arena.invariants_hold()); }
 
@@ -82,6 +87,7 @@ TEST(client_blob_arena, a_null_block_is_no_arena)
   CHECK(!arena.ready());
   CHECK(!arena.take(16u).taken());
   CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.room(), 0u);
   CHECK(arena.invariants_hold()); }
 
 /* Giving back a lease that was never taken changes nothing. */

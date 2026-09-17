@@ -61,6 +61,8 @@ public:
     void            retire_all();
 
     size_t used() const;
+    /* What the next lease can have at most. */
+    size_t room() const;
     bool   invariants_hold() const;
 
 private:

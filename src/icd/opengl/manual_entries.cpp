@@ -160,16 +160,16 @@ void APIENTRY Wrap_glFlush(void)
     ::av::glicd::gl_icd_binding.root().manual().flush();
 }
 
-void APIENTRY Wrap_glFlushMappedBufferRange(GLenum, GLintptr, GLsizeiptr)
+void APIENTRY Wrap_glFlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr length)
 {
     AV_SCOPE("Wrap_glFlushMappedBufferRange");
-    ::av::glicd::gl_icd_binding.root().manual().refuse();
+    ::av::glicd::gl_icd_binding.root().manual().flush_mapped_range(target, offset, length);
 }
 
-void APIENTRY Wrap_glFlushMappedNamedBufferRange(GLuint, GLintptr, GLsizeiptr)
+void APIENTRY Wrap_glFlushMappedNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length)
 {
     AV_SCOPE("Wrap_glFlushMappedNamedBufferRange");
-    ::av::glicd::gl_icd_binding.root().manual().refuse();
+    ::av::glicd::gl_icd_binding.root().manual().flush_mapped_named_range(buffer, offset, length);
 }
 
 void APIENTRY Wrap_glFlushMappedNamedBufferRangeEXT(GLuint, GLintptr, GLsizeiptr)
@@ -208,16 +208,16 @@ GLint APIENTRY Wrap_glGetAttribLocation(GLuint program, const GLchar* name)
     return ::av::glicd::gl_icd_binding.root().manual().attrib_location(program, name);
 }
 
-void APIENTRY Wrap_glGetBufferPointerv(GLenum, GLenum pname, void **params)
+void APIENTRY Wrap_glGetBufferPointerv(GLenum target, GLenum pname, void **params)
 {
     AV_SCOPE("Wrap_glGetBufferPointerv");
-    ::av::glicd::gl_icd_binding.root().manual().buffer_pointer(pname, params);
+    ::av::glicd::gl_icd_binding.root().manual().buffer_pointer(target, pname, params);
 }
 
-void APIENTRY Wrap_glGetNamedBufferPointerv(GLuint, GLenum pname, void **params)
+void APIENTRY Wrap_glGetNamedBufferPointerv(GLuint buffer, GLenum pname, void **params)
 {
     AV_SCOPE("Wrap_glGetNamedBufferPointerv");
-    ::av::glicd::gl_icd_binding.root().manual().buffer_pointer(pname, params);
+    ::av::glicd::gl_icd_binding.root().manual().named_buffer_pointer(buffer, pname, params);
 }
 
 void APIENTRY Wrap_glGetNamedBufferPointervEXT(GLuint, GLenum, void **)
@@ -298,40 +298,42 @@ void APIENTRY Wrap_glLinkProgram(GLuint program)
     ::av::glicd::gl_icd_binding.root().manual().link_program(program);
 }
 
-void* APIENTRY Wrap_glMapBuffer(GLenum, GLenum)
+void* APIENTRY Wrap_glMapBuffer(GLenum target, GLenum access)
 {
     AV_SCOPE("Wrap_glMapBuffer");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    return ::av::glicd::gl_icd_binding.root().manual().map_buffer(target, access);
 }
 
-void* APIENTRY Wrap_glMapBufferRange(GLenum, GLintptr, GLsizeiptr, GLbitfield)
+void* APIENTRY Wrap_glMapBufferRange(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     AV_SCOPE("Wrap_glMapBufferRange");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    return ::av::glicd::gl_icd_binding.root().manual().map_buffer_range(target, offset, length, access);
 }
 
-void* APIENTRY Wrap_glMapNamedBuffer(GLuint, GLenum)
+void* APIENTRY Wrap_glMapNamedBuffer(GLuint buffer, GLenum access)
 {
     AV_SCOPE("Wrap_glMapNamedBuffer");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    return ::av::glicd::gl_icd_binding.root().manual().map_named_buffer(buffer, access);
 }
 
 void* APIENTRY Wrap_glMapNamedBufferEXT(GLuint, GLenum)
 {
     AV_SCOPE("Wrap_glMapNamedBufferEXT");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    ::av::glicd::gl_icd_binding.root().manual().refuse();
+    return nullptr;
 }
 
-void* APIENTRY Wrap_glMapNamedBufferRange(GLuint, GLintptr, GLsizeiptr, GLbitfield)
+void* APIENTRY Wrap_glMapNamedBufferRange(GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     AV_SCOPE("Wrap_glMapNamedBufferRange");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    return ::av::glicd::gl_icd_binding.root().manual().map_named_buffer_range(buffer, offset, length, access);
 }
 
 void* APIENTRY Wrap_glMapNamedBufferRangeEXT(GLuint, GLintptr, GLsizeiptr, GLbitfield)
 {
     AV_SCOPE("Wrap_glMapNamedBufferRangeEXT");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_map();
+    ::av::glicd::gl_icd_binding.root().manual().refuse();
+    return nullptr;
 }
 
 void APIENTRY Wrap_glNamedBufferData(GLuint buffer, GLsizeiptr size, const void* data, GLenum usage)
@@ -382,22 +384,23 @@ void APIENTRY Wrap_glTexCoordPointer(GLint, GLenum, GLsizei, const void*)
     static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
 }
 
-GLboolean APIENTRY Wrap_glUnmapBuffer(GLenum)
+GLboolean APIENTRY Wrap_glUnmapBuffer(GLenum target)
 {
     AV_SCOPE("Wrap_glUnmapBuffer");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_unmap();
+    return ::av::glicd::gl_icd_binding.root().manual().unmap_buffer(target);
 }
 
-GLboolean APIENTRY Wrap_glUnmapNamedBuffer(GLuint)
+GLboolean APIENTRY Wrap_glUnmapNamedBuffer(GLuint buffer)
 {
     AV_SCOPE("Wrap_glUnmapNamedBuffer");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_unmap();
+    return ::av::glicd::gl_icd_binding.root().manual().unmap_named_buffer(buffer);
 }
 
 GLboolean APIENTRY Wrap_glUnmapNamedBufferEXT(GLuint)
 {
     AV_SCOPE("Wrap_glUnmapNamedBufferEXT");
-    return ::av::glicd::gl_icd_binding.root().manual().refuse_unmap();
+    ::av::glicd::gl_icd_binding.root().manual().refuse();
+    return 0;
 }
 
 void APIENTRY Wrap_glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer)

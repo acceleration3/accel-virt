@@ -120,7 +120,8 @@ TEST(gl_context_table, reports_each_live_context_under_its_handle)
                                    "pixel_format=1 major=0 minor=0 profile=0 flags=0 share=0 error=0 "
                                    "arena=false renderer= extensions=0\n"
                                    "contexts/0/context/65537/windows/0 held=0 draws_window=false "
-                                   "reads_window=false") == 0); }
+                                   "reads_window=false\n"
+                     "contexts/0/context/65537/mappings/0 held=0 persistent_writers=0") == 0); }
 
 TEST(gl_context_table_invariants, fail_for_a_zero_generation_a_miscount_or_a_broken_context)
 { Table zero;

@@ -18,6 +18,7 @@
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
+#include "icd/opengl/mapped_buffers.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
 #include "icd/opengl/window_framebuffers.hpp"
@@ -87,6 +88,8 @@ public:
     const GlExtensionList &extensions() const;
     /* The windows this context draws on. */
     WindowFramebuffers    &framebuffers();
+    /* The buffer ranges the application has mapped. */
+    MappedBuffers         &mappings();
 
     /* The first error recorded is kept until taken. */
     void        record(uint32_t error);
@@ -135,6 +138,7 @@ private:
     QueryShapes                    queries_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
+    MappedBuffers                  mappings_;
     char                           strings_[strings][string_bytes];
     uint64_t                       debug_callback_;
     uint64_t                       debug_user_;

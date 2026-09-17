@@ -4,9 +4,9 @@
  * and does nothing without one, as OpenGL does. The entries themselves
  * (manual_entries.cpp) are one line each into this.
  *
- * Until its task arrives, buffer mapping (T036) records GL_INVALID_OPERATION
- * and maps nothing. The GL extensions answered are the context's own list
- * (GlExtensionPolicy). A client-side
+ * A map is a guest copy of the range (MappedBuffers); a target names the
+ * buffer the host has bound there, which is asked. The GL extensions answered
+ * are the context's own list (GlExtensionPolicy). A client-side
  * vertex or index array, which the core profile removed, is
  * GL_INVALID_OPERATION with no host call. */
 #ifndef AV_GLICD_MANUAL_CALLS_HPP
@@ -23,6 +23,7 @@ class ManualCalls {
 public:
     enum : uint32_t {
         gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u, gl_invalid_operation = 0x0502u,
+        gl_read_only = 0x88B8u, gl_write_only = 0x88B9u, gl_read_write = 0x88BAu, gl_dynamic_storage_bit = 0x0100u,
         gl_extensions = 0x1F03u, gl_num_extensions = 0x821Du, gl_debug_callback_function = 0x8244u, gl_debug_callback_user_param = 0x8245u,
         gl_vertex_attrib_array_pointer = 0x8645u, gl_buffer_map_pointer = 0x88BDu, gl_uniform = 0x8E17u,
         gl_type = 0x92FAu, gl_invalid_index = 0xFFFFFFFFu,
@@ -32,12 +33,19 @@ public:
     ManualCalls(const ManualCalls &) = delete;
     ManualCalls &operator=(const ManualCalls &) = delete;
 
-    /* Buffer mapping, and the queries of pointers only a mapping or a
-     * direct-state extension would have. */
-    void *refuse_map();
-    bool  refuse_unmap();
+    /* Buffer mapping. glMapBuffer's access is the enum, the others' the bits. */
+    void *map_buffer(uint32_t target, uint32_t access);
+    void *map_buffer_range(uint32_t target, intptr_t offset, intptr_t length, uint32_t access);
+    void *map_named_buffer(uint32_t buffer, uint32_t access);
+    void *map_named_buffer_range(uint32_t buffer, intptr_t offset, intptr_t length, uint32_t access);
+    bool  unmap_buffer(uint32_t target);
+    bool  unmap_named_buffer(uint32_t buffer);
+    void  flush_mapped_range(uint32_t target, intptr_t offset, intptr_t length);
+    void  flush_mapped_named_range(uint32_t buffer, intptr_t offset, intptr_t length);
+    void  buffer_pointer(uint32_t target, uint32_t pname, void **params);
+    void  named_buffer_pointer(uint32_t buffer, uint32_t pname, void **params);
+    /* A call only a direct-state extension this ICD does not report has. */
     void  refuse();
-    void  buffer_pointer(uint32_t pname, void **params);
     void  attribute_pointer(uint32_t index, uint32_t pname, void **pointer);
     void  pointer(uint32_t pname, void **params);
 
@@ -85,6 +93,13 @@ private:
     void            record(uint32_t error);
     /* Whether a draw's indices can cross: an offset, or none. */
     bool            indices_cross(const void *indices);
+    /* The buffer the host has bound at `target`; false, with
+     * GL_INVALID_ENUM recorded, for a target that binds no buffer. */
+    bool            bound_to(GuestGlContext &context, uint32_t target, uint32_t &buffer);
+    void           *map_name(GuestGlContext &context, uint32_t buffer, int64_t offset, int64_t length,
+                             uint32_t access);
+    bool            unmap_name(GuestGlContext &context, uint32_t buffer);
+    void            mark_name(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t length);
 
     CurrentContexts &currents_;
 };

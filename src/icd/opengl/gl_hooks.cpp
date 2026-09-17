@@ -103,10 +103,13 @@ GLuint framebuffer_name(GLuint name) noexcept
     return context != nullptr ? context->framebuffers().name_of(name) : name;
 }
 
-/* Persistent mappings arrive with T036. */
+/* What a persistent map wrote goes to the host before a command reads it. */
 void flush_persistent_mappings() noexcept
 {
     AV_SCOPE("flush_persistent_mappings");
+    GuestGlContext *const context = current_context();
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    if (wire != nullptr) context->mappings().flush_persistent(*wire);
 }
 
 void forget_bindings() noexcept
