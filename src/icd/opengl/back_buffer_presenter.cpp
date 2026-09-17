@@ -6,7 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/opengl/client_array_state.hpp"
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 
@@ -37,7 +37,7 @@ BackBufferPresenter::~BackBufferPresenter()
 }
 
 Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const PixelFormat &format,
-                                    WindowSurface &surface)
+                                    icd::WindowSurface &surface)
 {
     AV_SCOPE("BackBufferPresenter::prepare");
     uint32_t width = 0u;
@@ -90,7 +90,7 @@ bool     BackBufferPresenter::double_buffered() const
 }
 
 bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState &state, void *dc,
-                                  WindowSurface &surface)
+                                  icd::WindowSurface &surface)
 {
     AV_SCOPE("BackBufferPresenter::present");
     if (framebuffers_[draw] == 0u) return false;

@@ -24,10 +24,13 @@ namespace av::icd {
 class LogSink;
 }
 
+namespace av::icd {
+class WindowSurface;
+}  // namespace av::icd
+
 namespace av::glicd {
 
 class ClientArrayState;
-class WindowSurface;
 struct BackBufferPresenterProbe;
 
 class BackBufferPresenter {
@@ -57,7 +60,7 @@ public:
      * no_memory when the pixels or a host name could not be had, with
      * nothing kept. */
     [[nodiscard]] Status prepare(ClientTransport &wire, void *window, const PixelFormat &format,
-                                 WindowSurface &surface);
+                                 icd::WindowSurface &surface);
     void    *window() const;
     /* 0 until prepared. */
     uint32_t framebuffer() const;
@@ -67,7 +70,7 @@ public:
     /* The frame onto `dc`: resolved, read back in rows the transport carries,
      * and put on the window bottom row first. false before a prepare; a DC
      * that refuses the frame is logged once and the swap still happened. */
-    bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, WindowSurface &surface);
+    bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface);
     /* Deletes the host objects through `wire` when there is one - without one
      * they went with the host's context - and gives the pixels back. */
     void     release(ClientTransport *wire);

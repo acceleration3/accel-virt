@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 
 namespace av::glicd {
 
@@ -37,7 +37,7 @@ uint32_t WindowTable::held() const
     return count_;
 }
 
-void WindowTable::drop_gone(WindowSurface &surface)
+void WindowTable::drop_gone(icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowTable::drop_gone");
     uint32_t kept = 0u;

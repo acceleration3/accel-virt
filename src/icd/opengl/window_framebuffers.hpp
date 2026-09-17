@@ -23,11 +23,14 @@ namespace av::icd {
 class LogSink;
 }
 
+namespace av::icd {
+class WindowSurface;
+}  // namespace av::icd
+
 namespace av::glicd {
 
 class ClientArrayState;
 class PixelFormat;
-class WindowSurface;
 struct WindowFramebuffersProbe;
 
 class WindowFramebuffers {
@@ -53,7 +56,7 @@ public:
      * window follows it to this one. no_space past max_windows windows;
      * prepare's refusals otherwise, with the current window unchanged. */
     [[nodiscard]] Status make_current_on(ClientTransport &wire, void *window, const PixelFormat &format,
-                                         WindowSurface &surface);
+                                         icd::WindowSurface &surface);
     /* Null until the context is current on a window, or once that window is gone. */
     void    *window() const;
     /* An application's framebuffer name as the host knows it: 0 is the
@@ -71,9 +74,9 @@ public:
      * framebuffer made again - bound again where the application left the
      * window bound. false for a window this context never drew on. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                     const PixelFormat &format, WindowSurface &surface);
+                     const PixelFormat &format, icd::WindowSurface &surface);
     /* The presenters of windows that are gone, given up. */
-    void     drop_gone(ClientTransport &wire, WindowSurface &surface);
+    void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
     /* Every presenter given up; the host's objects deleted through `wire` when there is one. */
     void     release(ClientTransport *wire);
     uint32_t held() const;

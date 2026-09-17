@@ -79,6 +79,18 @@ bool ScriptedWindowSurface::blit(void *dc, std::uint32_t width, std::uint32_t he
     return true;
 }
 
+bool ScriptedWindowSurface::blit_window(void *window, std::uint32_t width, std::uint32_t height,
+                                        const std::uint8_t *bgra_bottom_up)
+{
+    for (std::uint32_t index = 0u; index < dc_count_; index++) {
+        const Dc &dc = dcs_[index];
+        if (dc.window != window || window == nullptr) continue;
+        if (dc.closed) return false;
+        return blit(dc.dc, width, height, bgra_bottom_up);
+    }
+    return false;
+}
+
 std::uint32_t       ScriptedWindowSurface::blits() const { return blits_; }
 void               *ScriptedWindowSurface::last_blit_dc() const { return blit_dc_; }
 std::uint32_t       ScriptedWindowSurface::last_blit_width() const { return blit_width_; }

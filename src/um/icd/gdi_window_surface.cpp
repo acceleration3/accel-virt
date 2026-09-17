@@ -1,4 +1,4 @@
-#include "um/opengl/gdi_window_surface.hpp"
+#include "um/icd/gdi_window_surface.hpp"
 
 #include "core/trace/function_scope.hpp"
 
@@ -34,6 +34,16 @@ bool GdiWindowSurface::blit(void *dc, uint32_t width, uint32_t height, const uin
     format.bmiHeader.biCompression = BI_RGB;
     return SetDIBitsToDevice(static_cast<HDC>(dc), 0, 0, width, height, 0, 0, 0u, height, bgra_bottom_up, &format,
                              DIB_RGB_COLORS) != 0;
+}
+
+bool GdiWindowSurface::blit_window(void *window, uint32_t width, uint32_t height, const uint8_t *bgra_bottom_up)
+{
+    AV_SCOPE("GdiWindowSurface::blit_window");
+    const HDC dc = GetDC(static_cast<HWND>(window));
+    if (dc == nullptr) return false;
+    const bool drawn = blit(dc, width, height, bgra_bottom_up);
+    static_cast<void>(ReleaseDC(static_cast<HWND>(window), dc));
+    return drawn;
 }
 
 }  // namespace av

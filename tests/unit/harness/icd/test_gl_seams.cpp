@@ -7,7 +7,7 @@
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/thread_slot.hpp"
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -30,7 +30,7 @@ TEST(scripted_window_surface, a_dc_answers_its_window_and_a_memory_or_unknown_dc
   surface.add_dc(&dc_a, &window_a, 64u, 48u);
   surface.add_dc(&dc_b, &window_a, 64u, 48u);
   surface.add_dc(&memory_dc, nullptr, 0u, 0u);
-  av::glicd::WindowSurface &seam = surface;
+  av::icd::WindowSurface &seam = surface;
   CHECK(seam.window_of(&dc_a) == &window_a);
   CHECK(seam.window_of(&dc_b) == &window_a);
   CHECK(seam.window_of(&memory_dc) == nullptr);
@@ -84,6 +84,25 @@ TEST(scripted_window_surface, keeps_only_the_first_bytes_of_a_large_blit)
   std::memset(pixels, 0x5a, sizeof pixels);
   CHECK(surface.blit(&dc_a, 512u, 512u, pixels));
   CHECK_EQ(surface.last_blit_bytes()[ScriptedWindowSurface::kept_bytes - 1u], 0x5au); }
+
+/* A Vulkan swapchain holds a window, not a DC: its frame is kept as a blit on
+ * the window's first DC, and a closed or unknown window takes none. */
+TEST(scripted_window_surface, a_window_blit_draws_on_its_first_dc)
+{ ScriptedWindowSurface scripted;
+  av::icd::WindowSurface &surface = scripted;
+  int window = 0, dc = 0, other_dc = 0, unknown = 0;
+  scripted.add_dc(&dc, &window, 8u, 4u);
+  scripted.add_dc(&other_dc, &window, 8u, 4u);
+  const std::uint8_t frame[8 * 4 * 4] = {7u, 8u, 9u, 10u};
+  CHECK(surface.blit_window(&window, 8u, 4u, frame));
+  CHECK_EQ(scripted.blits(), 1u);
+  CHECK(scripted.last_blit_dc() == &dc);
+  CHECK_EQ(scripted.last_blit_bytes()[3], 10u);
+  CHECK(!surface.blit_window(&unknown, 8u, 4u, frame));
+  CHECK(!surface.blit_window(nullptr, 8u, 4u, frame));
+  scripted.close_window(&window);
+  CHECK(!surface.blit_window(&window, 8u, 4u, frame));
+  CHECK_EQ(scripted.blits(), 1u); }
 
 TEST(scripted_thread_slot, each_thread_keeps_its_own_value_and_error)
 { ScriptedThreadSlot slot;

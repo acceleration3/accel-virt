@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/opengl/pixel_format.hpp"
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -23,7 +23,7 @@ WindowFramebuffers::~WindowFramebuffers()
 }
 
 Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, const PixelFormat &format,
-                                           WindowSurface &surface)
+                                           icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::make_current_on");
     uint32_t   slot = find(window);
@@ -105,7 +105,7 @@ int32_t WindowFramebuffers::answer(uint32_t pname, int32_t host_value) const
 }
 
 bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                                 const PixelFormat &format, WindowSurface &surface)
+                                 const PixelFormat &format, icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::present");
     const uint32_t slot = find(window);
@@ -122,7 +122,7 @@ bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &
     return presented;
 }
 
-void WindowFramebuffers::drop_gone(ClientTransport &wire, WindowSurface &surface)
+void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::drop_gone");
     for (uint32_t slot = 0u; slot < max_windows; slot++) {

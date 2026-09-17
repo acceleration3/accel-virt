@@ -38,12 +38,15 @@ class LogSink;
 class ThreadLock;
 }  // namespace av::icd
 
+namespace av::icd {
+class WindowSurface;
+}  // namespace av::icd
+
 namespace av::glicd {
 
 class GlIcdBinding;
 class SystemOpengl;
 class ThreadSlot;
-class WindowSurface;
 struct GlIcdRootProbe;
 
 class GlIcdRoot final : public StateReporter {
@@ -63,7 +66,7 @@ public:
     static constexpr uint32_t max_pending = 64u;
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, icd::LogSink &log,
-              WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlIcdBinding &binding);
+              icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlIcdBinding &binding);
     ~GlIcdRoot();
     GlIcdRoot(const GlIcdRoot &) = delete;
     GlIcdRoot &operator=(const GlIcdRoot &) = delete;
@@ -140,7 +143,7 @@ private:
 
     icd::ThreadLock  &lock_;
     icd::LogSink     &log_;
-    WindowSurface    &surface_;
+    icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;
     SystemOpengl     &system_;
     GlIcdBinding     &binding_;

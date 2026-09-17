@@ -444,7 +444,7 @@ add_test(NAME rvkinspect_image
 # The Vulkan ICD exports exactly what the loader calls (feature 045).
 add_test(NAME rvkvk_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
-                 ${CMAKE_BINARY_DIR}/guest/rvkvk.dll --dll --only-exports
+                 ${CMAKE_BINARY_DIR}/guest/rvkvk.dll --dll --only-exports --allow-import user32.dll
                  --require-export vk_icdNegotiateLoaderICDInterfaceVersion
                  --require-export vk_icdGetInstanceProcAddr)
 

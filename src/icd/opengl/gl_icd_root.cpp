@@ -13,7 +13,7 @@
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/system_opengl.hpp"
 #include "icd/opengl/thread_slot.hpp"
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 
 #include "gl_dispatch_client.h"
 #include "gl_protocol_ids.h"
@@ -48,7 +48,7 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 }  // namespace
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-                     icd::LogSink &log, WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
+                     icd::LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlIcdBinding &binding)
     : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
       query_(formats_), windows_(), currents_(slot), connection_(kmt),

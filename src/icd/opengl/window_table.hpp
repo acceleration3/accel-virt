@@ -14,9 +14,12 @@ namespace av {
 class StateWriter;
 }
 
+namespace av::icd {
+class WindowSurface;
+}  // namespace av::icd
+
 namespace av::glicd {
 
-class WindowSurface;
 struct WindowTableProbe;
 
 class WindowTable {
@@ -34,7 +37,7 @@ public:
     int32_t              format_of(void *window) const;
     uint32_t             held() const;
     /* Forgets every window `surface` says no longer exists. */
-    void                 drop_gone(WindowSurface &surface);
+    void                 drop_gone(icd::WindowSurface &surface);
     void                 report(StateWriter &writer) const;
 
     bool invariants_hold() const;

@@ -5,13 +5,13 @@
 #ifndef AV_SCRIPTED_WINDOW_SURFACE_HPP
 #define AV_SCRIPTED_WINDOW_SURFACE_HPP
 
-#include "icd/opengl/window_surface.hpp"
+#include "icd/common/window_surface.hpp"
 
 #include <cstdint>
 
 namespace av {
 
-class ScriptedWindowSurface final : public glicd::WindowSurface {
+class ScriptedWindowSurface final : public icd::WindowSurface {
 public:
     static constexpr std::uint32_t max_dcs = 300u;
     static constexpr std::uint32_t kept_bytes = 1u << 16u;
@@ -27,6 +27,9 @@ public:
     void *window_of(void *dc) override;
     bool  client_size(void *window, std::uint32_t &width, std::uint32_t &height) override;
     bool  blit(void *dc, std::uint32_t width, std::uint32_t height, const std::uint8_t *bgra_bottom_up) override;
+    /* Kept as a blit on the window's first DC; last_blit_dc() is that DC. */
+    bool  blit_window(void *window, std::uint32_t width, std::uint32_t height,
+                      const std::uint8_t *bgra_bottom_up) override;
 
     std::uint32_t       blits() const;
     void               *last_blit_dc() const;

@@ -160,3 +160,8 @@ add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/prob
 add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
+
+# rvkvk.dll puts a presented frame on its window through user32 and gdi32
+# (feature 046), whose import library is made with the GL probe's above.
+add_dependencies(rvkvk rvkglprobe_imports)
+target_link_libraries(rvkvk PRIVATE ${USER32_IMPORT})

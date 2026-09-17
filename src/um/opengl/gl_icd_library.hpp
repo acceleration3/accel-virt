@@ -14,7 +14,7 @@
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
-#include "um/opengl/gdi_window_surface.hpp"
+#include "um/icd/gdi_window_surface.hpp"
 #include "um/opengl/loaded_opengl32.hpp"
 #include "um/opengl/tls_thread_slot.hpp"
 #include "um/trace/process_trace.hpp"
