@@ -12,8 +12,8 @@ ContextSession &ExecutorRootProbe::session_at(uint32_t slot) { return root.sessi
 
 void ExecutorRootProbe::remember(uint32_t slot, uint32_t sub_api, uint32_t gpu)
 {
-    root.slot_api_[slot] = sub_api;
-    root.slot_gpu_[slot] = gpu;
+    root.apis_of_[slot] = sub_api;
+    root.gpus_of_[slot] = gpu;
 }
 
 }  // namespace av

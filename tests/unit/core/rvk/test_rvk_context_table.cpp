@@ -1057,6 +1057,7 @@ TEST(rvk_context_table_report, a_context_being_set_up_is_counted_but_not_listed)
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   fixture.platform().on_acquire(nullptr, nullptr);
   CHECK(mid.claimed_unset);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* Feature 050: an OpenGL context's options reach the host's setup, and a share
  * context - named by its ring's D3DKMT handle, which only resolves in the
