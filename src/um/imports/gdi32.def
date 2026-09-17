@@ -1,5 +1,6 @@
 LIBRARY gdi32.dll
 EXPORTS
+ChoosePixelFormat
 D3DKMTCloseAdapter
 D3DKMTCreateAllocation2
 D3DKMTCreateContextVirtual
@@ -28,3 +29,4 @@ D3DKMTWaitForVerticalBlankEvent
 DescribePixelFormat
 SetDIBitsToDevice
 SetPixelFormat
+SwapBuffers

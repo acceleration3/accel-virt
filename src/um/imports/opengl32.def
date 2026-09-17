@@ -1,4 +1,20 @@
 LIBRARY opengl32.dll
 EXPORTS
+glBindTexture
+glClear
+glClearColor
+glDeleteTextures
+glDrawArrays
+glFinish
+glGenTextures
+glGetError
+glGetString
+glGetTexImage
+glReadPixels
+glTexImage2D
+glViewport
 wglCreateContext
 wglDeleteContext
+wglGetProcAddress
+wglMakeCurrent
+wglShareLists

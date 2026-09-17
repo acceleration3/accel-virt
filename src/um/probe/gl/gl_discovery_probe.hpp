@@ -9,6 +9,7 @@
 #define AV_UM_GL_DISCOVERY_PROBE_HPP
 
 #include "core/support/text_buffer.hpp"
+#include "um/probe/gl/probe_window.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -39,11 +40,10 @@ private:
     void     open_adapter();
     void     write() const;
 
-    char       bytes_[report_bytes];
-    TextBuffer report_;
-    void      *window_;
-    void      *dc_;
-    int32_t    format_;
+    char        bytes_[report_bytes];
+    TextBuffer  report_;
+    ProbeWindow window_;
+    int32_t     format_;
 };
 
 }  // namespace av

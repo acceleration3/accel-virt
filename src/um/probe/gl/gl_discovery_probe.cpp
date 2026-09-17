@@ -15,21 +15,13 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t window_class[] = L"rvkglprobe";
-constexpr int     window_side = 64;
-constexpr size_t  name_chars = 128u;
+constexpr size_t   name_chars = 128u;
 constexpr uint32_t hex_digits = 16u;
-
-LRESULT CALLBACK discovery_window(HWND window, UINT message, WPARAM wide, LPARAM lengthy)
-{
-    AV_SCOPE("discovery_window");
-    return DefWindowProcW(window, message, wide, lengthy);
-}
 
 }  // namespace
 
 GlDiscoveryProbe::GlDiscoveryProbe()
-    : bytes_{}, report_(bytes_, sizeof bytes_), window_(nullptr), dc_(nullptr), format_(0)
+    : bytes_{}, report_(bytes_, sizeof bytes_), window_(), format_(0)
 {
     AV_SCOPE("GlDiscoveryProbe::GlDiscoveryProbe");
 }
@@ -50,8 +42,6 @@ uint32_t GlDiscoveryProbe::run()
     create_context();
     line("rvkgl_loaded", GetModuleHandleW(L"rvkgl.dll") != nullptr ? "yes" : "no", 0u, 0u);
     report_new_modules(before, before_count);
-    ReleaseDC(static_cast<HWND>(window_), static_cast<HDC>(dc_));
-    DestroyWindow(static_cast<HWND>(window_));
     write();
     return 0u;
 }
@@ -107,33 +97,24 @@ void GlDiscoveryProbe::report_new_modules(void *const *before, uint32_t before_c
 bool GlDiscoveryProbe::make_window()
 {
     AV_SCOPE("GlDiscoveryProbe::make_window");
-    WNDCLASSEXW description = {};
-    description.cbSize = sizeof description;
-    description.style = CS_OWNDC;
-    description.lpfnWndProc = &discovery_window;
-    description.hInstance = GetModuleHandleW(nullptr);
-    description.lpszClassName = window_class;
-    SetLastError(0u);
-    const ATOM registered = RegisterClassExW(&description);
-    line("register_class", registered != 0u ? "ok" : "failed", registered, GetLastError());
-    if (registered == 0u) return false;
-    SetLastError(0u);
-    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_OVERLAPPEDWINDOW, 0, 0, window_side, window_side,
-                              nullptr, nullptr, description.hInstance, nullptr);
-    line("create_window", window_ != nullptr ? "ok" : "failed",
-         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window_)), GetLastError());
-    if (window_ == nullptr) return false;
-    dc_ = GetDC(static_cast<HWND>(window_));
-    line("get_dc", dc_ != nullptr ? "ok" : "failed", static_cast<uint64_t>(reinterpret_cast<uintptr_t>(dc_)),
-         GetLastError());
-    return dc_ != nullptr;
+    const bool registered = window_.register_class();
+    line("register_class", registered ? "ok" : "failed", window_.atom(), window_.last_error());
+    if (!registered) return false;
+    const bool created = window_.create();
+    line("create_window", created ? "ok" : "failed",
+         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window_.window())), window_.last_error());
+    if (!created) return false;
+    const bool got = window_.get_dc();
+    line("get_dc", got ? "ok" : "failed", static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window_.dc())),
+         window_.last_error());
+    return got;
 }
 
 void GlDiscoveryProbe::open_adapter()
 {
     AV_SCOPE("GlDiscoveryProbe::open_adapter");
     D3DKMT_OPENADAPTERFROMHDC open = {};
-    open.hDc = static_cast<HDC>(dc_);
+    open.hDc = static_cast<HDC>(window_.dc());
     const NTSTATUS status = D3DKMTOpenAdapterFromHdc(&open);
     const uint64_t luid = (static_cast<uint64_t>(static_cast<uint32_t>(open.AdapterLuid.HighPart)) << 32u) |
                           open.AdapterLuid.LowPart;
@@ -149,7 +130,7 @@ void GlDiscoveryProbe::describe()
     AV_SCOPE("GlDiscoveryProbe::describe");
     PIXELFORMATDESCRIPTOR pfd = {};
     SetLastError(0u);
-    const int count = DescribePixelFormat(static_cast<HDC>(dc_), 1, sizeof pfd, &pfd);
+    const int count = DescribePixelFormat(static_cast<HDC>(window_.dc()), 1, sizeof pfd, &pfd);
     line("describe_pixel_format", count > 0 ? "ok" : "failed", static_cast<uint64_t>(count), GetLastError());
     line("format_1_flags", "pfd", pfd.dwFlags, pfd.cDepthBits);
     format_ = count > 0 ? 1 : 0;
@@ -162,7 +143,7 @@ void GlDiscoveryProbe::set_format()
     pfd.nSize = sizeof pfd;
     pfd.nVersion = 1u;
     SetLastError(0u);
-    const BOOL set = SetPixelFormat(static_cast<HDC>(dc_), format_ != 0 ? format_ : 1, &pfd);
+    const BOOL set = SetPixelFormat(static_cast<HDC>(window_.dc()), format_ != 0 ? format_ : 1, &pfd);
     line("set_pixel_format", set ? "ok" : "failed", static_cast<uint64_t>(set), GetLastError());
 }
 
@@ -170,7 +151,7 @@ void GlDiscoveryProbe::create_context()
 {
     AV_SCOPE("GlDiscoveryProbe::create_context");
     SetLastError(0u);
-    const HGLRC context = wglCreateContext(static_cast<HDC>(dc_));
+    const HGLRC context = wglCreateContext(static_cast<HDC>(window_.dc()));
     line("create_context", context != nullptr ? "ok" : "failed",
          static_cast<uint64_t>(reinterpret_cast<uintptr_t>(context)), GetLastError());
     if (context != nullptr) static_cast<void>(wglDeleteContext(context));
