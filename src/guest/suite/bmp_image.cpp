@@ -16,8 +16,8 @@ constexpr uint32_t pixels_per_metre = 2835u;
 
 }  // namespace
 
-BmpImage::BmpImage(const uint8_t *rgba, uint32_t width, uint32_t height, Rows rows)
-    : rgba_(rgba), width_(width), height_(height), rows_(rows)
+BmpImage::BmpImage(const uint8_t *pixels, uint32_t width, uint32_t height, Rows rows, Order order)
+    : pixels_(pixels), width_(width), height_(height), rows_(rows), order_(order)
 {
     AV_SCOPE("BmpImage::BmpImage");
 }
@@ -25,7 +25,7 @@ BmpImage::BmpImage(const uint8_t *rgba, uint32_t width, uint32_t height, Rows ro
 size_t BmpImage::encoded_size() const
 {
     AV_SCOPE("BmpImage::encoded_size");
-    if (rgba_ == nullptr || width_ == 0u || height_ == 0u || width_ > max_extent || height_ > max_extent) return 0u;
+    if (pixels_ == nullptr || width_ == 0u || height_ == 0u || width_ > max_extent || height_ > max_extent) return 0u;
     return header_bytes + static_cast<size_t>(row_bytes()) * height_;
 }
 
@@ -56,9 +56,11 @@ Status BmpImage::encode(uint8_t *destination, size_t capacity) const
         for (uint32_t column = 0u; column < width_; column++) {
             const size_t pixel = in + static_cast<size_t>(column) * rgba_bytes;
             const size_t at = out + static_cast<size_t>(column) * rgb_bytes;
-            destination[at] = rgba_[pixel + 2u];
-            destination[at + 1u] = rgba_[pixel + 1u];
-            destination[at + 2u] = rgba_[pixel];
+            /* A BMP's pixel is blue, green, red. */
+            const uint32_t red = order_ == Order::red_first ? 0u : 2u;
+            destination[at] = pixels_[pixel + 2u - red];
+            destination[at + 1u] = pixels_[pixel + 1u];
+            destination[at + 2u] = pixels_[pixel + red];
         }
         for (size_t pad = static_cast<size_t>(width_) * rgb_bytes; pad < row_bytes(); pad++) destination[out + pad] = 0u;
     }

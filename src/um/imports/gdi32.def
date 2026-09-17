@@ -1,6 +1,9 @@
 LIBRARY gdi32.dll
 EXPORTS
+BitBlt
 ChoosePixelFormat
+CreateCompatibleDC
+CreateDIBSection
 D3DKMTCloseAdapter
 D3DKMTCreateAllocation2
 D3DKMTCreateContextVirtual
@@ -26,7 +29,10 @@ D3DKMTSubmitCommand
 D3DKMTUnlock2
 D3DKMTWaitForSynchronizationObjectFromCpu
 D3DKMTWaitForVerticalBlankEvent
+DeleteDC
+DeleteObject
 DescribePixelFormat
+SelectObject
 SetDIBitsToDevice
 SetPixelFormat
 SwapBuffers

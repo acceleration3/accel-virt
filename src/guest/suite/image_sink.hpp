@@ -15,7 +15,9 @@ class ImageSink {
 public:
     /* A probe's pictures are at most 64x64: the file of one, and a name's
      * longest spelling with its terminator. */
-    static constexpr size_t max_bytes = BmpImage::header_bytes + 64u * 64u * 3u;
+    /* The largest picture a probe keeps: the present step's resized window
+     * (feature 046), which is larger than the 64x64 renders. */
+    static constexpr size_t max_bytes = BmpImage::header_bytes + 128u * 128u * 3u;
     static constexpr size_t max_name = 32u;
 
     ImageSink() = default;

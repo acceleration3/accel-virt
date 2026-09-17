@@ -7,7 +7,8 @@
 
 namespace av {
 
-ProbeProgram::ProbeProgram() : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), images_()
+ProbeProgram::ProbeProgram()
+    : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), images_(), window_(), frames_()
 {
     AV_SCOPE("ProbeProgram::ProbeProgram");
 }
@@ -17,7 +18,11 @@ uint32_t ProbeProgram::run()
     AV_SCOPE("ProbeProgram::run");
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
-        VulkanProbe probe(kmt_, report_, vulkan_, images_);
+        /* A window the present steps draw on; without one they do not run, and
+         * the rest of the probe still does. */
+        const bool  opened = window_.open();
+        VulkanProbe probe(kmt_, report_, vulkan_, images_, frames_, window_.module(),
+                          opened ? window_.window() : nullptr);
         probe.run();
     } else {
         report_.check("program", "initialize", initialized, 0u);

@@ -108,6 +108,29 @@ public:
 
     virtual VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) = 0;
 
+    /* The window-system commands (feature 046). `module` and `window` are the
+     * Windows handles the surface is made for; the record's layout is the
+     * Windows structure's (win32_surface_create_record.hpp). */
+    virtual VkResult create_win32_surface(VkInstance instance, void *module, void *window,
+                                          VkSurfaceKHR *surface) = 0;
+    virtual void     destroy_surface(VkInstance instance, VkSurfaceKHR surface) = 0;
+    virtual VkResult surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                          VkSurfaceCapabilitiesKHR *capabilities) = 0;
+    virtual VkResult surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                                     VkSurfaceFormatKHR *formats) = 0;
+    virtual VkResult surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                                           VkPresentModeKHR *modes) = 0;
+    virtual VkResult create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info,
+                                      VkSwapchainKHR *swapchain) = 0;
+    virtual void     destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain) = 0;
+    virtual VkResult swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count,
+                                      VkImage *images) = 0;
+    /* No semaphore and no fence: this driver's present is synchronous. */
+    virtual VkResult acquire_next_image(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+                                        uint32_t *index) = 0;
+    virtual VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *info) = 0;
+
+
 protected:
     VulkanEntry() = default;
     ~VulkanEntry() = default;

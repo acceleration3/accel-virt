@@ -18,6 +18,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
+#include "harness/guest/scripted_window_frame.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -38,6 +39,11 @@ const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gp
 /* LowPart 0x1234, HighPart 2: a HighPart the report must not print. */
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 
+/* The probe's window, as the guest's is: 64x64, on the scripted desktop. */
+constexpr std::uint32_t window_side = VulkanProbe::extent;
+void *const window_handle = reinterpret_cast<void *>(0x7770u);
+void *const module_handle = reinterpret_cast<void *>(0x7771u);
+
 class ProbeRig {
 public:
     ProbeRig() : report_("rvkvkprobe")
@@ -45,23 +51,47 @@ public:
         kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
         vulkan_.set_luid(0u, adapter_luid, true);
+        frames_.set_window(window_handle, window_side, window_side);
+        vulkan_.present_into(frames_);
+        /* The scripted GPU paces its presents on the mock adapter, as the
+         * driver's FIFO pacing does on the real one. */
+        std::uint32_t adapters[2] = {};
+        std::uint32_t found = 0u;
+        CHECK_STATUS(kmt_.enumerate_adapters(adapters, 2u, found), av::Status::ok);
+        adapter_ = adapters[0];
+        CHECK_STATUS(kmt_.create_device(adapter_, device_), av::Status::ok);
+        vulkan_.pace_on(kmt_, adapter_, device_);
     }
     ~ProbeRig()
     {
+        CHECK_STATUS(kmt_.destroy_device(device_), av::Status::ok);
+        CHECK_STATUS(kmt_.close_adapter(adapter_), av::Status::ok);
         CHECK_EQ(vulkan_.live(), 0u);
         CHECK_EQ(vulkan_.misuses(), 0u);
         CHECK_EQ(kmt_.open_objects(), 0u);
         CHECK_EQ(kmt_.misuses(), 0u);
     }
 
-    MockKmt        &kmt() { return kmt_; }
-    ScriptedVulkan &vulkan() { return vulkan_; }
+    MockKmt             &kmt() { return kmt_; }
+    ScriptedVulkan      &vulkan() { return vulkan_; }
+    av::ScriptedWindowFrame &frames() { return frames_; }
     GuestReport    &report() { return report_; }
     const av::ScriptedImageSink &images() const { return images_; }
 
     void run()
     {
-        VulkanProbe probe(kmt_, report_, vulkan_, images_);
+        VulkanProbe probe(kmt_, report_, vulkan_, images_, frames_, module_handle, window_handle);
+        probe.run();
+        report_.finish();
+    }
+
+    /* Presents that wait for nothing: a driver that does not pace FIFO. */
+    void unpace() { vulkan_.present_unpaced(); }
+
+    /* A run with no window at all: the window-system steps do not happen. */
+    void run_without_a_window()
+    {
+        VulkanProbe probe(kmt_, report_, vulkan_, images_, frames_, module_handle, nullptr);
         probe.run();
         report_.finish();
     }
@@ -71,10 +101,13 @@ public:
     void print() const { std::fprintf(stderr, "%s", report_.text()); }
 
 private:
-    MockKmt        kmt_;
-    ScriptedVulkan vulkan_;
-    av::ScriptedImageSink images_;
-    GuestReport    report_;
+    MockKmt                 kmt_;
+    ScriptedVulkan          vulkan_;
+    av::ScriptedImageSink   images_;
+    av::ScriptedWindowFrame frames_;
+    GuestReport             report_;
+    std::uint32_t           adapter_ = 0u;
+    std::uint32_t           device_ = 0u;
 };
 
 }  // namespace
@@ -92,15 +125,26 @@ TEST(vulkan_probe, every_step_passes_on_a_working_gpu)
                   "ok vulkan.draw 4096\n"
                   "ok vulkan.lost\n"
                   "ok vulkan.recreated 256\n"
-                  "rvkvkprobe: 8 passed, 0 failed\n"));
+                  "ok vulkan.surface 4096\n"
+                  "ok vulkan.present 4096\n"
+                  "ok vulkan.pacing 60\n"
+                  "ok vulkan.resized 9216\n"
+                  "rvkvkprobe: 12 passed, 0 failed\n"));
   CHECK_EQ(rig.report().failed(), 0u);
   CHECK_EQ(rig.vulkan().instance_api_version(), (std::uint32_t{1} << 22u) | (std::uint32_t{3} << 12u));
+  /* Two instances: the first run's and the recreated one's, which the window
+   * steps run on. */
   CHECK_EQ(rig.vulkan().calls(Call::create_instance), 2u);
+  CHECK_EQ(rig.vulkan().presents(), VulkanProbe::frames + 1u);
+  CHECK_EQ(rig.frames().reads(), 2u);
+  CHECK_EQ(rig.frames().resizes(), 1u);
   CHECK_EQ(rig.vulkan().calls(Call::force_context_fault), 1u);
   CHECK_EQ(rig.vulkan().dispatched_groups(), VulkanProbe::elements / 16u);
   CHECK_EQ(rig.vulkan().drawn_vertices(), 3u);
+  /* The draw step's shaders, the present steps' two swapchains' and the
+   * compute's twice. */
   CHECK_EQ(rig.vulkan().shader_words(),
-           2u * av::double_spv_words + av::triangle_spv_words + av::solid_spv_words);
+           2u * av::double_spv_words + 3u * (av::triangle_spv_words + av::solid_spv_words));
   /* The compute buffer and the readback in the host-visible type, the image
    * in the device-local one. */
   CHECK_EQ(rig.vulkan().allocated_type(0u), 1u);
@@ -170,7 +214,8 @@ TEST(vulkan_probe, no_adapter_ends_the_run)
   ScriptedVulkan vulkan;
   GuestReport report("rvkvkprobe");
   av::ScriptedImageSink images;
-  { VulkanProbe probe(kmt, report, vulkan, images);
+  av::ScriptedWindowFrame frames;
+  { VulkanProbe probe(kmt, report, vulkan, images, frames, nullptr, nullptr);
     probe.run(); }
   report.finish();
   CHECK(std::strcmp(report.text(), "ok vulkan.instance\n"
@@ -231,7 +276,9 @@ TEST(vulkan_probe, a_wrong_pixel_fails_the_draw)
   rig.vulkan().misdraw();
   rig.run();
   CHECK(rig.holds("FAIL vulkan.draw status=4 4095\n"));
-  CHECK_EQ(rig.report().failed(), 1u); }
+  /* The same missing pixel is missing from the window the present put it on. */
+  CHECK(rig.holds("FAIL vulkan.present status=4 4095\n"));
+  CHECK_EQ(rig.report().failed(), 2u); }
 
 /* Memory no type of which the host can map fails the work that reads it, and
  * the image falls back to the host-visible type when it may not be local. */
@@ -328,3 +375,74 @@ TEST(vulkan_probe, a_recreated_run_without_a_family_is_missing)
   rig.run();
   CHECK(rig.holds("FAIL vulkan.recreated status=3 0\n"));
   CHECK_EQ(rig.vulkan().calls(Call::create_device), 1u); }
+
+/* Every window-system step, and what makes each of them fail: no surface, a
+ * window that shows something other than the frame, a present the driver did
+ * not pace, and a resize the swapchain did not notice. */
+TEST(vulkan_probe, a_surface_the_driver_refuses_ends_the_window_steps)
+{ ProbeRig rig;
+  rig.vulkan().fail(Call::create_win32_surface, 1u, VK_ERROR_NATIVE_WINDOW_IN_USE_KHR);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.surface status=7"));
+  CHECK(!rig.holds("vulkan.present"));
+  CHECK_EQ(rig.report().failed(), 1u); }
+
+/* The surface must describe the window it was made for: an extent that is not
+ * the window's is a driver that cannot be presented through. */
+TEST(vulkan_probe, a_surface_of_another_size_than_the_window_fails_the_step)
+{ ProbeRig rig;
+  rig.vulkan().hold_the_surface_extent(window_side / 2u, window_side);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.surface status=3 0"));
+  CHECK_EQ(rig.report().failed(), 1u); }
+
+TEST(vulkan_probe, a_swapchain_the_driver_refuses_fails_the_present_step)
+{ ProbeRig rig;
+  rig.vulkan().fail(Call::create_swapchain, 1u, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.present status=7"));
+  CHECK(!rig.holds("vulkan.resized"));
+  CHECK_EQ(rig.report().failed(), 1u); }
+
+/* The window is what the step judges: a frame that did not arrive whole is a
+ * failure however well the presents themselves went. */
+TEST(vulkan_probe, a_window_missing_a_pixel_fails_the_present_step)
+{ ProbeRig rig;
+  rig.vulkan().misdraw();
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.present status=4 4095"));
+  CHECK_EQ(rig.vulkan().presents(), VulkanProbe::frames); }
+
+TEST(vulkan_probe, a_window_that_cannot_be_read_fails_the_present_step)
+{ ProbeRig rig;
+  rig.frames().refuse_read();
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.present status=3 0"));
+  CHECK_EQ(rig.frames().reads(), 0u); }
+
+/* Unpaced presents: sixty frames in less time than sixty vertical blanks. */
+TEST(vulkan_probe, frames_the_driver_did_not_pace_fail_the_pacing_step)
+{ ProbeRig rig;
+  rig.unpace();
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.pacing status=4 0"));
+  CHECK(rig.holds("ok vulkan.present 4096")); }
+
+/* A resized window: the swapchain is out of date until the application makes
+ * another, and the new one presents at the new size. */
+TEST(vulkan_probe, a_swapchain_that_ignores_a_resize_fails_the_resized_step)
+{ ProbeRig rig;
+  rig.frames().refuse_resize();
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.resized status=3 0"));
+  CHECK(rig.holds("ok vulkan.present 4096")); }
+
+/* With no window there are no window-system steps, and the rest of the probe
+ * is unchanged: a probe on a machine with no desktop still proves the GPU. */
+TEST(vulkan_probe, no_window_means_no_window_steps)
+{ ProbeRig rig;
+  rig.run_without_a_window();
+  CHECK(rig.holds("ok vulkan.recreated 256"));
+  CHECK(!rig.holds("vulkan.surface"));
+  CHECK(!rig.holds("vulkan.present"));
+  CHECK_EQ(rig.report().failed(), 0u); }

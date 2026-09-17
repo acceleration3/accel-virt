@@ -59,7 +59,7 @@ ADAPTER_LUID = 0xD3A1
 LUID structure's eight bytes, LowPart first and little-endian."""
 
 
-VULKAN_PICTURE = "C:\\rvk\\vulkan-draw.bmp"
+VULKAN_PICTURES = ("C:\\rvk\\vulkan-draw.bmp", "C:\\rvk\\vulkan-present.bmp", "C:\\rvk\\vulkan-resized.bmp")
 GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
 
 
@@ -83,8 +83,10 @@ VULKANINFO_HEAD = ("==========\r\nVULKANINFO\r\n==========\r\n\r\nVulkan Instanc
 VULKANINFO = VULKANINFO_HEAD + vulkaninfo_gpu(0)
 PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\n"
                 f"ok vulkan.physical_device {ADAPTER_LUID}\r\nok vulkan.device\r\nok vulkan.compute\r\n"
-                "ok vulkan.draw\r\nok vulkan.lost\r\nok vulkan.recreated\r\nrvkvkprobe: 8 passed, 0 failed\r\n")
-"""What rvkvkprobe.exe prints when every step of feature 045's proof passed."""
+                "ok vulkan.draw\r\nok vulkan.lost\r\nok vulkan.recreated\r\nok vulkan.surface 4096\r\n"
+                "ok vulkan.present 4096\r\nok vulkan.pacing 60\r\nok vulkan.resized 9216\r\n"
+                "rvkvkprobe: 12 passed, 0 failed\r\n")
+"""What rvkvkprobe.exe prints when every step of features 045 and 046 passed."""
 KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
 ICD_LOG = "C:\\ProgramData\\rvk\\rvkvk-4242.log"
 
@@ -394,7 +396,7 @@ class GuestSuiteRun(unittest.TestCase):
         outputs.update(behaviour.pop("outputs", {}))
         exits = {"reg": 1}
         exits.update(behaviour.pop("exits", {}))
-        pictures = behaviour.pop("pictures", {VULKAN_PICTURE: "BM vulkan"})
+        pictures = behaviour.pop("pictures", {name: "BM vulkan" for name in VULKAN_PICTURES})
         self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "rvkvk: loader interface negotiation\r\n"},
                                                 **pictures),
                     **exits, **behaviour)
@@ -423,14 +425,17 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: vulkan: executor /nowhere/librvk_executor.so, host-gpu auto", result.stdout)
         self.assertIn("guest: khronos ok: no HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers key", result.stdout)
         self.assertIn(f"guest: vulkaninfo ok: one physical device, LUID LowPart {ADAPTER_LUID}", result.stdout)
-        self.assertIn("guest: vulkan ok: 8 passed", result.stdout)
+        self.assertIn("guest: vulkan ok: 12 passed", result.stdout)
         self.assertIn(f"guest: luid ok: the adapter, the probe's physical device and vulkaninfo's all "
                       f"{ADAPTER_LUID}", result.stdout)
         self.assertNotIn("guest: report ok", result.stdout)
         self.assertEqual((self.work / "vulkaninfo.txt").read_text(newline=""), VULKANINFO)
         self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), PROBE_REPORT)
         self.assertEqual((self.work / "images" / "vulkan-draw.bmp").read_text(), "BM vulkan")
-        self.assertIn(f"guest: vulkan.images ok: 1 in {self.work / 'images'}", result.stdout)
+        # The window-system steps' pictures come back too (feature 046).
+        self.assertEqual((self.work / "images" / "vulkan-present.bmp").read_text(), "BM vulkan")
+        self.assertEqual((self.work / "images" / "vulkan-resized.bmp").read_text(), "BM vulkan")
+        self.assertIn(f"guest: vulkan.images ok: 3 in {self.work / 'images'}", result.stdout)
         self.assertEqual((self.work / "diag" / "rvkvk-4242.log").read_text(newline=""),
                          "rvkvk: loader interface negotiation\r\n")
         self.assertIn("vulkaninfo ok", (self.work / "verdict.txt").read_text())
@@ -490,14 +495,17 @@ class GuestSuiteRun(unittest.TestCase):
     def test_the_probe_s_report_is_judged_step_by_step(self):
         cases = {
             "failed": (PROBE_REPORT.replace("ok vulkan.draw", "FAIL vulkan.draw VK_ERROR_DEVICE_LOST")
-                       .replace("8 passed, 0", "7 passed, 1"), 1,
+                       .replace("12 passed, 0", "11 passed, 1"), 1,
                        "vulkan failed: 1 step(s) failed, exit 1; see vulkan.txt"),
             "exit": (PROBE_REPORT, 3, "vulkan failed: 0 step(s) failed, exit 3; see vulkan.txt"),
-            "summary": (PROBE_REPORT.replace("rvkvkprobe: 8 passed, 0 failed\r\n", ""), 0,
+            "summary": (PROBE_REPORT.replace("rvkvkprobe: 12 passed, 0 failed\r\n", ""), 0,
                         "vulkan failed: no summary line (exit 0)"),
             "skipped": (PROBE_REPORT.replace("ok vulkan.lost\r\nok vulkan.recreated\r\n", "")
-                        .replace("8 passed", "6 passed"), 0,
+                        .replace("12 passed", "10 passed"), 0,
                         "vulkan failed: the probe reported no lost, recreated; see vulkan.txt"),
+            "no present": (PROBE_REPORT.replace("ok vulkan.present 4096\r\nok vulkan.pacing 60\r\n", "")
+                           .replace("12 passed", "10 passed"), 0,
+                           "vulkan failed: the probe reported no present, pacing; see vulkan.txt"),
             "rvktest": (PROBE_REPORT.replace("rvkvkprobe:", "rvktest:"), 0, "vulkan failed: no summary line"),
             "mismatch": (PROBE_REPORT.replace(f"physical_device {ADAPTER_LUID}", "physical_device 7"), 0,
                          f"luid failed: the probe's physical device has LUID LowPart 7, not the adapter's "
@@ -699,7 +707,7 @@ class GuestSuiteRun(unittest.TestCase):
         outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
                    "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "rvkvkprobe": PROBE_REPORT, "rvktest": rvk,
                    "rvkglprobe": gl_report or self.GL_REPORT, "collect": COLLECTED}
-        pictures = {VULKAN_PICTURE: "BM vulkan"}
+        pictures = {name: "BM vulkan" for name in VULKAN_PICTURES}
         pictures.update({f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES})
         self.script(outputs=outputs, reg=1, files=dict(GUEST_FILES, **pictures))
 
@@ -731,7 +739,7 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.real_executor_run()
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("guest: rvk failed: 1 step(s) failed", result.stdout)
-        self.assertIn("guest: vulkan ok: 8 passed", result.stdout)
+        self.assertIn("guest: vulkan ok: 12 passed", result.stdout)
         self.assertIn("guest: opengl ok: 9 passed", result.stdout)
         self.assertIn("guest: scenarios failed: 1 of 3 failed: rvk", result.stdout)
         self.assertIn("rvk failed", (self.work / "verdict.txt").read_text())

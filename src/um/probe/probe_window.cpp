@@ -1,4 +1,4 @@
-#include "um/probe/gl/probe_window.hpp"
+#include "um/probe/probe_window.hpp"
 
 #include "core/trace/function_scope.hpp"
 
@@ -50,7 +50,7 @@ bool ProbeWindow::create()
 {
     AV_SCOPE("ProbeWindow::create");
     SetLastError(0u);
-    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_POPUP, 0, 0, static_cast<int>(side),
+    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_POPUP | WS_VISIBLE, 0, 0, static_cast<int>(side),
                               static_cast<int>(side), nullptr, nullptr, static_cast<HINSTANCE>(instance_), nullptr);
     last_error_ = GetLastError();
     return window_ != nullptr;
@@ -69,6 +69,12 @@ bool ProbeWindow::open()
 {
     AV_SCOPE("ProbeWindow::open");
     return register_class() && create() && get_dc();
+}
+
+void *ProbeWindow::module() const
+{
+    AV_SCOPE("ProbeWindow::module");
+    return instance_;
 }
 
 void *ProbeWindow::window() const

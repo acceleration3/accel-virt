@@ -71,7 +71,11 @@ DISCOVERY_OPEN = re.compile(r"^discovery open_adapter_from_hdc (\w+) value=0x([0
 PROBE_STEP = re.compile(rb"^ok vulkan\.(\w+)(?: (\S+))?\r?$", re.M)
 # Every step of feature 045's proof, in the probe's order: a probe that stops
 # printing one has not proven it, whatever its summary counts.
-PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute", "draw", "lost", "recreated")
+# The window-system steps are feature 046's: a surface on the probe's own
+# window, the frames it presented read back off that window, the pacing they
+# were held to, and the window resized under the swapchain.
+PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute", "draw", "lost", "recreated",
+               "surface", "present", "pacing", "resized")
 # Feature 050's probe through the system opengl32.dll: the summary, each step,
 # and the strings the context answered, which the probe prints as notes.
 GL_SUMMARY = re.compile(r"^rvkglprobe: (\d+) passed, (\d+) failed\r?$", re.M)
@@ -83,7 +87,7 @@ GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "attr
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
 # The renders each probe judged, which it leaves beside itself as bitmaps for a
 # person to open (docs/testing.md); pulled into <work>/images.
-VULKAN_PICTURES = ("vulkan-draw",)
+VULKAN_PICTURES = ("vulkan-draw", "vulkan-present", "vulkan-resized")
 GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable

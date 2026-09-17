@@ -7,4 +7,5 @@ GetClientRect
 GetDC
 RegisterClassExW
 ReleaseDC
+SetWindowPos
 WindowFromDC

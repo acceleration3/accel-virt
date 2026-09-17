@@ -1,7 +1,7 @@
 #include "um/probe/gl/windows_gl_entry.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "um/probe/gl/probe_window.hpp"
+#include "um/probe/probe_window.hpp"
 
 #include <windows.h>
 

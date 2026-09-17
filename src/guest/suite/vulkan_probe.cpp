@@ -8,6 +8,7 @@
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/vulkan_entry.hpp"
+#include "guest/suite/window_frame.hpp"
 
 namespace av {
 
@@ -23,8 +24,10 @@ uint32_t low_part(uint64_t luid)
 
 }  // namespace
 
-VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images)
-    : kmt_(kmt), vulkan_(vulkan), images_(images), steps_(kmt, report, "vulkan"), adapter_luid_(0u)
+VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images, WindowFrame &windows,
+                         void *module, void *window)
+    : kmt_(kmt), vulkan_(vulkan), images_(images), windows_(windows), module_(module), window_(window),
+      steps_(kmt, report, "vulkan"), adapter_luid_(0u), elapsed_(0u)
 {
     AV_SCOPE("VulkanProbe::VulkanProbe");
 }
@@ -53,6 +56,126 @@ void VulkanProbe::run()
     }
     recreated_step();
 }
+
+/* A window of one's own, a surface on it, and the frames the driver puts
+ * there. They run on the recreated device, which outlives them: everything a
+ * swapchain holds goes with the device it was made on. */
+void VulkanProbe::window_steps(ProbeDevice &device)
+{
+    AV_SCOPE("VulkanProbe::window_steps");
+    if (window_ == nullptr || device.device() == VK_NULL_HANDLE) return;
+    PresentWork present(device, windows_, images_, module_, window_);
+    if (!surface_step(present)) return;
+    if (!present_step(present)) return;
+    pacing_step();
+    resized_step(present);
+}
+
+bool VulkanProbe::surface_step(PresentWork &present)
+{
+    AV_SCOPE("VulkanProbe::surface_step");
+    ProbeOutcome outcome;
+    const bool   offered = present.make_surface(outcome);
+    if (offered) outcome.measure(present.width() * present.height(), extent * extent);
+    outcome.report(steps_, "surface");
+    return offered;
+}
+
+/* Sixty FIFO frames, and then the window itself: every pixel of it must be the
+ * triangle's colour, whatever the driver says it did. */
+bool VulkanProbe::present_step(PresentWork &present)
+{
+    AV_SCOPE("VulkanProbe::present_step");
+    ProbeOutcome outcome;
+    if (!present.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome)) {
+        outcome.report(steps_, "present");
+        return false;
+    }
+    const uint64_t started = counter();
+    const bool     presented = outcome.accept(present.present_frames(frames, outcome));
+    elapsed_ = counter() - started;
+    if (!presented) {
+        outcome.report(steps_, "present");
+        return false;
+    }
+    const uint32_t pixels = present.width() * present.height();
+    const uint32_t coloured = present.coloured_on_the_window("vulkan-present", outcome);
+    outcome.measure(coloured, pixels);
+    outcome.report(steps_, "present");
+    return coloured == pixels;
+}
+
+/* FIFO holds each frame to a vertical blank: sixty frames cannot have taken
+ * less time than sixty blanks, less the one a first frame need not wait for. */
+void VulkanProbe::pacing_step()
+{
+    AV_SCOPE("VulkanProbe::pacing_step");
+    const uint64_t period = blank_ticks();
+    if (period == 0u) {
+        static_cast<void>(steps_.check_measured("pacing", Status::not_found, 0u));
+        return;
+    }
+    const uint64_t least = period * (frames - 1u);
+    static_cast<void>(steps_.check_measured("pacing", elapsed_ >= least ? Status::ok : Status::conflict,
+                                            static_cast<uint32_t>(elapsed_ / period)));
+}
+
+/* The window changes size under the swapchain: what it hands out is out of
+ * date until the application makes another, which presents at the new size. */
+void VulkanProbe::resized_step(PresentWork &present)
+{
+    AV_SCOPE("VulkanProbe::resized_step");
+    const uint32_t width = present.width();
+    const uint32_t height = present.height();
+    if (!windows_.resize(window_, width + resize_by, height + resize_by)) {
+        static_cast<void>(steps_.check_measured("resized", Status::not_found, 0u));
+        return;
+    }
+    ProbeOutcome   outcome;
+    const VkResult stale = present.present_frames(1u, outcome);
+    if (stale != VK_ERROR_OUT_OF_DATE_KHR) {
+        static_cast<void>(steps_.check_measured("resized", Status::conflict, static_cast<uint32_t>(stale)));
+        return;
+    }
+    ProbeOutcome again;
+    if (!present.make_swapchain(VK_PRESENT_MODE_IMMEDIATE_KHR, again) ||
+        !again.accept(present.present_frames(1u, again))) {
+        again.report(steps_, "resized");
+        return;
+    }
+    const uint32_t pixels = present.width() * present.height();
+    again.measure(present.coloured_on_the_window("vulkan-resized", again), pixels);
+    again.report(steps_, "resized");
+}
+
+/* One vertical blank, timed on an adapter and device of this step's own. */
+uint64_t VulkanProbe::blank_ticks()
+{
+    AV_SCOPE("VulkanProbe::blank_ticks");
+    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    AdapterSearch     search(kmt_);
+    if (search.find(rvkgpu) != Status::ok) return 0u;
+    uint32_t device = 0u;
+    uint64_t ticks = 0u;
+    if (kmt_.create_device(search.adapter(), device) == Status::ok) {
+        if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) {
+            const uint64_t started = counter();
+            if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) ticks = counter() - started;
+        }
+        static_cast<void>(kmt_.destroy_device(device));
+    }
+    static_cast<void>(search.close());
+    return ticks;
+}
+
+uint64_t VulkanProbe::counter() const
+{
+    AV_SCOPE("VulkanProbe::counter");
+    uint64_t frequency = 0u;
+    return kmt_.performance_counter(frequency);
+}
+
 
 Status VulkanProbe::adapter_step()
 {
@@ -117,6 +240,7 @@ void VulkanProbe::recreated_step()
         compute.run(outcome);
     }
     outcome.report(steps_, "recreated");
+    window_steps(device);
 }
 
 }  // namespace av

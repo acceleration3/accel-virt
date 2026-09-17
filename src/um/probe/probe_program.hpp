@@ -6,6 +6,8 @@
 #ifndef AV_PROBE_PROGRAM_HPP
 #define AV_PROBE_PROGRAM_HPP
 
+#include "um/probe/gdi_window_frame.hpp"
+#include "um/probe/probe_window.hpp"
 #include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/loader_vulkan.hpp"
@@ -27,10 +29,13 @@ public:
 private:
     void write_report() const;
 
-    GdiKmt       kmt_;
-    GuestReport  report_;
-    LoaderVulkan vulkan_;
+    GdiKmt          kmt_;
+    GuestReport     report_;
+    LoaderVulkan    vulkan_;
     WindowsImageSink images_;
+    /* The window the present steps put their frames on (feature 046). */
+    ProbeWindow     window_;
+    GdiWindowFrame  frames_;
 };
 
 }  // namespace av

@@ -25,6 +25,8 @@ public:
     bool     open();
     void    *window() const;
     void    *dc() const;
+    /* The module the class was registered for: a surface is made for it. */
+    void    *module() const;
     uint16_t atom() const;
     uint32_t last_error() const;
 

@@ -64,6 +64,8 @@ target_link_libraries(rvktest PRIVATE rvkguest ${RVKTEST_IMPORTS})
 file(GLOB RVKVKPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/*.cpp)
 add_executable(rvkvkprobe ${RVKVKPROBE_SOURCES})
 target_link_options(rvkvkprobe PRIVATE /ENTRY:rvkvkprobe_entry)
+# The present steps make a window and read it back (feature 046), so this
+# probe links user32 as the GL one does; its import library is made below.
 target_link_libraries(rvkvkprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT})
 
 # rvkvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
@@ -156,12 +158,16 @@ target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS} ${USER32_IMPORT})
 
 # rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
-add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp)
+add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/probe/probe_window.cpp)
 add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
-# (feature 046), whose import library is made with the GL probe's above.
+# (feature 046), and rvkvkprobe.exe makes that window and reads it back;
+# their import library is made with the GL probe's above.
 add_dependencies(rvkvk rvkglprobe_imports)
 target_link_libraries(rvkvk PRIVATE ${USER32_IMPORT})
+add_dependencies(rvkvkprobe rvkglprobe_imports)
+target_link_libraries(rvkvkprobe PRIVATE ${USER32_IMPORT})

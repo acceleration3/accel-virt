@@ -1,6 +1,8 @@
 /* A render check's pixels as a Windows bitmap, so a person can look at what a
- * probe drew: RGBA8 rows in, a 24-bit BMP (BITMAPINFOHEADER, bottom-up rows
- * padded to four bytes, BGR) out. Alpha is dropped. */
+ * probe drew: 8-bit four-channel rows in, a 24-bit BMP (BITMAPINFOHEADER,
+ * bottom-up rows padded to four bytes, BGR) out. Alpha is dropped. A render
+ * read back from a Vulkan image is RGBA; one read back from a window is the
+ * BGRA a DIB holds (feature 046), so the order is the caller's to say. */
 #ifndef AV_BMP_IMAGE_HPP
 #define AV_BMP_IMAGE_HPP
 
@@ -22,8 +24,10 @@ public:
     /* Where the first row of `rgba` is: GL reads back from the bottom,
      * Vulkan copies from the top. */
     enum class Rows : uint8_t { top_first, bottom_first };
+    /* Which of the first three bytes of a pixel is red. */
+    enum class Order : uint8_t { red_first, blue_first };
 
-    BmpImage(const uint8_t *rgba, uint32_t width, uint32_t height, Rows rows);
+    BmpImage(const uint8_t *pixels, uint32_t width, uint32_t height, Rows rows, Order order = Order::red_first);
 
     /* The file's size; 0 for no pixels, an empty side or one past max_extent. */
     size_t               encoded_size() const;
@@ -39,10 +43,11 @@ private:
     uint32_t row_bytes() const;
     void     put(uint8_t *destination, size_t offset, uint32_t value, uint32_t bytes) const;
 
-    const uint8_t *rgba_;
+    const uint8_t *pixels_;
     uint32_t       width_;
     uint32_t       height_;
     Rows           rows_;
+    Order          order_;
 
     friend struct BmpImageProbe;
 };

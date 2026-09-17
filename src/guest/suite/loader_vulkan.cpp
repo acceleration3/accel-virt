@@ -1,6 +1,7 @@
 #include "guest/suite/loader_vulkan.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/vulkan/win32_surface_create_record.hpp"
 
 namespace av {
 
@@ -63,6 +64,16 @@ constexpr const char *const names[] = {
     "vkCmdDraw",
     "vkCmdCopyImageToBuffer",
     "vkQueueSubmit",
+    "vkCreateWin32SurfaceKHR",
+    "vkDestroySurfaceKHR",
+    "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
+    "vkGetPhysicalDeviceSurfaceFormatsKHR",
+    "vkGetPhysicalDeviceSurfacePresentModesKHR",
+    "vkCreateSwapchainKHR",
+    "vkDestroySwapchainKHR",
+    "vkGetSwapchainImagesKHR",
+    "vkAcquireNextImageKHR",
+    "vkQueuePresentKHR",
 };
 
 constexpr const char force_context_fault_name[] = "vkRvkForceContextFault";
@@ -424,6 +435,86 @@ VkResult LoaderVulkan::queue_submit(VkQueue queue, const VkSubmitInfo *submit, V
 {
     AV_SCOPE("LoaderVulkan::queue_submit");
     return resolved<VkResult (VKAPI_PTR *)(VkQueue, uint32_t, const VkSubmitInfo *, VkFence)>(Function::queue_submit)(queue, 1u, submit, fence);
+}
+
+VkResult LoaderVulkan::create_win32_surface(VkInstance instance, void *module, void *window, VkSurfaceKHR *surface)
+{
+    AV_SCOPE("LoaderVulkan::create_win32_surface");
+    icd::Win32SurfaceCreateRecord info = {};
+    info.type_ = icd::win32_surface_create_info;
+    info.module_ = module;
+    info.window_ = window;
+    using Create = VkResult (VKAPI_PTR *)(VkInstance, const icd::Win32SurfaceCreateRecord *,
+                                          const VkAllocationCallbacks *, VkSurfaceKHR *);
+    return resolved<Create>(Function::create_win32_surface)(instance, &info, nullptr, surface);
+}
+
+void LoaderVulkan::destroy_surface(VkInstance instance, VkSurfaceKHR surface)
+{
+    AV_SCOPE("LoaderVulkan::destroy_surface");
+    resolved<void (VKAPI_PTR *)(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks *)>(Function::destroy_surface)(
+        instance, surface, nullptr);
+}
+
+VkResult LoaderVulkan::surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                            VkSurfaceCapabilitiesKHR *capabilities)
+{
+    AV_SCOPE("LoaderVulkan::surface_capabilities");
+    using Capabilities = VkResult (VKAPI_PTR *)(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilitiesKHR *);
+    return resolved<Capabilities>(Function::surface_capabilities)(physical_device, surface, capabilities);
+}
+
+VkResult LoaderVulkan::surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                                       VkSurfaceFormatKHR *formats)
+{
+    AV_SCOPE("LoaderVulkan::surface_formats");
+    using Formats = VkResult (VKAPI_PTR *)(VkPhysicalDevice, VkSurfaceKHR, uint32_t *, VkSurfaceFormatKHR *);
+    return resolved<Formats>(Function::surface_formats)(physical_device, surface, count, formats);
+}
+
+VkResult LoaderVulkan::surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                                             VkPresentModeKHR *modes)
+{
+    AV_SCOPE("LoaderVulkan::surface_present_modes");
+    using Modes = VkResult (VKAPI_PTR *)(VkPhysicalDevice, VkSurfaceKHR, uint32_t *, VkPresentModeKHR *);
+    return resolved<Modes>(Function::surface_present_modes)(physical_device, surface, count, modes);
+}
+
+VkResult LoaderVulkan::create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info,
+                                        VkSwapchainKHR *swapchain)
+{
+    AV_SCOPE("LoaderVulkan::create_swapchain");
+    using Create = VkResult (VKAPI_PTR *)(VkDevice, const VkSwapchainCreateInfoKHR *, const VkAllocationCallbacks *,
+                                          VkSwapchainKHR *);
+    return resolved<Create>(Function::create_swapchain)(device, info, nullptr, swapchain);
+}
+
+void LoaderVulkan::destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain)
+{
+    AV_SCOPE("LoaderVulkan::destroy_swapchain");
+    resolved<void (VKAPI_PTR *)(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks *)>(Function::destroy_swapchain)(
+        device, swapchain, nullptr);
+}
+
+VkResult LoaderVulkan::swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count, VkImage *images)
+{
+    AV_SCOPE("LoaderVulkan::swapchain_images");
+    using Images = VkResult (VKAPI_PTR *)(VkDevice, VkSwapchainKHR, uint32_t *, VkImage *);
+    return resolved<Images>(Function::swapchain_images)(device, swapchain, count, images);
+}
+
+VkResult LoaderVulkan::acquire_next_image(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, uint32_t *index)
+{
+    AV_SCOPE("LoaderVulkan::acquire_next_image");
+    using Acquire = VkResult (VKAPI_PTR *)(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t *);
+    return resolved<Acquire>(Function::acquire_next_image)(device, swapchain, timeout, VK_NULL_HANDLE, VK_NULL_HANDLE,
+                                                           index);
+}
+
+VkResult LoaderVulkan::queue_present(VkQueue queue, const VkPresentInfoKHR *info)
+{
+    AV_SCOPE("LoaderVulkan::queue_present");
+    return resolved<VkResult (VKAPI_PTR *)(VkQueue, const VkPresentInfoKHR *)>(Function::queue_present)(queue, info);
 }
 
 }  // namespace av

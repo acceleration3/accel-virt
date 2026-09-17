@@ -101,6 +101,22 @@ public:
 
     VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) override;
 
+    VkResult create_win32_surface(VkInstance instance, void *module, void *window, VkSurfaceKHR *surface) override;
+    void     destroy_surface(VkInstance instance, VkSurfaceKHR surface) override;
+    VkResult surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                  VkSurfaceCapabilitiesKHR *capabilities) override;
+    VkResult surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                             VkSurfaceFormatKHR *formats) override;
+    VkResult surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface, uint32_t *count,
+                                   VkPresentModeKHR *modes) override;
+    VkResult create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info,
+                              VkSwapchainKHR *swapchain) override;
+    void     destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain) override;
+    VkResult swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count, VkImage *images) override;
+    VkResult acquire_next_image(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+                                uint32_t *index) override;
+    VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *info) override;
+
 private:
     /* One per function resolved through an instance, in `names` order. */
     enum class Function : uint32_t {
@@ -159,6 +175,16 @@ private:
         cmd_draw,
         cmd_copy_image_to_buffer,
         queue_submit,
+        create_win32_surface,
+        destroy_surface,
+        surface_capabilities,
+        surface_formats,
+        surface_present_modes,
+        create_swapchain,
+        destroy_swapchain,
+        swapchain_images,
+        acquire_next_image,
+        queue_present,
         count
     };
     static constexpr uint32_t function_count = static_cast<uint32_t>(Function::count);

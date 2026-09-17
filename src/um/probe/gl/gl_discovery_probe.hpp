@@ -9,7 +9,7 @@
 #define AV_UM_GL_DISCOVERY_PROBE_HPP
 
 #include "core/support/text_buffer.hpp"
-#include "um/probe/gl/probe_window.hpp"
+#include "um/probe/probe_window.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

@@ -16,6 +16,9 @@
 
 namespace av {
 
+class Kmt;
+class ScriptedWindowFrame;
+
 class ScriptedVulkan final : public VulkanEntry {
 public:
     /* The calls a test can fail, and count. */
@@ -48,6 +51,10 @@ public:
         begin_command_buffer,
         end_command_buffer,
         queue_submit,
+        create_win32_surface,
+        create_swapchain,
+        acquire_next_image,
+        queue_present,
         count
     };
 
@@ -60,6 +67,8 @@ public:
     static constexpr std::uint8_t  colour[4] = {64u, 128u, 191u, 255u};
     /* Two types: 0 device local, 1 host visible; the buffers may use both. */
     static constexpr std::uint32_t default_memory_types = 2u;
+    /* A swapchain's images, as the probe's present asks for. */
+    static constexpr std::uint32_t images_per_swapchain = 2u;
 
     ScriptedVulkan();
     ScriptedVulkan(const ScriptedVulkan &) = delete;
@@ -88,6 +97,23 @@ public:
     /* What vkRvkForceContextFault answers, and what the device answers to
      * vkDeviceWaitIdle after it. */
     void          answer_fault(VkResult fault, VkResult idle_after);
+    /* The window a present draws on, as the driver's blit would: every pixel
+     * of it becomes the fragment shader's colour, in the window's own channel
+     * order, once a frame has been drawn into the image being presented. */
+    void          present_into(ScriptedWindowFrame &window);
+    /* Each present waits for a vertical blank on `adapter`, as the driver's
+     * FIFO pacing does; without this a present is unpaced. */
+    void          pace_on(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
+    void          present_unpaced();
+    /* The surface's current extent is not the window's: what an application
+     * meets between a resize and the message that follows it. */
+    void          hold_the_surface_extent(std::uint32_t width, std::uint32_t height);
+    /* A surface offering neither the format nor the mode this driver presents
+     * in, and one whose queries answer that it is lost. */
+    void          offer_nothing_presentable();
+    void          lose_the_surface_queries();
+    std::uint32_t presents() const;
+
     /* After the fault every LUID is xored with `luid_xor` and every family has
      * `flags`: what a host that changed under the probe looks like. */
     void          change_after_fault(std::uint64_t luid_xor, VkQueueFlags flags);
@@ -183,10 +209,27 @@ public:
 
     VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) override;
 
+    VkResult create_win32_surface(VkInstance instance, void *module, void *window, VkSurfaceKHR *surface) override;
+    void     destroy_surface(VkInstance instance, VkSurfaceKHR surface) override;
+    VkResult surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+                                  VkSurfaceCapabilitiesKHR *capabilities) override;
+    VkResult surface_formats(VkPhysicalDevice physical_device, VkSurfaceKHR surface, std::uint32_t *count,
+                             VkSurfaceFormatKHR *formats) override;
+    VkResult surface_present_modes(VkPhysicalDevice physical_device, VkSurfaceKHR surface, std::uint32_t *count,
+                                   VkPresentModeKHR *modes) override;
+    VkResult create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info,
+                              VkSwapchainKHR *swapchain) override;
+    void     destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain) override;
+    VkResult swapchain_images(VkDevice device, VkSwapchainKHR swapchain, std::uint32_t *count,
+                              VkImage *images) override;
+    VkResult acquire_next_image(VkDevice device, VkSwapchainKHR swapchain, std::uint64_t timeout,
+                                std::uint32_t *index) override;
+    VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *info) override;
+
 private:
     enum class Kind : std::uint32_t { none, instance, device, buffer, image, memory, view, shader, set_layout,
                                       pipeline_layout, pipeline, descriptor_pool, render_pass, framebuffer,
-                                      command_pool, fence };
+                                      command_pool, fence, surface, swapchain };
     struct Object {
         std::uint64_t handle;
         Kind          kind;
@@ -247,6 +290,25 @@ private:
     std::uint32_t drawn_vertices_;
     std::uint64_t shader_words_;
     std::uint32_t device_parent_;
+    ScriptedWindowFrame *window_;
+    void         *window_handle_;
+    Kmt          *pacing_kmt_;
+    std::uint32_t pacing_adapter_;
+    std::uint32_t pacing_device_;
+    bool          held_extent_;
+    bool          nothing_presentable_;
+    bool          lost_surface_;
+    std::uint32_t held_width_;
+    std::uint32_t held_height_;
+    std::uint64_t swapchain_;
+    std::uint32_t swapchain_width_;
+    std::uint32_t swapchain_height_;
+    std::uint64_t swapchain_images_[images_per_swapchain];
+    std::uint64_t retired_;
+    std::uint64_t retired_images_[images_per_swapchain];
+    std::uint32_t next_image_;
+    std::uint32_t presents_;
+    bool          drew_since_present_;
 };
 
 }  // namespace av

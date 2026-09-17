@@ -1,5 +1,8 @@
 #include "harness/guest/scripted_vulkan.hpp"
 
+#include "guest/kmt/kmt.hpp"
+#include "harness/guest/scripted_window_frame.hpp"
+
 #include <cstring>
 
 namespace av {
@@ -32,7 +35,10 @@ ScriptedVulkan::ScriptedVulkan()
       idle_after_fault_(VK_ERROR_DEVICE_LOST), luid_xor_(0u),
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
-      dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u)
+      dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
+      pacing_adapter_(0u), pacing_device_(0u), held_extent_(false), nothing_presentable_(false), lost_surface_(false), held_width_(0u), held_height_(0u), swapchain_(0u),
+      swapchain_width_(0u), swapchain_height_(0u), swapchain_images_{}, retired_(0u), retired_images_{}, next_image_(0u), presents_(0u),
+      drew_since_present_(false)
 {
     for (std::uint32_t index = 0u; index < max_physical_devices; index++) {
         luids_[index] = index + 1u;
@@ -581,6 +587,7 @@ void ScriptedVulkan::run(const Recording &recording)
             std::memcpy(target->bytes + index * element_bytes, &value, sizeof value);
         }
     }
+    if (recording.drew) drew_since_present_ = true;
     if (recording.drew && recording.copied_to != 0u) {
         const Object *const buffer = find(Kind::buffer, recording.copied_to);
         Allocation *const target = buffer != nullptr ? allocation_of(buffer->link) : nullptr;
@@ -589,6 +596,200 @@ void ScriptedVulkan::run(const Recording &recording)
             std::memcpy(target->bytes + at, colour, sizeof colour);
         if (misdraw_) std::memset(target->bytes + max_mapped_bytes - pixel_bytes, 0, pixel_bytes);
     }
+}
+
+void ScriptedVulkan::present_into(ScriptedWindowFrame &window) { window_ = &window; }
+
+void ScriptedVulkan::present_unpaced() { pacing_kmt_ = nullptr; }
+
+void ScriptedVulkan::pace_on(Kmt &kmt, std::uint32_t adapter, std::uint32_t device)
+{
+    pacing_kmt_ = &kmt;
+    pacing_adapter_ = adapter;
+    pacing_device_ = device;
+}
+
+void ScriptedVulkan::hold_the_surface_extent(std::uint32_t width, std::uint32_t height)
+{
+    held_extent_ = true;
+    held_width_ = width;
+    held_height_ = height;
+}
+
+void ScriptedVulkan::offer_nothing_presentable() { nothing_presentable_ = true; }
+void ScriptedVulkan::lose_the_surface_queries() { lost_surface_ = true; }
+
+std::uint32_t ScriptedVulkan::presents() const { return presents_; }
+
+VkResult ScriptedVulkan::create_win32_surface(VkInstance instance, void *, void *window, VkSurfaceKHR *surface)
+{
+    const VkResult result = use(Call::create_win32_surface);
+    if (result != VK_SUCCESS) return result;
+    if (find(Kind::instance, raw(instance)) == nullptr) misuses_++;
+    window_handle_ = window;
+    *surface = as_handle<VkSurfaceKHR>(make(Kind::surface, 0u));
+    return VK_SUCCESS;
+}
+
+void ScriptedVulkan::destroy_surface(VkInstance, VkSurfaceKHR surface) { destroy(Kind::surface, raw(surface)); }
+
+/* The window's own size, unless a test holds the surface at another: a
+ * swapchain of the wrong extent is what an application meets mid-resize. */
+VkResult ScriptedVulkan::surface_capabilities(VkPhysicalDevice, VkSurfaceKHR surface,
+                                              VkSurfaceCapabilitiesKHR *capabilities)
+{
+    if (find(Kind::surface, raw(surface)) == nullptr) return VK_ERROR_SURFACE_LOST_KHR;
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    if (window_ == nullptr || !window_->size(window_handle_, width, height)) return VK_ERROR_SURFACE_LOST_KHR;
+    if (held_extent_) {
+        width = held_width_;
+        height = held_height_;
+    }
+    *capabilities = VkSurfaceCapabilitiesKHR{};
+    capabilities->minImageCount = images_per_swapchain;
+    capabilities->maxImageCount = images_per_swapchain * 4u;
+    capabilities->currentExtent = {width, height};
+    capabilities->maxImageExtent = {width, height};
+    capabilities->maxImageArrayLayers = 1u;
+    capabilities->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    capabilities->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    capabilities->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    capabilities->supportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    return VK_SUCCESS;
+}
+
+VkResult ScriptedVulkan::surface_formats(VkPhysicalDevice, VkSurfaceKHR surface, std::uint32_t *count,
+                                         VkSurfaceFormatKHR *formats)
+{
+    if (find(Kind::surface, raw(surface)) == nullptr || lost_surface_) return VK_ERROR_SURFACE_LOST_KHR;
+    const VkSurfaceFormatKHR presentable[] = {{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+                                              {VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
+    const VkSurfaceFormatKHR unpresentable[] = {{VK_FORMAT_R5G6B5_UNORM_PACK16, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+                                                {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT}};
+    const VkSurfaceFormatKHR *const offered = nothing_presentable_ ? unpresentable : presentable;
+    const std::uint32_t available = 2u;
+    if (formats == nullptr) {
+        *count = available;
+        return VK_SUCCESS;
+    }
+    const std::uint32_t written = *count < available ? *count : available;
+    for (std::uint32_t index = 0u; index < written; index++) formats[index] = offered[index];
+    *count = written;
+    return written < available ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+VkResult ScriptedVulkan::surface_present_modes(VkPhysicalDevice, VkSurfaceKHR surface, std::uint32_t *count,
+                                               VkPresentModeKHR *modes)
+{
+    if (find(Kind::surface, raw(surface)) == nullptr || lost_surface_) return VK_ERROR_SURFACE_LOST_KHR;
+    const VkPresentModeKHR presentable[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
+    const VkPresentModeKHR unpresentable[] = {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR};
+    const VkPresentModeKHR *const offered = nothing_presentable_ ? unpresentable : presentable;
+    const std::uint32_t           available = 2u;
+    if (modes == nullptr) {
+        *count = available;
+        return VK_SUCCESS;
+    }
+    const std::uint32_t written = *count < available ? *count : available;
+    for (std::uint32_t index = 0u; index < written; index++) modes[index] = offered[index];
+    *count = written;
+    return written < available ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+VkResult ScriptedVulkan::create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info,
+                                          VkSwapchainKHR *swapchain)
+{
+    const VkResult result = use(Call::create_swapchain);
+    if (result != VK_SUCCESS) return result;
+    if (find(Kind::device, raw(device)) == nullptr) misuses_++;
+    if (find(Kind::surface, raw(info->surface)) == nullptr) return VK_ERROR_SURFACE_LOST_KHR;
+    /* One swapchain is retired by the next, as the specification has it: the
+     * old one is still there until the application destroys it. */
+    if (swapchain_ != 0u) {
+        if (retired_ != 0u || raw(info->oldSwapchain) != swapchain_) return VK_ERROR_OUT_OF_HOST_MEMORY;
+        retired_ = swapchain_;
+        for (std::uint32_t index = 0u; index < images_per_swapchain; index++)
+            retired_images_[index] = swapchain_images_[index];
+        swapchain_ = 0u;
+    }
+    swapchain_width_ = info->imageExtent.width;
+    swapchain_height_ = info->imageExtent.height;
+    for (std::uint32_t index = 0u; index < images_per_swapchain; index++)
+        swapchain_images_[index] = make(Kind::image, 0u);
+    next_image_ = 0u;
+    swapchain_ = make(Kind::swapchain, 0u);
+    *swapchain = as_handle<VkSwapchainKHR>(swapchain_);
+    return VK_SUCCESS;
+}
+
+void ScriptedVulkan::destroy_swapchain(VkDevice, VkSwapchainKHR swapchain)
+{
+    const bool retired = raw(swapchain) == retired_ && retired_ != 0u;
+    if (raw(swapchain) != swapchain_ && !retired) {
+        misuses_++;
+        return;
+    }
+    std::uint64_t *const kept = retired ? retired_images_ : swapchain_images_;
+    for (std::uint32_t index = 0u; index < images_per_swapchain; index++) {
+        destroy(Kind::image, kept[index]);
+        kept[index] = 0u;
+    }
+    destroy(Kind::swapchain, retired ? retired_ : swapchain_);
+    (retired ? retired_ : swapchain_) = 0u;
+}
+
+VkResult ScriptedVulkan::swapchain_images(VkDevice, VkSwapchainKHR swapchain, std::uint32_t *count, VkImage *images)
+{
+    if (raw(swapchain) != swapchain_ || swapchain_ == 0u) return VK_ERROR_OUT_OF_DATE_KHR;
+    if (images == nullptr) {
+        *count = images_per_swapchain;
+        return VK_SUCCESS;
+    }
+    const std::uint32_t written = *count < images_per_swapchain ? *count : images_per_swapchain;
+    for (std::uint32_t index = 0u; index < written; index++) images[index] = as_handle<VkImage>(swapchain_images_[index]);
+    *count = written;
+    return written < images_per_swapchain ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+/* The window is what decides: one of another size than the swapchain has left
+ * it out of date, as the driver's own acquire does. */
+VkResult ScriptedVulkan::acquire_next_image(VkDevice, VkSwapchainKHR swapchain, std::uint64_t, std::uint32_t *index)
+{
+    const VkResult result = use(Call::acquire_next_image);
+    if (result != VK_SUCCESS) return result;
+    if (raw(swapchain) != swapchain_ || swapchain_ == 0u) return VK_ERROR_OUT_OF_DATE_KHR;
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    if (window_ == nullptr || !window_->size(window_handle_, width, height)) return VK_ERROR_SURFACE_LOST_KHR;
+    if (width != swapchain_width_ || height != swapchain_height_) return VK_ERROR_OUT_OF_DATE_KHR;
+    *index = next_image_;
+    next_image_ = (next_image_ + 1u) % images_per_swapchain;
+    return VK_SUCCESS;
+}
+
+/* What the driver's present does, as far as the probe can see it: the drawn
+ * frame on the window, in the window's channel order. */
+VkResult ScriptedVulkan::queue_present(VkQueue, const VkPresentInfoKHR *info)
+{
+    const VkResult result = use(Call::queue_present);
+    if (result != VK_SUCCESS) return result;
+    if (info->swapchainCount != 1u || raw(info->pSwapchains[0]) != swapchain_) return VK_ERROR_OUT_OF_DATE_KHR;
+    std::uint32_t width = 0u;
+    std::uint32_t height = 0u;
+    if (window_ == nullptr || !window_->size(window_handle_, width, height)) return VK_ERROR_SURFACE_LOST_KHR;
+    if (width != swapchain_width_ || height != swapchain_height_) return VK_ERROR_OUT_OF_DATE_KHR;
+    if (!drew_since_present_) return VK_SUCCESS;
+    drew_since_present_ = false;
+    presents_++;
+    if (pacing_kmt_ != nullptr)
+        static_cast<void>(pacing_kmt_->wait_for_vertical_blank(pacing_adapter_, pacing_device_, 0u));
+    const std::uint8_t window_order[4] = {colour[2], colour[1], colour[0], colour[3]};
+    if (misdraw_)
+        window_->show_but_the_last(window_order);
+    else
+        window_->show(window_order);
+    return VK_SUCCESS;
 }
 
 }  // namespace av

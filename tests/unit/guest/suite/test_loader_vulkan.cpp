@@ -403,3 +403,74 @@ TEST(loader_vulkan, every_call_reaches_the_host_as_its_own_command)
   vk.destroy_instance(instance);
   CHECK(rig.rig().root().invariants_hold());
   CHECK_EQ(rig.rig().kmt().open_objects(), 0u); }
+
+/* The window-system commands the loader resolves are the ICD's own (feature
+ * 046): a surface for a window the ICD's window surface knows, what that
+ * surface offers, and the refusals a swapchain and a present answer without
+ * the host being asked anything. */
+TEST(loader_vulkan, the_window_system_commands_answer_through_the_instance)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  const VkPhysicalDevice physical = rig.physical_device(instance);
+  LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
+  /* create_instance resolves the table this test calls through. */
+  VkInstance own = VK_NULL_HANDLE;
+  const VkInstanceCreateInfo info = instance_info();
+  rig.host().vk_handle(0, ScriptedHost::vk_instance);
+  CHECK_EQ(vulkan.create_instance(&info, &own), VK_SUCCESS);
+  void *const window = reinterpret_cast<void *>(0x7770u);
+  rig.windows().add_dc(reinterpret_cast<void *>(0x7771u), window, 8u, 4u);
+  const std::uint32_t sent = rig.kmt().commands();
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  CHECK_EQ(vulkan.create_win32_surface(own, reinterpret_cast<void *>(0x7772u), window, &surface), VK_SUCCESS);
+  CHECK(surface != VK_NULL_HANDLE);
+  VkSurfaceCapabilitiesKHR capabilities = {};
+  CHECK_EQ(vulkan.surface_capabilities(physical, surface, &capabilities), VK_SUCCESS);
+  CHECK_EQ(capabilities.currentExtent.width, 8u);
+  CHECK_EQ(capabilities.currentExtent.height, 4u);
+  std::uint32_t      count = 0u;
+  CHECK_EQ(vulkan.surface_formats(physical, surface, &count, nullptr), VK_SUCCESS);
+  CHECK_EQ(count, 4u);
+  VkSurfaceFormatKHR formats[4] = {};
+  CHECK_EQ(vulkan.surface_formats(physical, surface, &count, formats), VK_SUCCESS);
+  CHECK_EQ(formats[0].format, VK_FORMAT_B8G8R8A8_UNORM);
+  VkPresentModeKHR modes[2] = {};
+  count = 2u;
+  CHECK_EQ(vulkan.surface_present_modes(physical, surface, &count, modes), VK_SUCCESS);
+  CHECK_EQ(modes[0], VK_PRESENT_MODE_FIFO_KHR);
+
+  /* A swapchain on a device this ICD did not make, a present of a swapchain it
+   * did not make, and the images and acquire of one: each refused here, so
+   * nothing of this reaches the host. */
+  VkSwapchainCreateInfoKHR create = {};
+  create.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  create.surface = surface;
+  create.minImageCount = 2u;
+  create.imageExtent = {8u, 4u};
+  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  int            stack = 0;
+  CHECK_EQ(vulkan.create_swapchain(reinterpret_cast<VkDevice>(&stack), &create, &swapchain),
+           VK_ERROR_INITIALIZATION_FAILED);
+  const VkSwapchainKHR nowhere = reinterpret_cast<VkSwapchainKHR>(0x50u);
+  std::uint32_t        images = 1u;
+  VkImage              image = VK_NULL_HANDLE;
+  CHECK_EQ(vulkan.swapchain_images(reinterpret_cast<VkDevice>(&stack), nowhere, &images, &image),
+           VK_ERROR_INITIALIZATION_FAILED);
+  std::uint32_t index = 0u;
+  CHECK_EQ(vulkan.acquire_next_image(reinterpret_cast<VkDevice>(&stack), nowhere, 0u, &index),
+           VK_ERROR_OUT_OF_DATE_KHR);
+  VkPresentInfoKHR present = {};
+  present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present.swapchainCount = 1u;
+  present.pSwapchains = &nowhere;
+  present.pImageIndices = &index;
+  CHECK_EQ(vulkan.queue_present(reinterpret_cast<VkQueue>(&stack), &present), VK_ERROR_OUT_OF_DATE_KHR);
+  vulkan.destroy_swapchain(reinterpret_cast<VkDevice>(&stack), nowhere);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  vulkan.destroy_surface(own, surface);
+  CHECK_EQ(vulkan.surface_capabilities(physical, surface, &capabilities), VK_ERROR_SURFACE_LOST_KHR);
+  vulkan.destroy_instance(own);
+  rig.destroy_instance(instance);
+  CHECK(rig.root().invariants_hold());
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }

@@ -20,6 +20,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
+#include "harness/icd/surface_window_frame.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
@@ -66,6 +67,9 @@ using av::VulkanProbe;
 using av::WidestHostGpu;
 
 namespace {
+
+/* The probe's window, and the resized one its last step makes. */
+constexpr std::uint32_t window_side = av::VulkanProbe::extent;
 
 /* The ICD as one guest process holds it: its own memory, locks and log. */
 class IcdProcess {
@@ -115,7 +119,12 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   { IcdProcess process(rig.kmt());
     LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
     av::DirectoryImageSink images(AV_IMAGE_DIR);
-    { VulkanProbe probe(rig.kmt(), report, vulkan, images);
+    /* The probe's window: a DC of the probe's size on the ICD's own window
+     * surface, read back as a desktop would be (feature 046). */
+    void *const window = reinterpret_cast<void *>(0x7770u);
+    process.windows().add_dc(reinterpret_cast<void *>(0x7771u), window, window_side, window_side);
+    av::SurfaceWindowFrame frames(process.windows(), window, window_side, window_side);
+    { VulkanProbe probe(rig.kmt(), report, vulkan, images, frames, reinterpret_cast<void *>(0x7772u), window);
       probe.run(); }
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; report.failed() != 0u && index < process.log().lines(); index++)
@@ -130,6 +139,11 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   CHECK(reported(report, "ok vulkan.draw 4096"));
   CHECK(reported(report, "ok vulkan.lost"));
   CHECK(reported(report, "ok vulkan.recreated 256"));
-  CHECK(reported(report, "rvkvkprobe: 8 passed, 0 failed"));
+  /* The window-system steps: the surface the window offers, the frames the
+   * driver put on it, the pacing it held them to, and the resize. */
+  CHECK(reported(report, "ok vulkan.surface 4096"));
+  CHECK(reported(report, "ok vulkan.present 4096"));
+  CHECK(reported(report, "ok vulkan.resized 9216"));
+  CHECK(reported(report, "rvkvkprobe: 12 passed, 0 failed"));
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
