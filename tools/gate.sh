@@ -13,6 +13,8 @@
 #   guest rvk build-guest-rvk/ the rvk scenarios on the real executor, after it
 #   guest vulkan build-guest-vulkan/  the ICD through the Khronos loader, after
 #                              that, when tools/fetch_vulkan_runtime.py has run
+#   guest opengl build-guest-opengl/  the OpenGL ICD through the system
+#                              opengl32.dll on the real executor, last
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -72,6 +74,14 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         fi
     else
         echo "gate: guest vulkan skipped: the Vulkan runtime is not fetched (tools/fetch_vulkan_runtime.py)" >&2
+    fi
+    # The OpenGL ICD through Windows' own opengl32.dll (feature 050): its own
+    # boot, since the probe's forced loss takes the device's contexts with it.
+    echo "== gate: guest opengl (build-qemu/librvk_executor.so)"
+    if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-opengl --opengl \
+            --executor build-qemu/librvk_executor.so; then
+        echo "gate: guest opengl failed" >&2
+        exit 1
     fi
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"

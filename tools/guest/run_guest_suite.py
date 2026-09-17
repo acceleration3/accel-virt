@@ -72,6 +72,15 @@ PROBE_STEP = re.compile(rb"^ok vulkan\.(\w+)(?: (\S+))?\r?$", re.M)
 # Every step of feature 045's proof, in the probe's order: a probe that stops
 # printing one has not proven it, whatever its summary counts.
 PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute", "draw", "lost", "recreated")
+# Feature 050's probe through the system opengl32.dll: the summary, each step,
+# and the strings the context answered, which the probe prints as notes.
+GL_SUMMARY = re.compile(r"^rvkglprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+GL_STEP = re.compile(r"^ok opengl\.(\w+)(?: (\S+))?\r?$", re.M)
+GL_NOTE = re.compile(r"^note opengl\.(\w+) (.*?)\r?$", re.M)
+GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "attribs", "lost", "recreated")
+# Renderers that are not a GPU: Mesa's software rasterizers, and what
+# opengl32.dll answers itself when no ICD took the window.
+SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable
 # surfaces name devices too, always with more on the line. --summary prints no
@@ -216,6 +225,9 @@ def arguments():
     parser.add_argument("--opengl-discovery", action="store_true",
                         help="run rvkglprobe.exe --discovery through the system opengl32.dll and record what it "
                              "loaded, instead of the suite (feature 050, T008)")
+    parser.add_argument("--opengl", action="store_true",
+                        help="run rvkglprobe.exe's steps through the system opengl32.dll on the host GPU instead of "
+                             "the suite; needs --executor naming the real library (feature 050, T043)")
     parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "rvkglprobe.exe"))
     parser.add_argument("--vulkan-runtime", default=str(ROOT / "third_party" / "vulkan-runtime"),
                         help="where tools/fetch_vulkan_runtime.py put vulkan-1.dll and vulkaninfo.exe")
@@ -242,8 +254,8 @@ def arguments():
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
-    if sum((parsed.rvk, parsed.vulkan, parsed.opengl_discovery)) > 1:
-        parser.error("--rvk, --vulkan and --opengl-discovery are separate boots: pass one")
+    if sum((parsed.rvk, parsed.vulkan, parsed.opengl_discovery, parsed.opengl)) > 1:
+        parser.error("--rvk, --vulkan, --opengl-discovery and --opengl are separate boots: pass one")
     return parsed
 
 
@@ -479,7 +491,7 @@ class GuestRun:
                          self.args.gl_icd, self.args.test, self.args.inspect]
         if self.args.vulkan:
             required.append(self.args.probe)
-        if self.args.opengl_discovery:
+        if self.args.opengl_discovery or self.args.opengl:
             required.append(self.args.gl_probe)
         for path in required:
             if not os.path.isfile(path):
@@ -597,7 +609,7 @@ class GuestRun:
                       (runtime / "vulkaninfo.exe", GUEST_DIRECTORY + "\\vulkaninfo.exe"),
                       (self.args.probe, GUEST_DIRECTORY + "\\rvkvkprobe.exe")]
 
-        if self.args.opengl_discovery:
+        if self.args.opengl_discovery or self.args.opengl:
             files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
 
         def send():
@@ -1231,6 +1243,9 @@ class GuestRun:
         if self.args.opengl_discovery:
             self.opengl_discovery()
             return
+        if self.args.opengl:
+            self.opengl()
+            return
         if self.args.rvk:
             self.rvk()
             return
@@ -1270,6 +1285,35 @@ class GuestRun:
         else:
             adapter = "the probe did not open the DC's adapter"
         self.say(f"discovery ok: rvkgl.dll {loaded}, {adapter}")
+
+    def opengl(self):
+        """Feature 050, SC-001 to SC-003: every step of rvkglprobe.exe through the
+        system opengl32.dll, on a renderer that is the host GPU's. The report is
+        written to a guest file and pulled, as vulkaninfo's is."""
+        report = GUEST_DIRECTORY + "\\opengl.txt"
+        command = f"{GUEST_DIRECTORY}\\rvkglprobe.exe > {report} 2>&1"
+        code, _out, _error = self.step("opengl.run", lambda: self.agent.run(CMD, ["/c", command],
+                                                                          self.args.step_timeout))
+        self.step("opengl.pull", lambda: self.agent.pull(report, self.work / "opengl.txt"))
+        text = (self.work / "opengl.txt").read_text(errors="replace")
+        summary = GL_SUMMARY.search(text)
+        if summary is None:
+            raise StepFailed("opengl", f"no summary in the probe's report, exit {code}; see opengl.txt")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("opengl", f"{failed} step(s) failed, exit {code}; see opengl.txt")
+        steps = dict(GL_STEP.findall(text))
+        missing = [name for name in GL_STEPS if name not in steps]
+        if missing:
+            raise StepFailed("opengl", f"the probe reported no {', '.join(missing)}; see opengl.txt")
+        notes = dict(GL_NOTE.findall(text))
+        renderer = notes.get("renderer", "")
+        if not renderer or renderer == "(none)":
+            raise StepFailed("opengl", "the probe named no renderer")
+        if any(software in renderer.lower() for software in SOFTWARE_RENDERERS):
+            raise StepFailed("opengl", f"the renderer {renderer} is not a host GPU")
+        self.say(f"opengl ok: {int(summary.group(1))} passed, renderer {renderer}, "
+                 f"version {notes.get('version', '(none)')}")
 
     def whole_machine(self):
         """What only a whole guest session answers, and what makes a run long:

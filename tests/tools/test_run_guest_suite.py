@@ -570,6 +570,84 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
 
+    GL_REPORT = ("ok opengl.pixel_format 1\r\n"
+                 "ok opengl.context\r\n"
+                 "note opengl.version 4.6 (Compatibility Profile) Mesa 26.2.2\r\n"
+                 "note opengl.renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)\r\n"
+                 "ok opengl.version 46\r\n"
+                 "ok opengl.draw 4096\r\n"
+                 "ok opengl.share 4\r\n"
+                 "ok opengl.busy 170\r\n"
+                 "ok opengl.attribs 8342\r\n"
+                 "ok opengl.lost 33365\r\n"
+                 "ok opengl.recreated 4096\r\n"
+                 "rvkglprobe: 9 passed, 0 failed\r\n")
+
+    def opengl_script(self, report=None, code=0):
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "rvkglprobe": self.GL_REPORT if report is None else report,
+                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkgl-4242.log\r\n"}
+        self.script(outputs=outputs, rvkglprobe=code,
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}))
+
+    def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
+        """Feature 050, T043: the probe runs with its report written to a guest
+        file and pulled; every one of the nine steps passes, the renderer is a
+        GPU's, and rvkgl's log is kept."""
+        self.opengl_script()
+        result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
+                                "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        self.assertIn("file C:\\rvk\\rvkglprobe.exe 1400", lines)
+        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkglprobe.exe "
+                      "> C:\\rvk\\opengl.txt 2>&1", lines)
+        self.assertIn("pull C:\\rvk\\opengl.txt", lines)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assertEqual((self.work / "opengl.txt").read_text(newline=""), self.GL_REPORT)
+        self.assertIn("guest: opengl ok: 9 passed, renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2), "
+                      "version 4.6 (Compatibility Profile) Mesa 26.2.2", result.stdout)
+        self.assertIn("opengl ok", (self.work / "verdict.txt").read_text())
+        self.assertTrue((self.work / "diag" / "rvkgl-4242.log").exists())
+        self.assertNotIn("--discovery", "\n".join(lines))
+        self.assert_clean()
+
+    def test_an_opengl_run_fails_a_failed_missing_or_software_step(self):
+        report = self.GL_REPORT
+        cases = {
+            "failed step": (report.replace("ok opengl.share 4", "fail opengl.share 0").replace(
+                "9 passed, 0 failed", "8 passed, 1 failed"), 1,
+                "opengl failed: 1 step(s) failed, exit 1; see opengl.txt"),
+            "missing step": (report.replace("ok opengl.busy 170\r\n", "").replace("9 passed", "8 passed"), 0,
+                             "opengl failed: the probe reported no busy; see opengl.txt"),
+            "no summary": (report.replace("rvkglprobe: 9 passed, 0 failed\r\n", ""), 0,
+                           "opengl failed: no summary in the probe's report, exit 0; see opengl.txt"),
+            "software": (report.replace("Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)", "llvmpipe (LLVM 19.1.0)"), 0,
+                         "opengl failed: the renderer llvmpipe (LLVM 19.1.0) is not a host GPU"),
+            "no renderer": (report.replace("note opengl.renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)\r\n",
+                                           ""), 0,
+                            "opengl failed: the probe named no renderer"),
+        }
+        for case, (text, code, reason) in cases.items():
+            with self.subTest(case):
+                self.opengl_script(text, code)
+                result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
+                                        "--gl-probe", self.scratch / "rvkglprobe.exe")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"guest: {reason}", result.stdout)
+
+    def test_an_opengl_run_is_its_own_boot_and_needs_the_real_executor_and_the_probe(self):
+        self.opengl_script()
+        for other in ("--rvk", "--vulkan", "--opengl-discovery"):
+            refused = self.run_suite("--opengl", other)
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn("separate boots", refused.stderr)
+        missing = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
+                                 "--gl-probe", self.scratch / "noprobe.exe")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
+
     def test_a_vulkan_run_without_the_pinned_runtime_or_the_probe_is_refused_before_qemu(self):
         self.vulkan_script()
         absent = self.run_suite("--vulkan", *self.vulkan_runtime(vulkaninfo_exe=None))
