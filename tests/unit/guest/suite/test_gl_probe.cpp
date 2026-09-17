@@ -151,6 +151,10 @@ TEST(gl_probe, a_draw_that_went_wrong_is_counted_and_fails)
     CHECK(rig.holds("FAIL opengl.draw status=7 0\n"));
   }
   /* A window larger than the read reads its corner. */
+  /* A window of nothing has nothing drawn. */
+  ProbeRig empty(0u, 0u);
+  empty.run();
+  CHECK(empty.holds("FAIL opengl.draw status=7 0\n"));
   ProbeRig large(100u, 70u);
   large.run();
   CHECK(large.holds("ok opengl.draw 4096\n")); }

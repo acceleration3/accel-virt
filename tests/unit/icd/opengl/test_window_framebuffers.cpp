@@ -249,11 +249,22 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   swapped = rig.commands();
   CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], doubled, rig.surface));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u);
+  /* The current window, drawn on there and read elsewhere. */
+  rig.framebuffers.bound(Windows::gl_framebuffer, 0u);
+  rig.framebuffers.bound(Windows::gl_read_framebuffer, 6u);
+  rig.surface.resize(&rig.windows[1], 6u, 6u);
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  rig.context_rig.host().gl_window(1u, 1u, 600u);
+  swapped = rig.commands();
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 1u);
+  CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_draw_framebuffer);
+  rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
   /* A window whose remake is refused keeps presenting what it had. */
   rig.surface.resize(&rig.windows[1], Windows::max_windows * 2000u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
-  CHECK_EQ(rig.framebuffers.name_of(0u), 400u);
+  CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
 TEST(window_framebuffers, gone_windows_are_given_up_and_release_gives_up_all)

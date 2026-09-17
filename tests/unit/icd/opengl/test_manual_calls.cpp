@@ -652,3 +652,60 @@ TEST(manual_calls, a_level_download_with_nothing_current_is_sized_nothing)
   CHECK_EQ(rig.root().manual().level_bytes(0x0DE1u, 0, 0x1908u, 0x1401u), 0u);
   CHECK_EQ(rig.root().manual().compressed_level_bytes(0x0DE1u, 0), 0u);
   CHECK_EQ(rig.kmt().commands(), 0u); }
+
+TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
+{ Current current;
+  av::ScriptedHost &host = current.rig().host();
+  /* GL_READ_ONLY through a target: bound buffer, size, fill. */
+  host.gl_integer(7);
+  answer_size(host, 4);
+  host.gl_bytes(nullptr, 0u);
+  CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x88B8u) != nullptr);
+  CHECK_EQ(current.context().mappings().held(), 1u);
+  /* GL_WRITE_ONLY by name: no fill. */
+  answer_size(host, 4);
+  CHECK(gen::Wrap_glMapNamedBuffer(8u, 0x88B9u) != nullptr);
+  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent_since(3u), ids::kCmd_glGetNamedBufferParameteri64v);
+  /* A target that binds no buffer. */
+  CHECK(gen::Wrap_glMapBufferRange(0x1234u, 0, 4, 1u) == nullptr);
+  CHECK_EQ(current.error(), gl_invalid_enum);
+  /* No access bits, refused by the mapping. */
+  CHECK(gen::Wrap_glMapNamedBufferRange(9u, 0, 4, 0u) == nullptr);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  /* The buffer bound at the target is not mapped. */
+  host.gl_integer(10);
+  CHECK(!gen::Wrap_glUnmapBuffer(array_buffer));
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  CHECK_EQ(current.sent(), 5u);
+  CHECK_EQ(current.context().mappings().held(), 2u); }
+
+/* The generated entries' hooks: framebuffer 0 is the window's, and a draw
+ * sends what persistent maps wrote first - with nothing current, and on a
+ * lost context, nothing. */
+TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
+{ { GlIcdRig rig;
+    rig.load_with_format();
+    CHECK_EQ(gen::Wrap_glCheckNamedFramebufferStatus(0u, 0x8D40u), 0u);
+    const GLenum buffers[] = {0x8CE0u};
+    gen::Wrap_glDrawBuffers(1, buffers);
+    CHECK_EQ(rig.kmt().commands(), 0u); }
+  Current current;
+  av::ScriptedHost &host = current.rig().host();
+  host.gl_varint(0x8CD5u);
+  CHECK_EQ(gen::Wrap_glCheckNamedFramebufferStatus(0u, 0x8D40u), 0x8CD5u);
+  CHECK_EQ(current.sent_since(0u), ids::kCmd_glCheckNamedFramebufferStatus);
+  CHECK_EQ(current.argument_since(0u, 0u), 100u);
+  answer_size(host, 4);
+  CHECK(gen::Wrap_glMapNamedBufferRange(3u, 0, 4, 0x0002u | 0x0040u) != nullptr);
+  const GLenum buffers[] = {0x8CE0u};
+  gen::Wrap_glDrawBuffers(1, buffers);
+  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent_since(2u), ids::kCmd_glNamedBufferSubData);
+  CHECK_EQ(current.sent_since(3u), ids::kCmd_glDrawBuffers);
+  current.rig().kmt().withhold_answer_at(1u);
+  GLint value = 0;
+  gen::Wrap_glGetIntegerv(0x0BA2u, &value);
+  const std::uint32_t lost = current.sent();
+  gen::Wrap_glDrawBuffers(1, buffers);
+  CHECK_EQ(current.sent(), lost); }

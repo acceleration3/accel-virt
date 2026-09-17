@@ -30,6 +30,7 @@ struct BufferMappingProbe {
     static void drop_block(BufferMapping &mapping) { mapping.block_ = nullptr; }
     static void set_block(BufferMapping &mapping, std::uint8_t *block) { mapping.block_ = block; }
     static void drop_buffer(BufferMapping &mapping) { mapping.buffer_ = 0u; }
+    static void set_length(BufferMapping &mapping, std::uint64_t length) { mapping.length_ = length; }
     static void set_dirty(BufferMapping &mapping, std::uint64_t from, std::uint64_t to)
     {
         mapping.dirty_from_ = from;
@@ -338,6 +339,9 @@ TEST(buffer_mapping_invariants, fail_for_a_half_held_range_or_marks_outside_it_o
   Probe::drop_block(block.mapping);
   CHECK(!block.mapping.invariants_hold());
   Probe::set_block(block.mapping, held);
+  Probe::set_length(block.mapping, 0u);
+  CHECK(!block.mapping.invariants_hold());
+  Probe::set_length(block.mapping, 8u);
   Probe::drop_buffer(block.mapping);
   CHECK(!block.mapping.invariants_hold());
   Rig marks;

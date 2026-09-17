@@ -452,7 +452,9 @@ bool GlIcdRoot::invariants_hold() const
         if (slot == nullptr) return false;
     for (uint32_t row = 0u; row < max_pending; row++)
         if ((pending_threads_[row] == 0u) != (pending_handles_[row] == 0u)) return false;
-    return extensions_.invariants_hold() && query_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
+    /* The query's own invariants are the format table's. */
+    return extensions_.invariants_hold() && query_.invariants_hold() && windows_.invariants_hold() &&
+           currents_.invariants_hold() &&
            connection_.invariants_hold() && contexts_.invariants_hold();
 }
 

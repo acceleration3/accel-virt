@@ -45,6 +45,14 @@ struct UniformShapesProbe {
     static void overfill(UniformShapes &shapes, uint32_t count) { shapes.count_ = count; }
 };
 
+struct WindowFramebuffersProbe {
+    static void point_nowhere(WindowFramebuffers &windows, std::uint32_t slot) { windows.current_ = slot; }
+};
+
+struct MappedBuffersProbe {
+    static void miscount(MappedBuffers &mappings, std::uint32_t writers) { mappings.persistent_writers_ = writers; }
+};
+
 struct QueryShapesProbe {
     static void overflow(QueryShapes &shapes, uint32_t length) { shapes.lengths_[1] = length; }
 };
@@ -338,4 +346,11 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   av::glicd::QueryShapesProbe::overflow(made->queries(), 0x80000000u);
   CHECK(!made->invariants_hold());
   av::glicd::QueryShapesProbe::overflow(made->queries(), 0u);
+  CHECK(made->invariants_hold());
+  av::glicd::WindowFramebuffersProbe::point_nowhere(made->framebuffers(), 0u);
+  CHECK(!made->invariants_hold());
+  av::glicd::WindowFramebuffersProbe::point_nowhere(made->framebuffers(), av::glicd::WindowFramebuffers::max_windows);
+  av::glicd::MappedBuffersProbe::miscount(made->mappings(), 1u);
+  CHECK(!made->invariants_hold());
+  av::glicd::MappedBuffersProbe::miscount(made->mappings(), 0u);
   CHECK(made->invariants_hold()); }

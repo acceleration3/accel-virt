@@ -214,7 +214,7 @@ void ScriptedGl::finish() { static_cast<void>(current_or_misuse()); }
 void ScriptedGl::read_pixels(std::int32_t width, std::int32_t height, std::uint8_t *rgba)
 {
     if (!current_or_misuse()) return;
-    if (width <= 0 || height <= 0 || static_cast<std::uint32_t>(width) > max_extent ||
+    if (width < 0 || height < 0 || static_cast<std::uint32_t>(width) > max_extent ||
         static_cast<std::uint32_t>(height) > max_extent) {
         misuses_++;
         return;

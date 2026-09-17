@@ -28,6 +28,7 @@ namespace av::glicd {
 struct GlExtensionPolicyProbe {
     static void overcount(GlExtensionPolicy &policy) { policy.gl_count_ = GlExtensionPolicy::max_rows + 1u; }
     static void blank_wgl(GlExtensionPolicy &policy) { policy.wgl_[0] = '\0'; }
+    static void overcount_wgl(GlExtensionPolicy &policy) { policy.wgl_count_ = GlExtensionPolicy::max_rows + 1u; }
 };
 
 }  // namespace av::glicd
@@ -85,7 +86,8 @@ TEST(gl_extension_policy, reports_what_rows_the_tier_and_the_host_share)
 { Made made;
   const GlExtensionPolicy policy(carried_rows, 3u, nullptr, 0u);
   CHECK(policy.invariants_hold());
-  made.rig.host().gl_integer(4);
+  made.rig.host().gl_integer(5);
+  made.rig.host().gl_string("GL_ARB_debug_output");
   made.rig.host().gl_string("GL_ARB_debug_output");
   made.rig.host().gl_string("GL_KHR_debug");
   made.rig.host().gl_string("GL_EXT_host_only");
@@ -99,8 +101,9 @@ TEST(gl_extension_policy, reports_what_rows_the_tier_and_the_host_share)
   CHECK(std::strcmp(list.name(1u), "GL_ARB_debug_output") == 0);
   CHECK(list.name(0u) == carried_rows[0].name_);
   CHECK(std::strcmp(list.joined(), "GL_ARB_texture_float GL_ARB_debug_output") == 0);
-  /* The count and all four names: a row is still unfound until the end. */
-  CHECK_EQ(made.rig.kmt().commands() - before, 5u);
+  /* The count and all five names, one listed twice: a row is still unfound
+   * until the end. */
+  CHECK_EQ(made.rig.kmt().commands() - before, 6u);
   CHECK_EQ(made.rig.kmt().queued_answers(), 0u);
   CHECK(list.invariants_hold()); }
 
@@ -203,6 +206,19 @@ TEST(gl_extension_policy, reads_no_more_than_64_rows_of_either_table)
   CHECK(std::strstr(policy.wgl_extensions(), "WGL_ARB_row_63") != nullptr);
   CHECK(std::strstr(policy.wgl_extensions(), "WGL_ARB_row_64") == nullptr); }
 
+/* Rows longer together than the string are cut at its end, and the string
+ * still judges whole. */
+TEST(gl_extension_policy, wgl_rows_longer_than_the_string_are_cut)
+{ static Row rows[GlExtensionPolicy::max_rows];
+  static char names[GlExtensionPolicy::max_rows][96];
+  for (std::uint32_t at = 0u; at < GlExtensionPolicy::max_rows; at++) {
+    std::snprintf(names[at], sizeof names[at], "WGL_ARB_a_rather_long_extension_name_to_fill_the_string_%02u_xxxxxxxxxxxxxxxxxxxxxx", at);
+    rows[at] = Row{names[at], 1u, "suite.case"};
+  }
+  const GlExtensionPolicy policy(nullptr, 0u, rows, GlExtensionPolicy::max_rows);
+  CHECK_EQ(std::strlen(policy.wgl_extensions()), GlExtensionPolicy::wgl_bytes - 1u);
+  CHECK(policy.invariants_hold()); }
+
 TEST(gl_extension_policy_invariants, fail_for_rows_of_the_wrong_kind_or_a_string_that_is_not_theirs)
 { constexpr Row wgl_as_gl[] = {{"WGL_ARB_pixel_format", 1u, "suite.case"}};
   constexpr Row gl_as_wgl[] = {{"GL_ARB_debug_output", 1u, "suite.case"}};
@@ -216,4 +232,7 @@ TEST(gl_extension_policy_invariants, fail_for_rows_of_the_wrong_kind_or_a_string
   CHECK(!blanked.invariants_hold());
   GlExtensionPolicy counted(nullptr, 0u, nullptr, 0u);
   av::glicd::GlExtensionPolicyProbe::overcount(counted);
-  CHECK(!counted.invariants_hold()); }
+  CHECK(!counted.invariants_hold());
+  GlExtensionPolicy wgl_counted(nullptr, 0u, nullptr, 0u);
+  av::glicd::GlExtensionPolicyProbe::overcount_wgl(wgl_counted);
+  CHECK(!wgl_counted.invariants_hold()); }

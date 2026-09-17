@@ -42,6 +42,7 @@ struct BackBufferPresenterProbe {
     static void drop_depth(BackBufferPresenter &presenter) { presenter.renderbuffers_[1] = 0u; }
     static void drop_framebuffer(BackBufferPresenter &presenter) { presenter.framebuffers_[0] = 0u; }
     static void drop_texture(BackBufferPresenter &presenter) { presenter.texture_ = 0u; }
+    static void drop_colour(BackBufferPresenter &presenter) { presenter.renderbuffers_[0] = 0u; }
 };
 
 }  // namespace av::glicd
@@ -184,7 +185,13 @@ TEST(back_buffer_presenter, a_resize_deletes_the_old_objects_and_makes_new_ones)
   rig.host().gl_window(1u, 1u, 400u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &other, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.presenter.framebuffer(), 400u);
-  CHECK(rig.presenter.window() == &other); }
+  CHECK(rig.presenter.window() == &other);
+  /* Only the height changed. */
+  rig.surface.resize(&other, 2u, 3u);
+  rig.host().gl_window(1u, 1u, 500u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &other, plain_d24s8, rig.surface), Status::ok);
+  CHECK_EQ(rig.presenter.framebuffer(), 500u);
+  CHECK_EQ(rig.presenter.height(), 3u); }
 
 /* WGL_ARB_multisample's formats: a multisampled colour renderbuffer on the
  * framebuffer, resolved into the texture on a second framebuffer before it
@@ -250,6 +257,7 @@ TEST(back_buffer_presenter, a_0x0_window_has_storage_and_shows_nothing)
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.argument(made + 3u, 3u), 1u);
   CHECK_EQ(rig.argument(made + 3u, 4u), 1u);
+  CHECK(rig.presenter.invariants_hold());
   const std::uint32_t swapped = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface));
   CHECK_EQ(rig.commands(), swapped);
@@ -440,4 +448,21 @@ TEST(back_buffer_presenter_invariants, fail_when_a_made_presenter_is_missing_a_p
   Rig orphan;
   made(orphan, plain_d24s8, 1u, 1u);
   Probe::drop_framebuffer(orphan.presenter);
-  CHECK(!orphan.presenter.invariants_hold()); }
+  CHECK(!orphan.presenter.invariants_hold());
+  /* Unmade, any name left is broken: the resolve framebuffer, the colour
+   * renderbuffer, the depth one. */
+  Rig names;
+  made(names, multisampled_d32_srgb, 2u, 2u);
+  Probe::drop_framebuffer(names.presenter);
+  CHECK(!names.presenter.invariants_hold());
+  Probe::drop_resolve(names.presenter);
+  Probe::drop_texture(names.presenter);
+  CHECK(!names.presenter.invariants_hold());
+  Probe::drop_colour(names.presenter);
+  CHECK(!names.presenter.invariants_hold());
+  Probe::drop_depth(names.presenter);
+  CHECK(names.presenter.invariants_hold());
+  Rig colour;
+  made(colour, multisampled_d32_srgb, 2u, 2u);
+  Probe::drop_colour(colour.presenter);
+  CHECK(!colour.presenter.invariants_hold()); }

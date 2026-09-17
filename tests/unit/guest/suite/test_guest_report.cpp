@@ -75,12 +75,14 @@ TEST(guest_report, a_note_is_one_line_of_text_and_no_verdict)
 { GuestReport report("rvkglprobe");
   report.note("opengl", "renderer", "Mesa\r\nsecond");
   report.note("opengl", "version", nullptr);
+  report.note("opengl", "lines", "one\ntwo");
   char long_text[GuestReport::note_bytes + 8u];
   std::memset(long_text, 'x', sizeof long_text - 1u);
   long_text[sizeof long_text - 1u] = '\0';
   report.note("opengl", "long", long_text);
   report.finish();
-  char expected[GuestReport::note_bytes + 128u] = "note opengl.renderer Mesa\nnote opengl.version (none)\nnote opengl.long ";
+  char expected[GuestReport::note_bytes + 128u] = "note opengl.renderer Mesa\nnote opengl.version (none)\nnote opengl.lines one\n"
+                                                     "note opengl.long ";
   std::memset(expected + std::strlen(expected), 'x', GuestReport::note_bytes);
   std::strcat(expected, "\nrvkglprobe: 0 passed, 0 failed\n");
   CHECK(std::strcmp(report.text(), expected) == 0);

@@ -696,3 +696,47 @@ TEST(gl_icd_root, answers_pixel_format_attributes_and_choices_through_wgl)
   CHECK_EQ(choose(rig.memory_dc(), asked, nullptr, 4u, formats, nullptr), 0);
   check_error(rig, Root::error_invalid_parameter);
   CHECK(rig.root().invariants_hold()); }
+
+/* DrvSetContext puts the context on the DC's window: a window it cannot draw
+ * on refuses the make current, unless the host lost the context meanwhile. */
+TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const window = rig.surface().window_of(rig.dc());
+  rig.surface().resize(window, 9000u, 10u);
+  void *const context = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK(!rig.opengl32().make_current(rig.dc(), context));
+  check_error(rig, Root::error_invalid_pixel_format);
+  CHECK(rig.root().current() == nullptr);
+  /* Eight windows at most per context. */
+  rig.surface().resize(window, 8u, 8u);
+  int dcs[8] = {};
+  int windows[8] = {};
+  rig.host().gl_window(1u, 1u);
+  CHECK(rig.opengl32().make_current(rig.dc(), context));
+  for (int index = 0; index < 8; index++) {
+    rig.surface().add_dc(&dcs[index], &windows[index], 4u, 4u);
+    CHECK(rig.opengl32().set_pixel_format(&dcs[index], 1));
+    if (index < 7) rig.host().gl_window(1u, 1u);
+    const bool current = rig.opengl32().make_current(&dcs[index], context);
+    CHECK_EQ(current, index < 7);
+  }
+  check_error(rig, Root::error_not_enough_memory);
+  /* The host lost the context while its window's framebuffer was made: current
+   * all the same, as a lost context is. */
+  rig.surface().resize(window, 8u, 8u);
+  void *const other = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::submit);
+  rig.kmt().withhold_answer_at(rig.host().gl_make_waits + 1u);
+  CHECK(rig.opengl32().make_current(rig.dc(), other));
+  CHECK(rig.kmt().calls(MockKmt::Call::submit) > made);
+  CHECK(rig.root().current() != nullptr);
+  CHECK(rig.root().current()->wire() == nullptr);
+  /* Released and made current again, a lost context is current with no host call. */
+  CHECK(rig.opengl32().make_current(nullptr, nullptr));
+  const std::uint32_t lost = rig.kmt().commands();
+  CHECK(rig.opengl32().make_current(rig.dc(), other));
+  CHECK_EQ(rig.kmt().commands(), lost);
+  CHECK(rig.root().invariants_hold()); }

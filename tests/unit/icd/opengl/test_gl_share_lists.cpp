@@ -5,12 +5,21 @@
  * is refused. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
+#include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 
 #include <cstdint>
+
+namespace av::glicd {
+
+struct GlIcdRootProbe {
+    static GuestGlContext *context(GlIcdRoot &root, std::uint64_t handle) { return root.contexts_.resolve(handle); }
+};
+
+}  // namespace av::glicd
 
 using av::GlIcdRig;
 using av::MockKmt;
@@ -159,3 +168,35 @@ TEST(gl_share_lists, a_context_records_one_target_and_only_while_unmade)
   CHECK_STATUS(context->share_after(9u), Status::invalid_state);
   CHECK_STATUS(context->share(9u), Status::invalid_state);
   CHECK_EQ(context->share_target(), 0u); }
+
+/* A loop of shares a bug could leave is walked no further than the table
+ * holds, and a context sharing through it is not made. */
+TEST(gl_share_lists, a_loop_of_targets_is_walked_no_further_than_the_table)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const x = rig.opengl32().create_context(rig.dc());
+  void *const y = rig.opengl32().create_context(rig.dc());
+  void *const z = rig.opengl32().create_context(rig.dc());
+  const std::uintptr_t hx = rig.opengl32().driver_context(x);
+  const std::uintptr_t hy = rig.opengl32().driver_context(y);
+  using Probe = av::glicd::GlIcdRootProbe;
+  CHECK_STATUS(Probe::context(rig.root(), hx)->share_after(hy), Status::ok);
+  CHECK_STATUS(Probe::context(rig.root(), hy)->share_after(hx), Status::ok);
+  CHECK(rig.opengl32().share_lists(x, z));
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  CHECK(!rig.opengl32().make_current(rig.dc(), z));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), opened); }
+
+/* A share walked through a deleted target stops there. */
+TEST(gl_share_lists, a_walk_through_a_deleted_target_stops_at_it)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const a = rig.opengl32().create_context(rig.dc());
+  void *const b = rig.opengl32().create_context(rig.dc());
+  void *const c = rig.opengl32().create_context(rig.dc());
+  CHECK(rig.opengl32().share_lists(a, b));
+  CHECK(rig.opengl32().delete_context(a));
+  CHECK(rig.opengl32().share_lists(b, c));
+  CHECK_EQ(av::glicd::GlIcdRootProbe::context(rig.root(), rig.opengl32().driver_context(c))->share_target(),
+           rig.opengl32().driver_context(b)); }
