@@ -452,3 +452,31 @@ TEST(present_blit, a_row_that_crosses_a_page_is_moved_in_both_of_them)
   CHECK_EQ(platform.mapped_frames(), 0u);
   platform.release_contiguous(source_block, bytes);
   platform.release_contiguous(destination_block, bytes); }
+
+/* A present whose rectangles are the extremes of an int32 - which is what a
+ * user-mode caller can put in one - moves the surface it names and no more.
+ * The differences and sums the clipping takes leave an int32, so none of it may
+ * be computed in one. */
+TEST(present_blit, rectangles_at_the_extremes_of_an_int32_move_only_the_surface)
+{ MockPlatform platform;
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  source.paint_all(0xBBu);
+  destination.paint_all(0u);
+  const PresentSurface from = source.present();
+  const PresentSurface into = destination.present();
+  constexpr std::int32_t lowest = -2147483647 - 1;
+  constexpr std::int32_t highest = 2147483647;
+  { PresentBlit blit(platform, &from, into);
+    /* Source and destination of the same, enormous, size: what is on both
+     * surfaces moves, and nothing else does. */
+    CHECK_STATUS(blit.blit(Rectangle(lowest, lowest, highest, highest),
+                           Rectangle(lowest, lowest, highest, highest), nullptr, 0u), Status::ok);
+    CHECK_EQ(blit.rows(), side);
+    CHECK_EQ(destination.count(0xBBu), side * side);
+    CHECK(blit.invariants_hold()); }
+  { PresentBlit blit(platform, nullptr, into);
+    const RectRecord everywhere = rect(lowest, lowest, highest, highest);
+    CHECK_STATUS(blit.fill(0xCCu, Rectangle(lowest, lowest, highest, highest), &everywhere, 1u), Status::ok);
+    CHECK_EQ(destination.count(0xCCu), side * side); }
+  CHECK_EQ(platform.mapped_frames(), 0u); }

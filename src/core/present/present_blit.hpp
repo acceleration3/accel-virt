@@ -12,6 +12,7 @@
 #define AV_PRESENT_BLIT_HPP
 
 #include "core/platform/platform.hpp"
+#include "core/present/present_area.hpp"
 #include "core/present/present_surface.hpp"
 #include "core/support/status.hpp"
 
@@ -61,7 +62,7 @@ private:
      * when the page is not mapped; what is unmapped is what this answered. */
     uint8_t             *map_at(const PresentSurface &surface, uint64_t offset, uint32_t &within,
                                 uint32_t &available);
-    [[nodiscard]] Status move_rectangle(const Rectangle &source, const Rectangle &destination, bool filling,
+    [[nodiscard]] Status move_rectangle(const PresentArea &source, const PresentArea &destination, bool filling,
                                         uint32_t colour);
     /* Whether both surfaces are four-byte ones this can reach. */
     bool                 reachable(bool filling) const;

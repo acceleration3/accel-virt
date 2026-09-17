@@ -8,25 +8,6 @@
 
 namespace av {
 
-namespace {
-
-/* The intersection of two spans, as [start, end); empty when they do not
- * overlap. */
-struct Span {
-    int32_t start;
-    int32_t end;
-};
-
-Span overlap(int32_t first_start, int32_t first_end, int32_t second_start, int32_t second_end)
-{
-    AV_SCOPE("overlap");
-    const int32_t start = first_start > second_start ? first_start : second_start;
-    const int32_t end = first_end < second_end ? first_end : second_end;
-    return Span{start, end > start ? end : start};
-}
-
-}  // namespace
-
 PresentBlit::PresentBlit(Platform &platform, const PresentSurface *source, const PresentSurface &destination)
     : platform_(platform), source_(source), destination_(destination), rows_(0u), clipped_rows_(0u)
 {
@@ -39,23 +20,24 @@ Status PresentBlit::blit(const Rectangle &source, const Rectangle &destination, 
     AV_SCOPE("PresentBlit::blit");
     platform_.require_irql_at_most(Irql::passive, "PresentBlit::blit");
     if (!reachable(false)) return Status::not_supported;
+    const PresentArea from(source);
+    const PresentArea into(destination);
     /* The desktop presents one to one; nothing here scales. */
-    if (source.right() - source.left() != destination.right() - destination.left() ||
-        source.bottom() - source.top() != destination.bottom() - destination.top())
+    if (from.right() - from.left() != into.right() - into.left() ||
+        from.bottom() - from.top() != into.bottom() - into.top())
         return Status::not_supported;
-    if (count == 0u) return move_rectangle(source, destination, false, 0u);
+    if (count == 0u) return move_rectangle(from, into, false, 0u);
     if (sub_rectangles == nullptr) return Status::invalid_parameter;
     for (uint32_t index = 0u; index < count; index++) {
         const RectRecord &sub = sub_rectangles[index];
-        const Span        columns = overlap(sub.left, sub.right, destination.left(), destination.right());
-        const Span        rows = overlap(sub.top, sub.bottom, destination.top(), destination.bottom());
-        const Rectangle   piece(columns.start, rows.start, columns.end, rows.end);
+        const PresentArea piece = PresentArea(sub.left, sub.top, sub.right, sub.bottom)
+                                      .intersected_with(into);
         /* The same piece of the source: the two rectangles are the same size. */
-        const Rectangle   from(source.left() + columns.start - destination.left(),
-                               source.top() + rows.start - destination.top(),
-                               source.left() + columns.end - destination.left(),
-                               source.top() + rows.end - destination.top());
-        const Status      moved = move_rectangle(from, piece, false, 0u);
+        const PresentArea piece_source(from.left() + piece.left() - into.left(),
+                                       from.top() + piece.top() - into.top(),
+                                       from.left() + piece.right() - into.left(),
+                                       from.top() + piece.bottom() - into.top());
+        const Status      moved = move_rectangle(piece_source, piece, false, 0u);
         if (moved != Status::ok) return moved;
     }
     return Status::ok;
@@ -67,13 +49,13 @@ Status PresentBlit::fill(uint32_t colour, const Rectangle &destination, const Re
     AV_SCOPE("PresentBlit::fill");
     platform_.require_irql_at_most(Irql::passive, "PresentBlit::fill");
     if (!reachable(true)) return Status::not_supported;
-    if (count == 0u) return move_rectangle(destination, destination, true, colour);
+    const PresentArea into(destination);
+    if (count == 0u) return move_rectangle(into, into, true, colour);
     if (sub_rectangles == nullptr) return Status::invalid_parameter;
     for (uint32_t index = 0u; index < count; index++) {
         const RectRecord &sub = sub_rectangles[index];
-        const Span        columns = overlap(sub.left, sub.right, destination.left(), destination.right());
-        const Span        rows = overlap(sub.top, sub.bottom, destination.top(), destination.bottom());
-        const Rectangle   piece(columns.start, rows.start, columns.end, rows.end);
+        const PresentArea piece = PresentArea(sub.left, sub.top, sub.right, sub.bottom)
+                                      .intersected_with(into);
         const Status      filled = move_rectangle(piece, piece, true, colour);
         if (filled != Status::ok) return filled;
     }
@@ -81,26 +63,25 @@ Status PresentBlit::fill(uint32_t colour, const Rectangle &destination, const Re
 }
 
 /* Every row of the rectangle, clipped to both surfaces before it moves. */
-Status PresentBlit::move_rectangle(const Rectangle &source, const Rectangle &destination, bool filling,
+Status PresentBlit::move_rectangle(const PresentArea &source, const PresentArea &destination, bool filling,
                                    uint32_t colour)
 {
     AV_SCOPE("PresentBlit::move_rectangle");
     const SurfaceLayout &into = destination_.layout();
     const SurfaceLayout &from = filling ? into : source_->layout();
-    const Span columns = overlap(destination.left(), destination.right(), 0, static_cast<int32_t>(into.width()));
-    const Span rows = overlap(destination.top(), destination.bottom(), 0, static_cast<int32_t>(into.height()));
-    for (int32_t row = rows.start; row < rows.end; row++) {
-        const int32_t source_row = source.top() + row - destination.top();
-        if (source_row < 0 || source_row >= static_cast<int32_t>(from.height())) continue;
-        const int32_t source_left = source.left() + columns.start - destination.left();
-        const Span    source_columns =
-            overlap(source_left, source_left + (columns.end - columns.start), 0, static_cast<int32_t>(from.width()));
-        if (source_columns.end == source_columns.start) continue;
-        const uint32_t bytes = static_cast<uint32_t>(source_columns.end - source_columns.start) * pixel_bytes;
-        const uint32_t to_x = static_cast<uint32_t>(columns.start + (source_columns.start - source_left));
+    const PresentArea    written = destination.clipped_to(into.width(), into.height());
+    for (int64_t row = written.top(); row < written.bottom(); row++) {
+        const int64_t source_row = source.top() + row - destination.top();
+        if (source_row < 0 || source_row >= static_cast<int64_t>(from.height())) continue;
+        const int64_t     source_left = source.left() + written.left() - destination.left();
+        const PresentArea read(source_left, source_row, source_left + written.width(), source_row + 1);
+        const PresentArea taken = read.clipped_to(from.width(), from.height());
+        if (taken.width() == 0) continue;
+        const auto bytes = static_cast<uint32_t>(taken.width()) * pixel_bytes;
+        const auto to_x = static_cast<uint32_t>(written.left() + (taken.left() - source_left));
         clipped_rows_++;
-        const Status moved = move_row(static_cast<uint32_t>(source_columns.start), static_cast<uint32_t>(source_row),
-                                      to_x, static_cast<uint32_t>(row), bytes, filling, colour);
+        const Status moved = move_row(static_cast<uint32_t>(taken.left()), static_cast<uint32_t>(source_row), to_x,
+                                      static_cast<uint32_t>(row), bytes, filling, colour);
         if (moved != Status::ok) return moved;
         rows_++;
     }
