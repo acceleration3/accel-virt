@@ -29,7 +29,11 @@ struct GuestGlContextProbe {
         context.staging_ = static_cast<uint8_t *>(other);
     }
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
-    static void connect(GuestGlContext &context, bool connected) { context.connected_ = connected; }
+    static void connect(GuestGlContext &context, bool connected)
+    {
+        context.link_ = connected ? 0u : GlConnection::no_link;
+    }
+    static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
     static void drop_lock(GuestGlContext &context) { context.locked_.destroy(); }
     static void restore_lock(GuestGlContext &context)
     {
@@ -238,6 +242,60 @@ TEST(guest_gl_context, a_faulted_transport_makes_the_context_lost)
   CHECK(context->share_name() != 0u);
   CHECK(context->invariants_hold()); }
 
+/* A lost context reports its loss once, after any error it recorded: a robust
+ * one - robust access with lose-on-reset - as GL_CONTEXT_LOST, with
+ * GL_UNKNOWN_CONTEXT_RESET as its reset status every time, any other as
+ * GL_OUT_OF_MEMORY with no reset status. A context not lost reports neither. */
+TEST(guest_gl_context, a_lost_context_reports_its_loss_by_its_robustness)
+{ const std::uint8_t robust_flags = GlContextOptions::robust_access | GlContextOptions::lose_context_on_reset;
+  const std::uint8_t flag_sets[] = {robust_flags, GlContextOptions::robust_access, 0u};
+  for (const std::uint8_t flags : flag_sets) {
+    const bool robust = flags == robust_flags;
+    GlContextRig rig;
+    Context context(rig, GlContextOptions(4u, 6u, GlContextOptions::Profile::core, flags, 0u));
+    CHECK_EQ(context->robust(), robust);
+    CHECK_EQ(context->lost_reset_status(), 0u);
+    rig.host().gl_make(renderer, "4.6");
+    CHECK_STATUS(context->make(), Status::ok);
+    CHECK_EQ(context->take_error(), 0u);
+    CHECK_EQ(context->lost_reset_status(), 0u);
+    rig.kmt().withhold_answer_at(1u);
+    CHECK_EQ(av::glproto::rvk_glGetError(*context->wire()), 0u);
+    CHECK(context->wire() == nullptr);
+    CHECK_EQ(context->lost_reset_status(), robust ? GuestGlContext::gl_unknown_context_reset : 0u);
+    CHECK_EQ(context->lost_reset_status(), robust ? GuestGlContext::gl_unknown_context_reset : 0u);
+    context->record(0x0502u);
+    CHECK_EQ(context->take_error(), 0x0502u);
+    CHECK(context->invariants_hold());
+    CHECK_EQ(context->take_error(),
+             robust ? GuestGlContext::gl_context_lost : GuestGlContext::gl_out_of_memory);
+    CHECK(context->invariants_hold());
+    CHECK_EQ(context->take_error(), 0u);
+  } }
+
+/* Another context's fault loses this one at its next call, and its deletion
+ * then asks the host nothing: the blob arena is abandoned, not closed. */
+TEST(guest_gl_context, a_fault_on_its_device_loses_it_and_it_goes_without_the_host)
+{ GlContextRig rig;
+  std::uint32_t commands = 0u;
+  {
+    Context first(rig);
+    Context second(rig);
+    rig.host().gl_make(renderer, "4.6");
+    CHECK_STATUS(first->make(), Status::ok);
+    rig.host().gl_make(renderer, "4.6");
+    CHECK_STATUS(second->make(), Status::ok);
+    rig.kmt().withhold_answer_at(1u);
+    CHECK_EQ(av::glproto::rvk_glGetError(*first->wire()), 0u);
+    CHECK(first->wire() == nullptr);
+    CHECK(second->wire() == nullptr);
+    CHECK(second->state() == State::lost);
+    commands = rig.kmt().commands();
+  }
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK_EQ(rig.log().holding("did not close whole"), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
 TEST(guest_gl_context, the_first_error_recorded_is_kept_until_taken)
 { GlContextRig rig;
   Context context(rig);
@@ -290,7 +348,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter created(bytes, sizeof bytes);
   context->report(created, 0x10001u);
   CHECK(std::strcmp(created.dump(), "context/65537 state=created owner=0 pixel_format=7 major=3 minor=3 "
-                                    "profile=2 flags=0 share=0 share_target=0 error=0 arena=false renderer= extensions=0\n"
+                                    "profile=2 flags=0 share=0 share_target=0 error=0 link=4 arena=false renderer= extensions=0\n"
                                     "context/65537/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/65537/mappings/0 held=0 persistent_writers=0") == 0);
   rig.host().gl_make(renderer, "4.6");
@@ -300,7 +358,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter made(bytes, sizeof bytes);
   context->report(made, 1u);
   CHECK(std::strcmp(made.dump(), "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
-                                 "share=0 share_target=0 error=1282 arena=true renderer=rvk host renderer extensions=0\n"
+                                 "share=0 share_target=0 error=1282 link=0 arena=true renderer=rvk host renderer extensions=0\n"
                                  "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/1/mappings/0 held=0 persistent_writers=0") == 0); }
 
@@ -321,7 +379,11 @@ TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
   av::glicd::GuestGlContextProbe::connect(*connected, true);
   CHECK(!connected->invariants_hold());
   av::glicd::GuestGlContextProbe::connect(*connected, false);
-  CHECK(connected->invariants_hold()); }
+  CHECK(connected->invariants_hold());
+  /* A loss reported by a context that is not lost. */
+  Context reported(rig);
+  av::glicd::GuestGlContextProbe::report_loss(*reported);
+  CHECK(!reported->invariants_hold()); }
 
 TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_is_broken)
 { using av::glicd::GuestGlContextProbe;

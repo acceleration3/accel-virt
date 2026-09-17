@@ -1,10 +1,14 @@
-/* The OpenGL ICD's one way to the rvkgpu adapter in a process (research.md
- * §3): the adapter found by enumeration - a session-0 window's DC opens none
- * (050 T009) - and a device on it that every context's transport shares. It
- * opens with the first context made and closes with the last one gone. */
+/* The OpenGL ICD's ways to the rvkgpu adapter in a process (research.md §3):
+ * the adapter found by enumeration - a session-0 window's DC opens none (050
+ * T009) - and the devices on it that contexts' transports share. A device
+ * opens with the first context made on it and closes with the last one gone.
+ * When one context's transport faults, its whole device is lost (US3, T040):
+ * the contexts on it keep their link until they are deleted, and the next
+ * context made opens a new device beside it. */
 #ifndef AV_GLICD_GL_CONNECTION_HPP
 #define AV_GLICD_GL_CONNECTION_HPP
 
+#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -20,28 +24,49 @@ namespace av::glicd {
 
 class GlConnection {
 public:
+    /* A process that loses a device three times while contexts on each stay
+     * alive has had enough devices. */
+    static constexpr uint32_t max_links = 4u;
+    static constexpr uint32_t no_link = max_links;
+
     explicit GlConnection(Kmt &kmt);
     ~GlConnection();
     GlConnection(const GlConnection &) = delete;
     GlConnection &operator=(const GlConnection &) = delete;
 
-    /* One more context uses the device: the first opens it. not_supported
-     * when there is no rvkgpu adapter or no device on it, with nothing left
-     * open and no user counted. */
-    [[nodiscard]] Status acquire();
-    /* One context fewer; the last closes the device and the adapter. */
-    void                 release();
+    /* One more context uses a device: the device new contexts share, or a
+     * new one when there is none or it was lost. `link` names it; no_link on
+     * failure. not_supported with no rvkgpu adapter or no device made on it,
+     * no_space with every link lost and still held - nothing opened for
+     * either. */
+    [[nodiscard]] Status acquire(uint32_t &link);
+    /* One context fewer on `link`; its last closes the device, and the last
+     * device the adapter. A link not held is ignored. */
+    void                 release(uint32_t link);
+    /* The device behind `link` faulted: no new context joins it. A link not
+     * held is ignored. */
+    void                 lose(uint32_t link);
+    bool                 lost(uint32_t link) const;
+    /* Contexts holding any link. */
     uint32_t             users() const;
-    /* The device the transports open on; only while a user holds it. */
-    GuestConnection     &device();
+    /* The device a held link names. */
+    GuestConnection     &device(uint32_t link);
     void                 report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 
 private:
-    AdapterSearch   search_;
-    GuestConnection device_;
-    uint32_t        users_;
+    bool held(uint32_t link) const;
+    [[nodiscard]] Status open_link(uint32_t link);
+    void                 close_adapter_if_idle();
+
+    Kmt                           &kmt_;
+    AdapterSearch                  search_;
+    ObjectStorage<GuestConnection> devices_[max_links];
+    uint32_t                       users_[max_links];
+    bool                           lost_[max_links];
+    /* The link new contexts join: held and not lost, or no_link. */
+    uint32_t                       current_;
 
     friend struct GlConnectionProbe;
 };

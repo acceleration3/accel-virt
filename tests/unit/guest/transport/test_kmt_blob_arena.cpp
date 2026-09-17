@@ -322,3 +322,25 @@ TEST(kmt_blob_arena, the_invariant_catches_a_size_it_never_makes_and_lending_out
   CHECK(rig.arena().invariants_hold());
   rig.host().nop();
   CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+/* An arena abandoned with its context's device lost takes the lending back
+ * and unbinds the chunk, but sends the host nothing: the import goes with the
+ * host context. Abandoned twice, or never opened, nothing is asked. */
+TEST(kmt_blob_arena, abandon_lets_the_chunk_go_without_a_host_call)
+{ Rig rig;
+  CHECK_STATUS(rig.arena().abandon(), Status::ok);
+  rig.host_takes_the_import();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  const std::uint32_t commands = rig.kmt().commands();
+  CHECK_STATUS(rig.arena().abandon(), Status::ok);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  rig.check_nothing_is_held();
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  CHECK_STATUS(rig.arena().abandon(), Status::ok);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
+  /* A refused unbind is what abandon answers, with nothing held all the same. */
+  rig.host_takes_the_import();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
+  CHECK_STATUS(rig.arena().abandon(), Status::invalid_state);
+  rig.check_nothing_is_held(); }

@@ -9,7 +9,14 @@
 
 namespace av {
 
-ContextFault::ContextFault(ClientTransport &transport) : transport_(transport)
+ContextFault::ContextFault(ClientTransport &transport)
+    : transport_(transport), command_(vkproto::kCmd_vkCreateInstance), prefix_bytes_(sizeof(uint32_t))
+{
+    AV_SCOPE("ContextFault::ContextFault");
+}
+
+ContextFault::ContextFault(ClientTransport &transport, uint32_t command)
+    : transport_(transport), command_(command), prefix_bytes_(0u)
 {
     AV_SCOPE("ContextFault::ContextFault");
 }
@@ -18,10 +25,10 @@ Status ContextFault::send()
 {
     AV_SCOPE("ContextFault::send");
     WireWriter request = transport_.request_writer();
-    request.write_u32(static_cast<uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
+    if (prefix_bytes_ != 0u) request.write_u32(static_cast<uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
     WireReader          answer(nullptr, 0u);
     const SyncCallScope call(transport_);
-    const TransportResult sent = transport_.send_sync(vkproto::kCmd_vkCreateInstance, request, answer);
+    const TransportResult sent = transport_.send_sync(command_, request, answer);
     return sent == TransportResult::failed ? Status::ok : Status::conflict;
 }
 

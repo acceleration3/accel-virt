@@ -62,6 +62,12 @@ Status BlobImport::release()
     return answer.remaining() == 0u ? Status::ok : Status::malformed;
 }
 
+void BlobImport::forget()
+{
+    AV_SCOPE("BlobImport::forget");
+    memory_ = 0u;
+}
+
 uint64_t BlobImport::memory() const
 {
     AV_SCOPE("BlobImport::memory");

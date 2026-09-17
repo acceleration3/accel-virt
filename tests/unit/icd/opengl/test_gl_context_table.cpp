@@ -118,7 +118,7 @@ TEST(gl_context_table, reports_each_live_context_under_its_handle)
   fixture.table.report(writer);
   CHECK(std::strcmp(writer.dump(), "contexts/0 live=1\ncontexts/0/context/65537 state=created owner=0 "
                                    "pixel_format=1 major=0 minor=0 profile=0 flags=0 share=0 share_target=0 error=0 "
-                                   "arena=false renderer= extensions=0\n"
+                                   "link=4 arena=false renderer= extensions=0\n"
                                    "contexts/0/context/65537/windows/0 held=0 draws_window=false "
                                    "reads_window=false\n"
                      "contexts/0/context/65537/mappings/0 held=0 persistent_writers=0") == 0); }

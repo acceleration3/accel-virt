@@ -6,6 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/extension_policy.hpp"
 #include "icd/common/log_sink.hpp"
+#include "guest/transport/context_fault.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "icd/opengl/context_attributes.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
@@ -15,6 +16,7 @@
 #include "icd/opengl/window_surface.hpp"
 
 #include "gl_dispatch_client.h"
+#include "gl_protocol_ids.h"
 
 namespace av::glicd {
 
@@ -24,6 +26,9 @@ namespace {
 constexpr uint32_t get_error_slot = 261u;
 constexpr uint32_t get_integerv_slot = 263u;
 constexpr uint32_t line_bytes = 160u;
+/* ARB_robustness, KHR_robustness, EXT_robustness and GL 4.5 all name one query. */
+constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", "glGetGraphicsResetStatusARB",
+                                                    "glGetGraphicsResetStatusEXT", "glGetGraphicsResetStatusKHR"};
 /* The GL extensions reported: none yet - a row arrives with the test that
  * proves its extension through this ICD (tools/check_extension_policy.py). */
 constexpr const icd::ExtensionPolicy::Row *reported_extensions = nullptr;
@@ -247,6 +252,11 @@ void *GlIcdRoot::get_proc_address(const char *name)
         return reinterpret_cast<void *>(&entry::wglGetPixelFormatAttribfvARB);
     if (__builtin_strcmp(name, "wglChoosePixelFormatARB") == 0)
         return reinterpret_cast<void *>(&entry::wglChoosePixelFormatARB);
+    /* A lost context answers its reset status without the host. */
+    for (const char *const spelling : reset_status_names)
+        if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
+    if (__builtin_strcmp(name, "rvkForceContextFault") == 0)
+        return reinterpret_cast<void *>(&entry::rvkForceContextFault);
     for (uint32_t row = 0u; row < generated::kNamedEntryCount; row++)
         if (__builtin_strcmp(generated::kNamedEntries[row].name, name) == 0)
             return reinterpret_cast<void *>(generated::kNamedEntries[row].address);
@@ -398,10 +408,39 @@ uint32_t GlIcdRoot::get_error()
     AV_SCOPE("GlIcdRoot::get_error");
     GuestGlContext *const context = currents_.current();
     if (context == nullptr) return 0u;
-    const uint32_t local = context->take_error();
-    if (local != 0u) return local;
+    /* The wire first: that is where a context finds out it was lost, which
+     * is the error it reports next. */
     ClientTransport *const transport = context->wire();
+    const uint32_t         local = context->take_error();
+    if (local != 0u) return local;
     return transport != nullptr ? glproto::rvk_glGetError(*transport) : 0u;
+}
+
+uint32_t GlIcdRoot::reset_status()
+{
+    AV_SCOPE("GlIcdRoot::reset_status");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr) return 0u;
+    ClientTransport *const transport = context->wire();
+    return transport != nullptr ? glproto::rvk_glGetGraphicsResetStatus(*transport) : context->lost_reset_status();
+}
+
+int32_t GlIcdRoot::force_context_fault()
+{
+    AV_SCOPE("GlIcdRoot::force_context_fault");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr) {
+        fail(error_invalid_operation);
+        return 0;
+    }
+    ClientTransport *const transport = context->wire();
+    if (transport == nullptr) return 1;
+    /* A glGetString with no name: the OpenGL decoder cannot take it, and an
+     * OpenGL context only skips the Vulkan command 045's fault sends. */
+    static_cast<void>(ContextFault(*transport, glproto::kCmd_glGetString).send());
+    if (context->wire() == nullptr) return 1;
+    log_.write("rvkgl: the host answered the forced fault; the context goes on");
+    return 0;
 }
 
 uint64_t GlIcdRoot::mint_sync_token()

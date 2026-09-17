@@ -45,6 +45,10 @@ int32_t     APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, cons
 uintptr_t APIENTRY legacy_call();
 /* glGetError: the context's own error first, then the host's. */
 GLenum    APIENTRY get_error();
+/* glGetGraphicsResetStatus in every spelling: a lost context answers it. */
+GLenum    APIENTRY get_graphics_reset_status();
+/* The probe's own fault hook (feature 050, T040), found only by name. */
+int32_t   APIENTRY rvkForceContextFault();
 /* glGetIntegerv, which answers GL_NUM_EXTENSIONS itself. */
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 

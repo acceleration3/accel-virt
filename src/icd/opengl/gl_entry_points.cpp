@@ -142,6 +142,18 @@ GLenum APIENTRY get_error()
     return gl_icd_binding.root().get_error();
 }
 
+GLenum APIENTRY get_graphics_reset_status()
+{
+    AV_SCOPE("get_graphics_reset_status");
+    return gl_icd_binding.root().reset_status();
+}
+
+int32_t APIENTRY rvkForceContextFault()
+{
+    AV_SCOPE("rvkForceContextFault");
+    return gl_icd_binding.root().force_context_fault();
+}
+
 void APIENTRY get_integerv(GLenum pname, GLint *data)
 {
     AV_SCOPE("get_integerv");

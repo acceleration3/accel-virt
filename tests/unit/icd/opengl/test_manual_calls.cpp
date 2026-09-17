@@ -599,7 +599,11 @@ TEST(manual_calls, the_window_is_translated_on_the_way_to_the_host_and_back)
   current.rig().host().gl_integer(static_cast<std::int32_t>(gl_color_attachment0));
   av::glicd::entry::get_integerv(gl_draw_buffer, &answer);
   CHECK_EQ(answer, static_cast<GLint>(gl_back));
+  /* A query with nowhere to answer is still the host's to answer. */
+  current.rig().host().gl_integer(0);
   av::glicd::entry::get_integerv(gl_draw_buffer, nullptr);
+  CHECK_EQ(current.rig().kmt().queued_answers(), 0u);
+  current.rig().host().gl_varint(0u);
   CHECK_EQ(current.error(), 0u); }
 
 TEST(manual_calls, window_calls_with_nothing_current_send_nothing)

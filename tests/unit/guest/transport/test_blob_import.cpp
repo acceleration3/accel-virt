@@ -206,3 +206,20 @@ TEST(blob_import, invariants_refuse_a_refusal_that_holds_memory)
   BlobImport import(transport);
   BlobImportProbe::refused_and_held(import);
   CHECK(!import.invariants_hold()); }
+
+/* A context whose device was lost forgets its import rather than asking the
+ * host to release it: destroying the context frees it on the host (feature
+ * 050, T040). Nothing is sent, and a later release asks nothing either. */
+TEST(blob_import, forget_drops_the_import_without_a_call)
+{ MockTransport transport;
+  BlobImport import(transport);
+  const Answer taken(0u, 0u, device_memory);
+  transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
+  CHECK_STATUS(import.import(chunk_resource, 0u, one_mebibyte, 0u), Status::ok);
+  import.forget();
+  CHECK_EQ(import.memory(), 0u);
+  CHECK(import.invariants_hold());
+  CHECK_STATUS(import.release(), Status::ok);
+  CHECK_EQ(transport.sends(), 1u);
+  import.forget();
+  CHECK_EQ(transport.sends(), 1u); }

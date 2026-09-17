@@ -4,7 +4,8 @@
  * behind the send lock, and a blob arena its bulk data crosses in), with the
  * guest-side state the generated client asks about and the host's strings.
  *
- * created -> (make) made -> lost when the transport faults. Nothing is on the
+ * created -> (make) made -> lost when its device faults - through its own
+ * transport or another context's on the same device. Nothing is on the
  * host until make; a make that fails leaves the context created and holds
  * nothing. The error a WGL or legacy call records locally is what glGetError
  * answers before the host's. */
@@ -15,6 +16,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/opengl/gl_connection.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
@@ -40,7 +42,6 @@ class ThreadLock;
 
 namespace av::glicd {
 
-class GlConnection;
 class GlExtensionPolicy;
 struct GuestGlContextProbe;
 
@@ -55,6 +56,7 @@ public:
     enum : uint32_t {
         gl_vendor = 0x1F00u, gl_renderer = 0x1F01u, gl_version = 0x1F02u, gl_shading_language_version = 0x8B8Cu,
     };
+    enum : uint32_t { gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u };
 
     GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, icd::LogSink &log,
                    const GlExtensionPolicy &extensions, int32_t pixel_format, const GlContextOptions &options);
@@ -103,8 +105,16 @@ public:
 
     /* The first error recorded is kept until taken. */
     void        record(uint32_t error);
-    /* The recorded error, then GL_NO_ERROR, 0. */
+    /* The recorded error; then, once, the loss of a lost context -
+     * GL_CONTEXT_LOST for a robust one, GL_OUT_OF_MEMORY for any other
+     * (T040); then GL_NO_ERROR, 0. */
     uint32_t    take_error();
+    /* Asked for with both robust access and lose-on-reset. */
+    bool        robust() const;
+    /* What glGetGraphicsResetStatus answers without the host: for a lost
+     * robust context GL_UNKNOWN_CONTEXT_RESET, every time, since a lost
+     * context's reset never completes; otherwise GL_NO_ERROR. */
+    uint32_t    lost_reset_status() const;
     /* The host's string for `name`, the version capped at 4.6; null for any
      * other name or before make. */
     const char *string(uint32_t name) const;
@@ -139,7 +149,9 @@ private:
     uint32_t                       owner_;
     uint32_t                       error_;
     uint64_t                       share_target_;
-    bool                           connected_;
+    /* The device link a made or lost context holds; no_link otherwise. */
+    uint32_t                       link_;
+    bool                           loss_reported_;
     uint8_t                       *staging_;
     ObjectStorage<KmtTransport>    transport_;
     ObjectStorage<icd::LockedTransport> locked_;

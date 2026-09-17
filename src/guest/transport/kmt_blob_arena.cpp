@@ -60,6 +60,16 @@ Status KmtBlobArena::close()
     return released != Status::ok ? released : unbound;
 }
 
+Status KmtBlobArena::abandon()
+{
+    AV_SCOPE("KmtBlobArena::abandon");
+    if (bytes_ == 0u) return Status::ok;
+    transport_.blobs().lend(nullptr, 0u);
+    bytes_ = 0u;
+    import_.forget();
+    return chunk_.release();
+}
+
 bool     KmtBlobArena::lending() const
 {
     AV_SCOPE("KmtBlobArena::lending");

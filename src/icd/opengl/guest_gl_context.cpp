@@ -27,7 +27,7 @@ GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, ic
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), error_(no_error), share_target_(0u), connected_(false),
+      options_(options), state_(State::created), owner_(0u), error_(no_error), share_target_(0u), link_(GlConnection::no_link), loss_reported_(false),
       staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
@@ -115,9 +115,13 @@ Status GuestGlContext::share(uint32_t share_name)
 ClientTransport *GuestGlContext::wire()
 {
     AV_SCOPE("GuestGlContext::wire");
-    if (state_ == State::made && transport_.object().faulted()) {
+    if (state_ != State::made) return nullptr;
+    /* One faulted transport loses its whole device: every context on the
+     * link finds out at its own next call, on its own thread. */
+    if (transport_.object().faulted()) connection_.lose(link_);
+    if (connection_.lost(link_)) {
         state_ = State::lost;
-        log_.write("rvkgl: the context's transport faulted; the context is lost");
+        log_.write("rvkgl: the context's device faulted; the context is lost");
     }
     return state_ == State::made ? &locked_.object() : nullptr;
 }
@@ -167,7 +171,9 @@ uint32_t GuestGlContext::take_error()
     AV_SCOPE("GuestGlContext::take_error");
     const uint32_t taken = error_;
     error_ = no_error;
-    return taken;
+    if (taken != no_error || state_ != State::lost || loss_reported_) return taken;
+    loss_reported_ = true;
+    return robust() ? gl_context_lost : gl_out_of_memory;
 }
 
 const char *GuestGlContext::string(uint32_t name) const
@@ -197,6 +203,19 @@ uint64_t GuestGlContext::debug_user() const
     return debug_user_;
 }
 
+bool GuestGlContext::robust() const
+{
+    AV_SCOPE("GuestGlContext::robust");
+    const uint8_t both = GlContextOptions::robust_access | GlContextOptions::lose_context_on_reset;
+    return (options_.flags() & both) == both;
+}
+
+uint32_t GuestGlContext::lost_reset_status() const
+{
+    AV_SCOPE("GuestGlContext::lost_reset_status");
+    return state_ == State::lost && robust() ? gl_unknown_context_reset : no_error;
+}
+
 void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
 {
     AV_SCOPE("GuestGlContext::report");
@@ -212,6 +231,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("share", options_.share_context());
     writer.number("share_target", share_target_);
     writer.number("error", error_);
+    writer.number("link", link_);
     writer.flag("arena", arena_.constructed() && arena_.object().lending());
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
     writer.number("extensions", extensions_.count());
@@ -226,7 +246,10 @@ bool GuestGlContext::invariants_hold() const
 {
     AV_SCOPE("GuestGlContext::invariants_hold");
     const bool held = state_ != State::created;
-    if (held != transport_.constructed() || held != locked_.constructed() || held != connected_) return false;
+    if (held != transport_.constructed() || held != locked_.constructed() ||
+        held != (link_ != GlConnection::no_link))
+        return false;
+    if (loss_reported_ && state_ != State::lost) return false;
     if (held != (staging_ != nullptr)) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
@@ -237,12 +260,11 @@ bool GuestGlContext::invariants_hold() const
 Status GuestGlContext::build()
 {
     AV_SCOPE("GuestGlContext::build");
-    if (connection_.acquire() != Status::ok) return Status::not_supported;
-    connected_ = true;
+    if (connection_.acquire(link_) != Status::ok) return Status::not_supported;
     staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes, Pool::paged));
     if (staging_ == nullptr) return Status::no_memory;
     /* Both storages were emptied by teardown or never filled. */
-    static_cast<void>(transport_.construct(connection_.device(), SubApi::opengl, ring_order, reply_bytes, staging_,
+    static_cast<void>(transport_.construct(connection_.device(link_), SubApi::opengl, ring_order, reply_bytes, staging_,
                                            staging_bytes));
     const Status initialized = transport_.object().initialize(options_);
     if (initialized != Status::ok) {
@@ -250,7 +272,7 @@ Status GuestGlContext::build()
         return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
     }
     static_cast<void>(locked_.construct(transport_.object(), send_lock_));
-    static_cast<void>(arena_.construct(connection_.device(), transport_.object()));
+    static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
     if (arena_.object().open(arena_bytes) != Status::ok)
         log_.write("rvkgl: no blob arena for the context; bulk data crosses inline");
     return Status::ok;
@@ -306,15 +328,19 @@ void GuestGlContext::teardown()
     framebuffers_.release(nullptr);
     mappings_.release();
     if (arena_.constructed()) {
-        if (arena_.object().close() != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
+        /* A lost context's host context goes with DestroyContext, and its
+         * import with it: nothing is asked of the host. */
+        const Status closed = state_ == State::lost ? arena_.object().abandon() : arena_.object().close();
+        if (closed != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
         arena_.destroy();
     }
     locked_.destroy();
     transport_.destroy();
     if (staging_ != nullptr) memory_.release(staging_);
     staging_ = nullptr;
-    if (connected_) connection_.release();
-    connected_ = false;
+    connection_.release(link_);
+    link_ = GlConnection::no_link;
+    loss_reported_ = false;
     state_ = State::created;
     owner_ = 0u;
     for (auto &row : strings_) row[0] = '\0';

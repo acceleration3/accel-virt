@@ -33,6 +33,9 @@ public:
      * answers; ok with nothing sent when none is held. invalid_state when the
      * call failed, malformed when the host answered with bytes. */
     [[nodiscard]] Status release();
+    /* The import held is dropped with nothing sent: its context is gone on
+     * the host, which frees what the context imported. */
+    void                 forget();
     /* The device memory the host answered; 0 unless an import is held. */
     uint64_t             memory() const;
     /* The status of the host's last refusal; 0 after an import it took. */

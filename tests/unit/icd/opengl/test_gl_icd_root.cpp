@@ -56,7 +56,7 @@ struct WindowTableProbe {
 };
 
 struct GlConnectionProbe {
-    static void set_users(GlConnection &connection, uint32_t users) { connection.users_ = users; }
+    static void set_users(GlConnection &connection, uint32_t users) { connection.users_[0] = users; }
 };
 
 struct GlContextTableProbe {
@@ -374,13 +374,16 @@ TEST(gl_icd_root, a_legacy_command_is_invalid_operation_without_a_host_call)
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0x0505u);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glGetError), 1u); }
 
-TEST(gl_icd_root, a_lost_context_answers_no_error_and_sends_nothing)
+/* The call that faulted answers nothing; the loss is glGetError's next
+ * answer, once (T040), and nothing is sent after it. */
+TEST(gl_icd_root, a_lost_context_reports_its_loss_once_and_sends_nothing)
 { GlIcdRig rig;
   rig.load_with_format();
   CHECK(rig.current_context() != nullptr);
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
   const std::uint32_t commands = rig.kmt().commands();
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0x0505u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
   rig.opengl32().gl<ClearFn>(slot_clear)(0x4000u);
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
@@ -478,7 +481,9 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   CHECK(create(rig.dc(), unmade, attributes) == nullptr);
   check_error(rig, Root::error_invalid_operation);
   rig.kmt().withhold_answer_at(1u);
+  /* Lost while its window is made: current all the same, the loss its first error. */
   CHECK(rig.opengl32().make_current(rig.dc(), first));
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0x0505u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
   CHECK(create(rig.dc(), first, attributes) == nullptr);
   check_error(rig, Root::error_invalid_operation); }

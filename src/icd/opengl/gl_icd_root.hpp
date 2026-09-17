@@ -109,6 +109,14 @@ public:
     /* glGetError: the current context's own error first, then the host's; 0
      * with nothing current or the context lost. */
     uint32_t         get_error();
+    /* glGetGraphicsResetStatus: the host's answer, or a lost context's own
+     * (GuestGlContext::lost_reset_status); 0 with nothing current. */
+    uint32_t         reset_status();
+    /* The probe's rvkForceContextFault (T040): the calling thread's context
+     * sent a call its host cannot decode. 1 when the context is lost after
+     * it (or was already), 0 when the host answered; 0 with
+     * ERROR_INVALID_OPERATION with nothing current. */
+    int32_t          force_context_fault();
     uint64_t         mint_sync_token();
     /* A command whose encoding overflowed and was not sent. */
     void             note_dropped(const char *api, const char *command, size_t written);

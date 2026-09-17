@@ -39,6 +39,10 @@ public:
      * attempted whatever the one before answered: the first failure, and
      * nothing is held after. ok with nothing asked when nothing is held. */
     [[nodiscard]] Status close();
+    /* close() for a context whose device was lost: the import is forgotten
+     * rather than released - destroying the context frees it on the host -
+     * and the chunk is let go. The chunk's failure, if any. */
+    [[nodiscard]] Status abandon();
     bool                 lending() const;
     /* The chunk's size; 0 unless lending. */
     uint64_t             bytes() const;
