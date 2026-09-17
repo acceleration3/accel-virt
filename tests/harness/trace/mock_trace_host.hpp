@@ -26,8 +26,9 @@ public:
     void run_as(std::uint64_t key, std::uint32_t number);
     void set_clock(std::uint64_t now);
     void set_level(std::uint16_t level);
-    /* The `nth` swap from now (1 is the next) answers false and writes nothing. */
-    void fail_exchange_at(std::uint32_t nth);
+    /* The `nth` swap from now (1 is the next) answers false and writes nothing;
+     * with a count, that many swaps from it do. */
+    void fail_exchange_at(std::uint32_t nth, std::uint32_t count = 1u);
     /* Every swap fails until cleared. */
     void fail_every_exchange(bool failing);
     /* Called once, from the next level() - then cleared. */
@@ -47,6 +48,7 @@ private:
     std::uint16_t level_;
     std::uint32_t exchanges_;
     std::uint32_t fail_at_;
+    std::uint32_t fail_count_;
     bool          failing_;
     pthread_t     owner_;
     mutable Hook  hook_;

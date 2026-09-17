@@ -43,7 +43,11 @@ TEST(mock_trace_host, swaps_only_an_expected_word_and_fails_the_scripted_one)
   CHECK(!host.exchange(word, 11u, 12u));
   mock.fail_every_exchange(false);
   CHECK(host.exchange(word, 11u, 12u));
-  CHECK_EQ(mock.exchanges(), 7u); }
+  CHECK_EQ(mock.exchanges(), 7u);
+  mock.fail_exchange_at(1u, 2u);
+  CHECK(!host.exchange(word, 12u, 13u));
+  CHECK(!host.exchange(word, 12u, 13u));
+  CHECK(host.exchange(word, 12u, 13u)); }
 
 TEST(mock_trace_host, runs_the_level_hook_once)
 { MockTraceHost mock;

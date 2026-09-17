@@ -9,8 +9,10 @@ namespace {
 
 /* gettid() is a system call every time, and every scope asks: the id is read
  * once per thread. QEMU does not fork once devices exist, so no child keeps a
- * parent's id. */
-thread_local pid_t thread_id = 0;
+ * parent's id. Initial-exec: the general-dynamic model a shared object gets by
+ * default calls __tls_get_addr on every scope, and one int fits the static TLS
+ * surplus glibc keeps for dlopened modules. */
+[[gnu::tls_model("initial-exec")]] thread_local pid_t thread_id = 0;
 
 pid_t cached_thread_id()
 {

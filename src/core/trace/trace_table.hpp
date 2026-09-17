@@ -67,6 +67,7 @@ private:
     void     write16(size_t offset, uint16_t value);
     uint64_t &owner(uint32_t slot);
     uint64_t  owner_word(uint32_t slot) const;
+    size_t    slot_at(uint32_t slot) const;
     uint32_t first_probe(uint64_t key) const;
     uint32_t active_slot(uint64_t key) const;
     uint32_t claim(uint64_t key);
@@ -76,6 +77,8 @@ private:
     TraceHost  &host_;
     uint8_t    *region_;
     TraceLayout layout_;
+    /* layout_'s slot count, kept beside it for the scope path. */
+    uint32_t    slots_;
 
     friend struct TraceTableProbe;
 };

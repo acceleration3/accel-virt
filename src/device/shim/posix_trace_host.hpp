@@ -24,10 +24,14 @@ public:
 private:
     /* The clock's nanoseconds per trace tick. */
     static constexpr uint64_t nanoseconds_per_tick = 100u;
-    static constexpr int monotonic = 1;  /* CLOCK_MONOTONIC */
+    /* CLOCK_MONOTONIC_COARSE: the last tick of CLOCK_MONOTONIC, a few ns to
+     * read against ~20 for the precise clock on every scope, never ahead of
+     * the CLOCK_MONOTONIC a reader compares against, and fine enough for ages
+     * judged in milliseconds. */
+    static constexpr int monotonic_coarse = 6;
 
-    /* The clock every stamp comes from, which a reader compares against. */
-    int clock_ = monotonic;
+    /* The clock every stamp comes from. */
+    int clock_ = monotonic_coarse;
 };
 
 }  // namespace av

@@ -3,6 +3,8 @@
 #include "core/trace/scope_name.hpp"
 #include "core/trace/trace_host.hpp"
 
+static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "trace tables are little-endian");
+
 namespace av {
 
 namespace {
@@ -14,7 +16,7 @@ constexpr uint32_t mix_shift = 32u;
 
 }  // namespace
 
-TraceTable::TraceTable(TraceHost &host) : host_(host), region_(nullptr), layout_(0u) {}
+TraceTable::TraceTable(TraceHost &host) : host_(host), region_(nullptr), layout_(0u), slots_(0u) {}
 
 Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module, uint32_t process)
 {
@@ -29,6 +31,7 @@ Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module,
     for (size_t byte = 0u; byte < fit.bytes(); byte++) region[byte] = 0u;
     region_ = region;
     layout_ = fit;
+    slots_ = fit.slots();
     for (size_t byte = 0u; byte < length; byte++) region_[TraceLayout::module_at + byte] = static_cast<uint8_t>(module[byte]);
     write32(TraceLayout::version_at, TraceLayout::version);
     write32(TraceLayout::header_bytes_at, TraceLayout::header_bytes);
@@ -49,24 +52,32 @@ uint32_t TraceTable::enter(const ScopeName &name)
     if (region_ == nullptr) return no_slot;
     const uint64_t key = host_.thread_key();
     if (key == 0u || (key & TraceLayout::active) != 0u) return no_slot;
-    uint32_t slot = active_slot(key);
-    if (slot == no_slot) slot = claim(key);
-    if (slot == no_slot) return no_slot;
+    /* A thread's slot is almost always the one its key hashes to: nested, it
+     * is active there; entering again, it is idle there. Only a collision
+     * pays for the scan. */
+    uint32_t       slot = first_probe(key);
+    const uint64_t word = owner_word(slot);
+    if (word != (key | TraceLayout::active) && !(word == key && take(slot, word, key))) {
+        slot = active_slot(key);
+        if (slot == no_slot) slot = claim(key);
+        if (slot == no_slot) return no_slot;
+    }
     push(slot, name);
     return slot;
 }
 
 void TraceTable::leave(uint32_t slot)
 {
-    if (region_ == nullptr || slot >= layout_.slots()) return;
+    if (region_ == nullptr || slot >= slots_) return;
     const uint64_t key = host_.thread_key();
-    const size_t   at = layout_.slot(slot);
-    if (owner(slot) != (key | TraceLayout::active)) return;
+    const size_t   at = slot_at(slot);
+    if (owner_word(slot) != (key | TraceLayout::active)) return;
     /* An active slot holds at least the frame its enter pushed. */
     const uint32_t depth = read32(at + TraceLayout::depth_at);
     write32(at + TraceLayout::depth_at, depth - 1u);
     if (depth != 1u) return;
-    write32(at + TraceLayout::last_left_at, read32(layout_.frame(slot, 0u) + TraceLayout::name_at));
+    write32(at + TraceLayout::last_left_at,
+            read32(at + TraceLayout::slot_header_bytes + TraceLayout::name_at));
     write64(at + TraceLayout::left_at, host_.clock());
     write64(at + TraceLayout::waiting_at, 0u);
     /* Only this thread moves its own slot out of active, so the swap cannot
@@ -80,7 +91,7 @@ void TraceTable::waiting(uint64_t lock)
     if (region_ == nullptr) return;
     const uint32_t slot = active_slot(host_.thread_key());
     if (slot == no_slot) return;
-    write64(layout_.slot(slot) + TraceLayout::waiting_at, lock);
+    write64(slot_at(slot) + TraceLayout::waiting_at, lock);
 }
 
 void TraceTable::acquired(uint64_t lock)
@@ -88,22 +99,23 @@ void TraceTable::acquired(uint64_t lock)
     if (region_ == nullptr) return;
     const uint32_t slot = active_slot(host_.thread_key());
     if (slot == no_slot) return;
-    write64(layout_.slot(slot) + TraceLayout::waiting_at, 0u);
-    write64(layout_.slot(slot) + TraceLayout::holding_at, lock);
+    write64(slot_at(slot) + TraceLayout::waiting_at, 0u);
+    write64(slot_at(slot) + TraceLayout::holding_at, lock);
 }
 
 void TraceTable::released(uint64_t lock)
 {
     if (region_ == nullptr) return;
     const uint32_t slot = active_slot(host_.thread_key());
-    if (slot == no_slot || read64(layout_.slot(slot) + TraceLayout::holding_at) != lock) return;
-    write64(layout_.slot(slot) + TraceLayout::holding_at, 0u);
+    if (slot == no_slot || read64(slot_at(slot) + TraceLayout::holding_at) != lock) return;
+    write64(slot_at(slot) + TraceLayout::holding_at, 0u);
 }
 
 void TraceTable::withdraw()
 {
     region_ = nullptr;
     layout_ = TraceLayout(uint32_t{0});
+    slots_ = 0u;
 }
 
 void TraceTable::record_crash(uint32_t code, uint64_t address)
@@ -121,12 +133,13 @@ size_t         TraceTable::bytes() const { return region_ != nullptr ? layout_.b
 
 bool TraceTable::invariants_hold() const
 {
-    if (region_ == nullptr) return layout_.slots() == 0u;
+    if (layout_.slots() != slots_) return false;
+    if (region_ == nullptr) return slots_ == 0u;
     if (read64(TraceLayout::magic_at) != TraceLayout::magic || read32(TraceLayout::slot_count_at) != layout_.slots())
         return false;
     for (uint32_t slot = 0u; slot < layout_.slots(); slot++) {
         const uint64_t word = owner_word(slot);
-        const uint32_t depth = read32(layout_.slot(slot) + TraceLayout::depth_at);
+        const uint32_t depth = read32(slot_at(slot) + TraceLayout::depth_at);
         /* A free or idle slot has left every function it entered. */
         if ((word & TraceLayout::active) == 0u && depth != 0u) return false;
         if (word == TraceLayout::active) return false;
@@ -134,59 +147,59 @@ bool TraceTable::invariants_hold() const
     return true;
 }
 
+/* Every field is little-endian (docs/trace.md) and so is every target, so a
+ * field is one load or store. */
 uint64_t TraceTable::read64(size_t offset) const
 {
     uint64_t value = 0u;
-    for (size_t byte = 0u; byte < sizeof value; byte++)
-        value |= static_cast<uint64_t>(region_[offset + byte]) << (8u * byte);
+    __builtin_memcpy(&value, region_ + offset, sizeof value);
     return value;
 }
 
-uint32_t TraceTable::read32(size_t offset) const { return static_cast<uint32_t>(read64(offset) & 0xFFFFFFFFull); }
-
-void TraceTable::write64(size_t offset, uint64_t value)
+uint32_t TraceTable::read32(size_t offset) const
 {
-    for (size_t byte = 0u; byte < sizeof value; byte++)
-        region_[offset + byte] = static_cast<uint8_t>(value >> (8u * byte));
+    uint32_t value = 0u;
+    __builtin_memcpy(&value, region_ + offset, sizeof value);
+    return value;
 }
 
-void TraceTable::write32(size_t offset, uint32_t value)
-{
-    for (size_t byte = 0u; byte < sizeof value; byte++)
-        region_[offset + byte] = static_cast<uint8_t>(value >> (8u * byte));
-}
-
-void TraceTable::write16(size_t offset, uint16_t value)
-{
-    region_[offset] = static_cast<uint8_t>(value);
-    region_[offset + 1u] = static_cast<uint8_t>(value >> 8u);
-}
+void TraceTable::write64(size_t offset, uint64_t value) { __builtin_memcpy(region_ + offset, &value, sizeof value); }
+void TraceTable::write32(size_t offset, uint32_t value) { __builtin_memcpy(region_ + offset, &value, sizeof value); }
+void TraceTable::write16(size_t offset, uint16_t value) { __builtin_memcpy(region_ + offset, &value, sizeof value); }
 
 /* The owner word is swapped by other threads, so it is the one field read and
  * written as a whole u64: a byte-wise read could combine two owners. The
  * region is 8-byte aligned and every slot starts at an 8-byte offset. */
 uint64_t &TraceTable::owner(uint32_t slot)
 {
-    return *static_cast<uint64_t *>(static_cast<void *>(region_ + layout_.slot(slot) + TraceLayout::owner_at));
+    return *static_cast<uint64_t *>(static_cast<void *>(region_ + slot_at(slot) + TraceLayout::owner_at));
+}
+
+/* TraceLayout::slot's arithmetic, in this file so every access on the scope
+ * path is inlined rather than a call into another object. */
+size_t TraceTable::slot_at(uint32_t slot) const
+{
+    return TraceLayout::header_bytes + static_cast<size_t>(slot) * TraceLayout::slot_bytes;
 }
 
 uint64_t TraceTable::owner_word(uint32_t slot) const
 {
     return *static_cast<const uint64_t *>(
-        static_cast<const void *>(region_ + layout_.slot(slot) + TraceLayout::owner_at));
+        static_cast<const void *>(region_ + slot_at(slot) + TraceLayout::owner_at));
 }
 
+/* The top 32 bits of the mixed key, scaled onto the slots without a division. */
 uint32_t TraceTable::first_probe(uint64_t key) const
 {
-    return static_cast<uint32_t>(((key * key_mix) >> mix_shift) % layout_.slots());
+    return static_cast<uint32_t>((((key * key_mix) >> mix_shift) * slots_) >> mix_shift);
 }
 
 uint32_t TraceTable::active_slot(uint64_t key) const
 {
     if (key == 0u) return no_slot;
     const uint32_t start = first_probe(key);
-    for (uint32_t step = 0u; step < layout_.slots(); step++) {
-        const uint32_t slot = (start + step) % layout_.slots();
+    for (uint32_t step = 0u; step < slots_; step++) {
+        const uint32_t slot = (start + step) % slots_;
         if (owner_word(slot) == (key | TraceLayout::active)) return slot;
     }
     return no_slot;
@@ -198,8 +211,8 @@ uint32_t TraceTable::claim(uint64_t key)
 {
     const uint32_t start = first_probe(key);
     for (uint32_t pass = 0u; pass < 3u; pass++) {
-        for (uint32_t step = 0u; step < layout_.slots(); step++) {
-            const uint32_t slot = (start + step) % layout_.slots();
+        for (uint32_t step = 0u; step < slots_; step++) {
+            const uint32_t slot = (start + step) % slots_;
             const uint64_t word = owner_word(slot);
             const bool     wanted = pass == 0u ? word == key
                                   : pass == 1u ? word == 0u
@@ -213,7 +226,7 @@ uint32_t TraceTable::claim(uint64_t key)
 bool TraceTable::take(uint32_t slot, uint64_t expected, uint64_t key)
 {
     if (!host_.exchange(owner(slot), expected, key | TraceLayout::active)) return false;
-    const size_t at = layout_.slot(slot);
+    const size_t at = slot_at(slot);
     write32(at + TraceLayout::depth_at, 0u);
     write32(at + TraceLayout::thread_at, host_.thread_number());
     write64(at + TraceLayout::waiting_at, 0u);
@@ -229,12 +242,12 @@ bool TraceTable::take(uint32_t slot, uint64_t expected, uint64_t key)
  * thread between the two pushes above this frame, not over it. */
 void TraceTable::push(uint32_t slot, const ScopeName &name)
 {
-    const size_t   at = layout_.slot(slot);
+    const size_t   at = slot_at(slot);
     const uint32_t depth = read32(at + TraceLayout::depth_at);
     write32(at + TraceLayout::depth_at, depth + 1u);
     write64(at + TraceLayout::entries_at, read64(at + TraceLayout::entries_at) + 1u);
     if (depth >= TraceLayout::frames_per_slot) return;
-    const size_t frame = layout_.frame(slot, depth);
+    const size_t frame = at + TraceLayout::slot_header_bytes + static_cast<size_t>(depth) * TraceLayout::frame_bytes;
     write32(frame + TraceLayout::name_at, name.id());
     write16(frame + TraceLayout::level_at, host_.level());
     write64(frame + TraceLayout::entered_at, host_.clock());

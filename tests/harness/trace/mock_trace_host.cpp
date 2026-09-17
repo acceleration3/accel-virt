@@ -3,7 +3,7 @@
 namespace av {
 
 MockTraceHost::MockTraceHost()
-    : key_(0x1000u), number_(100u), now_(1u), level_(0u), exchanges_(0u), fail_at_(0u), failing_(false),
+    : key_(0x1000u), number_(100u), now_(1u), level_(0u), exchanges_(0u), fail_at_(0u), fail_count_(0u), failing_(false),
       owner_(pthread_self()), hook_(nullptr), hook_context_(nullptr)
 {}
 
@@ -15,7 +15,11 @@ void MockTraceHost::run_as(std::uint64_t key, std::uint32_t number)
 
 void MockTraceHost::set_clock(std::uint64_t now) { now_ = now; }
 void MockTraceHost::set_level(std::uint16_t level) { level_ = level; }
-void MockTraceHost::fail_exchange_at(std::uint32_t nth) { fail_at_ = exchanges_ + nth; }
+void MockTraceHost::fail_exchange_at(std::uint32_t nth, std::uint32_t count)
+{
+    fail_at_ = exchanges_ + nth;
+    fail_count_ = count;
+}
 void MockTraceHost::fail_every_exchange(bool failing) { failing_ = failing; }
 
 void MockTraceHost::on_next_level(Hook hook, void *context)
@@ -43,7 +47,8 @@ std::uint16_t MockTraceHost::level() const
 bool MockTraceHost::exchange(std::uint64_t &word, std::uint64_t expected, std::uint64_t desired)
 {
     exchanges_++;
-    if (failing_ || exchanges_ == fail_at_ || word != expected) return false;
+    const bool scripted = exchanges_ >= fail_at_ && exchanges_ < fail_at_ + fail_count_;
+    if (failing_ || scripted || word != expected) return false;
     word = desired;
     return true;
 }

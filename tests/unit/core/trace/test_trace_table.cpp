@@ -15,7 +15,12 @@ using av::TraceTable;
 namespace av {
 
 struct TraceTableProbe {
-    static void claim_slots(TraceTable &table) { table.layout_ = TraceLayout(std::uint32_t{1}); }
+    static void claim_slots(TraceTable &table)
+    {
+        table.layout_ = TraceLayout(std::uint32_t{1});
+        table.slots_ = 1u;
+    }
+    static void desynchronize(TraceTable &table) { table.slots_ = table.layout_.slots() + 1u; }
 };
 
 }  // namespace av
@@ -275,10 +280,10 @@ TEST(trace_table_enter, a_lost_swap_moves_on_to_the_next_candidate)
   fixture.host.run_as(0x20u, 2u);
   const std::uint32_t second = fixture.table.enter(outer);
   fixture.table.leave(second);
-  /* Thread 0x10 loses the swap on its own idle slot: it takes a free one and
-   * its idle slot is left as it was. */
+  /* Thread 0x10 loses the swap on its own idle slot at the hashed try and
+   * again in the scan: it takes a free one and its idle slot is left as it was. */
   fixture.host.run_as(0x10u, 1u);
-  fixture.host.fail_exchange_at(1u);
+  fixture.host.fail_exchange_at(1u, 2u);
   const std::uint32_t taken = fixture.table.enter(middle);
   CHECK(taken < 4u);
   CHECK(taken != uncontested);
@@ -290,6 +295,21 @@ TEST(trace_table_enter, a_lost_swap_moves_on_to_the_next_candidate)
   fixture.host.fail_every_exchange(true);
   fixture.host.run_as(0x30u, 3u);
   CHECK_EQ(fixture.table.enter(outer), TraceTable::no_slot);
+  CHECK(fixture.table.invariants_hold()); }
+
+/* One lost swap at the hashed slot is retried by the scan, which finds the
+ * slot still idle and this thread's. */
+TEST(trace_table_enter, a_swap_lost_once_at_the_hashed_slot_is_retried)
+{ TableFixture fixture;
+  fixture.host.run_as(0x10u, 1u);
+  const std::uint32_t slot = fixture.table.enter(outer);
+  fixture.table.leave(slot);
+  const std::uint32_t before = fixture.host.exchanges();
+  fixture.host.fail_exchange_at(1u);
+  CHECK_EQ(fixture.table.enter(middle), slot);
+  CHECK_EQ(fixture.host.exchanges(), before + 2u);
+  CHECK_EQ(u64_at(fixture.bytes(), slot_at(slot)), 0x10u | active_bit);
+  CHECK_EQ(u64_at(fixture.bytes(), slot_at(slot) + 16u), 2u);
   CHECK(fixture.table.invariants_hold()); }
 
 TEST(trace_table_leave, a_lost_swap_leaves_the_slot_active_and_the_thread_resumes_it)
@@ -431,6 +451,11 @@ TEST(trace_table_invariants, fail_for_an_unlaid_table_that_claims_slots)
   av::TraceTableProbe::claim_slots(table);
   CHECK(!table.invariants_hold()); }
 
+TEST(trace_table_invariants, fail_for_a_slot_count_that_differs_from_the_layout)
+{ TableFixture fixture;
+  av::TraceTableProbe::desynchronize(fixture.table);
+  CHECK(!fixture.table.invariants_hold()); }
+
 /* A table withdrawn while a scope is open writes nothing when that scope
  * leaves, so its owner may release the region first. */
 TEST(trace_table_withdraw, later_calls_write_nothing_to_the_region)
@@ -449,4 +474,32 @@ TEST(trace_table_withdraw, later_calls_write_nothing_to_the_region)
   fixture.table.released(1u);
   fixture.table.record_crash(1u, 1u);
   for (std::size_t byte = 0u; byte < sizeof fixture.region.bytes; byte++) CHECK_EQ(fixture.region.bytes[byte], 0xEEu);
+  CHECK(fixture.table.invariants_hold()); }
+
+/* Two threads whose keys hash to one slot: the second lives elsewhere, and
+ * its nested entries find its slot by the scan, never the first thread's. */
+TEST(trace_table_enter, a_thread_whose_hashed_slot_is_taken_nests_on_its_own)
+{ TableFixture fixture;
+  fixture.host.run_as(0x10u, 1u);
+  const std::uint32_t first = fixture.table.enter(outer);
+  std::uint64_t colliding = 0x11u;
+  for (; colliding < 0x100000u; colliding++) {
+    fixture.host.run_as(colliding, 2u);
+    const std::uint32_t probe = fixture.table.enter(inner);
+    if (probe == TraceTable::no_slot) continue;
+    fixture.table.leave(probe);
+    /* Hashing to the same slot leaves this key's slot elsewhere; a key that
+     * hashed elsewhere got its own hashed slot, which is not the first's. */
+    const std::uint64_t key_mix = 0x9E3779B97F4A7C15ull;
+    const std::uint64_t mixed = colliding * key_mix;
+    if (static_cast<std::uint32_t>(((mixed >> 32u) * 4u) >> 32u) == first) break;
+  }
+  CHECK(colliding < 0x100000u);
+  fixture.host.run_as(colliding, 2u);
+  const std::uint32_t second = fixture.table.enter(outer);
+  CHECK(second != first);
+  CHECK(second < 4u);
+  CHECK_EQ(fixture.table.enter(middle), second);
+  CHECK_EQ(u32_at(fixture.bytes(), slot_at(second) + 8u), 2u);
+  CHECK_EQ(u32_at(fixture.bytes(), slot_at(first) + 8u), 1u);
   CHECK(fixture.table.invariants_hold()); }
