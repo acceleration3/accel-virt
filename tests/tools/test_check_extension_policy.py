@@ -22,12 +22,20 @@ SUPPORTED = textwrap.dedent('''
     };
 ''')
 
+CARRIED = textwrap.dedent('''
+    inline constexpr const char* kCarriedExtensions[] = {
+        "GL_ARB_debug_output",
+        "GL_KHR_debug",
+    };
+''')
+
 
 class CheckExtensionPolicy(unittest.TestCase):
     def setUp(self):
         self.root = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root)
         self.write("src/proto/generated/vulkan/vk_supported_extensions.h", SUPPORTED)
+        self.write("src/proto/generated/opengl/gl_tier.h", CARRIED)
         self.write("tests/unit/icd/vulkan/test_things.cpp",
                    "TEST(memory_entries, reports_the_budget)\n{ }\n"
                    "TEST( probe , enables_spirv )\n{ }\n"
@@ -153,8 +161,60 @@ class CheckExtensionPolicy(unittest.TestCase):
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}', where="src/icd/opengl/gl_icd_root.cpp")
         result = self.check()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("extension_policy: no generated list is known for opengl", result.stderr)
+        self.assertIn("src/icd/opengl/gl_icd_root.cpp: VK_KHR_spirv_1_4 is not in "
+                      "src/proto/generated/opengl/gl_tier.h", result.stderr)
         self.assertNotIn("vulkan", result.stderr)
+        self.table('{"GL_KHR_debug", 1u, "probe.enables_spirv"}', where="src/icd/opengl/gl_icd_root.cpp")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok, 2 reported (opengl 1, vulkan 1)", result.stdout)
+
+    def wgl_table(self, rows, where="src/icd/opengl/gl_icd_root.cpp"):
+        self.write(where, "namespace {\nconst ExtensionPolicy::Row reported_extensions[] = {\n"
+                          '{"GL_KHR_debug", 1u, "probe.enables_spirv"}\n};\n'
+                          "const ExtensionPolicy::Row reported_wgl_extensions[] = {\n" + rows + "\n};\n}\n")
+
+    def test_wgl_rows_name_a_wgl_extension_and_a_test_that_exists(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.wgl_table('{"WGL_ARB_pixel_format", 1u, "probe.enables_spirv"},\n'
+                       '{"WGL_ARB_multisample", 1u, "memory_entries.reports_the_budget"}')
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok, 4 reported (opengl 1 + 2 wgl, vulkan 1)", result.stdout)
+        self.wgl_table('{"GL_ARB_pixel_format", 1u, "probe.enables_spirv"},\n'
+                       '{"WGL_ARB_multisample", 1u, "probe.missing"},\n'
+                       '{"WGL_ARB_multisample", 0u, "probe.enables_spirv"},\n'
+                       '{"WGL_ARB_x", 1u, "nosuite"}')
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        for message in ("GL_ARB_pixel_format is not a WGL extension",
+                        "WGL_ARB_multisample names probe.missing, which no TEST under tests/ defines",
+                        "WGL_ARB_multisample is named twice", "WGL_ARB_multisample has spec version 0",
+                        "WGL_ARB_x names 'nosuite', not a test as suite.case"):
+            self.assertIn(message, result.stderr)
+
+    def test_a_wgl_table_belongs_to_the_opengl_icd_alone_and_once(self):
+        self.write("src/icd/vulkan/icd_root.cpp",
+                   "constexpr const ExtensionPolicy::Row *reported_extensions = nullptr;\n"
+                   "const ExtensionPolicy::Row reported_wgl_extensions[] = {\n};\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/icd/vulkan/icd_root.cpp: a reported_wgl_extensions table outside src/icd/opengl",
+                      result.stderr)
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.wgl_table('{"WGL_ARB_pixel_format", 1u, "probe.enables_spirv"}')
+        self.write("src/icd/opengl/other.cpp", "const ExtensionPolicy::Row reported_wgl_extensions[] = {\n};\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("want at most one reported_wgl_extensions table in src/icd/opengl, found 2", result.stderr)
+        self.write("src/icd/opengl/other.cpp", "const ExtensionPolicy::Row reported_wgl_extensions[] = {\n"
+                                               "  WGL_ROW(pixel_format)\n};\n")
+        (self.root / "src/icd/opengl/gl_icd_root.cpp").unlink()
+        self.write("src/icd/opengl/gl_icd_root.cpp",
+                   "constexpr const ExtensionPolicy::Row *reported_extensions = nullptr;\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/icd/opengl/other.cpp: unreadable row: WGL_ROW(pixel_format)", result.stderr)
 
     def test_a_table_in_the_shared_directory_belongs_to_no_icd(self):
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')

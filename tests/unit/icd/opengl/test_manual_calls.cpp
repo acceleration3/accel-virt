@@ -3,7 +3,11 @@
  * MockKmt: what each sends, what each keeps, and what each refuses with no
  * host call. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
+#include "harness/icd/scripted_thread_slot.hpp"
+#include "icd/opengl/current_contexts.hpp"
+#include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
 #include "icd/opengl/gl_error_query.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
@@ -19,15 +23,6 @@ using av::GlIcdRig;
 using av::glicd::ManualCalls;
 namespace gen = av::glicd::generated;
 namespace ids = av::glproto;
-
-namespace av::glicd {
-
-struct ManualCallsProbe {
-    static void drop_extensions(ManualCalls &calls) { calls.no_extensions_ = nullptr; }
-    static void name_extensions(ManualCalls &calls) { calls.no_extensions_ = "GL_ARB_nothing"; }
-};
-
-}  // namespace av::glicd
 
 namespace {
 
@@ -299,7 +294,6 @@ TEST(manual_calls, with_nothing_current_nothing_is_sent_or_answered)
 { GlIcdRig rig;
   rig.load_with_format();
   ManualCalls &calls = rig.root().manual();
-  CHECK(calls.invariants_hold());
   GLuint name = 0u;
   void  *pointer = reinterpret_cast<void *>(0x1u);
   GLint  value = 7;
@@ -369,14 +363,6 @@ TEST(gl_error_query, asks_the_host_and_answers_no_error_when_the_call_fails)
   CHECK_EQ(av::glicd::GlErrorQuery(wire).ask(), 0u);
   CHECK_EQ(av::glicd::GlErrorQuery(wire).ask(), 0u); }
 
-TEST(manual_calls_invariants, fail_when_an_extension_list_appears)
-{ GlIcdRig dropped;
-  av::glicd::ManualCallsProbe::drop_extensions(dropped.root().manual());
-  CHECK(!dropped.root().manual().invariants_hold());
-  GlIcdRig named;
-  av::glicd::ManualCallsProbe::name_extensions(named.root().manual());
-  CHECK(!named.root().manual().invariants_hold()); }
-
 TEST(manual_calls, the_extension_count_is_answered_without_the_host)
 { Current current;
   GLint count = 9;
@@ -384,3 +370,37 @@ TEST(manual_calls, the_extension_count_is_answered_without_the_host)
   CHECK_EQ(count, 0);
   av::glicd::entry::get_integerv(0x821Du, nullptr);
   CHECK_EQ(current.sent(), 0u); }
+
+/* A context whose host lists a reported extension answers it by count, by
+ * index and joined, all without the host; an index past it and any other
+ * indexed name are the GL's errors. */
+TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
+{ static constexpr av::glicd::GlExtensionPolicy::Row rows[] = {
+      {"GL_ARB_debug_output", 1u, "manual_calls.the_extensions_answered_are_the_context_s_list"}};
+  av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(rows, 1u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy, 1,
+                                    av::GlContextOptions());
+  CHECK(calls.string_i(0x1F03u, 0u) == nullptr);
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_integer(2);
+  rig.host().gl_string("GL_EXT_host_only");
+  rig.host().gl_string("GL_ARB_debug_output");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+  const std::uint32_t commands = rig.kmt().commands();
+  GLint count = 0;
+  calls.integers(0x821Du, &count);
+  CHECK_EQ(count, 1);
+  CHECK(std::strcmp(reinterpret_cast<const char *>(calls.string(0x1F03u)), "GL_ARB_debug_output") == 0);
+  CHECK(std::strcmp(reinterpret_cast<const char *>(calls.string_i(0x1F03u, 0u)), "GL_ARB_debug_output") == 0);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK(calls.string_i(0x1F03u, 1u) == nullptr);
+  CHECK_EQ(context.take_error(), gl_invalid_value);
+  CHECK(calls.string_i(0x1F00u, 0u) == nullptr);
+  CHECK_EQ(context.take_error(), gl_invalid_enum);
+  currents.release(); }

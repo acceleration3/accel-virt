@@ -4,8 +4,9 @@
  * and does nothing without one, as OpenGL does. The entries themselves
  * (manual_entries.cpp) are one line each into this.
  *
- * Until their tasks arrive, buffer mapping (T036) records GL_INVALID_OPERATION
- * and maps nothing, and no GL extension is reported (T033). A client-side
+ * Until its task arrives, buffer mapping (T036) records GL_INVALID_OPERATION
+ * and maps nothing. The GL extensions answered are the context's own list
+ * (GlExtensionPolicy). A client-side
  * vertex or index array, which the core profile removed, is
  * GL_INVALID_OPERATION with no host call. */
 #ifndef AV_GLICD_MANUAL_CALLS_HPP
@@ -17,7 +18,6 @@ namespace av::glicd {
 
 class CurrentContexts;
 class GuestGlContext;
-struct ManualCallsProbe;
 
 class ManualCalls {
 public:
@@ -69,13 +69,10 @@ public:
     void delete_program(uint32_t program);
     int32_t attrib_location(uint32_t program, const char *name);
     int32_t uniform_location(uint32_t program, const char *name);
-    /* glGetIntegerv, but GL_NUM_EXTENSIONS answers the extensions reported:
-     * none (T033). */
+    /* glGetIntegerv, but GL_NUM_EXTENSIONS answers the context's list. */
     void           integers(uint32_t pname, int32_t *data);
     const uint8_t *string(uint32_t name);
     const uint8_t *string_i(uint32_t name, uint32_t index);
-
-    bool invariants_hold() const;
 
 private:
     /* The current context's transport's context, when it can send. */
@@ -85,9 +82,6 @@ private:
     bool            indices_cross(const void *indices);
 
     CurrentContexts &currents_;
-    const char      *no_extensions_;
-
-    friend struct ManualCallsProbe;
 };
 
 }  // namespace av::glicd

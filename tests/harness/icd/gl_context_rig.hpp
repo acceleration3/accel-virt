@@ -12,6 +12,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_connection.hpp"
+#include "icd/opengl/gl_extension_policy.hpp"
 
 namespace av {
 
@@ -31,6 +32,8 @@ public:
     RecordingThreadLock  &send_lock();
     RecordingLog         &log();
     glicd::GlConnection  &connection();
+    /* A policy reporting nothing, which asks the host nothing at a make. */
+    const glicd::GlExtensionPolicy &extensions() const;
 
 private:
     MockPlatform        platform_;
@@ -40,6 +43,7 @@ private:
     RecordingThreadLock send_lock_;
     RecordingLog        log_;
     glicd::GlConnection connection_;
+    glicd::GlExtensionPolicy extensions_;
 };
 
 }  // namespace av

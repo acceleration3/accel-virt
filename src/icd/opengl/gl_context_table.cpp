@@ -6,8 +6,9 @@
 namespace av::glicd {
 
 GlContextTable::GlContextTable(BlockSource &memory, GlConnection &connection, icd::ThreadLock &send_lock,
-                               icd::LogSink &log)
-    : memory_(memory), connection_(connection), send_lock_(send_lock), log_(log), pool_(memory), contexts_{},
+                               icd::LogSink &log, const GlExtensionPolicy &extensions)
+    : memory_(memory), connection_(connection), send_lock_(send_lock), log_(log), extensions_(extensions),
+      pool_(memory), contexts_{},
       generations_{}, live_(0u)
 {
     AV_SCOPE("GlContextTable::GlContextTable");
@@ -22,7 +23,8 @@ Status GlContextTable::create(int32_t pixel_format, const GlContextOptions &opti
     while (slot < max_contexts && contexts_[slot] != nullptr) slot++;
     if (slot == max_contexts) return Status::no_space;
     GuestGlContext *made = nullptr;
-    const Status status = pool_.create(made, connection_, memory_, send_lock_, log_, pixel_format, options);
+    const Status status = pool_.create(made, connection_, memory_, send_lock_, log_, extensions_, pixel_format,
+                                       options);
     if (status != Status::ok) return status;
     contexts_[slot] = made;
     live_++;

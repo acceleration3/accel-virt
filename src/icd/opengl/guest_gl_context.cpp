@@ -7,6 +7,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/opengl/gl_connection.hpp"
+#include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include "gl_dispatch_client.h"
@@ -22,10 +23,12 @@ constexpr uint32_t no_error = 0u;
 }  // namespace
 
 GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                               icd::LogSink &log, int32_t pixel_format, const GlContextOptions &options)
-    : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), pixel_format_(pixel_format),
+                               icd::LogSink &log, const GlExtensionPolicy &extensions, int32_t pixel_format,
+                               const GlContextOptions &options)
+    : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
+      pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), error_(no_error), connected_(false),
-      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), strings_{},
+      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
     AV_SCOPE("GuestGlContext::GuestGlContext");
@@ -109,6 +112,12 @@ QueryShapes      &GuestGlContext::queries()
 {
     AV_SCOPE("GuestGlContext::queries");
     return queries_;
+}
+
+const GlExtensionList &GuestGlContext::extensions() const
+{
+    AV_SCOPE("GuestGlContext::extensions");
+    return extensions_;
 }
 
 void GuestGlContext::record(uint32_t error)
@@ -222,6 +231,7 @@ bool GuestGlContext::learn()
         queries_.learn(static_cast<QueryShapes::List>(list), length);
     }
     cap_version();
+    policy_.learn(wire, extensions_);
     return !transport_.object().faulted();
 }
 

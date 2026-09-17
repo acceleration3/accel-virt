@@ -21,7 +21,13 @@ SHARED_DIRECTORY = "common"
 # Where each API's generator lists what it implemented, and the array naming it.
 IMPLEMENTED_LISTS = {
     "vulkan": ("src/proto/generated/vulkan/vk_supported_extensions.h", "kImplementedDeviceExtensions"),
+    "opengl": ("src/proto/generated/opengl/gl_tier.h", "kCarriedExtensions"),
 }
+# The OpenGL ICD also reports window-system extensions: its own WGL functions,
+# which no generator lists, held to a test each all the same (feature 050).
+WINDOW_SYSTEM_API = "opengl"
+WGL_ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_wgl_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
+WGL_NAME = re.compile(r"^WGL_\w+$")
 TESTS_DIRECTORY = "tests"
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
@@ -54,6 +60,11 @@ class PolicyCheck:
         return sorted(name for name in os.listdir(base)
                       if name != SHARED_DIRECTORY and os.path.isdir(os.path.join(base, name))
                       and any(True for _source in self.sources(os.path.join(TABLE_DIRECTORY, name), (".cpp",))))
+
+    def wgl_tables(self, directory):
+        """Every WGL table in `directory`: (where, rows text)."""
+        return [(relative, match.group("rows")) for relative, code in self.sources(directory, (".cpp", ".hpp"))
+                for match in WGL_ARRAY.finditer(code)]
 
     def tables(self, directory):
         """Every definition of a table in `directory`: (where, rows text or None for empty)."""
@@ -104,6 +115,43 @@ class PolicyCheck:
         tests = self.defined_tests()
         for api in icds:
             violations += self.icd_violations(api, tests)
+            violations += self.wgl_violations(api, tests)
+        return violations
+
+    def wgl_violations(self, api, tests):
+        directory = f"{TABLE_DIRECTORY}/{api}"
+        tables = self.wgl_tables(directory)
+        if api != WINDOW_SYSTEM_API:
+            return [f"{where}: a reported_wgl_extensions table outside {TABLE_DIRECTORY}/{WINDOW_SYSTEM_API}"
+                    for where, _rows in tables]
+        if len(tables) > 1:
+            return [f"extension_policy: want at most one reported_wgl_extensions table in {directory}, "
+                    f"found {len(tables)}"]
+        violations = []
+        for where, text in tables:
+            rows, unreadable = self.rows(where, text)
+            violations += unreadable + self.row_violations(where, rows, tests, None)
+        return violations
+
+    def row_violations(self, where, rows, tests, implemented):
+        """What is wrong with `rows`: judged against `implemented` names, or as
+        WGL names when there is no generated list for them."""
+        violations = []
+        seen = set()
+        for name, version, test in rows:
+            if name in seen:
+                violations.append(f"{where}: {name} is named twice")
+            seen.add(name)
+            if implemented is None and not WGL_NAME.match(name):
+                violations.append(f"{where}: {name} is not a WGL extension")
+            elif implemented is not None and name not in implemented[1]:
+                violations.append(f"{where}: {name} is not in {implemented[0]}")
+            if version == 0:
+                violations.append(f"{where}: {name} has spec version 0")
+            if not TEST_NAME.match(test):
+                violations.append(f"{where}: {name} names '{test}', not a test as suite.case")
+            elif test not in tests:
+                violations.append(f"{where}: {name} names {test}, which no TEST under {TESTS_DIRECTORY}/ defines")
         return violations
 
     def icd_violations(self, api, tests):
@@ -122,29 +170,16 @@ class PolicyCheck:
             if api not in IMPLEMENTED_LISTS:
                 return violations + [f"extension_policy: no generated list is known for {api}"]
             return violations + [f"extension_policy: no {IMPLEMENTED_LISTS[api][0]}"]
-        listed = IMPLEMENTED_LISTS[api][0]
-        seen = set()
-        for name, version, test in rows:
-            if name in seen:
-                violations.append(f"{where}: {name} is named twice")
-            seen.add(name)
-            if name not in implemented:
-                violations.append(f"{where}: {name} is not in {listed}")
-            if version == 0:
-                violations.append(f"{where}: {name} has spec version 0")
-            if not TEST_NAME.match(test):
-                violations.append(f"{where}: {name} names '{test}', not a test as suite.case")
-            elif test not in tests:
-                violations.append(f"{where}: {name} names {test}, which no TEST under {TESTS_DIRECTORY}/ defines")
-        return violations
+        return violations + self.row_violations(where, rows, tests, (IMPLEMENTED_LISTS[api][0], implemented))
 
     def reported(self):
-        """(api, rows reported) for every ICD whose table can be read."""
+        """(api, rows reported, WGL rows reported) for every ICD whose table can be read."""
         counts = []
         for api in self.icds():
             tables = self.tables(f"{TABLE_DIRECTORY}/{api}")
             rows = 0 if len(tables) != 1 or tables[0][1] is None else len(self.rows(*tables[0])[0])
-            counts.append((api, rows))
+            wgl = self.wgl_tables(f"{TABLE_DIRECTORY}/{api}")
+            counts.append((api, rows, len(self.rows(*wgl[0])[0]) if wgl else 0))
         return counts
 
 def main(argv=None):
@@ -156,8 +191,8 @@ def main(argv=None):
     if violations:
         return 1
     counts = check.reported()
-    detail = ", ".join(f"{api} {rows}" for api, rows in counts)
-    print(f"extension_policy: ok, {sum(rows for _api, rows in counts)} reported ({detail})")
+    detail = ", ".join(f"{api} {rows}" + (f" + {wgl} wgl" if wgl else "") for api, rows, wgl in counts)
+    print(f"extension_policy: ok, {sum(rows + wgl for _api, rows, wgl in counts)} reported ({detail})")
     return 0
 
 

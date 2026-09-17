@@ -16,6 +16,7 @@
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/gl_connection.hpp"
 #include "icd/opengl/gl_context_table.hpp"
+#include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/manual_calls.hpp"
 #include "icd/opengl/pixel_format_query.hpp"
 #include "icd/opengl/pixel_format_table.hpp"
@@ -137,6 +138,7 @@ private:
     WindowTable       windows_;
     CurrentContexts   currents_;
     GlConnection      connection_;
+    GlExtensionPolicy extensions_;
     GlContextTable    contexts_;
     ManualCalls       manual_;
     void             *callbacks_[max_callbacks];

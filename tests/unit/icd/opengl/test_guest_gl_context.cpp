@@ -58,7 +58,7 @@ constexpr const char *renderer = "rvk host renderer";
 class Context {
 public:
     explicit Context(GlContextRig &rig, const GlContextOptions &options = GlContextOptions())
-        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), 7, options)
+        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), 7, options)
     {}
     GuestGlContext &operator*() { return context_; }
     GuestGlContext *operator->() { return &context_; }

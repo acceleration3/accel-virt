@@ -36,15 +36,15 @@ struct GlIcdRootProbe {
     static void empty_slot(GlIcdRoot &root) { root.proc_table_.slots[4] = nullptr; }
     static void miscount_table(GlIcdRoot &root) { root.proc_table_.entries = 3; }
     static void overcount_callbacks(GlIcdRoot &root) { root.callback_count_ = 10u; }
-    static ManualCalls      &manual(GlIcdRoot &root) { return root.manual_; }
+    static GlExtensionPolicy &extensions(GlIcdRoot &root) { return root.extensions_; }
     static PixelFormatTable &formats(GlIcdRoot &root) { return root.formats_; }
     static WindowTable      &windows(GlIcdRoot &root) { return root.windows_; }
     static GlConnection     &connection(GlIcdRoot &root) { return root.connection_; }
     static GlContextTable   &contexts(GlIcdRoot &root) { return root.contexts_; }
 };
 
-struct ManualCallsProbe {
-    static void name_extensions(ManualCalls &calls) { calls.no_extensions_ = "GL_ARB_nothing"; }
+struct GlExtensionPolicyProbe {
+    static void overcount(GlExtensionPolicy &policy) { policy.gl_count_ = GlExtensionPolicy::max_rows + 1u; }
 };
 
 struct PixelFormatTableProbe {
@@ -301,8 +301,8 @@ TEST(gl_icd_root, answers_gl_and_wgl_names_it_implements)
   CHECK(rig.opengl32().get_proc_address("glNotACommand") == nullptr);
   CHECK(rig.root().get_proc_address(nullptr) == nullptr);
   const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().get_proc_address("wglGetExtensionsStringARB"));
-  CHECK(std::strcmp(extensions(rig.dc()),
-                    "WGL_ARB_extensions_string WGL_ARB_create_context WGL_ARB_create_context_profile") == 0);
+  CHECK(std::strcmp(extensions(rig.dc()), "WGL_ARB_extensions_string WGL_ARB_pixel_format WGL_ARB_create_context "
+                                          "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness") == 0);
   CHECK(rig.root().extensions_string(rig.memory_dc()) == extensions(rig.dc())); }
 
 TEST(gl_icd_root, a_gl_call_with_nothing_current_does_nothing)
@@ -577,9 +577,9 @@ TEST(gl_icd_root_invariants, fail_for_state_no_entry_makes)
 
 TEST(gl_icd_root_invariants, fail_when_a_part_it_owns_is_broken)
 { using av::glicd::GlIcdRootProbe;
-  GlIcdRig manual;
-  av::glicd::ManualCallsProbe::name_extensions(GlIcdRootProbe::manual(manual.root()));
-  CHECK(!manual.root().invariants_hold());
+  GlIcdRig extensions;
+  av::glicd::GlExtensionPolicyProbe::overcount(GlIcdRootProbe::extensions(extensions.root()));
+  CHECK(!extensions.root().invariants_hold());
   GlIcdRig formats;
   av::glicd::PixelFormatTableProbe::repeat_row(GlIcdRootProbe::formats(formats.root()));
   CHECK(!formats.root().invariants_hold());

@@ -17,6 +17,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/opengl/gl_extension_list.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -38,6 +39,7 @@ class ThreadLock;
 namespace av::glicd {
 
 class GlConnection;
+class GlExtensionPolicy;
 struct GuestGlContextProbe;
 
 class GuestGlContext {
@@ -53,7 +55,7 @@ public:
     };
 
     GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, icd::LogSink &log,
-                   int32_t pixel_format, const GlContextOptions &options);
+                   const GlExtensionPolicy &extensions, int32_t pixel_format, const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
     GuestGlContext &operator=(const GuestGlContext &) = delete;
@@ -80,6 +82,8 @@ public:
     ClientArrayState &arrays();
     UniformShapes    &uniforms();
     QueryShapes      &queries();
+    /* The OpenGL extensions reported for this context, learned at make. */
+    const GlExtensionList &extensions() const;
 
     /* The first error recorded is kept until taken. */
     void        record(uint32_t error);
@@ -112,6 +116,7 @@ private:
     BlockSource                   &memory_;
     icd::ThreadLock               &send_lock_;
     icd::LogSink                  &log_;
+    const GlExtensionPolicy       &policy_;
     int32_t                        pixel_format_;
     GlContextOptions               options_;
     State                          state_;
@@ -125,6 +130,7 @@ private:
     ClientArrayState               arrays_;
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;
+    GlExtensionList                extensions_;
     char                           strings_[strings][string_bytes];
     uint64_t                       debug_callback_;
     uint64_t                       debug_user_;

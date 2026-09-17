@@ -20,17 +20,23 @@ namespace av::glicd {
 
 namespace {
 
-/* The WGL extension functions DrvGetProcAddress answers, and the extensions
- * they make whole. */
-constexpr const char *wgl_extensions =
-    "WGL_ARB_extensions_string WGL_ARB_create_context WGL_ARB_create_context_profile";
 /* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
 constexpr uint32_t get_error_slot = 261u;
 constexpr uint32_t get_integerv_slot = 263u;
 constexpr uint32_t line_bytes = 160u;
-/* The GL extensions reported: none until T033 names one with its test
- * (tools/check_extension_policy.py reads this). */
-[[maybe_unused]] constexpr const icd::ExtensionPolicy::Row *reported_extensions = nullptr;
+/* The GL extensions reported: none yet - a row arrives with the test that
+ * proves its extension through this ICD (tools/check_extension_policy.py). */
+constexpr const icd::ExtensionPolicy::Row *reported_extensions = nullptr;
+/* The WGL extensions the functions DrvGetProcAddress answers make whole, each
+ * with the test that proves it. */
+constexpr icd::ExtensionPolicy::Row reported_wgl_extensions[] = {
+    {"WGL_ARB_extensions_string", 1u, "gl_icd_root.answers_gl_and_wgl_names_it_implements"},
+    {"WGL_ARB_pixel_format", 1u, "gl_icd_root.answers_pixel_format_attributes_and_choices_through_wgl"},
+    {"WGL_ARB_create_context", 1u, "gl_icd_root.a_create_with_attributes_makes_the_context_and_opengl32s_hglrc_names_it"},
+    {"WGL_ARB_create_context_profile", 1u, "gl_icd_root.a_create_with_attributes_answers_the_arb_errors"},
+    {"WGL_ARB_create_context_robustness", 1u, "context_attributes.flags_and_the_reset_strategy_become_option_flags"},
+};
+constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof reported_wgl_extensions[0];
 
 }  // namespace
 
@@ -38,7 +44,9 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
                      icd::LogSink &log, WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlIcdBinding &binding)
     : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
-      query_(formats_), windows_(), currents_(slot), connection_(kmt), contexts_(memory, connection_, send_lock, log),
+      query_(formats_), windows_(), currents_(slot), connection_(kmt),
+      extensions_(reported_extensions, 0u, reported_wgl_extensions, reported_wgl_count),
+      contexts_(memory, connection_, send_lock, log, extensions_),
       manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
@@ -292,7 +300,7 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
 const char *GlIcdRoot::extensions_string(void *)
 {
     AV_SCOPE("GlIcdRoot::extensions_string");
-    return wgl_extensions;
+    return extensions_.wgl_extensions();
 }
 
 bool GlIcdRoot::pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
@@ -407,7 +415,7 @@ bool GlIcdRoot::invariants_hold() const
         if (slot == nullptr) return false;
     for (uint32_t row = 0u; row < max_pending; row++)
         if ((pending_threads_[row] == 0u) != (pending_handles_[row] == 0u)) return false;
-    return manual_.invariants_hold() && query_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
+    return extensions_.invariants_hold() && query_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
            connection_.invariants_hold() && contexts_.invariants_hold();
 }
 

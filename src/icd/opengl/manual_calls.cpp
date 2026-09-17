@@ -18,7 +18,7 @@ uint64_t address_of(const void *pointer)
 
 }  // namespace
 
-ManualCalls::ManualCalls(CurrentContexts &currents) : currents_(currents), no_extensions_("")
+ManualCalls::ManualCalls(CurrentContexts &currents) : currents_(currents)
 {
     AV_SCOPE("ManualCalls::ManualCalls");
 }
@@ -309,7 +309,7 @@ void ManualCalls::integers(uint32_t pname, int32_t *data)
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     if (pname != gl_num_extensions) return glproto::rvk_glGetIntegerv(*context->wire(), pname, data);
-    if (data != nullptr) *data = 0;
+    if (data != nullptr) *data = static_cast<int32_t>(context->extensions().count());
 }
 
 const uint8_t *ManualCalls::string(uint32_t name)
@@ -317,25 +317,22 @@ const uint8_t *ManualCalls::string(uint32_t name)
     AV_SCOPE("ManualCalls::string");
     GuestGlContext *const context = currents_.current();
     if (context == nullptr) return nullptr;
-    if (name == gl_extensions) return reinterpret_cast<const uint8_t *>(no_extensions_);
+    if (name == gl_extensions) return reinterpret_cast<const uint8_t *>(context->extensions().joined());
     const char *const answer = context->string(name);
     if (answer == nullptr) context->record(gl_invalid_enum);
     return reinterpret_cast<const uint8_t *>(answer);
 }
 
-/* No GL extension is reported (T033), so no index names one. */
-const uint8_t *ManualCalls::string_i(uint32_t name, uint32_t)
+/* GL_EXTENSIONS is the one indexed string this ICD has; an index past the
+ * context's list is GL_INVALID_VALUE. */
+const uint8_t *ManualCalls::string_i(uint32_t name, uint32_t index)
 {
     AV_SCOPE("ManualCalls::string_i");
     GuestGlContext *const context = currents_.current();
-    if (context != nullptr) context->record(name == gl_extensions ? gl_invalid_value : gl_invalid_enum);
-    return nullptr;
-}
-
-bool ManualCalls::invariants_hold() const
-{
-    AV_SCOPE("ManualCalls::invariants_hold");
-    return no_extensions_ != nullptr && no_extensions_[0] == '\0';
+    if (context == nullptr) return nullptr;
+    const char *const answer = name == gl_extensions ? context->extensions().name(index) : nullptr;
+    if (answer == nullptr) context->record(name == gl_extensions ? gl_invalid_value : gl_invalid_enum);
+    return reinterpret_cast<const uint8_t *>(answer);
 }
 
 GuestGlContext *ManualCalls::sending()
