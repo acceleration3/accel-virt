@@ -12,6 +12,7 @@
 #ifndef AV_GLICD_MANUAL_CALLS_HPP
 #define AV_GLICD_MANUAL_CALLS_HPP
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av::glicd {
@@ -26,7 +27,8 @@ public:
         gl_read_only = 0x88B8u, gl_write_only = 0x88B9u, gl_read_write = 0x88BAu, gl_dynamic_storage_bit = 0x0100u,
         gl_extensions = 0x1F03u, gl_num_extensions = 0x821Du, gl_debug_callback_function = 0x8244u, gl_debug_callback_user_param = 0x8245u,
         gl_vertex_attrib_array_pointer = 0x8645u, gl_buffer_map_pointer = 0x88BDu, gl_uniform = 0x8E17u,
-        gl_type = 0x92FAu, gl_invalid_index = 0xFFFFFFFFu,
+        gl_type = 0x92FAu, gl_invalid_index = 0xFFFFFFFFu, gl_texture_width = 0x1000u, gl_texture_height = 0x1001u,
+        gl_texture_depth = 0x8071u, gl_texture_compressed_image_size = 0x86A0u,
     };
 
     explicit ManualCalls(CurrentContexts &currents);
@@ -82,6 +84,11 @@ public:
     void delete_program(uint32_t program);
     int32_t attrib_location(uint32_t program, const char *name);
     int32_t uniform_location(uint32_t program, const char *name);
+    /* The bytes a glGetTexImage of the bound texture's `level` writes, its
+     * size asked of the host; 0 with nothing current. */
+    size_t level_bytes(uint32_t target, int32_t level, uint32_t format, uint32_t type);
+    /* GL_TEXTURE_COMPRESSED_IMAGE_SIZE of the bound texture's `level`. */
+    size_t compressed_level_bytes(uint32_t target, int32_t level);
     /* glGetIntegerv, but GL_NUM_EXTENSIONS answers the context's list. */
     void           integers(uint32_t pname, int32_t *data);
     const uint8_t *string(uint32_t name);

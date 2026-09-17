@@ -20,6 +20,7 @@ class StateWriter;
 class GuestReport {
 public:
     static constexpr size_t capacity = 16384u;
+    static constexpr size_t note_bytes = 160u;
 
     GuestReport();
     explicit GuestReport(const char *program);
@@ -33,6 +34,10 @@ public:
     /* A step that measured something: the number is on the line, passed or
      * not, because it is what the run was for. */
     void measure(const char *scenario, const char *step, Status status, uint32_t measurement);
+    /* `note scenario.key text`: something a step learned that is not a
+     * verdict, up to its first line break and note_bytes bytes; `(none)` for
+     * null. */
+    void note(const char *scenario, const char *key, const char *text);
     void finish();
 
     const char *text() const;

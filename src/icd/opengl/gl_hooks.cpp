@@ -10,6 +10,7 @@
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
+#include "icd/opengl/manual_calls.hpp"
 #include "proto/gl_icd_support.hpp"
 #include "proto/icd_stub_report.hpp"
 
@@ -63,15 +64,17 @@ size_t compressed_bytes(GLsizei, GLsizei, GLsizei, GLsizei image_size, bool pack
 
 /* A level's size is the host's, and no hook may ask it inside a call: a
  * download sized from a level answers nothing (research.md §5). */
-size_t level_bytes(GLenum, GLint, GLenum, GLenum) noexcept
+/* A whole level's download is sized by the host's answer for the level: the
+ * host refuses one whose buffer is short of it. */
+size_t level_bytes(GLenum target, GLint level, GLenum format, GLenum type) noexcept
 {
     AV_SCOPE("level_bytes");
-    return 0u;
+    return gl_icd_binding.root().manual().level_bytes(target, level, format, type);
 }
-size_t compressed_level_bytes(GLenum, GLint, bool) noexcept
+size_t compressed_level_bytes(GLenum target, GLint level, bool) noexcept
 {
     AV_SCOPE("compressed_level_bytes");
-    return 0u;
+    return gl_icd_binding.root().manual().compressed_level_bytes(target, level);
 }
 
 const uint64_t *offsets_of(const void *const *offsets, size_t count) noexcept

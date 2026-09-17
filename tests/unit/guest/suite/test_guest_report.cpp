@@ -68,3 +68,22 @@ TEST(guest_report_report, names_the_counts_and_the_step_checked_last)
   CHECK(std::strcmp(done.dump(), "report/0 program=rvkvkprobe passed=2 failed=2 last_scenario=vsync "
                                  "last_step=rate finished=true") == 0);
   CHECK(report.invariants_hold()); }
+
+/* A note carries text a step learned, cut at its first line break or at
+ * note_bytes, and counts as neither a pass nor a failure. */
+TEST(guest_report, a_note_is_one_line_of_text_and_no_verdict)
+{ GuestReport report("rvkglprobe");
+  report.note("opengl", "renderer", "Mesa\r\nsecond");
+  report.note("opengl", "version", nullptr);
+  char long_text[GuestReport::note_bytes + 8u];
+  std::memset(long_text, 'x', sizeof long_text - 1u);
+  long_text[sizeof long_text - 1u] = '\0';
+  report.note("opengl", "long", long_text);
+  report.finish();
+  char expected[GuestReport::note_bytes + 128u] = "note opengl.renderer Mesa\nnote opengl.version (none)\nnote opengl.long ";
+  std::memset(expected + std::strlen(expected), 'x', GuestReport::note_bytes);
+  std::strcat(expected, "\nrvkglprobe: 0 passed, 0 failed\n");
+  CHECK(std::strcmp(report.text(), expected) == 0);
+  CHECK_EQ(report.passed(), 0u);
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(report.invariants_hold()); }

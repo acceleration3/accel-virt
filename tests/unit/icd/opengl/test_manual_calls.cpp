@@ -609,3 +609,46 @@ TEST(manual_calls, window_calls_with_nothing_current_send_nothing)
   gen::Wrap_glDrawBuffer(0x0405u);
   gen::Wrap_glReadBuffer(0x0405u);
   CHECK_EQ(rig.kmt().commands(), 0u); }
+
+/* A whole level's download is sized from the host's answer for the level:
+ * level_bytes asks its width, height and depth, compressed_level_bytes its
+ * compressed size. */
+TEST(manual_calls, a_level_download_is_sized_by_the_hosts_level)
+{ Current current;
+  av::ScriptedHost &host = current.rig().host();
+  host.gl_integer(3);
+  host.gl_integer(2);
+  host.gl_integer(1);
+  const std::uint32_t before = current.sent();
+  std::uint8_t pixels[24] = {};
+  host.gl_bytes(nullptr, 0u);
+  gen::Wrap_glGetTexImage(0x0DE1u, 1, 0x1908u /* GL_RGBA */, 0x1401u, pixels);
+  CHECK_EQ(current.sent() - before, 4u);
+  CHECK_EQ(current.sent_since(before), ids::kCmd_glGetTexLevelParameteriv);
+  CHECK_EQ(current.argument_since(before, 1u), 1u);
+  CHECK_EQ(current.argument_since(before, 2u), 0x1000u);
+  CHECK_EQ(current.argument_since(before + 1u, 2u), 0x1001u);
+  CHECK_EQ(current.argument_since(before + 2u, 2u), 0x8071u);
+  CHECK_EQ(current.sent_since(before + 3u), ids::kCmd_glGetTexImage);
+  /* Default pack alignment 4: two rows of 3 RGBA pixels. */
+  CHECK_EQ(current.context().arrays().pixel_bytes(0x1908u, 0x1401u, 3, 2, 1, true), 24u);
+  host.gl_integer(4);
+  host.gl_integer(-1);
+  host.gl_integer(1);
+  CHECK_EQ(current.rig().root().manual().level_bytes(0x0DE1u, 0, 0x1908u, 0x1401u), 0u);
+  host.gl_integer(77);
+  CHECK_EQ(current.rig().root().manual().compressed_level_bytes(0x0DE1u, 2), 77u);
+  host.gl_integer(-5);
+  CHECK_EQ(current.rig().root().manual().compressed_level_bytes(0x0DE1u, 2), 0u);
+  host.gl_integer(16);
+  host.gl_bytes(nullptr, 0u);
+  gen::Wrap_glGetCompressedTexImage(0x0DE1u, 0, pixels);
+  CHECK_EQ(current.sent_since(current.sent() - 1u), ids::kCmd_glGetCompressedTexImage);
+  CHECK_EQ(current.error(), 0u); }
+
+TEST(manual_calls, a_level_download_with_nothing_current_is_sized_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK_EQ(rig.root().manual().level_bytes(0x0DE1u, 0, 0x1908u, 0x1401u), 0u);
+  CHECK_EQ(rig.root().manual().compressed_level_bytes(0x0DE1u, 0), 0u);
+  CHECK_EQ(rig.kmt().commands(), 0u); }

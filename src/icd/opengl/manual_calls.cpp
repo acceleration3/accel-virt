@@ -410,6 +410,29 @@ int32_t ManualCalls::uniform_location(uint32_t program, const char *name)
     return location;
 }
 
+size_t ManualCalls::level_bytes(uint32_t target, int32_t level, uint32_t format, uint32_t type)
+{
+    AV_SCOPE("ManualCalls::level_bytes");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return 0u;
+    ClientTransport &wire = *context->wire();
+    int32_t          width = 0, height = 0, depth = 0;
+    glproto::rvk_glGetTexLevelParameteriv(wire, target, level, gl_texture_width, &width);
+    glproto::rvk_glGetTexLevelParameteriv(wire, target, level, gl_texture_height, &height);
+    glproto::rvk_glGetTexLevelParameteriv(wire, target, level, gl_texture_depth, &depth);
+    return context->arrays().pixel_bytes(format, type, width, height, depth, true);
+}
+
+size_t ManualCalls::compressed_level_bytes(uint32_t target, int32_t level)
+{
+    AV_SCOPE("ManualCalls::compressed_level_bytes");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return 0u;
+    int32_t size = 0;
+    glproto::rvk_glGetTexLevelParameteriv(*context->wire(), target, level, gl_texture_compressed_image_size, &size);
+    return size > 0 ? static_cast<size_t>(size) : 0u;
+}
+
 void ManualCalls::integers(uint32_t pname, int32_t *data)
 {
     AV_SCOPE("ManualCalls::integers");

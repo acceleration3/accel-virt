@@ -76,6 +76,26 @@ void GuestReport::line(const char *scenario, const char *step, bool passed, Stat
     else failed_++;
 }
 
+void GuestReport::note(const char *scenario, const char *key, const char *text)
+{
+    AV_SCOPE("GuestReport::note");
+    buffer_.append("note ");
+    buffer_.append(scenario);
+    buffer_.append(".");
+    buffer_.append(key);
+    buffer_.append(" ");
+    if (text == nullptr) text = "(none)";
+    char   kept[note_bytes + 1u];
+    size_t length = 0u;
+    while (length < note_bytes && text[length] != '\0' && text[length] != '\n' && text[length] != '\r') {
+        kept[length] = text[length];
+        length++;
+    }
+    kept[length] = '\0';
+    buffer_.append(kept);
+    buffer_.append("\n");
+}
+
 void GuestReport::finish()
 {
     AV_SCOPE("GuestReport::finish");

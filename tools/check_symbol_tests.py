@@ -28,6 +28,9 @@ EXCLUDE = {
                              "in tests/harness, and exercised through every guest suite test",
     "src/guest/suite/vulkan_entry.hpp": "the Vulkan the probe calls, implemented by LoaderVulkan and by "
                              "ScriptedVulkan in tests/harness, and exercised through every probe test",
+    "src/guest/suite/gl_entry.hpp": "the WGL and GL the GL probe calls, implemented by the system opengl32 in "
+                             "src/um, by Opengl32GlEntry over FakeOpengl32 and by ScriptedGl in tests/harness, "
+                             "and exercised through every GL probe test",
     "src/device/executor/session_backend.hpp": "what a session requires of a host API, implemented "
                              "by the Vulkan, OpenGL and OpenCL backends and by MockSessionBackend "
                              "in tests/harness, and exercised through every session test",

@@ -8,12 +8,15 @@
  * nothing here to judge, and the test returns without checking. */
 #include "core/trace/state_writer.hpp"
 #include "device/abi/rvk_executor.h"
+#include "guest/suite/gl_probe.hpp"
+#include "guest/suite/guest_report.hpp"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
 #include "harness/icd/fake_opengl32.hpp"
 #include "harness/icd/lock_trace.hpp"
+#include "harness/icd/opengl32_gl_entry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
@@ -98,6 +101,7 @@ public:
     GlIcdRoot    &root() { return root_; }
     RecordingLog &log() { return log_; }
     FakeOpengl32 &opengl32() { return opengl32_; }
+    ScriptedThreadSlot &threads() { return threads_; }
     void         *dc() { return &dc_; }
 
 private:
@@ -135,6 +139,22 @@ bool host_renderer(const RvkExecutorOps &ops, const std::uint8_t *uuid, char *ou
     return true;
 }
 
+/* The host GPU is found once, before the executor library opens its EGL
+ * displays: finding it opens and terminates the same displays, and an EGL
+ * display terminated under the library stays terminated for it. */
+const WidestHostGpu &widest_gpu()
+{
+    static const WidestHostGpu gpu;
+    return gpu;
+}
+
+const ExecutorLibraryFile &shared_library()
+{
+    static_cast<void>(widest_gpu());
+    static const ExecutorLibraryFile library(AV_EXECUTOR_LIBRARY);
+    return library;
+}
+
 /* The major and minor a GL_VERSION string starts with. */
 bool version_of(const char *version, unsigned &major, unsigned &minor)
 {
@@ -144,9 +164,9 @@ bool version_of(const char *version, unsigned &major, unsigned &minor)
 }  // namespace
 
 TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_through_the_arena)
-{ const WidestHostGpu gpu;
+{ const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
-  const ExecutorLibraryFile library(AV_EXECUTOR_LIBRARY);
+  const ExecutorLibraryFile &library = shared_library();
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
   char expected_renderer[renderer_bytes] = {};
@@ -218,6 +238,35 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
 
     CHECK(gl.make_current(nullptr, nullptr));
     CHECK(gl.delete_context(context));
+    CHECK(process.root().invariants_hold());
+    for (std::uint32_t index = 0u; index < process.log().lines(); index++)
+        std::fprintf(stderr, "%s\n", process.log().line(index)); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* The GL probe's steps (T038) through the ICD on this machine's GPU: a
+ * triangle presented to the window and read back, a texture read across
+ * wglShareLists, the ARB errors. */
+TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { GlProcess process(rig.kmt());
+    CHECK(process.opengl32().load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
+    av::Opengl32GlEntry gl(process.opengl32(), process.threads(), process.dc(), window_side, window_side);
+    av::GuestReport     report("rvkglprobe");
+    av::GlProbe         probe(rig.kmt(), report, gl);
+    probe.run();
+    report.finish();
+    std::fprintf(stderr, "%s", report.text());
+    CHECK_EQ(report.failed(), 0u);
+    CHECK_EQ(report.passed(), 6u);
+    CHECK(std::strstr(report.text(), "ok opengl.draw 1024\n") != nullptr);
+    CHECK(std::strstr(report.text(), "ok opengl.share 4\n") != nullptr);
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; index < process.log().lines(); index++)
         std::fprintf(stderr, "%s\n", process.log().line(index)); }
