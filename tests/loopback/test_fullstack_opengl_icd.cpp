@@ -244,9 +244,11 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* The GL probe's steps (T038) through the ICD on this machine's GPU: a
+/* The GL probe's steps (T038, T041) through the ICD on this machine's GPU: a
  * triangle presented to the window and read back, a texture read across
- * wglShareLists, the ARB errors. */
+ * wglShareLists, a context refused to a second thread, the ARB errors, a
+ * robust context the host faulted, and a context made after that loss - with
+ * the device holding no context once the process is gone. */
 TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
@@ -264,9 +266,12 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
     report.finish();
     std::fprintf(stderr, "%s", report.text());
     CHECK_EQ(report.failed(), 0u);
-    CHECK_EQ(report.passed(), 6u);
+    CHECK_EQ(report.passed(), 9u);
     CHECK(std::strstr(report.text(), "ok opengl.draw 1024\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.share 4\n") != nullptr);
+    CHECK(std::strstr(report.text(), "ok opengl.busy 170\n") != nullptr);
+    CHECK(std::strstr(report.text(), "ok opengl.lost 33365\n") != nullptr);
+    CHECK(std::strstr(report.text(), "ok opengl.recreated 1024\n") != nullptr);
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; index < process.log().lines(); index++)
         std::fprintf(stderr, "%s\n", process.log().line(index)); }

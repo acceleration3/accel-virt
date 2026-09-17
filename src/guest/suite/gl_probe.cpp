@@ -24,8 +24,10 @@ constexpr const char *solid_source = "#version 330 core\n"
 constexpr uint32_t lowest_major = 3u, highest_major = 4u, highest_minor = 6u, bytes_per_pixel = 4u;
 constexpr uint32_t version_scale = 10u;
 
-/* WGL_ARB_create_context(_profile) names. */
+/* WGL_ARB_create_context(_profile, _robustness) names. */
 constexpr int32_t major_version = 0x2091, minor_version = 0x2092, profile_mask = 0x9126;
+constexpr int32_t context_flags = 0x2094, robust_access_bit = 0x4;
+constexpr int32_t reset_strategy = 0x8256, lose_context_on_reset = 0x8252;
 constexpr int32_t both_profiles = 3;
 
 constexpr uint8_t share_texels[GlProbe::share_extent * GlProbe::share_extent * bytes_per_pixel] = {
@@ -76,11 +78,14 @@ void GlProbe::run()
     void *context = nullptr;
     if (context_step(context) != Status::ok) return;
     version_step();
-    draw_step();
+    draw_step("draw");
     share_step(context);
+    busy_step(context);
     static_cast<void>(gl_.make_current(nullptr));
     static_cast<void>(gl_.delete_context(context));
     attribs_step();
+    lost_step();
+    recreated_step();
 }
 
 Status GlProbe::pixel_format_step()
@@ -122,14 +127,14 @@ void GlProbe::version_step()
                           major * version_scale + minor);
 }
 
-void GlProbe::draw_step()
+void GlProbe::draw_step(const char *name)
 {
     AV_SCOPE("GlProbe::draw_step");
     const uint32_t width = gl_.width() < max_extent ? gl_.width() : max_extent;
     const uint32_t height = gl_.height() < max_extent ? gl_.height() : max_extent;
     const uint32_t made = program();
     if (made == 0u) {
-        static_cast<void>(steps_.check_measured("draw", Status::invalid_state, 0u));
+        static_cast<void>(steps_.check_measured(name, Status::invalid_state, 0u));
         return;
     }
     const uint32_t array = gl_.gen_vertex_array();
@@ -151,7 +156,7 @@ void GlProbe::draw_step()
     const uint32_t count = width * height;
     const uint32_t matched = matching(pixels, count);
     const bool     drawn = swapped && error == 0u && count != 0u && matched == count;
-    static_cast<void>(steps_.check_measured("draw", drawn ? Status::ok : Status::invalid_state, matched));
+    static_cast<void>(steps_.check_measured(name, drawn ? Status::ok : Status::invalid_state, matched));
 }
 
 /* Both contexts are shared before either is made, as the ICD requires. */
@@ -192,6 +197,50 @@ void GlProbe::share_step(void *current)
     }
     static_cast<void>(steps_.check_measured("share", matched == texels ? Status::ok : Status::invalid_state,
                                             matched));
+}
+
+void GlProbe::busy_step(void *current)
+{
+    AV_SCOPE("GlProbe::busy_step");
+    const uint32_t error = gl_.make_current_elsewhere(current);
+    static_cast<void>(steps_.check_measured("busy", error == error_busy ? Status::ok : Status::invalid_state, error));
+}
+
+/* The fault loses every context on the device, so nothing else is current. */
+void GlProbe::lost_step()
+{
+    AV_SCOPE("GlProbe::lost_step");
+    const int32_t robust[] = {context_flags, robust_access_bit, reset_strategy, lose_context_on_reset, 0};
+    void *const   context = gl_.create_context_attribs(robust);
+    if (context == nullptr || !gl_.make_current(context)) {
+        const uint32_t error = gl_.last_error();
+        if (context != nullptr) static_cast<void>(gl_.delete_context(context));
+        static_cast<void>(steps_.check_measured("lost", Status::invalid_state, error));
+        return;
+    }
+    const int32_t  forced = gl_.force_fault();
+    const uint32_t status = forced == 1 ? gl_.reset_status() : 0u;
+    const uint32_t reported = gl_.error();
+    const uint32_t after = gl_.error();
+    static_cast<void>(gl_.make_current(nullptr));
+    static_cast<void>(gl_.delete_context(context));
+    const bool lost = forced == 1 && status == gl_unknown_context_reset && reported == gl_context_lost && after == 0u;
+    static_cast<void>(steps_.check_measured("lost", lost ? Status::ok : Status::invalid_state, status));
+}
+
+void GlProbe::recreated_step()
+{
+    AV_SCOPE("GlProbe::recreated_step");
+    void *const context = gl_.create_context();
+    if (context == nullptr || !gl_.make_current(context)) {
+        const uint32_t error = gl_.last_error();
+        if (context != nullptr) static_cast<void>(gl_.delete_context(context));
+        static_cast<void>(steps_.check_measured("recreated", Status::invalid_state, error));
+        return;
+    }
+    draw_step("recreated");
+    static_cast<void>(gl_.make_current(nullptr));
+    static_cast<void>(gl_.delete_context(context));
 }
 
 void GlProbe::attribs_step()

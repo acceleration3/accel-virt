@@ -21,6 +21,8 @@ public:
         set_pixel_format,
         create_context,
         make_current,
+        make_current_elsewhere,
+        force_fault,
         share_lists,
         swap_buffers,
         create_shader,
@@ -49,6 +51,16 @@ public:
     void accept_profiles();
     /* Textures read in another context come back empty although shared. */
     void isolate_textures();
+    /* A context current here may be made current on another thread too. */
+    void let_other_threads_take_contexts();
+    /* No rvkForceContextFault; the fault leaves the context working; a lost
+     * robust context reports no reset; a loss is never reported by
+     * glGetError, or reported by every call. */
+    void hide_fault_hook();
+    void survive_faults();
+    void forget_resets();
+    void leave_losses_unreported();
+    void report_losses_forever();
 
     std::uint32_t live_contexts() const;
     /* Shaders, programs, vertex arrays and textures not deleted. */
@@ -67,6 +79,9 @@ public:
     bool          share_lists(void *first, void *second) override;
     bool          swap_buffers() override;
     std::uint32_t last_error() const override;
+    std::uint32_t make_current_elsewhere(void *context) override;
+    std::int32_t  force_fault() override;
+    std::uint32_t reset_status() override;
 
     const char   *string(std::uint32_t name) override;
     std::uint32_t error() override;
@@ -103,6 +118,9 @@ private:
         bool          live = false;
         bool          made = false;
         std::uint32_t group = 0u;
+        bool          robust = false;
+        bool          lost = false;
+        bool          loss_reported = false;
     };
     struct Texture {
         bool          live = false;
@@ -126,6 +144,12 @@ private:
     bool          accept_versions_;
     bool          accept_profiles_;
     bool          isolate_;
+    bool          shared_threads_;
+    bool          hidden_hook_;
+    bool          survives_;
+    bool          forgets_resets_;
+    bool          unreported_;
+    bool          reported_forever_;
     std::int32_t  format_;
     Context       contexts_[max_contexts];
     std::uint32_t current_;

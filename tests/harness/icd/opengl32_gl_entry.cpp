@@ -48,6 +48,33 @@ bool Opengl32GlEntry::share_lists(void *first, void *second) { return opengl32_.
 bool Opengl32GlEntry::swap_buffers() { return opengl32_.swap_buffers(dc_); }
 std::uint32_t Opengl32GlEntry::last_error() const { return threads_.last_error(); }
 
+/* The second thread is a thread number the probe's own never uses. */
+std::uint32_t Opengl32GlEntry::make_current_elsewhere(void *context)
+{
+    const std::uint32_t here = threads_.thread_id();
+    threads_.switch_to(elsewhere);
+    threads_.clear_last_error();
+    const bool          made = opengl32_.make_current(dc_, context);
+    const std::uint32_t error = made ? 0u : threads_.last_error();
+    if (made) static_cast<void>(opengl32_.make_current(dc_, nullptr));
+    threads_.switch_to(here);
+    return error;
+}
+
+std::int32_t Opengl32GlEntry::force_fault()
+{
+    using Force = std::int32_t (APIENTRY *)();
+    const auto hook = reinterpret_cast<Force>(opengl32_.get_proc_address("rvkForceContextFault"));
+    return hook != nullptr ? hook() : -1;
+}
+
+std::uint32_t Opengl32GlEntry::reset_status()
+{
+    using ResetFn = GLenum (APIENTRY *)();
+    const auto query = reinterpret_cast<ResetFn>(opengl32_.get_proc_address("glGetGraphicsResetStatus"));
+    return query != nullptr ? query() : 0u;
+}
+
 const char *Opengl32GlEntry::string(std::uint32_t name)
 {
     using GetString = const GLubyte *(APIENTRY *)(GLenum);

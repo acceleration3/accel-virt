@@ -35,6 +35,9 @@ public:
     bool          share_lists(void *first, void *second) override;
     bool          swap_buffers() override;
     std::uint32_t last_error() const override;
+    std::uint32_t make_current_elsewhere(void *context) override;
+    std::int32_t  force_fault() override;
+    std::uint32_t reset_status() override;
 
     const char   *string(std::uint32_t name) override;
     std::uint32_t error() override;
@@ -67,6 +70,8 @@ public:
     void          delete_texture(std::uint32_t texture) override;
 
 private:
+    static constexpr std::uint32_t elsewhere = 7u;
+
     template <typename Function>
     Function named(const char *name) const;
 

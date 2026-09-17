@@ -13,6 +13,9 @@ constexpr std::uint32_t gl_compile_status = 0x8B81u, gl_link_status = 0x8B82u;
 constexpr std::uint32_t gl_color_buffer_bit = 0x4000u, gl_triangles = 0x0004u;
 constexpr std::int32_t  major_version = 0x2091, minor_version = 0x2092, profile_mask = 0x9126;
 constexpr std::uint32_t error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u;
+constexpr std::uint32_t error_busy = 170u;
+constexpr std::int32_t  context_flags = 0x2094, robust_access_bit = 0x4, reset_strategy = 0x8256, lose_on_reset = 0x8252;
+constexpr std::uint32_t gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u;
 constexpr std::uint8_t  solid[4] = {64u, 128u, 191u, 255u};
 /* ScriptedGl's context handles: a row plus this, never a real address. */
 constexpr std::uintptr_t handle_base = 0x4000u;
@@ -26,7 +29,8 @@ std::uint8_t unorm(float value)
 
 ScriptedGl::ScriptedGl(std::uint32_t width, std::uint32_t height)
     : width_(width), height_(height), fail_at_{}, calls_{}, version_("4.6.0 scripted"), renderer_("scripted gpu"),
-      error_(0u), shift_(0), accept_versions_(false), accept_profiles_(false), isolate_(false), format_(0), contexts_{}, current_(none),
+      error_(0u), shift_(0), accept_versions_(false), accept_profiles_(false), isolate_(false), shared_threads_(false),
+      hidden_hook_(false), survives_(false), forgets_resets_(false), unreported_(false), reported_forever_(false), format_(0), contexts_{}, current_(none),
       last_error_(0u), textures_{}, bound_texture_(0u), objects_(0u), next_name_(10u), program_(0u), linked_(0u), uncompiled_(0u),
       array_(0u), back_{}, clear_{}, misuses_(0u)
 {
@@ -45,6 +49,12 @@ void ScriptedGl::shift_colour(std::int32_t shift) { shift_ = shift; }
 void ScriptedGl::accept_versions() { accept_versions_ = true; }
 void ScriptedGl::accept_profiles() { accept_profiles_ = true; }
 void ScriptedGl::isolate_textures() { isolate_ = true; }
+void ScriptedGl::let_other_threads_take_contexts() { shared_threads_ = true; }
+void ScriptedGl::hide_fault_hook() { hidden_hook_ = true; }
+void ScriptedGl::survive_faults() { survives_ = true; }
+void ScriptedGl::forget_resets() { forgets_resets_ = true; }
+void ScriptedGl::leave_losses_unreported() { unreported_ = true; }
+void ScriptedGl::report_losses_forever() { reported_forever_ = true; }
 
 std::uint32_t ScriptedGl::live_contexts() const
 {
@@ -87,7 +97,7 @@ void *ScriptedGl::create_context()
     }
     for (std::uint32_t row = 0u; row < max_contexts; row++) {
         if (contexts_[row].live) continue;
-        contexts_[row] = Context{true, false, row + 1u};
+        contexts_[row] = Context{true, false, row + 1u, false, false, false};
         return reinterpret_cast<void *>(handle_base + row);
     }
     last_error_ = refused;
@@ -96,11 +106,13 @@ void *ScriptedGl::create_context()
 
 void *ScriptedGl::create_context_attribs(const std::int32_t *attributes)
 {
-    std::int32_t major = 1, minor = 0, profile = 0;
+    std::int32_t major = 1, minor = 0, profile = 0, flags = 0, strategy = 0;
     for (; attributes != nullptr && attributes[0] != 0; attributes += 2) {
         if (attributes[0] == major_version) major = attributes[1];
         if (attributes[0] == minor_version) minor = attributes[1];
         if (attributes[0] == profile_mask) profile = attributes[1];
+        if (attributes[0] == context_flags) flags = attributes[1];
+        if (attributes[0] == reset_strategy) strategy = attributes[1];
     }
     if (!accept_versions_ && major == 4 && minor > 6) {
         last_error_ = error_invalid_version_arb;
@@ -110,7 +122,10 @@ void *ScriptedGl::create_context_attribs(const std::int32_t *attributes)
         last_error_ = error_invalid_profile_arb;
         return nullptr;
     }
-    return create_context();
+    void *const made = create_context();
+    if (made != nullptr)
+        contexts_[row_of(made)].robust = (flags & robust_access_bit) != 0 && strategy == lose_on_reset;
+    return made;
 }
 
 bool ScriptedGl::make_current(void *context)
@@ -163,6 +178,33 @@ bool ScriptedGl::swap_buffers()
 
 std::uint32_t ScriptedGl::last_error() const { return last_error_; }
 
+std::uint32_t ScriptedGl::make_current_elsewhere(void *context)
+{
+    const std::uint32_t row = row_of(context);
+    if (row == none) misuses_++;
+    if (row == none || fails(Call::make_current_elsewhere)) return refused;
+    if (row == current_ && !shared_threads_) return error_busy;
+    contexts_[row].made = true;
+    return 0u;
+}
+
+std::int32_t ScriptedGl::force_fault()
+{
+    if (hidden_hook_) return -1;
+    if (!current_or_misuse()) return 0;
+    static_cast<void>(fails(Call::force_fault));
+    if (survives_) return 0;
+    contexts_[current_].lost = true;
+    return 1;
+}
+
+std::uint32_t ScriptedGl::reset_status()
+{
+    if (!current_or_misuse()) return 0u;
+    const Context &context = contexts_[current_];
+    return context.lost && context.robust && !forgets_resets_ ? gl_unknown_context_reset : 0u;
+}
+
 const char *ScriptedGl::string(std::uint32_t name)
 {
     if (!current_or_misuse()) return nullptr;
@@ -173,7 +215,11 @@ const char *ScriptedGl::string(std::uint32_t name)
 std::uint32_t ScriptedGl::error()
 {
     if (!current_or_misuse()) return 0u;
-    return error_;
+    Context &context = contexts_[current_];
+    if (!context.lost) return error_;
+    if (unreported_ || (context.loss_reported && !reported_forever_)) return 0u;
+    context.loss_reported = true;
+    return context.robust ? gl_context_lost : gl_out_of_memory;
 }
 
 void ScriptedGl::viewport(std::int32_t, std::int32_t, std::int32_t width, std::int32_t height)

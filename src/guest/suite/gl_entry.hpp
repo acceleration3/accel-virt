@@ -34,6 +34,15 @@ public:
     virtual bool     swap_buffers() = 0;
     /* GetLastError, after a WGL call that failed. */
     virtual uint32_t last_error() const = 0;
+    /* wglMakeCurrent of `context` on the window's DC from a second thread,
+     * which releases it again when that succeeded: 0 then, GetLastError
+     * there otherwise. */
+    virtual uint32_t make_current_elsewhere(void *context) = 0;
+    /* The ICD's probe-only rvkForceContextFault through wglGetProcAddress:
+     * what it answers, or -1 when the ICD has no such hook. */
+    virtual int32_t  force_fault() = 0;
+    /* glGetGraphicsResetStatus through wglGetProcAddress; 0 without it. */
+    virtual uint32_t reset_status() = 0;
 
     virtual const char *string(uint32_t name) = 0;
     virtual uint32_t    error() = 0;

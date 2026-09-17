@@ -1,6 +1,8 @@
-/* The GL probe over a scripted GL (feature 050, T038): every step's line
- * as the runner reads it, the version and renderer as notes, the draw read
- * back after the swap, a texture read across a share, the ARB errors; a
+/* The GL probe over a scripted GL (feature 050, T038, T041): every step's
+ * line as the runner reads it, the version and renderer as notes, the draw
+ * read back after the swap, a texture read across a share, a context refused
+ * to a second thread, the ARB errors, a forced loss and a context made after
+ * it; a
  * failure at each call is reported, stops the run where nothing past it can
  * run, and leaves no context or object behind. */
 #include "guest/suite/gl_probe.hpp"
@@ -61,9 +63,13 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.version 46\n"
                                          "ok opengl.draw 32\n"
                                          "ok opengl.share 4\n"
+                                         "ok opengl.busy 170\n"
                                          "ok opengl.attribs 8342\n"
-                                         "rvkglprobe: 6 passed, 0 failed\n") == 0);
-  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 1u); }
+                                         "ok opengl.lost 33365\n"
+                                         "ok opengl.recreated 32\n"
+                                         "rvkglprobe: 9 passed, 0 failed\n") == 0);
+  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u);
+  CHECK_EQ(rig.gl().calls(Call::force_fault), 1u); }
 
 TEST(gl_probe, no_format_or_no_context_ends_the_run)
 { const struct {
@@ -198,3 +204,71 @@ TEST(gl_probe, attributes_the_icd_does_not_refuse_fail_the_attribs_step)
   other.gl().fail_at(Call::create_context, 4u);
   other.run();
   CHECK(other.holds("FAIL opengl.attribs status=7 123\n")); }
+
+/* busy (T041): the context current here is refused to another thread with
+ * ERROR_BUSY; one that takes it, or refuses it for another reason, fails. */
+TEST(gl_probe, a_context_another_thread_may_take_fails_the_busy_step)
+{ ProbeRig taken;
+  taken.gl().let_other_threads_take_contexts();
+  taken.run();
+  CHECK(taken.holds("FAIL opengl.busy status=7 0\n"));
+  CHECK(taken.holds("ok opengl.lost 33365\n"));
+  ProbeRig other;
+  other.gl().fail_at(Call::make_current_elsewhere, 1u);
+  other.run();
+  CHECK(other.holds("FAIL opengl.busy status=7 123\n"));
+  CHECK(other.holds("ok opengl.recreated 32\n")); }
+
+/* lost (T041): a robust context faulted on purpose reports an unknown reset,
+ * GL_CONTEXT_LOST once and then nothing; anything else fails the step, and
+ * the run goes on to recreate a context. */
+TEST(gl_probe, a_loss_that_is_not_reported_as_the_arb_says_fails_the_lost_step)
+{ ProbeRig no_hook;
+  no_hook.gl().hide_fault_hook();
+  no_hook.run();
+  CHECK(no_hook.holds("FAIL opengl.lost status=7 0\n"));
+  CHECK(no_hook.holds("ok opengl.recreated 32\n"));
+  ProbeRig survives;
+  survives.gl().survive_faults();
+  survives.run();
+  CHECK(survives.holds("FAIL opengl.lost status=7 0\n"));
+  ProbeRig forgets;
+  forgets.gl().forget_resets();
+  forgets.run();
+  CHECK(forgets.holds("FAIL opengl.lost status=7 0\n"));
+  ProbeRig unreported;
+  unreported.gl().leave_losses_unreported();
+  unreported.run();
+  CHECK(unreported.holds("FAIL opengl.lost status=7 33365\n"));
+  ProbeRig repeated;
+  repeated.gl().report_losses_forever();
+  repeated.run();
+  CHECK(repeated.holds("FAIL opengl.lost status=7 33365\n"));
+  /* The robust context cannot be made, or made current. */
+  ProbeRig uncreated;
+  uncreated.gl().fail_at(Call::create_context, 4u);
+  uncreated.run();
+  CHECK(uncreated.holds("FAIL opengl.lost status=7 123\n"));
+  CHECK(uncreated.holds("ok opengl.recreated 32\n"));
+  ProbeRig uncurrent;
+  uncurrent.gl().fail_at(Call::make_current, 5u);
+  uncurrent.run();
+  CHECK(uncurrent.holds("FAIL opengl.lost status=7 123\n")); }
+
+/* recreated (T041): a context made after the loss draws again; one that
+ * cannot be made or made current, or does not draw, fails. */
+TEST(gl_probe, a_context_that_cannot_be_made_again_fails_the_recreated_step)
+{ ProbeRig uncreated;
+  uncreated.gl().fail_at(Call::create_context, 5u);
+  uncreated.run();
+  CHECK(uncreated.holds("ok opengl.lost 33365\n"));
+  CHECK(uncreated.holds("FAIL opengl.recreated status=7 123\n"));
+  ProbeRig uncurrent;
+  uncurrent.gl().fail_at(Call::make_current, 6u);
+  uncurrent.run();
+  CHECK(uncurrent.holds("FAIL opengl.recreated status=7 123\n"));
+  ProbeRig undrawn;
+  undrawn.gl().fail_at(Call::swap_buffers, 2u);
+  undrawn.run();
+  CHECK(undrawn.holds("ok opengl.draw 32\n"));
+  CHECK(undrawn.holds("FAIL opengl.recreated status=7 32\n")); }
