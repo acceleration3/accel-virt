@@ -10,6 +10,7 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/threading/work_item.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -17,6 +18,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 
 using av::BlobTable;
 using av::DeviceContext;
@@ -64,6 +66,30 @@ TEST(device_context_table_create, each_context_gets_its_own_running_worker)
   CHECK_EQ(host.run_main_loop(), 1u);
   CHECK_EQ(ran.load(), 1u);
   CHECK(table.find(2u) == nullptr); }
+
+/* The table's line, then each context in slot order with its worker; an
+ * unbound context says only that it is unbound, its ring's progress and
+ * whether it has an executor. */
+TEST(device_context_table_report, writes_each_context_and_its_worker)
+{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+  char bytes[512];
+  av::StateWriter empty(bytes, sizeof bytes);
+  empty.open("device", 0u);
+  table.report(empty);
+  CHECK(std::strcmp(empty.dump(), "device/0\ndevice/0/contexts/0 live=0") == 0);
+  CHECK_STATUS(table.create(1u), Status::ok);
+  CHECK_STATUS(table.create(7u), Status::ok);
+  av::StateWriter two(bytes, sizeof bytes);
+  table.report(two);
+  const char *const expected =
+      "contexts/0 live=2\n"
+      "contexts/0/context/1 bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
+      "contexts/0/context/1/worker/0 running=true pending=0 stopping=false\n"
+      "contexts/0/context/7 bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
+      "contexts/0/context/7/worker/0 running=true pending=0 stopping=false";
+  CHECK(std::strcmp(two.dump(), expected) == 0);
+  CHECK(two.invariants_hold());
+  table.destroy_all(); }
 
 TEST(device_context_table_create, refuses_id_zero_a_live_id_and_a_full_table)
 { MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);

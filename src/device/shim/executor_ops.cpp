@@ -17,6 +17,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
+#include "device/shim/host_trace.hpp"
 #include "device/shim/loader_host_apis.hpp"
 
 namespace {
@@ -48,6 +49,10 @@ public:
         AV_SCOPE("Library::root");
         if (!asked_) {
             asked_ = true;
+            /* The library's own table, before anything it runs opens a scope
+             * worth reading; a host without /dev/shm runs untraced. */
+            (void)trace_.construct();
+            (void)trace_.object().start("executor");
             (void)apis_.construct();
             (void)root_.construct();
             apis_.object().open();
@@ -61,6 +66,7 @@ public:
 
 private:
 
+    av::ObjectStorage<av::HostTrace>      trace_;
     av::ObjectStorage<av::LoaderHostApis> apis_;
     av::ObjectStorage<av::ExecutorRoot>   root_;
     bool                                  asked_ = false;

@@ -26,6 +26,7 @@ class ExecutorLibrary;
 class FenceInterrupts;
 class ContextSetup;
 class Host;
+class StateWriter;
 class WorkItem;
 struct DeviceContextProbe;
 
@@ -48,6 +49,9 @@ public:
     const ContextBinding &binding() const;
     uint32_t             id() const;
     bool                 running() const;
+    /* Main loop: its line and its worker's. The ring's progress is the
+     * worker's own, read as it last wrote it. */
+    void                 report(StateWriter &writer);
 
 private:
     uint32_t       id_;

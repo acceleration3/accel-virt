@@ -25,6 +25,7 @@ public:
     void     destroy_mutex(void *mutex) override;
     void     lock_mutex(void *mutex) override;
     void     unlock_mutex(void *mutex) override;
+    bool     try_lock_mutex(void *mutex) override;
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     uint32_t gpu_count() override;
     GpuIdentity gpu_identity(uint32_t index) override;

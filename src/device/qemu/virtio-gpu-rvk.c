@@ -11,6 +11,7 @@
  */
 #include "qemu/osdep.h"
 #include "qapi/error.h"
+#include "qemu/main-loop.h"
 #include "qemu/module.h"
 #include "qemu/iov.h"
 #include "qemu/mmap-alloc.h"
@@ -25,6 +26,13 @@ static void (*virtio_gpu_rvk_parent_unrealize)(DeviceState *qdev);
 /* Fence queues carry no requests: a kick does nothing. */
 static void virtio_gpu_rvk_fence_kick(VirtIODevice *vdev, VirtQueue *vq)
 {
+}
+
+/* The device core's trace socket asks the main loop for its state dump
+ * through this, with no device state behind it (docs/trace.md). */
+static void virtio_gpu_rvk_schedule(RvkHostRoutine routine, void *context)
+{
+    aio_bh_schedule_oneshot(qemu_get_aio_context(), routine, context);
 }
 
 static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
@@ -73,6 +81,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
             return;
         }
     }
+    rvk_device_trace_start(virtio_gpu_rvk_schedule);
     virtio_gpu_rvk_host_init(r);
     r->core = rvk_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
                                 error, sizeof(error));

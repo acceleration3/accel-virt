@@ -1,13 +1,13 @@
 #include "um/trace/windows_crash.hpp"
 
 #include "core/support/text_buffer.hpp"
+#include "core/trace/crash_event.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/image_range.hpp"
 #include "core/trace/trace_host.hpp"
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_table.hpp"
 #include "core/trace/trace_text.hpp"
-#include "guest/trace/crash_event.hpp"
 #include "um/trace/wide_name.hpp"
 
 #include <windows.h>

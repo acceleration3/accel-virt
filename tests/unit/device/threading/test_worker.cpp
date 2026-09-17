@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
@@ -16,6 +17,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <sched.h>
 
 using av::BlobWindow;
@@ -41,6 +43,9 @@ struct WorkerProbe {
     static void overfill(Worker &worker) { worker.count_ = Worker::queue_capacity + 1u; }
     static void misplace_head(Worker &worker) { worker.head_ = Worker::queue_capacity; }
     static Doorbell &doorbell(Worker &worker) { return worker.doorbell_; }
+    static void      fill(Worker &worker) { worker.count_ = Worker::queue_capacity; }
+    static void      empty(Worker &worker) { worker.count_ = 0u; }
+    static void     *lock(Worker &worker) { return worker.lock_; }
 };
 
 }  // namespace av
@@ -154,6 +159,30 @@ TEST(worker_post, runs_work_off_the_main_loop_and_completes_on_it_in_order)
   CHECK_EQ(fixture.worker().pending(), 0u);
   fixture.worker().stop();
   CHECK(!fixture.worker().running());
+  CHECK(fixture.worker().invariants_hold()); }
+
+/* A worker's line: whether it runs, what waits and whether it is stopping;
+ * a lock another thread holds is written as busy rather than waited on. */
+TEST(worker_report, writes_its_queue_or_busy_without_waiting)
+{ Fixture fixture;
+  char bytes[256];
+  av::StateWriter unstarted(bytes, sizeof bytes);
+  fixture.worker().report(unstarted);
+  CHECK(std::strcmp(unstarted.dump(), "worker/0 running=false pending=0 stopping=false") == 0);
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  av::StateWriter started(bytes, sizeof bytes);
+  fixture.worker().report(started);
+  CHECK(std::strcmp(started.dump(), "worker/0 running=true pending=0 stopping=false") == 0);
+  av::WorkerProbe::fill(fixture.worker());
+  fixture.host().hold_mutex_elsewhere(av::WorkerProbe::lock(fixture.worker()), true);
+  av::StateWriter busy(bytes, sizeof bytes);
+  fixture.worker().report(busy);
+  CHECK(std::strcmp(busy.dump(), "worker/0 running=true busy=true") == 0);
+  fixture.host().hold_mutex_elsewhere(av::WorkerProbe::lock(fixture.worker()), false);
+  av::StateWriter full(bytes, sizeof bytes);
+  fixture.worker().report(full);
+  CHECK(std::strcmp(full.dump(), "worker/0 running=true pending=64 stopping=false") == 0);
+  av::WorkerProbe::empty(fixture.worker());
   CHECK(fixture.worker().invariants_hold()); }
 
 TEST(worker_post, a_full_queue_refuses_the_next_item)

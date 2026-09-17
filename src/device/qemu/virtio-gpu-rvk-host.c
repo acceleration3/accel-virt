@@ -137,6 +137,11 @@ static void rvk_lock_mutex(void *opaque, void *mutex)
     qemu_mutex_lock(mutex);
 }
 
+static int rvk_try_lock_mutex(void *opaque, void *mutex)
+{
+    return qemu_mutex_trylock(mutex) == 0;
+}
+
 static void rvk_unlock_mutex(void *opaque, void *mutex)
 {
     qemu_mutex_unlock(mutex);
@@ -732,6 +737,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .destroy_mutex = rvk_destroy_mutex,
         .lock_mutex = rvk_lock_mutex,
         .unlock_mutex = rvk_unlock_mutex,
+        .try_lock_mutex = rvk_try_lock_mutex,
         .run_on_main_loop = rvk_run_on_main_loop,
         .gpu_count = rvk_gpu_count,
         .gpu_properties = rvk_gpu_properties,

@@ -10,6 +10,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/state_reporter.hpp"
 #include "device/abi/rvk_device.h"
 #include "device/abi/rvk_executor.h"
 #include "device/module/device_instance.hpp"
@@ -21,7 +22,7 @@ namespace av {
 
 struct DeviceModuleProbe;
 
-class DeviceModule {
+class DeviceModule final : public StateReporter {
 public:
     static constexpr uint32_t max_devices = 16u;
 
@@ -34,6 +35,8 @@ public:
                                 bool base_blobs, char *error, size_t error_size);
     [[nodiscard]] Status destroy(DeviceInstance *instance);
     uint32_t             live() const;
+    /* Main loop: the module's line, then each live device by slot. */
+    void                 report(StateWriter &writer) override;
 
 private:
     ObjectStorage<DeviceInstance> slots_[max_devices] = {};

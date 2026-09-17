@@ -2,6 +2,10 @@
  * a table that reaches the MockHost, so the forwarding and the big-lock checks
  * are proven with real threads. */
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
+#include "core/trace/scope_binding.hpp"
+#include "core/trace/trace_snapshot.hpp"
+#include "core/trace/trace_table.hpp"
 #include "device/abi/table_host.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -15,6 +19,7 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_host_ops.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/trace/mock_trace_host.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -74,6 +79,54 @@ TEST(table_host, a_null_answer_from_the_table_is_no_memory)
   CHECK_STATUS(host.create_event(handle), Status::no_memory);
   mock.fail_mutex_at(1u);
   CHECK_STATUS(host.create_mutex(handle), Status::no_memory); }
+
+TEST(table_host, forwards_a_try_lock_and_its_answer)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *mutex = nullptr;
+  CHECK_STATUS(host.create_mutex(mutex), Status::ok);
+  mock.hold_mutex_elsewhere(mutex, true);
+  CHECK(!host.try_lock_mutex(mutex));
+  mock.hold_mutex_elsewhere(mutex, false);
+  CHECK(host.try_lock_mutex(mutex));
+  host.unlock_mutex(mutex);
+  host.destroy_mutex(mutex);
+  CHECK_EQ(mock.live_mutexes(), 0u); }
+
+/* Every device lock goes through the table, so the table names it in the
+ * trace: waited on, then held, then given back; a refused try holds nothing. */
+TEST(table_host, marks_each_mutex_in_the_bound_trace)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  av::MockTraceHost clock;
+  alignas(8) std::uint8_t bytes[96u + 824u] = {};
+  av::TraceTable table(clock);
+  CHECK_STATUS(table.initialize(bytes, sizeof bytes, "device", 1u), Status::ok);
+  av::scope_binding.bind(table);
+  void *mutex = nullptr;
+  CHECK_STATUS(host.create_mutex(mutex), Status::ok);
+  const auto held = [&]() {
+    av::TraceSnapshot snapshot;
+    CHECK_STATUS(snapshot.read(bytes, sizeof bytes), Status::ok);
+    return snapshot.slot(0u).holding();
+  };
+  const std::uint64_t address = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mutex));
+  {
+    const av::FunctionScope scope(av::scope_binding, av::ScopeName("test::lock"));
+    host.lock_mutex(mutex);
+    CHECK_EQ(held(), address);
+    host.unlock_mutex(mutex);
+    CHECK_EQ(held(), 0u);
+    mock.hold_mutex_elsewhere(mutex, true);
+    CHECK(!host.try_lock_mutex(mutex));
+    CHECK_EQ(held(), 0u);
+    mock.hold_mutex_elsewhere(mutex, false);
+    CHECK(host.try_lock_mutex(mutex));
+    CHECK_EQ(held(), address);
+    host.unlock_mutex(mutex);
+    CHECK_EQ(held(), 0u);
+  }
+  av::scope_binding.unbind();
+  host.destroy_mutex(mutex);
+  CHECK(table.invariants_hold()); }
 
 TEST(table_host, checks_the_threading_contract_against_the_big_lock)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());

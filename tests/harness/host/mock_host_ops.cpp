@@ -39,6 +39,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.destroy_mutex = [](void *opaque, void *mutex) { host_of(opaque).destroy_mutex(mutex); };
     table_.lock_mutex = [](void *opaque, void *mutex) { host_of(opaque).lock_mutex(mutex); };
     table_.unlock_mutex = [](void *opaque, void *mutex) { host_of(opaque).unlock_mutex(mutex); };
+    table_.try_lock_mutex = [](void *opaque, void *mutex) { return host_of(opaque).try_lock_mutex(mutex) ? 1 : 0; };
     table_.run_on_main_loop = [](void *opaque, RvkHostRoutine routine, void *context) {
         host_of(opaque).run_on_main_loop(routine, context);
     };

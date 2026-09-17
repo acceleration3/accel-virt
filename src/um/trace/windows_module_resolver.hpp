@@ -4,7 +4,7 @@
 #ifndef AV_UM_WINDOWS_MODULE_RESOLVER_HPP
 #define AV_UM_WINDOWS_MODULE_RESOLVER_HPP
 
-#include "guest/trace/module_resolver.hpp"
+#include "core/trace/module_resolver.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

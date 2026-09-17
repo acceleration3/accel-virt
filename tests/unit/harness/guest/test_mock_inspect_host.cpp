@@ -1,7 +1,7 @@
 #include "guest/inspect/inspect_host.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_inspect_host.hpp"
-#include "harness/guest/scripted_module_resolver.hpp"
+#include "harness/trace/scripted_module_resolver.hpp"
 
 #include <cstdint>
 #include <cstring>

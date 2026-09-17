@@ -3,15 +3,26 @@
 #include "device/module/device_instance.hpp"
 #include "device/module/device_module.hpp"
 #include "device/ring/ring_consumer.hpp"
+#include "device/shim/device_trace.hpp"
 #include "device/threading/worker.hpp"
 
 namespace av {
 
 constinit DeviceModule device_module;
+/* The module's trace services: its table, crash file and state socket. */
+constinit DeviceTraceRoot device_trace;
 
 }  // namespace av
 
 extern "C" {
+
+/* The fatal signals' handler: sigaction hands it no context. */
+static void rvk_device_crashed(int signal, siginfo_t *info, void *context)
+{ av::device_trace.crashed(signal, info, context); }
+
+__attribute__((visibility("default")))
+void rvk_device_trace_start(RvkMainLoopScheduler schedule)
+{ av::device_trace.start(av::device_module, schedule, &rvk_device_crashed); }
 
 __attribute__((visibility("default")))
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,

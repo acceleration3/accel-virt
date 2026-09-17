@@ -1,4 +1,4 @@
-#include "harness/guest/scripted_module_resolver.hpp"
+#include "harness/trace/scripted_module_resolver.hpp"
 
 #include <cstring>
 

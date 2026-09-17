@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/context/device_context.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/memory/blob_resource.hpp"
@@ -171,6 +172,15 @@ TEST(virtio_gpu_rvk_control, answers_blob_requests_and_reset_releases_every_blob
   CHECK_EQ(host.live_host_memory(), 0u);
   CHECK(device.invariants_hold()); }
 
+TEST(virtio_gpu_rvk_report, an_unrealized_device_says_so_and_has_no_contexts)
+{ MockHost host;
+  VirtioGpuRvk device(host);
+  char dump[256];
+  av::StateWriter writer(dump, sizeof dump);
+  writer.open("device", 0u);
+  device.report(writer);
+  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/contexts/0 live=0") == 0); }
+
 TEST(virtio_gpu_rvk_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
 { MockHost host;
   VirtioGpuRvk device(host);
@@ -256,6 +266,23 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   CHECK(device.control(&submit_request, 0x0207u));
   CHECK_EQ(submit_request.response_type(), 0x1100u);
   CHECK(device.invariants_hold());
+  /* The device's own fields go on the line its module opened; a bound
+   * context adds what it is bound to. */
+  char dump[1024];
+  av::StateWriter writer(dump, sizeof dump);
+  writer.open("device", 3u);
+  device.report(writer);
+  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                                    "device/3/contexts/0 live=1\n"
+                                    "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
+                                    "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
+                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                                 "device/3/contexts/0 live=1\n"
+                                 "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
+                                 "ring_order=12 fence=2 doorbell=0 reply=0 attached=")) == 0);
+  /* The worker attaches the ring and makes the executor on its own thread, so
+   * only the worker's line is settled here. */
+  CHECK(std::strstr(writer.dump(), "\ndevice/3/contexts/0/context/7/worker/0 running=true ") != nullptr);
   device.reset();
   CHECK_EQ(device.contexts(), 0u);
   CHECK_EQ(device.blobs(), 0u);

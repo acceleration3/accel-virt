@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.6.1 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-16
+**Version**: 2.6.2 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-17
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -85,7 +85,11 @@ exists and unbound only when no thread can still be inside the binary. A
 Windows binary's tracing is started from that root's storage; `rvktest.exe`,
 which has no other root, keeps its `ProcessTrace` in one `ObjectStorage` in
 its entry's translation unit (`src/um/program_entry.cpp`), because its
-unhandled-exception filter is handed no context either.
+unhandled-exception filter is handed no context either. The QEMU device
+module's trace services live beside its `DeviceModule`, in a
+`DeviceTraceRoot` in `src/device/abi/entry_points.cpp`, whose fatal-signal
+handler is handed no context; the executor library's table is part of its
+root's storage in `src/device/shim/executor_ops.cpp`.
 An object whose
 lifetime cannot be a scope is held in `ObjectStorage<T>`; an object whose count
 has no fixed bound - a device, an allocation - lives in an `ObjectPool<T>`,

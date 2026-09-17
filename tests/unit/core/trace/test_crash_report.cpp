@@ -1,14 +1,14 @@
 #include "core/support/text_buffer.hpp"
+#include "core/trace/crash_event.hpp"
+#include "core/trace/crash_report.hpp"
 #include "core/trace/image_range.hpp"
+#include "core/trace/module_resolver.hpp"
 #include "core/trace/scope_name.hpp"
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_table.hpp"
 #include "core/trace/trace_text.hpp"
-#include "guest/trace/crash_event.hpp"
-#include "guest/trace/crash_report.hpp"
-#include "guest/trace/module_resolver.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/guest/scripted_module_resolver.hpp"
+#include "harness/trace/scripted_module_resolver.hpp"
 #include "harness/trace/mock_trace_host.hpp"
 
 #include <cstdint>

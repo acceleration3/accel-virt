@@ -53,6 +53,9 @@ typedef struct RvkHostOps {
     void (*destroy_mutex)(void *opaque, void *mutex);
     void (*lock_mutex)(void *opaque, void *mutex);
     void (*unlock_mutex)(void *opaque, void *mutex);
+    /* Takes the mutex only if it is free: nonzero when taken. A state dump
+     * never waits on a lock (docs/trace.md). */
+    int (*try_lock_mutex)(void *opaque, void *mutex);
     /* Runs routine(context) later on the main loop, in call order. */
     void (*run_on_main_loop)(void *opaque, RvkHostRoutine routine, void *context);
     uint32_t (*gpu_count)(void *opaque);
@@ -113,7 +116,16 @@ typedef struct RvkHostOps {
     int (*resource_exists)(void *opaque, uint32_t id);
 } RvkHostOps;
 
+/* Runs routine(context) later on QEMU's main loop, under the big lock; any
+ * thread, and with no device's state behind it. */
+typedef void (*RvkMainLoopScheduler)(RvkHostRoutine routine, void *context);
+
 typedef struct RvkDevice RvkDevice;
+
+/* The module's trace table, crash file and state socket (docs/trace.md): once
+ * per process, before the first rvk_device_create; later calls do nothing.
+ * `schedule` is how the state socket reaches the main loop. */
+void rvk_device_trace_start(RvkMainLoopScheduler schedule);
 
 /* Realizes a device on the host GPU `host_gpu` names ("auto", a UUID, or NULL
  * for auto), running commands through `executor` (NULL: no capset);

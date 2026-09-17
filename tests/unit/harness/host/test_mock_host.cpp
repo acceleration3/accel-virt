@@ -104,6 +104,28 @@ TEST(mock_host_mutexes, lock_and_unlock_and_catch_misuse)
   mock.destroy_mutex(mutex);
   CHECK_EQ(mock.live_mutexes(), 0u); }
 
+/* A try takes a free mutex and refuses one held - by the caller or, as a test
+ * says, by another thread - without waiting. */
+TEST(mock_host_mutexes, a_try_takes_only_a_free_mutex)
+{ MockHost mock;
+  void *mutex = nullptr;
+  CHECK_STATUS(mock.create_mutex(mutex), Status::ok);
+  CHECK(mock.try_lock_mutex(mutex));
+  CHECK(!mock.try_lock_mutex(mutex));
+  mock.unlock_mutex(mutex);
+  mock.hold_mutex_elsewhere(mutex, true);
+  CHECK(!mock.try_lock_mutex(mutex));
+  mock.hold_mutex_elsewhere(mutex, false);
+  CHECK(mock.try_lock_mutex(mutex));
+  mock.unlock_mutex(mutex);
+  mock.destroy_mutex(mutex);
+  int stranger = 0;
+  CHECK(!mock.try_lock_mutex(&stranger));
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  mock.hold_mutex_elsewhere(&stranger, true);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  CHECK_EQ(mock.live_mutexes(), 0u); }
+
 TEST(mock_host, unknown_handles_are_violations)
 { MockHost mock;
   int stranger = 0;

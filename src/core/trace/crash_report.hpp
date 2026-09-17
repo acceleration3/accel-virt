@@ -5,7 +5,7 @@
 #ifndef AV_CRASH_REPORT_HPP
 #define AV_CRASH_REPORT_HPP
 
-#include "guest/trace/crash_event.hpp"
+#include "core/trace/crash_event.hpp"
 
 #include <stdint.h>
 

@@ -118,6 +118,33 @@ escape the trace magic.
 key and so no slot. That keeps the full-stack rig's device workers - which
 share the process, and so the driver's bound table - from racing its slots.
 
+### The trace tracker in the device
+
+`Worker`, `DeviceContext`, `DeviceContextTable`, `VirtioGpuRvk` and
+`DeviceModule` report over `MockHost`, each checked against the exact dump.
+A worker's mutex held elsewhere (`MockHost::hold_mutex_elsewhere`) reports
+`busy=true`, and `TableHost` is shown marking a bound table as its mutexes
+are taken, tried and released.
+
+The POSIX shims are tested for real in
+`tests/unit/device/shim/test_device_trace.cpp`:
+- `/dev/shm` files: made at mode 0600, and swept only for processes that do
+  not exist;
+- `dladdr1` names for libc and the test binary;
+- the state socket, answered through a scheduler the test controls, with
+  every refusal;
+- the crash file: written once, with this thread's frames and native stack,
+  chained to a counting `SIGBUS` handler, never written for a machine check,
+  and an ignored action given back.
+
+Mutating the machine-check guard or the chaining fails it.
+
+Live, `qemu_smoke` and `qemu_virtio_gpu` still pass with tracing started in
+realize. A qtest QEMU answers `host_threads` and `host_state` through
+`tools/mcp/rvk_inspect.py`. A `kill -SEGV` leaves a crash file whose native
+stack runs from the handler through libc into `qemu-system-x86_64`, and the
+process ends.
+
 ### The mock platform
 
 `Platform` is an abstract base with exactly two implementations — that is what

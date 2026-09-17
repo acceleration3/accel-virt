@@ -1,6 +1,7 @@
 #include "device/context/device_context_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/host/host.hpp"
 
 namespace av {
@@ -74,6 +75,16 @@ bool DeviceContextTable::holds_doorbell(uint32_t index)
         if (slot.constructed() && slot.object().binding().bound() && slot.object().binding().doorbell() == index)
             return true;
     return false;
+}
+
+void DeviceContextTable::report(StateWriter &writer)
+{
+    AV_SCOPE("DeviceContextTable::report");
+    writer.open("contexts", 0u);
+    writer.number("live", live());
+    for (ObjectStorage<DeviceContext> &slot : slots_)
+        if (slot.constructed()) slot.object().report(writer);
+    writer.close();
 }
 
 uint32_t DeviceContextTable::live() const

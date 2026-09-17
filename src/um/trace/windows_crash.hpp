@@ -6,7 +6,7 @@
 #ifndef AV_UM_WINDOWS_CRASH_HPP
 #define AV_UM_WINDOWS_CRASH_HPP
 
-#include "guest/trace/crash_report.hpp"
+#include "core/trace/crash_report.hpp"
 #include "um/trace/windows_module_resolver.hpp"
 
 #include <stdint.h>

@@ -45,6 +45,7 @@ public:
     void     destroy_mutex(void *mutex) override;
     void     lock_mutex(void *mutex) override;
     void     unlock_mutex(void *mutex) override;
+    bool     try_lock_mutex(void *mutex) override;
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     std::uint32_t gpu_count() override;
     GpuIdentity gpu_identity(std::uint32_t index) override;
@@ -85,6 +86,8 @@ public:
     void fail_thread_start_at(std::uint32_t nth);
     void fail_event_at(std::uint32_t nth);
     void fail_mutex_at(std::uint32_t nth);
+    /* try_lock_mutex refuses `mutex` as if another thread held it. */
+    void hold_mutex_elsewhere(void *mutex, bool held);
     void fail_allocation_at(std::uint32_t nth);
     void fail_host_memory_at(std::uint32_t nth);
     void fail_placement_at(std::uint32_t nth);
@@ -192,6 +195,7 @@ private:
     struct Mutex {
         pthread_mutex_t lock;
         bool            locked;
+        bool            elsewhere;
         bool            live;
     };
     struct MainLoopWork {

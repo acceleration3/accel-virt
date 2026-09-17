@@ -2,7 +2,7 @@
 #ifndef AV_SCRIPTED_MODULE_RESOLVER_HPP
 #define AV_SCRIPTED_MODULE_RESOLVER_HPP
 
-#include "guest/trace/module_resolver.hpp"
+#include "core/trace/module_resolver.hpp"
 
 #include <cstddef>
 #include <cstdint>

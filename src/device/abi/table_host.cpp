@@ -1,5 +1,6 @@
 #include "device/abi/table_host.hpp"
 
+#include "core/platform/lock_marks.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/context/gpu_identity.hpp"
 
@@ -89,12 +90,24 @@ void TableHost::destroy_mutex(void *mutex)
 void TableHost::lock_mutex(void *mutex)
 {
     AV_SCOPE("TableHost::lock_mutex");
+    const LockMarks marks(mutex);
+    marks.waiting();
     ops_.lock_mutex(ops_.opaque, mutex);
+    marks.acquired();
+}
+
+bool TableHost::try_lock_mutex(void *mutex)
+{
+    AV_SCOPE("TableHost::try_lock_mutex");
+    if (ops_.try_lock_mutex(ops_.opaque, mutex) == 0) return false;
+    LockMarks(mutex).acquired();
+    return true;
 }
 
 void TableHost::unlock_mutex(void *mutex)
 {
     AV_SCOPE("TableHost::unlock_mutex");
+    LockMarks(mutex).released();
     ops_.unlock_mutex(ops_.opaque, mutex);
 }
 

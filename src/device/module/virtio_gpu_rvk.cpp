@@ -1,6 +1,7 @@
 #include "device/module/virtio_gpu_rvk.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/control_request.hpp"
@@ -137,6 +138,20 @@ uint32_t VirtioGpuRvk::gpu_index() const
 {
     AV_SCOPE("VirtioGpuRvk::gpu_index");
     return binding_.index();
+}
+
+void VirtioGpuRvk::report(StateWriter &writer)
+{
+    AV_SCOPE("VirtioGpuRvk::report");
+    writer.flag("realized", realized());
+    if (realized()) {
+        writer.number("gpu", gpu_index());
+        writer.number("capsets", capsets());
+        writer.number("blobs", blobs());
+        writer.number("contexts", contexts());
+        writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
+    }
+    contexts_.report(writer);
 }
 
 /* Contexts exist only on a realized device. */

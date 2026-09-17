@@ -1,9 +1,8 @@
-#include "guest/trace/crash_report.hpp"
+#include "core/trace/crash_report.hpp"
 
 #include "core/support/text_buffer.hpp"
-#include "core/trace/function_scope.hpp"
+#include "core/trace/module_resolver.hpp"
 #include "core/trace/trace_text.hpp"
-#include "guest/trace/module_resolver.hpp"
 
 namespace av {
 
@@ -19,12 +18,10 @@ CrashReport::CrashReport(const CrashEvent &event, TraceText &trace, ModuleResolv
     : event_(event), trace_(trace), modules_(modules), returns_(returns),
       count_(returns == nullptr ? 0u : count < max_frames ? count : max_frames), part_(Part::crash), frame_(0u)
 {
-    AV_SCOPE("CrashReport::CrashReport");
 }
 
 bool CrashReport::next(TextBuffer &out)
 {
-    AV_SCOPE("CrashReport::next");
     if (part_ == Part::crash) {
         out.append("crash module=");
         out.append(event_.module());
@@ -55,14 +52,12 @@ bool CrashReport::next(TextBuffer &out)
 
 bool CrashReport::invariants_hold() const
 {
-    AV_SCOPE("CrashReport::invariants_hold");
     return count_ <= max_frames && frame_ <= count_ && (returns_ != nullptr || count_ == 0u);
 }
 
 /* `0x<address> (<module>+0x<offset>)`, or the address alone in no module. */
 void CrashReport::located(TextBuffer &out, uint64_t address) const
 {
-    AV_SCOPE("CrashReport::located");
     out.append("0x");
     out.append_hex(address, address_digits);
     char     module[module_chars] = {};

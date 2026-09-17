@@ -18,6 +18,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class Host;
 class TextBuffer;
 struct VirtioGpuRvkProbe;
@@ -52,6 +54,8 @@ public:
     uint32_t             contexts() const;
     bool                 realized() const;
     uint32_t             gpu_index() const;
+    /* Main loop: its fields on the line its caller opened, then its contexts. */
+    void                 report(StateWriter &writer);
 
     bool invariants_hold() const;
 

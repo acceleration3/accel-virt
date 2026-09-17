@@ -41,6 +41,8 @@ public:
     virtual void destroy_mutex(void *mutex) = 0;
     virtual void lock_mutex(void *mutex) = 0;
     virtual void unlock_mutex(void *mutex) = 0;
+    /* Takes the mutex only if it is free; whether it did. */
+    virtual bool try_lock_mutex(void *mutex) = 0;
 
     /* Runs `routine` later on the main loop, under the big lock, in call order. */
     virtual void run_on_main_loop(HostRoutine routine, void *context) = 0;

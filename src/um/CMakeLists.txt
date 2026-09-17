@@ -74,7 +74,6 @@ file(GLOB_RECURSE RVKVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp

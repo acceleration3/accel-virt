@@ -1,6 +1,7 @@
 #include "device/threading/worker.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_consumer.hpp"
@@ -103,6 +104,28 @@ uint32_t Worker::pending()
     const uint32_t queued = count_;
     host_.unlock_mutex(lock_);
     return queued;
+}
+
+void Worker::report(StateWriter &writer)
+{
+    AV_SCOPE("Worker::report");
+    writer.open("worker", 0u);
+    writer.flag("running", thread_ != nullptr);
+    uint32_t queued = 0u;
+    bool     requested = false;
+    if (thread_ != nullptr) {
+        if (!host_.try_lock_mutex(lock_)) {
+            writer.flag("busy", true);
+            writer.close();
+            return;
+        }
+        queued = count_;
+        requested = stopping_;
+        host_.unlock_mutex(lock_);
+    }
+    writer.number("pending", queued);
+    writer.flag("stopping", requested);
+    writer.close();
 }
 
 bool Worker::stopping()

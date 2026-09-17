@@ -468,6 +468,7 @@ Status MockHost::create_mutex(void *&mutex)
         if (candidate.live) continue;
         pthread_mutex_init(&candidate.lock, nullptr);
         candidate.locked = false;
+        candidate.elsewhere = false;
         candidate.live = true;
         mutex = &candidate;
         return Status::ok;
@@ -501,6 +502,28 @@ void MockHost::lock_mutex(void *mutex)
     }
     pthread_mutex_lock(&slot->lock);
     slot->locked = true;
+}
+
+bool MockHost::try_lock_mutex(void *mutex)
+{
+    Mutex *const slot = mutex_of(mutex);
+    if (slot == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::try_lock_mutex");
+        return false;
+    }
+    if (slot->elsewhere || pthread_mutex_trylock(&slot->lock) != 0) return false;
+    slot->locked = true;
+    return true;
+}
+
+void MockHost::hold_mutex_elsewhere(void *mutex, bool held)
+{
+    Mutex *const slot = mutex_of(mutex);
+    if (slot == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::hold_mutex_elsewhere");
+        return;
+    }
+    slot->elsewhere = held;
 }
 
 void MockHost::unlock_mutex(void *mutex)

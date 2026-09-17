@@ -2,6 +2,7 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
@@ -34,6 +35,20 @@ Status DeviceModule::destroy(DeviceInstance *instance)
         return Status::ok;
     }
     return Status::invalid_parameter;
+}
+
+void DeviceModule::report(StateWriter &writer)
+{
+    AV_SCOPE("DeviceModule::report");
+    writer.open("module", 0u);
+    writer.number("devices", live());
+    for (uint32_t slot = 0u; slot < max_devices; slot++) {
+        if (!slots_[slot].constructed()) continue;
+        writer.open("device", slot);
+        slots_[slot].object().device().report(writer);
+        writer.close();
+    }
+    writer.close();
 }
 
 uint32_t DeviceModule::live() const

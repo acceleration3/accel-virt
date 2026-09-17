@@ -219,6 +219,93 @@ table.
   refuses only when that allocation fails (`STATUS_NO_MEMORY`), so
   rvkinspect's 16 KiB windows need no smaller page.
 
+## As built: the device and the executor library
+
+- QEMU's glue calls `rvk_device_trace_start(schedule)` in realize, before
+  `rvk_device_create` (later calls do nothing). It lands in `DeviceTraceRoot`
+  (`src/device/shim/device_trace.*`), in `src/device/abi/entry_points.cpp`
+  beside `DeviceModule`. `schedule` is the glue's
+  `aio_bh_schedule_oneshot(qemu_get_aio_context(), ...)`, which has no device
+  behind it and so no device's lifetime to outlive.
+- `HostTrace` owns the table: 128 slots in `/dev/shm/rvk-trace-<module>-<pid>`
+  (`ShmTraceRegion`: `shm_open` with `O_EXCL`, mode 0600), bound for
+  `AV_SCOPE`. The image range is the loaded object that holds `HostTrace`'s
+  own code (`dl_iterate_phdr`): the QEMU module for the device, and the library
+  for the executor. Opening a region first removes any `rvk-trace-*-<pid>` or
+  `rvk-state-*-<pid>.sock` whose process no longer exists (`kill(pid, 0)`
+  answering `ESRCH`). Crash files are never removed. A process's own files
+  stay after it ends, so a crashed QEMU's table can still be read.
+- `PosixTraceHost`: `gettid()` read once per thread (a `thread_local`, since
+  the call is a system call and every scope asks), `CLOCK_MONOTONIC` in
+  100 ns, level 0, `__atomic_compare_exchange_n`.
+- The executor library starts its own `HostTrace` (`executor`) inside
+  `rvk_executor_ops()`'s root on the first question. Its `scope_binding` is its
+  own: `nm -D` shows neither the library nor the QEMU module exporting it.
+  Its state is not in the dump, because the executor ABI has no call a device
+  could ask it with.
+- **Crash.** `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGABRT` go to a
+  one-line `extern "C"` handler on a 64 KiB alternate stack; the stack is set
+  for the thread that started tracing only. The handler records the crash in
+  the table and writes `/dev/shm/crash-device-<pid>.txt` once, with
+  `CrashReport`, `TraceText` and `_Unwind_Backtrace`. `CrashReport`,
+  `CrashEvent` and `ModuleResolver` moved to `src/core/trace/` so both sides
+  share them. Each native frame is named by `dladdr1`; the device library is
+  built with `-fasynchronous-unwind-tables`, without which the walk stopped at
+  the first frame. `si_addr` is used only for a fault (`si_code > 0`); a
+  signal another process sent writes address 0.
+  - **Chaining.** A handler that was installed before is called. A default
+    or ignored action is restored and the signal raised again. The raise
+    matters: a signal another process sent would not re-occur on return,
+    and QEMU would keep running.
+  - **Machine checks.** A `SIGBUS` with `BUS_MCEERR_AR`/`AO` is only
+    chained: it is QEMU's to handle.
+- **State socket.** `/dev/shm/rvk-state-device-<pid>.sock`, mode 0600, served by
+  one detached thread. Its `accept` is marked `LockMarks` waiting/woken, so the
+  thread reads as waiting, not stalled.
+  - **Requests.** `state
+` schedules `DeviceModule::report` on the main loop
+    and waits 2 s for it. Anything else - including nothing within 2 s - gets
+    `error unknown request
+`.
+  - **A main loop that does not answer** gets
+    `error the main loop did not answer within 2 s
+`. The request stays owed,
+    and further requests get
+    `error the main loop has not finished the previous request
+` until the
+    routine runs and clears it. The dump buffer (256 KiB) is written outside
+    the handshake's mutex, since only one side touches it at a time.
+- **The dump**, written by the main loop:
+  - `module/0 devices=`
+  - per live device: `device/<slot> realized=` and, once realized,
+    `gpu= capsets= blobs= contexts= driver_ok=`
+  - `contexts/0 live=`
+  - per context: `context/<id> bound=` (bound: `sub_api= version= ring=
+    ring_order= fence= doorbell= reply=`), then `attached= faulted= head=
+    last_fence= batches= executor=`
+  - its worker: `worker/0 running= pending= stopping=`, or `busy=true` when
+    another thread holds the worker's mutex.
+
+  The ring counters are the worker's own and are read as it last wrote them.
+- **Locks.** Every device mutex goes through `TableHost`, which marks
+  `waiting`, `acquired` and `released`. `RvkHostOps` gained
+  `try_lock_mutex` (`qemu_mutex_trylock`), and `Host::try_lock_mutex` with it.
+- **Cost.** A micro-benchmark decoded `VkInstanceCreateInfo` from the fuzz
+  corpus 2 000 000 times (`-O2`; the generated decoder itself has no marks,
+  the `WireReader` it calls has).
+
+  | | ns per decode |
+  |---|---|
+  | unbound | 700 |
+  | bound, caller outside any scope | 13 400 (32 000 before the thread id was cached) |
+  | bound, inside a scope | 4 600 (22 000 before) |
+
+  The rest is the table itself:
+  - an outermost entry probes every slot before it claims one, reading each
+    byte by byte;
+  - every frame reads the clock;
+  - the wire primitives open a scope for each field.
+
 ## `rvkinspect.exe`
 
 The guest's reader, pushed with the package to `C:\rvk\rvkinspect.exe`. It

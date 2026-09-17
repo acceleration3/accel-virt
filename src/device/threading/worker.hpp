@@ -18,6 +18,7 @@
 namespace av {
 
 class Host;
+class StateWriter;
 class RingConsumer;
 struct WorkerProbe;
 
@@ -46,6 +47,9 @@ public:
     bool                 stopping();
     /* The thread's body, entered through RvkWorkerRun. */
     void                 run();
+    /* Its line under the open one; a lock another thread holds is busy, never
+     * waited on. Any thread. */
+    void                 report(StateWriter &writer);
 
     bool invariants_hold() const;
 

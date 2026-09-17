@@ -17,6 +17,7 @@ class BlobTable;
 class ExecutorLibrary;
 class FenceInterrupts;
 class Host;
+class StateWriter;
 struct DeviceContextTableProbe;
 
 class DeviceContextTable {
@@ -38,6 +39,8 @@ public:
     /* Whether a bound context holds doorbell page `index`. */
     bool                 holds_doorbell(uint32_t index);
     uint32_t             live() const;
+    /* Main loop: its line, then each context in slot order. */
+    void                 report(StateWriter &writer);
 
     bool invariants_hold() const;
 

@@ -1,6 +1,8 @@
 /* The module's devices through the C ABI the QEMU glue calls, over a C host
  * table that reaches the MockHost. */
 #include "core/support/status.hpp"
+#include "core/trace/state_reporter.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/abi/rvk_device.h"
 #include "device/module/device_instance.hpp"
@@ -46,6 +48,27 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   CHECK_EQ(module.live(), 0u);
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_STATUS(module.destroy(instance), Status::invalid_parameter); }
+
+/* The module is the state root: its line, then each live device by slot. */
+TEST(device_module_report, writes_every_live_device_under_its_slot)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  DeviceModule module;
+  av::StateReporter &root = module;
+  char dump[512];
+  av::StateWriter none(dump, sizeof dump);
+  root.report(none);
+  CHECK(std::strcmp(none.dump(), "module/0 devices=0") == 0);
+  char error[96] = {};
+  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
+  CHECK_STATUS(module.destroy(first), Status::ok);
+  av::StateWriter one(dump, sizeof dump);
+  root.report(one);
+  CHECK(std::strcmp(one.dump(), "module/0 devices=1\n"
+                                "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 contexts=0 driver_ok=false\n"
+                                "module/0/device/1/contexts/0 live=0") == 0);
+  CHECK_STATUS(module.destroy(second), Status::ok); }
 
 TEST(device_module_destroy, finds_the_device_named_among_others)
 { MockHost host; MockHostOps ops(host);

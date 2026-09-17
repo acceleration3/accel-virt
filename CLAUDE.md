@@ -32,7 +32,8 @@ libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
 the kernel shim's static storage for the root, the device module's
 `DeviceModule`, the executor library's root behind `rvk_executor_ops()`, the
 Vulkan ICD's root behind `vk_icdGetInstanceProcAddr` and `IcdBinding`'s pointer to
-it, `scope_binding`'s pointer to the binary's trace table, and rvktest.exe's
+it, `scope_binding`'s pointer to the binary's trace table (with the device
+module's `DeviceTraceRoot` beside `DeviceModule`), and rvktest.exe's
 `ProcessTrace` in `src/um/program_entry.cpp`'s storage are the only
 process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single

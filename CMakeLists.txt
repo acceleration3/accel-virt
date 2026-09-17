@@ -145,8 +145,10 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
 # through the generated rvk_device.pc.
 # TextBuffer is the one core/support class with a body the device core uses;
-# the trace table is core/trace's, and every function opens a scope on it.
+# the trace table is core/trace's, every function opens a scope on it, and every
+# device lock marks it (LockMarks).
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
+list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
@@ -158,7 +160,9 @@ target_include_directories(rvk_device PRIVATE src)
 if(AV_GENERATED)
   target_include_directories(rvk_device PRIVATE ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
-target_compile_options(rvk_device PRIVATE -O2 -ffreestanding)
+# Unwind tables, which -ffreestanding with -fno-exceptions leaves out: the crash
+# file walks the faulting thread's stack through them (docs/trace.md).
+target_compile_options(rvk_device PRIVATE -O2 -ffreestanding -fasynchronous-unwind-tables)
 set_target_properties(rvk_device PROPERTIES
   POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 configure_file(cmake/rvk_device.pc.in ${CMAKE_BINARY_DIR}/rvk_device.pc.in @ONLY)
