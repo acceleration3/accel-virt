@@ -65,8 +65,6 @@ public:
      * anything else is null. */
     ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options = nullptr,
                          ContextSession *share = nullptr);
-    /* The backend a session is running on, for a test to look at. */
-    SessionBackend *backend_of(const ContextSession *session);
     /* Gives a session's slot and block back. Safe on a null, which is what the
      * device passes if it ever destroys twice. */
     void            close(ContextSession *session);

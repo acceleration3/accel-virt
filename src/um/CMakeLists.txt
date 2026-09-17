@@ -109,25 +109,8 @@ add_executable(rvkinspect ${RVKINSPECT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/icd/
 target_link_options(rvkinspect PRIVATE /ENTRY:rvkinspect_entry)
 target_link_libraries(rvkinspect PRIVATE rvkguest ${RVKTEST_IMPORTS})
 
-# rvkgl.dll, the OpenGL ICD (feature 050). Its discovery build (T007) answers
-# opengl32 with nothing behind it, logging every call; T030 replaces it with
-# the ICD over src/icd/opengl.
-file(GLOB_RECURSE RVKGL_SOURCES CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/icd/file_log.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/opengl/*.cpp)
-add_library(rvkgl SHARED ${RVKGL_SOURCES})
-add_dependencies(rvkgl rvktest_imports)
-set_target_properties(rvkgl PROPERTIES PREFIX "")
-target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_options(rvkgl PRIVATE /ENTRY:rvkgl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
-set_property(TARGET rvkgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
-target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS})
-
-# rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
+# Import libraries for what only the OpenGL programs call: opengl32 for the
+# probe, user32 for both.
 set(RVKGLPROBE_IMPORTS "")
 foreach(module opengl32 user32)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
@@ -137,6 +120,41 @@ foreach(module opengl32 user32)
   list(APPEND RVKGLPROBE_IMPORTS ${library})
 endforeach()
 add_custom_target(rvkglprobe_imports DEPENDS ${RVKGLPROBE_IMPORTS})
+list(GET RVKGLPROBE_IMPORTS 1 USER32_IMPORT)
+
+# rvkgl.dll, the OpenGL ICD (feature 050): the ICD's decisions in src/icd over
+# the transport, D3DKMT through gdi32, windows through user32, the shim both
+# ICDs share in icd/ and its own in opengl/.
+file(GLOB_RECURSE RVKGL_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opengl/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/opengl/*.cpp)
+list(REMOVE_ITEM RVKGL_SOURCES ${RVKTEST_GENERATED})
+list(APPEND RVKGL_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
+  ${RVKTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
+  ${RVKTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
+add_library(rvkgl SHARED ${RVKGL_SOURCES})
+add_dependencies(rvkgl rvktest_imports rvkglprobe_imports)
+set_target_properties(rvkgl PROPERTIES PREFIX "")
+target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include
+  ${RVKTEST_GENERATED_DIR}/opengl
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opengl)
+target_link_options(rvkgl PRIVATE /ENTRY:rvkgl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
+set_property(TARGET rvkgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
+target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS} ${USER32_IMPORT})
+
+# rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
 add_executable(rvkglprobe ${RVKGLPROBE_SOURCES})
 add_dependencies(rvkglprobe rvkglprobe_imports)

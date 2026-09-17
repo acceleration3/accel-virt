@@ -4,6 +4,8 @@
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/wire/wire_writer.hpp"
 
+#include <cstring>
+
 namespace av {
 
 namespace {
@@ -92,6 +94,61 @@ void ScriptedHost::vk_memory_properties(std::uint32_t count, std::uint32_t host_
     writer.write_pod<std::int32_t>(0);
     vkproto::serialize_VkPhysicalDeviceMemoryProperties(writer, properties);
     queue(writer);
+}
+
+void ScriptedHost::gl_string(const char *text)
+{
+    WireWriter        writer(answer_, sizeof answer_);
+    const std::size_t length = std::strlen(text);
+    writer.write_varint(1u);
+    writer.write_varint(length);
+    writer.write(text, length);
+    queue(writer);
+}
+
+void ScriptedHost::gl_varint(std::uint64_t value)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(value);
+    queue(writer);
+}
+
+void ScriptedHost::gl_bytes(const std::uint8_t *bytes, std::uint32_t size)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(size);
+    writer.write(bytes, size);
+    queue(writer);
+}
+
+void ScriptedHost::gl_integer(std::int32_t value)
+{
+    std::uint8_t bytes[sizeof value];
+    std::memcpy(bytes, &value, sizeof value);
+    gl_bytes(bytes, sizeof bytes);
+}
+
+void ScriptedHost::gl_resource_property(std::int32_t value)
+{
+    const std::int32_t written = 1;
+    WireWriter         writer(answer_, sizeof answer_);
+    writer.write_varint(sizeof written);
+    writer.write(&written, sizeof written);
+    writer.write_varint(sizeof value);
+    writer.write(&value, sizeof value);
+    queue(writer);
+}
+
+void ScriptedHost::gl_make(const char *renderer, const char *version)
+{
+    blob_import(0u, 0x0000600000000077ull);
+    gl_string("rvk host vendor");
+    gl_string(renderer);
+    gl_string(version);
+    gl_string("4.60");
+    gl_integer(3);
+    gl_integer(1);
+    gl_integer(0);
 }
 
 void ScriptedHost::blob_import(std::uint32_t status, std::uint64_t memory)

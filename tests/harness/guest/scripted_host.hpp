@@ -88,6 +88,23 @@ public:
     /* An info query's answer: the result, `size` bytes of `value`, and the
      * size again as the size it reports. */
     void cl_info(std::int32_t result, const char *value, std::uint32_t size);
+    /* An OpenGL string query's answer: present, the length, the bytes. */
+    void gl_string(const char *text);
+    /* An OpenGL scalar return - an error, a location, an index. */
+    void gl_varint(std::uint64_t value);
+    /* An OpenGL query's filled buffer: its length, then its bytes. */
+    void gl_bytes(const std::uint8_t *bytes, std::uint32_t size);
+    /* glGetIntegerv's answer of one value. */
+    void gl_integer(std::int32_t value);
+    /* A resource property query's answer: one value written, and `value`. */
+    void gl_resource_property(std::int32_t value);
+    /* Everything a GL context's make waits for: the blob import, the vendor,
+     * renderer, version and shading language strings, and the three list
+     * lengths. */
+    void gl_make(const char *renderer, const char *version);
+    /* Waits a GL make takes. */
+    static constexpr std::uint32_t gl_make_waits = 8u;
+
     /* The next answer queued stops after its first `bytes`, as a host that
      * wrote a short reply leaves it. */
     void cut_next(std::uint32_t bytes);

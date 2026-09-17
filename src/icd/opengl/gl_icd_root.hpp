@@ -1,0 +1,145 @@
+/* rvkgl.dll's decisions (research.md §1-§4, contracts/icd_interface.md): what
+ * each Drv* entry, each WGL extension function and each generated entry's
+ * hook answers. One per process - in the exports' storage in the DLL, the one
+ * under test in a test - bound to GlIcdBinding for its life.
+ *
+ * Nothing reaches the device before a context is made: a context is made at
+ * its first DrvSetContext, or at once for wglCreateContextAttribsARB, whose
+ * errors the call itself must report. The process's device is opened with the
+ * first context made and closed with the last one deleted. A GL call takes no
+ * root lock: it reaches the calling thread's current context, which no other
+ * thread may delete. */
+#ifndef AV_GLICD_GL_ICD_ROOT_HPP
+#define AV_GLICD_GL_ICD_ROOT_HPP
+
+#include "core/trace/state_reporter.hpp"
+#include "icd/opengl/current_contexts.hpp"
+#include "icd/opengl/gl_connection.hpp"
+#include "icd/opengl/gl_context_table.hpp"
+#include "icd/opengl/manual_calls.hpp"
+#include "icd/opengl/pixel_format_table.hpp"
+#include "icd/opengl/window_table.hpp"
+
+#include "gl_icd_table.h"
+
+#include <stdint.h>
+
+namespace av {
+class BlockSource;
+class ClientTransport;
+class Kmt;
+class StateWriter;
+}  // namespace av
+
+namespace av::icd {
+class LogSink;
+class ThreadLock;
+}  // namespace av::icd
+
+namespace av::glicd {
+
+class GlIcdBinding;
+class SystemOpengl;
+class ThreadSlot;
+class WindowSurface;
+struct GlIcdRootProbe;
+
+class GlIcdRoot final : public StateReporter {
+public:
+    /* The version opengl32 asks DrvValidateVersion about for this ICD. */
+    static constexpr uint32_t icd_version = 2u;
+    static constexpr uint32_t max_callbacks = 9u;
+    /* opengl32's callback table order (research.md §1). */
+    enum : uint32_t { callback_get_dhglrc = 2u };
+    enum : uint32_t {
+        error_invalid_handle = 6u, error_not_enough_memory = 8u, error_not_supported = 50u,
+        error_invalid_parameter = 87u, error_busy = 170u, error_invalid_pixel_format = 2000u,
+        error_invalid_operation = 4317u, error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u,
+    };
+    enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
+    static constexpr uint32_t swap_main_plane = 1u;
+    static constexpr uint32_t max_pending = 64u;
+
+    GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, icd::LogSink &log,
+              WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlIcdBinding &binding);
+    ~GlIcdRoot();
+    GlIcdRoot(const GlIcdRoot &) = delete;
+    GlIcdRoot &operator=(const GlIcdRoot &) = delete;
+
+    /* The Drv* entries, in contracts/icd_interface.md's order. A DC and an
+     * HGLRC are opaque; a DHGLRC is a GlContextTable handle. */
+    bool     validate_version(uint32_t version);
+    void     set_callback_procs(int32_t count, void *const *procs);
+    int32_t  describe_pixel_format(void *dc, int32_t index, uint32_t bytes, uint8_t *descriptor);
+    bool     set_pixel_format(void *dc, int32_t index);
+    uint64_t create_context(void *dc);
+    uint64_t create_layer_context(void *dc, int32_t layer);
+    bool     delete_context(uint64_t handle);
+    /* The proc table opengl32 installs for the thread, or null. */
+    void    *set_context(void *dc, uint64_t handle, void *set_proc_table);
+    bool     release_context(uint64_t handle);
+    bool     copy_context(uint64_t source, uint64_t destination, uint32_t mask);
+    bool     share_lists(uint64_t first, uint64_t second);
+    void    *get_proc_address(const char *name);
+    bool     describe_layer_plane(void *dc, int32_t format, int32_t plane, uint32_t bytes, void *descriptor);
+    bool     swap_layer_buffers(void *dc, uint32_t planes);
+    bool     swap_buffers(void *dc);
+
+    /* WGL_ARB_create_context(_profile): opengl32's HGLRC, or null with the
+     * ARB's error set. */
+    void       *create_context_attribs(void *dc, void *share, const int32_t *attributes);
+    const char *extensions_string(void *dc);
+
+    /* What the entries and hooks reach: the calling thread's context. */
+    GuestGlContext  *current();
+    ManualCalls     &manual();
+    ClientTransport *wire();
+    /* A GL 1.1 command the core profile lacks: GL_INVALID_OPERATION on the
+     * current context, no host call; 0, what a legacy query answers. */
+    uintptr_t        record_legacy();
+    /* glGetError: the current context's own error first, then the host's; 0
+     * with nothing current or the context lost. */
+    uint32_t         get_error();
+    uint64_t         mint_sync_token();
+    /* A command whose encoding overflowed and was not sent. */
+    void             note_dropped(const char *api, const char *command, size_t written);
+
+    void report(StateWriter &writer) override;
+
+    bool invariants_hold() const;
+
+private:
+    uint64_t take_pending(uint32_t thread);
+    bool     put_pending(uint32_t thread, uint64_t handle);
+    int32_t  format_of_dc(void *dc);
+    void     fail(uint32_t error);
+    uint32_t made_error(Status status) const;
+    uint32_t make_error(Status status, const GlContextOptions &options) const;
+    /* The live context an HGLRC names, through opengl32's callback. */
+    GuestGlContext *shared_context(void *share);
+
+    icd::ThreadLock  &lock_;
+    icd::LogSink     &log_;
+    WindowSurface    &surface_;
+    ThreadSlot       &slot_;
+    SystemOpengl     &system_;
+    GlIcdBinding     &binding_;
+    PixelFormatTable  formats_;
+    WindowTable       windows_;
+    CurrentContexts   currents_;
+    GlConnection      connection_;
+    GlContextTable    contexts_;
+    ManualCalls       manual_;
+    void             *callbacks_[max_callbacks];
+    uint32_t          callback_count_;
+    generated::GlProcTable proc_table_;
+    uint32_t          pending_threads_[max_pending];
+    uint64_t          pending_handles_[max_pending];
+    uint64_t          sync_tokens_;
+
+    friend struct GlIcdRootProbe;
+};
+
+}  // namespace av::glicd
+
+#endif  // AV_GLICD_GL_ICD_ROOT_HPP

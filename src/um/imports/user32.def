@@ -3,6 +3,8 @@ EXPORTS
 CreateWindowExW
 DefWindowProcW
 DestroyWindow
+GetClientRect
 GetDC
 RegisterClassExW
 ReleaseDC
+WindowFromDC

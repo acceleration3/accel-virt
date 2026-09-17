@@ -17,6 +17,7 @@ GetLastError
 GetModuleFileNameW
 GetModuleHandleExW
 GetModuleHandleW
+GetProcAddress
 GetProcessHeap
 GetStdHandle
 HeapAlloc
@@ -38,6 +39,10 @@ RtlVirtualUnwind
 SetEvent
 SetLastError
 SetUnhandledExceptionFilter
+TlsAlloc
+TlsFree
+TlsGetValue
+TlsSetValue
 TryAcquireSRWLockExclusive
 UnmapViewOfFile
 VirtualQuery

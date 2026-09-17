@@ -73,11 +73,12 @@ Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint6
     return Status::ok;
 }
 
-Status KmtTransport::initialize()
+Status KmtTransport::initialize(const GlContextOptions &options)
 {
     AV_SCOPE("KmtTransport::initialize");
     if (context_ != 0u) return Status::invalid_state;
     if (staging_bytes_ <= CommandHeader::encoded_size) return Status::invalid_parameter;
+    if (!record_carries(options)) return Status::invalid_parameter;
     ScopeExit undo([&] { teardown(); });
     uint8_t      *ring_view = nullptr;
     uint8_t      *reply_view = nullptr;
@@ -107,7 +108,7 @@ Status KmtTransport::initialize()
     /* The record names the ring, fence and reply by the handles just allocated,
      * so the miniport publishes exactly this context's memory. */
     const RvkContextRecord record(sub_api_, ring_order_, allocations_[ring_index], allocations_[fence_index],
-                                  allocations_[reply_index]);
+                                  allocations_[reply_index], options);
     uint8_t      private_data[RvkContextRecord::encoded_size] = {};
     static_cast<void>(record.encode(private_data, sizeof private_data));
     const Status made = connection_.kmt().create_context_virtual(connection_.device(), private_data,
@@ -115,6 +116,24 @@ Status KmtTransport::initialize()
     if (made != Status::ok) return made;
     undo.dismiss();
     return Status::ok;
+}
+
+bool KmtTransport::record_carries(const GlContextOptions &options) const
+{
+    AV_SCOPE("KmtTransport::record_carries");
+    /* Distinct stand-ins for the handles the allocations will have: the record
+     * judges the options as the miniport will. */
+    const RvkContextRecord candidate(sub_api_, ring_order_, 1u, 2u, 3u, options);
+    uint8_t                bytes[RvkContextRecord::encoded_size] = {};
+    static_cast<void>(candidate.encode(bytes, sizeof bytes));
+    RvkContextRecord decoded;
+    return decoded.decode(bytes, sizeof bytes) == Status::ok;
+}
+
+uint32_t KmtTransport::ring() const
+{
+    AV_SCOPE("KmtTransport::ring");
+    return context_ != 0u ? allocations_[ring_index] : 0u;
 }
 
 void KmtTransport::teardown()

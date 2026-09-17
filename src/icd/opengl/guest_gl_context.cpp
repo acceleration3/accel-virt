@@ -1,0 +1,269 @@
+#include "icd/opengl/guest_gl_context.hpp"
+
+#include "core/platform/block_source.hpp"
+#include "core/support/scope_exit.hpp"
+#include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
+#include "icd/common/log_sink.hpp"
+#include "icd/opengl/gl_connection.hpp"
+#include "proto/context/sub_api.hpp"
+
+#include "gl_dispatch_client.h"
+
+namespace av::glicd {
+
+namespace {
+
+constexpr uint32_t latest_major = 4u;
+constexpr uint32_t latest_minor = 6u;
+constexpr uint32_t no_error = 0u;
+
+}  // namespace
+
+GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
+                               icd::LogSink &log, int32_t pixel_format, const GlContextOptions &options)
+    : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), pixel_format_(pixel_format),
+      options_(options), state_(State::created), owner_(0u), error_(no_error), connected_(false),
+      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), strings_{},
+      debug_callback_(0u), debug_user_(0u)
+{
+    AV_SCOPE("GuestGlContext::GuestGlContext");
+}
+
+GuestGlContext::~GuestGlContext()
+{
+    AV_SCOPE("GuestGlContext::~GuestGlContext");
+    teardown();
+}
+
+Status GuestGlContext::make()
+{
+    AV_SCOPE("GuestGlContext::make");
+    if (state_ != State::created) return Status::invalid_state;
+    ScopeExit    undo([&] { teardown(); });
+    const Status built = build();
+    if (built != Status::ok) return built;
+    if (!learn()) {
+        log_.write("rvkgl: the host refused the context's options");
+        return Status::invalid_parameter;
+    }
+    undo.dismiss();
+    state_ = State::made;
+    return Status::ok;
+}
+
+GuestGlContext::State GuestGlContext::state() const
+{
+    AV_SCOPE("GuestGlContext::state");
+    return state_;
+}
+uint32_t              GuestGlContext::owner() const
+{
+    AV_SCOPE("GuestGlContext::owner");
+    return owner_;
+}
+void                  GuestGlContext::set_owner(uint32_t thread)
+{
+    AV_SCOPE("GuestGlContext::set_owner");
+    owner_ = thread;
+}
+int32_t               GuestGlContext::pixel_format() const
+{
+    AV_SCOPE("GuestGlContext::pixel_format");
+    return pixel_format_;
+}
+const GlContextOptions &GuestGlContext::options() const
+{
+    AV_SCOPE("GuestGlContext::options");
+    return options_;
+}
+
+uint32_t GuestGlContext::share_name() const
+{
+    AV_SCOPE("GuestGlContext::share_name");
+    return state_ == State::created ? 0u : transport_.object().ring();
+}
+
+ClientTransport *GuestGlContext::wire()
+{
+    AV_SCOPE("GuestGlContext::wire");
+    if (state_ == State::made && transport_.object().faulted()) {
+        state_ = State::lost;
+        log_.write("rvkgl: the context's transport faulted; the context is lost");
+    }
+    return state_ == State::made ? &locked_.object() : nullptr;
+}
+
+ClientArrayState &GuestGlContext::arrays()
+{
+    AV_SCOPE("GuestGlContext::arrays");
+    return arrays_;
+}
+UniformShapes    &GuestGlContext::uniforms()
+{
+    AV_SCOPE("GuestGlContext::uniforms");
+    return uniforms_;
+}
+QueryShapes      &GuestGlContext::queries()
+{
+    AV_SCOPE("GuestGlContext::queries");
+    return queries_;
+}
+
+void GuestGlContext::record(uint32_t error)
+{
+    AV_SCOPE("GuestGlContext::record");
+    if (error_ == no_error) error_ = error;
+}
+
+uint32_t GuestGlContext::take_error()
+{
+    AV_SCOPE("GuestGlContext::take_error");
+    const uint32_t taken = error_;
+    error_ = no_error;
+    return taken;
+}
+
+const char *GuestGlContext::string(uint32_t name) const
+{
+    AV_SCOPE("GuestGlContext::string");
+    if (state_ == State::created) return nullptr;
+    for (uint32_t row = 0u; row < strings; row++)
+        if (string_names[row] == name) return strings_[row];
+    return nullptr;
+}
+
+void GuestGlContext::set_debug_callback(uint64_t callback, uint64_t user)
+{
+    AV_SCOPE("GuestGlContext::set_debug_callback");
+    debug_callback_ = callback;
+    debug_user_ = user;
+}
+
+uint64_t GuestGlContext::debug_callback() const
+{
+    AV_SCOPE("GuestGlContext::debug_callback");
+    return debug_callback_;
+}
+uint64_t GuestGlContext::debug_user() const
+{
+    AV_SCOPE("GuestGlContext::debug_user");
+    return debug_user_;
+}
+
+void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
+{
+    AV_SCOPE("GuestGlContext::report");
+    static constexpr const char *const state_names[] = {"created", "made", "lost"};
+    writer.open("context", handle);
+    writer.text("state", state_names[static_cast<uint32_t>(state_)]);
+    writer.number("owner", owner_);
+    writer.number("pixel_format", static_cast<uint32_t>(pixel_format_));
+    writer.number("major", options_.major());
+    writer.number("minor", options_.minor());
+    writer.number("profile", static_cast<uint32_t>(options_.profile()));
+    writer.number("flags", options_.flags());
+    writer.number("share", options_.share_context());
+    writer.number("error", error_);
+    writer.flag("arena", arena_.constructed() && arena_.object().lending());
+    writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
+    writer.close();
+}
+
+/* Made or lost is exactly when the host context's pieces are held, and a
+ * string kept is terminated inside its row. */
+bool GuestGlContext::invariants_hold() const
+{
+    AV_SCOPE("GuestGlContext::invariants_hold");
+    const bool held = state_ != State::created;
+    if (held != transport_.constructed() || held != locked_.constructed() || held != connected_) return false;
+    if (held != (staging_ != nullptr)) return false;
+    for (uint32_t row = 0u; row < strings; row++)
+        if (strings_[row][string_bytes - 1u] != '\0') return false;
+    return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold();
+}
+
+Status GuestGlContext::build()
+{
+    AV_SCOPE("GuestGlContext::build");
+    if (connection_.acquire() != Status::ok) return Status::not_supported;
+    connected_ = true;
+    staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes, Pool::paged));
+    if (staging_ == nullptr) return Status::no_memory;
+    /* Both storages were emptied by teardown or never filled. */
+    static_cast<void>(transport_.construct(connection_.device(), SubApi::opengl, ring_order, reply_bytes, staging_,
+                                           staging_bytes));
+    const Status initialized = transport_.object().initialize(options_);
+    if (initialized != Status::ok) {
+        log_.write("rvkgl: the driver refused the context");
+        return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
+    }
+    static_cast<void>(locked_.construct(transport_.object(), send_lock_));
+    static_cast<void>(arena_.construct(connection_.device(), transport_.object()));
+    if (arena_.object().open(arena_bytes) != Status::ok)
+        log_.write("rvkgl: no blob arena for the context; bulk data crosses inline");
+    return Status::ok;
+}
+
+bool GuestGlContext::learn()
+{
+    AV_SCOPE("GuestGlContext::learn");
+    ClientTransport &wire = locked_.object();
+    for (uint32_t row = 0u; row < strings; row++) {
+        size_t length = 0u;
+        if (!glproto::rvk_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
+            return false;
+        strings_[row][length < string_bytes ? length : string_bytes - 1u] = '\0';
+    }
+    for (uint32_t list = 0u; list < QueryShapes::lists; list++) {
+        int32_t length = 0;
+        glproto::rvk_glGetIntegerv(wire, QueryShapes::length_queries[list], &length);
+        queries_.learn(static_cast<QueryShapes::List>(list), length);
+    }
+    cap_version();
+    return !transport_.object().faulted();
+}
+
+/* A host newer than the ICD implements is reported as 4.6: the version's
+ * leading "major.minor" is rewritten, and the rest of the host's string kept. */
+void GuestGlContext::cap_version()
+{
+    AV_SCOPE("GuestGlContext::cap_version");
+    char *const version = strings_[version_row];
+    uint32_t    major = 0u;
+    uint32_t    minor = 0u;
+    uint32_t    at = 0u;
+    while (version[at] >= '0' && version[at] <= '9') major = major * 10u + static_cast<uint32_t>(version[at++] - '0');
+    if (at == 0u || version[at] != '.') return;
+    const uint32_t minor_at = ++at;
+    while (version[at] >= '0' && version[at] <= '9') minor = minor * 10u + static_cast<uint32_t>(version[at++] - '0');
+    if (at == minor_at || major < latest_major || (major == latest_major && minor <= latest_minor)) return;
+    char       capped[string_bytes];
+    TextBuffer text(capped, sizeof capped);
+    text.append_decimal(latest_major);
+    text.append(".");
+    text.append_decimal(latest_minor);
+    text.append(version + at);
+    for (uint32_t byte = 0u; byte <= text.length(); byte++) version[byte] = capped[byte];
+}
+
+void GuestGlContext::teardown()
+{
+    AV_SCOPE("GuestGlContext::teardown");
+    if (arena_.constructed()) {
+        if (arena_.object().close() != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
+        arena_.destroy();
+    }
+    locked_.destroy();
+    transport_.destroy();
+    if (staging_ != nullptr) memory_.release(staging_);
+    staging_ = nullptr;
+    if (connected_) connection_.release();
+    connected_ = false;
+    state_ = State::created;
+    owner_ = 0u;
+    for (auto &row : strings_) row[0] = '\0';
+}
+
+}  // namespace av::glicd

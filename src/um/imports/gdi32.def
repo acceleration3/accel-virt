@@ -26,4 +26,5 @@ D3DKMTUnlock2
 D3DKMTWaitForSynchronizationObjectFromCpu
 D3DKMTWaitForVerticalBlankEvent
 DescribePixelFormat
+SetDIBitsToDevice
 SetPixelFormat

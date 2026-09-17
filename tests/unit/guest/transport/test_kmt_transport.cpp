@@ -144,6 +144,44 @@ TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
   transport.teardown();
   CHECK(!transport.established()); }
 
+/* An OpenGL context's record carries what it is made with (feature 050): the
+ * options reach the private data unchanged, the ring a sharing context names
+ * is this transport's own ring allocation, and nothing is answered before the
+ * ring exists or after it is gone. Options the record cannot carry - on
+ * another sub-API - are refused before anything is allocated. */
+TEST(kmt_transport, an_opengl_record_carries_its_options_and_the_ring_is_named)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_EQ(transport.ring(), 0u);
+  const av::GlContextOptions options(4u, 5u, av::GlContextOptions::Profile::core,
+                                     av::GlContextOptions::debug, 0x4242u);
+  CHECK_STATUS(transport.initialize(options), Status::ok);
+  CHECK_EQ(transport.ring(), KmtTransportProbe::ring_allocation(transport));
+  RvkContextRecord record;
+  CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
+  const av::GlContextOptions carried = record.options();
+  CHECK_EQ(carried.major(), 4u);
+  CHECK_EQ(carried.minor(), 5u);
+  CHECK(carried.profile() == av::GlContextOptions::Profile::core);
+  CHECK_EQ(carried.flags(), av::GlContextOptions::debug);
+  CHECK_EQ(carried.share_context(), 0x4242u);
+  CHECK(transport.invariants_hold());
+  transport.teardown();
+  CHECK_EQ(transport.ring(), 0u);
+  KmtTransport vulkan(fixture.connection(), SubApi::vulkan, 12u,
+                      reply_bytes, transport_staging, sizeof transport_staging);
+  const std::uint32_t allocations = fixture.kmt().calls(MockKmt::Call::create_allocation);
+  CHECK_STATUS(vulkan.initialize(options), Status::invalid_parameter);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  CHECK(!vulkan.established());
+  const av::GlContextOptions invalid(4u, 7u, av::GlContextOptions::Profile::core, 0u, 0u);
+  CHECK_STATUS(transport.initialize(invalid), Status::invalid_parameter);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  CHECK_EQ(fixture.kmt().open_objects(), 3u); }
+
 /* A command sent async is framed into a batch in the ring and submitted. */
 TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
 { Fixture fixture;

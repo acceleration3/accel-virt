@@ -1,0 +1,446 @@
+#include "icd/opengl/gl_icd_root.hpp"
+
+#include "core/support/scope_exit.hpp"
+#include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
+#include "icd/common/extension_policy.hpp"
+#include "icd/common/log_sink.hpp"
+#include "icd/common/thread_lock.hpp"
+#include "icd/opengl/context_attributes.hpp"
+#include "icd/opengl/gl_entry_points.hpp"
+#include "icd/opengl/gl_icd_binding.hpp"
+#include "icd/opengl/system_opengl.hpp"
+#include "icd/opengl/thread_slot.hpp"
+#include "icd/opengl/window_surface.hpp"
+
+#include "gl_dispatch_client.h"
+
+namespace av::glicd {
+
+namespace {
+
+/* The WGL extension functions DrvGetProcAddress answers, and the extensions
+ * they make whole. */
+constexpr const char *wgl_extensions =
+    "WGL_ARB_extensions_string WGL_ARB_create_context WGL_ARB_create_context_profile";
+/* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
+constexpr uint32_t get_error_slot = 261u;
+constexpr uint32_t get_integerv_slot = 263u;
+constexpr uint32_t line_bytes = 160u;
+/* The GL extensions reported: none until T033 names one with its test
+ * (tools/check_extension_policy.py reads this). */
+[[maybe_unused]] constexpr const icd::ExtensionPolicy::Row *reported_extensions = nullptr;
+
+}  // namespace
+
+GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
+                     icd::LogSink &log, WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
+                     GlIcdBinding &binding)
+    : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
+      windows_(), currents_(slot), connection_(kmt), contexts_(memory, connection_, send_lock, log),
+      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u)
+{
+    AV_SCOPE("GlIcdRoot::GlIcdRoot");
+    generated::fill_proc_table(proc_table_);
+    proc_table_.slots[get_error_slot] = reinterpret_cast<GlProc>(&entry::get_error);
+    proc_table_.slots[get_integerv_slot] = reinterpret_cast<GlProc>(&entry::get_integerv);
+    binding_.bind(*this);
+}
+
+GlIcdRoot::~GlIcdRoot()
+{
+    AV_SCOPE("GlIcdRoot::~GlIcdRoot");
+    binding_.unbind();
+}
+
+bool GlIcdRoot::validate_version(uint32_t version)
+{
+    AV_SCOPE("GlIcdRoot::validate_version");
+    return version == icd_version;
+}
+
+void GlIcdRoot::set_callback_procs(int32_t count, void *const *procs)
+{
+    AV_SCOPE("GlIcdRoot::set_callback_procs");
+    if (procs == nullptr || count < 0) return;
+    const uint32_t kept = static_cast<uint32_t>(count) < max_callbacks ? static_cast<uint32_t>(count) : max_callbacks;
+    for (uint32_t index = 0u; index < kept; index++) callbacks_[index] = procs[index];
+    callback_count_ = kept;
+}
+
+int32_t GlIcdRoot::describe_pixel_format(void *dc, int32_t index, uint32_t bytes, uint8_t *descriptor)
+{
+    AV_SCOPE("GlIcdRoot::describe_pixel_format");
+    if (surface_.window_of(dc) == nullptr) return 0;
+    return formats_.describe(index, bytes, descriptor);
+}
+
+bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
+{
+    AV_SCOPE("GlIcdRoot::set_pixel_format");
+    void *const window = surface_.window_of(dc);
+    if (window == nullptr || !formats_.contains(index)) {
+        fail(error_invalid_pixel_format);
+        return false;
+    }
+    lock_.acquire();
+    ScopeExit    release([&] { lock_.release(); });
+    const Status set = windows_.set_format(window, index);
+    if (set == Status::ok) return true;
+    fail(set == Status::no_space ? error_not_enough_memory : error_invalid_pixel_format);
+    return false;
+}
+
+uint64_t GlIcdRoot::create_context(void *dc)
+{
+    AV_SCOPE("GlIcdRoot::create_context");
+    return create_layer_context(dc, 0);
+}
+
+uint64_t GlIcdRoot::create_layer_context(void *dc, int32_t layer)
+{
+    AV_SCOPE("GlIcdRoot::create_layer_context");
+    if (layer != 0) {
+        fail(error_invalid_parameter);
+        return 0u;
+    }
+    lock_.acquire();
+    ScopeExit      release([&] { lock_.release(); });
+    const uint64_t pending = take_pending(slot_.thread_id());
+    if (pending != 0u) return pending;
+    const int32_t format = windows_.format_of(surface_.window_of(dc));
+    if (format == 0) {
+        fail(error_invalid_pixel_format);
+        return 0u;
+    }
+    uint64_t handle = 0u;
+    if (contexts_.create(format, GlContextOptions(), handle) != Status::ok) fail(error_not_enough_memory);
+    return handle;
+}
+
+bool GlIcdRoot::delete_context(uint64_t handle)
+{
+    AV_SCOPE("GlIcdRoot::delete_context");
+    lock_.acquire();
+    ScopeExit             release([&] { lock_.release(); });
+    GuestGlContext *const context = contexts_.resolve(handle);
+    if (context == nullptr) {
+        fail(error_invalid_handle);
+        return false;
+    }
+    if (currents_.current_elsewhere(*context)) {
+        fail(error_busy);
+        return false;
+    }
+    if (currents_.current() == context) currents_.release();
+    /* The handle resolved above, so the table holds its context and gives it back. */
+    static_cast<void>(contexts_.destroy(handle));
+    return true;
+}
+
+void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
+{
+    AV_SCOPE("GlIcdRoot::set_context");
+    lock_.acquire();
+    ScopeExit             release([&] { lock_.release(); });
+    GuestGlContext *const context = contexts_.resolve(handle);
+    if (context == nullptr) {
+        fail(error_invalid_handle);
+        return nullptr;
+    }
+    if (windows_.format_of(surface_.window_of(dc)) != context->pixel_format()) {
+        fail(error_invalid_pixel_format);
+        return nullptr;
+    }
+    if (currents_.current_elsewhere(*context)) {
+        fail(error_busy);
+        return nullptr;
+    }
+    if (context->state() == GuestGlContext::State::created) {
+        const Status made = context->make();
+        if (made != Status::ok) {
+            fail(made_error(made));
+            return nullptr;
+        }
+    }
+    static_cast<void>(currents_.make_current(*context));
+    return &proc_table_;
+}
+
+bool GlIcdRoot::release_context(uint64_t handle)
+{
+    AV_SCOPE("GlIcdRoot::release_context");
+    lock_.acquire();
+    ScopeExit             release([&] { lock_.release(); });
+    GuestGlContext *const context = contexts_.resolve(handle);
+    if (context == nullptr || currents_.current() != context) return false;
+    currents_.release();
+    return true;
+}
+
+bool GlIcdRoot::copy_context(uint64_t, uint64_t, uint32_t)
+{
+    AV_SCOPE("GlIcdRoot::copy_context");
+    fail(error_not_supported);
+    return false;
+}
+
+/* Share lists arrive with T037: a context's share target has to be made
+ * before it, which this ICD does not arrange yet. */
+bool GlIcdRoot::share_lists(uint64_t, uint64_t)
+{
+    AV_SCOPE("GlIcdRoot::share_lists");
+    fail(error_not_supported);
+    return false;
+}
+
+void *GlIcdRoot::get_proc_address(const char *name)
+{
+    AV_SCOPE("GlIcdRoot::get_proc_address");
+    if (name == nullptr) return nullptr;
+    if (__builtin_strcmp(name, "wglCreateContextAttribsARB") == 0)
+        return reinterpret_cast<void *>(&entry::wglCreateContextAttribsARB);
+    if (__builtin_strcmp(name, "wglGetExtensionsStringARB") == 0)
+        return reinterpret_cast<void *>(&entry::wglGetExtensionsStringARB);
+    for (uint32_t row = 0u; row < generated::kNamedEntryCount; row++)
+        if (__builtin_strcmp(generated::kNamedEntries[row].name, name) == 0)
+            return reinterpret_cast<void *>(generated::kNamedEntries[row].address);
+    return nullptr;
+}
+
+bool GlIcdRoot::describe_layer_plane(void *, int32_t, int32_t, uint32_t, void *)
+{
+    AV_SCOPE("GlIcdRoot::describe_layer_plane");
+    return false;
+}
+
+bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
+{
+    AV_SCOPE("GlIcdRoot::swap_layer_buffers");
+    return (planes & swap_main_plane) != 0u && swap_buffers(dc);
+}
+
+/* Presentation arrives with T035: until then a swap finishes the frame's
+ * commands on the host and puts nothing on the window. */
+bool GlIcdRoot::swap_buffers(void *dc)
+{
+    AV_SCOPE("GlIcdRoot::swap_buffers");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || windows_.format_of(surface_.window_of(dc)) != context->pixel_format()) return false;
+    ClientTransport *const transport = context->wire();
+    if (transport != nullptr) glproto::rvk_glFlush(*transport);
+    return true;
+}
+
+void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *attributes)
+{
+    AV_SCOPE("GlIcdRoot::create_context_attribs");
+    ContextAttributes attribs(attributes);
+    const uint32_t    refused = attribs.decode();
+    if (refused != 0u) {
+        fail(refused);
+        return nullptr;
+    }
+    const int32_t format = windows_.format_of(surface_.window_of(dc));
+    if (format == 0) {
+        fail(error_invalid_pixel_format);
+        return nullptr;
+    }
+    GlContextOptions options = attribs.options();
+    if (share != nullptr) {
+        GuestGlContext *const target = shared_context(share);
+        if (target == nullptr) {
+            fail(error_invalid_operation);
+            return nullptr;
+        }
+        /* A share needs a version on the wire (contracts/context_options.md),
+         * and 1.0 is what WGL_ARB_create_context takes an empty list to ask. */
+        if (options.major() == 0u) options = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
+        options = options.sharing(target->share_name());
+    }
+    const uint32_t thread = slot_.thread_id();
+    uint64_t       handle = 0u;
+    lock_.acquire();
+    const Status created = contexts_.create(format, options, handle);
+    lock_.release();
+    if (created != Status::ok) {
+        fail(error_not_enough_memory);
+        return nullptr;
+    }
+    GuestGlContext *const context = contexts_.resolve(handle);
+    const Status          made = context->make();
+    lock_.acquire();
+    const bool pended = made == Status::ok && put_pending(thread, handle);
+    lock_.release();
+    void *const hglrc = pended ? system_.create_context(dc) : nullptr;
+    lock_.acquire();
+    ScopeExit      release([&] { lock_.release(); });
+    const uint64_t unclaimed = take_pending(thread);
+    if (hglrc != nullptr && unclaimed == 0u) return hglrc;
+    static_cast<void>(contexts_.destroy(handle));
+    fail(made != Status::ok ? make_error(made, options) : error_invalid_operation);
+    return nullptr;
+}
+
+const char *GlIcdRoot::extensions_string(void *)
+{
+    AV_SCOPE("GlIcdRoot::extensions_string");
+    return wgl_extensions;
+}
+
+GuestGlContext *GlIcdRoot::current()
+{
+    AV_SCOPE("GlIcdRoot::current");
+    return currents_.current();
+}
+ManualCalls    &GlIcdRoot::manual()
+{
+    AV_SCOPE("GlIcdRoot::manual");
+    return manual_;
+}
+
+ClientTransport *GlIcdRoot::wire()
+{
+    AV_SCOPE("GlIcdRoot::wire");
+    GuestGlContext *const context = currents_.current();
+    return context != nullptr ? context->wire() : nullptr;
+}
+
+uintptr_t GlIcdRoot::record_legacy()
+{
+    AV_SCOPE("GlIcdRoot::record_legacy");
+    GuestGlContext *const context = currents_.current();
+    if (context != nullptr) context->record(gl_invalid_operation);
+    return 0u;
+}
+
+uint32_t GlIcdRoot::get_error()
+{
+    AV_SCOPE("GlIcdRoot::get_error");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr) return 0u;
+    const uint32_t local = context->take_error();
+    if (local != 0u) return local;
+    ClientTransport *const transport = context->wire();
+    return transport != nullptr ? glproto::rvk_glGetError(*transport) : 0u;
+}
+
+uint64_t GlIcdRoot::mint_sync_token()
+{
+    AV_SCOPE("GlIcdRoot::mint_sync_token");
+    return ++sync_tokens_;
+}
+
+void GlIcdRoot::note_dropped(const char *api, const char *command, size_t written)
+{
+    AV_SCOPE("GlIcdRoot::note_dropped");
+    char       line[line_bytes];
+    TextBuffer text(line, sizeof line);
+    text.append("rvkgl: ");
+    text.append(api);
+    text.append(" ");
+    text.append(command);
+    text.append(" not sent: its encoding overflowed at byte ");
+    text.append_decimal(written);
+    log_.write(text.text());
+}
+
+void GlIcdRoot::report(StateWriter &writer)
+{
+    AV_SCOPE("GlIcdRoot::report");
+    writer.open("root", 0u);
+    if (!lock_.try_acquire()) {
+        writer.flag("busy", true);
+        writer.close();
+        return;
+    }
+    ScopeExit release([&] { lock_.release(); });
+    writer.flag("busy", false);
+    writer.number("callbacks", callback_count_);
+    writer.number("current_anywhere", currents_.anywhere());
+    writer.close();
+    connection_.report(writer);
+    windows_.report(writer);
+    contexts_.report(writer);
+}
+
+bool GlIcdRoot::invariants_hold() const
+{
+    AV_SCOPE("GlIcdRoot::invariants_hold");
+    if (callback_count_ > max_callbacks || proc_table_.entries != static_cast<int32_t>(generated::kProcTableSlots))
+        return false;
+    for (const GlProc slot : proc_table_.slots)
+        if (slot == nullptr) return false;
+    for (uint32_t row = 0u; row < max_pending; row++)
+        if ((pending_threads_[row] == 0u) != (pending_handles_[row] == 0u)) return false;
+    return manual_.invariants_hold() && formats_.invariants_hold() && windows_.invariants_hold() && currents_.invariants_hold() &&
+           connection_.invariants_hold() && contexts_.invariants_hold();
+}
+
+uint64_t GlIcdRoot::take_pending(uint32_t thread)
+{
+    AV_SCOPE("GlIcdRoot::take_pending");
+    for (uint32_t row = 0u; row < max_pending; row++) {
+        /* A thread id is never 0, so a row naming it holds a handle too. */
+        if (pending_threads_[row] != thread) continue;
+        const uint64_t handle = pending_handles_[row];
+        pending_threads_[row] = 0u;
+        pending_handles_[row] = 0u;
+        return handle;
+    }
+    return 0u;
+}
+
+bool GlIcdRoot::put_pending(uint32_t thread, uint64_t handle)
+{
+    AV_SCOPE("GlIcdRoot::put_pending");
+    for (uint32_t row = 0u; row < max_pending; row++) {
+        if (pending_handles_[row] != 0u) continue;
+        pending_threads_[row] = thread;
+        pending_handles_[row] = handle;
+        return true;
+    }
+    return false;
+}
+
+void GlIcdRoot::fail(uint32_t error)
+{
+    AV_SCOPE("GlIcdRoot::fail");
+    slot_.set_last_error(error);
+}
+
+uint32_t GlIcdRoot::made_error(Status status) const
+{
+    AV_SCOPE("GlIcdRoot::made_error");
+    if (status == Status::not_supported) return error_not_supported;
+    return status == Status::no_memory ? error_not_enough_memory : error_invalid_operation;
+}
+
+/* WGL_ARB_create_context: a refused version is ERROR_INVALID_VERSION_ARB. The
+ * host does not say which option it refused, so a context that asked for the
+ * compatibility profile is taken to have been refused that. */
+uint32_t GlIcdRoot::make_error(Status status, const GlContextOptions &options) const
+{
+    AV_SCOPE("GlIcdRoot::make_error");
+    if (status != Status::invalid_parameter) return made_error(status);
+    return options.profile() == GlContextOptions::Profile::compatibility ? error_invalid_profile_arb
+                                                                          : error_invalid_version_arb;
+}
+
+GuestGlContext *GlIcdRoot::shared_context(void *share)
+{
+    AV_SCOPE("GlIcdRoot::shared_context");
+    if (callback_count_ <= callback_get_dhglrc) return nullptr;
+    using GetDhglrc = uintptr_t (APIENTRY *)(void *);
+    const uintptr_t handle = reinterpret_cast<GetDhglrc>(callbacks_[callback_get_dhglrc])(share);
+    lock_.acquire();
+    ScopeExit             release([&] { lock_.release(); });
+    GuestGlContext *const target = contexts_.resolve(handle);
+    if (target == nullptr) return nullptr;
+    if (target->state() == GuestGlContext::State::created && target->make() != Status::ok) return nullptr;
+    /* wire() is what notices a transport that faulted since. */
+    return target->wire() != nullptr ? target : nullptr;
+}
+
+}  // namespace av::glicd

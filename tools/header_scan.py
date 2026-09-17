@@ -39,7 +39,8 @@ CLASS_RE = re.compile(r"^\s*(?:class|struct)\s+([A-Z]\w*)\s*(?:final\s*)?(?:[:{]
 METHOD_RE = re.compile(
     r"^\s*(?:\[\[nodiscard\]\]\s*)?"
     r"(?:virtual\s+|explicit\s+|constexpr\s+|inline\s+)*"
-    r"(?:[\w:<>,\s*&]+?\s+)?"
+    # The return type may end in the declarator's * or &: `void *name(`.
+    r"(?:[\w:<>,\s*&]+?[\s*&]+)?"
     r"(\w+)\s*\([^;{]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?"
     r"(?:=\s*(?:0|default|delete)\s*)?;")
 STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b)"

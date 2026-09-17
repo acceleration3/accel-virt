@@ -267,7 +267,7 @@ endforeach()
 # src/um's (T029); on Linux this is what the ICD's unit tests and the full-stack
 # rig link.
 if(AV_GENERATED)
-  file(GLOB_RECURSE AV_ICD_SOURCES CONFIGURE_DEPENDS src/icd/*.cpp)
+  file(GLOB_RECURSE AV_ICD_SOURCES CONFIGURE_DEPENDS src/icd/common/*.cpp src/icd/vulkan/*.cpp)
   # The client dispatch and the weak handle defaults are av_core's too, and are
   # compiled again here on purpose. A link reads archives in order: with them in
   # this archive, every handle_to_wire the wrappers reach is resolved here - the
@@ -296,6 +296,17 @@ if(AV_GENERATED)
   target_include_directories(av_gl_generated PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl
     ${CMAKE_SOURCE_DIR}/src/icd/opengl)
   target_compile_options(av_gl_generated PRIVATE ${AV_TEST_FLAGS})
+
+  # The OpenGL ICD's portable core: src/icd/opengl over the generated client
+  # and entries, whose hooks it defines. Its own archive, apart from the Vulkan
+  # ICD's, as the two DLLs are apart.
+  file(GLOB_RECURSE AV_GL_ICD_SOURCES CONFIGURE_DEPENDS src/icd/common/*.cpp src/icd/opengl/*.cpp)
+  add_library(av_gl_icd STATIC ${AV_GL_ICD_SOURCES} $<TARGET_OBJECTS:av_gl_generated>)
+  target_link_libraries(av_gl_icd PUBLIC av_core)
+  target_include_directories(av_gl_icd PUBLIC ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl
+    ${CMAKE_SOURCE_DIR}/src/icd/opengl)
+  target_compile_options(av_gl_icd PRIVATE ${AV_TEST_FLAGS})
+  target_link_options(av_gl_icd PUBLIC ${AV_TEST_FLAGS})
 endif()
 
 # ---- unit tests: one binary per module, so a crash isolates -----------------
@@ -327,12 +338,19 @@ foreach(src ${AV_UNIT_TESTS})
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader
   # seam is tested through the ICD's own entry point, so it links it too.
-  if(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
+  if(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
+    target_link_libraries(${name} PRIVATE av_gl_icd)
+  elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
   # The probe through the ICD on this machine's GPU (feature 045, T038): the
   # ICD's hooks and the executor's cannot share a binary, so the executor is
   # the library file QEMU loads, its symbols its own.
+  if(name STREQUAL "test_fullstack_opengl_icd")
+    target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS})
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+  endif()
   if(name STREQUAL "test_fullstack_vulkan_icd")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
     add_dependencies(${name} rvk_executor)
@@ -531,6 +549,9 @@ if(AV_FUZZ)
     if(name STREQUAL "fuzz_physical_device_view" OR name STREQUAL "fuzz_extension_policy" OR
        name STREQUAL "fuzz_memory_type_table")
       target_link_libraries(${name} PRIVATE av_icd)
+    endif()
+    if(name STREQUAL "fuzz_context_attributes")
+      target_link_libraries(${name} PRIVATE av_gl_icd)
     endif()
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)

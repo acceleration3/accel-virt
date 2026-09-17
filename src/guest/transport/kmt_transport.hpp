@@ -18,6 +18,7 @@
 #include "guest/transport/transport_ring.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -46,8 +47,10 @@ public:
      * names the ring, fence and reply by the handles just allocated, for the
      * miniport to publish. invalid_state once set up; invalid_parameter, with
      * nothing asked of the Kmt, for staging with no room past a command header;
-     * the Kmt's own error otherwise, with nothing left open. */
-    [[nodiscard]] Status initialize();
+     * the Kmt's own error otherwise, with nothing left open. The record carries
+     * `options` (feature 050): options it cannot carry - any but the defaults
+     * off OpenGL, or none OpenGL has - are invalid_parameter, asked of no one. */
+    [[nodiscard]] Status initialize(const GlContextOptions &options = GlContextOptions());
     void                 teardown();
     bool                 established() const;
     /* A device-side failure (a refused submission, a faulted wait, a bad reply)
@@ -56,6 +59,9 @@ public:
     /* The virtual context's D3DKMT handle, for a call the driver takes beside
      * the transport - an escape on this context; 0 unless established. */
     uint32_t             context() const;
+    /* The ring allocation's D3DKMT handle, by which another OpenGL context of
+     * this process names this one to share with; 0 unless established. */
+    uint32_t             ring() const;
 
     /* A round trip of the transport's own no-op (feature 044), which the
      * device answers itself: ok when answered with nothing; invalid_state when
@@ -88,6 +94,8 @@ private:
     static constexpr uint32_t reply_index = 2u;
     static constexpr uint32_t dma_index   = 3u;
 
+    /* Whether the record can carry `options` for this sub-API and order. */
+    bool                 record_carries(const GlContextOptions &options) const;
     [[nodiscard]] Status setup_allocation(uint32_t index, AllocationKind kind, uint64_t bytes, bool map_gpu,
                                           bool do_lock, uint8_t *&view, uint64_t &address);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,

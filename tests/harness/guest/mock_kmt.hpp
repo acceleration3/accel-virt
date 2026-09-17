@@ -73,7 +73,7 @@ public:
     /* The memory each lock of an allocation up to this size addresses; several
      * may be held at once. A larger allocation's lock addresses all of it. */
     static constexpr std::uint32_t view_capacity = 8192u;
-    static constexpr std::uint32_t max_locks = 8u;
+    static constexpr std::uint32_t max_locks = 16u;
     /* The largest context or escape private data this records for a test to
      * read back. */
     static constexpr std::uint32_t max_private = 64u;
