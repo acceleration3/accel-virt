@@ -13,6 +13,8 @@ constexpr std::uint32_t gl_compile_status = 0x8B81u, gl_link_status = 0x8B82u;
 constexpr std::uint32_t gl_color_buffer_bit = 0x4000u, gl_triangles = 0x0004u;
 constexpr std::int32_t  major_version = 0x2091, minor_version = 0x2092, profile_mask = 0x9126;
 constexpr std::uint32_t error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u;
+/* ERROR_PROC_NOT_FOUND. */
+constexpr std::uint32_t error_proc_not_found = 127u;
 constexpr std::uint32_t error_busy = 170u;
 constexpr std::int32_t  context_flags = 0x2094, robust_access_bit = 0x4, reset_strategy = 0x8256, lose_on_reset = 0x8252;
 constexpr std::uint32_t gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u;
@@ -104,8 +106,14 @@ void *ScriptedGl::create_context()
     return nullptr;
 }
 
+/* As opengl32: the function is only named to a thread with a context current,
+ * so without one there is nothing to call - ERROR_PROC_NOT_FOUND. */
 void *ScriptedGl::create_context_attribs(const std::int32_t *attributes)
 {
+    if (current_ == none) {
+        last_error_ = error_proc_not_found;
+        return nullptr;
+    }
     std::int32_t major = 1, minor = 0, profile = 0, flags = 0, strategy = 0;
     for (; attributes != nullptr && attributes[0] != 0; attributes += 2) {
         if (attributes[0] == major_version) major = attributes[1];

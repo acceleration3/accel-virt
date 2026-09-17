@@ -62,7 +62,7 @@ struct LossRig {
     {
         rig.threads().switch_to(thread);
         void *const dc = thread == 1u ? rig.dc() : rig.other_dc();
-        const auto  create = reinterpret_cast<AttribsFn>(rig.opengl32().get_proc_address("wglCreateContextAttribsARB"));
+        const auto  create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
         rig.host().gl_make("host gpu", "4.6");
         void *const context = create(dc, nullptr, robust_attributes);
         rig.host().gl_window(1u, 1u);
@@ -80,7 +80,7 @@ struct LossRig {
 
     GLenum reset_status()
     {
-        return reinterpret_cast<ResetStatusFn>(rig.opengl32().get_proc_address("glGetGraphicsResetStatus"))();
+        return reinterpret_cast<ResetStatusFn>(rig.opengl32().driver_proc_address("glGetGraphicsResetStatus"))();
     }
 
     /* What a glClear costs the Kmt: every call it made and every command it
@@ -160,7 +160,7 @@ TEST(gl_device_loss, a_robust_context_reports_an_unknown_reset)
   const char *const spellings[] = {"glGetGraphicsResetStatusARB", "glGetGraphicsResetStatusEXT",
                                    "glGetGraphicsResetStatusKHR"};
   for (const char *const name : spellings)
-    CHECK_EQ(reinterpret_cast<ResetStatusFn>(rig.opengl32().get_proc_address(name))(), gl_unknown_context_reset);
+    CHECK_EQ(reinterpret_cast<ResetStatusFn>(rig.opengl32().driver_proc_address(name))(), gl_unknown_context_reset);
   CHECK_EQ(loss.get_error(), gl_context_lost);
   CHECK_EQ(loss.get_error(), 0u);
   CHECK_EQ(rig.kmt().commands(), commands);
@@ -174,7 +174,7 @@ TEST(gl_device_loss, half_of_robustness_reports_like_any_context)
   for (const std::int32_t *const attributes : halves) {
     LossRig loss;
     GlIcdRig &rig = loss.rig;
-    const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().get_proc_address("wglCreateContextAttribsARB"));
+    const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
     rig.host().gl_make("host gpu", "4.6");
     void *const context = create(rig.dc(), nullptr, attributes);
     rig.host().gl_window(1u, 1u);
@@ -234,7 +234,7 @@ TEST(gl_device_loss, a_lost_context_made_current_again_stays_lost)
 TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
-  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().get_proc_address("rvkForceContextFault"));
+  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("rvkForceContextFault"));
   CHECK(force != nullptr);
   rig.threads().switch_to(3u);
   CHECK_EQ(force(), 0);
@@ -259,7 +259,7 @@ TEST(gl_device_loss, a_host_that_answers_the_forced_fault_leaves_the_context_wor
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
   CHECK(loss.made_on(1u) != nullptr);
-  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().get_proc_address("rvkForceContextFault"));
+  const auto force = reinterpret_cast<ForceFaultFn>(rig.opengl32().driver_proc_address("rvkForceContextFault"));
   rig.host().gl_string("answered");
   CHECK_EQ(force(), 0);
   CHECK_EQ(rig.log().holding("the host answered the forced fault"), 1u);

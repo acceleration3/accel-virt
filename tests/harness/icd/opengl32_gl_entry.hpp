@@ -70,6 +70,8 @@ public:
     void          delete_texture(std::uint32_t texture) override;
 
 private:
+    /* ERROR_PROC_NOT_FOUND. */
+    static constexpr std::uint32_t proc_not_found = 127u;
     static constexpr std::uint32_t elsewhere = 7u;
 
     template <typename Function>

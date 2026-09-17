@@ -140,7 +140,16 @@ bool FakeOpengl32::share_lists(void *first, void *second)
 
 bool FakeOpengl32::swap_buffers(void *dc) { return reinterpret_cast<Swap>(resolve("DrvSwapBuffers"))(dc) != 0; }
 
+/* opengl32's wglGetProcAddress asks the ICD only for a thread with a context
+ * of it current, and answers null otherwise - the live guest's attribs step
+ * failed with ERROR_PROC_NOT_FOUND for exactly that. */
 void *FakeOpengl32::get_proc_address(const char *name)
+{
+    if (current_[threads_.thread_id() - 1u] == 0u) return nullptr;
+    return driver_proc_address(name);
+}
+
+void *FakeOpengl32::driver_proc_address(const char *name)
 {
     return reinterpret_cast<GetProc>(resolve("DrvGetProcAddress"))(name);
 }

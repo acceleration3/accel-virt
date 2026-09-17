@@ -92,7 +92,7 @@ list(APPEND RVKVK_SOURCES
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp)
 
-add_library(rvkvk SHARED ${RVKVK_SOURCES})
+add_library(rvkvk SHARED ${RVKVK_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
 add_dependencies(rvkvk rvktest_imports)
 set_target_properties(rvkvk PROPERTIES PREFIX "")
 target_include_directories(rvkvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -143,7 +143,7 @@ list(APPEND RVKGL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
   ${RVKTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
   ${RVKTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
-add_library(rvkgl SHARED ${RVKGL_SOURCES})
+add_library(rvkgl SHARED ${RVKGL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
 add_dependencies(rvkgl rvktest_imports rvkglprobe_imports)
 set_target_properties(rvkgl PROPERTIES PREFIX "")
 target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..

@@ -309,16 +309,16 @@ TEST(gl_icd_root, copy_and_layer_planes_are_declined)
 
 TEST(gl_icd_root, answers_gl_and_wgl_names_it_implements)
 { GlIcdRig rig;
-  CHECK(rig.opengl32().get_proc_address("wglCreateContextAttribsARB") ==
+  CHECK(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB") ==
         reinterpret_cast<void *>(&av::glicd::entry::wglCreateContextAttribsARB));
-  CHECK(rig.opengl32().get_proc_address("wglGetExtensionsStringARB") ==
+  CHECK(rig.opengl32().driver_proc_address("wglGetExtensionsStringARB") ==
         reinterpret_cast<void *>(&av::glicd::entry::wglGetExtensionsStringARB));
-  CHECK(rig.opengl32().get_proc_address("glDrawBuffers") != nullptr);
-  CHECK(rig.opengl32().get_proc_address("glBindVertexArray") != nullptr);
-  CHECK(rig.opengl32().get_proc_address("wglSwapIntervalEXT") == nullptr);
-  CHECK(rig.opengl32().get_proc_address("glNotACommand") == nullptr);
+  CHECK(rig.opengl32().driver_proc_address("glDrawBuffers") != nullptr);
+  CHECK(rig.opengl32().driver_proc_address("glBindVertexArray") != nullptr);
+  CHECK(rig.opengl32().driver_proc_address("wglSwapIntervalEXT") == nullptr);
+  CHECK(rig.opengl32().driver_proc_address("glNotACommand") == nullptr);
   CHECK(rig.root().get_proc_address(nullptr) == nullptr);
-  const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().get_proc_address("wglGetExtensionsStringARB"));
+  const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().driver_proc_address("wglGetExtensionsStringARB"));
   CHECK(std::strcmp(extensions(rig.dc()), "WGL_ARB_extensions_string WGL_ARB_pixel_format WGL_ARB_create_context "
                                           "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness "
                                           "WGL_ARB_multisample WGL_ARB_framebuffer_sRGB") == 0);
@@ -430,7 +430,7 @@ TEST(gl_icd_root, a_lost_context_swaps_without_a_host_call)
 TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc_names_it)
 { GlIcdRig rig;
   rig.load_with_format();
-  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().get_proc_address("wglCreateContextAttribsARB"));
+  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
   const std::int32_t attributes[] = {0x2091, 4, 0x2092, 5, 0x9126, 1, 0};
   rig.host().gl_make("host gpu", "4.6");
   void *const context = create(rig.dc(), nullptr, attributes);
@@ -450,7 +450,7 @@ TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc
 TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_names)
 { GlIcdRig rig;
   rig.load_with_format();
-  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().get_proc_address("wglCreateContextAttribsARB"));
+  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
   void *const first = rig.opengl32().create_context(rig.dc());
   const std::int32_t attributes[] = {0};
   /* The share target is made first, then the context sharing it. */
@@ -491,7 +491,7 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
 TEST(gl_icd_root, a_create_with_attributes_answers_the_arb_errors)
 { GlIcdRig rig;
   rig.load_with_format();
-  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().get_proc_address("wglCreateContextAttribsARB"));
+  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
   const std::int32_t bad_version[] = {0x2091, 4, 0x2092, 7, 0};
   CHECK(create(rig.dc(), nullptr, bad_version) == nullptr);
   check_error(rig, Root::error_invalid_version_arb);
@@ -662,9 +662,9 @@ TEST(gl_icd_root_invariants, fail_when_a_thread_names_a_context_another_thread_o
 TEST(gl_icd_root, answers_pixel_format_attributes_and_choices_through_wgl)
 { GlIcdRig rig;
   rig.load_with_format();
-  const auto attribiv = reinterpret_cast<AttribivFn>(rig.opengl32().get_proc_address("wglGetPixelFormatAttribivARB"));
-  const auto attribfv = reinterpret_cast<AttribfvFn>(rig.opengl32().get_proc_address("wglGetPixelFormatAttribfvARB"));
-  const auto choose = reinterpret_cast<ChooseFn>(rig.opengl32().get_proc_address("wglChoosePixelFormatARB"));
+  const auto attribiv = reinterpret_cast<AttribivFn>(rig.opengl32().driver_proc_address("wglGetPixelFormatAttribivARB"));
+  const auto attribfv = reinterpret_cast<AttribfvFn>(rig.opengl32().driver_proc_address("wglGetPixelFormatAttribfvARB"));
+  const auto choose = reinterpret_cast<ChooseFn>(rig.opengl32().driver_proc_address("wglChoosePixelFormatARB"));
   CHECK(attribiv == reinterpret_cast<AttribivFn>(&av::glicd::entry::wglGetPixelFormatAttribivARB));
   CHECK(attribfv == reinterpret_cast<AttribfvFn>(&av::glicd::entry::wglGetPixelFormatAttribfvARB));
   CHECK(choose == reinterpret_cast<ChooseFn>(&av::glicd::entry::wglChoosePixelFormatARB));

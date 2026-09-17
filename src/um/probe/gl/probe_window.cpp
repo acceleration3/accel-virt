@@ -50,7 +50,7 @@ bool ProbeWindow::create()
 {
     AV_SCOPE("ProbeWindow::create");
     SetLastError(0u);
-    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_OVERLAPPEDWINDOW, 0, 0, static_cast<int>(side),
+    window_ = CreateWindowExW(0u, window_class, L"rvkglprobe", WS_POPUP, 0, 0, static_cast<int>(side),
                               static_cast<int>(side), nullptr, nullptr, static_cast<HINSTANCE>(instance_), nullptr);
     last_error_ = GetLastError();
     return window_ != nullptr;

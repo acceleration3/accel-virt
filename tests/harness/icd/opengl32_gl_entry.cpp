@@ -39,7 +39,13 @@ void *Opengl32GlEntry::create_context() { return opengl32_.create_context(dc_); 
 void *Opengl32GlEntry::create_context_attribs(const std::int32_t *attributes)
 {
     using Create = void *(APIENTRY *)(void *, void *, const std::int32_t *);
-    return named<Create>("wglCreateContextAttribsARB")(dc_, nullptr, attributes);
+    const Create create = named<Create>("wglCreateContextAttribsARB");
+    /* What opengl32 leaves a caller with nothing current: no function. */
+    if (create == nullptr) {
+        threads_.set_last_error(proc_not_found);
+        return nullptr;
+    }
+    return create(dc_, nullptr, attributes);
 }
 
 bool Opengl32GlEntry::make_current(void *context) { return opengl32_.make_current(dc_, context); }

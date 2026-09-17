@@ -367,6 +367,14 @@ switch ($Stage) {
         # The Vulkan ICD's log, one file per process that loaded it (feature
         # 045, FR-007); none when nothing did.
         Copy-Item 'C:\ProgramData\rvk\*.log' $Diagnostics -ErrorAction SilentlyContinue
+        # What a traced program left when it crashed (docs/trace.md), and what
+        # Windows Error Reporting recorded for any rvk program, traced or not:
+        # a probe that faulted before its table existed shows only there.
+        Copy-Item 'C:\ProgramData\rvk\crash-*.txt' $Diagnostics -ErrorAction SilentlyContinue
+        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Windows Error Reporting' } `
+                -MaxEvents 50 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'rvk' } |
+            Format-List TimeCreated, Message | Out-File "$Diagnostics\application-crashes.txt" -Encoding utf8
         & {
             Get-PnpDevice -Class Display | Format-List FriendlyName, InstanceId, Status, Problem
             $device = RvkDevice

@@ -84,10 +84,13 @@ void GlProbe::run()
     draw_step("draw");
     share_step(context);
     busy_step(context);
-    static_cast<void>(gl_.make_current(nullptr));
-    static_cast<void>(gl_.delete_context(context));
+    /* opengl32 names an extension function only to a thread with a context
+     * current, so the first context stays current while the attribute
+     * contexts are made; the forced loss takes it down with its device. */
     attribs_step();
     lost_step();
+    static_cast<void>(gl_.make_current(nullptr));
+    static_cast<void>(gl_.delete_context(context));
     recreated_step();
 }
 

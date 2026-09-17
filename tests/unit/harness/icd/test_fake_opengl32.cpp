@@ -75,3 +75,21 @@ TEST(fake_opengl32, takes_a_proc_table_per_thread_and_answers_contexts_by_hglrc)
   CHECK(!rig.opengl32().delete_context(reinterpret_cast<void *>(0x5u)));
   CHECK(rig.opengl32().delete_context(context));
   CHECK(!rig.opengl32().make_current(rig.dc(), context)); }
+
+/* opengl32's wglGetProcAddress names a function only to a thread with a
+ * context current - the live guest's probe met exactly this - while the
+ * driver's own DrvGetProcAddress answers regardless. */
+TEST(fake_opengl32, names_a_function_only_to_a_thread_with_a_context_current)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.opengl32().get_proc_address("wglCreateContextAttribsARB") == nullptr);
+  CHECK(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB") != nullptr);
+  void *const context = rig.current_context();
+  CHECK(rig.opengl32().get_proc_address("wglCreateContextAttribsARB") ==
+        rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
+  rig.threads().switch_to(2u);
+  CHECK(rig.opengl32().get_proc_address("wglCreateContextAttribsARB") == nullptr);
+  rig.threads().switch_to(1u);
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
+  CHECK(rig.opengl32().get_proc_address("wglCreateContextAttribsARB") == nullptr);
+  CHECK(rig.opengl32().delete_context(context)); }

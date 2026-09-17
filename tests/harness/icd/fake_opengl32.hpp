@@ -50,7 +50,10 @@ public:
     /* wglShareLists: `second` shares `first`'s objects. */
     bool         share_lists(void *first, void *second);
     bool         swap_buffers(void *dc);
+    /* wglGetProcAddress: null unless the calling thread has a context current. */
     void        *get_proc_address(const char *name);
+    /* DrvGetProcAddress itself, as opengl32 calls it behind that check. */
+    void        *driver_proc_address(const char *name);
     /* The DHGLRC an HGLRC names, as wglCbGetDhglrc answers. */
     std::uintptr_t driver_context(void *context) const;
     /* The calling thread's table slot, null without a table. */
