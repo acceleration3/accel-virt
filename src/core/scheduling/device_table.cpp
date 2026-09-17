@@ -147,6 +147,13 @@ Status DeviceTable::close(void *device, const DxgkargCloseAllocationRecord &requ
     return Status::ok;
 }
 
+DeviceAllocation *DeviceTable::opened(void *handle)
+{
+    AV_SCOPE("DeviceTable::opened");
+    platform_.require_irql_at_most(Irql::passive, "DeviceTable::opened");
+    return opens_.find(handle);
+}
+
 Device *DeviceTable::find(void *device)
 {
     AV_SCOPE("DeviceTable::find");

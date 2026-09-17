@@ -38,6 +38,9 @@ public:
     [[nodiscard]] Status close(void *device, const DxgkargCloseAllocationRecord &request);
     /* The live device `device` names, or null. */
     Device              *find(void *device);
+    /* The allocation `handle` names, if this table opened it; null otherwise.
+     * What a present's allocation list is read through (feature 046). */
+    DeviceAllocation    *opened(void *handle);
     uint32_t             devices() const;
     uint32_t             opens() const;
 

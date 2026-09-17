@@ -26,4 +26,28 @@ void Rectangle::write(WireWriter &writer) const
     writer.write_u32(static_cast<uint32_t>(bottom_));
 }
 
+int32_t Rectangle::left() const
+{
+    AV_SCOPE("Rectangle::left");
+    return left_;
+}
+
+int32_t Rectangle::top() const
+{
+    AV_SCOPE("Rectangle::top");
+    return top_;
+}
+
+int32_t Rectangle::right() const
+{
+    AV_SCOPE("Rectangle::right");
+    return right_;
+}
+
+int32_t Rectangle::bottom() const
+{
+    AV_SCOPE("Rectangle::bottom");
+    return bottom_;
+}
+
 }  // namespace av

@@ -62,6 +62,12 @@
 #include "core/memory/standard_allocation.hpp"
 #include "core/miniport/adapter_info_query.hpp"
 #include "core/pci/pci_base_addresses.hpp"
+#include "core/ddi/dxgk_allocation_list_record.hpp"
+#include "core/memory/device_allocation.hpp"
+#include "core/memory/allocation.hpp"
+#include "core/present/present_blit.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/commands/rectangle.hpp"
 #include "core/present/present_request.hpp"
 #include "core/rvk/capset_exchange.hpp"
 #include "core/scheduling/patch_request.hpp"
@@ -103,7 +109,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -1107,9 +1113,52 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     AV_SCOPE("Adapter::present");
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t presented = PresentRequest(platform_, *request).present().value();
+    PresentRequest   writing(platform_, *request);
+    PresentOperation kind = PresentOperation::blt;
+    const bool       named = writing.operation(kind) == Status::ok;
+    const uint32_t   first = request->MultipassOffset;
+    const int32_t    presented = writing.present().value();
+    /* The DMA buffer this wrote is executed on the host only for a context of
+     * the rvk protocol; dxgkrnl's own presents are loopback-completed, so the
+     * pixels the desktop presents move here (feature 046, FR-004). */
+    if (presented == 0 && named) move_presented_pixels(*request, kind, first);
     log_status("rvkgpu: Present", presented);
     return presented;
+}
+
+/* The allocation list of a present addressed by patch locations is its source
+ * allocations and then its destination ones; a context with GPU virtual
+ * addressing has none, and its commands the host executes. */
+void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first)
+{
+    AV_SCOPE("Adapter::move_presented_pixels");
+    const bool filling = kind == PresentOperation::color_fill;
+    if (kind == PresentOperation::flip) return;
+    if (request.pAllocationList == nullptr || request.NumDstAllocations != 1u ||
+        (!filling && request.NumSrcAllocations != 1u)) {
+        presents_unmoved_++;
+        return;
+    }
+    const auto *const list = static_cast<const DxgkAllocationListRecord *>(request.pAllocationList);
+    DeviceAllocation *const source = filling ? nullptr : devices_.opened(list[0].hDeviceSpecificAllocation);
+    DeviceAllocation *const destination =
+        devices_.opened(list[request.NumSrcAllocations].hDeviceSpecificAllocation);
+    if (destination == nullptr || (!filling && source == nullptr)) {
+        presents_unmoved_++;
+        return;
+    }
+    const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
+    const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
+                              source != nullptr ? source->allocation().pages() : GuestPageList());
+    PresentBlit          blit(platform_, source != nullptr ? &read : nullptr, written);
+    const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
+    const uint32_t  count = request.SubRectCnt - first;
+    const RectRecord *const rectangles = count != 0u ? request.pDstSubRects + first : nullptr;
+    const Rectangle   from(request.SrcRect.left, request.SrcRect.top, request.SrcRect.right, request.SrcRect.bottom);
+    const Status      moved = filling ? blit.fill(request.Color, into, rectangles, count)
+                                      : blit.blit(from, into, rectangles, count);
+    if (moved != Status::ok) presents_unmoved_++;
+    present_rows_ += blit.rows();
 }
 
 int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)
@@ -1478,6 +1527,8 @@ void Adapter::report(StateWriter &writer)
     writer.flag("present", present_);
     writer.flag("powering_down", transition_.held());
     writer.number("presented_fence", presented_fence_);
+    writer.number("present_rows", present_rows_);
+    writer.number("presents_unmoved", presents_unmoved_);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

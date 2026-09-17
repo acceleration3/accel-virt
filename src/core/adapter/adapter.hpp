@@ -3,6 +3,7 @@
 #ifndef AV_ADAPTER_HPP
 #define AV_ADAPTER_HPP
 
+#include "proto/commands/present_operation.hpp"
 #include "core/adapter/driver_capabilities.hpp"
 #include "core/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "core/display/display_info_response.hpp"
@@ -242,6 +243,9 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* The pixels of a present nothing else executes (feature 046). */
+    void move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first);
+
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
@@ -364,6 +368,10 @@ private:
     DisplayScanout                 scanout_;
     /* The node fence the host was last shown a frame for. */
     uint32_t                       presented_fence_;
+    /* Rows of pixels this miniport moved for a present nothing executes - the
+     * desktop's (feature 046, FR-004) - and presents it could not move. */
+    uint64_t                       present_rows_;
+    uint64_t                       presents_unmoved_;
     /* Set from the interrupt when the device says its configuration changed,
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;

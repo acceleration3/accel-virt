@@ -26,6 +26,9 @@ public:
      * only some sub-rectangles fit, answers STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER
      * with MultipassOffset naming the first one left. */
     NtStatus present();
+    /* Which operation the flags name: invalid_parameter unless it is one this
+     * driver presents. The caller that moves the pixels asks (feature 046). */
+    [[nodiscard]] Status operation(PresentOperation &operation) const;
 
 private:
     enum : uint32_t {
@@ -37,8 +40,6 @@ private:
     enum : uint32_t { source_index = 1u, destination_index = 2u };   /* DXGK_PRESENT_*_INDEX */
     static constexpr uint32_t insufficient_dma_buffer = 0xC01E0001u;   /* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER */
 
-    /* invalid_parameter unless the flags name one operation this driver presents. */
-    [[nodiscard]] Status operation(PresentOperation &operation) const;
     [[nodiscard]] Status validate(PresentOperation operation, const PresentAddressing &addressing) const;
 
     Platform             &platform_;

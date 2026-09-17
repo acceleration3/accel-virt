@@ -16,6 +16,12 @@ public:
     bool is_valid() const;
     void write(WireWriter &writer) const;
 
+    /* The edges, for what moves the pixels inside them (feature 046). */
+    int32_t left() const;
+    int32_t top() const;
+    int32_t right() const;
+    int32_t bottom() const;
+
 private:
     int32_t left_;
     int32_t top_;
