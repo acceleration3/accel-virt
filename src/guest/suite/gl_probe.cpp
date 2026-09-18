@@ -244,12 +244,15 @@ void GlProbe::resized_step()
     AV_SCOPE("GlProbe::resized_step");
     const uint32_t width = gl_.width();
     const uint32_t height = gl_.height();
-    const uint32_t narrowed = width / 2u;
-    if (narrowed < 1u) {
+    /* Widened, not narrowed: Windows clamps a window to its minimum tracking
+     * size, so a narrower one is a resize the window system refuses and this
+     * step would be judging user32 rather than the driver. */
+    const uint32_t widened = width * 2u;
+    if (width == 0u) {
         static_cast<void>(steps_.check_measured("resized", Status::not_supported, 0u));
         return;
     }
-    if (!gl_.resize(narrowed, height)) {
+    if (!gl_.resize(widened, height)) {
         static_cast<void>(steps_.check_measured("resized", Status::not_supported, width));
         return;
     }
@@ -260,7 +263,7 @@ void GlProbe::resized_step()
     gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
     gl_.clear(gl_color_buffer_bit);
     const bool swapped = gl_.swap_buffers();
-    const bool resized = swapped && gl_.width() == narrowed;
+    const bool resized = swapped && gl_.width() == widened;
     static_cast<void>(steps_.check_measured("resized", resized ? Status::ok : Status::invalid_state, gl_.width()));
     static_cast<void>(gl_.resize(width, height));
 }

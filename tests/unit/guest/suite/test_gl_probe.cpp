@@ -91,7 +91,7 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.busy 170\n"
                                          "ok opengl.compat 32\n"
                                          "ok opengl.interval 60\n"
-                                         "ok opengl.resized 4\n"
+                                         "ok opengl.resized 16\n"
                                          "ok opengl.attribs 8342\n"
                                          "ok opengl.lost 33365\n"
                                          "ok opengl.recreated 32\n"
@@ -386,7 +386,7 @@ TEST(gl_probe, a_swap_after_the_resize_that_fails_fails_the_step)
    * resize's first: the second is what this refuses. */
   unswapped.gl().fail_at(Call::swap_buffers, 2u + 1u + GlProbe::paced_frames + 1u);
   unswapped.run();
-  CHECK(unswapped.holds("FAIL opengl.resized status=7 4\n")); }
+  CHECK(unswapped.holds("FAIL opengl.resized status=7 16\n")); }
 
 TEST(gl_probe, a_run_with_no_rvkgpu_cannot_time_the_interval)
 { ProbeRig lonely;
@@ -407,8 +407,8 @@ TEST(gl_probe, a_window_that_cannot_be_resized_ends_the_resized_step)
   fixed.run();
   CHECK(fixed.holds("FAIL opengl.resized status=6 8\n"));
 
-  /* A window one pixel wide cannot be narrowed at all. */
-  ProbeRig narrow(1u, 1u);
+  /* A window of nothing has nothing to widen. */
+  ProbeRig narrow(0u, 0u);
   narrow.run();
   CHECK(narrow.holds("FAIL opengl.resized status=6 0\n")); }
 

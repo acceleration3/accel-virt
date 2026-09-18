@@ -35,7 +35,7 @@ public:
     };
     static constexpr std::uint32_t max_contexts = 8u;
     static constexpr std::uint32_t max_textures = 4u;
-    static constexpr std::uint32_t max_extent = 64u;
+    static constexpr std::uint32_t max_extent = 128u;
     static constexpr std::uint32_t refused = 0x7Bu;
 
     ScriptedGl(std::uint32_t width, std::uint32_t height);
