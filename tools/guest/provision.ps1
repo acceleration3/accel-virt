@@ -210,6 +210,17 @@ switch ($Stage) {
         exit 0
     }
     'install' {
+        # The WDDM features this driver implements, staged off by this build of
+        # Windows (feature 049, research.md §19). dxgkrnl's ConfigureFeature
+        # reads Features\<DXGK_FEATURE_ID>\Enabled, and the driver's own INF
+        # reaches only the adapter's database; the global one is here.
+        #   4  DXGK_FEATURE_USER_MODE_SUBMISSION
+        #   37 DXGK_FEATURE_NATIVE_FENCE
+        foreach ($feature in 4, 37) {
+            $key = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Features\$feature"
+            SetDword $key Enabled 1
+            SetDword $key AllowExperimental 1
+        }
         pnputil /add-driver "$Package\rvkgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
         verifier /standard /driver rvkgpu.sys | Out-Null
