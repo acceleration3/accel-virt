@@ -19,6 +19,8 @@ struct D3d11WorkProbe {
     /* The frame the readback left, to play a driver's rounding into. */
     static std::uint8_t *frame(D3d11Work &work) { return work.frame_; }
     static void          read_without_a_device(D3d11Work &work) { work.read_ = true; }
+    static void          adapter_without_a_device(D3d11Work &work) { work.adapter_ = 0x99u; }
+    static void          level_without_a_device(D3d11Work &work) { work.feature_level_ = 0xB000u; }
     static std::uint32_t coloured(const D3d11Work &work) { return work.coloured(); }
 };
 
@@ -102,15 +104,24 @@ TEST(d3d11_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to
  * the pixels that were right on the line: what a layer drawing nothing at all
  * looks like. */
 TEST(d3d11_work, a_frame_of_the_wrong_colour_fails_with_the_count)
-{ D3d11Rig rig;
-  rig.d3d11().miscolour();
-  const char *report = rig.run();
-  CHECK(std::strstr(report, "FAIL d3d11.pixels") != nullptr);
-  CHECK(std::strstr(report, " 4095\n") != nullptr);
-  /* The present still runs: what the frame held is the step's verdict, not
-   * the run's. */
-  CHECK(std::strstr(report, "ok d3d11.present") != nullptr);
-  CHECK(std::strstr(report, "rvkd3d11probe: 6 passed, 1 failed") != nullptr); }
+{ /* Every channel on its own: a layer that got blue right and red wrong is as
+   * wrong as one that drew nothing. */
+  for (unsigned channel = 0u; channel < 3u; channel++) {
+      D3d11Rig rig;
+      rig.d3d11().miscolour(channel);
+      const char *report = rig.run();
+      CHECK(std::strstr(report, "FAIL d3d11.pixels") != nullptr);
+      CHECK(std::strstr(report, " 4095\n") != nullptr);
+      /* The present still runs: what the frame held is the step's verdict,
+       * not the run's. */
+      CHECK(std::strstr(report, "ok d3d11.present") != nullptr);
+      CHECK(std::strstr(report, "rvkd3d11probe: 6 passed, 1 failed") != nullptr);
+  }
+  /* The alpha byte is not judged: a D3D11 back buffer's is the swap chain's
+   * to set, and nothing here reads it. */
+  D3d11Rig alpha;
+  alpha.d3d11().miscolour(3u);
+  CHECK(std::strstr(alpha.run(), "ok d3d11.pixels 4096") != nullptr); }
 
 /* Every call refused, one at a time: the HRESULT is what the step reports, and
  * nothing after it runs. */
@@ -175,4 +186,11 @@ TEST(d3d11_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   D3d11Work         work(d3d11, images);
   CHECK(work.invariants_hold());
   D3d11WorkProbe::read_without_a_device(work);
-  CHECK(!work.invariants_hold()); }
+  CHECK(!work.invariants_hold());
+  /* The other two: something learnt from a device that was never made. */
+  D3d11Work adapter(d3d11, images);
+  D3d11WorkProbe::adapter_without_a_device(adapter);
+  CHECK(!adapter.invariants_hold());
+  D3d11Work level(d3d11, images);
+  D3d11WorkProbe::level_without_a_device(level);
+  CHECK(!level.invariants_hold()); }

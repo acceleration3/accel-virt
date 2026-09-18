@@ -17,6 +17,7 @@ namespace av {
 struct D3d9WorkProbe {
     static std::uint8_t *frame(D3d9Work &work) { return work.frame_; }
     static void          read_without_a_device(D3d9Work &work) { work.read_ = true; }
+    static void          adapter_without_a_device(D3d9Work &work) { work.adapter_ = 0x99u; }
     static std::uint32_t coloured(const D3d9Work &work) { return work.coloured(); }
 };
 
@@ -88,13 +89,19 @@ TEST(d3d9_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to)
   CHECK(rig.images().size("d3d9-clear") > 0u); }
 
 TEST(d3d9_work, a_frame_of_the_wrong_colour_fails_with_the_count)
-{ D3d9Rig rig;
-  rig.d3d9().miscolour();
-  const char *report = rig.run();
-  CHECK(std::strstr(report, "FAIL d3d9.pixels") != nullptr);
-  CHECK(std::strstr(report, " 4095\n") != nullptr);
-  CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
-  CHECK(std::strstr(report, "rvkd3d9probe: 5 passed, 1 failed") != nullptr); }
+{ for (unsigned channel = 0u; channel < 3u; channel++) {
+      D3d9Rig rig;
+      rig.d3d9().miscolour(channel);
+      const char *report = rig.run();
+      CHECK(std::strstr(report, "FAIL d3d9.pixels") != nullptr);
+      CHECK(std::strstr(report, " 4095\n") != nullptr);
+      CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
+      CHECK(std::strstr(report, "rvkd3d9probe: 5 passed, 1 failed") != nullptr);
+  }
+  /* X8R8G8B8: the fourth byte is not a channel at all. */
+  D3d9Rig unused;
+  unused.d3d9().miscolour(3u);
+  CHECK(std::strstr(unused.run(), "ok d3d9.pixels 4096") != nullptr); }
 
 TEST(d3d9_work, a_refusal_at_each_call_stops_the_run_there)
 { constexpr std::int32_t d3derr_invalidcall = static_cast<std::int32_t>(0x8876086C);
@@ -147,4 +154,8 @@ TEST(d3d9_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   D3d9Work          work(d3d9, images);
   CHECK(work.invariants_hold());
   D3d9WorkProbe::read_without_a_device(work);
-  CHECK(!work.invariants_hold()); }
+  CHECK(!work.invariants_hold());
+  /* The other two: something learnt from a device that was never made. */
+  D3d9Work adapter(d3d9, images);
+  D3d9WorkProbe::adapter_without_a_device(adapter);
+  CHECK(!adapter.invariants_hold()); }

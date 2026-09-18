@@ -26,7 +26,10 @@ public:
 
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
     /* The frame comes back one pixel short of the colour. */
-    void          miscolour();
+    /* The frame comes back with one pixel's `channel` off by more than a
+     * driver's rounding: which channel matters, because each is compared on
+     * its own. */
+    void          miscolour(unsigned channel);
     std::uint32_t calls(Call call) const;
     bool          live() const;
     std::uint32_t width() const;
@@ -54,7 +57,7 @@ private:
     bool          target_;
     bool          copied_;
     bool          waited_;
-    bool          miscolour_;
+    unsigned      miscoloured_;
 };
 
 }  // namespace av

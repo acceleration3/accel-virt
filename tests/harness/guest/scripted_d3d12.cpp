@@ -2,11 +2,18 @@
 
 #include "harness/framework/test_registry.hpp"
 
+namespace {
+
+/* No channel: what a frame that comes back whole is asked for. */
+constexpr unsigned no_channel = 4u;
+
+}  // namespace
+
 namespace av {
 
 ScriptedD3d12::ScriptedD3d12()
     : calls_{}, fail_at_{}, fail_with_{}, cleared_{}, width_(0u), height_(0u), live_(false), queue_(false),
-      target_(false), copied_(false), waited_(false), miscolour_(false)
+      target_(false), copied_(false), waited_(false), miscoloured_(no_channel)
 {
 }
 
@@ -16,9 +23,9 @@ void ScriptedD3d12::fail(Call call, std::uint32_t nth, std::int32_t result)
     fail_with_[static_cast<unsigned>(call)] = result;
 }
 
-void ScriptedD3d12::miscolour()
+void ScriptedD3d12::miscolour(unsigned channel)
 {
-    miscolour_ = true;
+    miscoloured_ = channel;
 }
 
 std::uint32_t ScriptedD3d12::calls(Call call) const
@@ -111,7 +118,8 @@ std::int32_t ScriptedD3d12::read_back(std::uint8_t *pixels, std::uint32_t bytes)
     for (std::uint32_t pixel = 0u; pixel * 4u < bytes; pixel++)
         for (unsigned channel = 0u; channel < 4u; channel++)
             pixels[pixel * 4u + channel] = cleared_[channel];
-    if (miscolour_ && bytes >= 4u) pixels[0] = static_cast<std::uint8_t>(cleared_[0] + 8u);
+    if (miscoloured_ < 4u && bytes >= 4u)
+        pixels[miscoloured_] = static_cast<std::uint8_t>(pixels[miscoloured_] + 8u);
     return 0;
 }
 

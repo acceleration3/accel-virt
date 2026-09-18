@@ -29,7 +29,10 @@ public:
     /* `call` answers `result` from its `nth` use on. */
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
     /* The frame comes back one pixel short of the colour. */
-    void          miscolour();
+    /* The frame comes back with one pixel's `channel` off by more than a
+     * driver's rounding: which channel matters, because each is compared on
+     * its own. */
+    void          miscolour(unsigned channel);
     std::uint32_t calls(Call call) const;
     /* Whether a device is live: what says the probe released what it made. */
     bool          live() const;
@@ -60,7 +63,7 @@ private:
     std::uint32_t height_;
     bool          live_;
     bool          target_;
-    bool          miscolour_;
+    unsigned      miscoloured_;
 };
 
 }  // namespace av

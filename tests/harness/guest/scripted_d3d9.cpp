@@ -2,11 +2,18 @@
 
 #include "harness/framework/test_registry.hpp"
 
+namespace {
+
+/* No channel: what a frame that comes back whole is asked for. */
+constexpr unsigned no_channel = 4u;
+
+}  // namespace
+
 namespace av {
 
 ScriptedD3d9::ScriptedD3d9()
     : calls_{}, fail_at_{}, fail_with_{}, cleared_{}, window_(nullptr), width_(0u), height_(0u), live_(false),
-      cleared_once_(false), miscolour_(false)
+      cleared_once_(false), miscoloured_(no_channel)
 {
 }
 
@@ -16,9 +23,9 @@ void ScriptedD3d9::fail(Call call, std::uint32_t nth, std::int32_t result)
     fail_with_[static_cast<unsigned>(call)] = result;
 }
 
-void ScriptedD3d9::miscolour()
+void ScriptedD3d9::miscolour(unsigned channel)
 {
-    miscolour_ = true;
+    miscoloured_ = channel;
 }
 
 std::uint32_t ScriptedD3d9::calls(Call call) const
@@ -91,7 +98,8 @@ std::int32_t ScriptedD3d9::read_back(std::uint8_t *pixels, std::uint32_t bytes)
         pixels[pixel * 4u + 2u] = cleared_[0];
         pixels[pixel * 4u + 3u] = cleared_[3];
     }
-    if (miscolour_ && bytes >= 4u) pixels[1] = static_cast<std::uint8_t>(cleared_[1] + 8u);
+    if (miscoloured_ < 4u && bytes >= 4u)
+        pixels[miscoloured_] = static_cast<std::uint8_t>(pixels[miscoloured_] + 8u);
     return 0;
 }
 
