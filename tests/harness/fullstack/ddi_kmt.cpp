@@ -675,4 +675,41 @@ std::uint32_t DdiKmt::open_objects() const
     return open;
 }
 
+
+Status DdiKmt::create_hw_queue(std::uint32_t, std::uint32_t, void *, std::uint32_t &queue)
+{
+    queue = 0u;
+    return Status::not_supported;
+}
+
+Status DdiKmt::destroy_hw_queue(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status DdiKmt::create_doorbell(std::uint32_t, std::uint32_t, std::uint32_t &doorbell, void *&page,
+                              const std::uint32_t *&status, std::uint64_t *&queued)
+{
+    doorbell = 0u;
+    page = nullptr;
+    status = nullptr;
+    queued = nullptr;
+    return Status::not_supported;
+}
+
+Status DdiKmt::connect_doorbell(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status DdiKmt::destroy_doorbell(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status DdiKmt::notify_work_submission(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
 }  // namespace av

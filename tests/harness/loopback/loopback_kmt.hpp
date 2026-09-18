@@ -57,6 +57,20 @@ public:
     Status   submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                     const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status   wait_for_context(std::uint32_t device, std::uint32_t context) override;
+    /* Feature 049's doorbells are not modelled here: this rig is the one below
+     * the doorbell - it publishes tails and rings the device's own page itself
+     * - so a process asking for a hardware queue is answered not_supported and
+     * submits the way it always has. The full-stack rig is where a user-mode
+     * store is driven end to end. */
+    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence,
+                             std::uint32_t &queue) override;
+    Status   destroy_hw_queue(std::uint32_t queue) override;
+    Status   create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
+                             const std::uint32_t *&status, std::uint64_t *&queued) override;
+    Status   connect_doorbell(std::uint32_t doorbell) override;
+    Status   destroy_doorbell(std::uint32_t doorbell) override;
+    Status   notify_work_submission(std::uint32_t doorbell) override;
+
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                     std::uint32_t size) override;

@@ -364,6 +364,73 @@ Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, cons
     return answer(D3DKMTSubmitCommand(&request));
 }
 
+Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, void *fence, uint32_t &queue)
+{
+    AV_SCOPE("GdiKmt::create_hw_queue");
+    queue = 0u;
+    D3DKMT_CREATEHWQUEUE request = {};
+    request.hHwContext = context;
+    const Status made = answer(D3DKMTCreateHwQueue(&request));
+    if (made != Status::ok) return made;
+    queue = request.hHwQueue;
+    /* The read-only mapping of the queue's progress is the process's own view
+     * of what the driver has finished. */
+    *static_cast<void **>(fence) = request.HwQueueProgressFenceCPUVirtualAddress;
+    return Status::ok;
+}
+
+Status GdiKmt::destroy_hw_queue(uint32_t queue)
+{
+    AV_SCOPE("GdiKmt::destroy_hw_queue");
+    D3DKMT_DESTROYHWQUEUE request = {};
+    request.hHwQueue = queue;
+    return answer(D3DKMTDestroyHwQueue(&request));
+}
+
+Status GdiKmt::create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell, void *&page,
+                               const uint32_t *&status, uint64_t *&queued)
+{
+    AV_SCOPE("GdiKmt::create_doorbell");
+    doorbell = 0u;
+    page = nullptr;
+    status = nullptr;
+    queued = nullptr;
+    D3DKMT_CREATE_DOORBELL request = {};
+    request.hHwQueue = queue;
+    request.hRingBuffer = ring;
+    const Status made = answer(D3DKMTCreateDoorbell(&request));
+    if (made != Status::ok) return made;
+    doorbell = request.hDoorbell;
+    page = request.DoorbellCPUVirtualAddress;
+    status = static_cast<const uint32_t *>(request.DoorbellStatusCPUVirtualAddress);
+    queued = static_cast<uint64_t *>(request.HwQueueProgressFenceLastQueuedValueCPUVirtualAddress);
+    return Status::ok;
+}
+
+Status GdiKmt::connect_doorbell(uint32_t doorbell)
+{
+    AV_SCOPE("GdiKmt::connect_doorbell");
+    D3DKMT_CONNECT_DOORBELL request = {};
+    request.hDoorbell = doorbell;
+    return answer(D3DKMTConnectDoorbell(&request));
+}
+
+Status GdiKmt::destroy_doorbell(uint32_t doorbell)
+{
+    AV_SCOPE("GdiKmt::destroy_doorbell");
+    D3DKMT_DESTROY_DOORBELL request = {};
+    request.hDoorbell = doorbell;
+    return answer(D3DKMTDestroyDoorbell(&request));
+}
+
+Status GdiKmt::notify_work_submission(uint32_t doorbell)
+{
+    AV_SCOPE("GdiKmt::notify_work_submission");
+    D3DKMT_NOTIFY_WORK_SUBMISSION request = {};
+    request.hDoorbell = doorbell;
+    return answer(D3DKMTNotifyWorkSubmission(&request));
+}
+
 /* A CPU notification signalled behind everything the context has submitted. */
 Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
 {

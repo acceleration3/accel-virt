@@ -66,6 +66,28 @@ public:
                             uint32_t private_size) = 0;
     /* Until everything submitted on the context so far has completed. */
     virtual Status   wait_for_context(uint32_t device, uint32_t context) = 0;
+    /* A hardware queue on `context`, which is what a doorbell is created for
+     * (feature 049, research.md §1). `fence` is where the driver writes the
+     * queue's progress, which the process reads. not_supported when the OS
+     * will not give this adapter one - hardware scheduling is its decision,
+     * not the driver's (research.md §11) - and the transport then submits the
+     * way it always has. */
+    virtual Status   create_hw_queue(uint32_t device, uint32_t context, void *fence, uint32_t &queue) = 0;
+    virtual Status   destroy_hw_queue(uint32_t queue) = 0;
+    /* D3DKMTCreateDoorbell on `queue` over the process's `ring` allocation: the
+     * three addresses it answers are the doorbell itself, the status page a
+     * process reads before every store, and where it writes the fence value it
+     * has queued. A doorbell created is not connected. */
+    virtual Status   create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell, void *&page,
+                                     const uint32_t *&status, uint64_t *&queued) = 0;
+    /* Connected, the process may store; dxgkrnl disconnects it for suspend,
+     * reset and migration without telling the process, which learns it from
+     * the status page (contracts, research.md §6). */
+    virtual Status   connect_doorbell(uint32_t doorbell) = 0;
+    virtual Status   destroy_doorbell(uint32_t doorbell) = 0;
+    /* What a process calls after a store when the status asked it to. This
+     * device's never does, so nothing calls it in the steady state. */
+    virtual Status   notify_work_submission(uint32_t doorbell) = 0;
     /* Until the next vertical blank of `source` on that device: what DWM's
      * frame pacing waits on, and the only way in to see the rate the driver
      * reports. */

@@ -1,5 +1,7 @@
 #include "harness/guest/mock_kmt.hpp"
 
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
+
 #include "core/support/nt_status.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -34,8 +36,121 @@ MockKmt::MockKmt()
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
-      queued_taken_(0u), withheld_countdown_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
+      queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(true), doorbells_{},
+      doorbell_count_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
+
+/* ---- feature 049: hardware queues and doorbells -------------------------- */
+
+Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence, std::uint32_t &queue)
+{
+    if (!begin(Call::create_hw_queue)) return refuse(last_code_);
+    queue = 0u;
+    const Object *const on = find(Kind::context, context);
+    if (on == nullptr || on->owner != device || fence == nullptr) return misuse();
+    /* Hardware scheduling is the OS's decision, not the driver's
+     * (049 research.md §11): a machine without it gives out no queue, and the
+     * transport submits the way it always has. */
+    if (!hardware_scheduling_) return refuse(not_supported);
+    queue = open(Kind::hw_queue, context, 0u, 0u);
+    return succeed();
+}
+
+Status MockKmt::destroy_hw_queue(std::uint32_t queue)
+{
+    if (!begin(Call::destroy_hw_queue)) return refuse(last_code_);
+    Object *const found = find(Kind::hw_queue, queue);
+    if (found == nullptr) return misuse();
+    /* A queue destroyed takes its doorbells, as dxgkrnl's does. */
+    for (std::uint32_t index = 0u; index < doorbell_count_; index++)
+        if (doorbells_[index].queue == queue) doorbells_[index].handle = 0u;
+    found->kind = Kind::none;
+    return succeed();
+}
+
+Status MockKmt::create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
+                               const std::uint32_t *&status, std::uint64_t *&queued)
+{
+    if (!begin(Call::create_doorbell)) return refuse(last_code_);
+    doorbell = 0u;
+    page = nullptr;
+    status = nullptr;
+    queued = nullptr;
+    const Object *const on = find(Kind::hw_queue, queue);
+    if (on == nullptr || find(Kind::allocation, ring) == nullptr) return misuse();
+    if (doorbell_count_ == max_doorbells) return refuse(invalid_parameter);
+    DoorbellPages &made = doorbells_[doorbell_count_++];
+    made = DoorbellPages{};
+    made.handle = open(Kind::doorbell, queue, 0u, 0u);
+    made.queue = queue;
+    /* Created is not connected: what a process reads says to submit the other
+     * way until it connects. */
+    made.status = static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry);
+    doorbell = made.handle;
+    page = &made.page;
+    status = &made.status;
+    queued = &made.queued;
+    return succeed();
+}
+
+Status MockKmt::connect_doorbell(std::uint32_t doorbell)
+{
+    if (!begin(Call::connect_doorbell)) return refuse(last_code_);
+    DoorbellPages *const found = doorbell_of(doorbell);
+    if (found == nullptr) return misuse();
+    found->connected = true;
+    found->status = static_cast<std::uint32_t>(DoorbellStatus::connected);
+    return succeed();
+}
+
+Status MockKmt::destroy_doorbell(std::uint32_t doorbell)
+{
+    if (!begin(Call::destroy_doorbell)) return refuse(last_code_);
+    DoorbellPages *const found = doorbell_of(doorbell);
+    if (found == nullptr) return misuse();
+    Object *const object = find(Kind::doorbell, doorbell);
+    if (object != nullptr) object->kind = Kind::none;
+    found->handle = 0u;
+    return succeed();
+}
+
+Status MockKmt::notify_work_submission(std::uint32_t doorbell)
+{
+    if (!begin(Call::notify_work_submission)) return refuse(last_code_);
+    return doorbell_of(doorbell) != nullptr ? succeed() : misuse();
+}
+
+void MockKmt::refuse_hardware_scheduling()
+{
+    hardware_scheduling_ = false;
+}
+
+void MockKmt::set_doorbell_status(std::uint32_t doorbell, std::uint32_t status)
+{
+    DoorbellPages *const found = doorbell_of(doorbell);
+    if (found != nullptr) found->status = status;
+}
+
+std::uint32_t MockKmt::doorbell_stores(std::uint32_t doorbell) const
+{
+    for (std::uint32_t index = 0u; index < doorbell_count_; index++)
+        if (doorbells_[index].handle == doorbell) return doorbells_[index].page;
+    return 0u;
+}
+
+std::uint64_t MockKmt::queued_fence(std::uint32_t doorbell) const
+{
+    for (std::uint32_t index = 0u; index < doorbell_count_; index++)
+        if (doorbells_[index].handle == doorbell) return doorbells_[index].queued;
+    return 0u;
+}
+
+MockKmt::DoorbellPages *MockKmt::doorbell_of(std::uint32_t handle)
+{
+    for (std::uint32_t index = 0u; index < doorbell_count_; index++)
+        if (doorbells_[index].handle == handle && handle != 0u) return &doorbells_[index];
+    return nullptr;
+}
 
 MockKmt::~MockKmt()
 {

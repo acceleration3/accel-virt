@@ -244,4 +244,41 @@ std::uint64_t LoopbackKmt::performance_counter(std::uint64_t &frequency) const
 
 std::uint32_t LoopbackKmt::last_code() const { return 0u; }
 
+
+Status LoopbackKmt::create_hw_queue(std::uint32_t, std::uint32_t, void *, std::uint32_t &queue)
+{
+    queue = 0u;
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::destroy_hw_queue(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::create_doorbell(std::uint32_t, std::uint32_t, std::uint32_t &doorbell, void *&page,
+                              const std::uint32_t *&status, std::uint64_t *&queued)
+{
+    doorbell = 0u;
+    page = nullptr;
+    status = nullptr;
+    queued = nullptr;
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::connect_doorbell(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::destroy_doorbell(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::notify_work_submission(std::uint32_t)
+{
+    return Status::not_supported;
+}
+
 }  // namespace av

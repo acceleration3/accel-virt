@@ -5,14 +5,19 @@ ChoosePixelFormat
 CreateCompatibleDC
 CreateDIBSection
 D3DKMTCloseAdapter
+D3DKMTConnectDoorbell
 D3DKMTCreateAllocation2
 D3DKMTCreateContextVirtual
 D3DKMTCreateDevice
+D3DKMTCreateDoorbell
+D3DKMTCreateHwQueue
 D3DKMTCreatePagingQueue
 D3DKMTCreateSynchronizationObject2
 D3DKMTDestroyAllocation2
 D3DKMTDestroyContext
 D3DKMTDestroyDevice
+D3DKMTDestroyDoorbell
+D3DKMTDestroyHwQueue
 D3DKMTDestroyPagingQueue
 D3DKMTDestroySynchronizationObject
 D3DKMTEnumAdapters2
@@ -21,6 +26,7 @@ D3DKMTFreeGpuVirtualAddress
 D3DKMTLock2
 D3DKMTMakeResident
 D3DKMTMapGpuVirtualAddress
+D3DKMTNotifyWorkSubmission
 D3DKMTOpenAdapterFromHdc
 D3DKMTQueryAdapterInfo
 D3DKMTQueryVideoMemoryInfo

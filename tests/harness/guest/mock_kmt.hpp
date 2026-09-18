@@ -58,6 +58,12 @@ public:
         destroy_context,
         submit,
         wait_for_context,
+        create_hw_queue,
+        destroy_hw_queue,
+        create_doorbell,
+        connect_doorbell,
+        destroy_doorbell,
+        notify_work_submission,
         wait_for_vertical_blank,
         escape,
         adapter_luid,
@@ -130,6 +136,27 @@ public:
     Status        submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                          const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status        wait_for_context(std::uint32_t device, std::uint32_t context) override;
+    /* Feature 049. A hardware queue is answered only while
+     * `hardware_scheduling_` is on, which a test turns off to play an OS that
+     * will not give this adapter one; a doorbell answers three pages of this
+     * mock's own memory, which a test reads to see what the transport stored.
+     */
+    Status        create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence,
+                                  std::uint32_t &queue) override;
+    Status        destroy_hw_queue(std::uint32_t queue) override;
+    Status        create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
+                                  const std::uint32_t *&status, std::uint64_t *&queued) override;
+    Status        connect_doorbell(std::uint32_t doorbell) override;
+    Status        destroy_doorbell(std::uint32_t doorbell) override;
+    Status        notify_work_submission(std::uint32_t doorbell) override;
+
+    /* What a test plays with: whether the OS gives this adapter a hardware
+     * queue at all, what a process reads out of a doorbell's status page, and
+     * the stores it made to the doorbell. */
+    void          refuse_hardware_scheduling();
+    void          set_doorbell_status(std::uint32_t doorbell, std::uint32_t status);
+    std::uint32_t doorbell_stores(std::uint32_t doorbell) const;
+    std::uint64_t queued_fence(std::uint32_t doorbell) const;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     /* As the driver answers a HostVisibleBindRecord: a bind of a host-visible
      * allocation of `device` answers first_chunk_resource + the binds so far
@@ -241,7 +268,19 @@ public:
     std::uint64_t       allocation_pages(std::uint32_t allocation);
 
 private:
-    enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
+    enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping, hw_queue,
+                                doorbell };
+    /* One doorbell this mock handed out: the pages a process was given, what
+     * it stored, and what its status page says (feature 049). */
+    struct DoorbellPages {
+        std::uint32_t handle;
+        std::uint32_t queue;
+        std::uint32_t page;      /* a 4-byte store lands here */
+        std::uint32_t status;
+        std::uint64_t queued;
+        std::uint32_t stores;
+        bool          connected;
+    };
     /* A context's `address` is the reply allocation its record named, or 0,
      * `ring` the ring allocation, and `lost` whether a wait on it was
      * withheld - how the driver sees a context the host faulted. */
@@ -256,8 +295,12 @@ private:
         bool          lost;
     };
     static constexpr std::uint32_t max_adapters = 8u;
+    /* More than a transport holds: one per context it runs. */
+    static constexpr std::uint32_t max_doorbells = 8u;
     static constexpr std::uint32_t segment_groups = 2u;
     static constexpr std::uint64_t first_address = 0x100000000ull;
+
+    DoorbellPages *doorbell_of(std::uint32_t handle);
 
     bool          begin(Call call);
     Status        refuse(std::uint32_t code);
@@ -334,6 +377,11 @@ private:
     std::uint32_t queued_count_;
     std::uint32_t queued_taken_;
     std::uint32_t withheld_countdown_;
+    /* Feature 049: whether the OS gives this adapter hardware queues, and the
+     * doorbells it handed out. */
+    bool          hardware_scheduling_;
+    DoorbellPages doorbells_[max_doorbells];
+    std::uint32_t doorbell_count_;
     std::uint32_t journal_ids_[max_journal];
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];
