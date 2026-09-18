@@ -475,7 +475,18 @@ TEST(opengl_dispatch, call_lists_is_held_to_its_count_times_its_type)
   CHECK(!send(session, lists, Frame().varint(4u).varint(unsigned_short).run(7u)));
   CHECK(!send(session, lists, Frame().varint(static_cast<std::uint32_t>(-1)).varint(unsigned_short).run(8u)));
   CHECK(send(session, lists, Frame().varint(4u).varint(unsigned_short).run(8u)));
-  CHECK_EQ(session.gl().calls(), 1u);
+  /* GL_2_BYTES through GL_4_BYTES name a list of that many bytes each; the
+   * decoder sizes them by the wider element table, which is room GL never
+   * reads past. */
+  constexpr std::uint64_t three_bytes = 0x1408u;
+  CHECK(!send(session, lists, Frame().varint(4u).varint(three_bytes).run(12u)));
+  CHECK(send(session, lists, Frame().varint(4u).varint(three_bytes).run(16u)));
+  /* The signed types are as narrow as their unsigned twins. */
+  CHECK(send(session, lists, Frame().varint(4u).varint(0x1400u).run(4u)));
+  /* An enum glCallLists has no list type for is GL_INVALID_ENUM: GL reads
+   * nothing, whatever room the run carried. */
+  CHECK(send(session, lists, Frame().varint(4u).varint(0x140Bu).run(8u)));
+  CHECK_EQ(session.gl().calls(), 4u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
 /* Index offsets need an element buffer. An array with no buffer is a client

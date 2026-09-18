@@ -472,10 +472,22 @@ void RecordingGl::buffer_data(GLsizeiptr size, const void *data)
 
 void RecordingGl::call_lists(GLsizei n, GLenum type, const void *lists)
 {
-    constexpr GLenum unsigned_byte = 0x1401u, unsigned_short = 0x1403u;
+    /* What glCallLists reads per name, by its own table (GL 1.1, 5.4): the
+     * signed types are as wide as their unsigned twins, and GL_2_BYTES through
+     * GL_4_BYTES name a list with that many bytes each. Any other enum is
+     * GL_INVALID_ENUM and GL reads nothing at all, so a run sized by some
+     * other rule is a pointer nobody follows rather than a short one. */
+    constexpr GLenum signed_byte = 0x1400u, unsigned_byte = 0x1401u, signed_short = 0x1402u,
+                     unsigned_short = 0x1403u, signed_int = 0x1404u, unsigned_int = 0x1405u,
+                     gl_float = 0x1406u, two_bytes = 0x1407u, three_bytes = 0x1408u,
+                     four_bytes = 0x1409u;
     calls_++;
     if (n <= 0) return;
-    const std::uint64_t width = type == unsigned_byte ? 1u : type == unsigned_short ? 2u : 4u;
+    std::uint64_t width = 0u;
+    if (type == signed_byte || type == unsigned_byte) width = 1u;
+    if (type == signed_short || type == unsigned_short || type == two_bytes) width = 2u;
+    if (type == three_bytes) width = 3u;
+    if (type == signed_int || type == unsigned_int || type == gl_float || type == four_bytes) width = 4u;
     check_span(lists, static_cast<std::uint64_t>(n) * width);
 }
 
