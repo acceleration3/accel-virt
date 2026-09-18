@@ -564,3 +564,36 @@ TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
       backend.shut_down();
   }
   host.close(); }
+
+/* Outside a context's own decode there is no backend deciding, and nothing is
+ * sized: a hook answering some other context's length would be worse than
+ * answering none (feature 047). */
+TEST(vulkan_backend, with_no_context_deciding_nothing_is_sized)
+{ CHECK_EQ(av::vkproto::descriptor_template_bytes(reinterpret_cast<VkDescriptorUpdateTemplate>(0x4242u)), 0u);
+  CHECK_EQ(av::vkproto::descriptor_template_bytes(VK_NULL_HANDLE), 0u); }
+
+/* A template a guest never created sizes no blob, so an update naming it is
+ * refused unless it carries none. What the backend answers here is what the
+ * generated decoder checks the guest's own length against (feature 047,
+ * contracts/descriptor_templates.md); it must not need a GPU to answer. */
+TEST(vulkan_backend, a_template_it_never_made_sizes_no_blob)
+{ VulkanBackend backend;
+  CHECK_EQ(backend.template_bytes(VK_NULL_HANDLE), 0u);
+  CHECK_EQ(backend.template_bytes(reinterpret_cast<VkDescriptorUpdateTemplate>(0x4242u)), 0u);
+  /* An update naming that template, carrying one image descriptor: the length
+   * the guest wrote is not the length the backend accounts for, so the frame
+   * does not decode. */
+  std::uint8_t frame[256] = {};
+  WireWriter   writer(frame, sizeof frame);
+  writer.write_u64(0x1u);                                  /* the device */
+  writer.write_u64(0x2u);                                  /* the descriptor set */
+  writer.write_u64(0x4242u);                               /* the template */
+  writer.write_varint(sizeof(VkDescriptorImageInfo));      /* a blob it did not size */
+  for (std::size_t at = 0u; at < sizeof(VkDescriptorImageInfo); at++) writer.write_u8(0u);
+  std::uint8_t block[block_bytes] = {};
+  WireArena    arena(block, sizeof block);
+  WireReader   reader(frame, writer.offset());
+  std::uint8_t reply_bytes[64] = {};
+  WireWriter   reply(reply_bytes, sizeof reply_bytes);
+  CHECK(!backend.run(static_cast<std::uint32_t>(av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplate), reader, reply,
+                     arena)); }

@@ -158,6 +158,20 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append(f"        payload.write_pod({p.name}[rvk_i][rvk_j]);")
             lines.append("    }")
             lines.append("}")
+        elif kind == "in_template_blob":
+            # The length is the template's, and only a side that remembers the
+            # template can answer it. A null blob sends no bytes rather than a
+            # length with nothing behind it.
+            handle = classify.template_sibling(cmd.params)
+            lines.append(
+                f"const uint64_t rvk_blob = ({p.name} != nullptr)"
+                f" ? descriptor_template_bytes({handle}) : 0;"
+            )
+            lines.append("payload.write_varint(rvk_blob);")
+            lines.append(
+                f"if (rvk_blob != 0) {{ payload.write({p.name},"
+                " static_cast<size_t>(rvk_blob)); }"
+            )
         elif kind == "in_byte_array":
             lines.append(f"if ({p.name} != nullptr && {p.len_expr} > 0) {{")
             lines.append(

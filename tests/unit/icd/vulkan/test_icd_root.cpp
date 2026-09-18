@@ -202,7 +202,12 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle", "vkEnumerateDeviceExtensionProperties",
       "vkCreateDevice", "vkDestroyInstance", "vkGetPhysicalDeviceMemoryProperties",
       "vkGetPhysicalDeviceMemoryProperties2", "vkAllocateMemory", "vkFreeMemory", "vkFlushMappedMemoryRanges",
-      "vkInvalidateMappedMemoryRanges"};
+      "vkInvalidateMappedMemoryRanges",
+      /* The four that keep the descriptor template table honest (feature 047):
+       * each forwards to its generated wrapper and remembers or forgets what
+       * it made around it. */
+      "vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR",
+      "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);

@@ -16,6 +16,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/host_gpu.hpp"
+#include "device/executor/host_template_table.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/import_table.hpp"
 #include "device/shim/loader_host_apis.hpp"
@@ -145,6 +146,31 @@ public:
                   answered))
             return 0u;
         return handle_after_result(reply, answered);
+    }
+
+    /* vkCreateDescriptorUpdateTemplate as a guest sends it: the result the
+     * backend answered, so a refusal is what the test reads. */
+    VkResult create_template(std::uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
+                             std::uint32_t count)
+    {
+        std::uint8_t frame[1024];
+        WireWriter   writer(frame, sizeof frame);
+        writer.write_pod(device);
+        VkDescriptorUpdateTemplateCreateInfo create = {};
+        create.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
+        create.descriptorUpdateEntryCount = count;
+        create.pDescriptorUpdateEntries = entries;
+        create.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET;
+        vkproto::serialize_VkDescriptorUpdateTemplateCreateInfo(writer, create);
+        std::uint8_t reply[64] = {};
+        std::size_t  answered = 0u;
+        if (!send(vkproto::kCmd_vkCreateDescriptorUpdateTemplate, frame, writer.offset(), reply, sizeof reply,
+                  answered))
+            return VK_ERROR_UNKNOWN;
+        WireReader   read(reply, answered);
+        std::int32_t returned = 0;
+        (void)read.read_pod(returned);
+        return static_cast<VkResult>(returned);
     }
 
     bool destroy(std::uint32_t command, std::uint64_t handle)
@@ -1051,5 +1077,41 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_a_hos
       vkproto::rvk_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
       check_restricted(khr.memoryProperties, driver, importable);
       fresh.shut_down();
+  }
+}
+
+/* A guest that is not this project's ICD: entries the device cannot size, and
+ * more templates than it can track. Both are refused before the driver is
+ * asked for anything, because a template the device cannot account for is one
+ * no update through it could be checked against (feature 047,
+ * contracts/descriptor_templates.md). */
+TEST(vulkan_backend_device, a_template_the_device_cannot_track_is_refused_before_the_driver)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+
+      /* An entry whose last descriptor ends past 64 bits. */
+      VkDescriptorUpdateTemplateEntry hostile = {};
+      hostile.descriptorCount = 2u;
+      hostile.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+      hostile.offset = ~static_cast<std::size_t>(0);
+      hostile.stride = sizeof(VkDescriptorImageInfo);
+      CHECK_EQ(made.guest().create_template(made.device(), &hostile, 1u), VK_ERROR_INITIALIZATION_FAILED);
+
+      /* As many as it holds, then one more. None of them reaches the driver:
+       * the entries are sized and a slot taken first, so the refusal costs the
+       * host nothing. */
+      VkDescriptorUpdateTemplateEntry one = {};
+      one.descriptorCount = 1u;
+      one.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+      one.stride = sizeof(VkDescriptorImageInfo);
+      for (std::uint32_t taken = 0u; taken < av::HostTemplateTable::max_templates; taken++) {
+          CHECK_EQ(made.probe().reserve_template(as_handle<VkDevice>(made.device()), &one), av::Status::ok);
+          /* Named, so the slot is a template rather than the one reservation. */
+          VulkanBackendProbe::name_template(made.backend(), as_handle<VkDescriptorUpdateTemplate>(0x5000u + taken));
+      }
+      CHECK_EQ(made.guest().create_template(made.device(), &one, 1u), VK_ERROR_OUT_OF_HOST_MEMORY);
   }
 }

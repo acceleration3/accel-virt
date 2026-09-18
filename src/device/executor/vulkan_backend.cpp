@@ -186,6 +186,50 @@ void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocation
     RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
 }
 
+/* A template the guest made: what it reads is remembered, because the length of
+ * every blob an update through it carries is this template's and the guest's
+ * claim about that length is not trusted (feature 047). A template this table
+ * has no room for is refused rather than created, so no update can arrive for
+ * one it cannot size. */
+VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplate(VkDevice device,
+                                                            const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+                                                            const VkAllocationCallbacks *pAllocator,
+                                                            VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateDescriptorUpdateTemplate");
+    /* Sized and given a slot before the driver is asked: a guest sending more
+     * templates than this context can track, or entries that cannot be sized,
+     * is refused rather than handed a template no update through it could be
+     * checked against (constitution V). */
+    const Status ready = templates_.reserve(device, pCreateInfo);
+    if (ready == Status::no_space) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (ready != Status::ok) return VK_ERROR_INITIALIZATION_FAILED;
+    const VkResult result = RealVulkanDispatch::on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator,
+                                                                                    pDescriptorUpdateTemplate);
+    /* The driver's handle names the slot, and a null handle releases it.
+     * Vulkan sets the handle to VK_NULL_HANDLE when a create fails, so the
+     * driver's answer is read rather than branched on: there is no fault
+     * injection between here and the host's own driver, and a branch no test
+     * could take is a branch this does not have. */
+    templates_.name(*pDescriptorUpdateTemplate);
+    return result;
+}
+
+void VulkanBackend::on_vkDestroyDescriptorUpdateTemplate(VkDevice device,
+                                                         VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                         const VkAllocationCallbacks *pAllocator)
+{
+    AV_SCOPE("VulkanBackend::on_vkDestroyDescriptorUpdateTemplate");
+    templates_.forget(descriptorUpdateTemplate);
+    RealVulkanDispatch::on_vkDestroyDescriptorUpdateTemplate(device, descriptorUpdateTemplate, pAllocator);
+}
+
+uint64_t VulkanBackend::template_bytes(VkDescriptorUpdateTemplate made) const
+{
+    AV_SCOPE("VulkanBackend::template_bytes");
+    return templates_.bytes_of(made);
+}
+
 bool VulkanBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("VulkanBackend::knows");
@@ -318,6 +362,7 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
+    templates_.forget_device(device);
     if (device == device_) device_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
@@ -489,6 +534,17 @@ void handle_children_ended(uint64_t handle) noexcept
 {
     AV_SCOPE("handle_children_ended");
     if (VulkanBackend *backend = VulkanBackend::deciding()) backend->children_ended(handle);
+}
+
+/* The length of a WithTemplate blob, for the generated decoder: the template's,
+ * as this context recorded it when the guest created it. A context that is not
+ * deciding - a loopback test's decode with no backend - answers 0, which
+ * accepts only an empty blob. */
+uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
+{
+    AV_SCOPE("descriptor_template_bytes");
+    const VulkanBackend *const backend = VulkanBackend::deciding();
+    return backend != nullptr ? backend->template_bytes(t) : 0u;
 }
 
 bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept

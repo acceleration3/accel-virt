@@ -146,4 +146,13 @@ uint64_t handle_to_wire(VkCommandBuffer v) noexcept
     return icd::icd_binding.root().wire(v, icd::Kind::command_buffer);
 }
 
+/* The length of the blob a WithTemplate command carries: the template's, from
+ * the entries it was created with (feature 047). A handle this process did not
+ * make answers 0, which sends no descriptors rather than bytes from nowhere. */
+uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
+{
+    AV_SCOPE("descriptor_template_bytes");
+    return icd::icd_binding.root().templates().bytes_of(t);
+}
+
 }  // namespace av::vkproto

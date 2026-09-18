@@ -1257,6 +1257,12 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkTrimCommandPool(VkDevice device, VkCommandPool
     ::av::vkproto::rvk_vkTrimCommandPool(conn->transport(), device, commandPool, flags);
 }
 
+VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) {
+    AV_SCOPE("vkUpdateDescriptorSetWithTemplate");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::rvk_vkUpdateDescriptorSetWithTemplate(conn->transport(), device, descriptorSet, descriptorUpdateTemplate, pData);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) {
     AV_SCOPE("vkWaitSemaphores");
     auto* conn = ::av::icd::connection_of(device);
@@ -1403,6 +1409,11 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdNextSubpass2KHR(VkCommandBuffer commandBuff
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo) {
     AV_SCOPE("vkCmdPipelineBarrier2KHR");
     ::av::vkproto::rvk_vkCmdPipelineBarrier2KHR(::av::icd::record_target(commandBuffer), commandBuffer, pDependencyInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData) {
+    AV_SCOPE("vkCmdPushDescriptorSetWithTemplateKHR");
+    ::av::vkproto::rvk_vkCmdPushDescriptorSetWithTemplateKHR(::av::icd::record_target(commandBuffer), commandBuffer, descriptorUpdateTemplate, layout, set, pData);
 }
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkCmdResetEvent2KHR(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags2 stageMask) {
@@ -1574,6 +1585,12 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkTrimCommandPoolKHR(VkDevice device, VkCommandP
     AV_SCOPE("vkTrimCommandPoolKHR");
     auto* conn = ::av::icd::connection_of(device);
     ::av::vkproto::rvk_vkTrimCommandPoolKHR(conn->transport(), device, commandPool, flags);
+}
+
+VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) {
+    AV_SCOPE("vkUpdateDescriptorSetWithTemplateKHR");
+    auto* conn = ::av::icd::connection_of(device);
+    ::av::vkproto::rvk_vkUpdateDescriptorSetWithTemplateKHR(conn->transport(), device, descriptorSet, descriptorUpdateTemplate, pData);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) {
@@ -2237,7 +2254,7 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkUnmapMemory2KHR(VkDevice device, const VkM
 }
 
 namespace {
-const Entry kWrapperTable[386] = {
+const Entry kWrapperTable[389] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2447,6 +2464,7 @@ const Entry kWrapperTable[386] = {
     Entry{ "vkSetPrivateData", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkSetPrivateData), DispatchLevel::device },
     Entry{ "vkSignalSemaphore", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkSignalSemaphore), DispatchLevel::device },
     Entry{ "vkTrimCommandPool", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkTrimCommandPool), DispatchLevel::device },
+    Entry{ "vkUpdateDescriptorSetWithTemplate", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUpdateDescriptorSetWithTemplate), DispatchLevel::device },
     Entry{ "vkWaitSemaphores", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkWaitSemaphores), DispatchLevel::device },
     Entry{ "vkGetPhysicalDeviceFeatures2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceFeatures2KHR), DispatchLevel::physical_device },
     Entry{ "vkGetPhysicalDeviceFormatProperties2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetPhysicalDeviceFormatProperties2KHR), DispatchLevel::physical_device },
@@ -2474,6 +2492,7 @@ const Entry kWrapperTable[386] = {
     Entry{ "vkCmdEndRenderingKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdEndRenderingKHR), DispatchLevel::device },
     Entry{ "vkCmdNextSubpass2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdNextSubpass2KHR), DispatchLevel::device },
     Entry{ "vkCmdPipelineBarrier2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPipelineBarrier2KHR), DispatchLevel::device },
+    Entry{ "vkCmdPushDescriptorSetWithTemplateKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdPushDescriptorSetWithTemplateKHR), DispatchLevel::device },
     Entry{ "vkCmdResetEvent2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdResetEvent2KHR), DispatchLevel::device },
     Entry{ "vkCmdResolveImage2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdResolveImage2KHR), DispatchLevel::device },
     Entry{ "vkCmdSetDeviceMaskKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdSetDeviceMaskKHR), DispatchLevel::device },
@@ -2501,6 +2520,7 @@ const Entry kWrapperTable[386] = {
     Entry{ "vkQueueSubmit2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkQueueSubmit2KHR), DispatchLevel::device },
     Entry{ "vkSignalSemaphoreKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkSignalSemaphoreKHR), DispatchLevel::device },
     Entry{ "vkTrimCommandPoolKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkTrimCommandPoolKHR), DispatchLevel::device },
+    Entry{ "vkUpdateDescriptorSetWithTemplateKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUpdateDescriptorSetWithTemplateKHR), DispatchLevel::device },
     Entry{ "vkWaitSemaphoresKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkWaitSemaphoresKHR), DispatchLevel::device },
     Entry{ "vkCmdBeginConditionalRenderingEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdBeginConditionalRenderingEXT), DispatchLevel::device },
     Entry{ "vkCmdEndConditionalRenderingEXT", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkCmdEndConditionalRenderingEXT), DispatchLevel::device },
@@ -2634,6 +2654,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 386u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 389u}; }
 
 }  // namespace av::vkicd::generated

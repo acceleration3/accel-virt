@@ -383,6 +383,7 @@ public:
         return VK_SUCCESS;
     }
     void on_vkTrimCommandPool(VkDevice, VkCommandPool, VkCommandPoolTrimFlags) override {}
+    void on_vkUpdateDescriptorSetWithTemplate(VkDevice, VkDescriptorSet, VkDescriptorUpdateTemplate, const void*) override {}
     VkResult on_vkWaitSemaphores(VkDevice, const VkSemaphoreWaitInfo*, uint64_t) override {
         return VK_SUCCESS;
     }
@@ -424,6 +425,7 @@ public:
     void on_vkCmdEndRenderingKHR(VkCommandBuffer) override {}
     void on_vkCmdNextSubpass2KHR(VkCommandBuffer, const VkSubpassBeginInfo*, const VkSubpassEndInfo*) override {}
     void on_vkCmdPipelineBarrier2KHR(VkCommandBuffer, const VkDependencyInfo*) override {}
+    void on_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer, VkDescriptorUpdateTemplate, VkPipelineLayout, uint32_t, const void*) override {}
     void on_vkCmdResetEvent2KHR(VkCommandBuffer, VkEvent, VkPipelineStageFlags2) override {}
     void on_vkCmdResolveImage2KHR(VkCommandBuffer, const VkResolveImageInfo2*) override {}
     void on_vkCmdSetDeviceMaskKHR(VkCommandBuffer, uint32_t) override {}
@@ -474,6 +476,7 @@ public:
         return VK_SUCCESS;
     }
     void on_vkTrimCommandPoolKHR(VkDevice, VkCommandPool, VkCommandPoolTrimFlags) override {}
+    void on_vkUpdateDescriptorSetWithTemplateKHR(VkDevice, VkDescriptorSet, VkDescriptorUpdateTemplate, const void*) override {}
     VkResult on_vkWaitSemaphoresKHR(VkDevice, const VkSemaphoreWaitInfo*, uint64_t) override {
         return VK_SUCCESS;
     }

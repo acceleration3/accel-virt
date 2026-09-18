@@ -228,6 +228,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000100E0u: return "vkSetPrivateData";
         case 0x000100E1u: return "vkSignalSemaphore";
         case 0x000100E2u: return "vkTrimCommandPool";
+        case 0x000100E4u: return "vkUpdateDescriptorSetWithTemplate";
         case 0x000100E5u: return "vkWaitSemaphores";
         case 0x000100E6u: return "vkGetPhysicalDeviceFeatures2KHR";
         case 0x000100E7u: return "vkGetPhysicalDeviceFormatProperties2KHR";
@@ -255,6 +256,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000100FDu: return "vkCmdEndRenderingKHR";
         case 0x000100FEu: return "vkCmdNextSubpass2KHR";
         case 0x000100FFu: return "vkCmdPipelineBarrier2KHR";
+        case 0x00010100u: return "vkCmdPushDescriptorSetWithTemplateKHR";
         case 0x00010101u: return "vkCmdResetEvent2KHR";
         case 0x00010102u: return "vkCmdResolveImage2KHR";
         case 0x00010103u: return "vkCmdSetDeviceMaskKHR";
@@ -282,6 +284,7 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x00010119u: return "vkQueueSubmit2KHR";
         case 0x0001011Au: return "vkSignalSemaphoreKHR";
         case 0x0001011Bu: return "vkTrimCommandPoolKHR";
+        case 0x0001011Cu: return "vkUpdateDescriptorSetWithTemplateKHR";
         case 0x0001011Du: return "vkWaitSemaphoresKHR";
         case 0x0001011Eu: return "vkCmdBeginConditionalRenderingEXT";
         case 0x0001011Fu: return "vkCmdEndConditionalRenderingEXT";

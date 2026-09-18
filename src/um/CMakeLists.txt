@@ -30,6 +30,7 @@ list(APPEND RVKTEST_SOURCES
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_dispatchable_handle_default.cpp
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
+  ${RVKTEST_GENERATED_DIR}/vulkan/vk_descriptor_template_default.cpp
   ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 
 # Import libraries naming exactly what the programs call; the SDK's own are

@@ -66,6 +66,14 @@ const Entry        local_rows[] = {
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties2), Level::physical_device},
     {"vkAllocateMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAllocateMemory), Level::device},
     {"vkFreeMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFreeMemory), Level::device},
+    {"vkCreateDescriptorUpdateTemplate",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDescriptorUpdateTemplate), Level::device},
+    {"vkCreateDescriptorUpdateTemplateKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDescriptorUpdateTemplateKHR), Level::device},
+    {"vkDestroyDescriptorUpdateTemplate",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDescriptorUpdateTemplate), Level::device},
+    {"vkDestroyDescriptorUpdateTemplateKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDescriptorUpdateTemplateKHR), Level::device},
     {"vkMapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory), Level::device},
     {"vkUnmapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkUnmapMemory), Level::device},
     {"vkFlushMappedMemoryRanges", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFlushMappedMemoryRanges), Level::device},
@@ -139,7 +147,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
-      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_)
+      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock)
 {
     AV_SCOPE("IcdRoot::IcdRoot");
     binding_.bind(*this);
@@ -396,9 +404,52 @@ void IcdRoot::release_device_memory(LoaderHandle &device)
     if (released != Status::ok) note("device memory not released whole, status", static_cast<uint64_t>(released));
 }
 
+DescriptorTemplateTable &IcdRoot::templates()
+{
+    AV_SCOPE("IcdRoot::templates");
+    return templates_;
+}
+
+/* The generated wrapper makes the template on the host; what it made is
+ * remembered here, because the length of every blob a later update carries is
+ * this template's and nothing in that call says so (feature 047). */
+VkResult IcdRoot::create_descriptor_update_template(VkDevice device,
+                                                    const VkDescriptorUpdateTemplateCreateInfo *create,
+                                                    const VkAllocationCallbacks *allocator,
+                                                    VkDescriptorUpdateTemplate *made)
+{
+    AV_SCOPE("IcdRoot::create_descriptor_update_template");
+    if (create == nullptr || made == nullptr) return VK_ERROR_INITIALIZATION_FAILED;
+    /* What the entries say is read before the host is asked: a template whose
+     * blob cannot be sized is one no update through it could carry. */
+    DescriptorTemplateLayout layout;
+    if (layout.take(create->pDescriptorUpdateEntries, create->descriptorUpdateEntryCount) != Status::ok) {
+        log_.write("rvkvk: a descriptor update template names entries this driver cannot size");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = vkicd::generated::Wrap_vkCreateDescriptorUpdateTemplate(device, create, allocator, made);
+    if (result != VK_SUCCESS) return result;
+    const VkResult recorded = templates_.record(device, *made, create);
+    if (recorded == VK_SUCCESS) return VK_SUCCESS;
+    /* No room to remember it is no template at all: an update through one this
+     * table does not know would send a blob of no bytes. */
+    vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, *made, allocator);
+    *made = VK_NULL_HANDLE;
+    return recorded;
+}
+
+void IcdRoot::destroy_descriptor_update_template(VkDevice device, VkDescriptorUpdateTemplate made,
+                                                 const VkAllocationCallbacks *allocator)
+{
+    AV_SCOPE("IcdRoot::destroy_descriptor_update_template");
+    templates_.forget(made);
+    vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, made, allocator);
+}
+
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_device");
+    templates_.forget_device(device);
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     /* A swapchain frees its memory through the device: before the device's own. */

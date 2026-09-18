@@ -7,6 +7,8 @@
 
 #include "device/executor/vulkan_backend.hpp"
 
+#include "core/support/status.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -24,6 +26,12 @@ struct VulkanBackendProbe {
     const HandleRegistry &handles() const;
     /* Host-pointer imports the driver made and was not yet asked to free. */
     uint32_t              imports_held() const;
+    /* A slot in the backend's template table, taken as a create does: what
+     * fills it in a test without asking the driver for 512 templates
+     * (feature 047). */
+    [[nodiscard]] Status  reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry);
+    /* The reserved slot's handle, as a create does once the driver answered. */
+    static void           name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made);
 
     VulkanBackend &backend;
 };

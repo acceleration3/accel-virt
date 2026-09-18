@@ -69,6 +69,7 @@ set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_descriptor_template_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
@@ -352,6 +353,16 @@ foreach(src ${AV_UNIT_TESTS})
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
     # The probe's renders, as bitmaps a person can open (docs/testing.md).
     target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
+  endif()
+  # The descriptor template proof through the same stack (feature 047): the
+  # guest sizes a blob from the template it remembers and the device refuses a
+  # length its own template does not account for, which only both halves
+  # together can show.
+  if(name STREQUAL "test_fullstack_templates")
+    target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   if(name STREQUAL "test_fullstack_vulkan_icd")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})

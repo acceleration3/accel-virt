@@ -1042,6 +1042,14 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// the server and loopback tests link without an image registry.",
         "[[nodiscard]] uint64_t host_image_copy_bytes("
         "VkImage image, const VkMemoryToImageCopy& region) noexcept;",
+        "// How many bytes one update through `t` reads. The length of a",
+        "// descriptor blob is the template's, from the entries it was created",
+        "// with, and nothing in the call carries it: each side answers from its",
+        "// own table of templates (feature 047, DescriptorTemplateLayout).",
+        "// Weakly defined to 0 - no templates, so no bytes - so a build with no",
+        "// table links.",
+        "[[nodiscard]] uint64_t descriptor_template_bytes("
+        "VkDescriptorUpdateTemplate t) noexcept;",
         "// Any field, as the number it holds. A value off the wire is a value",
         "// its own type may not have - an enum with an unlisted value, most of",
         "// all - and loading one as that type is undefined. Everything that",
@@ -1227,6 +1235,30 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
     ]
     write(out_dir / "vk_host_image_default.cpp", "\n".join(host_image_default))
+
+    # vk_descriptor_template_default.cpp: its own file, for the reason above.
+    # The ICD and the device each define descriptor_template_bytes and so never
+    # pull this member; a side that defines neither hook family gets both
+    # defaults, which is what the loopback tests want.
+    template_default = [
+        GENERATED_BANNER,
+        "",
+        '#include "vk_serialize.h"',
+        "",
+        "#include <stdint.h>",
+        "",
+        *weak,
+        "",
+        "namespace av::vkproto {",
+        "",
+        "// Default: no template table here, so no descriptors are sent.",
+        "RVK_HOOK_DEFAULT uint64_t descriptor_template_bytes("
+        "VkDescriptorUpdateTemplate) noexcept { return 0; }",
+        "",
+        "}  // namespace av::vkproto",
+        "",
+    ]
+    write(out_dir / "vk_descriptor_template_default.cpp", "\n".join(template_default))
 
     # vk_handle_default.cpp: identity definitions of handle_to_wire.
     handle_default = [

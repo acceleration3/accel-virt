@@ -12,4 +12,18 @@ const HandleRegistry &VulkanBackendProbe::handles() const { return backend.handl
 
 uint32_t VulkanBackendProbe::imports_held() const { return backend.import_.held(); }
 
+Status VulkanBackendProbe::reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry)
+{
+    VkDescriptorUpdateTemplateCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
+    info.descriptorUpdateEntryCount = 1u;
+    info.pDescriptorUpdateEntries = entry;
+    return backend.templates_.reserve(device, &info);
+}
+
+void VulkanBackendProbe::name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made)
+{
+    target.templates_.name(made);
+}
+
 }  // namespace av

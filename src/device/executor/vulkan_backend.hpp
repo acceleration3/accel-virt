@@ -13,6 +13,7 @@
 #include "device/executor/adopted_blobs.hpp"
 #include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
+#include "device/executor/host_template_table.hpp"
 #include "device/executor/importable_types.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/shim/physical_device_list.hpp"
@@ -46,6 +47,20 @@ public:
                                  VkInstance *pInstance) override;
     void     on_vkDestroyInstance(VkInstance instance,
                                   const VkAllocationCallbacks *pAllocator) override;
+
+    /* The descriptor update templates this context made, because the length of
+     * a blob a WithTemplate command carries is the template's and the guest's
+     * claim about it is checked against this (feature 047). */
+    VkResult on_vkCreateDescriptorUpdateTemplate(VkDevice device,
+                                                 const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+                                                 const VkAllocationCallbacks *pAllocator,
+                                                 VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
+    void     on_vkDestroyDescriptorUpdateTemplate(VkDevice device,
+                                                  VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                  const VkAllocationCallbacks *pAllocator) override;
+    /* The bytes one update through `made` reads, for the generated decoder's
+     * hook; 0 for a template this context never made. */
+    uint64_t template_bytes(VkDescriptorUpdateTemplate made) const;
 
     /* A device is made able to import a host pointer whether or not the guest
      * asked, because every host-visible allocation the guest makes arrives as
@@ -149,6 +164,8 @@ private:
      * extensions a device is made with, unless the guest named them or its
      * list has no room. */
     void enable_host_import(VkDeviceCreateInfo &create);
+
+    HostTemplateTable templates_;
     /* Whether something made on `device` with the chain at `next` gets
      * `host_types` added as a structure of type `external`: only on the
      * device imports go to, made able to import, with types the driver

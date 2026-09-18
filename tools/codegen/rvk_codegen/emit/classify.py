@@ -203,6 +203,27 @@ def server_len_expr(params: list[Param], len_expr: str | None) -> str:
 # ---- Classification --------------------------------------------------------
 
 
+TEMPLATE_HANDLE = "VkDescriptorUpdateTemplate"
+"""The handle whose entries size a descriptor blob (feature 047)."""
+
+
+def template_sibling(params: list[Param] | None) -> str | None:
+    """The name of the ``VkDescriptorUpdateTemplate`` parameter beside ``p``.
+
+    ``pData`` in the three ``WithTemplate`` commands has no ``len`` in vk.xml:
+    its length is the template's, computed from the entries the template was
+    created with. That is not in the call, so the only thing that can answer it
+    is a hook each side implements over its own table of templates - the shape
+    ``host_image_copy_bytes`` already has.
+    """
+    if params is None:
+        return None
+    for other in params:
+        if other.type.base == TEMPLATE_HANDLE and other.type.pointer_depth == 0:
+            return other.name
+    return None
+
+
 def classify(reg: Registry, p: Param, params: list[Param] | None = None) -> str:
     if is_alloc_callbacks(p):
         return "in_null"
@@ -215,6 +236,15 @@ def classify(reg: Registry, p: Param, params: list[Param] | None = None) -> str:
         return "in_pod"
     if p.direction == "in" and p.type.base == "char" and p.type.pointer_depth == 1:
         return "in_string"
+    # A blob whose length is a descriptor update template's, not the call's.
+    if (
+        p.direction == "in"
+        and p.type.base == "void"
+        and p.type.pointer_depth == 1
+        and not p.len_expr
+        and template_sibling(params) is not None
+    ):
+        return "in_template_blob"
     # Input arrays (count is a sibling by-value param).
     if (
         p.direction == "in"

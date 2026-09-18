@@ -3528,6 +3528,28 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         s.on_vkTrimCommandPool(device, commandPool, flags);
         return true;
     }
+    case ::av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplate: {
+        AV_SCOPE("server:vkUpdateDescriptorSetWithTemplate");
+        VkDevice device = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorUpdateTemplate descriptorUpdateTemplate = VK_NULL_HANDLE;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
+        uint64_t rvk_blob = 0;
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!deserialize_VkDescriptorSet(r, descriptorSet)) return false;
+        if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (!r.read_varint(rvk_blob)) return false;
+        if (rvk_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
+        pData_storage_count = static_cast<size_t>(rvk_blob);
+        if (pData_storage_count != 0) {
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
+            if (pData_storage == nullptr) return false;
+            if (!r.read(pData_storage, pData_storage_count)) return false;
+        }
+        s.on_vkUpdateDescriptorSetWithTemplate(device, descriptorSet, descriptorUpdateTemplate, pData_storage);
+        return true;
+    }
     case ::av::vkproto::kCmd_vkWaitSemaphores: {
         AV_SCOPE("server:vkWaitSemaphores");
         VkDevice device = VK_NULL_HANDLE;
@@ -3940,6 +3962,30 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         s.on_vkCmdPipelineBarrier2KHR(commandBuffer, &pDependencyInfo_local);
         return true;
     }
+    case ::av::vkproto::kCmd_vkCmdPushDescriptorSetWithTemplateKHR: {
+        AV_SCOPE("server:vkCmdPushDescriptorSetWithTemplateKHR");
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkDescriptorUpdateTemplate descriptorUpdateTemplate = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        uint32_t set{};
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
+        uint64_t rvk_blob = 0;
+        if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
+        if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (!deserialize_VkPipelineLayout(r, layout)) return false;
+        if (!r.read_pod(set)) return false;
+        if (!r.read_varint(rvk_blob)) return false;
+        if (rvk_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
+        pData_storage_count = static_cast<size_t>(rvk_blob);
+        if (pData_storage_count != 0) {
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
+            if (pData_storage == nullptr) return false;
+            if (!r.read(pData_storage, pData_storage_count)) return false;
+        }
+        s.on_vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer, descriptorUpdateTemplate, layout, set, pData_storage);
+        return true;
+    }
     case ::av::vkproto::kCmd_vkCmdResetEvent2KHR: {
         AV_SCOPE("server:vkCmdResetEvent2KHR");
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
@@ -4348,6 +4394,28 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
         if (!r.read_pod(flags)) return false;
         s.on_vkTrimCommandPoolKHR(device, commandPool, flags);
+        return true;
+    }
+    case ::av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplateKHR: {
+        AV_SCOPE("server:vkUpdateDescriptorSetWithTemplateKHR");
+        VkDevice device = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorUpdateTemplate descriptorUpdateTemplate = VK_NULL_HANDLE;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
+        uint64_t rvk_blob = 0;
+        if (!deserialize_VkDevice(r, device)) return false;
+        if (!deserialize_VkDescriptorSet(r, descriptorSet)) return false;
+        if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
+        if (!r.read_varint(rvk_blob)) return false;
+        if (rvk_blob != descriptor_template_bytes(descriptorUpdateTemplate)) return false;
+        pData_storage_count = static_cast<size_t>(rvk_blob);
+        if (pData_storage_count != 0) {
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
+            if (pData_storage == nullptr) return false;
+            if (!r.read(pData_storage, pData_storage_count)) return false;
+        }
+        s.on_vkUpdateDescriptorSetWithTemplateKHR(device, descriptorSet, descriptorUpdateTemplate, pData_storage);
         return true;
     }
     case ::av::vkproto::kCmd_vkWaitSemaphoresKHR: {

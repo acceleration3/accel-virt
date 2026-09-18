@@ -3581,6 +3581,20 @@ void rvk_vkTrimCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandP
     }
 }
 
+void rvk_vkUpdateDescriptorSetWithTemplate(::av::ClientTransport& t, VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) {
+    AV_SCOPE("rvk_vkUpdateDescriptorSetWithTemplate");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, device);
+    serialize_VkDescriptorSet(payload, descriptorSet);
+    serialize_VkDescriptorUpdateTemplate(payload, descriptorUpdateTemplate);
+    const uint64_t rvk_blob = (pData != nullptr) ? descriptor_template_bytes(descriptorUpdateTemplate) : 0;
+    payload.write_varint(rvk_blob);
+    if (rvk_blob != 0) { payload.write(pData, static_cast<size_t>(rvk_blob)); }
+    if (t.send_async(::av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplate, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
 VkResult rvk_vkWaitSemaphores(::av::ClientTransport& t, VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) {
     AV_SCOPE("rvk_vkWaitSemaphores");
     ::av::WireWriter payload = t.request_writer();
@@ -4043,6 +4057,21 @@ void rvk_vkCmdPipelineBarrier2KHR(::av::ClientTransport& t, VkCommandBuffer comm
     serialize_VkCommandBuffer(payload, commandBuffer);
     serialize_VkDependencyInfo(payload, *pDependencyInfo);
     if (t.send_async(::av::vkproto::kCmd_vkCmdPipelineBarrier2KHR, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
+void rvk_vkCmdPushDescriptorSetWithTemplateKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData) {
+    AV_SCOPE("rvk_vkCmdPushDescriptorSetWithTemplateKHR");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkCommandBuffer(payload, commandBuffer);
+    serialize_VkDescriptorUpdateTemplate(payload, descriptorUpdateTemplate);
+    serialize_VkPipelineLayout(payload, layout);
+    payload.write_pod(set);
+    const uint64_t rvk_blob = (pData != nullptr) ? descriptor_template_bytes(descriptorUpdateTemplate) : 0;
+    payload.write_varint(rvk_blob);
+    if (rvk_blob != 0) { payload.write(pData, static_cast<size_t>(rvk_blob)); }
+    if (t.send_async(::av::vkproto::kCmd_vkCmdPushDescriptorSetWithTemplateKHR, payload) != ::av::TransportResult::ok) {
         return;
     }
 }
@@ -4537,6 +4566,20 @@ void rvk_vkTrimCommandPoolKHR(::av::ClientTransport& t, VkDevice device, VkComma
     serialize_VkCommandPool(payload, commandPool);
     payload.write_pod(flags);
     if (t.send_async(::av::vkproto::kCmd_vkTrimCommandPoolKHR, payload) != ::av::TransportResult::ok) {
+        return;
+    }
+}
+
+void rvk_vkUpdateDescriptorSetWithTemplateKHR(::av::ClientTransport& t, VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) {
+    AV_SCOPE("rvk_vkUpdateDescriptorSetWithTemplateKHR");
+    ::av::WireWriter payload = t.request_writer();
+    serialize_VkDevice(payload, device);
+    serialize_VkDescriptorSet(payload, descriptorSet);
+    serialize_VkDescriptorUpdateTemplate(payload, descriptorUpdateTemplate);
+    const uint64_t rvk_blob = (pData != nullptr) ? descriptor_template_bytes(descriptorUpdateTemplate) : 0;
+    payload.write_varint(rvk_blob);
+    if (rvk_blob != 0) { payload.write(pData, static_cast<size_t>(rvk_blob)); }
+    if (t.send_async(::av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplateKHR, payload) != ::av::TransportResult::ok) {
         return;
     }
 }

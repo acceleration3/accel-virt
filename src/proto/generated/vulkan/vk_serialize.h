@@ -33,6 +33,13 @@ static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
 // state, not in the struct. Weakly defined to 0 (send nothing) so
 // the server and loopback tests link without an image registry.
 [[nodiscard]] uint64_t host_image_copy_bytes(VkImage image, const VkMemoryToImageCopy& region) noexcept;
+// How many bytes one update through `t` reads. The length of a
+// descriptor blob is the template's, from the entries it was created
+// with, and nothing in the call carries it: each side answers from its
+// own table of templates (feature 047, DescriptorTemplateLayout).
+// Weakly defined to 0 - no templates, so no bytes - so a build with no
+// table links.
+[[nodiscard]] uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept;
 // Any field, as the number it holds. A value off the wire is a value
 // its own type may not have - an enum with an unlisted value, most of
 // all - and loading one as that type is undefined. Everything that

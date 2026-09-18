@@ -668,6 +668,9 @@ public:
     void on_vkTrimCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags) override {
         ::vkTrimCommandPool(device, commandPool, flags);
     }
+    void on_vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) override {
+        ::vkUpdateDescriptorSetWithTemplate(device, descriptorSet, descriptorUpdateTemplate, pData);
+    }
     VkResult on_vkWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) override {
         return ::vkWaitSemaphores(device, pWaitInfo, timeout);
     }
@@ -749,6 +752,15 @@ public:
     void on_vkCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo) override {
         ::vkCmdPipelineBarrier2(commandBuffer, pDependencyInfo);
     }
+    void on_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData) override {
+        if (pfn_vkCmdPushDescriptorSetWithTemplateKHR_ == nullptr) {
+            pfn_vkCmdPushDescriptorSetWithTemplateKHR_ = reinterpret_cast<PFN_vkCmdPushDescriptorSetWithTemplateKHR>(::vkGetInstanceProcAddr(instance_, "vkCmdPushDescriptorSetWithTemplateKHR"));
+        }
+        if (pfn_vkCmdPushDescriptorSetWithTemplateKHR_ == nullptr) {
+            return;
+        }
+        pfn_vkCmdPushDescriptorSetWithTemplateKHR_(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
+    }
     void on_vkCmdResetEvent2KHR(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags2 stageMask) override {
         ::vkCmdResetEvent2(commandBuffer, event, stageMask);
     }
@@ -829,6 +841,9 @@ public:
     }
     void on_vkTrimCommandPoolKHR(VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags) override {
         ::vkTrimCommandPool(device, commandPool, flags);
+    }
+    void on_vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData) override {
+        ::vkUpdateDescriptorSetWithTemplate(device, descriptorSet, descriptorUpdateTemplate, pData);
     }
     VkResult on_vkWaitSemaphoresKHR(VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout) override {
         return ::vkWaitSemaphores(device, pWaitInfo, timeout);
@@ -1848,6 +1863,7 @@ private:
     PFN_vkGetDeviceGroupPresentCapabilitiesKHR pfn_vkGetDeviceGroupPresentCapabilitiesKHR_ = nullptr;
     PFN_vkGetDeviceGroupSurfacePresentModesKHR pfn_vkGetDeviceGroupSurfacePresentModesKHR_ = nullptr;
     PFN_vkGetPhysicalDevicePresentRectanglesKHR pfn_vkGetPhysicalDevicePresentRectanglesKHR_ = nullptr;
+    PFN_vkCmdPushDescriptorSetWithTemplateKHR pfn_vkCmdPushDescriptorSetWithTemplateKHR_ = nullptr;
     PFN_vkCmdBeginConditionalRenderingEXT pfn_vkCmdBeginConditionalRenderingEXT_ = nullptr;
     PFN_vkCmdEndConditionalRenderingEXT pfn_vkCmdEndConditionalRenderingEXT_ = nullptr;
     PFN_vkCmdSetColorWriteEnableEXT pfn_vkCmdSetColorWriteEnableEXT_ = nullptr;

@@ -327,6 +327,26 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append(f"        {p.name}_outer = rvk_ptrs;")
             decode_lines.append("    }")
             call_args.append(f"{p.name}_outer")
+        elif kind == "in_template_blob":
+            handle = classify.template_sibling(cmd.params)
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))
+            decl_lines.append("    uint64_t rvk_blob = 0;")
+            decode_lines.append("    if (!r.read_varint(rvk_blob)) return false;")
+            # Constitution V: the guest's length is a claim. The template this
+            # side decoded says what the length must be.
+            decode_lines.append(
+                f"    if (rvk_blob != descriptor_template_bytes({handle})) return false;"
+            )
+            alloc = _storage_alloc(
+                "    ", f"{p.name}_storage", "uint8_t", "rvk_blob", zero_fill=False
+            )
+            alloc.insert(
+                len(alloc) - 1,
+                f"        if (!r.read({p.name}_storage, {p.name}_storage_count)) "
+                f"return false;",
+            )
+            decode_lines.extend(alloc)
+            call_args.append(f"{p.name}_storage")
         elif kind == "in_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
             decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))

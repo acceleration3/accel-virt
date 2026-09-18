@@ -75,6 +75,39 @@ VKAPI_ATTR void VKAPI_CALL local_vkDestroyDevice(VkDevice device, const VkAlloca
     icd_binding.root().destroy_device(device, pAllocator);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplate(
+    VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
+{
+    AV_SCOPE("local_vkCreateDescriptorUpdateTemplate");
+    return icd_binding.root().create_descriptor_update_template(device, pCreateInfo, pAllocator,
+                                                                pDescriptorUpdateTemplate);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplateKHR(
+    VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
+{
+    AV_SCOPE("local_vkCreateDescriptorUpdateTemplateKHR");
+    return icd_binding.root().create_descriptor_update_template(device, pCreateInfo, pAllocator,
+                                                                pDescriptorUpdateTemplate);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyDescriptorUpdateTemplate(VkDevice device,
+                                                                   VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                                   const VkAllocationCallbacks *pAllocator)
+{
+    AV_SCOPE("local_vkDestroyDescriptorUpdateTemplate");
+    icd_binding.root().destroy_descriptor_update_template(device, descriptorUpdateTemplate, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyDescriptorUpdateTemplateKHR(
+    VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks *pAllocator)
+{
+    AV_SCOPE("local_vkDestroyDescriptorUpdateTemplateKHR");
+    icd_binding.root().destroy_descriptor_update_template(device, descriptorUpdateTemplate, pAllocator);
+}
+
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
                                                                VkPhysicalDeviceProperties *pProperties)
 {

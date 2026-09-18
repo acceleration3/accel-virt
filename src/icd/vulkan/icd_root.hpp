@@ -30,6 +30,7 @@
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/icd_entry_lookup.hpp"
+#include "icd/vulkan/descriptor_template_table.hpp"
 #include "icd/vulkan/presentation.hpp"
 
 #include <stdint.h>
@@ -153,6 +154,17 @@ public:
     void            *wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection);
     /* The WSI entries' state (feature 046). */
     Presentation    &presentation();
+    /* The templates this process made, which size every blob a
+     * WithTemplate command carries (feature 047). */
+    DescriptorTemplateTable &templates();
+    /* vkCreateDescriptorUpdateTemplate through the generated wrapper,
+     * with what it made remembered; a create the host refused is not. */
+    VkResult create_descriptor_update_template(VkDevice device,
+                                               const VkDescriptorUpdateTemplateCreateInfo *create,
+                                               const VkAllocationCallbacks *allocator,
+                                               VkDescriptorUpdateTemplate *made);
+    void     destroy_descriptor_update_template(VkDevice device, VkDescriptorUpdateTemplate made,
+                                                const VkAllocationCallbacks *allocator);
     /* What a swapchain of `device` needs: its physical device, and the adapter
      * and D3DKMT device its vertical blank is waited on; false for a device
      * this ICD did not make. */
@@ -222,6 +234,7 @@ private:
      * device it was made on. */
     IcdEntryLookup         entries_;
     Presentation           presentation_;
+    DescriptorTemplateTable templates_;
 
     friend struct IcdRootProbe;
 };

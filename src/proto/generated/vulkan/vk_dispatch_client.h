@@ -218,6 +218,7 @@ void rvk_vkResetQueryPool(::av::ClientTransport& t, VkDevice device, VkQueryPool
 VkResult rvk_vkSetPrivateData(::av::ClientTransport& t, VkDevice device, VkObjectType objectType, uint64_t objectHandle, VkPrivateDataSlot privateDataSlot, uint64_t data);
 VkResult rvk_vkSignalSemaphore(::av::ClientTransport& t, VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo);
 void rvk_vkTrimCommandPool(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags);
+void rvk_vkUpdateDescriptorSetWithTemplate(::av::ClientTransport& t, VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData);
 VkResult rvk_vkWaitSemaphores(::av::ClientTransport& t, VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout);
 void rvk_vkGetPhysicalDeviceFeatures2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* pFeatures);
 void rvk_vkGetPhysicalDeviceFormatProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties2* pFormatProperties);
@@ -245,6 +246,7 @@ void rvk_vkCmdEndRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer comman
 void rvk_vkCmdEndRenderingKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer);
 void rvk_vkCmdNextSubpass2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkSubpassBeginInfo* pSubpassBeginInfo, const VkSubpassEndInfo* pSubpassEndInfo);
 void rvk_vkCmdPipelineBarrier2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo);
+void rvk_vkCmdPushDescriptorSetWithTemplateKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout, uint32_t set, const void* pData);
 void rvk_vkCmdResetEvent2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags2 stageMask);
 void rvk_vkCmdResolveImage2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkResolveImageInfo2* pResolveImageInfo);
 void rvk_vkCmdSetDeviceMaskKHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, uint32_t deviceMask);
@@ -272,6 +274,7 @@ VkResult rvk_vkGetSemaphoreCounterValueKHR(::av::ClientTransport& t, VkDevice de
 VkResult rvk_vkQueueSubmit2KHR(::av::ClientTransport& t, VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence);
 VkResult rvk_vkSignalSemaphoreKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreSignalInfo* pSignalInfo);
 void rvk_vkTrimCommandPoolKHR(::av::ClientTransport& t, VkDevice device, VkCommandPool commandPool, VkCommandPoolTrimFlags flags);
+void rvk_vkUpdateDescriptorSetWithTemplateKHR(::av::ClientTransport& t, VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void* pData);
 VkResult rvk_vkWaitSemaphoresKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreWaitInfo* pWaitInfo, uint64_t timeout);
 void rvk_vkCmdBeginConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
 void rvk_vkCmdEndConditionalRenderingEXT(::av::ClientTransport& t, VkCommandBuffer commandBuffer);
