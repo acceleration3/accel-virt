@@ -34,6 +34,7 @@
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/scheduling/hw_queue_contexts.hpp"
+#include "core/scheduling/native_fence_table.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/scheduling/doorbell_table.hpp"
 #include "core/scheduling/hw_queue_table.hpp"
@@ -98,6 +99,9 @@ struct DxgkargSetStablePowerStateRecord;
 struct DxgkargControlModeBehaviorRecord;
 struct DxgkargUpdateMonitorLinkInfoRecord;
 struct DxgkargCreateHwQueueRecord;
+struct DxgkargCreateNativeFenceRecord;
+struct DxgkargDestroyNativeFenceRecord;
+struct DxgkargUpdateNativeFenceValuesRecord;
 struct DxgkargSubmitCommandToHwQueueRecord;
 struct DxgkargResetHwEngineRecord;
 struct DxgkargResumeHwEngineRecord;
@@ -230,6 +234,12 @@ public:
     int32_t control_mode_behavior(DxgkargControlModeBehaviorRecord *request);
     int32_t update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request);
     /* Hardware queues: reached only once hardware scheduling is on. */
+    /* The native fences WDDM 3.1 asks for beside the doorbells (feature 049):
+     * the OS owns the memory, this driver owns which fences exist. */
+    int32_t create_native_fence(DxgkargCreateNativeFenceRecord *request);
+    int32_t destroy_native_fence(const DxgkargDestroyNativeFenceRecord *request);
+    int32_t update_monitored_values(const DxgkargUpdateNativeFenceValuesRecord *request);
+    int32_t update_current_values_from_cpu(const DxgkargUpdateNativeFenceValuesRecord *request);
     int32_t create_hw_queue(void *context, DxgkargCreateHwQueueRecord *request);
     int32_t destroy_hw_queue(void *queue);
     /* In flight until the DPC writes its progress fence. */
@@ -273,7 +283,9 @@ private:
         query_physical_adapter_caps = 15,
         query_display_driver_caps_extension = 16,
         query_wddm_device_caps = 29,
-    /* DXGKQAITYPE_USERMODESUBMISSION_CAPS (d3dkmddi.h:1858), feature 049. */
+    /* DXGKQAITYPE_NATIVE_FENCE_CAPS and DXGKQAITYPE_USERMODESUBMISSION_CAPS
+     * (d3dkmddi.h:1857), feature 049. */
+    query_native_fence_caps = 37,
     query_user_mode_submission_caps = 38,
     };
     enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */
@@ -386,10 +398,13 @@ private:
     /* What each hardware queue runs on, which a submission at DISPATCH reads
      * without taking the queue table's mutex (feature 049). */
     HwQueueContexts                hw_queue_contexts_;
-    /* Whether this OS lets the adapter be hardware scheduled, asked once at
-     * StartDevice: a node that reports context scheduling the OS has not
-     * enabled fails the whole adapter start (feature 049, research.md §15). */
+    NativeFenceTable               native_fences_;
+    /* Whether this OS lets the adapter be hardware scheduled, and lets a
+     * process submit for itself on it, asked once each at StartDevice: a node
+     * that reports what the OS has not enabled fails the whole adapter start
+     * (feature 049, research.md §15). */
     bool                           hardware_scheduling_;
+    bool                           user_mode_submission_;
     ExecutionNode                  node_;
     EngineProgress                 progress_;
     PowerTransition                transition_;

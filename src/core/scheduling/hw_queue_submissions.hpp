@@ -25,6 +25,10 @@ struct HwQueueSubmissionsProbe;
 class HwQueueSubmissions {
 public:
     static constexpr uint32_t capacity = 64u;
+    /* The hardware-scheduled node, which is where every queue runs (feature
+     * 049, research.md §16). */
+    static constexpr uint32_t node = 1u;
+    static constexpr uint32_t engine = 0u;
 
     explicit HwQueueSubmissions(Platform &platform);
     HwQueueSubmissions(const HwQueueSubmissions &) = delete;
@@ -52,8 +56,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t node = 0u;
-    static constexpr uint32_t engine = 0u;
 
     Platform  &platform_;
     SpinLock   lock_;

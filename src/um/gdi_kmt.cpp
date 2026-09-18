@@ -45,6 +45,8 @@ constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_descriptor_bytes = 256u;
 /* STATUS_IO_TIMEOUT: a failure, where STATUS_TIMEOUT would read as success. */
 constexpr uint32_t timed_out = 0xC00000B5u;
+/* Node 1, the hardware-scheduled one (feature 049). */
+constexpr uint32_t hardware_queue_node = 1u;
 
 }  // namespace
 
@@ -347,8 +349,11 @@ Status GdiKmt::make_context(uint32_t device, const uint8_t *private_data, uint32
     D3DKMT_CREATECONTEXTVIRTUAL request = {};
     request.Flags.HwQueueSupported = hardware_queue ? 1u : 0u;
     request.hDevice = device;
-    request.NodeOrdinal = 0u;
-    request.EngineAffinity = 1u;
+    /* The hardware-scheduled node is the second one: a queue, and so a
+     * doorbell, only runs on the node that reports context scheduling
+     * (feature 049, research.md §16). */
+    request.NodeOrdinal = hardware_queue ? hardware_queue_node : 0u;
+    request.EngineAffinity = 1u << request.NodeOrdinal;
     request.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
     request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
     request.PrivateDriverDataSize = size;

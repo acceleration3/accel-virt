@@ -42,6 +42,11 @@ private:
     static constexpr uint32_t known_flags = 0x17u;
     static constexpr uint32_t virtual_addressing = 0x4u;
     static constexpr uint32_t hw_queue_supported = 0x10u;
+    /* The nodes this adapter reports, and the one that is hardware scheduled:
+     * a context there is one a hardware queue may run on and nothing else
+     * (feature 049, research.md §16). */
+    static constexpr uint32_t node_count = 2u;
+    static constexpr uint32_t hardware_queue_node = 1u;
     static constexpr uint32_t known_engines = 0x1u;
 
     Platform            &platform_;

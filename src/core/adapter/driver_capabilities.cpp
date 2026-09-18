@@ -1,6 +1,7 @@
 #include "core/adapter/driver_capabilities.hpp"
 
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "core/ddi/dxgkarg_native_fence_records.hpp"
 
 #include "core/ddi/dxgk_driver_caps_record.hpp"
 #include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
@@ -26,7 +27,7 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
     caps.WDDMVersion = wddm_version_;
-    caps.SchedulingCaps = scheduling_multi_engine_aware;
+    caps.SchedulingCaps = scheduling_multi_engine_aware | scheduling_native_gpu_fence;
     caps.MemoryManagementCaps = memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
@@ -54,6 +55,18 @@ Status DriverCapabilities::report_user_mode_submission_caps(const AdapterInfoQue
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_user_mode_submission_caps");
     DxgkUserModeSubmissionCapsRecord caps = {};
     caps.DoorbellSizeInBytes = doorbell_store_bytes;
+    return query.write_output(&caps, sizeof caps);
+}
+
+Status DriverCapabilities::report_native_fence_caps(const AdapterInfoQuery &query) const
+{
+    AV_SCOPE("DriverCapabilities::report_native_fence_caps");
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_native_fence_caps");
+    DxgkNativeFenceCapsRecord caps = {};
+    /* One monitored value to a fence: this driver packs none of them together,
+     * so the OS may place each where it likes. */
+    caps.MonitoredValueStride = sizeof(uint64_t);
+    caps.MapToGpuSystemProcess = 0u;
     return query.write_output(&caps, sizeof caps);
 }
 

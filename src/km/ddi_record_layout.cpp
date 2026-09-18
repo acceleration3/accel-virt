@@ -97,6 +97,7 @@
 #include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
@@ -156,6 +157,45 @@ static_assert(offsetof(av::DxgkrnlInterfaceRecord, CallbacksAfterFeatureSupport)
                       sizeof(av::DxgkrnlInterfaceRecord::CallbacksAfterFeatureSupport) ==
                   offsetof(DXGKRNL_INTERFACE, DxgkCbDisconnectDoorbell) + sizeof(void *),
               "the callbacks after DxgkCbQueryFeatureSupport do not end at DxgkCbDisconnectDoorbell");
+
+AV_SAME_SIZE(DxgkargCreateNativeFenceRecord, DXGKARG_CREATENATIVEFENCE);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, hGlobalNativeFence, DXGKARG_CREATENATIVEFENCE, hGlobalNativeFence);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, Type, DXGKARG_CREATENATIVEFENCE, Type);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, CurrentValueSystemProcessGpuVa, DXGKARG_CREATENATIVEFENCE,
+               CurrentValueSystemProcessGpuVa);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, MonitoredValueSystemProcessGpuVa, DXGKARG_CREATENATIVEFENCE,
+               MonitoredValueSystemProcessGpuVa);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, pPrivateDriverData, DXGKARG_CREATENATIVEFENCE, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, Flags, DXGKARG_CREATENATIVEFENCE, Flags);
+AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, Reserved, DXGKARG_CREATENATIVEFENCE, Reserved);
+AV_SAME_SIZE(DxgkargDestroyNativeFenceRecord, DXGKARG_DESTROYNATIVEFENCE);
+AV_SAME_OFFSET(DxgkargDestroyNativeFenceRecord, hGlobalNativeFence, DXGKARG_DESTROYNATIVEFENCE, hGlobalNativeFence);
+AV_SAME_OFFSET(DxgkargDestroyNativeFenceRecord, Flags, DXGKARG_DESTROYNATIVEFENCE, Flags);
+AV_SAME_OFFSET(DxgkargDestroyNativeFenceRecord, Reserved, DXGKARG_DESTROYNATIVEFENCE, Reserved);
+AV_SAME_SIZE(DxgkargUpdateNativeFenceValuesRecord, DXGKARG_UPDATEMONITOREDVALUES);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NativeFenceArray, DXGKARG_UPDATEMONITOREDVALUES,
+               NativeFenceArray);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, UpdatedValueArray, DXGKARG_UPDATEMONITOREDVALUES,
+               UpdatedValueArray);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, ValueKernelCpuVa, DXGKARG_UPDATEMONITOREDVALUES,
+               MonitoredValueKernelCpuVa);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NumFences, DXGKARG_UPDATEMONITOREDVALUES, NumFences);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, Flags, DXGKARG_UPDATEMONITOREDVALUES, Flags);
+/* The same three arrays and the same offsets, which is why one record carries
+ * both updates. */
+AV_SAME_SIZE(DxgkargUpdateNativeFenceValuesRecord, DXGKARG_UPDATECURRENTVALUESFROMCPU);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NativeFenceArray, DXGKARG_UPDATECURRENTVALUESFROMCPU,
+               NativeFenceArray);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, ValueKernelCpuVa, DXGKARG_UPDATECURRENTVALUESFROMCPU,
+               CurrentValueKernelCpuVa);
+AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NumFences, DXGKARG_UPDATECURRENTVALUESFROMCPU, NumFences);
+AV_SAME_SIZE(DxgkNativeFenceCapsRecord, DXGK_NATIVE_FENCE_CAPS);
+AV_SAME_OFFSET(DxgkNativeFenceCapsRecord, MonitoredValueStride, DXGK_NATIVE_FENCE_CAPS, MonitoredValueStride);
+AV_SAME_OFFSET(DxgkNativeFenceCapsRecord, MapToGpuSystemProcess, DXGK_NATIVE_FENCE_CAPS, MapToGpuSystemProcess);
+AV_SAME_OFFSET(DxgkNativeFenceCapsRecord, MinimumAddress, DXGK_NATIVE_FENCE_CAPS, MinimumAddress);
+AV_SAME_OFFSET(DxgkNativeFenceCapsRecord, MaximumAddress, DXGK_NATIVE_FENCE_CAPS, MaximumAddress);
+AV_SAME_OFFSET(DxgkNativeFenceCapsRecord, Reserved, DXGK_NATIVE_FENCE_CAPS, Reserved);
+static_assert(av::native_fence_private_data_bytes == D3DDDI_NATIVE_FENCE_PDD_SIZE, "native fence private data");
 
 AV_SAME_SIZE(DxgkargcbQueryFeatureSupportRecord, DXGKARGCB_QUERYFEATURESUPPORT);
 AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, DeviceHandle, DXGKARGCB_QUERYFEATURESUPPORT, DeviceHandle);
@@ -1134,3 +1174,4 @@ static_assert(CM_RESOURCE_INTERRUPT_MESSAGE == 0x02 && CM_RESOURCE_MEMORY_LARGE 
                   CM_RESOURCE_MEMORY_LARGE_40 == 0x0200 && CM_RESOURCE_MEMORY_LARGE_48 == 0x0400 &&
                   CM_RESOURCE_MEMORY_LARGE_64 == 0x0800,
               "resource flags");
+

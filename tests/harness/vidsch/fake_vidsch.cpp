@@ -1,5 +1,7 @@
 #include "harness/vidsch/fake_vidsch.hpp"
 
+#include "core/scheduling/hw_queue_submissions.hpp"
+
 #include "core/ddi/dxgkarg_present_record.hpp"
 
 #include "core/ddi/dxgkarg_create_context_record.hpp"
@@ -210,8 +212,10 @@ void FakeVidSch::check_notification(const DxgkargcbNotifyInterruptDataRecord &da
         return;
     }
     if (data.InterruptType == monitored_fence_signaled) {
-        /* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal overlay FenceId and Argument1. */
-        if (data.FenceId != 0u || data.Argument1 != 0u)
+        /* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal overlay FenceId
+         * and Argument1; the queues run on the hardware-scheduled node
+         * (feature 049, research.md §16). */
+        if (data.FenceId != av::HwQueueSubmissions::node || data.Argument1 != 0u)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "fence signalled for node %u engine %u",
                                                     data.FenceId, data.Argument1);
         fence_signals_++;

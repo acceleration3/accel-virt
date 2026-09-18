@@ -1,4 +1,5 @@
 #include "core/adapter/driver_capabilities.hpp"
+#include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgk_driver_caps_record.hpp"
 #include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "core/ddi/dxgk_wddm_device_caps_record.hpp"
@@ -64,9 +65,12 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   CHECK(caps.HighestAcceptableAddress == -1);
   DxgkDriverCapsRecord expected = {};
   expected.WDDMVersion = wddm_version;
-  expected.SchedulingCaps = 0x1u;          /* MultiEngineAware */
+  /* MultiEngineAware, and NativeGpuFence - which the OS checks before it
+   * allows user-mode submission, and which the four native fence DDIs are
+   * behind (feature 049, research.md §14). */
+  expected.SchedulingCaps = 0x1u | 0x800u;
   expected.MemoryManagementCaps = 0x60u;   /* VirtualAddressingSupported | GpuMmuSupported */
-  expected.GpuEngineTopologyNbAsymetricProcessingNodes = 1u;
+  expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
   expected.SupportPerEngineTDR = 1u;
   expected.HighestAcceptableAddress = -1;
@@ -154,7 +158,7 @@ TEST(driver_capabilities, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling));
   while (platform.claim(Violation::irql_ceiling)) {} }
 
-TEST(driver_capabilities_report_physical_adapter_caps, one_gpu_mmu_node_that_also_pages)
+TEST(driver_capabilities_report_physical_adapter_caps, two_gpu_mmu_nodes_the_first_of_which_pages)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   std::uint32_t physical_adapter = 0u;
   av::DxgkPhysicalAdapterCapsRecord caps;
@@ -162,7 +166,9 @@ TEST(driver_capabilities_report_physical_adapter_caps, one_gpu_mmu_node_that_als
   int handle = 0;
   const DxgkargQueryAdapterInfoRecord record = request(&physical_adapter, 4u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_physical_adapter_caps(AdapterInfoQuery(platform, record), &handle), Status::ok);
-  CHECK_EQ(caps.NumExecutionNodes, 1u);
+  /* Node 0 runs packets and pages; node 1 is the hardware-scheduled one a
+   * process holds queues and doorbells on (feature 049, research.md §16). */
+  CHECK_EQ(caps.NumExecutionNodes, 2u);
   CHECK_EQ(caps.PagingNodeIndex, 0u);
   CHECK(caps.DxgkPhysicalAdapterHandle == &handle);
   CHECK_EQ(caps.Flags, 0x2u);   /* GpuMmuSupported */
@@ -189,3 +195,28 @@ TEST(driver_capabilities_report_physical_adapter_caps, another_adapter_or_short_
       AdapterInfoQuery(platform, request(&physical_adapter, 4u, &caps, sizeof caps)), nullptr));
   platform.set_irql(Irql::passive);
   while (platform.claim(Violation::irql_ceiling)) {} }
+
+/* Feature 049: what this driver's native fences need of the OS. One monitored
+ * value to a fence - none of them are packed together here - and nothing
+ * mapped into a GPU system process, because this device reads no fence memory
+ * of its own (research.md §14). The caps are answered at all only because the
+ * four native fence DDIs are implemented (constitution VI). */
+TEST(driver_capabilities_report_native_fence_caps, asks_for_one_value_a_fence_and_no_gpu_mapping)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  av::DxgkNativeFenceCapsRecord caps;
+  std::memset(&caps, 0xA5, sizeof caps);
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+  CHECK_STATUS(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, record)), Status::ok);
+  CHECK_EQ(caps.MonitoredValueStride, sizeof(std::uint64_t));
+  CHECK_EQ(caps.MapToGpuSystemProcess, 0u);
+  CHECK_EQ(caps.MinimumAddress, 0u);
+  CHECK_EQ(caps.MaximumAddress, 0u);
+  for (const std::uint8_t byte : caps.Reserved) CHECK_EQ(byte, 0u);
+
+  /* A buffer with no room for them is not answered with part of them. */
+  const DxgkargQueryAdapterInfoRecord short_output = request(nullptr, 0u, &caps, sizeof caps - 1u);
+  CHECK(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, short_output)) != Status::ok);
+  platform.set_irql(av::Irql::dispatch);
+  static_cast<void>(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, record)));
+  platform.set_irql(av::Irql::passive);
+  while (platform.claim(av::Violation::irql_ceiling)) {} }

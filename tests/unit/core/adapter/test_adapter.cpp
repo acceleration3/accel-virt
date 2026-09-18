@@ -12,6 +12,7 @@
 #include "core/ddi/dxgk_gpu_clock_data_record.hpp"
 #include "core/ddi/dxgk_gpu_mmu_caps_record.hpp"
 #include "core/ddi/dxgk_node_metadata_record.hpp"
+#include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
@@ -1581,7 +1582,12 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
   CHECK_EQ(metadata.Flags, 0u);
   CHECK_EQ(metadata.GpuMmuSupported, 1u);
   CHECK_EQ(metadata.IoMmuSupported, 0u);
-  CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);
+  /* The second node is the hardware-scheduled one, and a third is nobody's. */
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), success);
+  CHECK_EQ(metadata.EngineType, 1);
+  CHECK_EQ(metadata.GpuMmuSupported, 1u);
+  CHECK_EQ(metadata.Flags, 0u);   /* nothing until the OS allows it */
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(2u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
 
@@ -1599,8 +1605,10 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
 { Fixture fixture;
   fixture.dxgkrnl().allow_feature(av::feature_hwsch);
   CHECK_EQ(fixture.start(), success);
-  /* Asked once, at the start, before anything is reported. */
-  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 1u);
+  /* Asked at the start, before anything is reported: hardware scheduling, and
+   * then user-mode submission, which is only asked about where the first was
+   * allowed. */
+  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 2u);
   CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
   av::DxgkNodeMetadataRecord metadata;
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
@@ -1677,7 +1685,7 @@ TEST(adapter_reset_engine, aborts_what_the_node_was_executing_and_keeps_it_runni
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
   fixture.platform().set_irql(Irql::passive);
-  const av::DxgkargResetEngineRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  const av::DxgkargResetEngineRecord refused[] = {{2u, 0u, 0u}, {0u, 1u, 0u}};
   for (const av::DxgkargResetEngineRecord &request : refused) {
       av::DxgkargResetEngineRecord copy = request;
       CHECK_EQ(nt(fixture.adapter().reset_engine(&copy)), invalid_parameter);
@@ -1764,7 +1772,7 @@ TEST(adapter_query_engine_status, an_engine_that_stopped_moving_is_admitted)
   CHECK_EQ(status.EngineStatus, 0u);   /* it has not moved since: dxgkrnl may reset it */
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
-  const av::DxgkargQueryEngineStatusRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  const av::DxgkargQueryEngineStatusRecord refused[] = {{2u, 0u, 0u}, {0u, 1u, 0u}};
   for (const av::DxgkargQueryEngineStatusRecord &request : refused) {
       av::DxgkargQueryEngineStatusRecord copy = request;
       CHECK_EQ(nt(fixture.adapter().query_engine_status(&copy)), invalid_parameter);
@@ -1772,12 +1780,16 @@ TEST(adapter_query_engine_status, an_engine_that_stopped_moving_is_admitted)
   }
   CHECK_EQ(nt(fixture.adapter().query_engine_status(nullptr)), invalid_parameter); }
 
-TEST(adapter_query_dependent_engine_group, the_one_node_depends_on_itself)
+TEST(adapter_query_dependent_engine_group, each_node_depends_on_itself)
 { Fixture fixture;
   av::DxgkargQueryDependentEngineGroupRecord group = {0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(&group)), success);
   CHECK_EQ(group.DependentNodeOrdinalMask, 1u);
-  const av::DxgkargQueryDependentEngineGroupRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  /* The hardware-scheduled node holds up nothing on the packet one. */
+  av::DxgkargQueryDependentEngineGroupRecord hardware = {1u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(&hardware)), success);
+  CHECK_EQ(hardware.DependentNodeOrdinalMask, 2u);
+  const av::DxgkargQueryDependentEngineGroupRecord refused[] = {{2u, 0u, 0u}, {0u, 1u, 0u}};
   for (const av::DxgkargQueryDependentEngineGroupRecord &request : refused) {
       av::DxgkargQueryDependentEngineGroupRecord copy = request;
       CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(&copy)), invalid_parameter);
@@ -2170,7 +2182,7 @@ TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_eith
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
       if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
-          (requested >= 13 && requested <= 16) || requested == 38)
+          (requested >= 13 && requested <= 16) || requested == 37 || requested == 38)
           continue;
       GuardedBuffer input(64u), output(64u);
       std::memset(input.data(), 0xEE, 64u);
@@ -3906,6 +3918,72 @@ TEST(adapter_doorbell, refuses_every_doorbell_nobody_could_have)
 
 /* An adapter dxgkrnl starts twice without stopping it refuses rather than
  * mapping the doorbell pages over the ones a process already holds. */
+/* Feature 049: the native fences WDDM 3.1 asks for beside the doorbells. The
+ * OS owns the memory and names it on every update; the driver owns which
+ * fences exist, and answers for nothing else. */
+TEST(adapter_native_fence, makes_fences_writes_what_the_os_asks_and_refuses_the_rest)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateNativeFenceRecord create = {};
+  CHECK_EQ(nt(fixture.adapter().create_native_fence(&create)), success);
+  CHECK(create.hGlobalNativeFence != nullptr);
+  CHECK_EQ(nt(fixture.adapter().create_native_fence(nullptr)), invalid_parameter);
+
+  std::uint64_t                            current = 0u;
+  std::uint64_t                            monitored = 0u;
+  void                                    *handles[] = {create.hGlobalNativeFence};
+  std::uint64_t                            values[] = {21u};
+  void                                    *at_current[] = {&current};
+  void                                    *at_monitored[] = {&monitored};
+  av::DxgkargUpdateNativeFenceValuesRecord update = {};
+  update.NativeFenceArray = handles;
+  update.UpdatedValueArray = values;
+  update.NumFences = 1u;
+  update.ValueKernelCpuVa = at_current;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().update_current_values_from_cpu(&update)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(current, 21u);
+  update.ValueKernelCpuVa = at_monitored;
+  values[0] = 22u;
+  CHECK_EQ(nt(fixture.adapter().update_monitored_values(&update)), success);
+  CHECK_EQ(monitored, 22u);
+  CHECK_EQ(nt(fixture.adapter().update_monitored_values(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().update_current_values_from_cpu(nullptr)), invalid_parameter);
+
+  /* A fence this adapter never made is one it writes nothing for. */
+  int                                       outside = 0;
+  void                                     *stranger[] = {&outside};
+  update.NativeFenceArray = stranger;
+  CHECK_EQ(nt(fixture.adapter().update_monitored_values(&update)), invalid_parameter);
+  const av::DxgkargDestroyNativeFenceRecord unknown = {&outside, 0u, {}};
+  CHECK_EQ(nt(fixture.adapter().destroy_native_fence(&unknown)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_native_fence(nullptr)), invalid_parameter);
+  const av::DxgkargDestroyNativeFenceRecord destroy = {create.hGlobalNativeFence, 0u, {}};
+  CHECK_EQ(nt(fixture.adapter().destroy_native_fence(&destroy)), success);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* What the OS asks about those fences before it allows any of it: one
+ * monitored value per fence, and nothing mapped into a GPU system process -
+ * this device reads no fence memory of its own (research.md §14). */
+TEST(adapter_query_adapter_info, answers_what_this_drivers_native_fences_need)
+{ Fixture fixture;
+  av::DxgkNativeFenceCapsRecord caps;
+  std::memset(&caps, 0xEE, sizeof caps);
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 37;   /* DXGKQAITYPE_NATIVE_FENCE_CAPS */
+  query.pOutputData = &caps;
+  query.OutputDataSize = sizeof caps;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(caps.MonitoredValueStride, sizeof(std::uint64_t));
+  CHECK_EQ(caps.MapToGpuSystemProcess, 0u);
+  CHECK_EQ(caps.MinimumAddress, 0u);
+  CHECK_EQ(caps.MaximumAddress, 0u);
+  for (const std::uint8_t byte : caps.Reserved) CHECK_EQ(byte, 0u);
+  /* A buffer too small for the caps is not answered with part of them. */
+  query.OutputDataSize = sizeof caps - 1u;
+  CHECK(nt(fixture.adapter().query_adapter_info(&query)) != success); }
+
 TEST(adapter_start_device, a_second_start_without_a_stop_is_refused)
 { Fixture fixture;
   fixture.function().add_doorbell_region();

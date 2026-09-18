@@ -104,7 +104,13 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&AvDdiControlModeBehavior)},
         {DdiSlot::DxgkDdiUpdateMonitorLinkInfo, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitorLinkInfo)},
         {DdiSlot::DxgkDdiCreateHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiCreateHwQueue)},
-        /* The doorbells a process submits through (feature 049). */
+        /* The native fences WDDM 3.1 asks for beside the doorbells, and the
+         * doorbells a process submits through (feature 049). */
+        {DdiSlot::DxgkDdiCreateNativeFence, reinterpret_cast<DdiRoutine>(&AvDdiCreateNativeFence)},
+        {DdiSlot::DxgkDdiDestroyNativeFence, reinterpret_cast<DdiRoutine>(&AvDdiDestroyNativeFence)},
+        {DdiSlot::DxgkDdiUpdateMonitoredValues, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitoredValues)},
+        {DdiSlot::DxgkDdiUpdateCurrentValuesFromCpu,
+         reinterpret_cast<DdiRoutine>(&AvDdiUpdateCurrentValuesFromCpu)},
         {DdiSlot::DxgkDdiCreateDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiCreateDoorbell)},
         {DdiSlot::DxgkDdiConnectDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiConnectDoorbell)},
         {DdiSlot::DxgkDdiDisconnectDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiDisconnectDoorbell)},

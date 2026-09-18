@@ -28,7 +28,12 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
     /* Private data is either absent, or exactly the rvk context record - any
      * other size is data this driver does not define. */
     const bool rvk = request.PrivateDriverDataSize == RvkContextRecord::encoded_size;
-    if (owner == nullptr || request.NodeOrdinal != 0u || (request.EngineAffinity & ~known_engines) != 0u ||
+    /* Node 1 is the hardware-scheduled one: dxgkrnl puts a context there only
+     * when the process asked for one a queue may run on, and a context that
+     * did not ask has no way to submit to it (feature 049, research.md §16). */
+    if (owner == nullptr || request.NodeOrdinal >= node_count ||
+        (request.NodeOrdinal == hardware_queue_node && (request.Flags & hw_queue_supported) == 0u) ||
+        (request.EngineAffinity & ~known_engines) != 0u ||
         (request.Flags & ~known_flags) != 0u ||
         (request.PrivateDriverDataSize != 0u && !rvk) ||
         (request.Flags & (hw_queue_supported | virtual_addressing)) == hw_queue_supported)

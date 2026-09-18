@@ -272,6 +272,18 @@ int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkIn
 int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request)
 { return static_cast<av::Context *>(context)->device().adapter().create_hw_queue(context, request); }
 
+int32_t AvDdiCreateNativeFence(void *context, av::DxgkargCreateNativeFenceRecord *request)
+{ return static_cast<av::Adapter *>(context)->create_native_fence(request); }
+
+int32_t AvDdiDestroyNativeFence(void *context, const av::DxgkargDestroyNativeFenceRecord *request)
+{ return static_cast<av::Adapter *>(context)->destroy_native_fence(request); }
+
+int32_t AvDdiUpdateMonitoredValues(void *context, const av::DxgkargUpdateNativeFenceValuesRecord *request)
+{ return static_cast<av::Adapter *>(context)->update_monitored_values(request); }
+
+int32_t AvDdiUpdateCurrentValuesFromCpu(void *context, const av::DxgkargUpdateNativeFenceValuesRecord *request)
+{ return static_cast<av::Adapter *>(context)->update_current_values_from_cpu(request); }
+
 int32_t AvDdiCreateDoorbell(av::DxgkargCreateDoorbellRecord *request)
 { return static_cast<av::HwQueue *>(request->hHwQueue)->context().device().adapter().create_doorbell(request); }
 

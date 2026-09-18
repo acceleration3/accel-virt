@@ -21,6 +21,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/scheduling/hw_queue.hpp"
 #include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
@@ -112,7 +113,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
-      hardware_scheduling_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
@@ -141,7 +142,10 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
      * answer (research.md §15). */
     if (status == Status::ok) {
         hardware_scheduling_ = dxgkrnl_.feature_enabled(feature_hwsch, feature_support_stable);
+        user_mode_submission_ =
+            hardware_scheduling_ && dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
         log_status("rvkgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
+        log_status("rvkgpu: user-mode submission", user_mode_submission_ ? 1 : 0);
     }
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
@@ -523,6 +527,11 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     case query_driver_caps:
         answered = NtStatus(capabilities_.report_driver_caps(request)).value();
         break;
+    case query_native_fence_caps:
+        /* Answered only because the four native fence DDIs are implemented
+         * (constitution VI), and asked because the OS will not allow user-mode
+         * submission without it (research.md §14). */
+        return NtStatus(capabilities_.report_native_fence_caps(request)).value();
     case query_user_mode_submission_caps:
         /* Answered only because the doorbell DDIs are implemented (constitution
          * VI): dxgkrnl hands processes doorbell pages on the strength of it. */
@@ -1274,8 +1283,11 @@ int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRe
 {
     AV_SCOPE("Adapter::query_dependent_engine_group");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_dependent_engine_group");
-    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+    if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
+        request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
+    /* Each node depends on itself alone: what runs on one does not hold the
+     * other up. */
     request->DependentNodeOrdinalMask = uint64_t{1} << request->NodeOrdinal;
     return NtStatus(Status::ok).value();
 }
@@ -1287,10 +1299,13 @@ int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
      * @140027dc0) only reaches for the current thread when IRQL is below 2, so
      * dispatch is a level it expects to be called at. */
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::query_engine_status");
-    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+    if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
+        request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    /* VidSchiCheckNodeTimeout takes responsive as "no timeout this round". */
-    if (progress_.responsive()) request->EngineStatus |= engine_responsive;
+    /* VidSchiCheckNodeTimeout takes responsive as "no timeout this round". The
+     * hardware-scheduled node runs no packets, so nothing there can be stuck. */
+    if (request->NodeOrdinal != DriverCapabilities::packet_node || progress_.responsive())
+        request->EngineStatus |= engine_responsive;
     return NtStatus(Status::ok).value();
 }
 
@@ -1300,11 +1315,18 @@ int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
     /* The same DPC resets what it found stuck; DdiResetEngine (dxgkrnl.sys
      * @14006e0a4) checks only that the driver returns at the IRQL it entered. */
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::reset_engine");
-    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+    if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
+        request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
     /* VidSch already knows what it reset, so nothing more is reported; every
      * other context keeps running - a reset of one engine is not an outage
-     * (FR-002, FR-003). */
+     * (FR-002, FR-003). Resetting the hardware-scheduled node drops what its
+     * queues had in flight, which is what ResetHwEngine does for it. */
+    if (request->NodeOrdinal != DriverCapabilities::packet_node) {
+        hw_submissions_.abandon();
+        request->LastAbortedFenceId = 0u;
+        return NtStatus(Status::ok).value();
+    }
     request->LastAbortedFenceId = node_.abort_pending();
     return NtStatus(Status::ok).value();
 }
@@ -1384,11 +1406,13 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
 {
     AV_SCOPE("Adapter::get_node_metadata");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_node_metadata");
-    if (metadata == nullptr || node_and_adapter != 0u) return NtStatus(Status::invalid_parameter).value();
-    /* This driver addresses through the GPU MMU and not an IOMMU: what
-     * DxgkCbMapMdlToIoMmu would need is a path it does not have. */
-    static constexpr bool io_mmu_supported = false;
-    static constexpr char name[] = "3DNode00";
+    /* The low half names the node, the high half the physical adapter, of
+     * which this driver has one. */
+    const uint32_t node = node_and_adapter & 0xFFFFu;
+    if (metadata == nullptr || (node_and_adapter >> 16u) != 0u || node >= DriverCapabilities::node_count)
+        return NtStatus(Status::invalid_parameter).value();
+    static constexpr char names[DriverCapabilities::node_count][9] = {"3DNode00", "3DNode01"};
+    const char *const     name = names[node];
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
     metadata->GpuMmuSupported = 1u;
@@ -1405,17 +1429,18 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
      * are implemented and tested; what is missing is the fence half of WDDM
      * 3.1, and reporting the flag before it exists is a capability nobody can
      * use (constitution VI). */
-    /* And not context scheduling either, on a node like this one. dxgkrnl
-     * checks it against the node's *IoMmu* support, before it has cached that
-     * any node supports GpuMmu, so a single-node adapter that addresses
-     * through a GPU MMU is refused - with the adapter, not the flag
-     * (research.md §16). This driver has no IOMMU path to report, so what the
-     * node reports is what it can back: the depth it can hold in flight. */
-    metadata->Flags = hardware_scheduling_ && io_mmu_supported
+    /* The hardware-scheduled node is the second one, because dxgkrnl checks a
+     * node's context scheduling against the node before it: it is satisfied by
+     * an earlier node's GpuMmu support, and node 0 supplies that (§16). What
+     * the second node reports is what the OS allowed and this driver
+     * implements - the queue DDIs, the doorbell ones, and the native fences
+     * the OS demands beside them (§14). */
+    metadata->Flags = node == DriverCapabilities::hardware_queue_node && hardware_scheduling_
                           ? node_context_scheduling_supported |
+                                (user_mode_submission_ ? node_user_mode_submission : 0u) |
                                 (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift)
                           : 0u;
-    for (uint32_t index = 0u; index + 1u < sizeof name; index++)
+    for (uint32_t index = 0u; index + 1u < sizeof names[0]; index++)
         metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);
     return NtStatus(Status::ok).value();
 }
@@ -1543,6 +1568,38 @@ int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *re
         return NtStatus(Status::invalid_parameter).value();
     edid_.describe_link(*request);
     return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::create_native_fence(DxgkargCreateNativeFenceRecord *request)
+{
+    AV_SCOPE("Adapter::create_native_fence");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_native_fence");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(native_fences_.create(*request)).value();
+}
+
+int32_t Adapter::destroy_native_fence(const DxgkargDestroyNativeFenceRecord *request)
+{
+    AV_SCOPE("Adapter::destroy_native_fence");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_native_fence");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(native_fences_.destroy(*request)).value();
+}
+
+int32_t Adapter::update_monitored_values(const DxgkargUpdateNativeFenceValuesRecord *request)
+{
+    AV_SCOPE("Adapter::update_monitored_values");
+    platform_.require_irql_at_most(Irql::isr, "Adapter::update_monitored_values");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(native_fences_.update_monitored(*request)).value();
+}
+
+int32_t Adapter::update_current_values_from_cpu(const DxgkargUpdateNativeFenceValuesRecord *request)
+{
+    AV_SCOPE("Adapter::update_current_values_from_cpu");
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::update_current_values_from_cpu");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(native_fences_.update_current(*request)).value();
 }
 
 int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *request)

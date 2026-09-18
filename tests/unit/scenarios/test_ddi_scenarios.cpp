@@ -1646,14 +1646,20 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
 
 /* ---- WDDM 3.1 (feature 024) ----------------------------------------------------- */
 
-TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_doorbells_and_without_native_fences)
+TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_fences)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
-  /* Feature 049 filled the doorbell slots; the native fence ones are still
-   * nobody's, and the spec says why (049 research.md §9). */
-  const DdiSlot skipped[] = {
+  /* Feature 049 filled both halves of WDDM 3.1: the doorbells a process
+   * submits through, and the native fences the OS demands before it will hand
+   * one out (research.md §14). The sharing half is 025's (slots 186-189). */
+  const DdiSlot fences[] = {
       DdiSlot::DxgkDdiCreateNativeFence, DdiSlot::DxgkDdiDestroyNativeFence, DdiSlot::DxgkDdiUpdateMonitoredValues,
       DdiSlot::DxgkDdiUpdateCurrentValuesFromCpu,
+  };
+  for (const DdiSlot slot : fences) CHECK(table.routine(slot) != nullptr);
+  const DdiSlot skipped[] = {
+      DdiSlot::DxgkDdiOpenNativeFence, DdiSlot::DxgkDdiCloseNativeFence,
+      DdiSlot::DxgkDdiSetNativeFenceLogBuffer, DdiSlot::DxgkDdiUpdateNativeFenceLogs,
   };
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   const DdiSlot doorbells[] = {
@@ -1666,7 +1672,8 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_doorbells_and_without_native_f
   CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().SchedulingCaps & 0x800u, 0u);   /* no NativeGpuFence */
+  /* NativeGpuFence, which is what lets the OS allow user-mode submission. */
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().SchedulingCaps & 0x800u, 0x800u);
   { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0x14u), 0);
     av::FakeHwQueue queue(driver.platform(), table, device.fdo().context(), vidsch.context());
