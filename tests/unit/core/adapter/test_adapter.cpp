@@ -4067,16 +4067,17 @@ TEST(adapter_query_interface, refuses_an_interface_nobody_here_implements)
   CHECK_EQ(nt(fixture.adapter().query_interface(&query)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().query_interface(nullptr)), invalid_parameter);
 
-  /* And a device with no doorbell pages backs none of it, whatever the OS
-   * allows: there is nowhere for a process to store. */
-  CHECK_EQ(fixture.start(), success);
+  /* The interface is answered before the adapter has started anything, which
+   * is when dxgkrnl asks: what the driver says is what it implements, and a
+   * device that turns out to have no doorbell pages refuses a doorbell when
+   * one is asked for rather than here. */
   query.InterfaceType = feature_guid;
   CHECK_EQ(nt(fixture.adapter().query_interface(&query)), success);
   av::DxgkargQueryFeatureSupportRecord support = {};
   support.FeatureId = av::feature_user_mode_submission;
   CHECK_EQ(table.QueryFeatureSupport(table.Context, &support), success);
   CHECK_EQ(support.SupportedByDriver, 1u);
-  CHECK_EQ(support.SupportedOnCurrentConfig, 0u); }
+  CHECK_EQ(support.SupportedOnCurrentConfig, 1u); }
 
 TEST(adapter_start_device, a_second_start_without_a_stop_is_refused)
 { Fixture fixture;

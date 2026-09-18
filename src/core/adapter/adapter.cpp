@@ -561,9 +561,12 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
                              request->FeatureId == feature_hwsch;
     if (!implemented) return NtStatus(Status::ok).value();
     request->SupportedByDriver = 1u;
-    /* Every one of them needs the doorbell BAR this device may not have: a
-     * device without one hands out no queues and no doorbells (feature 030). */
-    request->SupportedOnCurrentConfig = doorbell_table_.constructed() ? 1u : 0u;
+    /* And on this configuration: dxgkrnl asks before StartDevice has mapped
+     * anything, so what the driver answers is what it implements rather than
+     * what it has mapped so far. A device that turns out to have no doorbell
+     * pages hands out no queues and no doorbells, which is refused there
+     * (Adapter::create_doorbell) rather than pretended here. */
+    request->SupportedOnCurrentConfig = 1u;
     return NtStatus(Status::ok).value();
 }
 
