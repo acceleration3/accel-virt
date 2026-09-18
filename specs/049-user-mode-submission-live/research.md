@@ -1,0 +1,111 @@
+# Research: user-mode submission in the guest (049)
+
+## 1. What a doorbell is attached to: a hardware queue, not a context
+
+`D3DKMT_CREATE_DOORBELL` (d3dkmthk.h) takes `hHwQueue` and `hRingBuffer`, not a
+context: user-mode submission is the hardware-scheduling path, where the process
+owns a ring buffer allocation and a queue on it, and the doorbell is how it
+tells the device the ring's tail moved. The driver already has the queue half -
+`HwQueue`, `HwQueueTable` and `HwQueueSubmissions` (feature 019) - and what 049
+adds is the page the process stores to and what happens when it does.
+
+The structure also asks for three CPU addresses back: the doorbell itself, a
+**status page**, and the location where user mode writes the fence value it has
+queued to. So a doorbell is three mappings, not one, and the status page is how
+a process learns it was disconnected without a kernel call (US2).
+
+## 2. What the device already does with a doorbell store
+
+Feature 030 built the device side: a `Doorbell` object per context, whose
+connection registers the context's wake event as a KVM ioeventfd on the
+doorbell page, so a store completes in the host kernel and wakes the worker
+directly. Nothing in the guest reaches it yet - feature 043's transport submits
+through `D3DKMTSubmitCommand`, a kernel transition per submission.
+
+So the wire is already there on the far side. 049 is the near side: the DDIs
+dxgkrnl calls to hand a process a page of it, and the transport that stores to
+it.
+
+## 3. Why DisconnectDoorbell is the hard part
+
+dxgkrnl disconnects doorbells for suspend, reset, migration and TDR, and the
+KMD must make later stores harmless *before it returns* (docs/kb/05-scheduling.md).
+The mechanism Windows drivers use is remapping the process's doorbell page to a
+dummy page: the store then lands somewhere that nothing reads.
+
+That is the whole of US2, and it is what makes a fallback necessary rather than
+optional: a process that stored to a disconnected doorbell has submitted
+nothing, learns so from the status page, and must resubmit through
+`D3DKMTSubmitCommand`. A transport that assumed a store always arrived would
+lose work exactly when the guest was suspended or reset.
+
+## 4. What the guest side must not do on the hot path (FR-004)
+
+No lock, no allocation, no system call in the steady state. That rules out
+asking the kernel anything per submission - including "am I still connected".
+The status page is what makes that possible: the process reads a value the KMD
+wrote, in its own address space.
+
+## 5. The benchmark is a ratio, not a number (US3, SC-001)
+
+A per-submit cost in microseconds says nothing across machines. What the
+benchmark reports is both paths' cost on the same boot, and the ratchet is
+their ratio - the same shape feature 048's conformance ratchet has, and for the
+same reason: the absolute number is a property of the host, the ratio is a
+property of the driver.
+
+## 6. The status page is a protocol, not a flag
+
+`D3DDDI_DOORBELLSTATUS` (d3dukmdt.h:2063) has four values, and each is an
+instruction to the process:
+
+| Value | What user mode does |
+|---|---|
+| `CONNECTED` | write the ring, store to the doorbell, done - no kernel call |
+| `CONNECTED_NOTIFY_KMD` | store, then call `D3DKMTNotifyWorkSubmission` as well |
+| `DISCONNECTED_RETRY` | do not store; submit through `D3DKMTSubmitCommand` and keep trying to reconnect |
+| `DISCONNECTED_ABORT` | the doorbell is gone; destroy it and make another |
+
+So US2's "detects the disconnect from the doorbell's status and resubmits" is
+not a heuristic: it is reading one enum out of a page the KMD writes, which
+costs no kernel transition and is what FR-004 needs.
+
+`DXGKARG_CONNECTDOORBELL` (d3dkmddi.h:10308) is where the KMD answers it, along
+with the kernel CPU address of the doorbell page; `DXGKARG_DISCONNECTDOORBELL`
+names only the doorbell, and the KMD must have made later stores harmless by
+the time it returns.
+
+## 7. What `CONNECTED_NOTIFY_KMD` buys a paravirtual driver
+
+Nothing, here. It exists for hardware that needs the KMD to do something after
+a store - power state, a hardware register write. This device's doorbell is an
+ioeventfd: the store *is* the notification. So this driver answers `CONNECTED`
+and implements `DxgkDdiNotifyWorkSubmission` as the fallback path it is,
+never as the steady state.
+
+## 8. The doorbell is already rung - by the driver
+
+Feature 043's path does not end at `D3DKMTSubmitCommand`: the miniport's
+`GuestContext` owns the context's ring and its doorbell index
+(`src/core/rvk/guest_context.hpp:84`), and `RingSubmitter` stores to the
+doorbell page when it publishes a tail. So every piece of the mechanism exists
+and works today - the ring, the page, the ioeventfd, the worker that wakes -
+and what makes a submission cost a kernel transition is only *who* does the
+store: the driver, on the process's behalf, inside `SubmitCommandVirtual`.
+
+That is what makes 049 a narrower feature than it looks. It does not build a
+submission path; it hands the existing one's last two writes - the ring tail
+and the doorbell store - to the process that already wrote the commands, and
+makes the driver's copy the fallback.
+
+Two consequences:
+
+- The ring a process writes is the ring the device already reads, and
+  `RingConsumer` already validates the tail against the head it owns
+  (`src/device/ring/ring_consumer.cpp:83`, faulting with `FaultCode::ring_tail`).
+  FR-005's "every value the device reads from a user-written ring is validated"
+  is therefore a property to *keep*, and the hostile tests for it belong beside
+  the ones 030 already has.
+- `LoopbackDoorbells` (`tests/harness/`) already models a doorbell page whose
+  store at offset 0 rings the mock host, so the full-stack rig can show a
+  user-mode store reaching the worker without a new harness.
