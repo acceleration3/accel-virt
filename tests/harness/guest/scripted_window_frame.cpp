@@ -5,8 +5,8 @@
 namespace av {
 
 ScriptedWindowFrame::ScriptedWindowFrame()
-    : window_(nullptr), width_(0u), height_(0u), refuse_size_(false), refuse_read_(false), refuse_resize_(false),
-      reads_(0u), resizes_(0u), pixels_{}
+    : window_(nullptr), width_(0u), height_(0u), refuse_size_(false), limited_sizes_(false), size_limit_(0u),
+      sizes_(0u), refuse_read_(false), refuse_resize_(false), reads_(0u), resizes_(0u), pixels_{}
 {
 }
 
@@ -18,6 +18,13 @@ void ScriptedWindowFrame::set_window(void *window, std::uint32_t width, std::uin
 }
 
 void ScriptedWindowFrame::refuse_size() { refuse_size_ = true; }
+
+void ScriptedWindowFrame::refuse_size_after(std::uint32_t count)
+{
+    limited_sizes_ = true;
+    size_limit_ = count;
+}
+
 void ScriptedWindowFrame::refuse_read() { refuse_read_ = true; }
 void ScriptedWindowFrame::refuse_resize() { refuse_resize_ = true; }
 
@@ -40,6 +47,8 @@ std::uint32_t ScriptedWindowFrame::resizes() const { return resizes_; }
 bool ScriptedWindowFrame::size(void *window, std::uint32_t &width, std::uint32_t &height)
 {
     if (refuse_size_ || window != window_) return false;
+    if (limited_sizes_ && sizes_ >= size_limit_) return false;
+    sizes_++;
     width = width_;
     height = height_;
     return true;

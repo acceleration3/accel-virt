@@ -1113,15 +1113,19 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     AV_SCOPE("Adapter::present");
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
-    PresentRequest   writing(platform_, *request);
-    PresentOperation kind = PresentOperation::blt;
-    const bool       named = writing.operation(kind) == Status::ok;
-    const uint32_t   first = request->MultipassOffset;
-    const int32_t    presented = writing.present().value();
+    PresentRequest writing(platform_, *request);
+    const uint32_t first = request->MultipassOffset;
+    const int32_t  presented = writing.present().value();
     /* The DMA buffer this wrote is executed on the host only for a context of
      * the rvk protocol; dxgkrnl's own presents are loopback-completed, so the
      * pixels the desktop presents move here (feature 046, FR-004). */
-    if (presented == 0 && named) move_presented_pixels(*request, kind, first);
+    if (presented == 0) {
+        PresentOperation kind = PresentOperation::blt;
+        /* A present that was written named an operation this driver presents:
+         * `present` refuses every other one before it writes anything. */
+        static_cast<void>(writing.operation(kind));
+        move_presented_pixels(*request, kind, first);
+    }
     log_status("rvkgpu: Present", presented);
     return presented;
 }

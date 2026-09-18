@@ -23,6 +23,9 @@ public:
     /* The window this plays, and its client size. */
     void         set_window(void *window, std::uint32_t width, std::uint32_t height);
     void         refuse_size();
+    /* The size is answered `count` times and refused after that: a window torn
+     * down between two of a caller's questions about it. */
+    void         refuse_size_after(std::uint32_t count);
     void         refuse_read();
     void         refuse_resize();
     /* Every pixel of the client area set to `bgra`, as a present does. */
@@ -41,6 +44,9 @@ private:
     std::uint32_t width_;
     std::uint32_t height_;
     bool          refuse_size_;
+    bool          limited_sizes_;
+    std::uint32_t size_limit_;
+    std::uint32_t sizes_;
     bool          refuse_read_;
     bool          refuse_resize_;
     std::uint32_t reads_;

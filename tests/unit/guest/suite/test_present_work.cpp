@@ -3,18 +3,38 @@
  * it draws and presents, and what it reads back off the window - with every
  * refusal each step can meet. */
 #include "guest/suite/bmp_image.hpp"
+#include "guest/suite/guest_report.hpp"
 #include "guest/suite/present_work.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
+#include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/window_frame.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
 #include "harness/guest/scripted_window_frame.hpp"
 
 #include <cstdint>
+#include <cstring>
+
+namespace av {
+
+/* The states no legitimate sequence can put the work in, which is what makes
+ * each clause of the invariant worth stating. */
+struct PresentWorkProbe {
+    static void more_images_than_there_is_room_for(PresentWork &work) { work.count_ = PresentWork::images + 1u; }
+    static void a_swapchain_without_its_surface(PresentWork &work) { work.surface_ = VK_NULL_HANDLE; }
+    static void images_with_no_swapchain(PresentWork &work) { work.count_ = 1u; }
+    static void a_framebuffer_without_its_view(PresentWork &work) { work.views_[0] = VK_NULL_HANDLE; }
+    static void wider_than_the_frame_it_keeps(PresentWork &work) { work.width_ = PresentWork::max_side + 1u; }
+    static void taller_than_the_frame_it_keeps(PresentWork &work) { work.height_ = PresentWork::max_side + 1u; }
+};
+
+}  // namespace av
 
 using av::PresentWork;
+using av::PresentWorkProbe;
 using av::ProbeDevice;
 using av::ProbeOutcome;
 using av::ScriptedVulkan;
@@ -32,7 +52,7 @@ void *const             module_handle = reinterpret_cast<void *>(0x7771u);
 /* A device on the scripted GPU, a window it presents into, and the work. */
 class PresentRig {
 public:
-    PresentRig() : device_(vulkan_)
+    PresentRig() : device_(vulkan_), report_("rvkvkprobe"), steps_(kmt_, report_, "vulkan")
     {
         frames_.set_window(window_handle, side, side);
         vulkan_.present_into(frames_);
@@ -50,11 +70,22 @@ public:
     /* The work over this rig; a window of nullptr is no window at all. */
     PresentWork          work() { return PresentWork(device_, frames_, pictures_, module_handle, window_handle); }
 
+    /* The line `step` would put in the guest's report: what the runner reads,
+     * and the only place a refusal says which one it was. */
+    const char *said(const ProbeOutcome &outcome, const char *step)
+    {
+        outcome.report(steps_, step);
+        return report_.text();
+    }
+
 private:
     ScriptedVulkan        vulkan_;
     ScriptedWindowFrame   frames_;
     av::ScriptedImageSink pictures_;
     ProbeDevice           device_;
+    av::MockKmt           kmt_;
+    av::GuestReport       report_;
+    av::ScenarioSteps     steps_;
 };
 
 }  // namespace
@@ -104,6 +135,58 @@ TEST(present_work, a_surface_that_does_not_describe_its_window_is_refused)
     CHECK(!work.make_surface(outcome));
     CHECK(work.invariants_hold()); } }
 
+/* What the surface offers is judged clause by clause, and the line each
+ * refusal writes says which kind it was: a driver's error, or nothing the
+ * probe can present through. */
+TEST(present_work, a_surface_offering_less_than_a_present_needs_is_refused)
+{ /* The window answers the surface's extent and is then gone: the size the
+   * surface must agree with cannot be had. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.frames().refuse_size_after(1u);
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0);
+    CHECK_EQ(work.height(), 0u); }
+  /* A surface as wide as its window but half as tall. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.vulkan().hold_the_surface_extent(side, side / 2u);
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0); }
+  /* A driver wanting more images than the work keeps room for. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.vulkan().ask_for_images(PresentWork::images + 1u);
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0);
+    /* Nothing of a surface that was refused is kept. */
+    CHECK_EQ(work.width(), 0u); }
+  /* The formats answered and the modes lost: the driver's error, not a
+   * surface that offers the wrong thing. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.vulkan().lose_the_present_modes();
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=7 3294967296\n") == 0); }
+  /* Both modes are needed: the paced one for the present step and the unpaced
+   * one for the resize, and a driver offering only one of them is refused. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.vulkan().offer_only_the_mode(VK_PRESENT_MODE_FIFO_KHR);
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0); }
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    rig.vulkan().offer_only_the_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+    CHECK(!work.make_surface(outcome));
+    CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0); } }
+
 TEST(present_work, a_swapchain_is_the_window_s_size_and_hands_out_its_images)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -145,15 +228,97 @@ TEST(present_work, a_swapchain_that_cannot_be_made_is_the_driver_s_refusal)
       CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
       CHECK(work.invariants_hold());
   }
-  /* A window larger than any frame it keeps, and one that cannot be measured. */
+  /* The fragment shader is the second module made: it is what fails, and the
+   * pipeline layout after it is never asked for. */
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    rig.vulkan().fail(Call::create_shader_module, 2u, VK_ERROR_OUT_OF_HOST_MEMORY);
+    CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    CHECK_EQ(rig.vulkan().calls(Call::create_shader_module), 2u);
+    CHECK_EQ(rig.vulkan().calls(Call::create_pipeline_layout), 0u);
+    CHECK(work.invariants_hold()); }
+  /* A window larger than any frame it keeps, in either direction, and one that
+   * cannot be measured: none of them reaches the driver. */
   PresentRig   rig;
   PresentWork  work = rig.work();
   ProbeOutcome outcome;
   CHECK(work.make_surface(outcome));
   CHECK(rig.frames().resize(window_handle, PresentWork::max_side + 8u, side));
   CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK(rig.frames().resize(window_handle, side, PresentWork::max_side + 8u));
+  CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
   rig.frames().refuse_size();
-  CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome)); }
+  CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 0u);
+  CHECK(work.invariants_hold()); }
+
+/* The swapchain is made but its images are not the two the work has room for:
+ * a driver's error is reported as one, and a count that is not two is a
+ * driver the work cannot present through. */
+TEST(present_work, a_swapchain_whose_images_cannot_be_had_is_refused)
+{ { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    rig.vulkan().lose_the_swapchain_images();
+    CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    CHECK(std::strcmp(rig.said(outcome, "present"), "FAIL vulkan.present status=7 4294967294\n") == 0);
+    CHECK_EQ(rig.vulkan().calls(Call::create_render_pass), 0u);
+    CHECK(work.invariants_hold()); }
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    rig.vulkan().hand_out_one_image();
+    CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    CHECK(std::strcmp(rig.said(outcome, "present"), "FAIL vulkan.present status=3 0\n") == 0);
+    /* Nothing is built on images the work never got. */
+    CHECK_EQ(rig.vulkan().calls(Call::create_image_view), 0u);
+    CHECK(work.invariants_hold()); } }
+
+/* Every clause of the invariant refuses the state it names. None of them is
+ * reachable by presenting, so each is put there by hand. */
+TEST(present_work, an_invariant_refuses_each_state_it_names)
+{ { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    PresentWorkProbe::more_images_than_there_is_room_for(work);
+    CHECK(!work.invariants_hold()); }
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    PresentWorkProbe::a_swapchain_without_its_surface(work);
+    CHECK(!work.invariants_hold()); }
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    work.release_swapchain();
+    PresentWorkProbe::images_with_no_swapchain(work);
+    CHECK(!work.invariants_hold()); }
+  { PresentRig   rig;
+    PresentWork  work = rig.work();
+    ProbeOutcome outcome;
+    CHECK(work.make_surface(outcome));
+    CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+    PresentWorkProbe::a_framebuffer_without_its_view(work);
+    CHECK(!work.invariants_hold()); }
+  /* A frame larger than the bytes kept for it, in either direction. */
+  { PresentRig  rig;
+    PresentWork work = rig.work();
+    PresentWorkProbe::wider_than_the_frame_it_keeps(work);
+    CHECK(!work.invariants_hold()); }
+  { PresentRig  rig;
+    PresentWork work = rig.work();
+    PresentWorkProbe::taller_than_the_frame_it_keeps(work);
+    CHECK(!work.invariants_hold()); } }
 
 /* The frames reach the window: every pixel of it is the triangle's colour,
  * and the picture kept is what the window showed. */

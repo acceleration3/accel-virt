@@ -36,7 +36,10 @@ ScriptedVulkan::ScriptedVulkan()
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
-      pacing_adapter_(0u), pacing_device_(0u), held_extent_(false), nothing_presentable_(false), lost_surface_(false), held_width_(0u), held_height_(0u), swapchain_(0u),
+      pacing_adapter_(0u), pacing_device_(0u), held_extent_(false), nothing_presentable_(false), lost_surface_(false),
+      lost_present_modes_(false), one_mode_(false), only_mode_(VK_PRESENT_MODE_FIFO_KHR),
+      least_images_(images_per_swapchain), lost_swapchain_images_(false), one_image_(false),
+      held_width_(0u), held_height_(0u), swapchain_(0u),
       swapchain_width_(0u), swapchain_height_(0u), swapchain_images_{}, retired_(0u), retired_images_{}, next_image_(0u), presents_(0u),
       drew_since_present_(false)
 {
@@ -618,6 +621,16 @@ void ScriptedVulkan::hold_the_surface_extent(std::uint32_t width, std::uint32_t 
 
 void ScriptedVulkan::offer_nothing_presentable() { nothing_presentable_ = true; }
 void ScriptedVulkan::lose_the_surface_queries() { lost_surface_ = true; }
+void ScriptedVulkan::lose_the_present_modes() { lost_present_modes_ = true; }
+void ScriptedVulkan::ask_for_images(std::uint32_t minimum) { least_images_ = minimum; }
+void ScriptedVulkan::lose_the_swapchain_images() { lost_swapchain_images_ = true; }
+void ScriptedVulkan::hand_out_one_image() { one_image_ = true; }
+
+void ScriptedVulkan::offer_only_the_mode(VkPresentModeKHR mode)
+{
+    one_mode_ = true;
+    only_mode_ = mode;
+}
 
 std::uint32_t ScriptedVulkan::presents() const { return presents_; }
 
@@ -647,7 +660,7 @@ VkResult ScriptedVulkan::surface_capabilities(VkPhysicalDevice, VkSurfaceKHR sur
         height = held_height_;
     }
     *capabilities = VkSurfaceCapabilitiesKHR{};
-    capabilities->minImageCount = images_per_swapchain;
+    capabilities->minImageCount = least_images_;
     capabilities->maxImageCount = images_per_swapchain * 4u;
     capabilities->currentExtent = {width, height};
     capabilities->maxImageExtent = {width, height};
@@ -682,10 +695,12 @@ VkResult ScriptedVulkan::surface_formats(VkPhysicalDevice, VkSurfaceKHR surface,
 VkResult ScriptedVulkan::surface_present_modes(VkPhysicalDevice, VkSurfaceKHR surface, std::uint32_t *count,
                                                VkPresentModeKHR *modes)
 {
-    if (find(Kind::surface, raw(surface)) == nullptr || lost_surface_) return VK_ERROR_SURFACE_LOST_KHR;
+    if (find(Kind::surface, raw(surface)) == nullptr || lost_surface_ || lost_present_modes_)
+        return VK_ERROR_SURFACE_LOST_KHR;
     const VkPresentModeKHR presentable[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
     const VkPresentModeKHR unpresentable[] = {VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR};
-    const VkPresentModeKHR *const offered = nothing_presentable_ ? unpresentable : presentable;
+    const VkPresentModeKHR only[] = {only_mode_, only_mode_};
+    const VkPresentModeKHR *const offered = one_mode_ ? only : (nothing_presentable_ ? unpresentable : presentable);
     const std::uint32_t           available = 2u;
     if (modes == nullptr) {
         *count = available;
@@ -742,14 +757,16 @@ void ScriptedVulkan::destroy_swapchain(VkDevice, VkSwapchainKHR swapchain)
 VkResult ScriptedVulkan::swapchain_images(VkDevice, VkSwapchainKHR swapchain, std::uint32_t *count, VkImage *images)
 {
     if (raw(swapchain) != swapchain_ || swapchain_ == 0u) return VK_ERROR_OUT_OF_DATE_KHR;
+    if (lost_swapchain_images_) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    const std::uint32_t available = one_image_ ? 1u : images_per_swapchain;
     if (images == nullptr) {
-        *count = images_per_swapchain;
+        *count = available;
         return VK_SUCCESS;
     }
-    const std::uint32_t written = *count < images_per_swapchain ? *count : images_per_swapchain;
+    const std::uint32_t written = *count < available ? *count : available;
     for (std::uint32_t index = 0u; index < written; index++) images[index] = as_handle<VkImage>(swapchain_images_[index]);
     *count = written;
-    return written < images_per_swapchain ? VK_INCOMPLETE : VK_SUCCESS;
+    return written < available ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 /* The window is what decides: one of another size than the swapchain has left

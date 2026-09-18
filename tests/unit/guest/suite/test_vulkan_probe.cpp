@@ -428,6 +428,48 @@ TEST(vulkan_probe, frames_the_driver_did_not_pace_fail_the_pacing_step)
   CHECK(rig.holds("FAIL vulkan.pacing status=4 0"));
   CHECK(rig.holds("ok vulkan.present 4096")); }
 
+/* The pacing step times a blank on an adapter and device of its own: without
+ * one there is nothing to compare sixty frames against, and the step measures
+ * nothing rather than judging the driver on a period it never had. */
+TEST(vulkan_probe, a_pacing_step_that_cannot_find_the_adapter_measures_nothing)
+{ ProbeRig rig;
+  /* The probe's LUID step enumerates first and the pacing step second: it is
+   * the second of the two that must find nothing. */
+  rig.kmt().fail_at(MockKmt::Call::enumerate_adapters, 2u, 0xC0000001u);
+  rig.run();
+  CHECK(rig.holds("ok vulkan.present 4096\n"));
+  CHECK(rig.holds("FAIL vulkan.pacing status=3 0\n"));
+  /* The steps after it are unharmed: only the pacing needed the adapter. */
+  CHECK(rig.holds("ok vulkan.resized 9216\n"));
+  CHECK_EQ(rig.report().failed(), 1u); }
+
+TEST(vulkan_probe, a_pacing_step_without_a_device_measures_nothing)
+{ ProbeRig rig;
+  /* The rig made its own device already; the next one is the pacing step's. */
+  rig.kmt().fail_at(MockKmt::Call::create_device, 1u, 0xC0000001u);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.pacing status=3 0\n"));
+  /* Nothing was waited on: a device that was never made cannot be. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), VulkanProbe::frames + 1u);
+  CHECK_EQ(rig.report().failed(), 1u); }
+
+/* The period is two blanks apart: neither wait may be refused, and the frames
+ * the driver did pace are not judged against a period that was never timed. */
+TEST(vulkan_probe, a_blank_the_driver_refuses_measures_no_pacing)
+{ ProbeRig rig;
+  rig.kmt().fail_at(MockKmt::Call::wait_for_vertical_blank, VulkanProbe::frames + 1u, 0xC0000001u);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.pacing status=3 0\n"));
+  /* The second wait is never asked for once the first was refused. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), VulkanProbe::frames + 2u); }
+
+TEST(vulkan_probe, a_second_blank_that_never_comes_measures_no_pacing)
+{ ProbeRig rig;
+  rig.kmt().fail_at(MockKmt::Call::wait_for_vertical_blank, VulkanProbe::frames + 2u, 0xC0000001u);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.pacing status=3 0\n"));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), VulkanProbe::frames + 3u); }
+
 /* A resized window: the swapchain is out of date until the application makes
  * another, and the new one presents at the new size. */
 TEST(vulkan_probe, a_swapchain_that_ignores_a_resize_fails_the_resized_step)
@@ -436,6 +478,36 @@ TEST(vulkan_probe, a_swapchain_that_ignores_a_resize_fails_the_resized_step)
   rig.run();
   CHECK(rig.holds("FAIL vulkan.resized status=3 0"));
   CHECK(rig.holds("ok vulkan.present 4096")); }
+
+/* The resized window must be what the swapchain notices: any other answer to
+ * the stale present is reported as the one the driver gave. */
+TEST(vulkan_probe, a_stale_present_that_is_not_out_of_date_fails_the_resized_step)
+{ ProbeRig rig;
+  rig.vulkan().fail(Call::acquire_next_image, VulkanProbe::frames + 1u, VK_ERROR_SURFACE_LOST_KHR);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.resized status=4 3294967296\n"));
+  CHECK(rig.holds("ok vulkan.present 4096\n"));
+  /* No second swapchain is made for a window whose loss was not a resize. */
+  CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 1u); }
+
+/* The swapchain made for the new size is the step's whole point: it must be
+ * made, and it must present. */
+TEST(vulkan_probe, a_swapchain_the_resize_cannot_replace_fails_the_resized_step)
+{ ProbeRig rig;
+  rig.vulkan().fail(Call::create_swapchain, 2u, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.resized status=7 4294967294\n"));
+  CHECK(rig.holds("ok vulkan.present 4096\n"));
+  /* The window was never read again: there was no frame at the new size. */
+  CHECK_EQ(rig.frames().reads(), 1u); }
+
+TEST(vulkan_probe, a_frame_the_new_swapchain_cannot_present_fails_the_resized_step)
+{ ProbeRig rig;
+  rig.vulkan().fail(Call::queue_present, VulkanProbe::frames + 1u, VK_ERROR_DEVICE_LOST);
+  rig.run();
+  CHECK(rig.holds("FAIL vulkan.resized status=7 4294967292\n"));
+  CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 2u);
+  CHECK_EQ(rig.frames().reads(), 1u); }
 
 /* With no window there are no window-system steps, and the rest of the probe
  * is unchanged: a probe on a machine with no desktop still proves the GPU. */

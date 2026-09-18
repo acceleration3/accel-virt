@@ -112,6 +112,18 @@ public:
      * in, and one whose queries answer that it is lost. */
     void          offer_nothing_presentable();
     void          lose_the_surface_queries();
+    /* The least images the surface will make a swapchain of: a driver asking
+     * for more than the caller keeps room for. */
+    void          ask_for_images(std::uint32_t minimum);
+    /* Every mode the surface offers is this one, listed twice: a driver that
+     * presents one way only. */
+    void          offer_only_the_mode(VkPresentModeKHR mode);
+    /* The present modes alone are lost, after the formats were answered. */
+    void          lose_the_present_modes();
+    /* A swapchain whose images cannot be listed, and one that hands out one
+     * image where the caller asked for two. */
+    void          lose_the_swapchain_images();
+    void          hand_out_one_image();
     std::uint32_t presents() const;
 
     /* After the fault every LUID is xored with `luid_xor` and every family has
@@ -298,6 +310,12 @@ private:
     bool          held_extent_;
     bool          nothing_presentable_;
     bool          lost_surface_;
+    bool          lost_present_modes_;
+    bool          one_mode_;
+    VkPresentModeKHR only_mode_;
+    std::uint32_t least_images_;
+    bool          lost_swapchain_images_;
+    bool          one_image_;
     std::uint32_t held_width_;
     std::uint32_t held_height_;
     std::uint64_t swapchain_;

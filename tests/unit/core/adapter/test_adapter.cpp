@@ -1363,6 +1363,17 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
   CHECK(dump.holds("presents_unmoved=0"));
   CHECK_EQ(fixture.platform().mapped_frames(), 0u);
 
+  /* A present's sub-rectangles are the parts of it that changed: only those
+   * rows move, and the rest of the destination keeps what it had. */
+  destination.paint_all(0u);
+  const av::RectRecord changed[2] = {{0, 0, side, 1}, {0, 2, side, 3}};
+  present.SubRectCnt = 2u;
+  present.pDstSubRects = changed;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), 2u * MappedSurface::side);
+  present.SubRectCnt = 0u;
+  present.pDstSubRects = nullptr;
+
   /* A destination rectangle of another size than the source's is a stretch this
    * driver does not do: the present still succeeds - dxgkrnl's DMA buffer was
    * written - but the pixels stay where they were, and the driver says so. */
@@ -1376,6 +1387,95 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
 
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A colour fill names one allocation - the destination - and writes the
+ * present's colour over it. It is the other operation dxgkrnl's own presents
+ * use, and it needs no source at all. */
+TEST(adapter_present, a_colour_fill_writes_the_present_s_colour_over_its_destination)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface       destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  av::DxgkAllocationListRecord list[1] = {};
+  list[0].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t                      dma[512] = {};
+  av::D3dddiPatchLocationListRecord patches[8] = {};
+  av::DxgkargPresentRecord          present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 8u;
+  present.Flags = 2u;   /* ColorFill */
+  present.Color = MappedSurface::colour;
+  present.pAllocationList = list;
+  present.NumSrcAllocations = 0u;
+  present.NumDstAllocations = 1u;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  const StateDump filled(fixture);
+  CHECK(filled.holds("present_rows=8"));
+  CHECK(filled.holds("presents_unmoved=0"));
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+
+  /* A fill whose destination this device never opened moves nothing, and a
+   * fill naming no destination at all is not a present of anything. */
+  list[0].hDeviceSpecificAllocation = &fixture;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000002 sources 0 destinations 1"));
+  present.NumDstAllocations = 0u;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000002 sources 0 destinations 0"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A blt names exactly one source and one destination. One that names two
+ * sources is a present this driver does not know how to read, and one whose
+ * source it never opened is a present it cannot read at all. */
+TEST(adapter_present, a_blt_naming_a_source_it_cannot_reach_moves_nothing)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface       destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  destination.paint_all(0u);
+  av::DxgkAllocationListRecord list[3] = {};
+  list[0].hDeviceSpecificAllocation = &fixture;               /* no allocation of this device */
+  list[1].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t                      dma[512] = {};
+  av::D3dddiPatchLocationListRecord patches[8] = {};
+  av::DxgkargPresentRecord          present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 8u;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = list;
+  present.NumSrcAllocations = 1u;
+  present.NumDstAllocations = 1u;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
+  present.NumSrcAllocations = 2u;
+  list[2].hDeviceSpecificAllocation = destination.open_handle();
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000001 sources 2 destinations 1"));
+  const StateDump dump(fixture);
+  CHECK(dump.holds("present_rows=0"));
+  CHECK(dump.holds("presents_unmoved=2"));
+  CHECK_EQ(destination.count(0u), MappedSurface::side * MappedSurface::side);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
