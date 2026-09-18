@@ -109,3 +109,24 @@ Two consequences:
 - `LoopbackDoorbells` (`tests/harness/`) already models a doorbell page whose
   store at offset 0 rings the mock host, so the full-stack rig can show a
   user-mode store reaching the worker without a new harness.
+
+## 9. Native fences are not this feature's, and FR-003 has to say so
+
+FR-003 asks completion waits to use native fences. That is thirteen more DDIs -
+`CreateNativeFence`, `Open`, `Close`, `Destroy`, `UpdateMonitoredValues`,
+`UpdateCurrentValuesFromCpu`, `SetNativeFenceLogBuffer`, `UpdateNativeFenceLogs`
+and their caps (`d3dkmddi.h:3147-3409`, slots 162-165 and 186-189) - each with
+GPU-visible fence memory, a log buffer the OS reads for scheduling, and a
+sharing path across processes. It is a feature's worth of work beside the
+doorbell's, and 024's own title carries both for the same reason: they arrived
+in WDDM 3.1 together, not because they are one mechanism.
+
+What 049 delivers is the submission half: a store that reaches the device with
+no kernel transition. The wait stays what it is today -
+`Kmt::wait_for_context`, which the device wakes through the fence queue's irqfd
+(feature 044) - and the benchmark measures the submit cost, which is what SC-001
+is about. A wait without a kernel transition is what the native fences buy, and
+it belongs with them.
+
+**This is a scope finding, recorded rather than quietly dropped**: FR-003 is
+not met by this feature, and the spec says so beside the requirement.

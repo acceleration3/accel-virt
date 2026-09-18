@@ -136,7 +136,12 @@ records both ways and reports per-submit cost.
 - **FR-002**: The KMD honours `DisconnectDoorbell` by remapping to a dummy page
   before returning (kb 05), and reports the doorbell's connection state.
 - **FR-003**: Completion waits use native fences, including across processes
-  once opened (feature 025).
+  once opened (feature 025). **Not delivered by this feature** (research.md §9):
+  native fences are thirteen further DDIs with GPU-visible fence memory and log
+  buffers the OS reads, which is a feature's work beside the doorbell's. 049
+  delivers the submission half - a store that reaches the device with no kernel
+  transition - and the wait stays `Kmt::wait_for_context`, woken by the fence
+  queue's irqfd (feature 044).
 - **FR-004**: The hot path takes no lock, makes no allocation and no system call
   in the steady state; this is asserted by the harness.
 - **FR-005**: Every value the device reads from a user-written ring or doorbell is
