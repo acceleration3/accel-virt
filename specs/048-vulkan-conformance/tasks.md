@@ -57,7 +57,7 @@ CTS present.
 
 - [X] T018 [US3] `tools/gate.sh` runs `--cts` as a guest step when both a prepared image and the pinned CTS are there, and says it skipped when either is missing (FR-006)
 - [X] T019 docs: `docs/testing.md` (the conformance run, what the verdict is and why it is a comparison, and the ratchet) and `docs/kb/` if the CTS's shape needs writing down
-- [ ] T020 Coverage and the tools shards; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
+- [X] T020 Coverage and the tools shards; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 
 ## Dependencies
 
