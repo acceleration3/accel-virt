@@ -9,6 +9,7 @@
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
 #include "core/support/status.hpp"
+#include "icd/opengl/front_buffer.hpp"
 #include "icd/opengl/pixel_format.hpp"
 
 #include <stddef.h>
@@ -62,6 +63,10 @@ public:
     [[nodiscard]] Status prepare(ClientTransport &wire, void *window, const PixelFormat &format,
                                  icd::WindowSurface &surface);
     void    *window() const;
+    /* The last frame this put on the window, which is what GL_FRONT names
+     * (feature 051): the host has no front buffer, since the window is a
+     * framebuffer object there. */
+    const FrontBuffer &front() const;
     /* 0 until prepared. */
     uint32_t framebuffer() const;
     uint32_t width() const;
@@ -104,6 +109,7 @@ private:
     uint32_t      texture_;
     uint32_t      renderbuffers_[renderbuffers];
     uint8_t      *pixels_;
+    FrontBuffer   front_;
     size_t        capacity_;
     bool          refusal_logged_;
 

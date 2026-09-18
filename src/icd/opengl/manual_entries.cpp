@@ -154,6 +154,13 @@ void APIENTRY Wrap_glEnableVertexAttribArray(GLuint index)
     ::av::glicd::gl_icd_binding.root().manual().enable_vertex_attrib_array(index, true);
 }
 
+void APIENTRY Wrap_glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type,
+                                void *pixels)
+{
+    AV_SCOPE("Wrap_glReadPixels");
+    ::av::glicd::gl_icd_binding.root().manual().read_pixels(x, y, width, height, format, type, pixels);
+}
+
 void APIENTRY Wrap_glFlush(void)
 {
     AV_SCOPE("Wrap_glFlush");

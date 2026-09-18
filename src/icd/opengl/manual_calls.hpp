@@ -91,6 +91,11 @@ public:
     size_t compressed_level_bytes(uint32_t target, int32_t level);
     /* glGetIntegerv, but GL_NUM_EXTENSIONS answers the context's list. */
     void           integers(uint32_t pname, int32_t *data);
+    /* glReadPixels: a read of the window's GL_FRONT is answered from the frame
+     * the swap put there, since the host has no front buffer; everything else
+     * goes to the host as it did (feature 051). */
+    void           read_pixels(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format, uint32_t type,
+                               void *pixels);
     const uint8_t *string(uint32_t name);
     const uint8_t *string_i(uint32_t name, uint32_t index);
 

@@ -25,7 +25,7 @@ static_assert(BackBufferPresenter::max_edge * 4u <= BackBufferPresenter::inline_
 
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, icd::LogSink &log)
     : memory_(memory), log_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
-      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), capacity_(0u), refusal_logged_(false)
+      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(false)
 {
     AV_SCOPE("BackBufferPresenter::BackBufferPresenter");
 }
@@ -61,6 +61,12 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
     delete_objects(wire);
     release(nullptr);
     return made;
+}
+
+const FrontBuffer &BackBufferPresenter::front() const
+{
+    AV_SCOPE("BackBufferPresenter::front");
+    return front_;
 }
 
 void    *BackBufferPresenter::window() const
@@ -104,6 +110,8 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     if (!plain) set_pack(wire, state, true);
     read_back(wire);
     if (!plain) set_pack(wire, state, false);
+    /* What the window is showing now is what a read of GL_FRONT answers. */
+    front_.presented(pixels_, width_, height_);
     if (surface.blit(dc, width_, height_, pixels_) || refusal_logged_) return true;
     char       line[line_bytes];
     TextBuffer text(line, sizeof line);
@@ -121,6 +129,7 @@ void BackBufferPresenter::release(ClientTransport *wire)
     AV_SCOPE("BackBufferPresenter::release");
     if (wire != nullptr) delete_objects(*wire);
     forget_objects();
+    front_.forget();
     if (pixels_ != nullptr) memory_.release(pixels_);
     pixels_ = nullptr;
     capacity_ = 0u;

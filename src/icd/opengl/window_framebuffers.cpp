@@ -11,7 +11,7 @@ namespace av::glicd {
 
 WindowFramebuffers::WindowFramebuffers(BlockSource &memory, icd::LogSink &log)
     : memory_(memory), log_(log), presenters_{}, current_(max_windows), draws_window_(false), reads_window_(false),
-      ever_current_(false)
+      read_buffer_(gl_back), ever_current_(false)
 {
     AV_SCOPE("WindowFramebuffers::WindowFramebuffers");
 }
@@ -76,6 +76,21 @@ void WindowFramebuffers::bound(uint32_t target, uint32_t name)
     const bool window = name == 0u;
     if (target == gl_framebuffer || target == gl_draw_framebuffer) draws_window_ = window;
     if (target == gl_framebuffer || target == gl_read_framebuffer) reads_window_ = window;
+}
+
+void WindowFramebuffers::reading(uint32_t buffer)
+{
+    AV_SCOPE("WindowFramebuffers::reading");
+    read_buffer_ = buffer;
+}
+
+bool WindowFramebuffers::read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
+                                    uint32_t type, void *pixels) const
+{
+    AV_SCOPE("WindowFramebuffers::read_front");
+    if (!reads_window_ || current_ == max_windows) return false;
+    if (read_buffer_ != gl_front && read_buffer_ != gl_front_left) return false;
+    return presenters_[current_].object().front().read(x, y, width, height, format, type, pixels);
 }
 
 uint32_t WindowFramebuffers::buffer_for(uint32_t buffer, bool drawing) const

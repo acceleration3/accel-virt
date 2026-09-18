@@ -1962,7 +1962,10 @@ HANDWRITTEN = {
     # and the buffers an application names for it - GL_BACK, GL_FRONT -
     # are that object's colour attachment; only the guest knows which
     # window the calling context is current on (back_buffer_presenter).
-    "glBindFramebuffer", "glDrawBuffer", "glReadBuffer",
+    # GL_FRONT has no host buffer at all: what it names is the frame the
+    # swap already read back and put on the window, which the guest still
+    # holds, so a read of it is answered here (feature 051, FrontBuffer).
+    "glBindFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels",
 
     # The array pointers and the draws that read them. A pointer taken
     # with no buffer bound is an address in the guest, and the rows it

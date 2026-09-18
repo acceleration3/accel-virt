@@ -2938,14 +2938,6 @@ void APIENTRY Wrap_glQueryCounter(GLuint id, GLenum target) {
     ::av::glproto::rvk_glQueryCounter(*rvk_t, id, target);
 }
 
-void APIENTRY Wrap_glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels) {
-    AV_SCOPE("glReadPixels");
-    auto* rvk_t = ::av::glicd::wire();
-    if (rvk_t == nullptr) return;
-    const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
-    ::av::glproto::rvk_glReadPixels(*rvk_t, x, y, width, height, format, type, pixels, rvk_pixels_offset ? 0 : ::av::glicd::pixel_bytes(format, type, width, height, 1, true), rvk_pixels_offset);
-}
-
 void APIENTRY Wrap_glReadnPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, void* data) {
     AV_SCOPE("glReadnPixels");
     auto* rvk_t = ::av::glicd::wire();

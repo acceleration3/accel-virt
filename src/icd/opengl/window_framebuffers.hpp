@@ -64,6 +64,15 @@ public:
     uint32_t name_of(uint32_t name) const;
     /* glBindFramebuffer(target, name), which of the two bindings is the window now. */
     void     bound(uint32_t target, uint32_t name);
+    /* What the application last named as its read buffer, so a read of
+     * GL_FRONT is answered from the frame the window is showing (feature
+     * 051). */
+    void     reading(uint32_t buffer);
+    /* Answers `width` x `height` pixels from (`x`, `y`) out of the current
+     * window's last presented frame; false unless the read is of GL_FRONT on
+     * the window, and then the host answers it as before. */
+    [[nodiscard]] bool read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
+                                  uint32_t type, void *pixels) const;
     /* A draw or read buffer the application names, as the window's
      * framebuffer object takes it: the window's buffers are its colour
      * attachment while that binding is the window. */
@@ -94,6 +103,9 @@ private:
     uint32_t                            current_;
     bool                                draws_window_;
     bool                                reads_window_;
+    /* The buffer glReadBuffer last named, GL_BACK until it is named. */
+    uint32_t                            read_buffer_;
+
     bool                                ever_current_;
 
     friend struct WindowFramebuffersProbe;

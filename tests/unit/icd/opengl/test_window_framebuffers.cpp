@@ -267,6 +267,32 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
+/* Feature 051: the host has no front buffer - the window is a framebuffer
+ * object there - so GL_FRONT names the frame the swap put on the window, which
+ * the guest still holds. A read of it is answered from there; a read of
+ * anything else is the host's. */
+TEST(window_framebuffers, a_read_of_the_windows_front_buffer_is_answered_without_the_host)
+{ Rig rig;
+  CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  std::uint8_t pixels[64] = {};
+  /* Nothing presented yet, and the read buffer is GL_BACK. */
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  rig.context_rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], doubled, rig.surface));
+  /* Still the back buffer: that read is the host's. */
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  rig.framebuffers.reading(0x0404u /* GL_FRONT */);
+  const std::uint32_t commands = rig.commands();
+  CHECK(rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  CHECK_EQ(rig.commands(), commands);
+  /* A rectangle past the frame, and a format no present produced, are the
+   * host's too. */
+  CHECK(!rig.framebuffers.read_front(0, 0, 4096, 4096, 0x80E1u, 0x1401u, pixels));
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x1907u /* GL_RGB */, 0x1401u, pixels));
+  rig.framebuffers.reading(0x0405u /* GL_BACK */);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  CHECK(rig.framebuffers.invariants_hold()); }
+
 TEST(window_framebuffers, gone_windows_are_given_up_and_release_gives_up_all)
 { Rig rig;
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);

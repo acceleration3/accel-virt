@@ -1,5 +1,7 @@
 #include "icd/opengl/manual_calls.hpp"
 
+#include "proto/gl_icd_support.hpp"
+
 #include "icd/opengl/granted_profile.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -482,7 +484,20 @@ void ManualCalls::read_buffer(uint32_t buffer)
     AV_SCOPE("ManualCalls::read_buffer");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    context->framebuffers().reading(buffer);
     glproto::rvk_glReadBuffer(*context->wire(), context->framebuffers().buffer_for(buffer, false));
+}
+
+void ManualCalls::read_pixels(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format, uint32_t type,
+                              void *pixels)
+{
+    AV_SCOPE("ManualCalls::read_pixels");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (context->framebuffers().read_front(x, y, width, height, format, type, pixels)) return;
+    const bool offset = glicd::pixel_buffer_bound(true);
+    glproto::rvk_glReadPixels(*context->wire(), x, y, width, height, format, type, pixels,
+                              offset ? 0u : glicd::pixel_bytes(format, type, width, height, 1, true), offset);
 }
 
 const uint8_t *ManualCalls::string(uint32_t name)
