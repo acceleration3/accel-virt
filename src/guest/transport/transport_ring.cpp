@@ -4,6 +4,7 @@
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -65,6 +66,15 @@ uint64_t TransportRing::read_head() const
     if (ring_ == nullptr) return 0u;
     WireReader reader(ring_ + head_offset, sizeof(uint64_t));
     return reader.read_u64();
+}
+
+Status TransportRing::publish_tail()
+{
+    AV_SCOPE("TransportRing::publish_tail");
+    if (ring_ == nullptr) return Status::invalid_state;
+    WireWriter writer(ring_ + tail_offset, sizeof(uint64_t));
+    writer.write_u64(tail_);
+    return writer.status();
 }
 
 uint64_t TransportRing::tail() const

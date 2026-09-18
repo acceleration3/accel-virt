@@ -35,6 +35,15 @@ public:
     [[nodiscard]] Status write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id,
                                      uint64_t &begin, uint64_t &end);
 
+    /* Writes the tail this ring has reached into the header, which the device
+     * reads to know how far the process has produced.
+     *
+     * The kernel path never calls it: there the miniport publishes the tail
+     * once it has checked the submission (docs/protocol.md, Submission). A
+     * process that rings its own doorbell has no kernel in the way, so it
+     * publishes its own tail - and the device's check of that tail is then the
+     * only one there is (feature 049). invalid_state unbound. */
+    [[nodiscard]] Status publish_tail();
     uint64_t tail() const;
     /* The device's head, read from the ring header each time. */
     uint64_t head() const;
@@ -46,6 +55,7 @@ public:
 
 private:
     static constexpr size_t   header_size = 32u;
+    static constexpr uint64_t tail_offset = 8u;
     static constexpr uint64_t head_offset = 16u;
 
     void     write_wrapped(uint64_t counter, const uint8_t *source, uint32_t count);

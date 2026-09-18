@@ -58,6 +58,38 @@ struct Ring {
 
 }  // namespace
 
+/* Who publishes the tail (feature 049). On the kernel path the miniport does
+ * it, once it has checked the submission - so the header's tail stays 0 however
+ * many batches the process wrote. A process that rings its own doorbell has no
+ * kernel in the way and publishes its own, which is the one write that makes
+ * its batches visible to the device. */
+TEST(transport_ring, publish_tail_is_what_a_process_that_rings_its_own_doorbell_writes)
+{ Ring          memory;
+  TransportRing ring;
+  /* Unbound, there is nothing to publish into. */
+  CHECK_STATUS(ring.publish_tail(), Status::invalid_state);
+  CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
+  std::uint8_t payload[64] = {};
+  std::uint64_t begin = 0u;
+  std::uint64_t end = 0u;
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 1u, begin, end), Status::ok);
+  /* Written, not published: this is the kernel path, and the header still says
+   * the device has been told of nothing. */
+  RingHeader header;
+  CHECK_STATUS(header.decode(memory.bytes, ring_bytes), Status::ok);
+  CHECK_EQ(header.tail(), 0u);
+  CHECK(ring.tail() > 0u);
+
+  CHECK_STATUS(ring.publish_tail(), Status::ok);
+  CHECK_STATUS(header.decode(memory.bytes, ring_bytes), Status::ok);
+  CHECK_EQ(header.tail(), ring.tail());
+  /* And publishing twice says the same thing: it is the counter, not an
+   * increment. */
+  CHECK_STATUS(ring.publish_tail(), Status::ok);
+  CHECK_STATUS(header.decode(memory.bytes, ring_bytes), Status::ok);
+  CHECK_EQ(header.tail(), ring.tail());
+  CHECK(ring.invariants_hold()); }
+
 TEST(transport_ring, is_unbound_until_initialized)
 { TransportRing ring;
   CHECK(ring.invariants_hold());

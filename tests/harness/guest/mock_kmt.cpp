@@ -131,11 +131,17 @@ void MockKmt::set_doorbell_status(std::uint32_t doorbell, std::uint32_t status)
     if (found != nullptr) found->status = status;
 }
 
-std::uint32_t MockKmt::doorbell_stores(std::uint32_t doorbell) const
+std::uint32_t MockKmt::doorbell_page(std::uint32_t doorbell) const
 {
     for (std::uint32_t index = 0u; index < doorbell_count_; index++)
         if (doorbells_[index].handle == doorbell) return doorbells_[index].page;
     return 0u;
+}
+
+void MockKmt::clear_doorbell_page(std::uint32_t doorbell)
+{
+    DoorbellPages *const found = doorbell_of(doorbell);
+    if (found != nullptr) found->page = 0u;
 }
 
 std::uint64_t MockKmt::queued_fence(std::uint32_t doorbell) const

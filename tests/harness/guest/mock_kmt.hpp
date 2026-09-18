@@ -155,7 +155,11 @@ public:
      * the stores it made to the doorbell. */
     void          refuse_hardware_scheduling();
     void          set_doorbell_status(std::uint32_t doorbell, std::uint32_t status);
-    std::uint32_t doorbell_stores(std::uint32_t doorbell) const;
+    /* What is in the doorbell's page now: a process's store is a four-byte
+     * write of a value that carries nothing, so what a test reads is whether
+     * it was stored to since the page was last cleared. */
+    std::uint32_t doorbell_page(std::uint32_t doorbell) const;
+    void          clear_doorbell_page(std::uint32_t doorbell);
     std::uint64_t queued_fence(std::uint32_t doorbell) const;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     /* As the driver answers a HostVisibleBindRecord: a bind of a host-visible
