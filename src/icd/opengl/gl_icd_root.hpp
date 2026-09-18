@@ -100,6 +100,10 @@ public:
      * describe and chooses none. */
     bool        pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
                                      int32_t *ints, float *floats);
+    /* glFlush: a single-buffered pixel format has no back buffer to swap, so
+     * the flush is what puts the frame on the window, as it does on Windows
+     * (feature 051, US2 edge case). */
+    void        flush_current();
     /* wglSwapIntervalEXT: false for an interval no extension this ICD reports
      * defines, or with no current context, with the error set. */
     bool        set_swap_interval(int32_t interval);

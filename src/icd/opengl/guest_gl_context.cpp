@@ -27,7 +27,7 @@ GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, ic
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), error_(no_error), share_target_(0u), link_(GlConnection::no_link), loss_reported_(false),
+      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(GlConnection::no_link), loss_reported_(false),
       staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
@@ -112,6 +112,18 @@ void                  GuestGlContext::set_owner(uint32_t thread)
 {
     AV_SCOPE("GuestGlContext::set_owner");
     owner_ = thread;
+}
+
+void *GuestGlContext::current_dc() const
+{
+    AV_SCOPE("GuestGlContext::current_dc");
+    return current_dc_;
+}
+
+void GuestGlContext::set_current_dc(void *dc)
+{
+    AV_SCOPE("GuestGlContext::set_current_dc");
+    current_dc_ = dc;
 }
 int32_t               GuestGlContext::pixel_format() const
 {

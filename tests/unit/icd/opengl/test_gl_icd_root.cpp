@@ -536,6 +536,34 @@ TEST(gl_icd_root, a_swap_on_a_window_nobody_can_see_reads_nothing_back)
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
   CHECK_EQ(rig.surface().blits(), blits + 1u); }
 
+/* Feature 051, US2 edge case: a single-buffered format has no back buffer to
+ * swap, so glFlush is what puts the frame on the window, as it does on
+ * Windows; SwapBuffers on one succeeds having presented nothing. */
+TEST(gl_icd_root, a_single_buffered_format_presents_on_flush)
+{ GlIcdRig rig;
+  CHECK(rig.opengl32().load(Root::icd_version, 1u) == av::FakeOpengl32::Load::loaded);
+  /* Format 2 is the single-buffered D24S8 one. */
+  CHECK(rig.opengl32().set_pixel_format(rig.dc(), 2));
+  void *const context = rig.opengl32().create_context(rig.dc());
+  CHECK(context != nullptr);
+  rig.host().gl_make("host gpu", "4.6.0 host");
+  rig.host().gl_policy(0);
+  rig.host().gl_window(1u, 1u);
+  CHECK(rig.opengl32().make_current(rig.dc(), context));
+  const std::uint32_t blits = rig.surface().blits();
+  rig.host().gl_bytes(nullptr, 0u);
+  rig.root().flush_current();
+  CHECK_EQ(rig.surface().blits(), blits + 1u);
+  /* And a double-buffered one flushes without presenting. */
+  CHECK(rig.opengl32().make_current(nullptr, nullptr));
+  CHECK(rig.opengl32().delete_context(context));
+  GlIcdRig doubled;
+  doubled.load_with_format();
+  CHECK(doubled.current_context() != nullptr);
+  const std::uint32_t untouched = doubled.surface().blits();
+  doubled.root().flush_current();
+  CHECK_EQ(doubled.surface().blits(), untouched); }
+
 TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
 { GlIcdRig rig;
   rig.load_with_format();

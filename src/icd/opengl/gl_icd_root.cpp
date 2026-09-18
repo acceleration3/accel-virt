@@ -204,6 +204,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
             return nullptr;
         }
     }
+    context->set_current_dc(dc);
     static_cast<void>(currents_.make_current(*context));
     return &proc_table_;
 }
@@ -215,6 +216,7 @@ bool GlIcdRoot::release_context(uint64_t handle)
     ScopeExit             release([&] { lock_.release(); });
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr || currents_.current() != context) return false;
+    context->set_current_dc(nullptr);
     currents_.release();
     return true;
 }
@@ -315,6 +317,15 @@ bool GlIcdRoot::swap_buffers(void *dc)
      * (feature 051, US2.2). */
     context->pace();
     return true;
+}
+
+void GlIcdRoot::flush_current()
+{
+    AV_SCOPE("GlIcdRoot::flush_current");
+    const GuestGlContext *const context = currents_.current();
+    if (context != nullptr && !formats_.format(context->pixel_format()).double_buffer())
+        static_cast<void>(swap_buffers(context->current_dc()));
+    manual_.flush();
 }
 
 bool GlIcdRoot::set_swap_interval(int32_t interval)

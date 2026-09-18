@@ -77,6 +77,10 @@ public:
     /* The thread the context is current on, 0 when none. */
     uint32_t             owner() const;
     void                 set_owner(uint32_t thread);
+    /* The device context it was made current on, which a flush that presents
+     * puts its frame on (feature 051); null when not current. */
+    void                *current_dc() const;
+    void                 set_current_dc(void *dc);
     int32_t              pixel_format() const;
     const GlContextOptions &options() const;
     /* The ring allocation another context names to share with this one; 0
@@ -162,6 +166,7 @@ private:
     GlContextOptions               options_;
     State                          state_;
     uint32_t                       owner_;
+    void                          *current_dc_;
     uint32_t                       error_;
     uint64_t                       share_target_;
     /* The device link a made or lost context holds; no_link otherwise. */

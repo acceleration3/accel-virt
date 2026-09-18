@@ -157,7 +157,7 @@ void APIENTRY Wrap_glEnableVertexAttribArray(GLuint index)
 void APIENTRY Wrap_glFlush(void)
 {
     AV_SCOPE("Wrap_glFlush");
-    ::av::glicd::gl_icd_binding.root().manual().flush();
+    ::av::glicd::gl_icd_binding.root().flush_current();
 }
 
 void APIENTRY Wrap_glFlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr length)

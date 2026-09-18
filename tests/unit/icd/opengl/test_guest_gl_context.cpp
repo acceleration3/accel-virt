@@ -231,6 +231,19 @@ TEST(guest_gl_context, a_context_created_with_attributes_asks_once)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::none); }
 
+/* Feature 051: the device context it was made current on, which a flush that
+ * presents puts its frame on. */
+TEST(guest_gl_context, it_remembers_the_dc_it_was_made_current_on)
+{ GlContextRig rig;
+  Context context(rig);
+  int dc = 0;
+  CHECK(context->current_dc() == nullptr);
+  context->set_current_dc(&dc);
+  CHECK(context->current_dc() == &dc);
+  context->set_current_dc(nullptr);
+  CHECK(context->current_dc() == nullptr);
+  CHECK(context->invariants_hold()); }
+
 TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
 { GlContextRig rig;
   {
