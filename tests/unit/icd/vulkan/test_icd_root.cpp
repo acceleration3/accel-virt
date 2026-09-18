@@ -344,18 +344,19 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
 
 /* The instance extensions are VK_KHR_get_physical_device_properties2 - its
  * entry points are the ICD's own, and a loader client such as vulkaninfo asks
- * for the physical device's LUID only when the extension is listed - and the
- * two surface extensions the WSI answers (feature 046). The count and array
- * protocol is the loader's: VK_INCOMPLETE with what fits, nothing written past
- * the capacity. */
+ * for the physical device's LUID only when the extension is listed - the two
+ * surface extensions the WSI answers (feature 046), and the *2 surface queries
+ * DXVK resolves whether or not it enabled them (feature 047). The count and
+ * array protocol is the loader's: VK_INCOMPLETE with what fits, nothing
+ * written past the capacity. */
 TEST(icd_root, reports_properties2_and_the_surface_extensions_as_its_instance_extensions)
 { IcdRig rig;
   const InstanceExtensions enumerate =
       rig.entry<InstanceExtensions>(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
-  std::uint32_t count = 5u;
+  std::uint32_t count = 6u;
   CHECK_EQ(enumerate(nullptr, &count, nullptr), VK_SUCCESS);
-  CHECK_EQ(count, 3u);
-  VkExtensionProperties properties[4] = {};
+  CHECK_EQ(count, 4u);
+  VkExtensionProperties properties[5] = {};
   properties[0].specVersion = 9u;
   count = 0u;
   CHECK_EQ(enumerate(nullptr, &count, properties), VK_INCOMPLETE);
@@ -364,16 +365,18 @@ TEST(icd_root, reports_properties2_and_the_surface_extensions_as_its_instance_ex
   count = 2u;
   CHECK_EQ(enumerate(nullptr, &count, properties), VK_INCOMPLETE);
   CHECK_EQ(count, 2u);
-  count = 4u;
+  count = 5u;
   CHECK_EQ(enumerate(nullptr, &count, properties), VK_SUCCESS);
-  CHECK_EQ(count, 3u);
+  CHECK_EQ(count, 4u);
   CHECK(__builtin_strcmp(properties[0].extensionName, "VK_KHR_get_physical_device_properties2") == 0);
   CHECK_EQ(properties[0].specVersion, 2u);
   CHECK(__builtin_strcmp(properties[1].extensionName, "VK_KHR_surface") == 0);
   CHECK_EQ(properties[1].specVersion, 25u);
   CHECK(__builtin_strcmp(properties[2].extensionName, "VK_KHR_win32_surface") == 0);
   CHECK_EQ(properties[2].specVersion, 6u);
-  CHECK_EQ(properties[3].specVersion, 0u);
+  CHECK(__builtin_strcmp(properties[3].extensionName, "VK_KHR_get_surface_capabilities2") == 0);
+  CHECK_EQ(properties[3].specVersion, 1u);
+  CHECK_EQ(properties[4].specVersion, 0u);
   bool implemented = false;
   for (const char *const name : av::vkproto::kImplementedInstanceExtensions)
     implemented = implemented || __builtin_strcmp(name, properties[0].extensionName) == 0;

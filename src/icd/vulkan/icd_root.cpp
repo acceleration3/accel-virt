@@ -136,6 +136,13 @@ constexpr InstanceExtension reported_instance_extensions[] = {
     {"VK_KHR_get_physical_device_properties2", 2u},
     {"VK_KHR_surface", 25u},
     {"VK_KHR_win32_surface", 6u},
+    /* DXVK resolves vkGetPhysicalDeviceSurfaceCapabilities2KHR whether or not
+     * it enabled the extension, and answering null there does not make it fall
+     * back - it makes D3D device creation fail
+     * (tools/codegen/profiles/vulkan.toml:19-25). The ICD answers both *2
+     * queries itself (feature 046), so it reports the extension that names
+     * them (feature 047, US1 scenario 1). */
+    {"VK_KHR_get_surface_capabilities2", 1u},
 };
 constexpr uint32_t reported_instance_extension_count =
     sizeof reported_instance_extensions / sizeof reported_instance_extensions[0];
