@@ -39,6 +39,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cts_results import CtsRatchet, QpaResults, SuiteComparison  # noqa: E402
+from submit_ratchet import SubmitRatchet  # noqa: E402
 from cts_shards import CtsShards  # noqa: E402
 from cts_subset import CtsSubset  # noqa: E402
 from fetch_cts import CtsFetch, CtsPins  # noqa: E402
@@ -64,6 +65,12 @@ RVK_LATENCY_LIMIT_US = 50000
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
 UPGRADED = re.compile(r"^upgrade: installed (\S+) running (\S+) problem 0\r?$", re.M)
+# What the doorbell bought, as the in-guest benchmark reports it (feature 049,
+# US3): both per-submission costs and the ratio the record holds.
+SUBMIT_DOORBELL_NS = re.compile(rb"^ok submit\.doorbell_ns (\d+)\r?$", re.M)
+SUBMIT_KERNEL_NS = re.compile(rb"^ok submit\.kernel_ns (\d+)\r?$", re.M)
+SUBMIT_RATIO = re.compile(rb"^ok submit\.ratio (\d+)\r?$", re.M)
+SUBMIT_DOORBELL = re.compile(rb"^note submit\.doorbell (\w+)\r?$", re.M)
 STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 # What Adapter::open_region logs at StartDevice, and the only place a run can
@@ -292,6 +299,7 @@ def arguments():
                         help="a .qpa of the same subset run natively on the host GPU; the verdict is the "
                              "comparison with it (FR-002)")
     parser.add_argument("--cts-ratchet", default=str(ROOT / "tools" / "cts_ratchet.txt"))
+    parser.add_argument("--submit-ratchet", default=str(ROOT / "tools" / "submit_ratchet.txt"))
     parser.add_argument("--frames", action="store_true",
                         help="capture the device's scanout after each application run and compare it with the "
                              "reference committed for it (feature 048, US2 and FR-004)")
@@ -942,6 +950,7 @@ class GuestRun:
             raise StepFailed("report", f"{failed} step(s) failed, exit {code}; see report.txt")
         self.say(f"report ok: {int(summary.group(1))} passed")
         self.report_stress(out)
+        self.report_submit(out)
         return out
 
     def report_stress(self, report):
@@ -955,6 +964,42 @@ class GuestRun:
             return
         self.say(f"stress ok: {int(fences.group(1))} fences awaited, worst wait "
                  f"{int(worst.group(1))} us")
+
+    def report_submit(self, report):
+        """US3: what a submission cost each way on this boot, and the ratio
+        against the record. The costs are said, never held: they are the
+        host's, and the ratio is the driver's (research.md §5)."""
+        ratio = SUBMIT_RATIO.search(report)
+        doorbell_ns = SUBMIT_DOORBELL_NS.search(report)
+        kernel_ns = SUBMIT_KERNEL_NS.search(report)
+        if ratio is None or doorbell_ns is None or kernel_ns is None:
+            self.say("submit skipped: the suite measured no submission cost")
+            return
+        connected = SUBMIT_DOORBELL.search(report)
+        if connected is None or connected.group(1) != b"connected":
+            self.say(f"submit skipped: this machine gave the adapter no hardware queue, so only the kernel "
+                     f"path ran ({int(kernel_ns.group(1))} ns a submission); nothing is measured against the "
+                     "record")
+            return
+        measured = int(ratio.group(1))
+        self.say(f"submit ok: {int(doorbell_ns.group(1))} ns through the doorbell, "
+                 f"{int(kernel_ns.group(1))} ns through the kernel, ratio {measured / 100:.2f}x")
+        record = SubmitRatchet(pathlib.Path(self.args.submit_ratchet))
+        try:
+            recorded = record.recorded
+        except ValueError as refused:
+            raise StepFailed("submit.ratchet", str(refused)) from refused
+        lost = record.lost(measured)
+        if lost:
+            raise StepFailed("submit.ratchet", f"the doorbell path is worth {measured / 100:.2f}x the kernel "
+                                               f"one here and {recorded / 100:.2f}x was recorded")
+        if not recorded:
+            self.say(f"submit.ratchet: nothing recorded yet; commit `{record.line(measured).strip()}` into "
+                     f"{self.args.submit_ratchet} in the change that earned it")
+            return
+        gained = record.gained(measured)
+        self.say(f"submit.ratchet ok: {recorded / 100:.2f}x kept" +
+                 (f", {gained / 100:.2f}x gained; commit `{record.line(measured).strip()}`" if gained else ""))
 
     def host_visible(self, report):
         """SC-003, and the one claim in this feature the guest cannot make for

@@ -36,6 +36,11 @@ void ScriptedHost::transport_run()
     for (std::uint32_t wait = 0u; wait < transport_waits; wait++) nop();
 }
 
+void ScriptedHost::submit_run()
+{
+    for (std::uint32_t wait = 0u; wait < submit_waits; wait++) nop();
+}
+
 void ScriptedHost::vk_result(std::int32_t result)
 {
     WireWriter writer(answer_, sizeof answer_);

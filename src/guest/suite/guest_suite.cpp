@@ -13,7 +13,7 @@ GuestSuite::GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds)
       vsync_(kmt, report, search_), transport_(kmt, report, search_, SubApi::vulkan, "transport"), stress_(kmt, report, search_, stress_seconds),
       timeout_(kmt, report, search_), opengl_(kmt, report, search_, SubApi::opengl, "opengl"),
       vulkan_(kmt, report, search_), opencl_(kmt, report, search_), host_import_(kmt, report, search_),
-      isolation_(kmt, report, search_)
+      isolation_(kmt, report, search_), submit_(kmt, report, search_)
       {
           AV_SCOPE("GuestSuite::GuestSuite");
       }
@@ -33,6 +33,10 @@ uint32_t GuestSuite::run_rvk()
     AV_SCOPE("GuestSuite::run_rvk");
     adapter_.run();
     transport_.run();
+    /* What user-mode submission bought, on the boot it ran on (feature 049,
+     * US3): before anything that faults a context, since it measures a context
+     * of its own that must be healthy. */
+    submit_.run();
     vulkan_.run();
     opencl_.run();
     host_import_.run();

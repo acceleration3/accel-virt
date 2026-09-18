@@ -98,7 +98,7 @@ public:
     static constexpr std::uint64_t default_local_budget = std::uint64_t{256} << 20u;
     static constexpr std::uint64_t default_non_local_budget = std::uint64_t{1} << 30u;
     /* Answers a test can queue, and commands the journal keeps. */
-    static constexpr std::uint32_t max_queued = 160u;
+    static constexpr std::uint32_t max_queued = 320u;
     static constexpr std::uint32_t max_journal = 128u;
     /* The leading bytes of each journalled command a test can read back. */
     static constexpr std::uint32_t journal_bytes = 128u;
@@ -201,6 +201,10 @@ public:
     /* A wait for a context costs this many ticks, as waiting for real work
      * does; 0 (the default) leaves the clock where it was. */
     void          spend_on_wait(std::uint64_t ticks);
+    /* A submission through the kernel costs this many ticks, as the transition
+     * into dxgkrnl does; a store to a doorbell costs nothing here, because it
+     * is a write in the process and this mock never sees it (feature 049). */
+    void          spend_on_submit(std::uint64_t ticks);
     /* Every `nth` wait for a context costs `ticks` more, as one the host was
      * slow to answer does: what a latency's median and fastest are judged by. */
     void          slow_every(std::uint32_t nth, std::uint64_t ticks);
@@ -324,6 +328,7 @@ private:
     Object       *find_mapping(std::uint64_t address);
     bool          is_locked(std::uint32_t allocation) const;
     void          write_answer(const Object &context);
+    void          take_doorbell_store(const Object &context);
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
     void          consume(const Object &context);
@@ -378,6 +383,7 @@ private:
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
+    std::uint64_t submit_cost_;
     std::uint32_t slow_nth_;
     std::uint64_t slow_ticks_;
     std::uint64_t frequency_;

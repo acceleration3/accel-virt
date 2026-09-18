@@ -13,6 +13,7 @@
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
+#include "guest/suite/submit_benchmark.hpp"
 #include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/transport_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
@@ -62,6 +63,7 @@ private:
     OpenClScenario      opencl_;
     HostVisibleImportScenario host_import_;
     IsolationScenario   isolation_;
+    SubmitBenchmark     submit_;
 };
 
 }  // namespace av

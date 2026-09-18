@@ -7,6 +7,8 @@
 #ifndef AV_SCRIPTED_HOST_HPP
 #define AV_SCRIPTED_HOST_HPP
 
+#include "guest/suite/submit_benchmark.hpp"
+
 #include <cstdint>
 
 namespace av {
@@ -49,6 +51,9 @@ public:
     static constexpr std::uint32_t vulkan_waits = 9u;
     static constexpr std::uint32_t opencl_waits = 24u;
     static constexpr std::uint32_t isolation_waits_before_fault = 3u;
+    /* The submit benchmark's (feature 049): the warm no-op, and the drain at
+     * the end of every timed block on each path. */
+    static constexpr std::uint32_t submit_waits = 1u + 2u * SubmitBenchmark::rounds;
     /* The import scenario's waits, and the one of them that waits for the fence
      * of the submitted copy - where a test plays the host GPU's copy. */
     static constexpr std::uint32_t host_visible_import_waits = 21u;
@@ -62,6 +67,8 @@ public:
     void nop();
     /* A whole transport scenario's no-ops. */
     void transport_run();
+    /* A whole submit benchmark's: every one of them is a no-op. */
+    void submit_run();
     void vk_result(std::int32_t result);
     void vk_handle(std::int32_t result, std::uint64_t handle);
     /* How many physical devices, for the call that asks only that. */

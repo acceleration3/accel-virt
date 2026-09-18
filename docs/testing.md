@@ -529,6 +529,22 @@ src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
   last fence completes too, with no reply behind it.
   A vertical blank turns the driver's vsync on and runs the platform's timers
   to the next one.
+- Feature 049's doorbells, once a rig asks for them
+  (`DdiKmt::allow_hardware_scheduling`, off by default as hardware-accelerated
+  GPU scheduling is off on Windows until it is turned on): CreateHwQueue on the
+  context with the progress fence dxgkrnl allocates, CreateDoorbell on that
+  queue, and ConnectDoorbell for the device page the driver names. A wait then
+  waits on both paths - the driver's fences for what it submitted, and the
+  queue's progress against the value user mode queued for what it did not.
+- `DoorbellFabric` is the bus between the two. The driver's own mapping of the
+  doorbell BAR is a synthetic address only `MockPlatform` can reach, which no
+  process can store to, so a doorbell hands out a page of real memory and the
+  fabric carries what lands in it to where the driver's own store would have
+  gone - or nowhere, while the doorbell is disconnected, which is what
+  dxgkrnl's dummy page does on a machine. Nothing carries it by itself: like
+  the rig's interrupts, a store arrives on the test thread between the calls a
+  process makes, which is what makes "the store arrived late" or "not at all"
+  a thing a test can write.
 
 What it runs (`tests/loopback/test_fullstack_*.cpp`):
 
@@ -544,6 +560,13 @@ What it runs (`tests/loopback/test_fullstack_*.cpp`):
   made again, a new transport echoing
 - 3000 batches wrapping the smallest ring; five transports interleaved on
   their own doorbells and messages, and a freed doorbell reused
+- the doorbell path with the submission in the process's hands (feature 049,
+  `test_fullstack_doorbell.cpp`): a store in user mode reaching the device
+  core's worker with no `SubmitCommandVirtual` at all, a disconnect making the
+  next store reach nothing, three rounds of echoes across a disconnect with
+  none lost or repeated, and the hostile half - a tail past the ring, an
+  arbitrary store value, a queued fence nobody submitted - each faulting only
+  the context that did it
 - a process that exits holding everything, cleaned up to nothing
 - `GuestSuite` unchanged: all 41 steps the guest run reports pass; the fence
   stress run for one second of mock time; and the timeout run, which fails at

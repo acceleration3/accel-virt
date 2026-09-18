@@ -733,15 +733,19 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
 TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_adapter)
 { MockKmt kmt;
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  /* Hardware scheduling on, so the benchmark measures both paths and the
+   * doorbell is exercised by a whole suite run (feature 049). */
+  kmt.allow_hardware_scheduling();
   av::ScriptedHost host(kmt);
   host.transport_run();
+  host.submit_run();
   host.vulkan_run();
   host.opencl_run();
   host.host_visible_import_run();
   host.transport_run();
   host.healthy_context();
-  const std::uint32_t before_import =
-      av::ScriptedHost::transport_waits + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits;
+  const std::uint32_t before_import = av::ScriptedHost::transport_waits + av::ScriptedHost::submit_waits +
+                                     av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits;
   /* The host GPU's copy, played on the chunks' views at the import's fence wait. */
   kmt.play_at_wait(before_import + av::ScriptedHost::host_visible_import_copy_wait, [](void *played) {
       MockKmt &mock = *static_cast<MockKmt *>(played);
@@ -757,10 +761,10 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   GuestSuite suite(kmt, report, 0u);
   const std::uint32_t failed = suite.run_rvk();
   CHECK_EQ(failed, 0u);
-  const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok vulkan.bind\n",
+  const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok submit.kernel_ns 0\n", "ok vulkan.bind\n",
                                "ok opencl.sum 64\n", "ok import.copied 1048576\n", "ok import.release\n",
                                "ok opengl.nop 0\n", "ok isolation.relink\n",
-                               "ok suite.close_adapter\n", "rvktest: 82 passed, 0 failed\n"};
+                               "ok suite.close_adapter\n", "rvktest: 91 passed, 0 failed\n"};
   const char *at = report.text();
   for (const char *line : order) {
       const char *const found = std::strstr(at, line);
@@ -779,10 +783,11 @@ TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_fi
 { MockKmt kmt;
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run_rvk(), 7u);
+  CHECK_EQ(suite.run_rvk(), 8u);
   const char *const lines[] = {"FAIL adapter.find", "FAIL transport.adapter status=3",
                                "FAIL vulkan.adapter status=3", "FAIL opencl.adapter status=3",
                                "FAIL import.adapter status=3", "FAIL opengl.adapter status=3",
-                               "FAIL isolation.adapter status=3"};
+                               "FAIL isolation.adapter status=3",
+                               "FAIL submit.adapter status=3"};
   for (const char *line : lines) CHECK(std::strstr(report.text(), line) != nullptr);
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }

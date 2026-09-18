@@ -49,15 +49,15 @@ which is a feature's work beside the doorbell's. The wait stays
 
 ## Phase 4: US3 - the gain is measured and held (P2)
 
-- [ ] T015 [US3] `SubmitBenchmark` (object) in `src/guest/suite/submit_benchmark.{hpp,cpp}`: a scripted number of no-op submissions each way on one boot, answering both per-submit costs. Tests over a scripted Kmt
-- [ ] T016 [US3] The in-guest suite reports both costs and their ratio (`ok submit.doorbell_ns`, `ok submit.kernel_ns`, `ok submit.ratio`), and `tools/guest/run_guest_suite.py` records the ratio against `tools/submit_ratchet.txt` - the absolute cost is the host's, the ratio is the driver's (research.md §5). Tests in `tests/tools/test_run_guest_suite.py`
-- [ ] T017 [US3] The ratchet file is committed **empty** until a guest run fills it, as 048's conformance ratchet is, and the runner says so rather than passing quietly
+- [X] T015 [US3] `SubmitBenchmark` (object) in `src/guest/suite/submit_benchmark.{hpp,cpp}`: a scripted number of no-op submissions each way on one boot, answering both per-submit costs. Tests over a scripted Kmt
+- [X] T016 [US3] The in-guest suite reports both costs and their ratio (`ok submit.doorbell_ns`, `ok submit.kernel_ns`, `ok submit.ratio`), and `tools/guest/run_guest_suite.py` records the ratio against `tools/submit_ratchet.txt` - the absolute cost is the host's, the ratio is the driver's (research.md §5). Tests in `tests/tools/test_run_guest_suite.py`
+- [X] T017 [US3] The ratchet file is committed **empty** until a guest run fills it, as 048's conformance ratchet is, and the runner says so rather than passing quietly
 
 **Checkpoint**: commit.
 
 ## Phase 5: Polish and merge
 
-- [ ] T018 docs: `docs/testing.md` (what the doorbell path is and how the rig drives it), `docs/kb/05-scheduling.md` (what this driver answers for the doorbell DDIs, and that native fences are not here)
+- [X] T018 docs: `docs/testing.md` (what the doorbell path is and how the rig drives it), `docs/kb/05-scheduling.md` (what this driver answers for the doorbell DDIs, and that native fences are not here)
 - [ ] T019 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 
 ## Dependencies

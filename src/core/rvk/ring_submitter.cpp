@@ -63,11 +63,13 @@ void RingSubmitter::user_mode_publishes()
     shared_tail_ = true;
 }
 
-/* The header is written by a process, so it is judged before it is believed:
- * a submission that begins behind what this ring already holds, or whose end
- * is not the tail the process published, is no submission of this ring. The
- * process publishes the tail before it stores (SubmissionPath::submit), so a
- * batch that falls back to the driver is one the header already ends at. */
+/* The header is written by a process, so it is judged before it is believed.
+ * Two headers describe this submission and no others: the one a process
+ * publishes before it stores, which already ends where the submission does
+ * (SubmissionPath::submit, for a batch that falls back to the driver), and the
+ * one left where the submission begins, which is a process that has stopped
+ * publishing for itself and a ring the driver is writing again. A submission
+ * that begins behind what this ring already holds is no submission of it. */
 Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submission)
 {
     AV_SCOPE("RingSubmitter::adopt_published_tail");
@@ -75,7 +77,8 @@ Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submissio
     platform_.copy(bytes, ring_ + tail_offset, sizeof bytes);
     WireReader     reader(bytes, sizeof bytes);
     const uint64_t published = reader.read_u64();
-    if (submission.begin() < tail_ || published != submission.end()) return Status::invalid_parameter;
+    if (submission.begin() < tail_) return Status::invalid_parameter;
+    if (published != submission.end() && published != submission.begin()) return Status::invalid_parameter;
     tail_ = submission.begin();
     return Status::ok;
 }

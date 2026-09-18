@@ -69,6 +69,50 @@ doorbells when a device is suspended, reset, or migrated, and the KMD must make
 subsequent user-mode stores harmless — usually by remapping the doorbell page
 to a dummy page.
 
+#### What this driver answers (feature 049)
+
+`DXGKQAITYPE_USERMODESUBMISSION_CAPS` reports a four-byte doorbell at offset 0
+of the page and no secondary one, which is what `rvk_device.h` says a store is.
+A doorbell is `DoorbellTable`'s `QueueDoorbell`, holding the hardware queue it
+was made on and the page index that queue's context was bound to —
+`RvkContextTable` hands out a doorbell page and a host context together, so the
+page a process stores to is the one the device's worker for that context waits
+on. `ConnectDoorbell` answers the kernel address of that page inside the BAR
+the miniport mapped, and `CONNECTED`: this device never asks for
+`CONNECTED_NOTIFY_KMD`, because the store *is* the notification, and
+`DxgkDdiNotifyWorkSubmission` does nothing but succeed for a process that was
+told otherwise by some other driver.
+
+**No dummy page is needed here**, and that is a property of the device rather
+than a shortcut. A store to this doorbell signals an eventfd; the worker wakes
+and reads the *ring's tail*, which is what says there is work, and a tail that
+did not move consumes nothing. Disconnecting therefore means marking the
+doorbell disconnected — so the status page a process reads says so — and
+refusing to answer a kernel address for it until it reconnects.
+
+What moves with the submission is harder than the doorbell itself. Once a
+process publishes its own ring tail and rings its own page:
+
+- The KMD no longer knows what was submitted. `HwQueueProgressFenceLastQueued`
+  `ValueCPUVirtualAddress` (`d3dkmthk.h`) is handed to the **process**, not to
+  the driver, so a KMD cannot check a completion against what it published —
+  and must not fail the context for one it never saw.
+- The ring's header is the tail both sides share. A batch the process falls
+  back to `SubmitCommandVirtual` with begins past what the driver last
+  published, so the driver takes the submission's own beginning, after checking
+  that the header ends exactly where that submission does.
+- A wait has nothing of the driver's to wait for. What it waits on is
+  `HwQueueProgressFenceCPUVirtualAddress` — the read-only mapping dxgkrnl gives
+  both the process and the KMD — which this driver writes the device's
+  completed fence into for any context that submits for itself.
+
+**Native fences are not implemented** (`CreateNativeFence`, `Open`, `Close`,
+`Destroy`, `UpdateMonitoredValues`, `UpdateCurrentValuesFromCpu`,
+`SetNativeFenceLogBuffer`, `UpdateNativeFenceLogs` and their caps, slots
+162-165 and 186-189). They are what removes the kernel transition from the
+*wait*, as the doorbell removes it from the submission; until they are here a
+process still waits through `D3DKMT`, and nothing reports otherwise.
+
 ## Fences
 
 | Primitive | Where the value lives | Who signals |

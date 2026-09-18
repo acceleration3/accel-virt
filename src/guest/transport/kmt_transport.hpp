@@ -62,6 +62,10 @@ public:
      * doorbell, and through the kernel. */
     uint64_t             submissions_through_doorbell() const;
     uint64_t             submissions_through_kernel() const;
+    /* Gives the doorbell back: every submission after this goes through the
+     * kernel, which is how the in-guest benchmark measures the two paths on
+     * one boot (feature 049, US3). Harmless without one. */
+    void                 give_back_doorbell();
     /* The virtual context's D3DKMT handle, for a call the driver takes beside
      * the transport - an escape on this context; 0 unless established. */
     uint32_t             context() const;

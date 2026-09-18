@@ -173,13 +173,20 @@ TEST(fullstack_rvk, the_rvk_run_passes_every_step_on_the_host_gpu)
   if (gpu.sub_apis() != every_sub_api) return;
   FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
+  /* With hardware scheduling on, the run submits through the process's own
+   * doorbell wherever it can, which is what the guest does on a machine that
+   * has it (feature 049). */
+  rig.kmt().allow_hardware_scheduling();
   GuestReport report;
   std::uint32_t failed = 0u;
   { GuestSuite suite(rig.kmt(), report, 0u);
     failed = suite.run_rvk(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK(reported(report, "rvktest: 82 passed, 0 failed"));
+  CHECK(reported(report, "rvktest: 91 passed, 0 failed"));
+  /* The benchmark measured both paths on the one boot, on the real GPU. */
+  CHECK(reported(report, "note submit.doorbell connected"));
+  CHECK(std::strstr(report.text(), "\nok submit.ratio ") != nullptr);
   CHECK(reported(report, "ok import.copied 1048576"));
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(reported(report, "ok vulkan.destroy"));

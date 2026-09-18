@@ -939,3 +939,32 @@ TEST(kmt_transport, a_disconnect_under_the_transport_is_recovered_from_by_the_tr
   CHECK_EQ(transport.submissions_through_kernel(), 2u);
   CHECK_EQ(fixture.kmt().doorbell_page(second), 1u);
   transport.teardown(); }
+
+/* A process that gives its doorbell back submits through the kernel from then
+ * on: what the in-guest benchmark does to measure both paths on one boot
+ * (feature 049, US3). */
+TEST(kmt_transport, give_back_doorbell_puts_every_submission_through_the_kernel)
+{ Fixture fixture;
+  fixture.kmt().allow_hardware_scheduling();
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter first = transport.request_writer();
+  first.write_u32(7u);
+  CHECK(transport.send_async(1u, first) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 1u);
+
+  transport.give_back_doorbell();
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u);
+  WireWriter second = transport.request_writer();
+  second.write_u32(8u);
+  CHECK(transport.send_async(2u, second) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 1u);
+  CHECK_EQ(transport.submissions_through_kernel(), 1u);
+  /* Given back twice is no second doorbell to give. */
+  transport.give_back_doorbell();
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
+  transport.teardown(); }

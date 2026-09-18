@@ -329,6 +329,12 @@ ClientBlobArena &KmtTransport::blobs()
     return blobs_;
 }
 
+void KmtTransport::give_back_doorbell()
+{
+    AV_SCOPE("KmtTransport::give_back_doorbell");
+    doorbell_.teardown();
+}
+
 bool KmtTransport::invariants_hold() const
 {
     AV_SCOPE("KmtTransport::invariants_hold");

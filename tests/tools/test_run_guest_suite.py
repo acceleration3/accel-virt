@@ -1239,6 +1239,68 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: stress ok: 74210 fences awaited, worst wait 812 us", result.stdout)
         self.assert_clean()
 
+    def test_the_submission_costs_are_read_back_and_judged_against_the_record(self):
+        """Feature 049 US3: both per-submission costs come back on the report's
+        own lines, and what the record holds is their ratio."""
+        measured = ("ok adapter.find\nnote submit.doorbell connected\r\nok submit.doorbell_ns 400\r\n"
+                    "ok submit.kernel_ns 1800\r\nok submit.ratio 450\r\n"
+                    "rvktest: 30 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        # Nothing recorded: the run passes and says the line that would record it.
+        empty = self.scratch / "submit_ratchet.txt"
+        empty.write_text("# nothing yet\n")
+        result = self.run_suite("--submit-ratchet", str(empty))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: submit ok: 400 ns through the doorbell, 1800 ns through the kernel, ratio 4.50x",
+                      result.stdout)
+        self.assertIn("submit.ratchet: nothing recorded yet; commit `ratio 450`", result.stdout)
+
+        # A record this run keeps, and one it falls below.
+        kept = self.scratch / "kept.txt"
+        kept.write_text("ratio 400\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        result = self.run_suite("--submit-ratchet", str(kept))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("submit.ratchet ok: 4.00x kept, 0.50x gained; commit `ratio 450`", result.stdout)
+
+        lost = self.scratch / "lost.txt"
+        lost.write_text("ratio 600\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        result = self.run_suite("--submit-ratchet", str(lost))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("submit.ratchet failed: the doorbell path is worth 4.50x the kernel one here and "
+                      "6.00x was recorded", result.stdout)
+
+        # A record that is not a ratio stops the run rather than being ignored.
+        broken = self.scratch / "broken.txt"
+        broken.write_text("four hundred\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": measured, "collect": COLLECTED})
+        result = self.run_suite("--submit-ratchet", str(broken))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("is not a `ratio <hundredths>` line", result.stdout)
+
+    def test_a_machine_without_hardware_queues_measures_no_gain_and_says_so(self):
+        """Hardware scheduling is the OS's decision (049 research.md §11): a
+        guest that gives out no hardware queue measures the kernel path alone,
+        and nothing is judged against the record."""
+        only_kernel = ("ok adapter.find\nnote submit.doorbell none\r\nok submit.doorbell_ns 0\r\n"
+                       "ok submit.kernel_ns 1800\r\nok submit.ratio 0\r\n"
+                       "rvktest: 30 passed, 0 failed\n")
+        held = self.scratch / "held.txt"
+        held.write_text("ratio 600\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": only_kernel, "collect": COLLECTED})
+        result = self.run_suite("--submit-ratchet", str(held))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("submit skipped: this machine gave the adapter no hardware queue", result.stdout)
+        self.assert_clean()
+
+    def test_a_suite_that_measured_no_submission_cost_says_so(self):
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("submit skipped: the suite measured no submission cost", result.stdout)
+        self.assert_clean()
+
     def test_a_run_that_asked_for_stress_and_got_none_fails(self):
         self.script(outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--stress-minutes", "0.5")

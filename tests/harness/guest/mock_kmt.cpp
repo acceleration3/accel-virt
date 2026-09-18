@@ -34,7 +34,7 @@ MockKmt::MockKmt()
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
-      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
@@ -527,6 +527,7 @@ Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint6
                        const std::uint8_t *private_data, std::uint32_t private_size)
 {
     if (!begin(Call::submit)) return refuse(last_code_);
+    ticks_ += submit_cost_;
     const Object *const submitting = find(Kind::context, context);
     if (submitting == nullptr || (private_data == nullptr) != (private_size == 0u)) return misuse();
     submission_size_ = private_size < max_private ? private_size : max_private;
@@ -548,10 +549,36 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     ticks_ += wait_cost_;
     if (slow_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_context)] % slow_nth_ == 0u) ticks_ += slow_ticks_;
     if (played()) play_(play_context_);
+    take_doorbell_store(*object);
     if (withheld()) object->lost = true;
     else write_answer(*object);
     consume(*object);
     return succeed();
+}
+
+/* A store the process made to a doorbell of this context, which this mock
+ * never saw made: the device does the work while the process waits, so the
+ * wait is where it is noticed. What it queued is in the fence word the process
+ * wrote, which is what the answer is written against (feature 049). */
+void MockKmt::take_doorbell_store(const Object &context)
+{
+    for (DoorbellPages &doorbell : doorbells_) {
+        if (doorbell.handle == 0u || doorbell.page == 0u) continue;
+        const Object *const queue = find(Kind::hw_queue, doorbell.queue);
+        if (queue == nullptr || queue->owner != context.handle) continue;
+        doorbell.page = 0u;
+        /* What the process published is what the device consumes: the ring's
+         * own tail, since nothing of this went through a submission. */
+        RingHeader                header;
+        const std::uint8_t *const ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+        if (ring == nullptr || header.decode(ring, RingHeader::encoded_size) != Status::ok ||
+            header.tail() == 0u)
+            return;
+        submission_size_ = SubmissionDescriptor::encoded_size;
+        static_cast<void>(
+            SubmissionDescriptor(doorbell.queued, 0u, header.tail()).encode(submission_, submission_size_));
+        return;
+    }
 }
 
 /* A queued answer is taken by the wait that finds it whether or not the slot
@@ -750,7 +777,13 @@ void MockKmt::answer_waits(const std::uint8_t *answer, std::uint32_t size)
 
 void MockKmt::queue_answer(const std::uint8_t *answer, std::uint32_t size)
 {
-    if (queued_count_ == max_queued) return;
+    /* A script longer than this mock can hold would be answered by silence
+     * halfway through, which reads as a driver failure: it is the test's own
+     * mistake, and is recorded as one. */
+    if (queued_count_ == max_queued) {
+        misuses_++;
+        return;
+    }
     const std::uint32_t kept = size < max_answer ? size : max_answer;
     for (std::uint32_t i = 0u; i < kept; i++) queued_[queued_count_][i] = answer[i];
     queued_sizes_[queued_count_] = kept;
@@ -771,6 +804,8 @@ std::uint32_t MockKmt::command_size(std::uint32_t index) const
 }
 
 void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }
+
+void MockKmt::spend_on_submit(std::uint64_t ticks) { submit_cost_ = ticks; }
 
 void MockKmt::slow_every(std::uint32_t nth, std::uint64_t ticks)
 {

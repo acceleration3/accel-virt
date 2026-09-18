@@ -1,0 +1,12 @@
+# What user-mode submission bought, committed (feature 049, US3): one line,
+# `ratio <hundredths>`, where 250 is a kernel submission costing two and a half
+# times a doorbell one. A run whose ratio falls below it fails; a run that
+# raises it writes the new line in the change that earned it -
+# tools/guest/run_guest_suite.py prints the line to add.
+#
+# The nanoseconds either path costs are the host's property and are not kept
+# here: the ratio is the driver's (specs/049-.../research.md §5).
+#
+# EMPTY ON PURPOSE. No guest has run the benchmark yet - whether this machine's
+# Windows hands the adapter a hardware queue at all is what the first live run
+# answers (research.md §11) - so a number here would be a claim nobody made.
