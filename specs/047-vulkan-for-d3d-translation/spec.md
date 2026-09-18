@@ -198,6 +198,14 @@ extensions rather than adding new ones.
   path that wants placement belongs to feature 061 with the rest of the 32-bit
   ICD. FR-003 is therefore met in part - `vkMapMemory2` exists and is proven -
   and its placement half is recorded as not this layer's to give.
+- **Q: two guest devices are two host devices - how can they share anything?**
+  → Through the FD extensions the host already has, inside the one process both
+  host devices live in (research.md §10): the ICD answers a handle of its own,
+  and an import asks the host for a fresh `vkGetMemoryFdKHR` of the remembered
+  memory and forwards `VkImportMemoryFdInfoKHR` in its place. Fresh per import,
+  because a host driver takes ownership of an FD it imports. Nothing new
+  crosses the wire and the executor is unchanged; until those entry points
+  exist the two extensions are not reported at all.
 - **Q: what does an exported Win32 handle mean when no host driver has the
   extension?** → within one process it names a host object the device already
   holds, and an import finds it again through `ExternalObjectTable`; the host

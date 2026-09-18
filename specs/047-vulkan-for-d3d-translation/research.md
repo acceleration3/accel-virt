@@ -176,3 +176,36 @@ What that costs is the WoW64 mapping path: winevulkan asks for placement
 because a 32-bit process needs the mapping inside its own address space. That
 is feature 061's problem together with the rest of the 32-bit ICD, and it is
 recorded there rather than half-answered here.
+
+## 10. How a Win32 handle can actually be shared, in one process
+
+US3 wants two devices in one guest process to see one image and wake on one
+semaphore. Two guest devices are two host `VkDevice`s - the executor keeps one
+`device_` per context and a guest making a second makes a second on the host
+(`src/device/executor/vulkan_backend.cpp:283,366`) - so sharing between them is
+sharing between two host devices, which no amount of guest-side bookkeeping
+achieves on its own.
+
+The host can do it, though, with the extensions it already has. The profile
+carries `VK_KHR_external_memory_fd` and `VK_KHR_external_semaphore_fd`, and both
+host devices live in one process - the QEMU device - which is exactly the scope
+an opaque FD is shareable in. So the translation is:
+
+| The guest asks | The ICD does |
+|---|---|
+| `vkGetMemoryWin32HandleKHR` | remembers the memory in `ExternalObjects` and answers its own handle |
+| `vkAllocateMemory` with `VkImportMemoryWin32HandleInfoKHR` | looks the handle up, asks the host for a **fresh** `vkGetMemoryFdKHR` of that memory, and forwards the allocation with `VkImportMemoryFdInfoKHR` instead |
+| `vkGetSemaphoreWin32HandleKHR` | the same, for a semaphore |
+| `vkImportSemaphoreWin32HandleKHR` | a fresh `vkGetSemaphoreFdKHR`, forwarded as `vkImportSemaphoreFdKHR` |
+
+A fresh FD per import rather than one kept: the host driver takes ownership of an
+FD it imports, so handing the same one to two imports would close it under the
+first. That is why `ExternalObjects` remembers the *object* and not a token -
+which is what it already does.
+
+Nothing new crosses the wire and nothing is added to the executor: the commands
+are ones the generator already carries. What is left to write is the four local
+ICD entry points, the chain rewrite in `vkAllocateMemory`, and the properties
+queries - and the two extensions must not be reported until those exist,
+because reporting an import that cannot work is what constitution VI forbids.
+
