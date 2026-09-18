@@ -60,7 +60,7 @@ LUID structure's eight bytes, LowPart first and little-endian."""
 
 
 VULKAN_PICTURES = ("C:\\rvk\\vulkan-draw.bmp", "C:\\rvk\\vulkan-present.bmp", "C:\\rvk\\vulkan-resized.bmp")
-GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
+GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat")
 
 
 def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="rvk (NVIDIA GeForce RTX 4090)"):
@@ -638,10 +638,13 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opengl.draw 4096\r\n"
                  "ok opengl.share 4\r\n"
                  "ok opengl.busy 170\r\n"
+                 "ok opengl.compat 4096\r\n"
+                 "ok opengl.interval 59\r\n"
+                 "ok opengl.resized 32\r\n"
                  "ok opengl.attribs 8342\r\n"
                  "ok opengl.lost 33365\r\n"
                  "ok opengl.recreated 4096\r\n"
-                 "rvkglprobe: 9 passed, 0 failed\r\n")
+                 "rvkglprobe: 12 passed, 0 failed\r\n")
 
     def opengl_script(self, report=None, code=0, pictures=None):
         outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
@@ -1052,7 +1055,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("pull C:\\rvk\\opengl.txt", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertEqual((self.work / "opengl.txt").read_text(newline=""), self.GL_REPORT)
-        self.assertIn("guest: opengl ok: 9 passed, renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2), "
+        self.assertIn("guest: opengl ok: 12 passed, renderer Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2), "
                       "version 4.6 (Compatibility Profile) Mesa 26.2.2", result.stdout)
         self.assertIn("opengl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "rvkgl-4242.log").exists())
@@ -1070,7 +1073,7 @@ class GuestSuiteRun(unittest.TestCase):
             "failed step": (report.replace("ok opengl.share 4", "fail opengl.share 0").replace(
                 "9 passed, 0 failed", "8 passed, 1 failed"), 1,
                 "opengl failed: 1 step(s) failed, exit 1; see opengl.txt"),
-            "missing step": (report.replace("ok opengl.busy 170\r\n", "").replace("9 passed", "8 passed"), 0,
+            "missing step": (report.replace("ok opengl.busy 170\r\n", "").replace("12 passed", "11 passed"), 0,
                              "opengl failed: the probe reported no busy; see opengl.txt"),
             "no summary": (report.replace("rvkglprobe: 9 passed, 0 failed\r\n", ""), 0,
                            "opengl failed: no summary in the probe's report, exit 0; see opengl.txt"),
@@ -1168,7 +1171,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("guest: rvk failed: 1 step(s) failed", result.stdout)
         self.assertIn("guest: vulkan ok: 12 passed", result.stdout)
-        self.assertIn("guest: opengl ok: 9 passed", result.stdout)
+        self.assertIn("guest: opengl ok: 12 passed", result.stdout)
         self.assertIn("guest: scenarios failed: 1 of 3 failed: rvk", result.stdout)
         self.assertIn("rvk failed", (self.work / "verdict.txt").read_text())
 

@@ -94,14 +94,15 @@ PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute
 GL_SUMMARY = re.compile(r"^rvkglprobe: (\d+) passed, (\d+) failed\r?$", re.M)
 GL_STEP = re.compile(r"^ok opengl\.(\w+)(?: (\S+))?\r?$", re.M)
 GL_NOTE = re.compile(r"^note opengl\.(\w+) (.*?)\r?$", re.M)
-GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "attribs", "lost", "recreated")
+GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "compat", "interval", "resized",
+            "attribs", "lost", "recreated")
 # Renderers that are not a GPU: Mesa's software rasterizers, and what
 # opengl32.dll answers itself when no ICD took the window.
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
 # The renders each probe judged, which it leaves beside itself as bitmaps for a
 # person to open (docs/testing.md); pulled into <work>/images.
 VULKAN_PICTURES = ("vulkan-draw", "vulkan-present", "vulkan-resized")
-GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
+GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat")
 # Feature 047's three D3D probes, each through the layer beside it: DXVK's
 # d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll. One summary and one step
 # list each, and the steps are the probe's own order - a probe that stops

@@ -193,6 +193,33 @@ With stack probes off, a program with no C runtime faults on any frame larger
 than the 4 KiB its main thread commits; `src/um/stack_probe.cpp` supplies the
 `__chkstk` the compiler calls.
 
+### The compatibility profile, and what a swap costs (feature 051)
+
+A context an application makes with `wglCreateContext` and no attributes is
+what every OpenGL program written before profiles existed makes, and what it
+wants is the fixed-function pipeline. The ICD asks the host for a 4.6
+compatibility context, then for the driver's own default, then for 4.6 core,
+and reports whichever it got - read from `GL_CONTEXT_PROFILE_MASK`, never from
+`GL_VERSION`, because one of this project's two host GPUs names its
+compatibility context exactly as it names its core one. Both host GPUs here
+grant 4.6 compatibility over EGL.
+
+The proc table's 274 compatibility slots hold their real forwarders, and each
+forwarder asks the granted profile before it sends: on a core context it
+records the `GL_INVALID_OPERATION` a core context would. The thirteen
+fixed-function **client array** entry points stay refused - they read the
+application's own memory at every draw, which this transport does not carry,
+and it is the same refusal a modern attribute array with no buffer bound gets.
+
+`SwapBuffers` still reads the back buffer and blits it (there is no D3DKMT
+present from an ICD - see above), but what surrounds it is a driver's:
+`wglSwapIntervalEXT` holds the swap for that many of the adapter's vertical
+blanks through the `FramePacer` both ICDs share; a swap on a window that is
+gone, minimized or empty reads nothing back at all; a single-buffered pixel
+format presents on `glFlush`, as it does on Windows; and a read of `GL_FRONT`
+is answered from the frame the swap already put on the window, with no round
+trip.
+
 ## Presenting from Vulkan
 
 `VK_KHR_win32_surface` + `VK_KHR_swapchain` on Windows are implemented by the
