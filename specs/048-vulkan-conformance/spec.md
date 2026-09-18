@@ -38,7 +38,14 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `QpaResults` | object | one `.qpa` log's case names and statuses | What one CTS run did, case by case |
+| `SuiteComparison` | object | a guest result set and a host one | Which cases the guest alone fails |
+| `CtsRatchet` | object | the committed record of what the guest passes | Whether a run lost a case it used to pass |
+| `CtsShards` | object | a subset list and a shard size | Which cases each guest run is given |
+| `CtsPins` | object | the pinned archive and the files taken from it | What the CTS build is pinned to |
+| `CtsFetch` | object | the pins and what is on disk | Whether the pinned CTS is there |
+| `FrameReference` | object | a captured frame, a reference and a tolerance | Whether a frame is the one committed |
+| `CtsRun` | system | one guest's CTS steps | Running the subset in the guest and pulling its results |
 
 ### Test requirements
 
