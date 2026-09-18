@@ -1,5 +1,7 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
+#include "icd/opengl/granted_profile.hpp"
+
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -54,7 +56,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
       query_(formats_), windows_(), currents_(slot), connection_(kmt),
       extensions_(reported_extensions, 0u, reported_wgl_extensions, reported_wgl_count),
       contexts_(memory, connection_, send_lock, log, extensions_),
-      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u)
+      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u), profile_noted_(false)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
     generated::fill_proc_table(proc_table_);
@@ -182,6 +184,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
             fail(made_error(made));
             return nullptr;
         }
+        note_profile(*context);
     }
     ClientTransport *const transport = context->wire();
     if (transport != nullptr) {
@@ -447,6 +450,37 @@ uint64_t GlIcdRoot::mint_sync_token()
 {
     AV_SCOPE("GlIcdRoot::mint_sync_token");
     return ++sync_tokens_;
+}
+
+/* What the host granted the first context this process made, named once: a
+ * driver whose compatibility profile is missing is the difference between an
+ * application running and every legacy call refusing, and the host's own
+ * version string says which driver answered (feature 051, US1.4). */
+void GlIcdRoot::note_profile(const GuestGlContext &context)
+{
+    AV_SCOPE("GlIcdRoot::note_profile");
+    if (profile_noted_) return;
+    profile_noted_ = true;
+    const GrantedProfile &profile = context.profile();
+    char                  line[line_bytes];
+    TextBuffer            text(line, sizeof line);
+    text.append("rvkgl: the host granted a ");
+    if (profile.mask() == GrantedProfile::compatibility_bit)
+        text.append("compatibility");
+    else if (profile.mask() == GrantedProfile::core_bit)
+        text.append("core");
+    else if (profile.known())
+        text.append("profileless");
+    else
+        text.append("silent");
+    text.append(" context, version ");
+    text.append_decimal(profile.major());
+    text.append(".");
+    text.append_decimal(profile.minor());
+    text.append(", ");
+    const char *const version = context.string(GuestGlContext::gl_version);
+    text.append(version != nullptr ? version : "(no version string)");
+    log_.write(text.text());
 }
 
 void GlIcdRoot::note_dropped(const char *api, const char *command, size_t written)

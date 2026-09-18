@@ -138,6 +138,9 @@ private:
     static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
 
     [[nodiscard]] Status build();
+    /* One ask: built, learned, and held or given back whole. */
+    [[nodiscard]] Status make_once();
+    bool                 asked_for_itself() const;
     /* The host's strings and list lengths; false when the host answered none. */
     bool                 learn();
     void                 cap_version();

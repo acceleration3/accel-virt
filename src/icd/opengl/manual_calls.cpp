@@ -1,5 +1,7 @@
 #include "icd/opengl/manual_calls.hpp"
 
+#include "icd/opengl/granted_profile.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
@@ -440,6 +442,17 @@ void ManualCalls::integers(uint32_t pname, int32_t *data)
     if (context == nullptr) return;
     if (pname == gl_num_extensions) {
         if (data != nullptr) *data = static_cast<int32_t>(context->extensions().count());
+        return;
+    }
+    /* What the host granted was learned when the context was made, so these
+     * three are answered from it rather than asked again (feature 051). */
+    if (pname == GrantedProfile::mask_query || pname == GrantedProfile::major_query ||
+        pname == GrantedProfile::minor_query) {
+        if (data == nullptr) return;
+        const GrantedProfile &profile = context->profile();
+        *data = static_cast<int32_t>(pname == GrantedProfile::mask_query    ? profile.mask()
+                                     : pname == GrantedProfile::major_query ? profile.major()
+                                                                            : profile.minor());
         return;
     }
     glproto::rvk_glGetIntegerv(*context->wire(), pname, data);

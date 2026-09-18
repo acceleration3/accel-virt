@@ -140,6 +140,8 @@ private:
     bool            shares_into(uint64_t first, uint64_t second) const;
     /* Makes `context` after the unmade contexts it shares through. */
     [[nodiscard]] Status make_chain(GuestGlContext &context);
+    /* What profile the host granted, named once per process. */
+    void                 note_profile(const GuestGlContext &context);
 
     icd::ThreadLock  &lock_;
     icd::LogSink     &log_;
@@ -161,6 +163,8 @@ private:
     uint32_t          pending_threads_[max_pending];
     uint64_t          pending_handles_[max_pending];
     uint64_t          sync_tokens_;
+    /* Whether the host's answer about profiles has been named (feature 051). */
+    bool              profile_noted_;
 
     friend struct GlIcdRootProbe;
 };

@@ -79,9 +79,12 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   CHECK_EQ(third->options().share_context(), second->share_name());
   CHECK_EQ(second->options().share_context(), first->share_name());
   CHECK_EQ(first->options().share_context(), 0u);
-  /* A share asks a version: 1.0 when none was asked. */
+  /* A share asks a version: 1.0 when none was asked. The head of the chain
+   * shares with nobody, so it is the one that asks the compatibility ladder's
+   * first rung (feature 051). */
   CHECK_EQ(second->options().major(), 1u);
-  CHECK_EQ(first->options().major(), 0u);
+  CHECK_EQ(first->options().major(), 4u);
+  CHECK(first->options().profile() == av::GlContextOptions::Profile::compatibility);
   CHECK_EQ(third->share_target(), rig.opengl32().driver_context(b));
   CHECK(rig.root().invariants_hold()); }
 

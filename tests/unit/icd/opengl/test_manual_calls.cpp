@@ -92,6 +92,26 @@ std::uint64_t storage_flags(Current &current, std::uint32_t index)
 
 }  // namespace
 
+/* Feature 051: the profile and version a context was granted are learned at
+ * the make, so a query for them is answered from what the host already said -
+ * one fewer round trip, and one answer whatever a driver does with a repeated
+ * query. */
+TEST(manual_calls, the_granted_profile_is_answered_without_the_host)
+{ Current      current;
+  ManualCalls &calls = current.rig().root().manual();
+  const std::uint32_t before = current.sent();
+  GLint mask = -1, major = -1, minor = -1;
+  calls.integers(0x9126u /* GL_CONTEXT_PROFILE_MASK */, &mask);
+  calls.integers(0x821Bu /* GL_MAJOR_VERSION */, &major);
+  calls.integers(0x821Cu /* GL_MINOR_VERSION */, &minor);
+  CHECK_EQ(mask, 2);
+  CHECK_EQ(major, 4);
+  CHECK_EQ(minor, 6);
+  CHECK_EQ(current.sent(), before);
+  /* A null pointer is a query nobody can be answered into. */
+  calls.integers(0x9126u, nullptr);
+  CHECK_EQ(current.sent(), before); }
+
 TEST(manual_calls, pixel_store_is_kept_and_sent)
 { Current current;
   gen::Wrap_glPixelStorei(0x0D05u /* GL_PACK_ALIGNMENT */, 1);

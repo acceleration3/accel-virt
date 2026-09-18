@@ -206,6 +206,10 @@ public:
     void          claim_adapters(std::uint32_t count);
     /* The Nth `call` from now (1-based) answers `code`; a success code answers success. */
     void          fail_at(Call call, std::uint32_t nth, std::uint32_t code);
+    /* The first `count` calls fail and the ones after them do not: what a host
+     * refusing an ask a driver then repeats differently looks like (feature
+     * 051's profile ladder). */
+    void          fail_first(Call call, std::uint32_t count, std::uint32_t code);
     /* The next `call` succeeds with a zero handle or address; a paging queue
      * comes without its fence object. */
     void          zero_next(Call call);
@@ -366,6 +370,7 @@ private:
     bool          claim_;
     std::uint32_t failures_[static_cast<unsigned>(Call::count)];
     std::uint32_t countdown_[static_cast<unsigned>(Call::count)];
+    std::uint32_t failing_run_[static_cast<unsigned>(Call::count)];
     bool          zeroing_[static_cast<unsigned>(Call::count)];
     std::uint32_t calls_[static_cast<unsigned>(Call::count)];
     Object        objects_[max_objects];

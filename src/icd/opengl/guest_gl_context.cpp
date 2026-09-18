@@ -45,6 +45,37 @@ Status GuestGlContext::make()
 {
     AV_SCOPE("GuestGlContext::make");
     if (state_ != State::created) return Status::invalid_state;
+    if (!asked_for_itself()) return make_once();
+    /* A context created without attributes is what an application written
+     * before profiles existed makes, and what it wants is the fixed-function
+     * pipeline. So it asks for a compatibility context, then for the driver's
+     * own default, then for core - and reports whichever it got (feature 051,
+     * research.md §2). Only a refusal of the options moves down the ladder. */
+    static constexpr struct Rungs {
+        GrantedProfile::Rung      rung;
+        uint32_t                  major;
+        uint32_t                  minor;
+        GlContextOptions::Profile profile;
+    } ladder[] = {
+        {GrantedProfile::Rung::compatibility_46, latest_major, latest_minor, GlContextOptions::Profile::compatibility},
+        {GrantedProfile::Rung::host_default, 0u, 0u, GlContextOptions::Profile::none},
+        {GrantedProfile::Rung::core_46, latest_major, latest_minor, GlContextOptions::Profile::core},
+    };
+    Status asked = Status::invalid_parameter;
+    for (const Rungs &rung : ladder) {
+        options_ = GlContextOptions(static_cast<uint8_t>(rung.major), static_cast<uint8_t>(rung.minor), rung.profile,
+                                    options_.flags(), options_.share_context());
+        profile_.granted(rung.rung);
+        asked = make_once();
+        if (asked != Status::invalid_parameter) return asked;
+    }
+    profile_.granted(GrantedProfile::Rung::none);
+    return asked;
+}
+
+Status GuestGlContext::make_once()
+{
+    AV_SCOPE("GuestGlContext::make_once");
     ScopeExit    undo([&] { teardown(); });
     const Status built = build();
     if (built != Status::ok) return built;
@@ -55,6 +86,16 @@ Status GuestGlContext::make()
     undo.dismiss();
     state_ = State::made;
     return Status::ok;
+}
+
+/* Whether the application said what it wanted: a context from
+ * wglCreateContextAttribsARB asks for what its attribute list named, and a
+ * share target's version is asked for by `share`. */
+bool GuestGlContext::asked_for_itself() const
+{
+    AV_SCOPE("GuestGlContext::asked_for_itself");
+    return options_.major() == 0u && options_.profile() == GlContextOptions::Profile::none &&
+           options_.share_context() == 0u;
 }
 
 GuestGlContext::State GuestGlContext::state() const

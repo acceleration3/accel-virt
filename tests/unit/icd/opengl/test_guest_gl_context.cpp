@@ -160,6 +160,77 @@ TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
   CHECK(!silent_context->profile().known());
   CHECK(!silent_context->profile().legacy_calls_live()); }
 
+/* Feature 051, research.md §2: a context created without attributes - what
+ * every OpenGL application written before 2009 makes - asks for 4.6
+ * compatibility, then for the driver's own default, then for 4.6 core, and
+ * reports whichever it got. A context created with attributes asks once. */
+TEST(guest_gl_context, a_legacy_context_asks_for_compatibility_first)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.host().gl_make_profile(renderer, "4.6 (Compatibility Profile) Mesa", 4, 6, 2);
+  CHECK_STATUS(context->make(), Status::ok);
+  CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::compatibility_46);
+  av::RvkContextRecord record;
+  CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
+  CHECK_EQ(record.options().major(), 4u);
+  CHECK_EQ(record.options().minor(), 6u);
+  CHECK(record.options().profile() == GlContextOptions::Profile::compatibility);
+  CHECK(context->profile().legacy_calls_live()); }
+
+TEST(guest_gl_context, a_host_with_no_compatibility_profile_gets_the_next_rung)
+{ GlContextRig rig;
+  Context context(rig);
+  /* The host refuses the compatibility ask; its own default answers. */
+  rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
+  rig.host().gl_make_profile(renderer, "1.4 Mesa", 1, 4, 0);
+  CHECK_STATUS(context->make(), Status::ok);
+  CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::host_default);
+  av::RvkContextRecord record;
+  CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
+  CHECK_EQ(record.options().major(), 0u);
+  CHECK(record.options().profile() == GlContextOptions::Profile::none);
+  /* A context from before profiles existed has the fixed function pipeline. */
+  CHECK(context->profile().legacy_calls_live()); }
+
+TEST(guest_gl_context, a_host_with_neither_falls_to_core_and_says_so)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 2u, MockKmt::invalid_parameter);
+  rig.host().gl_make_profile(renderer, "4.6 (Core Profile) Mesa", 4, 6, 1);
+  CHECK_STATUS(context->make(), Status::ok);
+  CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::core_46);
+  CHECK(!context->profile().legacy_calls_live());
+  CHECK(context->invariants_hold()); }
+
+TEST(guest_gl_context, a_host_that_refuses_every_rung_holds_nothing)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 3u, MockKmt::invalid_parameter);
+  CHECK_STATUS(context->make(), Status::invalid_parameter);
+  CHECK(context->state() == State::created);
+  CHECK(context->invariants_hold());
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+
+/* A refusal that is not the options' is the answer: no rung is tried after a
+ * device that has no memory. */
+TEST(guest_gl_context, a_refusal_that_is_not_the_profiles_stops_the_ladder)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(context->make(), Status::no_memory);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 0u);
+  CHECK(context->state() == State::created); }
+
+TEST(guest_gl_context, a_context_created_with_attributes_asks_once)
+{ GlContextRig rig;
+  const GlContextOptions options(4u, 5u, GlContextOptions::Profile::core, 0u, 0u);
+  Context context(rig, options);
+  rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
+  CHECK_STATUS(context->make(), Status::invalid_parameter);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
+  CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::none); }
+
 TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
 { GlContextRig rig;
   {
@@ -258,7 +329,9 @@ TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
       rig.kmt().withhold_answer_at(wait);
       CHECK_STATUS(context->make(), Status::invalid_parameter);
       CHECK(context->state() == State::created);
-      CHECK_EQ(rig.log().holding("the host refused the context"), 1u);
+      /* One line per ask the ladder made (feature 051): the host refused the
+       * compatibility context, its own default and the core one. */
+      CHECK_EQ(rig.log().holding("the host refused the context"), 3u);
       CHECK_EQ(rig.kmt().open_objects(), 0u);
       CHECK_EQ(rig.platform().live_allocations(), 0u);
   } }

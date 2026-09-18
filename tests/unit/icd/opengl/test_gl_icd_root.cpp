@@ -363,6 +363,18 @@ TEST(gl_icd_root, gl_calls_go_through_the_threads_table_to_its_context)
    * make (feature 051), then this test's own one. */
   CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 7u); }
 
+/* Feature 051, US1.4: what profile the host granted is worth exactly one line,
+ * whatever a process makes afterwards, and the line names the host's own
+ * version string so a bug report says which driver answered. */
+TEST(gl_icd_root, the_profile_the_host_granted_is_logged_once)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context("host gpu", "4.6 (Compatibility Profile) Mesa") != nullptr);
+  CHECK_EQ(rig.log().holding("compatibility"), 1u);
+  CHECK_EQ(rig.log().holding("4.6 (Compatibility Profile) Mesa"), 1u);
+  CHECK(rig.current_context("host gpu", "4.6 (Compatibility Profile) Mesa") != nullptr);
+  CHECK_EQ(rig.log().holding("compatibility"), 1u); }
+
 TEST(gl_icd_root, a_legacy_command_is_invalid_operation_without_a_host_call)
 { GlIcdRig rig;
   rig.load_with_format();

@@ -28,7 +28,7 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 
 MockKmt::MockKmt()
     : identities_{}, versions_{}, luids_{}, budgets_{default_local_budget, default_non_local_budget}, usages_{},
-      adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
+      adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{}, failing_run_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
@@ -224,6 +224,13 @@ bool MockKmt::begin(Call call)
     const unsigned index = static_cast<unsigned>(call);
     calls_[index]++;
     success_code_ = 0u;
+    if (failing_run_[index] != 0u) {
+        failing_run_[index]--;
+        last_code_ = failures_[index];
+        if (!NtStatus(failures_[index]).succeeded()) return false;
+        success_code_ = failures_[index];
+        return true;
+    }
     if (countdown_[index] == 0u || --countdown_[index] != 0u) return true;
     last_code_ = failures_[index];
     if (!NtStatus(failures_[index]).succeeded()) return false;
@@ -903,6 +910,12 @@ void MockKmt::claim_adapters(std::uint32_t count)
 void MockKmt::fail_at(Call call, std::uint32_t nth, std::uint32_t code)
 {
     countdown_[static_cast<unsigned>(call)] = nth;
+    failures_[static_cast<unsigned>(call)] = code;
+}
+
+void MockKmt::fail_first(Call call, std::uint32_t count, std::uint32_t code)
+{
+    failing_run_[static_cast<unsigned>(call)] = count;
     failures_[static_cast<unsigned>(call)] = code;
 }
 
