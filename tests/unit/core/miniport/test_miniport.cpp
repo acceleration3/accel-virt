@@ -257,7 +257,9 @@ TEST(ddi_entry_points, each_forwards_to_the_adapter_behind_the_context)
   CHECK_EQ(AvDdiNotifyAcpiEvent(context, 0, 0u, nullptr, &acpi_flags), 0);
   CHECK_EQ(acpi_flags, 0u);
   AvDdiResetDevice(context);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryInterface(context, nullptr)), 0xC00000BBu);
+  /* A query with no record is a caller's mistake; the interface this driver
+   * does answer is tested with the adapter (feature 049). */
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryInterface(context, nullptr)), 0xC000000Du);
   AvDdiControlEtwLogging(1u, 0u, 0u);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiLinkDevice(&pdo, context, nullptr)), 0xC000000Du);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiUpdateOverlay(nullptr, nullptr)), 0xC00000BBu);

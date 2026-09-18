@@ -29,6 +29,7 @@
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
+#include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
@@ -176,6 +177,7 @@ int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *reques
 /* The doorbell DDIs (feature 049): each names a hardware queue or a doorbell,
  * and every one of them reaches the adapter behind it. */
 /* The native fences WDDM 3.1 asks for beside the doorbells (feature 049). */
+int32_t AvDdiQueryFeatureSupport(void *context, av::DxgkargQueryFeatureSupportRecord *request);
 int32_t AvDdiCreateNativeFence(void *context, av::DxgkargCreateNativeFenceRecord *request);
 int32_t AvDdiDestroyNativeFence(void *context, const av::DxgkargDestroyNativeFenceRecord *request);
 int32_t AvDdiUpdateMonitoredValues(void *context, const av::DxgkargUpdateNativeFenceValuesRecord *request);

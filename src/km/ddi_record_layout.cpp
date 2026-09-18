@@ -98,6 +98,7 @@
 #include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
+#include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
@@ -157,6 +158,34 @@ static_assert(offsetof(av::DxgkrnlInterfaceRecord, CallbacksAfterFeatureSupport)
                       sizeof(av::DxgkrnlInterfaceRecord::CallbacksAfterFeatureSupport) ==
                   offsetof(DXGKRNL_INTERFACE, DxgkCbDisconnectDoorbell) + sizeof(void *),
               "the callbacks after DxgkCbQueryFeatureSupport do not end at DxgkCbDisconnectDoorbell");
+
+AV_SAME_SIZE(DxgkddiFeatureInterfaceRecord, DXGKDDI_FEATURE_INTERFACE);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, Size, DXGKDDI_FEATURE_INTERFACE, Size);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, Version, DXGKDDI_FEATURE_INTERFACE, Version);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, Context, DXGKDDI_FEATURE_INTERFACE, Context);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, InterfaceReference, DXGKDDI_FEATURE_INTERFACE, InterfaceReference);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, InterfaceDereference, DXGKDDI_FEATURE_INTERFACE, InterfaceDereference);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, QueryFeatureSupport, DXGKDDI_FEATURE_INTERFACE, QueryFeatureSupport);
+AV_SAME_OFFSET(DxgkddiFeatureInterfaceRecord, QueryFeatureInterface, DXGKDDI_FEATURE_INTERFACE,
+               QueryFeatureInterface);
+AV_SAME_SIZE(DxgkargQueryFeatureSupportRecord, DXGKARG_QUERYFEATURESUPPORT);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, FeatureId, DXGKARG_QUERYFEATURESUPPORT, FeatureId);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, MinSupportedVersion, DXGKARG_QUERYFEATURESUPPORT,
+               MinSupportedVersion);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, MaxSupportedVersion, DXGKARG_QUERYFEATURESUPPORT,
+               MaxSupportedVersion);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, AllowExperimental, DXGKARG_QUERYFEATURESUPPORT, AllowExperimental);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, SupportedByDriver, DXGKARG_QUERYFEATURESUPPORT, SupportedByDriver);
+AV_SAME_OFFSET(DxgkargQueryFeatureSupportRecord, SupportedOnCurrentConfig, DXGKARG_QUERYFEATURESUPPORT,
+               SupportedOnCurrentConfig);
+AV_SAME_SIZE(QueryInterfaceRecord, QUERY_INTERFACE);
+AV_SAME_OFFSET(QueryInterfaceRecord, InterfaceType, QUERY_INTERFACE, InterfaceType);
+AV_SAME_OFFSET(QueryInterfaceRecord, Size, QUERY_INTERFACE, Size);
+AV_SAME_OFFSET(QueryInterfaceRecord, Version, QUERY_INTERFACE, Version);
+AV_SAME_OFFSET(QueryInterfaceRecord, Interface, QUERY_INTERFACE, Interface);
+AV_SAME_OFFSET(QueryInterfaceRecord, InterfaceSpecificData, QUERY_INTERFACE, InterfaceSpecificData);
+AV_SAME_OFFSET(QueryInterfaceRecord, DeviceUid, QUERY_INTERFACE, DeviceUid);
+static_assert(av::feature_interface_version_1 == DXGK_FEATURE_INTERFACE_VERSION_1, "feature interface version");
 
 AV_SAME_SIZE(DxgkargCreateNativeFenceRecord, DXGKARG_CREATENATIVEFENCE);
 AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, hGlobalNativeFence, DXGKARG_CREATENATIVEFENCE, hGlobalNativeFence);

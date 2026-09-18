@@ -100,6 +100,8 @@ struct DxgkargControlModeBehaviorRecord;
 struct DxgkargUpdateMonitorLinkInfoRecord;
 struct DxgkargCreateHwQueueRecord;
 struct DxgkargCreateNativeFenceRecord;
+struct DxgkargQueryFeatureSupportRecord;
+struct QueryInterfaceRecord;
 struct DxgkargDestroyNativeFenceRecord;
 struct DxgkargUpdateNativeFenceValuesRecord;
 struct DxgkargSubmitCommandToHwQueueRecord;
@@ -136,6 +138,11 @@ public:
     int32_t notify_acpi_event(int32_t type, uint32_t event, void *argument, uint32_t *acpi_flags);
     void    reset_device();
     int32_t query_interface(void *query);
+    /* What this driver implements of a feature the OS is staging (feature 049,
+     * research.md §18): dxgkrnl leaves a feature disabled unless the driver
+     * answers for it, and a capability behind a disabled feature fails the
+     * adapter start. */
+    int32_t query_feature_support(DxgkargQueryFeatureSupportRecord *request);
     int32_t link_device(void *physical_device_object, LinkedDeviceRecord *linked);
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
@@ -306,6 +313,9 @@ private:
     /* The doorbell pages, when the device has them: a device without them is
      * one no rvk context can run on, and runs everything else as before. */
     [[nodiscard]] Status map_doorbells(const PciBaseAddresses &bars);
+    /* GUID_WDDM_INTERFACE_FEATURE: fills the caller's table with this
+     * driver's feature entry points. */
+    [[nodiscard]] Status answer_feature_interface(QueryInterfaceRecord &query);
     /* Which side of the boundary publishes the tail of the context a doorbell
      * hangs off, told to the context itself (feature 049). */
     void                 submissions_to_user_mode(const HwQueue &queue);

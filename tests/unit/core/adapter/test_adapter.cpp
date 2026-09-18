@@ -13,6 +13,7 @@
 #include "core/ddi/dxgk_gpu_mmu_caps_record.hpp"
 #include "core/ddi/dxgk_node_metadata_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
+#include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
@@ -2002,10 +2003,9 @@ TEST(adapter_link_device, is_a_chain_of_one_led_by_this_adapter)
   CHECK_EQ(linked.LeadLink, 1u);
   CHECK_EQ(nt(fixture.adapter().link_device(&fixture.function(), nullptr)), invalid_parameter); }
 
-TEST(adapter, dispatch_io_request_and_query_interface_are_not_supported)
+TEST(adapter, dispatch_io_request_is_not_supported)
 { Fixture fixture;
-  CHECK_EQ(nt(fixture.adapter().dispatch_io_request(0u, nullptr)), not_supported);
-  CHECK_EQ(nt(fixture.adapter().query_interface(nullptr)), not_supported); }
+  CHECK_EQ(nt(fixture.adapter().dispatch_io_request(0u, nullptr)), not_supported); }
 
 TEST(adapter_notify_acpi_event, succeeds_and_asks_for_nothing)
 { MockPlatform platform; int pdo = 0;
@@ -3986,6 +3986,94 @@ TEST(adapter_query_adapter_info, answers_what_this_drivers_native_fences_need)
   /* A buffer too small for the caps is not answered with part of them. */
   query.OutputDataSize = sizeof caps - 1u;
   CHECK(nt(fixture.adapter().query_adapter_info(&query)) != success); }
+
+/* Feature 049, research.md §18: dxgkrnl leaves a staged feature disabled
+ * unless the driver answers for it, and it asks through the interface it
+ * queries by GUID. So the interface is answered, and what it says is what this
+ * driver implements: native fences, user-mode submission and hardware
+ * scheduling, each at version 1 - and only where this device has the doorbell
+ * pages they all rest on. */
+TEST(adapter_query_interface, answers_the_feature_interface_and_what_this_driver_implements)
+{ Fixture fixture;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  static const std::uint8_t feature_guid[16] = {0x93, 0x39, 0xbb, 0x94, 0xc3, 0xc6, 0xa7, 0x4d,
+                                                0x89, 0x49, 0xa1, 0x13, 0x82, 0x32, 0xe7, 0x59};
+  av::DxgkddiFeatureInterfaceRecord table = {};
+  av::QueryInterfaceRecord          query = {};
+  query.InterfaceType = feature_guid;
+  query.Size = sizeof table;
+  query.Version = av::feature_interface_version_1;
+  query.Interface = &table;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), success);
+  CHECK_EQ(table.Version, av::feature_interface_version_1);
+  CHECK(table.Context == &fixture.adapter());
+  CHECK(table.QueryFeatureSupport != nullptr);
+  CHECK(table.InterfaceReference != nullptr && table.InterfaceDereference != nullptr);
+  /* Referencing the table is nobody's bookkeeping: it is the adapter's own. */
+  table.InterfaceReference(table.Context);
+  table.InterfaceDereference(table.Context);
+
+  const std::uint32_t implemented[] = {av::feature_hwsch, av::feature_native_fence,
+                                       av::feature_user_mode_submission};
+  for (const std::uint32_t feature : implemented) {
+      av::DxgkargQueryFeatureSupportRecord support = {};
+      support.FeatureId = feature;
+      CHECK_EQ(table.QueryFeatureSupport(table.Context, &support), success);
+      CHECK_EQ(support.SupportedByDriver, 1u);
+      CHECK_EQ(support.SupportedOnCurrentConfig, 1u);
+      CHECK_EQ(support.MinSupportedVersion, av::feature_version_1);
+      CHECK_EQ(support.MaxSupportedVersion, av::feature_version_1);
+  }
+  /* Everything else is a feature this driver has nothing behind. */
+  const std::uint32_t others[] = {1u, 2u, 3u, 5u, 0xFFFFu};
+  for (const std::uint32_t feature : others) {
+      av::DxgkargQueryFeatureSupportRecord support = {};
+      support.FeatureId = feature;
+      CHECK_EQ(table.QueryFeatureSupport(table.Context, &support), success);
+      CHECK_EQ(support.SupportedByDriver, 0u);
+      CHECK_EQ(support.SupportedOnCurrentConfig, 0u);
+  }
+  CHECK_EQ(nt(fixture.adapter().query_feature_support(nullptr)), invalid_parameter); }
+
+/* Everything else a query for an interface could be. */
+TEST(adapter_query_interface, refuses_an_interface_nobody_here_implements)
+{ Fixture fixture;
+  static const std::uint8_t feature_guid[16] = {0x93, 0x39, 0xbb, 0x94, 0xc3, 0xc6, 0xa7, 0x4d,
+                                                0x89, 0x49, 0xa1, 0x13, 0x82, 0x32, 0xe7, 0x59};
+  static const std::uint8_t other_guid[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                                              0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+  av::DxgkddiFeatureInterfaceRecord table = {};
+  av::QueryInterfaceRecord          query = {};
+  query.InterfaceType = other_guid;
+  query.Size = sizeof table;
+  query.Version = av::feature_interface_version_1;
+  query.Interface = &table;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), not_supported);
+  query.InterfaceType = feature_guid;
+  query.Version = av::feature_interface_version_1 + 1u;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), not_supported);
+  query.Version = av::feature_interface_version_1;
+  query.Size = sizeof table - 1u;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), not_supported);
+  query.Size = sizeof table;
+  query.Interface = nullptr;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), invalid_parameter);
+  query.Interface = &table;
+  query.InterfaceType = nullptr;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().query_interface(nullptr)), invalid_parameter);
+
+  /* And a device with no doorbell pages backs none of it, whatever the OS
+   * allows: there is nowhere for a process to store. */
+  CHECK_EQ(fixture.start(), success);
+  query.InterfaceType = feature_guid;
+  CHECK_EQ(nt(fixture.adapter().query_interface(&query)), success);
+  av::DxgkargQueryFeatureSupportRecord support = {};
+  support.FeatureId = av::feature_user_mode_submission;
+  CHECK_EQ(table.QueryFeatureSupport(table.Context, &support), success);
+  CHECK_EQ(support.SupportedByDriver, 1u);
+  CHECK_EQ(support.SupportedOnCurrentConfig, 0u); }
 
 TEST(adapter_start_device, a_second_start_without_a_stop_is_refused)
 { Fixture fixture;

@@ -22,6 +22,8 @@
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
+#include "core/ddi/dxgkddi_feature_interface_record.hpp"
+#include "core/ddi/entry_points.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/scheduling/hw_queue.hpp"
 #include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
@@ -504,11 +506,65 @@ void Adapter::reset_device()
     if (device_.constructed()) device_.object().reset_immediately();
 }
 
-int32_t Adapter::query_interface(void *)
+/* GUID_WDDM_INTERFACE_FEATURE (dispmprt.h:451), the one interface this driver
+ * answers: dxgkrnl asks for it to find out which staged features the driver
+ * implements. */
+namespace {
+constexpr uint8_t feature_interface_guid[16] = {0x93, 0x39, 0xbb, 0x94, 0xc3, 0xc6, 0xa7, 0x4d,
+                                                0x89, 0x49, 0xa1, 0x13, 0x82, 0x32, 0xe7, 0x59};
+}  // namespace
+
+int32_t Adapter::query_interface(void *query)
 {
     AV_SCOPE("Adapter::query_interface");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_interface");
-    return NtStatus(Status::not_supported).value();
+    if (query == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(answer_feature_interface(*static_cast<QueryInterfaceRecord *>(query))).value();
+}
+
+Status Adapter::answer_feature_interface(QueryInterfaceRecord &query)
+{
+    AV_SCOPE("Adapter::answer_feature_interface");
+    if (query.InterfaceType == nullptr || query.Interface == nullptr) return Status::invalid_parameter;
+    for (uint32_t byte = 0u; byte < sizeof feature_interface_guid; byte++)
+        if (static_cast<const uint8_t *>(query.InterfaceType)[byte] != feature_interface_guid[byte])
+            return Status::not_supported;
+    if (query.Version != feature_interface_version_1 || query.Size < sizeof(DxgkddiFeatureInterfaceRecord))
+        return Status::not_supported;
+    DxgkddiFeatureInterfaceRecord &table = *static_cast<DxgkddiFeatureInterfaceRecord *>(query.Interface);
+    table.Size = static_cast<uint16_t>(sizeof table);
+    table.Version = feature_interface_version_1;
+    table.Context = this;
+    /* Nothing is reference counted: the table is this adapter's, and dxgkrnl
+     * stops using it at RemoveDevice. */
+    table.InterfaceReference = [](void *) {};
+    table.InterfaceDereference = [](void *) {};
+    table.QueryFeatureSupport = &AvDdiQueryFeatureSupport;
+    table.QueryFeatureInterface = nullptr;
+    return Status::ok;
+}
+
+/* The features this driver implements, and nothing else: a feature it does not
+ * answer for stays disabled, which is what keeps a capability behind it
+ * unreportable (research.md §18). */
+int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request)
+{
+    AV_SCOPE("Adapter::query_feature_support");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_feature_support");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    request->MinSupportedVersion = feature_version_1;
+    request->MaxSupportedVersion = feature_version_1;
+    request->SupportedByDriver = 0u;
+    request->SupportedOnCurrentConfig = 0u;
+    const bool implemented = request->FeatureId == feature_native_fence ||
+                             request->FeatureId == feature_user_mode_submission ||
+                             request->FeatureId == feature_hwsch;
+    if (!implemented) return NtStatus(Status::ok).value();
+    request->SupportedByDriver = 1u;
+    /* Every one of them needs the doorbell BAR this device may not have: a
+     * device without one hands out no queues and no doorbells (feature 030). */
+    request->SupportedOnCurrentConfig = doorbell_table_.constructed() ? 1u : 0u;
+    return NtStatus(Status::ok).value();
 }
 
 /* DpiAddDevice calls a registered LinkDevice after every AddDevice and fails
