@@ -186,6 +186,7 @@ AV_SAME_OFFSET(QueryInterfaceRecord, Interface, QUERY_INTERFACE, Interface);
 AV_SAME_OFFSET(QueryInterfaceRecord, InterfaceSpecificData, QUERY_INTERFACE, InterfaceSpecificData);
 AV_SAME_OFFSET(QueryInterfaceRecord, DeviceUid, QUERY_INTERFACE, DeviceUid);
 static_assert(av::feature_interface_version_1 == DXGK_FEATURE_INTERFACE_VERSION_1, "feature interface version");
+static_assert(av::feature_version_highest == static_cast<DXGK_FEATURE_VERSION>(~0u), "feature version range");
 
 AV_SAME_SIZE(DxgkargCreateNativeFenceRecord, DXGKARG_CREATENATIVEFENCE);
 AV_SAME_OFFSET(DxgkargCreateNativeFenceRecord, hGlobalNativeFence, DXGKARG_CREATENATIVEFENCE, hGlobalNativeFence);

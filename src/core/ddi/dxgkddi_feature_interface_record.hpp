@@ -44,9 +44,15 @@ struct DxgkargQueryFeatureSupportRecord {
     uint8_t  SupportedOnCurrentConfig;
 };
 
-/* What the OS asks for and what a driver answers: version 1 of a feature is
- * the only one this driver implements any of. */
-enum : uint16_t { feature_version_1 = 1u };
+/* The versions a driver says it implements. dxgkrnl intersects the driver's
+ * range with its own and enables the feature at the highest version in both
+ * (DpiIsFeatureEnabled), so a range narrower than the OS's staged version
+ * disables the feature outright - which is what a first live run showed
+ * (feature 049, research.md §18). This driver implements each feature as the
+ * WDDM 3.2 headers define its mechanism and has no revisions of its own, so
+ * what it reports is every version: the mechanism is the same one whichever
+ * number this OS staged it under. */
+enum : uint16_t { feature_version_lowest = 0u, feature_version_highest = 0xFFFFu };
 /* DXGK_FEATURE_INTERFACE_VERSION_1 (dispmprt.h:1572). */
 enum : uint16_t { feature_interface_version_1 = 1u };
 

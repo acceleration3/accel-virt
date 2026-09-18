@@ -552,8 +552,8 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
     AV_SCOPE("Adapter::query_feature_support");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_feature_support");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    request->MinSupportedVersion = feature_version_1;
-    request->MaxSupportedVersion = feature_version_1;
+    request->MinSupportedVersion = feature_version_lowest;
+    request->MaxSupportedVersion = feature_version_highest;
     request->SupportedByDriver = 0u;
     request->SupportedOnCurrentConfig = 0u;
     const bool implemented = request->FeatureId == feature_native_fence ||

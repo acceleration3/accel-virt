@@ -4022,8 +4022,11 @@ TEST(adapter_query_interface, answers_the_feature_interface_and_what_this_driver
       CHECK_EQ(table.QueryFeatureSupport(table.Context, &support), success);
       CHECK_EQ(support.SupportedByDriver, 1u);
       CHECK_EQ(support.SupportedOnCurrentConfig, 1u);
-      CHECK_EQ(support.MinSupportedVersion, av::feature_version_1);
-      CHECK_EQ(support.MaxSupportedVersion, av::feature_version_1);
+      /* Every version: dxgkrnl enables the feature at the highest version in
+       * both ranges, and this driver implements the mechanism rather than a
+       * revision of it (research.md §18). */
+      CHECK_EQ(support.MinSupportedVersion, av::feature_version_lowest);
+      CHECK_EQ(support.MaxSupportedVersion, av::feature_version_highest);
   }
   /* Everything else is a feature this driver has nothing behind. */
   const std::uint32_t others[] = {1u, 2u, 3u, 5u, 0xFFFFu};
