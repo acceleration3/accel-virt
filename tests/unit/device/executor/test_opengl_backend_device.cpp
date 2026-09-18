@@ -16,6 +16,7 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <EGL/egl.h>
 #include <pthread.h>
@@ -63,6 +64,7 @@ constexpr unsigned gl_reset_notification_strategy = 0x8256;
 constexpr unsigned gl_lose_context_on_reset = 0x8252;
 constexpr int      gl_context_flag_debug = 0x2;
 constexpr int      gl_core_profile_bit = 0x1;
+constexpr int      gl_compatibility_profile_bit = 0x2;
 constexpr unsigned gl_texture_2d = 0x0DE1;
 constexpr unsigned gl_rgba8 = 0x8058;
 constexpr unsigned gl_rgba = 0x1908;
@@ -138,6 +140,34 @@ TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_mad
           CHECK(!none.initialize(displays.at(index), &options, nullptr));
           CHECK_EQ(none.resolved(), 0u);
       }
+  } }
+
+/* Feature 051: the compatibility profile a legacy application needs, asked for
+ * on every host GPU this machine has. A driver that has none refuses the
+ * create, which is the answer the guest ICD ladders down from - so it is
+ * reported, not failed. */
+TEST(opengl_backend_device, a_compatibility_context_is_made_where_the_host_has_one)
+{ Displays displays;
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      const RvkContextOptions compatibility_46 = {4u, 6u, RVK_CONTEXT_PROFILE_COMPATIBILITY, 0u, 0u};
+      OpenGlBackend backend;
+      if (!backend.initialize(displays.at(index), &compatibility_46, nullptr)) {
+          std::fprintf(stderr, "display %u grants no 4.6 compatibility context\n", index);
+          CHECK_EQ(backend.resolved(), 0u);
+          continue;
+      }
+      CHECK_EQ(integer(backend, gl_major_version), 4);
+      CHECK_EQ(integer(backend, gl_minor_version), 6);
+      /* The mask is the only answer: one of this machine's two drivers names
+       * its compatibility context exactly as it names its core one. */
+      CHECK_EQ(integer(backend, gl_context_profile_mask) & gl_compatibility_profile_bit,
+               gl_compatibility_profile_bit);
+      CHECK_EQ(integer(backend, gl_context_profile_mask) & gl_core_profile_bit, 0);
+      /* And the fixed-function entry points it exists for are there. */
+      CHECK(av::OpenGlBackendProbe::gl(backend).glNewList != nullptr);
+      CHECK(av::OpenGlBackendProbe::gl(backend).glCallLists != nullptr);
+      CHECK(av::OpenGlBackendProbe::gl(backend).glBegin != nullptr);
+      backend.shut_down();
   } }
 
 TEST(opengl_backend_device, debug_and_robust_contexts_report_their_flags)

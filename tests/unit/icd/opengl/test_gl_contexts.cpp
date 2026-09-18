@@ -53,6 +53,7 @@ struct Scenario {
         void *const context = rig.opengl32().create_context(dc_of(thread));
         if (context == nullptr) return nullptr;
         rig.host().gl_make("host gpu", "4.6.0 host");
+        rig.host().gl_policy(0);
         rig.host().gl_window(1u, 1u);
         return rig.opengl32().make_current(dc_of(thread), context) ? context : nullptr;
     }

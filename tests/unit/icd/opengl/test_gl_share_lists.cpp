@@ -65,7 +65,10 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   CHECK(rig.opengl32().share_lists(a, b));
   CHECK(rig.opengl32().share_lists(b, c));
   CHECK(rig.root().invariants_hold());
-  for (int made = 0; made < 3; made++) rig.host().gl_make("host gpu", "4.6");
+  for (int made = 0; made < 3; made++) {
+      rig.host().gl_make("host gpu", "4.6");
+      rig.host().gl_policy(0);
+  }
   const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
   const GuestGlContext *const third = current_on(rig, c);
   CHECK(third != nullptr);
@@ -114,6 +117,7 @@ TEST(gl_share_lists, a_share_with_a_made_unknown_or_same_context_or_into_a_loop_
   /* After DrvSetContext either way round. */
   void *const made = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(current_on(rig, made) != nullptr);
   void *const fresh = rig.opengl32().create_context(rig.dc());
   CHECK(!rig.opengl32().share_lists(made, fresh));
@@ -133,6 +137,7 @@ TEST(gl_share_lists, a_deleted_target_shares_nothing_and_a_deleted_context_is_no
   CHECK(!rig.root().share_lists(deleted, rig.opengl32().driver_context(b)));
   check_error(rig, Root::error_invalid_handle);
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
   const GuestGlContext *const alone = current_on(rig, b);
   CHECK(alone != nullptr);
@@ -152,6 +157,7 @@ TEST(gl_share_lists, a_target_that_cannot_be_made_or_was_lost_fails_the_make)
   CHECK(rig.root().current() == nullptr);
   /* a made and then lost: b cannot share it. */
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(current_on(rig, a) != nullptr);
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
@@ -167,6 +173,7 @@ TEST(gl_share_lists, a_context_records_one_target_and_only_while_unmade)
   rig.load_with_format();
   void *const a = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   GuestGlContext *const context = current_on(rig, a);
   CHECK_STATUS(context->share_after(9u), Status::invalid_state);
   CHECK_STATUS(context->share(9u), Status::invalid_state);

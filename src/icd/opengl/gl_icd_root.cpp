@@ -31,9 +31,14 @@ constexpr uint32_t line_bytes = 160u;
 /* ARB_robustness, KHR_robustness, EXT_robustness and GL 4.5 all name one query. */
 constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", "glGetGraphicsResetStatusARB",
                                                     "glGetGraphicsResetStatusEXT", "glGetGraphicsResetStatusKHR"};
-/* The GL extensions reported: none yet - a row arrives with the test that
- * proves its extension through this ICD (tools/check_extension_policy.py). */
-constexpr const icd::ExtensionPolicy::Row *reported_extensions = nullptr;
+/* The GL extensions reported: a row arrives with the test that proves its
+ * extension through this ICD (tools/check_extension_policy.py), and is still
+ * only reported where the host's own list has it. */
+constexpr icd::ExtensionPolicy::Row reported_extensions[] = {
+    {"GL_ARB_compatibility", 1u,
+     "fullstack_opengl_icd.a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list"},
+};
+constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The WGL extensions the functions DrvGetProcAddress answers make whole, each
  * with the test that proves it. */
 constexpr icd::ExtensionPolicy::Row reported_wgl_extensions[] = {
@@ -54,7 +59,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
                      GlIcdBinding &binding)
     : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
       query_(formats_), windows_(), currents_(slot), connection_(kmt),
-      extensions_(reported_extensions, 0u, reported_wgl_extensions, reported_wgl_count),
+      extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       contexts_(memory, connection_, send_lock, log, extensions_),
       manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u), profile_noted_(false)
 {

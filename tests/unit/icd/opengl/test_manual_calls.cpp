@@ -566,7 +566,8 @@ TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
                                     av::GlContextOptions());
   CHECK(calls.string_i(0x1F03u, 0u) == nullptr);
   rig.host().gl_make("host gpu", "4.6");
-  rig.host().gl_integer(2);
+  /* This context's own policy has rows, and the host lists two. */
+  rig.host().gl_policy(2);
   rig.host().gl_string("GL_EXT_host_only");
   rig.host().gl_string("GL_ARB_debug_output");
   CHECK_STATUS(context.make(), av::Status::ok);

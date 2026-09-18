@@ -54,6 +54,7 @@ struct LossRig {
         void *const dc = thread == 1u ? rig.dc() : rig.other_dc();
         void *const context = rig.opengl32().create_context(dc);
         rig.host().gl_make("host gpu", "4.6");
+        rig.host().gl_policy(0);
         rig.host().gl_window(1u, 1u);
         return rig.opengl32().make_current(dc, context) ? context : nullptr;
     }
@@ -64,6 +65,7 @@ struct LossRig {
         void *const dc = thread == 1u ? rig.dc() : rig.other_dc();
         const auto  create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
         rig.host().gl_make("host gpu", "4.6");
+        rig.host().gl_policy(0);
         void *const context = create(dc, nullptr, robust_attributes);
         rig.host().gl_window(1u, 1u);
         return context != nullptr && rig.opengl32().make_current(dc, context) ? context : nullptr;
@@ -176,6 +178,7 @@ TEST(gl_device_loss, half_of_robustness_reports_like_any_context)
     GlIcdRig &rig = loss.rig;
     const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
     rig.host().gl_make("host gpu", "4.6");
+    rig.host().gl_policy(0);
     void *const context = create(rig.dc(), nullptr, attributes);
     rig.host().gl_window(1u, 1u);
     CHECK(rig.opengl32().make_current(rig.dc(), context));

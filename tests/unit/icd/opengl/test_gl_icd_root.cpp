@@ -203,6 +203,7 @@ TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   rig.host().gl_make("host gpu", "4.6.0");
+  rig.host().gl_policy(0);
   rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
   CHECK(rig.kmt().open_objects() > 0u);
@@ -292,6 +293,7 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().current() == nullptr);
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   rig.host().gl_window(1u, 1u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) != nullptr);
   CHECK(rig.root().invariants_hold()); }
@@ -367,9 +369,10 @@ TEST(gl_icd_root, gl_calls_go_through_the_threads_table_to_its_context)
   rig.opengl32().gl<GetIntegervFn>(slot_get_integerv)(gl_viewport, viewport);
   CHECK_EQ(viewport[2], 64);
   CHECK_EQ(viewport[3], 48);
-  /* Three list lengths and the three the granted profile is read from at the
-   * make (feature 051), then this test's own one. */
-  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 7u); }
+  /* Three list lengths, the three the granted profile is read from at the make
+   * and the extension count its policy asks for (feature 051), then this
+   * test's own one. */
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 8u); }
 
 /* Feature 051, US1.4: what profile the host granted is worth exactly one line,
  * whatever a process makes afterwards, and the line names the host's own
@@ -497,6 +500,7 @@ TEST(gl_icd_root, a_create_with_attributes_makes_the_context_and_opengl32s_hglrc
   const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
   const std::int32_t attributes[] = {0x2091, 4, 0x2092, 5, 0x9126, 1, 0};
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   void *const context = create(rig.dc(), nullptr, attributes);
   CHECK(context != nullptr);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
@@ -519,7 +523,9 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   const std::int32_t attributes[] = {0};
   /* The share target is made first, then the context sharing it. */
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   void *const second = create(rig.dc(), first, attributes);
   CHECK(second != nullptr);
   CHECK_EQ(rig.opengl32().dhglrc_lookups(), 1u);
@@ -530,6 +536,7 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   /* A version asked for is kept beside the share. */
   const std::int32_t versioned[] = {0x2091, 3, 0x2092, 3, 0};
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(create(rig.dc(), first, versioned) != nullptr);
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.options().share_context() != 0u);
@@ -537,6 +544,7 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   CHECK_EQ(record.options().minor(), 3u);
   /* A made share target is not made again; a lost or unknown one is refused. */
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(create(rig.dc(), first, attributes) != nullptr);
   CHECK(create(rig.dc(), reinterpret_cast<void *>(0x5u), attributes) == nullptr);
   check_error(rig, Root::error_invalid_operation);
@@ -582,12 +590,14 @@ TEST(gl_icd_root, a_create_with_attributes_opengl32_does_not_finish_leaves_nothi
   rig.load_with_format();
   const std::int32_t none[] = {0};
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   rig.opengl32().refuse_next_create();
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
   check_error(rig, Root::error_invalid_operation);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   /* An HGLRC made without asking the driver names nothing of the ICD's. */
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   rig.opengl32().skip_driver_next_create();
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
   check_error(rig, Root::error_invalid_operation);
@@ -595,6 +605,7 @@ TEST(gl_icd_root, a_create_with_attributes_opengl32_does_not_finish_leaves_nothi
   CHECK(rig.root().invariants_hold());
   av::glicd::GlIcdRootProbe::fill_pending(rig.root());
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
   check_error(rig, Root::error_invalid_operation);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
@@ -664,6 +675,7 @@ TEST(gl_icd_root, a_create_and_a_call_take_the_root_lock_then_the_send_lock)
   void *const context = rig.opengl32().create_context(rig.dc());
   rig.trace().clear();
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
   const char *const made = rig.trace().text();
@@ -775,6 +787,7 @@ TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
   rig.surface().resize(window, 9000u, 10u);
   void *const context = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   CHECK(!rig.opengl32().make_current(rig.dc(), context));
   check_error(rig, Root::error_invalid_pixel_format);
   CHECK(rig.root().current() == nullptr);
@@ -797,8 +810,9 @@ TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
   rig.surface().resize(window, 8u, 8u);
   void *const other = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
   const std::uint32_t made = rig.kmt().calls(MockKmt::Call::submit);
-  rig.kmt().withhold_answer_at(rig.host().gl_make_waits + 1u);
+  rig.kmt().withhold_answer_at(rig.host().gl_make_waits + av::ScriptedHost::gl_policy_waits + 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), other));
   CHECK(rig.kmt().calls(MockKmt::Call::submit) > made);
   CHECK(rig.root().current() != nullptr);

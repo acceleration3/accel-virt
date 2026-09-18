@@ -124,6 +124,9 @@ public:
      * string does not say (research.md §1). */
     void gl_make_profile(const char *renderer, const char *version, std::int32_t major, std::int32_t minor,
                          std::int32_t mask);
+    /* What a context whose policy reports a row asks after the make: how many
+     * extensions the host lists. */
+    void gl_policy(std::int32_t listed);
     /* What the first make-current of a context on a window waits for: the
      * names of its framebuffer objects (two when multisampled), its colour
      * texture and its renderbuffers (a multisampled colour one, then the
@@ -131,6 +134,9 @@ public:
     void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
     /* Waits a GL make takes. */
     static constexpr std::uint32_t gl_make_waits = 11u;
+    /* One more wait when the context's policy reports a row: the make asks
+     * GL_NUM_EXTENSIONS before it asks for any name (feature 051). */
+    static constexpr std::uint32_t gl_policy_waits = 1u;
 
     /* The next answer queued stops after its first `bytes`, as a host that
      * wrote a short reply leaves it. */

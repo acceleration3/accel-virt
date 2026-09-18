@@ -201,6 +201,11 @@ void ScriptedHost::gl_make_profile(const char *renderer, const char *version, st
     gl_integer(mask);
 }
 
+void ScriptedHost::gl_policy(std::int32_t listed)
+{
+    gl_integer(listed);
+}
+
 void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first)
 {
     /* Two framebuffers, a texture and two renderbuffers at most. */
