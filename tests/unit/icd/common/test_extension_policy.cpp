@@ -205,6 +205,8 @@ TEST(extension_policy, invariants_refuse_a_row_that_names_nothing_no_test_no_ver
       {{nullptr, 1u, "extension_policy.test"}}, {{"", 1u, "extension_policy.test"}},
       {{long_name, 1u, "extension_policy.test"}}, {{"VK_KHR_spirv_1_4", 0u, "extension_policy.test"}},
       {{"VK_KHR_spirv_1_4", 1u, nullptr}}, {{"VK_KHR_spirv_1_4", 1u, ""}},
+      /* A row answered over a host extension has to name one. */
+      {{"VK_KHR_external_memory_win32", 1u, "extension_policy.test", ""}},
   };
   for (const auto &row : broken) CHECK(!ExtensionPolicy(row, 1u).invariants_hold());
   long_name[VK_MAX_EXTENSION_NAME_SIZE - 1u] = '\0';
@@ -213,3 +215,41 @@ TEST(extension_policy, invariants_refuse_a_row_that_names_nothing_no_test_no_ver
   const Row twice[] = {rows[0], rows[1], rows[0]};
   CHECK(!ExtensionPolicy(twice, 3u).invariants_hold());
   CHECK(ExtensionPolicy(twice, 2u).invariants_hold()); }
+
+/* A row may be answered over a different host extension: no Linux driver has a
+ * Win32 handle to give, so VK_KHR_external_memory_win32 is reported when the
+ * host lists VK_KHR_external_memory_fd, at the row's own version - the host's
+ * is a different extension's number (feature 047, US3, research.md §10). */
+TEST(extension_policy, a_row_is_reported_over_the_host_extension_it_names)
+{ const Row translated[] = {
+      {"VK_KHR_external_memory_win32", 1u, "extension_policy.test", "VK_KHR_external_memory_fd"},
+      {"VK_KHR_timeline_semaphore", 2u, "extension_policy.test"},
+  };
+  ExtensionPolicy policy(translated, 2u);
+  CHECK(policy.invariants_hold());
+  HostList host;
+  host.add("VK_KHR_external_memory_fd", 7u);
+  host.add("VK_KHR_timeline_semaphore", 2u);
+  std::uint32_t         count = 2u;
+  VkExtensionProperties reported[2] = {};
+  CHECK_EQ(policy.report(host.entries(), host.count(), &count, reported), VK_SUCCESS);
+  CHECK_EQ(count, 2u);
+  CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_external_memory_win32") == 0);
+  /* The row's version, not the host's 7: what was tested is this ICD's
+   * translation, whatever revision the mechanism behind it is at. */
+  CHECK_EQ(reported[0].specVersion, 1u);
+  CHECK(std::strcmp(reported[1].extensionName, "VK_KHR_timeline_semaphore") == 0);
+  CHECK_EQ(reported[1].specVersion, 2u);
+
+  /* A host without the mechanism is a host this is not reported on. */
+  HostList without;
+  without.add("VK_KHR_external_memory_win32", 1u);
+  without.add("VK_KHR_timeline_semaphore", 2u);
+  count = 2u;
+  CHECK_EQ(policy.report(without.entries(), without.count(), &count, reported), VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_timeline_semaphore") == 0);
+  /* And a device may be created with it exactly when it is reported: the row
+   * is what a create is judged against, as every other row is. */
+  const char *const asked[] = {"VK_KHR_external_memory_win32"};
+  CHECK_EQ(policy.first_refused(asked, 1u), 1u); }

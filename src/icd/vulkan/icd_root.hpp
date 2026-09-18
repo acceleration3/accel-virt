@@ -275,9 +275,12 @@ private:
     Win32HandleKind         semaphore_handles_;
     /* A fresh fd of an object of `owner`, asked of the host each time an
      * import names it: a driver takes ownership of an fd it imports, so one fd
-     * could not serve two imports. */
-    VkResult                host_memory_fd(VkDevice owner, VkDeviceMemory memory, int &fd);
-    VkResult                host_semaphore_fd(VkDevice owner, VkSemaphore semaphore, int &fd);
+     * could not serve two imports. Asked through the importing device's own
+     * connection, so an owner of another instance is a handle that context
+     * cannot name and the host refuses it - which is what sharing between two
+     * instances is, until feature 053. */
+    VkResult                host_memory_fd(LoaderHandle &made, VkDevice owner, VkDeviceMemory memory, int &fd);
+    VkResult                host_semaphore_fd(LoaderHandle &made, VkDevice owner, VkSemaphore semaphore, int &fd);
     /* The Win32 import node of an allocation's chain, or null. */
     const ImportMemoryWin32HandleRecord *imported_memory_record(const void *chain) const;
     /* Whether an allocation's chain exports or imports a Win32 handle, which

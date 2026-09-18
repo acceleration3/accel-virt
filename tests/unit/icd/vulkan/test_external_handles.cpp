@@ -445,3 +445,88 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   allocate.memoryTypeIndex = 0u;
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &other), VK_SUCCESS);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkAllocateMemory)); }
+
+/* What a chain longer than this driver reads means, and what a host that
+ * refuses the fd leaves: neither is answered with a share that did not
+ * happen. */
+TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_the_fd)
+{ SharingRig rig;
+  /* A chain of nodes with no Win32 marker in the part this driver reads is not
+   * a shared allocation, and goes the way every other allocation goes. */
+  constexpr std::uint32_t            beyond = 33u;
+  VkMemoryDedicatedAllocateInfo      many[beyond] = {};
+  for (std::uint32_t index = 0u; index < beyond; index++) {
+      many[index].sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+      many[index].pNext = index != 0u ? &many[index - 1u] : nullptr;
+  }
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &many[beyond - 1u];
+  allocate.allocationSize = 4096u;
+  rig.rig().host().vk_memory_properties(ScriptedHost::vk_host_memory_types, ScriptedHost::vk_host_visible_types);
+  rig.rig().host().vk_handle(0, 0x7900u);
+  VkDeviceMemory plain = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &plain), VK_SUCCESS);
+  CHECK(plain != VK_NULL_HANDLE);
+
+  /* The Win32 export structure alone still says the allocation is shared -
+   * it is what DXVK chains for a named handle - and then the chain is longer
+   * than this driver reads, which is refused rather than sent short. */
+  struct {
+      VkStructureType type_;
+      const void     *next_;
+      const void     *attributes_;
+      VkFlags         access_;
+      const void     *name_;
+  } win32 = {av::icd::export_memory_win32_handle_info, &many[beyond - 1u], nullptr, 0u, nullptr};
+  allocate.pNext = &win32;
+  const std::uint32_t before = rig.rig().kmt().commands();
+  VkDeviceMemory      refused = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &refused),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK(refused == VK_NULL_HANDLE);
+  CHECK_EQ(rig.rig().kmt().commands(), before);
+
+  /* A host that refuses a fresh fd of the remembered memory: the import is
+   * that refusal, not an allocation of memory nothing shares. */
+  void *const handle = rig.exported_memory();
+  av::icd::ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = handle;
+  VkMemoryAllocateInfo sharing = {};
+  sharing.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  sharing.pNext = &importing;
+  sharing.allocationSize = 4096u;
+  rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
+  VkDeviceMemory none = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &sharing, nullptr, &none),
+           VK_ERROR_TOO_MANY_OBJECTS);
+  CHECK(none == VK_NULL_HANDLE);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetMemoryFdKHR)); }
+
+/* A lost device answers the loss rather than the handle: the import goes
+ * nowhere, and neither does a host asked for an fd it will not answer. */
+TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the_answer)
+{ SharingRig rig;
+  void *const handle = rig.exported_semaphore();
+  av::icd::ImportSemaphoreWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+  importing.handle_type_ = av::icd::opaque_win32_semaphore;
+  importing.handle_ = handle;
+
+  /* The host refuses a fresh fd of the remembered semaphore. */
+  rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
+  CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
+           VK_ERROR_TOO_MANY_OBJECTS);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetSemaphoreFdKHR));
+
+  /* And once the context is faulted, the import is the loss. */
+  const std::uint32_t before = rig.rig().kmt().commands();
+  rig.rig().kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.entry<VkResult (*)(VkPhysicalDevice)>("vkRvkForceContextFault")(rig.physical_device()),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.rig().kmt().commands(), before + 1u); }

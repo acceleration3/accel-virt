@@ -398,7 +398,9 @@ VkResult VulkanBackend::on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphor
 VkResult VulkanBackend::remembered(VkDevice device, VkResult answered, int *fd)
 {
     AV_SCOPE("VulkanBackend::remembered");
-    if (answered != VK_SUCCESS || fd == nullptr || *fd < 0) return answered;
+    /* A driver that answered VK_SUCCESS answered an fd with it, and the
+     * generated server always has somewhere to put one. */
+    if (answered != VK_SUCCESS) return answered;
     if (fds_.keep(device, *fd)) return VK_SUCCESS;
     /* Nowhere to remember it, so nothing could ever name it: closed here
      * rather than answered as a handle no import would be allowed to use. */

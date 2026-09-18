@@ -35,6 +35,10 @@ struct VulkanBackendProbe {
     /* Whether the backend still holds `fd` as one it exported: what says
      * whether an import took it (feature 047, US3). */
     bool                  holds_fd(int fd) const;
+    /* What the backend makes of a driver's answer to an export, `fd` being
+     * what the driver wrote: the answer a refusing driver gets, which neither
+     * GPU measured gives (feature 047, US3). */
+    VkResult              export_answered(VkResult answered, int &fd);
 
     VulkanBackend &backend;
 };

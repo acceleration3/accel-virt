@@ -595,6 +595,21 @@ What it cannot see, and L5 still must:
   driver the host loader unloaded cannot leave a leak ASan reports from an
   unknown module
 
+- descriptor update templates through the whole stack
+  (`test_fullstack_templates.cpp`, 047): the guest sizes a template's blob from
+  what it remembers and the device refuses a length its own template does not
+  account for, so only both halves together show that the two numbers agree
+- two devices sharing memory and a semaphore through the Win32 external objects
+  (`test_fullstack_external_objects.cpp`, 047): one device allocates exportable
+  memory and signals, the other imports both by the handles the ICD answered,
+  waits on the signal and copies the shared buffer into its own staging, which
+  the guest reads back. Only this layer can show it, because a guest device is
+  a host device and the sharing is between two host devices - what the host
+  ever saw was `vkGetMemoryFdKHR` of the remembered allocation and
+  `VkImportMemoryFdInfoKHR` naming a fresh fd of it. A host whose driver cannot
+  share by fd makes no such device, and the test names which condition failed
+  and returns
+
 Still to come: a shared allocation opened by a second simulated process, and a
 display path - a VidPn committed and a primary scanned out - through the rig.
 

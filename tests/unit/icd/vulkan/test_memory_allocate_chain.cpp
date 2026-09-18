@@ -10,9 +10,23 @@
 
 #include <cstdint>
 
+namespace av::icd {
+
+/* The states no chain it built can be in: a node it does not own, and one that
+ * never ends. */
+struct MemoryAllocateChainProbe {
+    static void a_node_of_someone_else_s(MemoryAllocateChain &chain, const void *node)
+    { chain.info_.pNext = node; }
+    static void a_chain_that_never_ends(MemoryAllocateChain &chain)
+    { chain.dedicated_.pNext = &chain.dedicated_; }
+};
+
+}  // namespace av::icd
+
 using av::Status;
 using av::icd::ImportMemoryWin32HandleRecord;
 using av::icd::MemoryAllocateChain;
+using av::icd::MemoryAllocateChainProbe;
 using av::icd::Win32HandleKind;
 
 namespace {
@@ -172,3 +186,20 @@ TEST(memory_allocate_chain, a_chain_it_cannot_carry_whole_is_refused)
   CHECK_EQ(nodes_of(*chain.forwarded()), 0u);
   CHECK(!chain.exports());
   CHECK(!chain.imports()); }
+
+/* The chain it answers is its own nodes and ends: a node from anywhere else,
+ * or one that points back at itself, is a chain nobody could send. */
+TEST(memory_allocate_chain, a_chain_of_nodes_it_does_not_own_is_named)
+{ const Win32HandleKind kind = memory_kind();
+  MemoryAllocateChain   chain;
+  VkMemoryDedicatedAllocateInfo dedicated = {};
+  dedicated.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+  CHECK_STATUS(chain.take(allocation(&dedicated), kind, -1), Status::ok);
+  CHECK(chain.invariants_hold());
+  MemoryAllocateChainProbe::a_chain_that_never_ends(chain);
+  CHECK(!chain.invariants_hold());
+
+  MemoryAllocateChain other;
+  CHECK_STATUS(other.take(allocation(&dedicated), kind, -1), Status::ok);
+  MemoryAllocateChainProbe::a_node_of_someone_else_s(other, &dedicated);
+  CHECK(!other.invariants_hold()); }

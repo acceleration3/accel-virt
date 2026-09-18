@@ -59,4 +59,10 @@ TEST(win32_handle_kind, a_kind_of_two_bits_or_one_bit_twice_is_named)
   Win32HandleKind none(0u, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
   CHECK(!none.invariants_hold());
   Win32HandleKind nothing(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT, 0u);
-  CHECK(!nothing.invariants_hold()); }
+  CHECK(!nothing.invariants_hold());
+  /* Two host types is no more one mechanism than two Win32 types are one
+   * handle. */
+  Win32HandleKind two_hosts(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
+                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+                                VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
+  CHECK(!two_hosts.invariants_hold()); }

@@ -274,3 +274,75 @@ else in the present path. `PresentBlit` stays, proven at L1 and L2 and ready
 for the presents that will name allocations; `adapter/0 present_rows` and
 `presents_unmoved` in a state dump are how a later feature will see it start to
 carry frames.
+
+## What the two layers require of the ICD (feature 047)
+
+Both layers enumerate the driver's extensions and features and refuse the
+device that is missing one, so what they require is a gate here rather than a
+discovery in a game: `tools/layer_requirements.py` reads each layer's own
+required list out of its pinned source, and `tools/check_layer_requirements.py`
+fails the build naming any name the ICD's policy table does not report. The
+lists are never copied into this repository - a release that starts requiring
+one more extension fails the gate instead of failing at runtime.
+
+Three things about that gate are worth knowing:
+
+- **What the loader answers is not the driver's to report.** Both layers
+  require `VK_KHR_surface` and `VK_EXT_debug_utils`, which are the loader's;
+  `NOT_A_DRIVER_S` in the gate lists them, and an absent row for one of them
+  is not a gap.
+- **A row may be answered over a different host extension.** No Linux driver
+  has a Win32 handle to give, so `VK_KHR_external_memory_win32` is reported
+  over the host's `VK_KHR_external_memory_fd`, and the policy row names that
+  mechanism. The gate holds the named host extension to the generated list
+  too, so a row cannot promise a translation this build never generated.
+- **A feature is answered from the host unchanged.** Dynamic rendering,
+  synchronization2, timeline semaphores, buffer device address, descriptor
+  indexing, mutable descriptor types and the rest arrive as
+  `VkPhysicalDeviceFeatures2` chain nodes and are carried whole. An extension
+  the host lacks is one the ICD reports absent; nothing is answered
+  optimistically.
+
+### DXGI interop: what a Win32 handle is here
+
+A `HANDLE` is not a thing the wire carries, and it is not a type the host
+build's headers declare, so all four commands of the two Win32
+external-object extensions are the ICD's own
+(`src/icd/vulkan/external_objects.cpp`), over records that write out the
+Windows structure layouts. A handle the ICD answers names a row of its own
+table: the memory or the semaphore of one device.
+
+The sharing behind it is the host's. A guest device is a host device, so two
+guest devices sharing an image share it between two host devices - which the
+host's own fd extensions do, because both host devices live in the one process
+the device library runs in. So an export remembers the object and answers a
+handle, and an import asks the host for a **fresh** `vkGetMemoryFdKHR` of that
+object and forwards `VkImportMemoryFdInfoKHR` in the Win32 structure's place.
+Fresh per import, because a host driver takes ownership of an fd it imports.
+
+The device side owns those fds (`HostExportedFds`): an fd an import names must
+be one that context exported, since an fd a guest made up names something else
+in the QEMU process entirely, and an fd exported and never imported is closed
+with its device rather than held until QEMU exits.
+
+Two consequences to keep in mind:
+
+- **Sharing is within one instance.** The fd table is a context's, and each
+  guest instance is its own context. DXVK and vkd3d-proton each make one
+  instance, so this is not a limit either of them meets; two processes sharing
+  is feature 053's, which gives objects a device-global identity.
+- **The KMT and Direct3D handle types are absent, and say so.**
+  `vkGetPhysicalDeviceExternalBufferProperties` answers the one opaque Win32
+  type out of the host's opaque fd and answers every other Win32 type as
+  absent, because nothing here turns a Direct3D object into a host one.
+  `vkGetMemoryWin32HandlePropertiesKHR` refuses every handle: it answers for a
+  handle from outside, and a handle this ICD did not export names nothing.
+
+### The 32-bit ICD is feature 061's
+
+DXVK and vkd3d-proton both ship 32-bit builds, and a 32-bit title loads a
+32-bit `vulkan-1.dll` which loads a 32-bit ICD. There is none here: the
+driver's user-mode side is built x64 only, and a second architecture is a
+second build of the guest tree, its own D3DKMT thunk width and its own
+registry key. Feature 061 is where that belongs, and until then a 32-bit title
+finds no driver rather than a broken one.

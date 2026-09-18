@@ -1190,6 +1190,41 @@ TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
   }
 }
 
+/* A semaphore import names an fd this context exported too, and one it did not
+ * is refused before the driver is handed it. */
+TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_semaphore_fd"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkSemaphoreCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      VkSemaphore semaphore = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      VkImportSemaphoreFdInfoKHR importing = {};
+      importing.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+      importing.semaphore = semaphore;
+      importing.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      importing.fd = 4096;
+      CHECK_EQ(vkproto::rvk_vkImportSemaphoreFdKHR(wire, device, &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      vkproto::rvk_vkDestroySemaphore(wire, device, semaphore, nullptr);
+
+      /* A driver that refuses an export is answered as it stands, and nothing
+       * is remembered for it. Neither GPU measured refuses one - both export
+       * memory that was never made exportable - so the refusal is put in
+       * where the driver's answer goes. */
+      int nothing = -1;
+      CHECK_EQ(made.probe().export_answered(VK_ERROR_INVALID_EXTERNAL_HANDLE, nothing),
+               VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK(!made.probe().holds_fd(nothing));
+  }
+}
+
 /* Exporting more than the table holds is refused with nothing leaked: the fd
  * the driver answered is closed here, since an fd no import could name is one
  * this process would hold until it exited. */

@@ -27,6 +27,7 @@
 namespace av::icd {
 
 class Win32HandleKind;
+struct MemoryAllocateChainProbe;
 
 class MemoryAllocateChain {
 public:
@@ -71,6 +72,8 @@ private:
     VkBaseOutStructure           *last_;
     bool                          exports_;
     bool                          imports_;
+
+    friend struct MemoryAllocateChainProbe;
 };
 
 }  // namespace av::icd

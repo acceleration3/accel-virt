@@ -532,30 +532,26 @@ VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 
-VkResult IcdRoot::host_memory_fd(VkDevice owner, VkDeviceMemory memory, int &fd)
+VkResult IcdRoot::host_memory_fd(LoaderHandle &made, VkDevice owner, VkDeviceMemory memory, int &fd)
 {
     AV_SCOPE("IcdRoot::host_memory_fd");
-    LoaderHandle *const made = allocating_device(owner);
-    if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    if (lost(*made->connection(), "vkGetMemoryFdKHR")) return VK_ERROR_DEVICE_LOST;
     VkMemoryGetFdInfoKHR get = {};
     get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
     get.memory = memory;
     get.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_handles_.host_type());
-    return vkproto::rvk_vkGetMemoryFdKHR(made->connection()->transport(), owner, &get, &fd);
+    /* A faulted connection needs no check of its own: the call through it
+     * answers VK_ERROR_DEVICE_LOST. */
+    return vkproto::rvk_vkGetMemoryFdKHR(made.connection()->transport(), owner, &get, &fd);
 }
 
-VkResult IcdRoot::host_semaphore_fd(VkDevice owner, VkSemaphore semaphore, int &fd)
+VkResult IcdRoot::host_semaphore_fd(LoaderHandle &made, VkDevice owner, VkSemaphore semaphore, int &fd)
 {
     AV_SCOPE("IcdRoot::host_semaphore_fd");
-    LoaderHandle *const made = allocating_device(owner);
-    if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    if (lost(*made->connection(), "vkGetSemaphoreFdKHR")) return VK_ERROR_DEVICE_LOST;
     VkSemaphoreGetFdInfoKHR get = {};
     get.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
     get.semaphore = semaphore;
     get.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
-    return vkproto::rvk_vkGetSemaphoreFdKHR(made->connection()->transport(), owner, &get, &fd);
+    return vkproto::rvk_vkGetSemaphoreFdKHR(made.connection()->transport(), owner, &get, &fd);
 }
 
 VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphoreWin32HandleRecord *request)
@@ -571,7 +567,7 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     int            fd = -1;
-    const VkResult shared = host_semaphore_fd(owner, exported, fd);
+    const VkResult shared = host_semaphore_fd(*made, owner, exported, fd);
     if (shared != VK_SUCCESS) return shared;
     VkImportSemaphoreFdInfoKHR importing = {};
     importing.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
@@ -684,7 +680,7 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
             log_.write("rvkvk: vkAllocateMemory names a handle this driver did not export");
             return VK_ERROR_INVALID_EXTERNAL_HANDLE;
         }
-        const VkResult shared = host_memory_fd(owner, exported, fd);
+        const VkResult shared = host_memory_fd(made, owner, exported, fd);
         if (shared != VK_SUCCESS) return shared;
     }
     MemoryAllocateChain chain;
