@@ -71,6 +71,10 @@ using ClearFn = void (APIENTRY *)(GLbitfield);
 /* The legacy recorder's own type: Win64 lets opengl32 call it as any GL 1.1
  * signature, which UBSan's function check would flag here. */
 using NewListFn = void (APIENTRY *)(unsigned int, unsigned int);
+using EndListFn = void (APIENTRY *)();
+using CallListsFn = void (APIENTRY *)(int, unsigned int, const void *);
+using GenListsFn = unsigned int (APIENTRY *)(int);
+using BeginFn = void (APIENTRY *)(unsigned int);
 using GetErrorFn = GLenum (APIENTRY *)();
 using GetStringFn = const GLubyte *(APIENTRY *)(GLenum);
 using GetIntegervFn = void (APIENTRY *)(GLenum, GLint *);
@@ -84,6 +88,10 @@ using ChooseFn = std::int32_t (APIENTRY *)(void *, const std::int32_t *, const f
                                            std::int32_t *, std::uint32_t *);
 
 constexpr std::uint32_t slot_new_list = 0u;
+constexpr std::uint32_t slot_end_list = 1u;
+constexpr std::uint32_t slot_call_lists = 3u;
+constexpr std::uint32_t slot_gen_lists = 5u;
+constexpr std::uint32_t slot_begin = 7u;
 constexpr std::uint32_t slot_clear = 203u;
 constexpr std::uint32_t slot_get_error = 261u;
 constexpr std::uint32_t slot_get_integerv = 263u;
@@ -401,6 +409,34 @@ TEST(gl_icd_root, a_legacy_command_on_a_compatibility_context_reaches_the_host)
   /* And nothing was recorded against the context for it. */
   rig.host().gl_varint(0u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u); }
+
+/* Feature 051, US1.3: a display list lives on the host. What crosses the wire
+ * is the compile once and one call per frame after it - never the commands
+ * again, which is the whole point of a list. */
+TEST(gl_icd_root, a_display_list_is_compiled_once_and_called_with_one_command)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  rig.host().gl_varint(7u);   /* the name glGenLists answers */
+  CHECK_EQ(rig.opengl32().gl<GenListsFn>(slot_gen_lists)(1), 7u);
+  const std::uint32_t compiled = rig.kmt().commands();
+  rig.opengl32().gl<NewListFn>(slot_new_list)(7u, 0x1300u /* GL_COMPILE */);
+  rig.opengl32().gl<BeginFn>(slot_begin)(0x0004u /* GL_TRIANGLES */);
+  rig.opengl32().gl<EndListFn>(slot_end_list)();
+  const std::uint32_t after_compile = rig.kmt().commands();
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glNewList), 1u);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glBegin), 1u);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glEndList), 1u);
+
+  /* Three frames, each calling the list: three commands, and not one more
+   * glBegin. */
+  const std::uint8_t names[] = {7u, 7u};
+  for (int frame = 0; frame < 3; frame++)
+      rig.opengl32().gl<CallListsFn>(slot_call_lists)(2, 0x1401u /* GL_UNSIGNED_BYTE */, names);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glCallLists), 3u);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glBegin), 1u);
+  CHECK(rig.kmt().commands() - after_compile <= 3u);
+  CHECK(after_compile > compiled); }
 
 /* The call that faulted answers nothing; the loss is glGetError's next
  * answer, once (T040), and nothing is sent after it. */
