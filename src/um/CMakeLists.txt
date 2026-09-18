@@ -165,6 +165,34 @@ add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
+# The three D3D probes (feature 047): DXVK's d3d9.dll and d3d11.dll and
+# vkd3d-proton's d3d12.dll are what they call, which is the whole point of the
+# run - the layer beside the probe, on the guest's Vulkan loader, on this ICD.
+# Import libraries for what only they call; dxgi is D3D12's adapter
+# enumeration.
+set(RVKD3DPROBE_IMPORTS "")
+foreach(module d3d9 d3d11 d3d12 dxgi)
+  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
+  add_custom_command(OUTPUT ${library}
+    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+  list(APPEND RVKD3DPROBE_IMPORTS ${library})
+endforeach()
+add_custom_target(rvkd3dprobe_imports DEPENDS ${RVKD3DPROBE_IMPORTS})
+
+# One source list for three programs: each takes only what its own entry point
+# reaches, and /OPT:REF drops the other two APIs' seams.
+file(GLOB RVKD3DPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/d3d/*.cpp)
+foreach(probe d3d9 d3d11 d3d12)
+  add_executable(rvk${probe}probe ${RVKD3DPROBE_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/probe/probe_window.cpp)
+  add_dependencies(rvk${probe}probe rvkd3dprobe_imports rvkglprobe_imports)
+  target_link_options(rvk${probe}probe PRIVATE /ENTRY:rvk${probe}probe_entry)
+  target_link_libraries(rvk${probe}probe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS}
+    ${USER32_IMPORT})
+endforeach()
+
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
 # (feature 046), and rvkvkprobe.exe makes that window and reads it back;
 # their import library is made with the GL probe's above.

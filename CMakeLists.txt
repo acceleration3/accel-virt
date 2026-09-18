@@ -490,6 +490,26 @@ add_test(NAME rvkglprobe_image
                  --allow-import opengl32.dll --allow-import user32.dll
                  --require-import wglCreateContext --require-import D3DKMTOpenAdapterFromHdc)
 
+# The three D3D probes bind to the layer beside them and nothing else (feature
+# 047, T028): DXVK's d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll, and for
+# D3D12 the dxgi.dll its adapter enumeration goes through. A probe that
+# imported anything more would be proving something other than the layer.
+add_test(NAME rvkd3d9probe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkd3d9probe.exe
+                 --allow-import d3d9.dll --allow-import user32.dll
+                 --require-import Direct3DCreate9)
+add_test(NAME rvkd3d11probe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkd3d11probe.exe
+                 --allow-import d3d11.dll --allow-import user32.dll
+                 --require-import D3D11CreateDeviceAndSwapChain)
+add_test(NAME rvkd3d12probe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkd3d12probe.exe
+                 --allow-import d3d12.dll --allow-import dxgi.dll --allow-import user32.dll
+                 --require-import D3D12CreateDevice --require-import CreateDXGIFactory1)
+
 # ---- gate scripts are tested like any other code ---------------------------
 # One ctest per module, labelled `tools`, so `ctest -j` runs them side by side
 # and `ctest -LE tools` is the fast loop. The guest runner's module drives a
