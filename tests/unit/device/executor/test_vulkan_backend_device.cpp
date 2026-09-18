@@ -15,6 +15,7 @@
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/handle_registry.hpp"
+#include "device/executor/host_exported_fds.hpp"
 #include "device/executor/host_gpu.hpp"
 #include "device/executor/host_template_table.hpp"
 #include "device/executor/imported_blob.hpp"
@@ -1113,5 +1114,131 @@ TEST(vulkan_backend_device, a_template_the_device_cannot_track_is_refused_before
           VulkanBackendProbe::name_template(made.backend(), as_handle<VkDescriptorUpdateTemplate>(0x5000u + taken));
       }
       CHECK_EQ(made.guest().create_template(made.device(), &one, 1u), VK_ERROR_OUT_OF_HOST_MEMORY);
+  }
+}
+
+/* An fd an import names is one this context exported (feature 047, US3). The
+ * guest's ICD turns a Win32 handle into an import by asking for a fresh fd of
+ * the object the handle names, so every fd that arrives here was answered
+ * here; an fd a guest made up names something else in this process entirely
+ * and is refused before the driver is handed it. */
+TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkExportMemoryAllocateInfo exportable = {};
+      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exportable;
+      allocate.allocationSize = page;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory shared = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+
+      VkMemoryGetFdInfoKHR get = {};
+      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+      get.memory = shared;
+      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      int fd = -1;
+      if (vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
+      CHECK(fd >= 0);
+      CHECK(made.probe().holds_fd(fd));
+
+      /* An fd this context never exported, and one it exported and has
+       * already given away, are the same refusal. */
+      VkImportMemoryFdInfoKHR forged = {};
+      forged.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+      forged.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      forged.fd = fd + 4096;
+      VkMemoryAllocateInfo importing = allocate;
+      importing.pNext = &forged;
+      VkDeviceMemory imported = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &imported),
+               VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK(imported == VK_NULL_HANDLE);
+
+      /* The one it exported imports, and the driver owns the fd after it: a
+       * second import naming it is refused. */
+      VkImportMemoryFdInfoKHR import = forged;
+      import.fd = fd;
+      importing.pNext = &import;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &imported), VK_SUCCESS);
+      CHECK(!made.probe().holds_fd(fd));
+      VkDeviceMemory again = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &importing, nullptr, &again),
+               VK_ERROR_INVALID_EXTERNAL_HANDLE);
+
+      /* An allocation that imports nothing is untouched by any of it, and one
+       * the driver refuses stays refused. */
+      VkDeviceMemory plain = VK_NULL_HANDLE;
+      VkMemoryAllocateInfo alone = {};
+      alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      alone.allocationSize = page;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
+      VkMemoryAllocateInfo absurd = alone;
+      absurd.allocationSize = ~static_cast<VkDeviceSize>(0) / 2u;
+      VkDeviceMemory none = VK_NULL_HANDLE;
+      CHECK(vkproto::rvk_vkAllocateMemory(wire, device, &absurd, nullptr, &none) != VK_SUCCESS);
+  }
+}
+
+/* Exporting more than the table holds is refused with nothing leaked: the fd
+ * the driver answered is closed here, since an fd no import could name is one
+ * this process would hold until it exited. */
+TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkExportMemoryAllocateInfo exportable = {};
+      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exportable;
+      allocate.allocationSize = page;
+      VkDeviceMemory shared = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+
+      VkMemoryGetFdInfoKHR get = {};
+      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+      get.memory = shared;
+      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+      int first = -1;
+      if (vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &first) != VK_SUCCESS) continue;
+      for (std::uint32_t taken = 1u; taken < av::HostExportedFds::max_fds; taken++) {
+          int more = -1;
+          CHECK_EQ(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &more), VK_SUCCESS);
+      }
+      int past = -1;
+      CHECK_EQ(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &get, &past), VK_ERROR_TOO_MANY_OBJECTS);
+      /* What the fd the driver answered was is not askable from here - a
+       * refused command answers no out parameter through the wire - but the
+       * table is what an import consults, and it never learnt one. */
+      CHECK(!made.probe().holds_fd(past));
+      /* Exporting from memory that was never exportable is the driver's own
+       * refusal, and nothing is remembered for it. */
+      VkDeviceMemory plain = VK_NULL_HANDLE;
+      VkMemoryAllocateInfo alone = {};
+      alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      alone.allocationSize = page;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
+      VkMemoryGetFdInfoKHR unshared = get;
+      unshared.memory = plain;
+      int refused = -1;
+      CHECK(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &unshared, &refused) != VK_SUCCESS);
   }
 }

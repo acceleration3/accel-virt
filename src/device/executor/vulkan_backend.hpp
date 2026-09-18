@@ -13,6 +13,7 @@
 #include "device/executor/adopted_blobs.hpp"
 #include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
+#include "device/executor/host_exported_fds.hpp"
 #include "device/executor/host_template_table.hpp"
 #include "device/executor/importable_types.hpp"
 #include "device/executor/session_backend.hpp"
@@ -94,6 +95,21 @@ public:
     void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                          const VkAllocationCallbacks *pAllocator) override;
 
+    /* The fds this context exported, and what an import may name (feature 047,
+     * US3): an fd a guest sends is a claim that this context exported it, and
+     * one it made up names something else in this process (constitution V).
+     * The table owns what it exported, so an export nothing imported is closed
+     * with its device rather than held until the process exits. */
+    VkResult on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,
+                                 int *pFd) override;
+    VkResult on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
+                                    int *pFd) override;
+    VkResult on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+                                 const VkAllocationCallbacks *pAllocator,
+                                 VkDeviceMemory *pMemory) override;
+    VkResult on_vkImportSemaphoreFdKHR(VkDevice device,
+                                       const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo) override;
+
     /* The physical device of the bound GPU and no other, as a list of one and
      * as a group of one: the host's own lists name every GPU it has, and a
      * handle the guest was never shown is one it can never name (feature 044,
@@ -166,6 +182,16 @@ private:
     void enable_host_import(VkDeviceCreateInfo &create);
 
     HostTemplateTable templates_;
+    HostExportedFds   fds_;
+    /* Whether every fd the chain of an allocation names is one this context
+     * exported, answering the last of them in `fd` - -1 for a chain that
+     * imports nothing. False is the one case an allocation is refused here. */
+    [[nodiscard]] bool exported(const void *next, int &fd);
+    /* `answered`, with an fd the driver took forgotten. */
+    VkResult           imported(VkResult answered, int fd);
+    /* An fd the driver answered, kept as this context's; VK_ERROR_TOO_MANY_OBJECTS
+     * when the table is full, with the fd closed since nothing can name it. */
+    VkResult           remembered(VkDevice device, VkResult answered, int *fd);
     /* Whether something made on `device` with the chain at `next` gets
      * `host_types` added as a structure of type `external`: only on the
      * device imports go to, made able to import, with types the driver

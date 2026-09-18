@@ -21,6 +21,8 @@ Status VulkanBackendProbe::reserve_template(VkDevice device, const VkDescriptorU
     return backend.templates_.reserve(device, &info);
 }
 
+bool VulkanBackendProbe::holds_fd(int fd) const { return backend.fds_.holds(fd); }
+
 void VulkanBackendProbe::name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made)
 {
     target.templates_.name(made);

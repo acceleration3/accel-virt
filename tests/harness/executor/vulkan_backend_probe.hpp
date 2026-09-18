@@ -32,6 +32,9 @@ struct VulkanBackendProbe {
     [[nodiscard]] Status  reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry);
     /* The reserved slot's handle, as a create does once the driver answered. */
     static void           name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made);
+    /* Whether the backend still holds `fd` as one it exported: what says
+     * whether an import took it (feature 047, US3). */
+    bool                  holds_fd(int fd) const;
 
     VulkanBackend &backend;
 };

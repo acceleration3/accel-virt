@@ -206,6 +206,16 @@ include = [
     "VK_EXT_external_memory_dma_buf",
     "VK_KHR_external_fence_fd",
     "VK_KHR_external_semaphore_fd",
+
+    # What DXGI interop is spelt as on Windows (feature 047, US3). Every
+    # command of both is in [commands].exclude, so nothing generated names a
+    # HANDLE - a type the host build's headers do not declare - and the ICD
+    # answers all four itself, over the FD extensions above: an export
+    # remembers the object, and an import asks the host for a fresh fd of it
+    # and forwards VkImportMemoryFdInfoKHR in the Win32 structure's place
+    # (specs/047-vulkan-for-d3d-translation/research.md §10).
+    "VK_KHR_external_memory_win32",
+    "VK_KHR_external_semaphore_win32",
 ]
 
 [commands]
@@ -271,6 +281,16 @@ exclude = [
     # what withdrew VK_KHR_map_memory2 from the emitted list until now.
     "vkMapMemory2KHR",
     "vkUnmapMemory2KHR",
+
+    # A HANDLE is not a thing the wire carries and not a type this build's
+    # headers declare, so all four of the Win32 external-object commands are
+    # the ICD's own (feature 047, US3). They are answered over the fd
+    # extensions, which is why naming them here claims nothing that is not
+    # written: src/icd/vulkan/external_objects.cpp.
+    "vkGetMemoryWin32HandleKHR",
+    "vkGetMemoryWin32HandlePropertiesKHR",
+    "vkGetSemaphoreWin32HandleKHR",
+    "vkImportSemaphoreWin32HandleKHR",
 ]
 
 [chain_extras]

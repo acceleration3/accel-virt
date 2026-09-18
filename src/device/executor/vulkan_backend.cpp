@@ -10,6 +10,7 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <string.h>
+#include <unistd.h>
 
 namespace av {
 
@@ -363,6 +364,7 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     templates_.forget_device(device);
+    fds_.forget_device(device);
     if (device == device_) device_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
@@ -378,6 +380,70 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
     /* The blob stays the device's until it releases it; only what this
      * library made of it goes, so that the release finds nothing to free. */
     abandon(*imported);
+}
+
+VkResult VulkanBackend::on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetMemoryFdKHR");
+    return remembered(device, RealVulkanDispatch::on_vkGetMemoryFdKHR(device, pGetFdInfo, pFd), pFd);
+}
+
+VkResult VulkanBackend::on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
+                                               int *pFd)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetSemaphoreFdKHR");
+    return remembered(device, RealVulkanDispatch::on_vkGetSemaphoreFdKHR(device, pGetFdInfo, pFd), pFd);
+}
+
+VkResult VulkanBackend::remembered(VkDevice device, VkResult answered, int *fd)
+{
+    AV_SCOPE("VulkanBackend::remembered");
+    if (answered != VK_SUCCESS || fd == nullptr || *fd < 0) return answered;
+    if (fds_.keep(device, *fd)) return VK_SUCCESS;
+    /* Nowhere to remember it, so nothing could ever name it: closed here
+     * rather than answered as a handle no import would be allowed to use. */
+    static_cast<void>(::close(*fd));
+    *fd = -1;
+    return VK_ERROR_TOO_MANY_OBJECTS;
+}
+
+VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+                                           const VkAllocationCallbacks *, VkDeviceMemory *pMemory)
+{
+    AV_SCOPE("VulkanBackend::on_vkAllocateMemory");
+    int fd = -1;
+    if (!exported(pAllocateInfo->pNext, fd)) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    return imported(RealVulkanDispatch::on_vkAllocateMemory(device, pAllocateInfo, nullptr, pMemory), fd);
+}
+
+VkResult VulkanBackend::on_vkImportSemaphoreFdKHR(VkDevice device,
+                                                  const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo)
+{
+    AV_SCOPE("VulkanBackend::on_vkImportSemaphoreFdKHR");
+    if (!fds_.holds(pImportSemaphoreFdInfo->fd)) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    return imported(RealVulkanDispatch::on_vkImportSemaphoreFdKHR(device, pImportSemaphoreFdInfo),
+                    pImportSemaphoreFdInfo->fd);
+}
+
+bool VulkanBackend::exported(const void *next, int &fd)
+{
+    AV_SCOPE("VulkanBackend::exported");
+    for (const auto *node = static_cast<const VkBaseInStructure *>(next); node != nullptr; node = node->pNext) {
+        if (node->sType != VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR) continue;
+        const auto *import = reinterpret_cast<const VkImportMemoryFdInfoKHR *>(node);
+        if (!fds_.holds(import->fd)) return false;
+        fd = import->fd;
+    }
+    return true;
+}
+
+VkResult VulkanBackend::imported(VkResult answered, int fd)
+{
+    AV_SCOPE("VulkanBackend::imported");
+    /* The driver owns the fd only where it took it; a refused import leaves it
+     * this context's, to be closed with its device rather than twice. */
+    if (answered == VK_SUCCESS && fd >= 0) static_cast<void>(fds_.take(fd));
+    return answered;
 }
 
 bool VulkanBackend::importable(const ImportedBlob &blob)
