@@ -194,6 +194,10 @@ second are measured against the display's refresh rate with vsync on and off.
 
 ## Out of Scope
 
+- The fixed-function **client arrays** (`glVertexPointer` and the twelve entry
+  points beside it): they read the application's own memory at every draw,
+  which this transport does not carry - the same refusal 050 already makes for
+  a modern attribute array with no buffer bound (research.md §9).
 - Stereo pixel formats, overlay and underlay planes, `wglUseFontOutlines`
   beyond what Microsoft's `opengl32.dll` implements over the ICD.
 - Zero-copy composition on the host GPU without a guest allocation: feature

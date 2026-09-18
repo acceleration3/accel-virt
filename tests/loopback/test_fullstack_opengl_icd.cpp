@@ -84,6 +84,11 @@ constexpr std::size_t   renderer_bytes = 256u;
 constexpr std::size_t   pixel_blob_floor = 4096u;
 
 /* opengl32's table slots for the GL 1.1 entries the test calls. */
+/* The compatibility profile's own slots (feature 051): the list ones first in
+ * the table, then immediate mode. */
+constexpr std::uint32_t slot_new_list = 0u, slot_end_list = 1u, slot_call_list = 2u, slot_gen_lists = 5u,
+                        slot_begin = 7u, slot_color_3f = 13u, slot_end = 43u, slot_vertex_2f = 128u,
+                        slot_load_identity = 290u, slot_matrix_mode = 293u, slot_get_integerv = 263u;
 constexpr std::uint32_t slot_tex_image_2d = 183u, slot_clear = 203u, slot_clear_color = 206u,
                         slot_finish = 216u, slot_read_pixels = 256u, slot_get_error = 261u,
                         slot_get_string = 275u, slot_bind_texture = 307u, slot_gen_textures = 328u;
@@ -242,6 +247,101 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; index < process.log().lines(); index++)
         std::fprintf(stderr, "%s\n", process.log().line(index)); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* Feature 051, US1: a context created the way every OpenGL application written
+ * before profiles existed creates one - wglCreateContext, no attributes - gets
+ * a compatibility context from this machine's driver, and the fixed-function
+ * pipeline in it draws. The triangle is compiled into a display list and
+ * called, so what is judged is the host's pixels for a list the guest sent
+ * once. */
+TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) return;
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { GlProcess process(rig.kmt());
+    FakeOpengl32 &gl = process.opengl32();
+    CHECK(gl.load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
+    CHECK(gl.set_pixel_format(process.dc(), 1));
+    void *const context = gl.create_context(process.dc());
+    CHECK(context != nullptr);
+    CHECK(gl.make_current(process.dc(), context));
+
+    /* What the host granted, read the only way that answers on both of this
+     * project's host GPUs: NVIDIA's compatibility version string is its core
+     * one (research.md §1). */
+    GLint mask = 0;
+    gl.gl<void (APIENTRY *)(GLenum, GLint *)>(slot_get_integerv)(0x9126u /* GL_CONTEXT_PROFILE_MASK */, &mask);
+    using GetString = const GLubyte *(APIENTRY *)(GLenum);
+    const auto *const version = reinterpret_cast<const char *>(gl.gl<GetString>(slot_get_string)(gl_version));
+    std::fprintf(stderr, "legacy context: mask 0x%x, %s\n", static_cast<unsigned>(mask),
+                 version != nullptr ? version : "(none)");
+    /* A host with no compatibility profile is a host this cannot be tried on,
+     * and says so rather than failing (US1.4). */
+    if (mask != 2) {
+        std::fprintf(stderr, "host grants no compatibility profile; nothing to draw\n");
+        CHECK(gl.make_current(nullptr, nullptr));
+        CHECK(gl.delete_context(context));
+        return;
+    }
+
+    GLuint texture = 0u, framebuffer = 0u;
+    gl.gl<void (APIENTRY *)(GLsizei, GLuint *)>(slot_gen_textures)(1, &texture);
+    gl.gl<void (APIENTRY *)(GLenum, GLuint)>(slot_bind_texture)(gl_texture_2d, texture);
+    gl.gl<void (APIENTRY *)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)>(
+        slot_tex_image_2d)(gl_texture_2d, 0, static_cast<GLint>(gl_rgba), side, side, 0, gl_rgba,
+                           gl_unsigned_byte, nullptr);
+    using GenFramebuffers = void (APIENTRY *)(GLsizei, GLuint *);
+    using BindFramebuffer = void (APIENTRY *)(GLenum, GLuint);
+    using FramebufferTexture2D = void (APIENTRY *)(GLenum, GLenum, GLenum, GLuint, GLint);
+    reinterpret_cast<GenFramebuffers>(gl.get_proc_address("glGenFramebuffers"))(1, &framebuffer);
+    reinterpret_cast<BindFramebuffer>(gl.get_proc_address("glBindFramebuffer"))(gl_framebuffer, framebuffer);
+    reinterpret_cast<FramebufferTexture2D>(gl.get_proc_address("glFramebufferTexture2D"))(
+        gl_framebuffer, gl_color_attachment0, gl_texture_2d, texture, 0);
+    gl.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei)>(305u /* glViewport */)(0, 0, side, side);
+
+    /* The matrix stacks a core context does not have. */
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1701u /* GL_PROJECTION */);
+    gl.gl<void (APIENTRY *)()>(slot_load_identity)();
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1700u /* GL_MODELVIEW */);
+    gl.gl<void (APIENTRY *)()>(slot_load_identity)();
+    gl.gl<void (APIENTRY *)(GLfloat, GLfloat, GLfloat, GLfloat)>(slot_clear_color)(0.0f, 0.0f, 0.0f, 1.0f);
+    gl.gl<void (APIENTRY *)(GLbitfield)>(slot_clear)(gl_color_buffer_bit);
+
+    /* One list, compiled once: a triangle that covers the whole viewport. */
+    const GLuint list = gl.gl<GLuint (APIENTRY *)(GLsizei)>(slot_gen_lists)(1);
+    CHECK(list != 0u);
+    gl.gl<void (APIENTRY *)(GLuint, GLenum)>(slot_new_list)(list, 0x1300u /* GL_COMPILE */);
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_begin)(0x0004u /* GL_TRIANGLES */);
+    gl.gl<void (APIENTRY *)(GLfloat, GLfloat, GLfloat)>(slot_color_3f)(1.0f, 0.0f, 0.0f);
+    gl.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(-1.0f, -1.0f);
+    gl.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(3.0f, -1.0f);
+    gl.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(-1.0f, 3.0f);
+    gl.gl<void (APIENTRY *)()>(slot_end)();
+    gl.gl<void (APIENTRY *)()>(slot_end_list)();
+    gl.gl<void (APIENTRY *)(GLuint)>(slot_call_list)(list);
+    gl.gl<void (APIENTRY *)()>(slot_finish)();
+    CHECK_EQ(gl.gl<GLenum (APIENTRY *)()>(slot_get_error)(), 0u);
+
+    static std::uint8_t pixels[side * side * 4u];
+    std::memset(pixels, 0xEE, sizeof pixels);
+    gl.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *)>(slot_read_pixels)(
+        0, 0, side, side, gl_rgba, gl_unsigned_byte, pixels);
+    CHECK_EQ(gl.gl<GLenum (APIENTRY *)()>(slot_get_error)(), 0u);
+    std::uint32_t wrong = 0u;
+    for (std::uint32_t pixel = 0u; pixel < side * side; pixel++) {
+        const std::uint8_t *const at = pixels + pixel * 4u;
+        if (at[0] != 255u || at[1] != 0u || at[2] != 0u || at[3] != 255u) wrong++;
+    }
+    CHECK_EQ(wrong, 0u);
+    CHECK(process.root().invariants_hold());
+    CHECK(gl.make_current(nullptr, nullptr));
+    CHECK(gl.delete_context(context)); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 

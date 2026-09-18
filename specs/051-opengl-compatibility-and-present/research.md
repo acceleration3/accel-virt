@@ -145,3 +145,28 @@ the row is intersected with the host's list like every other), and
 `WGL_EXT_swap_control` in the WGL string, which stops being withheld
 (`src/icd/opengl/gl_extension_policy.cpp:14`) once there is an interval to
 honour.
+
+## 9. The thirteen entry points that stay refused
+
+Thirteen compatibility entry points are not generated forwarders but the ICD's
+own (`src/icd/opengl/manual_entries.cpp`): `glVertexPointer`, `glColorPointer`,
+`glNormalPointer`, `glTexCoordPointer`, `glIndexPointer`, `glEdgeFlagPointer`,
+`glFogCoordPointer`, `glSecondaryColorPointer`, `glInterleavedArrays`,
+`glEnableClientState`, `glDisableClientState`, `glClientActiveTexture` and
+`glArrayElement`. They are the fixed-function **client arrays**: a pointer into
+the application's own memory that GL reads at every draw.
+
+**Decision.** They keep recording `GL_INVALID_OPERATION`, as they did before
+051, and the gate above does not open them.
+
+**Rationale.** This is the same refusal 050 already makes for a modern vertex
+attribute with no buffer bound (`test_manual_calls`: "a client-side array is
+invalid operation"), and for the same reason: the transport sends commands, not
+the guest address space, so an array read at draw time would have to be copied
+across on every draw, at a size nobody states. A display list, immediate mode,
+the matrix stacks, `glPushAttrib`, selection and feedback need none of that and
+all work; an application that binds a buffer gets the modern path.
+
+Closing this means sizing a client array from the draw that reads it and
+copying that range per draw, which is a feature's work and is written down here
+rather than half-done.
