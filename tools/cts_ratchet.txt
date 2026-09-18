@@ -1,0 +1,8 @@
+# What the guest passes, committed: a record that may only grow (feature 048,
+# US3). A run that loses a case named here fails, and a run that gains one
+# writes it in the change that earned it - tools/check_cts_ratchet.py prints
+# the line to add.
+#
+# EMPTY ON PURPOSE. No guest has run the Vulkan CTS yet: the archive is not on
+# this machine and there is no network to pin it from (specs/048-.../plan.md),
+# so a record with names in it would be a claim nobody made.
