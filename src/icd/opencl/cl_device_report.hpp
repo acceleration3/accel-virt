@@ -46,6 +46,9 @@ public:
      * zero is what it leaves when there was no adapter, and is reported as a
      * LUID that is not valid. */
     explicit ClDeviceReport(uint64_t adapter_luid);
+    /* The adapter this device is on, once the ICD has opened one: a report
+     * built before there was an adapter has nothing to name. */
+    void     observe_luid(uint64_t adapter_luid);
     ClDeviceReport(const ClDeviceReport &) = delete;
     ClDeviceReport &operator=(const ClDeviceReport &) = delete;
 

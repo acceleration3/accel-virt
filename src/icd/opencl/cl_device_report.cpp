@@ -206,6 +206,12 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
     }
 }
 
+void ClDeviceReport::observe_luid(uint64_t adapter_luid)
+{
+    AV_SCOPE("ClDeviceReport::observe_luid");
+    luid_ = adapter_luid;
+}
+
 bool ClDeviceReport::invariants_hold() const
 {
     AV_SCOPE("ClDeviceReport::invariants_hold");

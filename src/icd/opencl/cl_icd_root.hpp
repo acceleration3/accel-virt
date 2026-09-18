@@ -1,0 +1,157 @@
+/* rvkcl.dll's decisions: what every entry point the Khronos loader reaches
+ * answers. One per process - in the exports' storage in the DLL, the one under
+ * test in a test - bound to ClIcdBinding for its life.
+ *
+ * Nothing opens an adapter until the application asks for a device. The loader
+ * enumerates platforms and asks two queries about each in every process that
+ * ever calls clGetPlatformIDs, including processes with no interest in this
+ * adapter, so those are answered from the platform alone.
+ *
+ * A cl_context is where a transport lives, so everything below one - a queue,
+ * a buffer, a program, a kernel, an event - is an object of that context and
+ * dies with it. What the application holds is a ClObject, whose first word is
+ * the dispatch table; what crosses the wire is the number the host answered.
+ *
+ * What is not here is deliberate. Only the commands this feature implements
+ * and tests have entries; every other slot of the dispatch table carries the
+ * generated refusal, which reports itself once and answers the API's own
+ * "this driver does not carry it" (constitution VI). */
+#ifndef AV_CLICD_CL_ICD_ROOT_HPP
+#define AV_CLICD_CL_ICD_ROOT_HPP
+
+#include "core/support/object_pool.hpp"
+#include "core/trace/state_reporter.hpp"
+#include "icd/common/icd_connection.hpp"
+#include "icd/opencl/cl_device_report.hpp"
+#include "icd/opencl/cl_dispatch_table.hpp"
+#include "icd/opencl/cl_extension_policy.hpp"
+#include "icd/opencl/cl_object_table.hpp"
+#include "icd/opencl/cl_platform.hpp"
+#include "icd/opencl/guest_cl_context.hpp"
+
+#include <CL/cl.h>
+#include <CL/cl_icd.h>
+
+namespace av {
+class BlockSource;
+class ClientTransport;
+class Kmt;
+class StateWriter;
+}  // namespace av
+
+namespace av::icd {
+class LogSink;
+class ThreadLock;
+}  // namespace av::icd
+
+namespace av::clicd {
+
+class ClIcdBinding;
+struct ClIcdRootProbe;
+
+class ClIcdRoot final : public StateReporter {
+public:
+    ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
+              icd::LogSink &log, ClIcdBinding &binding);
+    ~ClIcdRoot();
+    ClIcdRoot(const ClIcdRoot &) = delete;
+    ClIcdRoot &operator=(const ClIcdRoot &) = delete;
+
+    /* The table every object this ICD hands out carries in its first word, and
+     * the one the loader dispatches through. */
+    const cl_icd_dispatch &dispatch() const;
+
+    /* ---- what the loader resolves and calls before anything else --------- */
+
+    /* clIcdGetPlatformIDsKHR. Opens nothing. */
+    cl_int platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms);
+    /* clGetExtensionFunctionAddress: the one export, and the only name it
+     * answers is the enumeration above. */
+    void  *extension_function(const char *name);
+    cl_int platform_info(cl_platform_id platform, cl_platform_info name, size_t value_bytes,
+                         void *value, size_t *size_ret);
+
+    /* ---- devices -------------------------------------------------------- */
+
+    /* One device per rvkgpu adapter, made on the first ask and kept. */
+    cl_int device_ids(cl_platform_id platform, cl_device_type type, cl_uint num_entries,
+                      cl_device_id *devices, cl_uint *num_devices);
+    cl_int device_info(cl_device_id device, cl_device_info name, size_t value_bytes, void *value,
+                       size_t *size_ret);
+
+    /* ---- contexts ------------------------------------------------------- */
+
+    cl_context create_context(const cl_device_id *devices, cl_uint num_devices, cl_int *error);
+    cl_int     retain_context(cl_context context);
+    cl_int     release_context(cl_context context);
+
+    /* ---- everything an object of a context is ---------------------------- */
+
+    cl_command_queue create_queue(cl_context context, cl_device_id device, cl_int *error);
+    cl_mem           create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
+                                   void *host_pointer, cl_int *error);
+    cl_program       create_program(cl_context context, cl_uint count, const char **sources,
+                                    const size_t *lengths, cl_int *error);
+    cl_kernel        create_kernel(cl_program program, const char *name, cl_int *error);
+    cl_int           build_program(cl_program program, const char *options);
+    cl_int           set_kernel_argument(cl_kernel kernel, cl_uint index, size_t bytes,
+                                         const void *value);
+    cl_int           enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
+                                    const size_t *offset, const size_t *global, const size_t *local,
+                                    cl_event *event);
+    cl_int           enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
+                                  size_t offset, size_t bytes, void *into, cl_event *event);
+    cl_int           enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
+                                   size_t offset, size_t bytes, const void *from, cl_event *event);
+    cl_int           finish(cl_command_queue queue);
+    cl_int           flush(cl_command_queue queue);
+
+    /* Retain and release for every kind the ICD carries: the application's
+     * count is the ICD's, and the host is told once the last one goes. */
+    cl_int retain(void *object, ClObject::Kind kind);
+    cl_int release(void *object, ClObject::Kind kind);
+
+    /* ---- what a state dump says ----------------------------------------- */
+
+    void report(StateWriter &writer) override;
+    bool invariants_hold() const;
+
+private:
+    friend struct ClIcdRootProbe;
+
+    /* The context an object belongs to, and its transport, or null - which is
+     * what every entry asks first. */
+    GuestClContext  *context_of(ClObject &object);
+    ClientTransport *wire_of(ClObject &object);
+    /* Judges an application's pointer and answers the object, or null. */
+    ClObject        *judged(const void *pointer, ClObject::Kind kind);
+    /* Opens the device this ICD shows, once, on the first ask. */
+    [[nodiscard]] Status open_device();
+    /* Makes one object of a host answer, releasing the host's if this cannot
+     * hold it - a number the application could never use is worse than an
+     * error it can see. */
+    void            *wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *context,
+                          ClObject *parent, cl_int *error);
+    /* What an entry answers when the pointer it was given is not an object of
+     * that kind: the API's own error for each. */
+    cl_int           refusal_for(ClObject::Kind kind) const;
+
+    icd::ThreadLock       &lock_;
+    icd::LogSink          &log_;
+    ClIcdBinding          &binding_;
+    ClDispatchTable        dispatch_;
+    ClPlatform             platform_;
+    ClExtensionPolicy      extensions_;
+    ClObjectTable          objects_;
+    icd::IcdConnection     connection_;
+    ObjectPool<GuestClContext> contexts_;
+    BlockSource           &memory_;
+    icd::ThreadLock       &send_lock_;
+    /* The one device this ICD shows, made on the first clGetDeviceIDs. */
+    ClDeviceReport         device_;
+    ClObject              *device_object_;
+};
+
+}  // namespace av::clicd
+
+#endif  // AV_CLICD_CL_ICD_ROOT_HPP
