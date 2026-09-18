@@ -39,7 +39,13 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `GrantedProfile` | object | the version and profile mask the host gave, and which rung of the ask granted it | What this context actually is, as opposed to what was asked for |
+| `SwapInterval` | object | the interval and the blanks waited for one context | How many vertical blanks a swap waits for |
+| `WindowVisibility` | object | a window and the surface that answers for it | Whether a frame put on this window now would be seen |
+| `FrontBuffer` | object | the last presented frame's pixels and extent for one window | What a read of the front buffer answers |
+
+`FramePacer` moves from `src/icd/vulkan/` to `src/icd/common/` unchanged and is
+used by both ICDs; it is not a new class.
 
 ### Test requirements
 
@@ -144,13 +150,25 @@ second are measured against the display's refresh rate with vsync on and off.
   compatibility context; the guest keeps no parallel fixed-function emulation.
 - **FR-002**: The compatibility profile and each legacy extension are reported
   only when implemented, tested and provided by the host (constitution VI).
-- **FR-003**: Presentation shares feature 046's presenter: one component owns
-  swapchain-like buffers, D3DKMT present and vertical-blank pacing for both
-  APIs.
+- **FR-003**: Presentation shares what feature 046 built for Vulkan: the same
+  `WindowSurface` and the same vertical-blank pacing, which moves to
+  `src/icd/common/` so both ICDs hold one `FramePacer`.
+
+  *As written this said "D3DKMT present". There is no such present: 046 does
+  not have one either, because `DXGDEVICE::AllowLegacyPresent` refuses a legacy
+  present from a device that does not own the VidPn source and the redirected
+  present needs a user-mode driver's redirection surface (research.md §4,
+  `docs/kb/07-usermode.md`). It arrives with feature 055, for both APIs at
+  once.*
 - **FR-004**: Buffer sizes, formats and present regions from the application
   are validated before any allocation or host command is made from them.
-- **FR-005**: The GDI blit path is removed once this feature's presenter
-  passes; no configuration flag keeps both (constitution VIII).
+- **FR-005**: There is one present path, not two: no flag chooses between the
+  old read-back and a new one (constitution VIII).
+
+  *The GDI blit itself cannot be removed here - see FR-003 - and neither can
+  the read-back, because no host driver imports guest memory into OpenGL
+  (research.md §4). What 051 removes is every reason to read back a frame
+  nobody will see.*
 
 ## Success Criteria *(mandatory)*
 
@@ -159,8 +177,13 @@ second are measured against the display's refresh rate with vsync on and off.
 - **SC-002**: With vsync on, GL presents track the display refresh within the
   tolerance feature 046 sets for Vulkan; with it off, throughput is at least the
   read-back path's.
-- **SC-003**: No frame is read back into guest memory on the present path
-  (measured by the device's blob accounting).
+- **SC-003**: A swap on a window that cannot be seen reads nothing back at all,
+  measured by the device's blob accounting.
+
+  *As written this said no frame is ever read back. That is feature 055's to
+  meet: OpenGL has no way to render into guest memory on either host driver
+  (research.md §4), so the frame a window can see still crosses through the
+  blob region.*
 
 ## Assumptions
 
