@@ -31,6 +31,8 @@ struct DxgkargDestroyNativeFenceRecord;
 struct DxgkargUpdateNativeFenceValuesRecord;
 class StateWriter;
 
+struct NativeFenceTableProbe;
+
 class NativeFenceTable {
 public:
     /* What a process may hold at once; past this the OS is told there is no
@@ -88,6 +90,8 @@ private:
     uint64_t  monitored_[max_fences];
     uint64_t  current_[max_fences];
     uint32_t  live_;
+
+    friend struct NativeFenceTableProbe;
 };
 
 }  // namespace av

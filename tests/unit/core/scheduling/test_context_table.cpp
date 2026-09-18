@@ -112,13 +112,25 @@ TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing_and_har
   CHECK(fixture.contexts().invariants_hold());
   CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
 
+/* Feature 049: the second node is the hardware-scheduled one, and a context
+ * lands there only when the process asked for a queue to run it. */
+TEST(context_table_create, accepts_a_context_on_the_hardware_scheduled_node)
+{ Fixture fixture;
+  DxgkargCreateContextRecord request = {};
+  request.NodeOrdinal = 1u;
+  request.Flags = 0x15u;
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
+  CHECK(fixture.contexts().invariants_hold());
+  CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
+
 TEST(context_table_create, refuses_what_this_adapter_cannot_run)
-{ for (int knob = 0; knob < 7; knob++) {
+{ for (int knob = 0; knob < 8; knob++) {
       Fixture fixture;
       DxgkargCreateContextRecord request = {};
       void *device = fixture.device();
       if (knob == 0) device = &fixture;                    /* not a device */
-      if (knob == 1) request.NodeOrdinal = 1u;             /* one node */
+      if (knob == 1) request.NodeOrdinal = 1u;              /* node 1 runs queued contexts only */
+      if (knob == 7) request.NodeOrdinal = 2u;              /* two nodes */
       if (knob == 2) request.EngineAffinity = 2u;          /* one engine */
       if (knob == 3) request.Flags = 0x8u;                 /* SystemProtectedContext: WDDM 2.1 */
       if (knob == 4) request.PrivateDriverDataSize = 4u;   /* no private data defined */

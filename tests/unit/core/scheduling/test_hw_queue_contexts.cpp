@@ -95,3 +95,42 @@ TEST(hw_queue_contexts, runs_at_the_levels_it_declares)
   /* The bind at DISPATCH, and the read above it with the lock it takes. */
   while (platform.claim(Violation::irql_ceiling)) {}
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+namespace av {
+
+struct HwQueueContextsProbe {
+    static void overfill(HwQueueContexts &bound) { bound.count_ = HwQueueContexts::capacity + 1u; }
+    static void forget_queue(HwQueueContexts &bound, std::uint32_t slot) { bound.queues_[slot] = nullptr; }
+    static void forget_context(HwQueueContexts &bound, std::uint32_t slot) { bound.contexts_[slot] = nullptr; }
+    static void duplicate(HwQueueContexts &bound) { bound.queues_[1] = bound.queues_[0]; }
+};
+
+}  // namespace av
+
+/* What the invariant is for: a table that lost count, a slot naming nothing,
+ * and one queue answered by two contexts are each a table no submission may be
+ * read out of. */
+TEST(hw_queue_contexts_invariants, a_lost_count_a_blank_slot_and_a_queue_bound_twice_are_all_caught)
+{ MockPlatform    platform;
+  int             context = 0;
+  int             queues[2] = {0, 0};
+  HwQueueContexts overfull(platform);
+  av::HwQueueContextsProbe::overfill(overfull);
+  CHECK(!overfull.invariants_hold());
+
+  HwQueueContexts blank(platform);
+  CHECK_STATUS(blank.bind(&queues[0], as_context(context)), Status::ok);
+  av::HwQueueContextsProbe::forget_queue(blank, 0u);
+  CHECK(!blank.invariants_hold());
+
+  HwQueueContexts orphaned(platform);
+  CHECK_STATUS(orphaned.bind(&queues[0], as_context(context)), Status::ok);
+  av::HwQueueContextsProbe::forget_context(orphaned, 0u);
+  CHECK(!orphaned.invariants_hold());
+
+  HwQueueContexts twice(platform);
+  CHECK_STATUS(twice.bind(&queues[0], as_context(context)), Status::ok);
+  CHECK_STATUS(twice.bind(&queues[1], as_context(context)), Status::ok);
+  CHECK(twice.invariants_hold());
+  av::HwQueueContextsProbe::duplicate(twice);
+  CHECK(!twice.invariants_hold()); }

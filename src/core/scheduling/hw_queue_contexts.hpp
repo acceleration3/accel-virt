@@ -20,6 +20,7 @@
 namespace av {
 
 class Context;
+struct HwQueueContextsProbe;
 
 class HwQueueContexts {
 public:
@@ -50,6 +51,8 @@ private:
     const void *queues_[capacity];
     Context    *contexts_[capacity];
     uint32_t    count_;
+
+    friend struct HwQueueContextsProbe;
 };
 
 }  // namespace av

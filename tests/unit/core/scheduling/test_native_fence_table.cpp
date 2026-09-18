@@ -247,3 +247,29 @@ TEST(native_fence_table, runs_at_the_levels_it_declares)
   while (platform.claim(Violation::irql_ceiling)) {}
   while (platform.claim(Violation::blocking_at_dispatch)) {}
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+namespace av {
+
+struct NativeFenceTableProbe {
+    static void leave_behind(NativeFenceTable &fences, std::uint32_t slot, std::uint64_t current,
+                             std::uint64_t monitored)
+    {
+        fences.current_[slot] = current;
+        fences.monitored_[slot] = monitored;
+    }
+};
+
+}  // namespace av
+
+/* A slot nobody holds holds nothing: a value left in a destroyed fence would
+ * be read by the next process handed that slot. */
+TEST(native_fence_table_invariants, a_value_left_in_a_dead_slot_is_caught)
+{ MockPlatform     platform;
+  NativeFenceTable fences(platform);
+  CHECK(fences.invariants_hold());
+  av::NativeFenceTableProbe::leave_behind(fences, 3u, 7u, 0u);
+  CHECK(!fences.invariants_hold());
+  av::NativeFenceTableProbe::leave_behind(fences, 3u, 0u, 0u);
+  CHECK(fences.invariants_hold());
+  av::NativeFenceTableProbe::leave_behind(fences, 5u, 0u, 9u);
+  CHECK(!fences.invariants_hold()); }

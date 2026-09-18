@@ -15,6 +15,7 @@
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
+#include "core/scheduling/hw_queue_contexts.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
 #include "core/ddi/dxgk_page_table_level_desc_record.hpp"
@@ -1618,6 +1619,17 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
   CHECK_EQ(metadata.Flags & 0x8u, 0u);   /* no user-mode submission without fences */
   CHECK_EQ(metadata.Flags & 0x1u, 0x1u);
 
+  /* An OS that allowed the fences and refused the submission is asked about
+   * both, and the node reports only what it was granted. */
+  Fixture fences;
+  fences.dxgkrnl().allow_feature(av::feature_hwsch);
+  fences.dxgkrnl().allow_feature(av::feature_native_fence);
+  CHECK_EQ(fences.start(), success);
+  CHECK_EQ(fences.dxgkrnl().feature_queries(), 3u);
+  CHECK(fences.platform().logged_line("rvkgpu: user-mode submission status 0x00000000"));
+  CHECK_EQ(nt(fences.adapter().get_node_metadata(1u, &metadata)), success);
+  CHECK_EQ(metadata.Flags & 0x8u, 0u);
+
   /* An OS that allows both gets the whole flag set, depth included. */
   Fixture allowed;
   allowed.dxgkrnl().allow_feature(av::feature_hwsch);
@@ -1786,6 +1798,11 @@ TEST(adapter_query_engine_status, an_engine_that_stopped_moving_is_admitted)
   status.EngineStatus = 0u;
   CHECK_EQ(nt(fixture.adapter().query_engine_status(&status)), success);
   CHECK_EQ(status.EngineStatus, 0u);   /* it has not moved since: dxgkrnl may reset it */
+  /* The hardware-scheduled node runs no packets, so the same stalled moment
+   * says nothing about it (feature 049). */
+  av::DxgkargQueryEngineStatusRecord queued = {1u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().query_engine_status(&queued)), success);
+  CHECK_EQ(queued.EngineStatus, 1u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
   const av::DxgkargQueryEngineStatusRecord refused[] = {{2u, 0u, 0u}, {0u, 1u, 0u}};
@@ -2804,6 +2821,62 @@ TEST(adapter_hw_queue, submissions_complete_through_the_dpc_and_a_reset_drops_th
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fence, 2u);   /* neither the reset's nor the destroyed queue's work is written */
   CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* Feature 049: what a queue that cannot be made, or cannot be written down,
+ * leaves behind - and what a submission to a handle this driver never gave
+ * does instead of following it. */
+TEST(adapter_hw_queue, a_queue_nobody_can_run_or_record_leaves_nothing_and_a_stale_handle_is_refused)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x14u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint64_t                  progress = 0u;
+  av::DxgkargCreateHwQueueRecord queue = {};
+  queue.HwQueueProgressFenceCPUVirtualAddress = &progress;
+  /* A context this driver never gave: nothing to run the queue on. */
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(&fixture, &queue)), invalid_parameter);
+  CHECK(queue.hHwQueue == nullptr);
+
+  /* One queue past what the DISPATCH-readable table holds is refused, and the
+   * queue made for it is destroyed rather than left unreachable. */
+  void *made[av::HwQueueContexts::capacity] = {};
+  for (std::uint32_t index = 0u; index < av::HwQueueContexts::capacity; index++) {
+      av::DxgkargCreateHwQueueRecord each = {};
+      each.HwQueueProgressFenceCPUVirtualAddress = &progress;
+      CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, &each)), success);
+      made[index] = each.hHwQueue;
+  }
+  av::DxgkargCreateHwQueueRecord overflow = {};
+  overflow.HwQueueProgressFenceCPUVirtualAddress = &progress;
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, &overflow)), no_space);
+  CHECK(overflow.hHwQueue == nullptr);
+  CHECK(fixture.adapter().invariants_hold());
+
+  /* A submission naming no queue, and one naming a handle nobody was given. */
+  int                                     stranger = 0;
+  av::DxgkargSubmitCommandToHwQueueRecord submit = {};
+  submit.HwQueueProgressFenceId = 1u;
+  submit.HwQueueProgressFenceCpuVa = &progress;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), invalid_parameter);
+  submit.hHwQueue = &stranger;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), invalid_parameter);
+  submit.hHwQueue = made[0];
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  /* Resetting the hardware-scheduled node drops what its queues had in flight
+   * and reports no aborted packet, because it ran none. */
+  av::DxgkargResetEngineRecord reset = {1u, 0u, 0xEEu};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  CHECK_EQ(reset.LastAbortedFenceId, 0u);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(progress, 0u);
+  for (void *const each : made) CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(each)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 

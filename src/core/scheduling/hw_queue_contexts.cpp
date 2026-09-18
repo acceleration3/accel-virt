@@ -47,7 +47,7 @@ Context *HwQueueContexts::context_of(const void *queue)
     platform_.require_irql_at_most(Irql::dispatch, "HwQueueContexts::context_of");
     SpinLockGuard lock(lock_);
     for (uint32_t index = 0u; index < count_; index++)
-        if (queues_[index] == queue && queue != nullptr) return contexts_[index];
+        if (queues_[index] == queue) return contexts_[index];
     return nullptr;
 }
 
