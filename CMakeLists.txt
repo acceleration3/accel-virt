@@ -364,6 +364,16 @@ foreach(src ${AV_UNIT_TESTS})
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
+  # Two devices in one process sharing memory and a semaphore through the Win32
+  # external objects (feature 047, US3): only the whole stack shows that the
+  # translation to the host's fd mechanism works, because the sharing happens
+  # between two host devices.
+  if(name STREQUAL "test_fullstack_external_objects")
+    target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
+  endif()
   if(name STREQUAL "test_fullstack_vulkan_icd")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
     add_dependencies(${name} rvk_executor)
