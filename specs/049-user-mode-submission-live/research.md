@@ -219,3 +219,38 @@ driver, and a third one has to be built.
   a process queued through its doorbell is a question only the guest run
   answers, exactly like §11's. Both are answered on the same boot, and neither
   changes the shape of what is written here.
+
+## 13. What the first live run answered (feature 049, T019)
+
+The guest ran the benchmark and reported `note submit.doorbell none`: this
+machine's Windows handed the adapter no hardware queue, so the doorbell path
+never ran and only the kernel one was measured - 9337 ns a submission.
+
+Reverse engineering says why, and it is not the INF entry §11 guessed at:
+
+- `D3DKMTCreateHwQueue` takes an `hHwContext`, and `DxgkCreateHwQueueInternal`
+  refuses any context without `D3DDDI_CREATECONTEXTFLAGS.HwQueueSupported`
+  (0x10, `d3dukmdt.h:766`). This process never asked for one: `GdiKmt::
+  create_context_virtual` passes no flags.
+- A context that *does* ask is then a hardware-scheduled context, and
+  `DxgkSubmitCommandInternal` refuses it outright - "DXGCONTEXT 0x%p is
+  hardware scheduled and should not be passed to SubmitCommandCb". So the
+  fallback US2 needs cannot be `D3DKMTSubmitCommand` on such a context: it is
+  `D3DKMTSubmitCommandToHwQueue`, which the driver already has a DDI for
+  (feature 019) and has never carried a batch through.
+- dxgkrnl will not let the OS enable hardware scheduling for a driver that
+  reports nothing: "Driver reported ContextScheduling support for a node, but
+  the OS didn't allow HwSch to be enabled". This driver's
+  `DxgkDdiGetNodeMetadata` answers `Flags = 0`, which reports neither
+  `ContextSchedulingSupported` nor `UserModeSubmission`
+  (`DXGK_NODEMETADATA_FLAGS`, `d3dkmdt.h:1975`).
+
+So SC-001 and SC-002 - the benchmark's ratio and the suite with doorbells on -
+need the hardware-queue half of WDDM that 019 left as DDIs: a context that may
+hold a queue, a submission through that queue, and a wait on the queue's
+progress fence, which is the monitored fence `D3DKMT_CREATEHWQUEUE` answers and
+the location this driver already writes what the device finished into (§12).
+
+That is what T020-T024 build. Nothing here is a new capability the driver does
+not implement: it is the same ring, the same doorbell and the same fences,
+reached the way a hardware-scheduled adapter is reached.

@@ -60,6 +60,27 @@ which is a feature's work beside the doorbell's. The wait stays
 - [X] T018 docs: `docs/testing.md` (what the doorbell path is and how the rig drives it), `docs/kb/05-scheduling.md` (what this driver answers for the doorbell DDIs, and that native fences are not here)
 - [ ] T019 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 
+## Phase 6: US1 and US3 live - the hardware-queue half (P1)
+
+The first guest run answered §11's question: no hardware queue, because a
+doorbell hangs off one and a process only gets one on a context that asked to
+be hardware scheduled - which cannot then submit through `D3DKMTSubmitCommand`
+at all (research.md §13). SC-001 and SC-002 need this.
+
+- [ ] T020 The node reports what this driver implements: `DxgkDdiGetNodeMetadata` answers `ContextSchedulingSupported` and `UserModeSubmission` with the in-flight depth `HwQueueSubmissions` holds (`DXGK_NODEMETADATA_FLAGS`). Tests: the exact bits and depth, and that nothing else is claimed
+- [ ] T021 A process asks for a context a queue may run on: `Kmt::create_context_virtual` carries the hardware-queue opt-in, `GdiKmt` sets `D3DDDI_CREATECONTEXTFLAGS.HwQueueSupported`, and `KmtTransport` falls back to a plain context when the OS refuses one - a machine without hardware scheduling keeps the path it had. Tests over `MockKmt`
+- [ ] T022 A submission on such a context goes through its queue: `Kmt::submit_to_hw_queue`, `SubmissionPath` using it wherever a queue exists, and `Adapter::submit_command_to_hw_queue` publishing the batch into that context's rvk ring and ringing its doorbell - the same ring and the same descriptor the virtual path carries
+- [ ] T023 The wait is the queue's progress fence: `Kmt::create_hw_queue` answers the monitored fence `D3DKMT_CREATEHWQUEUE` makes, `KmtTransport::await` waits on it for a context that has one, and the driver writes what the device finished into it and reports `MONITORED_FENCE_SIGNALED` - for a batch that went through the kernel and one that went through the doorbell alike
+- [ ] T024 The rigs drive it: `MockKmt`, `DdiKmt` and the full-stack rig submit through a hardware queue and wait on its progress, and the loopback tests cover a disconnect across both paths
+
+**Checkpoint**: commit.
+
+## Phase 7: live
+
+- [ ] T025 The guest run with hardware scheduling on: the benchmark measures both paths, `tools/submit_ratchet.txt` gets the ratio it earned, and the rvk suite passes with doorbells live (SC-001, SC-002)
+
+**Checkpoint**: commit.
+
 ## Dependencies
 
 - Phase 1 blocks everything: nothing in the guest can create a doorbell until
