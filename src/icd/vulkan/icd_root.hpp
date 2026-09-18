@@ -111,6 +111,10 @@ public:
     void               free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
     VkResult           map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
                                   VkMemoryMapFlags flags, void **data);
+    /* The same mapping out of a `VkMemoryMapInfoKHR` (feature 047). A placed
+     * node in its chain, or the placed flag, is refused rather than ignored:
+     * this ICD's view of a chunk is the address VidMm chose (research.md §9). */
+    VkResult           map_memory2(VkDevice device, const VkMemoryMapInfoKHR *info, void **data);
     /* vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges, named by
      * `entry`: a mapping is the memory itself, so there is nothing to carry,
      * and only a device this ICD did not make, or a lost one, is refused. */

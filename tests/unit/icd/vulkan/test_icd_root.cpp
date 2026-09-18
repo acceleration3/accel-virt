@@ -264,10 +264,13 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
   /* The window-system entries of another platform are not this driver's. */
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
-  /* Three before the WSI, and the twelve window-system entries this platform's
-   * manual list names (the two Win32-only ones are not on it). */
-  CHECK_EQ(answered, 17u);
-  CHECK_EQ(through_an_instance, 15u);
+  /* Three before the WSI, the twelve window-system entries this platform's
+   * manual list names (the two Win32-only ones are not on it), and feature
+   * 047's two mapping entries. */
+  CHECK_EQ(answered, 19u);
+  CHECK_EQ(through_an_instance, 17u);
+  CHECK(rig.root().instance_proc_addr(instance, "vkMapMemory2KHR") == entry_of(&av::icd::local_vkMapMemory2KHR));
+  CHECK(rig.root().instance_proc_addr(instance, "vkUnmapMemory2KHR") == entry_of(&av::icd::local_vkUnmapMemory2KHR));
   rig.destroy_instance(instance); }
 
 /* The Windows loader drops a driver that answers any of these null for its

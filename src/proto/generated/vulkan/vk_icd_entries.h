@@ -403,7 +403,6 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetMemoryFdPropertiesKHR(VkDevice device, 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd);
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo);
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo);
-VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo);
 
 // The object the loader dispatches a command on, from its first
 // parameter in vk.xml: a global command takes no dispatchable handle,

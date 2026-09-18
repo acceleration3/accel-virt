@@ -75,6 +75,8 @@ const Entry        local_rows[] = {
     {"vkDestroyDescriptorUpdateTemplateKHR",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDescriptorUpdateTemplateKHR), Level::device},
     {"vkMapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory), Level::device},
+    {"vkMapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory2KHR), Level::device},
+    {"vkUnmapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkUnmapMemory2KHR), Level::device},
     {"vkUnmapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkUnmapMemory), Level::device},
     {"vkFlushMappedMemoryRanges", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFlushMappedMemoryRanges), Level::device},
     {"vkInvalidateMappedMemoryRanges",
@@ -113,6 +115,14 @@ constexpr size_t   line_bytes = 160u;
 constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
     {"VK_KHR_swapchain", 70u, "icd_presentation.a_swapchain_presents_its_frame_on_the_window"},
+    /* Feature 047. VK_EXT_map_memory_placed is deliberately absent: a chunk's
+     * view is at the address VidMm chose, so this driver cannot place a
+     * mapping and does not claim to (spec.md Clarifications, research.md 9). */
+    {"VK_KHR_map_memory2", 1u, "icd_memory.map_memory2_maps_what_vk_map_memory_does_and_refuses_placement"},
+    {"VK_KHR_descriptor_update_template", 1u,
+            "icd_descriptor_templates.a_template_is_remembered_and_sizes_the_blob_it_carries"},
+    {"VK_KHR_push_descriptor", 2u,
+            "fullstack_templates.a_descriptor_set_updated_through_a_template_reaches_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry
@@ -578,6 +588,20 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
     const DeviceMemory *const owned = made->device_memory();
     if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     return owned->map(memory, offset, size, flags, *data);
+}
+
+/* The VkMemoryMapInfoKHR shape of the same mapping. Placement is refused, not
+ * ignored: the chunk's view is at the address VidMm chose, so a caller that
+ * asked for one of its own must be told no (contracts/placed_mappings.md). */
+VkResult IcdRoot::map_memory2(VkDevice device, const VkMemoryMapInfoKHR *info, void **data)
+{
+    AV_SCOPE("IcdRoot::map_memory2");
+    if (info == nullptr || data == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
+    if (info->pNext != nullptr) {
+        log_.write("rvkvk: vkMapMemory2 names something this driver cannot place");
+        return VK_ERROR_MEMORY_MAP_FAILED;
+    }
+    return map_memory(device, info->memory, info->offset, info->size, info->flags, data);
 }
 
 VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)

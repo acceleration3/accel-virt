@@ -405,7 +405,6 @@ public:
     virtual VkResult on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd) = 0;
     virtual VkResult on_vkImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) = 0;
     virtual VkResult on_vkImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) = 0;
-    virtual VkResult on_vkUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo) = 0;
 };
 
 // Decode and dispatch a single command. Returns false on protocol error.

@@ -395,7 +395,6 @@ enum CmdId : uint32_t {
     kCmd_vkGetSemaphoreFdKHR = 0x000101A2u,
     kCmd_vkImportFenceFdKHR = 0x000101A3u,
     kCmd_vkImportSemaphoreFdKHR = 0x000101A4u,
-    kCmd_vkUnmapMemory2KHR = 0x000101A6u,
 };
 
 }  // namespace av::vkproto

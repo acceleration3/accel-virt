@@ -2247,14 +2247,8 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportSemaphoreFdKHR(VkDevice device, cons
     return ::av::vkproto::rvk_vkImportSemaphoreFdKHR(conn->transport(), device, pImportSemaphoreFdInfo);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo) {
-    AV_SCOPE("vkUnmapMemory2KHR");
-    auto* conn = ::av::icd::connection_of(device);
-    return ::av::vkproto::rvk_vkUnmapMemory2KHR(conn->transport(), device, pMemoryUnmapInfo);
-}
-
 namespace {
-const Entry kWrapperTable[389] = {
+const Entry kWrapperTable[388] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance), DispatchLevel::instance },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice), DispatchLevel::device },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue), DispatchLevel::device },
@@ -2643,7 +2637,6 @@ const Entry kWrapperTable[389] = {
     Entry{ "vkGetSemaphoreFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetSemaphoreFdKHR), DispatchLevel::device },
     Entry{ "vkImportFenceFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportFenceFdKHR), DispatchLevel::device },
     Entry{ "vkImportSemaphoreFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportSemaphoreFdKHR), DispatchLevel::device },
-    Entry{ "vkUnmapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUnmapMemory2KHR), DispatchLevel::device },
 };
 }  // namespace
 
@@ -2654,6 +2647,6 @@ const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
 size_t EntryTable::size() const noexcept { return count_; }
 
-EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 389u}; }
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 388u}; }
 
 }  // namespace av::vkicd::generated

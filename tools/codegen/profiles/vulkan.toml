@@ -257,6 +257,13 @@ exclude = [
     # prevent, arrived at from the other direction.
     "vkMapMemory",
     "vkUnmapMemory",
+    # The same two in their VkMemoryMapInfoKHR shape (feature 047). A mapping
+    # is guest memory at a guest address and nothing about it crosses the wire,
+    # so these are the ICD's own for the same reason the pair above is - and
+    # `void** ppData` is a shape the classifier cannot lower anyway, which is
+    # what withdrew VK_KHR_map_memory2 from the emitted list until now.
+    "vkMapMemory2KHR",
+    "vkUnmapMemory2KHR",
 ]
 
 [chain_extras]

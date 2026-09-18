@@ -6442,16 +6442,6 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
-    case ::av::vkproto::kCmd_vkUnmapMemory2KHR: {
-        AV_SCOPE("server:vkUnmapMemory2KHR");
-        VkDevice device = VK_NULL_HANDLE;
-        VkMemoryUnmapInfo pMemoryUnmapInfo_local{};
-        if (!deserialize_VkDevice(r, device)) return false;
-        if (!deserialize_VkMemoryUnmapInfo(r, &pMemoryUnmapInfo_local, arena)) return false;
-        VkResult result = s.on_vkUnmapMemory2KHR(device, &pMemoryUnmapInfo_local);
-        reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        return true;
-    }
     default:
         return false;
     }

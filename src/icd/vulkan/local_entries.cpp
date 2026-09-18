@@ -250,6 +250,23 @@ VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice, VkDeviceMemory)
     AV_SCOPE("local_vkUnmapMemory");
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR *pMemoryMapInfo,
+                                                     void **ppData)
+{
+    AV_SCOPE("local_vkMapMemory2KHR");
+    return icd_binding.root().map_memory2(device, pMemoryMapInfo, ppData);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkUnmapMemory2KHR(VkDevice, const VkMemoryUnmapInfoKHR *pMemoryUnmapInfo)
+{
+    AV_SCOPE("local_vkUnmapMemory2KHR");
+    /* Unmapping frees nothing: the chunk's view lives as long as the chunk. A
+     * flag in the request is a caller asking for something else - reserving
+     * the range - which this driver does not do. */
+    if (pMemoryUnmapInfo == nullptr || pMemoryUnmapInfo->flags != 0u) return VK_ERROR_MEMORY_MAP_FAILED;
+    return VK_SUCCESS;
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, uint32_t, const VkMappedMemoryRange *)
 {
     AV_SCOPE("local_vkFlushMappedMemoryRanges");

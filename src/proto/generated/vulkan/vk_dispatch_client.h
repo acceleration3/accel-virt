@@ -397,6 +397,5 @@ VkResult rvk_vkGetMemoryFdPropertiesKHR(::av::ClientTransport& t, VkDevice devic
 VkResult rvk_vkGetSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkSemaphoreGetFdInfoKHR* pGetFdInfo, int* pFd);
 VkResult rvk_vkImportFenceFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo);
 VkResult rvk_vkImportSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo);
-VkResult rvk_vkUnmapMemory2KHR(::av::ClientTransport& t, VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo);
 
 }  // namespace av::vkproto

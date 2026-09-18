@@ -312,3 +312,50 @@ TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
     CHECK(device == VK_NULL_HANDLE);
     CHECK_EQ(rig.kmt().commands(), quiet);
     CHECK_EQ(rig.rig().log().holding("not a list this driver can pass on"), 1u); } }
+
+/* The mapping and descriptor-template extensions feature 047 added, and the one
+ * it deliberately does not report. A host that lists placement gets no more
+ * from this driver for it: the ICD cannot place a mapping, so reporting it
+ * would be a capability that is not implemented (constitution VI). */
+TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placement_is_not)
+{ ExtensionRig rig;
+  /* Three at a time: the answer a host sends fits three of these structures. */
+  const char *const listed[] = {"VK_KHR_map_memory2", "VK_EXT_map_memory_placed", "VK_KHR_push_descriptor"};
+  rig.answer_count(VK_SUCCESS, 3u);
+  rig.answer_list(VK_SUCCESS, 3u, listed, 3u);
+  std::uint32_t         count = 8u;
+  VkExtensionProperties properties[8] = {};
+  CHECK_EQ(rig.enumerate(&count, properties), VK_SUCCESS);
+  bool map_memory2 = false;
+  bool placed = false;
+  bool templates = false;
+  bool push_descriptor = false;
+  for (std::uint32_t index = 0u; index < count; index++) {
+      map_memory2 = map_memory2 || std::strcmp(properties[index].extensionName, "VK_KHR_map_memory2") == 0;
+      placed = placed || std::strcmp(properties[index].extensionName, "VK_EXT_map_memory_placed") == 0;
+      templates = templates || std::strcmp(properties[index].extensionName,
+                                           "VK_KHR_descriptor_update_template") == 0;
+      push_descriptor = push_descriptor || std::strcmp(properties[index].extensionName,
+                                                       "VK_KHR_push_descriptor") == 0;
+  }
+  CHECK(map_memory2);
+  CHECK(push_descriptor);
+  CHECK(!placed);
+  CHECK(!templates);   /* this host did not list it */
+  /* The template extension, from a host that does list it. */
+  const char *const with_templates[] = {"VK_KHR_descriptor_update_template"};
+  rig.answer_count(VK_SUCCESS, 1u);
+  rig.answer_list(VK_SUCCESS, 1u, with_templates, 1u);
+  count = 8u;
+  VkExtensionProperties second[8] = {};
+  CHECK_EQ(rig.enumerate(&count, second), VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK(std::strcmp(second[0].extensionName, "VK_KHR_descriptor_update_template") == 0);
+  /* A device may be made with the three, and not with the one. */
+  VkDevice          device = VK_NULL_HANDLE;
+  const char *const enabling[] = {"VK_KHR_map_memory2", "VK_KHR_descriptor_update_template",
+                                  "VK_KHR_push_descriptor"};
+  rig.rig().host().vk_handle(0, ScriptedHost::vk_device);
+  CHECK_EQ(rig.create(enabling, 3u, &device), VK_SUCCESS);
+  const char *const placing[] = {"VK_EXT_map_memory_placed"};
+  CHECK_EQ(rig.create(placing, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT); }

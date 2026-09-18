@@ -94,6 +94,14 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory
 /* Mapped memory is the process's own RAM, so there is nothing to unmap, flush
  * or invalidate: the host GPU reads and writes the same bytes. */
 VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice device, VkDeviceMemory memory);
+/* The VkMemoryMapInfoKHR shape of the two above (feature 047). Placement is
+ * refused rather than ignored: the ICD cannot place a mapping, and a caller
+ * that asked for one must not be handed a mapping somewhere else
+ * (contracts/placed_mappings.md). */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR *pMemoryMapInfo,
+                                                     void **ppData);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkUnmapMemory2KHR(VkDevice device,
+                                                       const VkMemoryUnmapInfoKHR *pMemoryUnmapInfo);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
                                                                const VkMappedMemoryRange *pMemoryRanges);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,

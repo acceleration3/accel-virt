@@ -340,6 +340,78 @@ TEST(icd_memory, a_map_outside_the_allocation_fails)
   rig.host().nop();
   rig.free(memory); }
 
+/* vkMapMemory2 is the same mapping read out of a structure (feature 047,
+ * contracts/placed_mappings.md), and placement is refused rather than ignored:
+ * the address a chunk is at is VidMm's, so a caller that asked for one of its
+ * own must be told no instead of being handed a pointer elsewhere. */
+TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
+{ MemoryRig rig;
+  const VkDeviceMemory memory = rig.host_visible(2u * page, 0x30000u, true);
+  using MapMemory2 = VkResult (*)(VkDevice, const VkMemoryMapInfoKHR *, void **);
+  using UnmapMemory2 = VkResult (*)(VkDevice, const VkMemoryUnmapInfoKHR *);
+  const MapMemory2   map2 = rig.entry<MapMemory2>("vkMapMemory2KHR");
+  const UnmapMemory2 unmap2 = rig.entry<UnmapMemory2>("vkUnmapMemory2KHR");
+  CHECK(map2 != nullptr);
+  CHECK(unmap2 != nullptr);
+
+  VkMemoryMapInfoKHR info = {};
+  info.sType = VK_STRUCTURE_TYPE_MEMORY_MAP_INFO;
+  info.memory = memory;
+  info.offset = 0u;
+  info.size = VK_WHOLE_SIZE;
+  void *through_two = nullptr;
+  CHECK_EQ(map2(rig.device(), &info, &through_two), VK_SUCCESS);
+  CHECK(through_two != nullptr);
+  /* The same pointer the five-parameter entry answers: one mapping, one
+   * address. */
+  void *through_one = nullptr;
+  CHECK_EQ(rig.map(memory, 0u, VK_WHOLE_SIZE, through_one), VK_SUCCESS);
+  CHECK(through_one == through_two);
+  /* An offset within it answers that far in. */
+  info.offset = page;
+  info.size = page;
+  void *further = nullptr;
+  CHECK_EQ(map2(rig.device(), &info, &further), VK_SUCCESS);
+  CHECK_EQ(static_cast<const unsigned char *>(further) - static_cast<const unsigned char *>(through_two), page);
+
+  /* A range past the allocation, and a flag: refused, as vkMapMemory refuses
+   * them. */
+  info.offset = 0u;
+  info.size = 2u * page + 1u;
+  CHECK_EQ(map2(rig.device(), &info, &further), VK_ERROR_MEMORY_MAP_FAILED);
+  info.size = VK_WHOLE_SIZE;
+  info.flags = VK_MEMORY_MAP_PLACED_BIT_EXT;
+  CHECK_EQ(map2(rig.device(), &info, &further), VK_ERROR_MEMORY_MAP_FAILED);
+  info.flags = 0u;
+
+  /* Placement asked for in the chain: refused, and said once in the log. */
+  VkMemoryMapPlacedInfoEXT placed = {};
+  placed.sType = VK_STRUCTURE_TYPE_MEMORY_MAP_PLACED_INFO_EXT;
+  placed.pPlacedAddress = reinterpret_cast<void *>(0x40000000u);
+  info.pNext = &placed;
+  CHECK_EQ(map2(rig.device(), &info, &further), VK_ERROR_MEMORY_MAP_FAILED);
+  CHECK_EQ(rig.rig().log().holding("cannot place"), 1u);
+  info.pNext = nullptr;
+
+  /* Nothing to map, or nowhere to put the answer. */
+  CHECK_EQ(map2(rig.device(), nullptr, &further), VK_ERROR_MEMORY_MAP_FAILED);
+  CHECK_EQ(map2(rig.device(), &info, nullptr), VK_ERROR_MEMORY_MAP_FAILED);
+
+  /* Unmapping frees nothing and answers success; a flag in it does not. */
+  VkMemoryUnmapInfoKHR unmapping = {};
+  unmapping.sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO;
+  unmapping.memory = memory;
+  CHECK_EQ(unmap2(rig.device(), &unmapping), VK_SUCCESS);
+  unmapping.flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
+  CHECK_EQ(unmap2(rig.device(), &unmapping), VK_ERROR_MEMORY_MAP_FAILED);
+  CHECK_EQ(unmap2(rig.device(), nullptr), VK_ERROR_MEMORY_MAP_FAILED);
+  /* The memory is still there after all of that. */
+  void *again = nullptr;
+  CHECK_EQ(rig.map(memory, 0u, VK_WHOLE_SIZE, again), VK_SUCCESS);
+  CHECK(again == through_two);
+  rig.host().nop();
+  rig.free(memory); }
+
 /* Any other type is the host's: allocated and freed there, and never mapped. */
 TEST(icd_memory, a_device_local_allocation_is_the_host_s_and_cannot_be_mapped)
 { MemoryRig rig;

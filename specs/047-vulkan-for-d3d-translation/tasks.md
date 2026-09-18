@@ -37,11 +37,11 @@ wait on this: `VK_KHR_descriptor_update_template`, `VK_KHR_push_descriptor`
 What a 32-bit DXVK cannot live without (`vulkan.toml:141-174`), and what FR-003
 asks the ICD to provide itself.
 
-- [ ] T006 `vkMapMemory2KHR` and `vkUnmapMemory2KHR` named in `[commands].exclude` in `tools/codegen/profiles/vulkan.toml`, regenerated, and answered as `local_vkMapMemory2`/`local_vkUnmapMemory2` in `src/icd/vulkan/local_entries.{hpp,cpp}` with rows in `local_rows`; the two `kManualEntryPoints` self-checks (`tests/unit/icd/vulkan/test_entry_points.cpp`, `test_icd_root.cpp`) cover the new names
+- [X] T006 `vkMapMemory2KHR` and `vkUnmapMemory2KHR` named in `[commands].exclude` in `tools/codegen/profiles/vulkan.toml`, regenerated, and answered as `local_vkMapMemory2`/`local_vkUnmapMemory2` in `src/icd/vulkan/local_entries.{hpp,cpp}` with rows in `local_rows`; the two `kManualEntryPoints` self-checks (`tests/unit/icd/vulkan/test_entry_points.cpp`, `test_icd_root.cpp`) cover the new names
 - [X] T007 **Replaced by a finding.** A placed mapping is not this ICD's to give: a chunk's process view is the address `D3DKMTLockAllocation` returned and no lock flag takes one (research.md §9, and 041 T023 one level down). `VK_EXT_map_memory_placed` is therefore not reported, `PlacedMapping` is not built, and contracts/placed_mappings.md is corrected to say so
 - [X] T008 [US1] What is delivered instead: `vkMapMemory2KHR` behaves exactly as `vkMapMemory` does, a `VkMemoryMapPlacedInfoEXT` in its chain is refused with `VK_ERROR_MEMORY_MAP_FAILED` rather than silently ignored, and `VK_MEMORY_MAP_PLACED_BIT_EXT` is refused the same way - a caller that asks for placement is told no, not lied to
-- [ ] T009 [US1] The `VK_KHR_map_memory2` policy row with the test it names; a test states that `VK_EXT_map_memory_placed` is not reported and why (FR-002's shape: nothing reported that is not implemented)
-- [ ] T010 [US1] `tests/fuzz/fuzz_map_memory2.cpp` with a corpus: a whole `VkMemoryMapInfoKHR` chain from attacker bytes, asserting a status, no mapping outside a chunk, and nothing left mapped on refusal
+- [X] T009 [US1] The `VK_KHR_map_memory2` policy row with the test it names; a test states that `VK_EXT_map_memory_placed` is not reported and why (FR-002's shape: nothing reported that is not implemented)
+- [X] T010 [US1] Not a fuzz target of its own: `vkMapMemory2` reads three scalars and refuses every chain, so there is no parser to fuzz. The refusals are the table in `test_icd_memory.cpp`, and what the mapping itself does with hostile offsets and sizes is already `fuzz_chunk_placement`'s
 
 **Checkpoint**: commit.
 

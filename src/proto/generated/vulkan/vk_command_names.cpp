@@ -407,7 +407,6 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case 0x000101A2u: return "vkGetSemaphoreFdKHR";
         case 0x000101A3u: return "vkImportFenceFdKHR";
         case 0x000101A4u: return "vkImportSemaphoreFdKHR";
-        case 0x000101A6u: return "vkUnmapMemory2KHR";
         default: return "unknown";
     }
 }

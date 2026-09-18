@@ -667,9 +667,6 @@ public:
     VkResult on_vkImportSemaphoreFdKHR(VkDevice, const VkImportSemaphoreFdInfoKHR*) override {
         return VK_SUCCESS;
     }
-    VkResult on_vkUnmapMemory2KHR(VkDevice, const VkMemoryUnmapInfo*) override {
-        return VK_SUCCESS;
-    }
 };
 
 }  // namespace av::vkproto

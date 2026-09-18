@@ -6449,21 +6449,4 @@ VkResult rvk_vkImportSemaphoreFdKHR(::av::ClientTransport& t, VkDevice device, c
     return static_cast<VkResult>(result_code);
 }
 
-VkResult rvk_vkUnmapMemory2KHR(::av::ClientTransport& t, VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo) {
-    AV_SCOPE("rvk_vkUnmapMemory2KHR");
-    ::av::WireWriter payload = t.request_writer();
-    serialize_VkDevice(payload, device);
-    serialize_VkMemoryUnmapInfo(payload, *pMemoryUnmapInfo);
-    const ::av::SyncCallScope rvk_call{t};
-    ::av::WireReader r{nullptr, 0u};
-    if (t.send_sync(::av::vkproto::kCmd_vkUnmapMemory2KHR, payload, r) != ::av::TransportResult::ok) {
-        return VK_ERROR_DEVICE_LOST;
-    }
-    int32_t result_code = 0;
-    if (!r.read_pod(result_code)) {
-        return VK_ERROR_DEVICE_LOST;
-    }
-    return static_cast<VkResult>(result_code);
-}
-
 }  // namespace av::vkproto

@@ -1847,15 +1847,6 @@ public:
         }
         return pfn_vkImportSemaphoreFdKHR_(device, pImportSemaphoreFdInfo);
     }
-    VkResult on_vkUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo) override {
-        if (pfn_vkUnmapMemory2KHR_ == nullptr) {
-            pfn_vkUnmapMemory2KHR_ = reinterpret_cast<PFN_vkUnmapMemory2KHR>(::vkGetInstanceProcAddr(instance_, "vkUnmapMemory2KHR"));
-        }
-        if (pfn_vkUnmapMemory2KHR_ == nullptr) {
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
-        return pfn_vkUnmapMemory2KHR_(device, pMemoryUnmapInfo);
-    }
 
 private:
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -1970,7 +1961,6 @@ private:
     PFN_vkGetSemaphoreFdKHR pfn_vkGetSemaphoreFdKHR_ = nullptr;
     PFN_vkImportFenceFdKHR pfn_vkImportFenceFdKHR_ = nullptr;
     PFN_vkImportSemaphoreFdKHR pfn_vkImportSemaphoreFdKHR_ = nullptr;
-    PFN_vkUnmapMemory2KHR pfn_vkUnmapMemory2KHR_ = nullptr;
 };
 
 }  // namespace av::vkproto

@@ -57,9 +57,12 @@ TEST(entry_points, a_generated_name_resolves_to_its_wrapper_but_not_locally)
   CHECK(entry_points.find("vkCreateBuffer") ==
         reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkCreateBuffer));
   CHECK(entry_points.find_local("vkCreateBuffer") == nullptr);
-  /* The last row of the generated table resolves too: the search does not stop short. */
-  CHECK(entry_points.find("vkUnmapMemory2KHR") ==
-        reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkUnmapMemory2KHR)); }
+  /* The last row of the generated table resolves too: the search does not stop
+   * short. Which name is last is the generator's to decide, so it is read from
+   * the table rather than written here. */
+  const av::vkicd::generated::EntryTable table = av::vkicd::generated::wrapper_entries();
+  const av::vkicd::generated::Entry     &last = *(table.end() - 1);
+  CHECK(entry_points.find(last.name) == last.fn); }
 
 TEST(entry_points, every_generated_row_resolves_to_its_own_wrapper_with_no_local_rows)
 { EntryPoints entry_points(nullptr, 0u);

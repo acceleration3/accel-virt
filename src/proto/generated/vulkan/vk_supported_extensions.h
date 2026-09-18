@@ -59,6 +59,7 @@ inline constexpr const char* kImplementedDeviceExtensions[] = {
     "VK_KHR_maintenance3",
     "VK_KHR_maintenance4",
     "VK_KHR_maintenance5",
+    "VK_KHR_map_memory2",
     "VK_KHR_multiview",
     "VK_KHR_pipeline_library",
     "VK_KHR_push_descriptor",
@@ -138,8 +139,10 @@ inline constexpr const char* kManualEntryPoints[] = {
 #endif
     "vkGetSwapchainImagesKHR",
     "vkMapMemory",
+    "vkMapMemory2KHR",
     "vkQueuePresentKHR",
     "vkUnmapMemory",
+    "vkUnmapMemory2KHR",
 };
 
 }  // namespace av::vkproto
