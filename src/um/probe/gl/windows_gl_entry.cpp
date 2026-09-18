@@ -77,16 +77,22 @@ Function WindowsGlEntry::named(const char *name) const
     return reinterpret_cast<Function>(wglGetProcAddress(name));
 }
 
+/* The client area as it is now, not as the window was made: a step that
+ * resizes the window is judged against what the window became (feature 051). */
 uint32_t WindowsGlEntry::width() const
 {
     AV_SCOPE("WindowsGlEntry::width");
-    return ProbeWindow::side;
+    RECT client = {};
+    if (!GetClientRect(static_cast<HWND>(window_.window()), &client)) return ProbeWindow::side;
+    return static_cast<uint32_t>(client.right - client.left);
 }
 
 uint32_t WindowsGlEntry::height() const
 {
     AV_SCOPE("WindowsGlEntry::height");
-    return ProbeWindow::side;
+    RECT client = {};
+    if (!GetClientRect(static_cast<HWND>(window_.window()), &client)) return ProbeWindow::side;
+    return static_cast<uint32_t>(client.bottom - client.top);
 }
 
 int32_t WindowsGlEntry::choose_pixel_format()
