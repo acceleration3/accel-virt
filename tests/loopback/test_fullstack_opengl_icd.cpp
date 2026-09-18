@@ -368,7 +368,7 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
     report.finish();
     std::fprintf(stderr, "%s", report.text());
     CHECK_EQ(report.failed(), 0u);
-    CHECK_EQ(report.passed(), 9u);
+    CHECK_EQ(report.passed(), 12u);   /* feature 051 added compat, interval and resized */
     CHECK(std::strstr(report.text(), "ok opengl.draw 1024\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.share 4\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.busy 170\n") != nullptr);

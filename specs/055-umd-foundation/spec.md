@@ -77,6 +77,17 @@ allocation contract with the KMD and its transport already working.
 vkd3d-proton and DXVK need none of this (`docs/kb/07-usermode.md`); this
 feature exists so the adapter is a first-class GPU.
 
+### How the translation is built — binding on 055, 056, 057 and 064
+
+**DXVK and vkd3d-proton are used as source, not as binaries.** Their
+translation code is what turns Direct3D into Vulkan, built into `rvkumd.dll`
+so the Vulkan commands it produces cross this project's wire to the QEMU
+device. Placing `d3d11.dll`, `d3d12.dll` or `d3d9.dll` beside an application -
+what feature 047's probes do to exercise the Vulkan ICD - is a test harness,
+not the shipping design, and is not what these features deliver. The source
+subset is vendored and pinned the way `tools/codegen/` vendors the Khronos
+generator.
+
 ### User Story 1 - The runtimes load rvkumd.dll for the adapter (Priority: P1)
 
 **Independent Test**: in the guest, the in-guest runner installs the package

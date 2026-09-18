@@ -44,6 +44,21 @@ public:
     /* glGetGraphicsResetStatus through wglGetProcAddress; 0 without it. */
     virtual uint32_t reset_status() = 0;
 
+    /* glGetIntegerv of a name that answers one value (feature 051:
+     * GL_CONTEXT_PROFILE_MASK). */
+    virtual int32_t  integer(uint32_t pname) = 0;
+    /* wglSwapIntervalEXT and wglGetSwapIntervalEXT through
+     * wglGetProcAddress; false and -1 where the ICD has neither. */
+    virtual bool     set_swap_interval(int32_t interval) = 0;
+    virtual int32_t  swap_interval() = 0;
+    /* The window resized, so the next swap presents at the new extent; false
+     * where the window cannot be resized. */
+    virtual bool     resize(uint32_t width, uint32_t height) = 0;
+    /* A full-viewport triangle drawn by the fixed-function pipeline, compiled
+     * into a display list and called - which needs a compatibility profile and
+     * nothing else (feature 051, US1). False when the list could not be made. */
+    virtual bool     legacy_triangle() = 0;
+
     virtual const char *string(uint32_t name) = 0;
     virtual uint32_t    error() = 0;
     virtual void        viewport(int32_t x, int32_t y, int32_t width, int32_t height) = 0;

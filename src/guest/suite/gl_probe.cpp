@@ -2,6 +2,10 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/kmt.hpp"
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/suite/adapter_scenario.hpp"
+#include "guest/suite/adapter_search.hpp"
 #include "guest/suite/bmp_image.hpp"
 #include "guest/suite/gl_entry.hpp"
 #include "guest/suite/guest_report.hpp"
@@ -69,7 +73,7 @@ uint32_t matching(const uint8_t *rgba, uint32_t count)
 }  // namespace
 
 GlProbe::GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl, ImageSink &images)
-    : report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
+    : kmt_(kmt), report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
 {
     AV_SCOPE("GlProbe::GlProbe");
 }
@@ -87,6 +91,9 @@ void GlProbe::run()
     /* opengl32 names an extension function only to a thread with a context
      * current, so the first context stays current while the attribute
      * contexts are made; the forced loss takes it down with its device. */
+    compat_step();
+    interval_step();
+    resized_step();
     attribs_step();
     lost_step();
     static_cast<void>(gl_.make_current(nullptr));
@@ -169,6 +176,119 @@ void GlProbe::draw_step(const char *name)
     const uint32_t matched = matching(pixels, count);
     const bool     drawn = swapped && error == 0u && count != 0u && matched == count;
     static_cast<void>(steps_.check_measured(name, drawn ? Status::ok : Status::invalid_state, matched));
+}
+
+/* Feature 051, US1: the profile the host granted, and the fixed-function
+ * pipeline drawn through a display list on it. The measurement is the mask, so
+ * a report says which profile the run had; a core context is not a failure of
+ * this driver, it is a host with no compatibility profile, and the step says
+ * so with the pixels it could not draw. */
+void GlProbe::compat_step()
+{
+    AV_SCOPE("GlProbe::compat_step");
+    const int32_t mask = gl_.integer(gl_context_profile_mask);
+    const bool    compatibility = (static_cast<uint32_t>(mask) & gl_compatibility_profile_bit) != 0u;
+    if (!compatibility) {
+        report_.note("opengl", "compat", "the host granted no compatibility profile");
+        static_cast<void>(steps_.check_measured("compat", Status::not_supported, static_cast<uint32_t>(mask)));
+        return;
+    }
+    const uint32_t width = gl_.width() < max_extent ? gl_.width() : max_extent;
+    const uint32_t height = gl_.height() < max_extent ? gl_.height() : max_extent;
+    gl_.viewport(0, 0, static_cast<int32_t>(gl_.width()), static_cast<int32_t>(gl_.height()));
+    gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
+    gl_.clear(gl_color_buffer_bit);
+    const bool drawn = gl_.legacy_triangle();
+    const bool swapped = drawn && gl_.swap_buffers();
+    uint8_t    pixels[max_extent * max_extent * bytes_per_pixel] = {};
+    gl_.read_pixels(static_cast<int32_t>(width), static_cast<int32_t>(height), pixels);
+    const uint32_t error = gl_.error();
+    images_.save("opengl-compat", BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
+    const uint32_t count = width * height;
+    const uint32_t matched = matching(pixels, count);
+    const bool     whole = swapped && error == 0u && count != 0u && matched == count;
+    static_cast<void>(steps_.check_measured("compat", whole ? Status::ok : Status::invalid_state, matched));
+}
+
+/* Feature 051, US2.2: sixty swaps at interval 1 cannot have taken less time
+ * than fifty-nine vertical blanks, and interval 0 waits for none. */
+void GlProbe::interval_step()
+{
+    AV_SCOPE("GlProbe::interval_step");
+    if (!gl_.set_swap_interval(paced_interval) || gl_.swap_interval() != paced_interval) {
+        static_cast<void>(steps_.check_measured("interval", Status::not_supported, 0u));
+        return;
+    }
+    const uint64_t period = blank_ticks();
+    if (period == 0u) {
+        static_cast<void>(steps_.check_measured("interval", Status::not_found, 0u));
+        return;
+    }
+    const uint64_t started = counter();
+    for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
+    const uint64_t paced = counter() - started;
+    const uint64_t least = period * (paced_frames - 1u);
+    /* And with no interval the same swaps are not held to the blank. */
+    const bool     unpaced_set = gl_.set_swap_interval(0);
+    const uint64_t loose_started = counter();
+    for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
+    const uint64_t unpaced = counter() - loose_started;
+    static_cast<void>(gl_.set_swap_interval(paced_interval));
+    const bool held = paced >= least && unpaced_set && unpaced < paced;
+    static_cast<void>(steps_.check_measured("interval", held ? Status::ok : Status::conflict,
+                                            static_cast<uint32_t>(paced / period)));
+}
+
+/* Feature 051, US2.3: a window resized under a context that keeps swapping is
+ * presented at its new extent, and nothing had to be made again by hand. */
+void GlProbe::resized_step()
+{
+    AV_SCOPE("GlProbe::resized_step");
+    const uint32_t width = gl_.width();
+    const uint32_t height = gl_.height();
+    const uint32_t narrowed = width / 2u;
+    if (narrowed == 0u || narrowed == width || !gl_.resize(narrowed, height)) {
+        static_cast<void>(steps_.check_measured("resized", Status::not_supported, 0u));
+        return;
+    }
+    /* The first swap presents what the window had; the second is the first at
+     * the new extent. */
+    static_cast<void>(gl_.swap_buffers());
+    gl_.viewport(0, 0, static_cast<int32_t>(gl_.width()), static_cast<int32_t>(gl_.height()));
+    gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
+    gl_.clear(gl_color_buffer_bit);
+    const bool     swapped = gl_.swap_buffers();
+    const uint32_t error = gl_.error();
+    const bool     resized = gl_.width() == narrowed && swapped && error == 0u;
+    static_cast<void>(steps_.check_measured("resized", resized ? Status::ok : Status::invalid_state, gl_.width()));
+    static_cast<void>(gl_.resize(width, height));
+}
+
+uint64_t GlProbe::blank_ticks()
+{
+    AV_SCOPE("GlProbe::blank_ticks");
+    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    AdapterSearch     search(kmt_);
+    if (search.find(rvkgpu) != Status::ok) return 0u;
+    uint32_t device = 0u;
+    uint64_t ticks = 0u;
+    if (kmt_.create_device(search.adapter(), device) == Status::ok) {
+        if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) {
+            const uint64_t started = counter();
+            if (kmt_.wait_for_vertical_blank(search.adapter(), device, 0u) == Status::ok) ticks = counter() - started;
+        }
+        static_cast<void>(kmt_.destroy_device(device));
+    }
+    static_cast<void>(search.close());
+    return ticks;
+}
+
+uint64_t GlProbe::counter() const
+{
+    AV_SCOPE("GlProbe::counter");
+    uint64_t frequency = 0u;
+    return kmt_.performance_counter(frequency);
 }
 
 /* Both contexts are shared before either is made, as the ICD requires. */

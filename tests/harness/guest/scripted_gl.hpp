@@ -14,6 +14,8 @@
 
 namespace av {
 
+class Kmt;
+
 class ScriptedGl final : public GlEntry {
 public:
     enum class Call : std::uint32_t {
@@ -41,6 +43,18 @@ public:
     ScriptedGl &operator=(const ScriptedGl &) = delete;
 
     void fail_at(Call call, std::uint32_t nth);
+    /* What GL_CONTEXT_PROFILE_MASK answers: compatibility (2) until a test
+     * says otherwise (feature 051). */
+    void set_profile_mask(std::int32_t mask);
+    /* No wglSwapIntervalEXT at all, as an ICD without the extension. */
+    void hide_swap_control();
+    /* The adapter a paced swap waits on, as the ICD's does: without one a
+     * swap waits for nothing (feature 051). */
+    void          pace_with(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
+    /* Blanks the swaps waited for, as the interval asked. */
+    std::uint32_t paced_blanks() const;
+    /* Windows this cannot resize. */
+    void refuse_resizes();
     void set_strings(const char *version, const char *renderer);
     /* What glGetError answers after the draw. */
     void set_error(std::uint32_t error);
@@ -82,6 +96,12 @@ public:
     std::uint32_t make_current_elsewhere(void *context) override;
     std::int32_t  force_fault() override;
     std::uint32_t reset_status() override;
+
+    std::int32_t  integer(std::uint32_t pname) override;
+    bool          set_swap_interval(std::int32_t interval) override;
+    std::int32_t  swap_interval() override;
+    bool          resize(std::uint32_t width, std::uint32_t height) override;
+    bool          legacy_triangle() override;
 
     const char   *string(std::uint32_t name) override;
     std::uint32_t error() override;
@@ -151,6 +171,18 @@ private:
     bool          unreported_;
     bool          reported_forever_;
     std::int32_t  format_;
+    /* Feature 051: what the profile mask answers, whether the swap-control
+     * entries exist, what the interval is, the blanks the swaps waited for,
+     * whether a resize is allowed, and the lists this made. */
+    std::int32_t  profile_mask_;
+    bool          hidden_swap_control_;
+    bool          refuses_resizes_;
+    std::int32_t  interval_;
+    std::uint32_t paced_blanks_;
+    Kmt          *pacing_kmt_;
+    std::uint32_t pacing_adapter_;
+    std::uint32_t pacing_device_;
+    std::uint32_t lists_;
     Context       contexts_[max_contexts];
     std::uint32_t current_;
     std::uint32_t last_error_;

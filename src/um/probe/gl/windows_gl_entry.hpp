@@ -35,6 +35,11 @@ public:
     int32_t  force_fault() override;
     uint32_t reset_status() override;
 
+    int32_t     integer(uint32_t pname) override;
+    bool        set_swap_interval(int32_t interval) override;
+    int32_t     swap_interval() override;
+    bool        resize(uint32_t width, uint32_t height) override;
+    bool        legacy_triangle() override;
     const char *string(uint32_t name) override;
     uint32_t    error() override;
     void        viewport(int32_t x, int32_t y, int32_t width, int32_t height) override;

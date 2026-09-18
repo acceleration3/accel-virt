@@ -59,8 +59,8 @@ UMD's redirection surface. It arrives with feature 055, for both APIs at once.
 
 ## Phase 5: Live, and the record
 
-- [ ] T021 The guest suite's OpenGL probe (`src/guest/suite/opengl_probe.*`) gains a `compat` step: a legacy `wglCreateContext`, a display list compiled and called, an immediate-mode triangle, and the profile mask it was granted, reported as a suite result
-- [ ] T022 The probe gains `interval` and `resized` steps: 60 swaps at interval 1 take at least 59 of the adapter's blanks (the tolerance 046 set), interval 0 takes fewer, and a resized window keeps presenting at its new extent
+- [X] T021 The guest suite's OpenGL probe (`src/guest/suite/opengl_probe.*`) gains a `compat` step: a legacy `wglCreateContext`, a display list compiled and called, an immediate-mode triangle, and the profile mask it was granted, reported as a suite result
+- [X] T022 The probe gains `interval` and `resized` steps: 60 swaps at interval 1 take at least 59 of the adapter's blanks (the tolerance 046 set), interval 0 takes fewer, and a resized window keeps presenting at its new extent
 - [ ] T023 `tools/guest/run_guest_suite.py` reports the new steps, and `docs/kb/05-scheduling.md`'s OpenGL notes and `docs/roadmap.md`'s capability column record what 051 enables - and that the GDI blit and the read-back stay until 055
 - [ ] T024 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 

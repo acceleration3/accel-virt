@@ -8,11 +8,14 @@
 #include "guest/suite/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
+#include "guest/suite/adapter_scenario.hpp"
+#include "guest/kmt/pci_identity.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_gl.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 using av::ScriptedImageSink;
@@ -28,9 +31,22 @@ class ProbeRig {
 public:
     explicit ProbeRig(std::uint32_t width = 8u, std::uint32_t height = 4u) : gl_(width, height), report_("rvkglprobe")
     {
+        /* The rvkgpu the probe's own steps find, and the adapter a paced swap
+         * waits on, as the ICD's does (feature 051). */
+        const av::PciIdentity rvk(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
+                                  av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem);
+        kmt_.add_adapter(rvk, av::AdapterScenario::wddm_3_2);
+        std::uint32_t adapters[2] = {};
+        std::uint32_t found = 0u;
+        CHECK_STATUS(kmt_.enumerate_adapters(adapters, 2u, found), av::Status::ok);
+        adapter_ = adapters[0];
+        CHECK_STATUS(kmt_.create_device(adapter_, device_), av::Status::ok);
+        gl_.pace_with(kmt_, adapter_, device_);
     }
     ~ProbeRig()
     {
+        CHECK_STATUS(kmt_.destroy_device(device_), av::Status::ok);
+        CHECK_STATUS(kmt_.close_adapter(adapter_), av::Status::ok);
         CHECK_EQ(gl_.live_contexts(), 0u);
         CHECK_EQ(gl_.live_objects(), 0u);
         CHECK_EQ(gl_.misuses(), 0u);
@@ -51,6 +67,8 @@ public:
 private:
     ScriptedImageSink images_;
     MockKmt     kmt_;
+    std::uint32_t adapter_ = 0u;
+    std::uint32_t device_ = 0u;
     ScriptedGl  gl_;
     GuestReport report_;
 };
@@ -68,15 +86,23 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.draw 32\n"
                                          "ok opengl.share 4\n"
                                          "ok opengl.busy 170\n"
+                                         "ok opengl.compat 32\n"
+                                         "ok opengl.interval 60\n"
+                                         "ok opengl.resized 4\n"
                                          "ok opengl.attribs 8342\n"
                                          "ok opengl.lost 33365\n"
                                          "ok opengl.recreated 32\n"
-                                         "rvkglprobe: 9 passed, 0 failed\n") == 0);
-  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u);
+                                         "rvkglprobe: 12 passed, 0 failed\n") == 0);
+  /* The two draws, the compatibility frame, the interval step's two runs of
+   * sixty, and the resize's two (feature 051). */
+  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u + 1u + 2u * GlProbe::paced_frames + 2u);
+  /* Every swap at the default interval of one blank, and the interval step's
+   * sixty paced ones; its sixty unpaced ones waited for nothing. */
+  CHECK_EQ(rig.gl().paced_blanks(), GlProbe::paced_frames + 5u);
   CHECK_EQ(rig.gl().calls(Call::force_fault), 1u);
   /* A picture of each render the probe judged: the two 8x4 draws, 24 bytes a
    * row, and the 2x2 shared texture, each pixel the colour it read back. */
-  CHECK_EQ(rig.images().saved(), 3u);
+  CHECK_EQ(rig.images().saved(), 4u);
   CHECK_EQ(rig.images().size("opengl-draw"), 54u + 4u * 24u);
   CHECK_EQ(rig.images().size("opengl-recreated"), 54u + 4u * 24u);
   CHECK_EQ(rig.images().size("opengl-share"), 54u + 2u * 8u);
@@ -285,7 +311,9 @@ TEST(gl_probe, a_context_that_cannot_be_made_again_fails_the_recreated_step)
   uncurrent.run();
   CHECK(uncurrent.holds("FAIL opengl.recreated status=7 123\n"));
   ProbeRig undrawn;
-  undrawn.gl().fail_at(Call::swap_buffers, 2u);
+  /* The draw's swap, the compatibility frame's, the interval step's hundred
+   * and twenty and the resize's two, then the recreated draw's. */
+  undrawn.gl().fail_at(Call::swap_buffers, 2u + 1u + 2u * GlProbe::paced_frames + 2u);
   undrawn.run();
   CHECK(undrawn.holds("ok opengl.draw 32\n"));
   CHECK(undrawn.holds("FAIL opengl.recreated status=7 32\n")); }

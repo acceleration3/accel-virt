@@ -38,6 +38,11 @@ public:
     std::uint32_t make_current_elsewhere(void *context) override;
     std::int32_t  force_fault() override;
     std::uint32_t reset_status() override;
+    std::int32_t  integer(std::uint32_t pname) override;
+    bool          set_swap_interval(std::int32_t interval) override;
+    std::int32_t  swap_interval() override;
+    bool          resize(std::uint32_t width, std::uint32_t height) override;
+    bool          legacy_triangle() override;
 
     const char   *string(std::uint32_t name) override;
     std::uint32_t error() override;

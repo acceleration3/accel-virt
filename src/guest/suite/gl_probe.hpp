@@ -40,7 +40,11 @@ public:
         gl_fragment_shader = 0x8B30u, gl_vertex_shader = 0x8B31u, gl_compile_status = 0x8B81u,
         gl_link_status = 0x8B82u, error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u,
         error_busy = 170u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u,
+        gl_context_profile_mask = 0x9126u, gl_compatibility_profile_bit = 0x2u,
     };
+    /* What the interval step swaps, and the interval it asks for. */
+    static constexpr uint32_t paced_frames = 60u;
+    static constexpr int32_t  paced_interval = 1;
     /* solid.frag's vec4(0.25, 0.5, 0.75, 1.0) as UNORM bytes. */
     static constexpr uint8_t colour[4] = {64u, 128u, 191u, 255u};
 
@@ -60,12 +64,23 @@ private:
     void                 share_step(void *current);
     void                 busy_step(void *current);
     void                 attribs_step();
+    /* Feature 051: what profile the host granted and whether the fixed-function
+     * pipeline draws through it; how many blanks sixty paced swaps took; and a
+     * window resized under a context that keeps presenting. */
+    void                 compat_step();
+    void                 interval_step();
+    void                 resized_step();
+    /* One vertical blank in performance-counter ticks, 0 where the adapter
+     * answers none. */
+    uint64_t             blank_ticks();
+    uint64_t             counter() const;
     void                 lost_step();
     void                 recreated_step();
     /* The triangle's program, 0 when a shader or the link failed. */
     uint32_t             program();
     uint32_t             shader(uint32_t type, const char *source);
 
+    Kmt          &kmt_;
     GuestReport  &report_;
     GlEntry      &gl_;
     ImageSink    &images_;

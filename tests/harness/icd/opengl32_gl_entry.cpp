@@ -14,6 +14,10 @@ constexpr std::uint32_t slot_tex_image_2d = 183u, slot_clear = 203u, slot_clear_
                         slot_read_pixels = 256u, slot_get_error = 261u, slot_get_string = 275u,
                         slot_get_tex_image = 281u, slot_viewport = 305u, slot_bind_texture = 307u,
                         slot_draw_arrays = 310u, slot_delete_textures = 327u, slot_gen_textures = 328u;
+/* The compatibility slots the probe's legacy step calls (feature 051). */
+constexpr std::uint32_t slot_new_list = 0u, slot_end_list = 1u, slot_call_list = 2u, slot_gen_lists = 5u,
+                        slot_begin = 7u, slot_color_3f = 13u, slot_end = 43u, slot_vertex_2f = 128u,
+                        slot_load_identity = 290u, slot_matrix_mode = 293u, slot_get_integerv = 263u;
 constexpr std::uint32_t gl_texture_2d = 0x0DE1u, gl_rgba = 0x1908u, gl_rgba8 = 0x8058u, gl_unsigned_byte = 0x1401u;
 
 }  // namespace
@@ -213,6 +217,57 @@ void Opengl32GlEntry::delete_texture(std::uint32_t texture)
 {
     const GLuint textures[] = {texture};
     opengl32_.gl<void (APIENTRY *)(GLsizei, const GLuint *)>(slot_delete_textures)(1, textures);
+}
+
+std::int32_t Opengl32GlEntry::integer(std::uint32_t pname)
+{
+    GLint value = 0;
+    opengl32_.gl<void (APIENTRY *)(GLenum, GLint *)>(slot_get_integerv)(pname, &value);
+    return value;
+}
+
+bool Opengl32GlEntry::set_swap_interval(std::int32_t interval)
+{
+    using SetInterval = std::int32_t(APIENTRY *)(std::int32_t);
+    const auto set = reinterpret_cast<SetInterval>(opengl32_.get_proc_address("wglSwapIntervalEXT"));
+    return set != nullptr && set(interval) != 0;
+}
+
+std::int32_t Opengl32GlEntry::swap_interval()
+{
+    using GetInterval = std::int32_t(APIENTRY *)();
+    const auto get = reinterpret_cast<GetInterval>(opengl32_.get_proc_address("wglGetSwapIntervalEXT"));
+    return get != nullptr ? get() : -1;
+}
+
+bool Opengl32GlEntry::resize(std::uint32_t width, std::uint32_t height)
+{
+    /* The windows are the test's own: a resize here is what the surface says
+     * the client area is. */
+    width_ = width;
+    height_ = height;
+    return true;
+}
+
+bool Opengl32GlEntry::legacy_triangle()
+{
+    const GLuint list = opengl32_.gl<GLuint (APIENTRY *)(GLsizei)>(slot_gen_lists)(1);
+    if (list == 0u) return false;
+    opengl32_.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1701u /* GL_PROJECTION */);
+    opengl32_.gl<void (APIENTRY *)()>(slot_load_identity)();
+    opengl32_.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1700u /* GL_MODELVIEW */);
+    opengl32_.gl<void (APIENTRY *)()>(slot_load_identity)();
+    opengl32_.gl<void (APIENTRY *)(GLuint, GLenum)>(slot_new_list)(list, 0x1300u /* GL_COMPILE */);
+    opengl32_.gl<void (APIENTRY *)(GLenum)>(slot_begin)(0x0004u /* GL_TRIANGLES */);
+    opengl32_.gl<void (APIENTRY *)(GLfloat, GLfloat, GLfloat)>(slot_color_3f)(0.25f, 0.5f, 0.75f);
+    opengl32_.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(-1.0f, -1.0f);
+    opengl32_.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(3.0f, -1.0f);
+    opengl32_.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(-1.0f, 3.0f);
+    opengl32_.gl<void (APIENTRY *)()>(slot_end)();
+    opengl32_.gl<void (APIENTRY *)()>(slot_end_list)();
+    opengl32_.gl<void (APIENTRY *)(GLuint)>(slot_call_list)(list);
+    opengl32_.gl<void (APIENTRY *)()>(slot_finish)();
+    return true;
 }
 
 }  // namespace av

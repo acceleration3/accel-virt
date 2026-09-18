@@ -21,6 +21,20 @@ void WINAPI glTexImage2D(unsigned int target, int level, int internal_format, in
                          unsigned int format, unsigned int type, const void *pixels);
 void WINAPI glGetTexImage(unsigned int target, int level, unsigned int format, unsigned int type, void *pixels);
 void WINAPI glDeleteTextures(int count, const unsigned int *textures);
+void WINAPI glGetIntegerv(unsigned int pname, int *data);
+/* The compatibility profile's own, which opengl32 exports whatever the driver
+ * grants: the ICD refuses them on a core context (feature 051). */
+unsigned int WINAPI glGenLists(int range);
+void WINAPI         glNewList(unsigned int list, unsigned int mode);
+void WINAPI         glEndList();
+void WINAPI         glCallList(unsigned int list);
+void WINAPI         glDeleteLists(unsigned int list, int range);
+void WINAPI         glBegin(unsigned int mode);
+void WINAPI         glEnd();
+void WINAPI         glColor3f(float red, float green, float blue);
+void WINAPI         glVertex2f(float x, float y);
+void WINAPI         glMatrixMode(unsigned int mode);
+void WINAPI         glLoadIdentity();
 }
 
 namespace av {
@@ -379,6 +393,64 @@ void WindowsGlEntry::delete_texture(uint32_t texture)
 {
     AV_SCOPE("WindowsGlEntry::delete_texture");
     glDeleteTextures(1, &texture);
+}
+
+int32_t WindowsGlEntry::integer(uint32_t pname)
+{
+    AV_SCOPE("WindowsGlEntry::integer");
+    int value = 0;
+    glGetIntegerv(pname, &value);
+    return value;
+}
+
+bool WindowsGlEntry::set_swap_interval(int32_t interval)
+{
+    AV_SCOPE("WindowsGlEntry::set_swap_interval");
+    using SetInterval = BOOL(WINAPI *)(int);
+    const auto set = reinterpret_cast<SetInterval>(wglGetProcAddress("wglSwapIntervalEXT"));
+    return set != nullptr && set(interval) != FALSE;
+}
+
+int32_t WindowsGlEntry::swap_interval()
+{
+    AV_SCOPE("WindowsGlEntry::swap_interval");
+    using GetInterval = int(WINAPI *)();
+    const auto get = reinterpret_cast<GetInterval>(wglGetProcAddress("wglGetSwapIntervalEXT"));
+    return get != nullptr ? get() : -1;
+}
+
+bool WindowsGlEntry::resize(uint32_t width, uint32_t height)
+{
+    AV_SCOPE("WindowsGlEntry::resize");
+    return SetWindowPos(static_cast<HWND>(window_.window()), nullptr, 0, 0, static_cast<int>(width),
+                        static_cast<int>(height), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE;
+}
+
+bool WindowsGlEntry::legacy_triangle()
+{
+    AV_SCOPE("WindowsGlEntry::legacy_triangle");
+    /* The fixed-function pipeline, compiled once and called: no shader, no
+     * vertex array, nothing a core context has (feature 051). */
+    const unsigned int list = glGenLists(1);
+    if (list == 0u) return false;
+    constexpr unsigned int gl_projection = 0x1701u, gl_modelview = 0x1700u, gl_compile = 0x1300u,
+                           gl_triangles = 0x0004u;
+    glMatrixMode(gl_projection);
+    glLoadIdentity();
+    glMatrixMode(gl_modelview);
+    glLoadIdentity();
+    glNewList(list, gl_compile);
+    glBegin(gl_triangles);
+    glColor3f(0.25f, 0.5f, 0.75f);
+    glVertex2f(-1.0f, -1.0f);
+    glVertex2f(3.0f, -1.0f);
+    glVertex2f(-1.0f, 3.0f);
+    glEnd();
+    glEndList();
+    glCallList(list);
+    glFinish();
+    glDeleteLists(list, 1);
+    return true;
 }
 
 }  // namespace av

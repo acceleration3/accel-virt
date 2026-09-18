@@ -1,5 +1,7 @@
 #include "harness/guest/scripted_gl.hpp"
 
+#include "guest/kmt/kmt.hpp"
+
 #include <cstring>
 
 namespace av {
@@ -32,7 +34,8 @@ std::uint8_t unorm(float value)
 ScriptedGl::ScriptedGl(std::uint32_t width, std::uint32_t height)
     : width_(width), height_(height), fail_at_{}, calls_{}, version_("4.6.0 scripted"), renderer_("scripted gpu"),
       error_(0u), shift_(0), accept_versions_(false), accept_profiles_(false), isolate_(false), shared_threads_(false),
-      hidden_hook_(false), survives_(false), forgets_resets_(false), unreported_(false), reported_forever_(false), format_(0), contexts_{}, current_(none),
+      hidden_hook_(false), survives_(false), forgets_resets_(false), unreported_(false), reported_forever_(false), format_(0), profile_mask_(2), hidden_swap_control_(false), refuses_resizes_(false), interval_(1),
+      paced_blanks_(0u), pacing_kmt_(nullptr), pacing_adapter_(0u), pacing_device_(0u), lists_(0u), contexts_{}, current_(none),
       last_error_(0u), textures_{}, bound_texture_(0u), objects_(0u), next_name_(10u), program_(0u), linked_(0u), uncompiled_(0u),
       array_(0u), back_{}, clear_{}, misuses_(0u)
 {
@@ -181,7 +184,14 @@ bool ScriptedGl::share_lists(void *first, void *second)
 bool ScriptedGl::swap_buffers()
 {
     if (!current_or_misuse()) return false;
-    return !fails(Call::swap_buffers);
+    if (fails(Call::swap_buffers)) return false;
+    /* What the ICD does after the frame is on the window: waits for the
+     * interval's vertical blanks (feature 051). */
+    for (std::int32_t blank = 0; pacing_kmt_ != nullptr && blank < interval_; blank++) {
+        if (pacing_kmt_->wait_for_vertical_blank(pacing_adapter_, pacing_device_, 0u) != Status::ok) break;
+        paced_blanks_++;
+    }
+    return true;
 }
 
 std::uint32_t ScriptedGl::last_error() const { return last_error_; }
@@ -426,6 +436,63 @@ bool ScriptedGl::current_or_misuse()
     if (current_ != none) return true;
     misuses_++;
     return false;
+}
+
+void ScriptedGl::set_profile_mask(std::int32_t mask) { profile_mask_ = mask; }
+void ScriptedGl::pace_with(Kmt &kmt, std::uint32_t adapter, std::uint32_t device)
+{
+    pacing_kmt_ = &kmt;
+    pacing_adapter_ = adapter;
+    pacing_device_ = device;
+}
+void ScriptedGl::hide_swap_control() { hidden_swap_control_ = true; }
+std::uint32_t ScriptedGl::paced_blanks() const { return paced_blanks_; }
+void ScriptedGl::refuse_resizes() { refuses_resizes_ = true; }
+
+std::int32_t ScriptedGl::integer(std::uint32_t pname)
+{
+    if (!current_or_misuse()) return 0;
+    /* GL_CONTEXT_PROFILE_MASK; every other name is one this does not keep. */
+    return pname == 0x9126u ? profile_mask_ : 0;
+}
+
+bool ScriptedGl::set_swap_interval(std::int32_t interval)
+{
+    if (hidden_swap_control_ || !current_or_misuse()) return false;
+    if (interval < 0 || interval > 4) return false;
+    interval_ = interval;
+    return true;
+}
+
+std::int32_t ScriptedGl::swap_interval()
+{
+    if (hidden_swap_control_) return -1;
+    return current_or_misuse() ? interval_ : 0;
+}
+
+bool ScriptedGl::resize(std::uint32_t width, std::uint32_t height)
+{
+    if (refuses_resizes_ || width == 0u || height == 0u || width > max_extent || height > max_extent) return false;
+    width_ = width;
+    height_ = height;
+    return true;
+}
+
+bool ScriptedGl::legacy_triangle()
+{
+    if (!current_or_misuse()) return false;
+    /* A core context has no display lists: the ICD refuses them and glGenLists
+     * answers nothing (feature 051). */
+    if (profile_mask_ != 2) {
+        error_ = 0x0502u;   /* GL_INVALID_OPERATION */
+        return false;
+    }
+    lists_++;
+    /* The fixed-function pipeline needs no program and no vertex array: the
+     * list is compiled and called, and the back buffer holds solid.frag's
+     * colour, which is what the probe judges either way. */
+    for (std::uint32_t channel = 0u; channel < 4u; channel++) back_[channel] = solid[channel];
+    return true;
 }
 
 }  // namespace av
