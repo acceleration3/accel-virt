@@ -30,7 +30,7 @@ which is a feature's work beside the doorbell's. The wait stays
 
 ## Phase 2: US1 - submission without a kernel transition (P1)
 
-- [ ] T007 [US1] `Kmt` gains `create_doorbell`, `connect_doorbell`, `destroy_doorbell` and `notify_work_submission` (`d3dkmthk.h:886-945`), implemented in `src/um/gdi_kmt.cpp` over the real D3DKMT entry points and in `MockKmt` for the tests
+- [X] T007 [US1] `Kmt` gains `create_doorbell`, `connect_doorbell`, `destroy_doorbell` and `notify_work_submission` (`d3dkmthk.h:886-945`), implemented in `src/um/gdi_kmt.cpp` over the real D3DKMT entry points and in `MockKmt` for the tests
 - [X] T008 [US1] `GuestDoorbell` (object) in `src/guest/transport/guest_doorbell.{hpp,cpp}`: the three mappings a create answers - the doorbell, the status page, and where the queued fence value is written - and the store. Tests `tests/unit/guest/transport/test_guest_doorbell.cpp` over MockKmt: the store lands at offset 0 of the page, the status is read before every store, and nothing is stored while disconnected.
       **What this moves across the kernel boundary**: today the process owns the tail counter and *the miniport publishes it in the ring header* once it has checked the submission (`src/guest/transport/transport_ring.hpp:1-9`, docs/protocol.md Submission). A process that stores to the doorbell itself must publish that tail itself, so `TransportRing` gains a `publish_tail()` the doorbell path calls and the kernel path does not - and the device's existing validation of that tail (`RingConsumer`, feature 030) becomes the only thing standing between a hostile process and the ring, which is what T014 tests
 - [X] T009 [US1] `SubmissionPath` (object) in `src/guest/transport/submission_path.{hpp,cpp}`: which way one submission goes, by the status page alone - `CONNECTED` stores, `CONNECTED_NOTIFY_KMD` stores and then calls, `DISCONNECTED_RETRY` and `DISCONNECTED_ABORT` submit the old way. Tests: every status, and that the connected path makes no Kmt call at all (FR-004)
@@ -77,7 +77,7 @@ at all (research.md §13). SC-001 and SC-002 need this.
 
 ## Phase 7: live
 
-- [ ] T025 The guest run with hardware scheduling on: the benchmark measures both paths, `tools/submit_ratchet.txt` gets the ratio it earned, and the rvk suite passes with doorbells live (SC-001, SC-002)
+- [X] T025 The guest run answered instead: Windows hands this adapter no hardware queue, and the three rules that decide it are decompiled and recorded (research.md §13-§16). The node reports what it can back, the driver asks the OS before reporting anything, `tools/submit_ratchet.txt` stays empty and the runner says so, and the rvk suite passes with the transport submitting as it always has. SC-001 and SC-002 are recorded as not met, with what each needs
 
 **Checkpoint**: commit.
 

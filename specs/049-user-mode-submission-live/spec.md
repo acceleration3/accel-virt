@@ -152,8 +152,21 @@ records both ways and reports per-submit cost.
 - **SC-001**: With doorbells the in-guest benchmark's per-submit cost is at least
   five times lower than through `D3DKMTSubmitCommand` on the first passing host;
   the measured ratio becomes the ratchet.
-- **SC-002**: The Vulkan application suite (feature 048) passes unchanged with
-  doorbells on.
+
+  **Not met, and the live runs say why** (research.md §13-§16). The benchmark
+  is built, tested and reports all three numbers; the doorbell half of it does
+  not run in the guest, because Windows will not hand this adapter a hardware
+  queue - and so no doorbell - until the node may report user-mode submission,
+  which needs native fences (§14) and an IOMMU path or a second node (§16).
+  `tools/submit_ratchet.txt` therefore stays empty, and the runner says so.
+  Both are recorded as one-line changes behind the things they ask for.
+
+- **SC-002**: Not met, for the same reason: with no doorbell in the guest there
+  is nothing to run the application suite "with doorbells on" against. The
+  suite passes unchanged with the transport submitting as it always has, which
+  is what the guest run shows.
+- **SC-002 (as written)**: The Vulkan application suite (feature 048) passes
+  unchanged with doorbells on.
 - **SC-003**: A suspend-resume and a forced TDR during the benchmark lose and
   duplicate no records.
 
