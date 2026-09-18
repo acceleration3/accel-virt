@@ -1,0 +1,25 @@
+# The Vulkan CTS build this repository runs in the guest, pinned by URL and
+# hash (feature 048, FR-001).
+#
+#   archive <url> <sha256>                       the build archive
+#   file <name> <path inside it> <sha256>        one file taken out of it
+#
+# EMPTY ON PURPOSE. The CTS is a build this machine has never downloaded, and
+# there is no network here to download it from. Writing a URL and a hash from
+# memory would pin whatever a guess happened to name, and a wrong hash is
+# indistinguishable from a tampered archive at the point it matters. So the
+# pins are filled in by whoever first runs
+#
+#     python3 -B tools/fetch_cts.py
+#
+# with a network, from the build that run downloads - and every test of the
+# fetch drives it over archives the tests build and serve through file://, so
+# the tooling is proven either way (tests/tools/test_fetch_cts.py). Until then
+# `run_guest_suite.py --cts` refuses before it boots anything and names this
+# fetch, and tools/compare_cts.py says the comparison could not be made rather
+# than passing quietly.
+#
+# The shape each line will have, for a Windows x64 build:
+#   archive https://github.com/KhronosGroup/VK-GL-CTS/releases/download/vulkan-cts-X.Y.Z.W/<build>.zip <sha256>
+#   file deqp-vk.exe <inside>/deqp-vk.exe <sha256>
+#   file gles2-shaders.qpa ... (whatever data files the build needs beside it)

@@ -147,6 +147,42 @@ class Archive:
         return parts[1] if len(parts) == 2 else name
 
 
+class ArchiveCache:
+    """Where pinned archives are kept, and how one is got.
+
+    An archive is cached under the hash it is pinned to, so a cache hit is a
+    hit on the bytes that were asked for and nothing else; a partial download
+    is removed rather than trusted next time. Shared with tools/fetch_cts.py,
+    which pins its archive the same way.
+    """
+
+    def __init__(self, directory, name):
+        self.directory = directory
+        self.name = name
+
+    def get(self, url, digest, kind):
+        archive = self.directory / f"{self.name}-{kind}-{digest}{self.suffix_of(url)}"
+        if archive.is_file():
+            return Archive(archive, digest)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        partial = archive.with_name(archive.name + ".part")
+        request = urllib.request.Request(url, headers={"User-Agent": "accel-virt-fetch"})
+        try:
+            with urllib.request.urlopen(request) as source, partial.open("wb") as out:
+                shutil.copyfileobj(source, out)
+        except (urllib.error.URLError, OSError) as error:
+            partial.unlink(missing_ok=True)
+            raise Refused(f"{url}: {error}") from error
+        partial.rename(archive)
+        return Archive(archive, digest)
+
+    def suffix_of(self, url):
+        for suffix in (".tar.zst", ".tar.gz", ".tgz", ".zip", ".tar"):
+            if url.endswith(suffix):
+                return suffix
+        raise Refused(f"{url}: not an archive shape this reads")
+
+
 class LayerFetch:
     """One layer's files on disk, and whether they are the pinned ones."""
 
@@ -174,27 +210,7 @@ class LayerFetch:
         return problems
 
     def download(self, url, digest, kind):
-        """The archive, cached under the hash it is pinned to; a partial
-        download is removed rather than trusted next time."""
-        archive = self.cache / f"{self.layer}-{kind}-{digest}{self.suffix_of(url)}"
-        if archive.is_file():
-            return Archive(archive, digest)
-        partial = archive.with_name(archive.name + ".part")
-        request = urllib.request.Request(url, headers={"User-Agent": "accel-virt-fetch"})
-        try:
-            with urllib.request.urlopen(request) as source, partial.open("wb") as out:
-                shutil.copyfileobj(source, out)
-        except (urllib.error.URLError, OSError) as error:
-            partial.unlink(missing_ok=True)
-            raise Refused(f"{url}: {error}") from error
-        partial.rename(archive)
-        return Archive(archive, digest)
-
-    def suffix_of(self, url):
-        for suffix in (".tar.zst", ".tar.gz", ".tgz", ".zip", ".tar"):
-            if url.endswith(suffix):
-                return suffix
-        raise Refused(f"{url}: not an archive shape this reads")
+        return ArchiveCache(self.cache, self.layer).get(url, digest, kind)
 
     def fetch(self):
         """Both archives verified and everything extracted, or Refused with
