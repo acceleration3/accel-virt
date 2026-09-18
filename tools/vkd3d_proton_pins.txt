@@ -1,0 +1,26 @@
+# vkd3d-proton, pinned by URL and hash (feature 047, FR-001 and SC-001).
+#
+#   source  <url> <sha256>   the release's own source, which tools/layer_requirements.py
+#                            reads the required and optional lists out of
+#   release <url> <sha256>   the release archive the guest's DLLs come from
+#   file <name> <path inside the release, without its top directory> <sha256>
+#
+# EMPTY ON PURPOSE. The pins are two URLs and three hashes of files this
+# machine has never downloaded: writing them from memory would pin whatever a
+# guess happened to name, and a wrong hash is indistinguishable here from a
+# tampered archive. So they are filled in by whoever first runs
+#
+#     python3 -B tools/fetch_layers.py vkd3d-proton
+#
+# with a network, from the release that run downloads - and every test of the
+# fetch and of the extractor drives them over archives the tests build, so the
+# tooling is proven either way (tests/tools/test_fetch_layers.py,
+# tests/tools/test_layer_requirements.py). Until then
+# tools/check_layer_requirements.py says the list could not be checked rather
+# than passing quietly.
+#
+# The shape each line will have:
+#   source https://github.com/HansKristian-Work/vkd3d-proton/archive/refs/tags/vX.Y.tar.gz <sha256>
+#   release https://github.com/HansKristian-Work/vkd3d-proton/releases/download/vX.Y/vkd3d-proton-X.Y.tar.zst <sha256>
+#   file d3d12.dll x64/d3d12.dll <sha256>
+#   file d3d12core.dll x64/d3d12core.dll <sha256>

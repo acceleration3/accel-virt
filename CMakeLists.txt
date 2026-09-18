@@ -525,6 +525,12 @@ add_test(NAME protocol_ids
 add_test(NAME extension_policy
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_extension_policy.py ${CMAKE_SOURCE_DIR})
 
+# ---- what a pinned translation layer requires is what the ICD reports (047) -
+# Skipped, with a line saying so, while a layer's pins are not fetched: the
+# comparison needs the release's own source (tools/fetch_layers.py).
+add_test(NAME layer_requirements
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_layer_requirements.py ${CMAKE_SOURCE_DIR})
+
 # ---- constitution III and IV.5 --------------------------------------------
 add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
