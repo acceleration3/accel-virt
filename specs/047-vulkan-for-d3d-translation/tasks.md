@@ -87,7 +87,7 @@ asks the ICD to provide itself.
 
 ## Phase 7: Polish and merge
 
-- [ ] T031 docs: `docs/testing.md` (the D3D layers and the `--d3d` run), `docs/kb/07-usermode.md` (what the two layers require, and that the 32-bit ICD is 061's), `docs/roadmap.md` if a capability line changes
+- [X] T031 docs: `docs/testing.md` (the D3D layers and the `--d3d` run), `docs/kb/07-usermode.md` (what the two layers require, and that the 32-bit ICD is 061's), `docs/roadmap.md` needed nothing: its table is generated from `tools/features.py` and has no per-feature completion column, and 047 changes no status, level or slot count in it
 - [ ] T032 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 
 ## Dependencies
