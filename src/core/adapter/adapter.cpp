@@ -142,6 +142,14 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
      * answer (research.md §15). */
     if (status == Status::ok) {
         hardware_scheduling_ = dxgkrnl_.feature_enabled(feature_hwsch, feature_support_stable);
+        /* The capability is reportable only where the OS allowed the feature:
+         * claiming it otherwise fails the adapter start (research.md §17). */
+        if (dxgkrnl_.feature_enabled(feature_native_fence, feature_support_stable)) {
+            capabilities_.native_fences_allowed();
+            log_status("rvkgpu: native fences", 1);
+        } else {
+            log_status("rvkgpu: native fences", 0);
+        }
         user_mode_submission_ =
             hardware_scheduling_ && dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
         log_status("rvkgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
@@ -529,9 +537,11 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         break;
     case query_native_fence_caps:
         /* Answered only because the four native fence DDIs are implemented
-         * (constitution VI), and asked because the OS will not allow user-mode
-         * submission without it (research.md §14). */
-        return NtStatus(capabilities_.report_native_fence_caps(request)).value();
+         * (constitution VI) and the OS allowed the feature; where it did not,
+         * this is a type this driver does not report at all (§17). */
+        if (capabilities_.native_fences_reportable())
+            answered = NtStatus(capabilities_.report_native_fence_caps(request)).value();
+        break;
     case query_user_mode_submission_caps:
         /* Answered only because the doorbell DDIs are implemented (constitution
          * VI): dxgkrnl hands processes doorbell pages on the strength of it. */

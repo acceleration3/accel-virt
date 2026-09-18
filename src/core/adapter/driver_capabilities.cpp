@@ -14,8 +14,8 @@
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
-    : platform_(platform), wddm_version_(wddm_3_2), highest_acceptable_address_(any_address),
-      mode_behaviors_(0u), display_extension_(0u)
+    : platform_(platform), native_fences_(false), wddm_version_(wddm_3_2),
+      highest_acceptable_address_(any_address), mode_behaviors_(0u), display_extension_(0u)
       {
           AV_SCOPE("DriverCapabilities::DriverCapabilities");
       }
@@ -27,7 +27,9 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
     caps.WDDMVersion = wddm_version_;
-    caps.SchedulingCaps = scheduling_multi_engine_aware | scheduling_native_gpu_fence;
+    /* NativeGpuFence only where the OS allowed the feature: claiming it while
+     * the OS has it disabled fails the adapter start (research.md §17). */
+    caps.SchedulingCaps = scheduling_multi_engine_aware | (native_fences_ ? scheduling_native_gpu_fence : 0u);
     caps.MemoryManagementCaps = memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
@@ -58,6 +60,13 @@ Status DriverCapabilities::report_user_mode_submission_caps(const AdapterInfoQue
     return query.write_output(&caps, sizeof caps);
 }
 
+void DriverCapabilities::native_fences_allowed()
+{
+    AV_SCOPE("DriverCapabilities::native_fences_allowed");
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::native_fences_allowed");
+    native_fences_ = true;
+}
+
 Status DriverCapabilities::report_native_fence_caps(const AdapterInfoQuery &query) const
 {
     AV_SCOPE("DriverCapabilities::report_native_fence_caps");
@@ -68,6 +77,12 @@ Status DriverCapabilities::report_native_fence_caps(const AdapterInfoQuery &quer
     caps.MonitoredValueStride = sizeof(uint64_t);
     caps.MapToGpuSystemProcess = 0u;
     return query.write_output(&caps, sizeof caps);
+}
+
+bool DriverCapabilities::native_fences_reportable() const
+{
+    AV_SCOPE("DriverCapabilities::native_fences_reportable");
+    return native_fences_;
 }
 
 Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const

@@ -20,6 +20,7 @@ struct DxgkargcbQueryFeatureSupportRecord {
 enum : uint32_t {
     feature_hwsch = 0u,
     feature_user_mode_submission = 4u,
+    feature_native_fence = 37u,
 };
 
 /* DXGK_FEATURE_SUPPORT_* (d3dkmdt.h:2153): what the driver says of its own

@@ -123,11 +123,11 @@ public:
         feature_queries++;
         feature_asked = request.FeatureId;
         feature_support_asked = request.DriverSupportState;
-        request.Enabled = (allowed_features & (1u << request.FeatureId)) != 0u ? 1u : 0u;
+        request.Enabled = (allowed_features & (std::uint64_t{1} << (request.FeatureId % 64u))) != 0u ? 1u : 0u;
         return answer;
     }
 
-    std::uint32_t allowed_features = 0u;
+    std::uint64_t allowed_features = 0u;
     std::uint32_t feature_queries = 0u;
     std::uint32_t feature_asked = 0xFFFFFFFFu;
     std::uint32_t feature_support_asked = 0xFFFFFFFFu;
@@ -427,7 +427,7 @@ TEST(dxgkrnl_interface_feature_enabled, answers_what_the_os_allows_and_no_for_an
   CHECK_EQ(callbacks.feature_asked, av::feature_hwsch);
   CHECK_EQ(callbacks.feature_support_asked, av::feature_support_stable);
 
-  callbacks.allowed_features = 1u << av::feature_hwsch;
+  callbacks.allowed_features = std::uint64_t{1} << av::feature_hwsch;
   CHECK(interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
   CHECK(!interface.feature_enabled(av::feature_user_mode_submission, av::feature_support_stable));
 

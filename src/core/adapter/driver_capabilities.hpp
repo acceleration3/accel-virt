@@ -29,6 +29,11 @@ public:
     static constexpr uint32_t packet_node = 0u;
     static constexpr uint32_t hardware_queue_node = 1u;
     explicit DriverCapabilities(Platform &platform);
+    /* What the OS allowed at StartDevice, before anything is reported: a
+     * driver that claims NativeGpuFence while the OS has the native fence
+     * feature disabled fails the whole adapter start (feature 049,
+     * research.md §17). */
+    void                 native_fences_allowed();
     DriverCapabilities(const DriverCapabilities &) = delete;
     DriverCapabilities &operator=(const DriverCapabilities &) = delete;
 
@@ -45,6 +50,9 @@ public:
      * fence, and no mapping into a GPU system process - the device reads no
      * fence memory of its own (feature 049). */
     [[nodiscard]] Status report_native_fence_caps(const AdapterInfoQuery &query) const;
+    /* Whether there are any to report: a driver that has not been allowed the
+     * feature answers the query as it answers any type it does not report. */
+    bool                 native_fences_reportable() const;
     /* DXGKQAITYPE_PHYSICALADAPTERCAPS for physical adapter 0, named by dxgkrnl's
      * device handle. */
     [[nodiscard]] Status report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const;
@@ -76,6 +84,9 @@ private:
     static constexpr uint32_t pointer_caps = 0x7u;   /* Monochrome | Color | MaskedColor */
 
     Platform &platform_;
+    /* Whether the OS allowed native fences, which is what makes the
+     * NativeGpuFence capability reportable at all. */
+    bool      native_fences_;
     int32_t   wddm_version_;
     int64_t   highest_acceptable_address_;
     /* DXGK_MODE_BEHAVIOR_FLAGS: neither HDR nor colorimetric control. */

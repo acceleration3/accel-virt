@@ -31,6 +31,7 @@
 #include "core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/miniport/ddi_slot.hpp"
 #include "core/miniport/ddi_table.hpp"
 #include "core/miniport/driver_image.hpp"
@@ -1668,6 +1669,9 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_f
   };
   for (const DdiSlot slot : doorbells) CHECK(table.routine(slot) != nullptr);
   Device device(driver, 0u);
+  /* This OS allows native fences, so the driver may report the capability
+   * they are behind; one that does not is told nothing about them (§17). */
+  device.dxgkrnl().allow_feature(av::feature_native_fence);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);

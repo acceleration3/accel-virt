@@ -75,7 +75,10 @@ FakeDxgkrnlAdapter::~FakeDxgkrnlAdapter()
 
 DxgkrnlInterfaceRecord &FakeDxgkrnlAdapter::record() { return record_; }
 
-void FakeDxgkrnlAdapter::allow_feature(std::uint32_t feature_id) { allowed_features_ |= 1u << feature_id; }
+void FakeDxgkrnlAdapter::allow_feature(std::uint32_t feature_id)
+{
+    allowed_features_ |= std::uint64_t{1} << (feature_id % 64u);
+}
 
 void FakeDxgkrnlAdapter::refuse_feature_queries(std::uint32_t status) { feature_query_status_ = status; }
 
@@ -86,7 +89,7 @@ std::int32_t FakeDxgkrnlAdapter::query_feature_support(DxgkargcbQueryFeatureSupp
     if (feature_query_status_ != 0u) return static_cast<std::int32_t>(feature_query_status_);
     /* A driver that says its implementation is off gets no from any OS. */
     if (request.DriverSupportState == 0u) return 0;
-    request.Enabled = (allowed_features_ & (1u << request.FeatureId)) != 0u ? 1u : 0u;
+    request.Enabled = (allowed_features_ & (std::uint64_t{1} << (request.FeatureId % 64u))) != 0u ? 1u : 0u;
     return 0;
 }
 

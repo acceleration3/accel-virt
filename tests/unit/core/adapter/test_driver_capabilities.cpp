@@ -65,10 +65,10 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   CHECK(caps.HighestAcceptableAddress == -1);
   DxgkDriverCapsRecord expected = {};
   expected.WDDMVersion = wddm_version;
-  /* MultiEngineAware, and NativeGpuFence - which the OS checks before it
-   * allows user-mode submission, and which the four native fence DDIs are
-   * behind (feature 049, research.md §14). */
-  expected.SchedulingCaps = 0x1u | 0x800u;
+  /* MultiEngineAware alone until the OS allows native fences: claiming
+   * NativeGpuFence while the feature is disabled fails the adapter start
+   * (feature 049, research.md §17). */
+  expected.SchedulingCaps = 0x1u;
   expected.MemoryManagementCaps = 0x60u;   /* VirtualAddressingSupported | GpuMmuSupported */
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
@@ -202,10 +202,21 @@ TEST(driver_capabilities_report_physical_adapter_caps, another_adapter_or_short_
  * of its own (research.md §14). The caps are answered at all only because the
  * four native fence DDIs are implemented (constitution VI). */
 TEST(driver_capabilities_report_native_fence_caps, asks_for_one_value_a_fence_and_no_gpu_mapping)
-{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+{ MockPlatform platform; DriverCapabilities capabilities(platform);
   av::DxgkNativeFenceCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
   const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+  /* Until the OS says the feature is on, there are none to report and none of
+   * NativeGpuFence is claimed either. */
+  CHECK(!capabilities.native_fences_reportable());
+  DxgkDriverCapsRecord driver_caps = {};
+  const DxgkargQueryAdapterInfoRecord all = request(nullptr, 0u, &driver_caps, sizeof driver_caps);
+  CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, all)), Status::ok);
+  CHECK_EQ(driver_caps.SchedulingCaps & 0x800u, 0u);
+  capabilities.native_fences_allowed();
+  CHECK(capabilities.native_fences_reportable());
+  CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, all)), Status::ok);
+  CHECK_EQ(driver_caps.SchedulingCaps & 0x800u, 0x800u);
   CHECK_STATUS(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK_EQ(caps.MonitoredValueStride, sizeof(std::uint64_t));
   CHECK_EQ(caps.MapToGpuSystemProcess, 0u);

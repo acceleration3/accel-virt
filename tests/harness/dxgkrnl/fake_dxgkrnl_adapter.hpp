@@ -97,7 +97,7 @@ private:
     std::uint32_t          unmap_status_;
     /* Feature 049: which features this OS allows, one bit per feature id, and
      * how many times the driver asked. */
-    std::uint32_t          allowed_features_ = 0u;
+    std::uint64_t          allowed_features_ = 0u;
     std::uint32_t          feature_query_status_ = 0u;
     std::uint32_t          feature_queries_ = 0u;
     Mapping                mappings_[max_mappings];

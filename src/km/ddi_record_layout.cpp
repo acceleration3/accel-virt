@@ -206,6 +206,8 @@ AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, Enabled, DXGKARGCB_QUERYFEATU
 static_assert(av::feature_hwsch == static_cast<unsigned>(DXGK_FEATURE_HWSCH), "DXGK_FEATURE_HWSCH");
 static_assert(av::feature_user_mode_submission == static_cast<unsigned>(DXGK_FEATURE_USER_MODE_SUBMISSION),
               "DXGK_FEATURE_USER_MODE_SUBMISSION");
+static_assert(av::feature_native_fence == static_cast<unsigned>(DXGK_FEATURE_NATIVE_FENCE),
+              "DXGK_FEATURE_NATIVE_FENCE");
 static_assert(av::feature_support_stable == DXGK_FEATURE_SUPPORT_STABLE, "DXGK_FEATURE_SUPPORT_STABLE");
 static_assert(av::node_context_scheduling_supported == 0x1u, "ContextSchedulingSupported");
 static_assert(av::node_user_mode_submission == 0x8u, "UserModeSubmission");

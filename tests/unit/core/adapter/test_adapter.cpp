@@ -1605,10 +1605,11 @@ TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_sch
 { Fixture fixture;
   fixture.dxgkrnl().allow_feature(av::feature_hwsch);
   CHECK_EQ(fixture.start(), success);
-  /* Asked at the start, before anything is reported: hardware scheduling, and
-   * then user-mode submission, which is only asked about where the first was
-   * allowed. */
-  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 2u);
+  /* Asked at the start, before anything is reported: hardware scheduling,
+   * native fences, and user-mode submission - the last only where hardware
+   * scheduling was allowed, since a node cannot report one without the
+   * other. */
+  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 3u);
   CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
   av::DxgkNodeMetadataRecord metadata;
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
@@ -3968,6 +3969,8 @@ TEST(adapter_native_fence, makes_fences_writes_what_the_os_asks_and_refuses_the_
  * this device reads no fence memory of its own (research.md §14). */
 TEST(adapter_query_adapter_info, answers_what_this_drivers_native_fences_need)
 { Fixture fixture;
+  fixture.dxgkrnl().allow_feature(av::feature_native_fence);
+  CHECK_EQ(fixture.start(), success);
   av::DxgkNativeFenceCapsRecord caps;
   std::memset(&caps, 0xEE, sizeof caps);
   DxgkargQueryAdapterInfoRecord query = {};
