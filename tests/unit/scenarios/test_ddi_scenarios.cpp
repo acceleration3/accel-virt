@@ -1578,17 +1578,89 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 3.1 (feature 024) ----------------------------------------------------- */
+/* ---- WDDM 3.1 doorbells (feature 049) -------------------------------------------- */
 
-TEST(ddi_scenario, a_wddm_3_1_adapter_starts_without_native_fences_or_doorbells)
+/* The five doorbell DDIs through the table dxgkrnl registered. A doorbell names
+ * the device page its queue's *context* was bound to, so a context that is not
+ * an rvk context - which every context in this scenario is, because binding one
+ * needs the device and its allocations - has no page and is refused. What the
+ * successful path does is test_doorbell_table's and the full-stack rig's. */
+TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
+  Device          device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(0x14u), 0);
+    av::FakeHwQueue queue(driver.platform(), table, device.fdo().context(), vidsch.context());
+    CHECK_EQ(queue.create(0u), 0);
+
+    const auto create = reinterpret_cast<std::int32_t (*)(av::DxgkargCreateDoorbellRecord *)>(
+        table.routine(DdiSlot::DxgkDdiCreateDoorbell));
+    av::DxgkargCreateDoorbellRecord made = {};
+    made.hHwQueue = queue.handle();
+    /* No page: the context this queue runs on was never bound to one. */
+    CHECK(create(&made) != 0);
+    CHECK(made.hDoorbell == nullptr);
+    /* Private data is a thing this driver carries none of, and a flag it does
+     * not know is a request it does not answer. */
+    made.PrivateDriverDataSize = 4u;
+    CHECK(create(&made) != 0);
+    made.PrivateDriverDataSize = 0u;
+    made.Flags = 1u;
+    CHECK(create(&made) != 0);
+
+    /* Every other doorbell DDI, given a handle nobody made. */
+    std::uint64_t not_a_doorbell = 0u;
+    av::DxgkargConnectDoorbellRecord connect = {};
+    connect.hDoorbell = &not_a_doorbell;
+    av::DxgkargDisconnectDoorbellRecord disconnect = {};
+    disconnect.hDoorbell = &not_a_doorbell;
+    av::DxgkargDestroyDoorbellRecord destroy = {};
+    destroy.hDoorbell = &not_a_doorbell;
+    /* Reached through the adapter rather than the table: the table's entry
+     * points read the handle as a doorbell, which a handle nobody made is
+     * not. */
+    av::Adapter &adapter = *static_cast<av::Adapter *>(device.fdo().context());
+    CHECK(adapter.connect_doorbell(&connect) != 0);
+    CHECK(adapter.disconnect_doorbell(&disconnect) != 0);
+    CHECK(adapter.destroy_doorbell(&destroy) != 0);
+    CHECK(adapter.create_doorbell(nullptr) != 0);
+    CHECK(adapter.connect_doorbell(nullptr) != 0);
+    CHECK(adapter.disconnect_doorbell(nullptr) != 0);
+    CHECK(adapter.destroy_doorbell(nullptr) != 0);
+    CHECK(adapter.notify_work_submission(nullptr) != 0);
+
+    /* NotifyWorkSubmission on a queue that exists answers success and
+     * publishes nothing: the work is in the ring and the store already woke
+     * the worker. */
+    const auto notify = reinterpret_cast<std::int32_t (*)(const av::DxgkargNotifyWorkSubmissionRecord *)>(
+        table.routine(DdiSlot::DxgkDdiNotifyWorkSubmission));
+    av::DxgkargNotifyWorkSubmissionRecord submitted = {};
+    submitted.hHwQueue = queue.handle();
+    CHECK_EQ(notify(&submitted), 0);
+    CHECK_EQ(queue.destroy(), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 3.1 (feature 024) ----------------------------------------------------- */
+
+TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_doorbells_and_without_native_fences)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  /* Feature 049 filled the doorbell slots; the native fence ones are still
+   * nobody's, and the spec says why (049 research.md §9). */
   const DdiSlot skipped[] = {
       DdiSlot::DxgkDdiCreateNativeFence, DdiSlot::DxgkDdiDestroyNativeFence, DdiSlot::DxgkDdiUpdateMonitoredValues,
-      DdiSlot::DxgkDdiUpdateCurrentValuesFromCpu, DdiSlot::DxgkDdiCreateDoorbell, DdiSlot::DxgkDdiConnectDoorbell,
-      DdiSlot::DxgkDdiDisconnectDoorbell, DdiSlot::DxgkDdiDestroyDoorbell, DdiSlot::DxgkDdiNotifyWorkSubmission,
+      DdiSlot::DxgkDdiUpdateCurrentValuesFromCpu,
   };
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
+  const DdiSlot doorbells[] = {
+      DdiSlot::DxgkDdiCreateDoorbell, DdiSlot::DxgkDdiConnectDoorbell, DdiSlot::DxgkDdiDisconnectDoorbell,
+      DdiSlot::DxgkDdiDestroyDoorbell, DdiSlot::DxgkDdiNotifyWorkSubmission,
+  };
+  for (const DdiSlot slot : doorbells) CHECK(table.routine(slot) != nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.start_device(), 0);

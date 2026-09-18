@@ -20,6 +20,8 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "core/scheduling/hw_queue.hpp"
 #include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
 #include "core/ddi/dxgkarg_create_process_record.hpp"
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
@@ -102,7 +104,7 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), doorbells_(), capabilities_(platform), geometry_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
       segment_(platform), host_visible_(platform), region_blob_(platform),
       memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
@@ -155,7 +157,9 @@ Status Adapter::map_doorbells(const PciBaseAddresses &bars)
     if (!region.present()) return Status::ok;
     const Status mapped = mappings_.map_region(bars, resources_, region);
     if (mapped != Status::ok) return mapped;
-    return doorbells_.construct(platform_, mappings_.address_of(region), region.length());
+    const Status made = doorbells_.construct(platform_, mappings_.address_of(region), region.length());
+    if (made != Status::ok) return made;
+    return doorbell_table_.construct(platform_, doorbells_.object());
 }
 
 void Adapter::remember_device()
@@ -266,7 +270,8 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
         cursor_.release();
         scanout_.release();
         vsync_.destroy();
-        doorbells_.destroy();
+        doorbell_table_.destroy();
+    doorbells_.destroy();
         mappings_.unmap_all();
     });
     Status status = discover_and_map(dxgkrnl_interface);
@@ -305,6 +310,7 @@ int32_t Adapter::stop_device()
     const Status status = power_down();
     scanout_.release();
     cursor_.release();
+    doorbell_table_.destroy();
     doorbells_.destroy();
     mappings_.unmap_all();
     identity_.forget();
@@ -506,6 +512,10 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     case query_driver_caps:
         answered = NtStatus(capabilities_.report_driver_caps(request)).value();
         break;
+    case query_user_mode_submission_caps:
+        /* Answered only because the doorbell DDIs are implemented (constitution
+         * VI): dxgkrnl hands processes doorbell pages on the strength of it. */
+        return NtStatus(capabilities_.report_user_mode_submission_caps(request)).value();
     case query_wddm_device_caps:
         answered = NtStatus(capabilities_.report_wddm_device_caps(request)).value();
         break;
@@ -1523,6 +1533,72 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
                                                  static_cast<uint64_t *>(request->HwQueueProgressFenceCpuVa));
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
     return NtStatus(status).value();
+}
+
+int32_t Adapter::create_doorbell(DxgkargCreateDoorbellRecord *request)
+{
+    AV_SCOPE("Adapter::create_doorbell");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_doorbell");
+    if (request == nullptr || request->PrivateDriverDataSize != 0u || request->Flags != 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    /* The page is the one the queue's context was bound to: a doorbell names
+     * the context's own ring, and the device wakes that context's worker. */
+    HwQueue *const queue = hw_queues_.find(request->hHwQueue);
+    if (queue == nullptr) return NtStatus(Status::invalid_parameter).value();
+    const uint32_t page = rvk_contexts_.doorbell_of(&queue->context());
+    void          *made = nullptr;
+    const Status   created = doorbell_table_.object().create(*queue, page, made);
+    if (created != Status::ok) return NtStatus(created).value();
+    request->hDoorbell = made;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::connect_doorbell(DxgkargConnectDoorbellRecord *request)
+{
+    AV_SCOPE("Adapter::connect_doorbell");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::connect_doorbell");
+    if (request == nullptr || request->Flags != 0u) return NtStatus(Status::invalid_parameter).value();
+    if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    void          *address = nullptr;
+    DoorbellStatus status = DoorbellStatus::disconnected_abort;
+    const Status   connected = doorbell_table_.object().connect(request->hDoorbell, address, status);
+    if (connected != Status::ok) return NtStatus(connected).value();
+    request->KernelCpuVirtualAddress = address;
+    /* No secondary doorbell: the caps say so, and a process that asked for one
+     * anyway is answered the one page there is. */
+    request->SecondaryKernelCpuVirtualAddress = nullptr;
+    request->Status = static_cast<uint32_t>(status);
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::disconnect_doorbell(const DxgkargDisconnectDoorbellRecord *request)
+{
+    AV_SCOPE("Adapter::disconnect_doorbell");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::disconnect_doorbell");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    return NtStatus(doorbell_table_.object().disconnect(request->hDoorbell)).value();
+}
+
+int32_t Adapter::destroy_doorbell(const DxgkargDestroyDoorbellRecord *request)
+{
+    AV_SCOPE("Adapter::destroy_doorbell");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_doorbell");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    return NtStatus(doorbell_table_.object().destroy(request->hDoorbell)).value();
+}
+
+int32_t Adapter::notify_work_submission(const DxgkargNotifyWorkSubmissionRecord *request)
+{
+    AV_SCOPE("Adapter::notify_work_submission");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::notify_work_submission");
+    if (request == nullptr || hw_queues_.find(request->hHwQueue) == nullptr)
+        return NtStatus(Status::invalid_parameter).value();
+    /* Nothing to do: the work is in the ring and the store already woke the
+     * worker. A driver whose doorbell needed a kernel push would push here. */
+    return NtStatus(Status::ok).value();
 }
 
 int32_t Adapter::reset_hw_engine(const DxgkargResetHwEngineRecord *request)

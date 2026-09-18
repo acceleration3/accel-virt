@@ -71,4 +71,10 @@ void MappedRegisterWindow::write_u64(uint64_t offset, uint64_t value)
     platform_.write_register_u64(at(offset), value);
 }
 
+void *MappedRegisterWindow::address_at(uint64_t offset) const
+{
+    AV_SCOPE("MappedRegisterWindow::address_at");
+    return base_ + offset;
+}
+
 }  // namespace av

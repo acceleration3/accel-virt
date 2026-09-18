@@ -130,3 +130,29 @@ it belongs with them.
 
 **This is a scope finding, recorded rather than quietly dropped**: FR-003 is
 not met by this feature, and the spec says so beside the requirement.
+
+## 10. Why this device needs no dummy page
+
+The usual way a KMD makes stores harmless after `DisconnectDoorbell` is to
+remap the process's doorbell page to a dummy page (kb 05). That is a mechanism
+for hardware where a store *is* the work - a register write that starts a
+command processor.
+
+Here it is not. A store to this device's doorbell page signals an eventfd; the
+worker wakes and reads the **ring's tail**, which is what says there is work
+(`RingConsumer::observe`, `src/device/ring/ring_consumer.cpp:83`). A tail that
+did not move consumes nothing.
+
+So a store to a disconnected doorbell costs one spurious wake and does nothing,
+by construction: the process that was told `DISCONNECTED_RETRY` submits through
+`D3DKMTSubmitCommand`, which publishes the tail through the driver, and the
+driver rings the doorbell itself. There is no state a rogue store can reach.
+
+What the KMD does on disconnect is therefore what the DDI actually requires:
+mark the doorbell disconnected so the status a process reads says so, and
+refuse to answer a kernel address for it again until it reconnects. A dummy
+page would be a mechanism with nothing to protect.
+
+This is worth stating rather than assuming, because it is the property that
+makes FR-005 hold: **every value the device reads from a user-written ring is
+already validated** (feature 030), and the doorbell carries no value at all.

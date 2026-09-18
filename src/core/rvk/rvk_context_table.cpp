@@ -342,6 +342,14 @@ void *RvkContextTable::user_of(const Allocation *allocation)
     return nullptr;
 }
 
+uint32_t RvkContextTable::doorbell_of(const void *context) const
+{
+    AV_SCOPE("RvkContextTable::doorbell_of");
+    /* The slot is the doorbell page: a context takes one of each together
+     * (RvkContextTable::set_up). */
+    return slot_of(context);
+}
+
 uint32_t RvkContextTable::bound() const
 {
     AV_SCOPE("RvkContextTable::bound");

@@ -272,6 +272,21 @@ int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkIn
 int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request)
 { return static_cast<av::Context *>(context)->device().adapter().create_hw_queue(context, request); }
 
+int32_t AvDdiCreateDoorbell(av::DxgkargCreateDoorbellRecord *request)
+{ return static_cast<av::HwQueue *>(request->hHwQueue)->context().device().adapter().create_doorbell(request); }
+
+int32_t AvDdiConnectDoorbell(av::DxgkargConnectDoorbellRecord *request)
+{ return static_cast<av::QueueDoorbell *>(request->hDoorbell)->queue().context().device().adapter().connect_doorbell(request); }
+
+int32_t AvDdiDisconnectDoorbell(const av::DxgkargDisconnectDoorbellRecord *request)
+{ return static_cast<av::QueueDoorbell *>(request->hDoorbell)->queue().context().device().adapter().disconnect_doorbell(request); }
+
+int32_t AvDdiDestroyDoorbell(const av::DxgkargDestroyDoorbellRecord *request)
+{ return static_cast<av::QueueDoorbell *>(request->hDoorbell)->queue().context().device().adapter().destroy_doorbell(request); }
+
+int32_t AvDdiNotifyWorkSubmission(const av::DxgkargNotifyWorkSubmissionRecord *request)
+{ return static_cast<av::HwQueue *>(request->hHwQueue)->context().device().adapter().notify_work_submission(request); }
+
 int32_t AvDdiDestroyHwQueue(void *queue)
 { return static_cast<av::HwQueue *>(queue)->context().device().adapter().destroy_hw_queue(queue); }
 

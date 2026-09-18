@@ -90,6 +90,7 @@
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_record.hpp"
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
@@ -834,6 +835,41 @@ AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, pDmaBufferPrivateData, DXGKA
 AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, Flags, DXGKARG_SUBMITCOMMANDTOHWQUEUE, Flags);
 AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceGpuVa, DXGKARG_SUBMITCOMMANDTOHWQUEUE, HwQueueProgressFenceGpuVa);
 AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceCpuVa, DXGKARG_SUBMITCOMMANDTOHWQUEUE, HwQueueProgressFenceCpuVa);
+
+AV_SAME_SIZE(DxgkargCreateDoorbellRecord, DXGKARG_CREATEDOORBELL);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, hHwQueue, DXGKARG_CREATEDOORBELL, hHwQueue);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, hDoorbell, DXGKARG_CREATEDOORBELL, hDoorbell);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, PrivateDriverDataSize, DXGKARG_CREATEDOORBELL, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, PrivateDriverData, DXGKARG_CREATEDOORBELL, PrivateDriverData);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, hRingBuffer, DXGKARG_CREATEDOORBELL, hRingBuffer);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, hRingBufferControl, DXGKARG_CREATEDOORBELL, hRingBufferControl);
+AV_SAME_OFFSET(DxgkargCreateDoorbellRecord, Flags, DXGKARG_CREATEDOORBELL, Flags);
+
+AV_SAME_SIZE(DxgkargConnectDoorbellRecord, DXGKARG_CONNECTDOORBELL);
+AV_SAME_OFFSET(DxgkargConnectDoorbellRecord, hDoorbell, DXGKARG_CONNECTDOORBELL, hDoorbell);
+AV_SAME_OFFSET(DxgkargConnectDoorbellRecord, Flags, DXGKARG_CONNECTDOORBELL, Flags);
+AV_SAME_OFFSET(DxgkargConnectDoorbellRecord, KernelCpuVirtualAddress, DXGKARG_CONNECTDOORBELL,
+               KernelCpuVirtualAddress);
+AV_SAME_OFFSET(DxgkargConnectDoorbellRecord, SecondaryKernelCpuVirtualAddress, DXGKARG_CONNECTDOORBELL,
+               SecondaryKernelCpuVirtualAddress);
+AV_SAME_OFFSET(DxgkargConnectDoorbellRecord, Status, DXGKARG_CONNECTDOORBELL, Status);
+
+AV_SAME_SIZE(DxgkargDisconnectDoorbellRecord, DXGKARG_DISCONNECTDOORBELL);
+AV_SAME_OFFSET(DxgkargDisconnectDoorbellRecord, hDoorbell, DXGKARG_DISCONNECTDOORBELL, hDoorbell);
+AV_SAME_OFFSET(DxgkargDisconnectDoorbellRecord, Flags, DXGKARG_DISCONNECTDOORBELL, Flags);
+
+AV_SAME_SIZE(DxgkargDestroyDoorbellRecord, DXGKARG_DESTROYDOORBELL);
+AV_SAME_OFFSET(DxgkargDestroyDoorbellRecord, hDoorbell, DXGKARG_DESTROYDOORBELL, hDoorbell);
+
+AV_SAME_SIZE(DxgkargNotifyWorkSubmissionRecord, DXGKARG_NOTIFYWORKSUBMISSION);
+AV_SAME_OFFSET(DxgkargNotifyWorkSubmissionRecord, hHwQueue, DXGKARG_NOTIFYWORKSUBMISSION, hHwQueue);
+AV_SAME_OFFSET(DxgkargNotifyWorkSubmissionRecord, Flags, DXGKARG_NOTIFYWORKSUBMISSION, Flags);
+
+AV_SAME_SIZE(DxgkUserModeSubmissionCapsRecord, DXGK_USERMODESUBMISSION_CAPS);
+AV_SAME_OFFSET(DxgkUserModeSubmissionCapsRecord, DoorbellSizeInBytes, DXGK_USERMODESUBMISSION_CAPS,
+               DoorbellSizeInBytes);
+AV_SAME_OFFSET(DxgkUserModeSubmissionCapsRecord, SecondaryDoorbellSizeInBytes, DXGK_USERMODESUBMISSION_CAPS,
+               SecondaryDoorbellSizeInBytes);
 
 AV_SAME_SIZE(DxgkargResetHwEngineRecord, DXGKARG_RESETHWENGINE);
 AV_SAME_OFFSET(DxgkargResetHwEngineRecord, NodeOrdinal, DXGKARG_RESETHWENGINE, NodeOrdinal);

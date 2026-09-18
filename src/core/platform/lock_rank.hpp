@@ -10,6 +10,7 @@
 namespace av {
 
 enum class LockRank : uint16_t {
+    doorbell_table = 70u,     /* DoorbellTable, taken before the queues it names (feature 049) */
     hw_queue_table = 80u,     /* HwQueueTable, which looks contexts up in ContextTable */
     context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */

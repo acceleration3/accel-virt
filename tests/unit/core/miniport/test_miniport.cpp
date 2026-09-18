@@ -82,6 +82,11 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiCreateHwQueue,       DdiSlot::DxgkDdiDestroyHwQueue,
     DdiSlot::DxgkDdiSubmitCommandToHwQueue, DdiSlot::DxgkDdiResetHwEngine,
     DdiSlot::DxgkDdiResumeHwEngine,
+    /* The doorbells a process submits through (feature 049): the five WDDM 3.1
+     * left NULL until there was something behind them. */
+    DdiSlot::DxgkDdiCreateDoorbell, DdiSlot::DxgkDdiConnectDoorbell,
+    DdiSlot::DxgkDdiDisconnectDoorbell, DdiSlot::DxgkDdiDestroyDoorbell,
+    DdiSlot::DxgkDdiNotifyWorkSubmission,
 };
 
 bool is_implemented(std::uint16_t index)

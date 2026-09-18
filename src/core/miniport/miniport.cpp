@@ -104,6 +104,12 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&AvDdiControlModeBehavior)},
         {DdiSlot::DxgkDdiUpdateMonitorLinkInfo, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitorLinkInfo)},
         {DdiSlot::DxgkDdiCreateHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiCreateHwQueue)},
+        /* The doorbells a process submits through (feature 049). */
+        {DdiSlot::DxgkDdiCreateDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiCreateDoorbell)},
+        {DdiSlot::DxgkDdiConnectDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiConnectDoorbell)},
+        {DdiSlot::DxgkDdiDisconnectDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiDisconnectDoorbell)},
+        {DdiSlot::DxgkDdiDestroyDoorbell, reinterpret_cast<DdiRoutine>(&AvDdiDestroyDoorbell)},
+        {DdiSlot::DxgkDdiNotifyWorkSubmission, reinterpret_cast<DdiRoutine>(&AvDdiNotifyWorkSubmission)},
         {DdiSlot::DxgkDdiDestroyHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiDestroyHwQueue)},
         {DdiSlot::DxgkDdiSubmitCommandToHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommandToHwQueue)},
         {DdiSlot::DxgkDdiResetHwEngine, reinterpret_cast<DdiRoutine>(&AvDdiResetHwEngine)},

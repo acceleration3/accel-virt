@@ -17,6 +17,9 @@ struct DxgkargControlModeBehaviorRecord;
 
 class DriverCapabilities {
 public:
+    /* What a process stores to ring this device's doorbell: four bytes at
+     * offset 0 of the page (rvk_device.h). */
+    static constexpr uint32_t doorbell_store_bytes = 4u;
     explicit DriverCapabilities(Platform &platform);
     DriverCapabilities(const DriverCapabilities &) = delete;
     DriverCapabilities &operator=(const DriverCapabilities &) = delete;
@@ -25,6 +28,11 @@ public:
     [[nodiscard]] Status report_driver_caps(const AdapterInfoQuery &query) const;
     /* DXGKQAITYPE_WDDMDEVICECAPS, which dxgkrnl may ask before StartDevice. */
     [[nodiscard]] Status report_wddm_device_caps(const AdapterInfoQuery &query) const;
+    /* DXGKQAITYPE_USERMODESUBMISSION_CAPS (feature 049): this device's doorbell
+     * is a four-byte store at offset 0 of its page, and it has no secondary
+     * doorbell. Reported only because the doorbell DDIs are implemented -
+     * dxgkrnl asks a driver that says yes to hand processes pages. */
+    [[nodiscard]] Status report_user_mode_submission_caps(const AdapterInfoQuery &query) const;
     /* DXGKQAITYPE_PHYSICALADAPTERCAPS for physical adapter 0, named by dxgkrnl's
      * device handle. */
     [[nodiscard]] Status report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const;

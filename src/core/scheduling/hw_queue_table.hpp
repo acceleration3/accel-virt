@@ -31,6 +31,9 @@ public:
     [[nodiscard]] Status destroy(void *queue);
     /* Whether any queue still runs on `context`. */
     bool                 serves(void *context);
+    /* The queue at `handle`, or null for one this table did not make: what a
+     * doorbell is created on (feature 049). */
+    HwQueue             *find(void *handle);
     uint32_t             live() const;
 
     /* A line for the table and one per queue; `busy=true` and nothing more

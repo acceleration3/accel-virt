@@ -51,6 +51,14 @@ bool HwQueueTable::serves(void *context)
     return !queues_.all_of([context](const HwQueue &queue) { return &queue.context() != context; });
 }
 
+HwQueue *HwQueueTable::find(void *handle)
+{
+    AV_SCOPE("HwQueueTable::find");
+    platform_.require_irql_at_most(Irql::passive, "HwQueueTable::find");
+    MutexGuard lock(mutex_);
+    return handle != nullptr ? queues_.find(handle) : nullptr;
+}
+
 uint32_t HwQueueTable::live() const
 {
     AV_SCOPE("HwQueueTable::live");

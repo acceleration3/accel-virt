@@ -34,6 +34,7 @@
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
+#include "core/scheduling/doorbell_table.hpp"
 #include "core/scheduling/hw_queue_table.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -232,6 +233,18 @@ public:
     int32_t destroy_hw_queue(void *queue);
     /* In flight until the DPC writes its progress fence. */
     int32_t submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueRecord *request);
+    /* The doorbells a process submits through (feature 049): created on a
+     * hardware queue, connected to the page that queue's context was bound to,
+     * and disconnected when dxgkrnl suspends, resets or migrates the device. */
+    int32_t create_doorbell(DxgkargCreateDoorbellRecord *request);
+    int32_t connect_doorbell(DxgkargConnectDoorbellRecord *request);
+    int32_t disconnect_doorbell(const DxgkargDisconnectDoorbellRecord *request);
+    int32_t destroy_doorbell(const DxgkargDestroyDoorbellRecord *request);
+    /* A process that stored to a doorbell whose status asked it to tell the
+     * driver. This device's never does (research.md §7), so this is the
+     * fallback's fallback: it publishes nothing and answers success, because
+     * the work is already in the ring and the store already woke the worker. */
+    int32_t notify_work_submission(const DxgkargNotifyWorkSubmissionRecord *request);
     int32_t reset_hw_engine(const DxgkargResetHwEngineRecord *request);
     /* After a successful reset; submissions were never refused in between. */
     int32_t resume_hw_engine(const DxgkargResumeHwEngineRecord *request);
@@ -259,6 +272,8 @@ private:
         query_physical_adapter_caps = 15,
         query_display_driver_caps_extension = 16,
         query_wddm_device_caps = 29,
+    /* DXGKQAITYPE_USERMODESUBMISSION_CAPS (d3dkmddi.h:1858), feature 049. */
+    query_user_mode_submission_caps = 38,
     };
     enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */
     enum : int32_t { vsync_enable = 0, vsync_disable_no_phase = 2 };      /* DXGK_CRTC_VSYNC_STATE */
@@ -344,6 +359,9 @@ private:
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
     ObjectStorage<MappedRegisterWindow> doorbells_;
+    /* The doorbells processes hold on hardware queues (feature 049): made with
+     * the mapping they hand out pages of, and gone with it. */
+    ObjectStorage<DoorbellTable>   doorbell_table_;
     DriverCapabilities             capabilities_;
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;

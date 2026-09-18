@@ -27,6 +27,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_create_process_record.hpp"
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
@@ -2075,6 +2076,35 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
   CHECK_EQ(caps, 0x3200); }
 
+/* Feature 049: the capability dxgkrnl asks before it hands a process a doorbell
+ * page. Four bytes at offset 0 of the page, and no secondary doorbell - and it
+ * is answered at all only because the five doorbell DDIs are implemented
+ * (constitution VI). */
+TEST(adapter_query_adapter_info, answers_what_a_user_mode_submission_doorbell_is)
+{ Fixture fixture; av::DxgkUserModeSubmissionCapsRecord caps = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 38;   /* DXGKQAITYPE_USERMODESUBMISSION_CAPS */
+  query.pOutputData = &caps;
+  query.OutputDataSize = sizeof caps;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(caps.DoorbellSizeInBytes, 4u);
+  CHECK_EQ(caps.SecondaryDoorbellSizeInBytes, 0u);
+  CHECK_EQ(caps.Flags, 0u);
+  /* DriverCapabilities::report_user_mode_submission_caps is what answered it,
+   * and it needs no input: a doorbell's shape is the device's, not the
+   * caller's. */
+  query.pInputData = nullptr;
+  query.InputDataSize = 0u;
+  query.pOutputData = &caps;
+  query.OutputDataSize = sizeof caps;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  /* A buffer too small for the answer is refused rather than half written. */
+  std::uint32_t narrow = 0xEEu;
+  query.pOutputData = &narrow;
+  query.OutputDataSize = sizeof narrow;
+  CHECK(nt(fixture.adapter().query_adapter_info(&query)) != success);
+  CHECK_EQ(narrow, 0xEEu); }
+
 TEST(adapter_query_adapter_info, answers_the_display_caps_extension)
 { Fixture fixture; std::uint32_t extension = 0xEEu;
   DxgkargQueryAdapterInfoRecord query = {};
@@ -2104,7 +2134,7 @@ TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_eith
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
       if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
-          (requested >= 13 && requested <= 16))
+          (requested >= 13 && requested <= 16) || requested == 38)
           continue;
       GuardedBuffer input(64u), output(64u);
       std::memset(input.data(), 0xEE, 64u);

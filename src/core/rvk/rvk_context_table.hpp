@@ -102,6 +102,10 @@ public:
      * is taken; the device's refusal otherwise. Nothing is bound on failure. */
     [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
+    /* DISPATCH. The doorbell page `context` was bound to, or max_contexts for
+     * a context that is not bound: what a doorbell of that context's hardware
+     * queue names (feature 049). */
+    uint32_t             doorbell_of(const void *context) const;
 
     /* One line per live rvk context and its bound chunks; `busy=true` and
      * nothing more while a submission or the DPC holds the slots. */

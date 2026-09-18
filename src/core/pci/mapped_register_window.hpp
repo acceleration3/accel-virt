@@ -23,6 +23,12 @@ public:
     void     write_u32(uint64_t offset, uint32_t value) override;
     void     write_u64(uint64_t offset, uint64_t value) override;
 
+    /* Where `offset` is in this mapping. What DxgkDdiConnectDoorbell answers
+     * for a doorbell page (feature 049): dxgkrnl maps the pages behind that
+     * address into the process that asked. Only a real mapping has one, which
+     * is why it is here and not on RegisterWindow. */
+    void    *address_at(uint64_t offset) const;
+
 private:
     void *at(uint64_t offset) const;
 

@@ -305,6 +305,10 @@ TEST(rvk_context_table_bind, sets_the_host_context_up_on_the_process_s_own_pages
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   CHECK(fixture.table().invariants_hold());
   CHECK_EQ(fixture.table().bound(), 1u);
+  /* The slot is the doorbell page, which is what a doorbell of this context's
+   * hardware queue names (feature 049). A context nobody bound has none. */
+  CHECK_EQ(fixture.table().doorbell_of(&first_context), 0u);
+  CHECK_EQ(fixture.table().doorbell_of(&second_context), av::RvkContextTable::max_contexts);
   CHECK_EQ(host.count_of(ctx_create_type), 1u);
   CHECK_EQ(host.count_of(create_blob_type), 3u);
   CHECK_EQ(host.count_of(submit_3d_type), 1u);

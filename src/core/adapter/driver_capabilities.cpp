@@ -1,5 +1,7 @@
 #include "core/adapter/driver_capabilities.hpp"
 
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
+
 #include "core/ddi/dxgk_driver_caps_record.hpp"
 #include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "core/ddi/dxgk_wddm_device_caps_record.hpp"
@@ -43,6 +45,15 @@ Status DriverCapabilities::report_wddm_device_caps(const AdapterInfoQuery &query
     if (input != Status::ok) return input;
     DxgkWddmDeviceCapsRecord caps = {};
     caps.WDDMVersion = wddm_version_;
+    return query.write_output(&caps, sizeof caps);
+}
+
+Status DriverCapabilities::report_user_mode_submission_caps(const AdapterInfoQuery &query) const
+{
+    AV_SCOPE("DriverCapabilities::report_user_mode_submission_caps");
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_user_mode_submission_caps");
+    DxgkUserModeSubmissionCapsRecord caps = {};
+    caps.DoorbellSizeInBytes = doorbell_store_bytes;
     return query.write_output(&caps, sizeof caps);
 }
 

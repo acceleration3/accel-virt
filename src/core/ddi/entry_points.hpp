@@ -27,6 +27,7 @@
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_create_process_record.hpp"
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
@@ -171,6 +172,13 @@ void    AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerS
 int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRecord *request);
 int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request);
 int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request);
+/* The doorbell DDIs (feature 049): each names a hardware queue or a doorbell,
+ * and every one of them reaches the adapter behind it. */
+int32_t AvDdiCreateDoorbell(av::DxgkargCreateDoorbellRecord *request);
+int32_t AvDdiConnectDoorbell(av::DxgkargConnectDoorbellRecord *request);
+int32_t AvDdiDisconnectDoorbell(const av::DxgkargDisconnectDoorbellRecord *request);
+int32_t AvDdiDestroyDoorbell(const av::DxgkargDestroyDoorbellRecord *request);
+int32_t AvDdiNotifyWorkSubmission(const av::DxgkargNotifyWorkSubmissionRecord *request);
 int32_t AvDdiDestroyHwQueue(void *queue);
 int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitCommandToHwQueueRecord *request);
 int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request);
