@@ -140,6 +140,17 @@ writes null slots. On a Windows build the 16 D3D/DX9 slots are typed and get
 refusals; on Linux they are `void *` and stay null, so a host-side test must not
 assert "no slot is null".
 
+**A fourth, found while building the DLL.** `cl_icd_stubs.h` includes
+`<type_traits>`, and the guest build has no C++ standard library - it compiles
+`/X` against the Windows kit alone - so the header the loader's every refusal
+comes from does not compile for the target it exists for. It uses five names,
+all compiler builtins (`is_same_v`, `is_void_v`, `is_pointer_v`, `true_type`,
+`false_type`), so `src/um/opencl/compat/type_traits` supplies them on the ICD's
+include path and nowhere else, the way `src/um/opencl_loader/compat/` supplies
+the loader's C library. The generator emitting a standard-library include into
+a freestanding target is the real defect, and it belongs to whoever owns the
+emitter.
+
 **Three gaps this feature closes.**
 
 1. `av::icd::stub_called(api, entry_point, why)` is called once per refusal by

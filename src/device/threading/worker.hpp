@@ -17,6 +17,7 @@
 
 namespace av {
 
+class ContextSignal;
 class Host;
 class StateWriter;
 class RingConsumer;
@@ -39,6 +40,12 @@ public:
     /* Main loop. invalid_state unless started or once connected; the
      * doorbell's answer otherwise. */
     [[nodiscard]] Status connect_doorbell(uint32_t index);
+    /* Main loop. The landing pad the worker empties each time it wakes, before
+     * it serves its ring. */
+    void                 connect_signal(ContextSignal &signal);
+    /* Any thread: wakes the worker, as a store to its doorbell does, and
+     * nothing at all when it is not running. */
+    void                 wake();
     /* Main loop. */
     void                 disconnect_doorbell();
     void                 stop();
@@ -59,17 +66,18 @@ private:
     Step next(WorkItem &item);
     void release();
 
-    Host         &host_;
-    RingConsumer &ring_;
+    Host          &host_;
+    RingConsumer  &ring_;
+    ContextSignal *signal_;
     /* Rings wake_: stop() disconnects it before the event is destroyed. */
-    Doorbell      doorbell_;
-    void         *thread_;
-    void         *wake_;
-    void         *lock_;
-    WorkItem      queue_[queue_capacity];
-    uint32_t      head_;
-    uint32_t      count_;
-    bool          stopping_;
+    Doorbell       doorbell_;
+    void          *thread_;
+    void          *wake_;
+    void          *lock_;
+    WorkItem       queue_[queue_capacity];
+    uint32_t       head_;
+    uint32_t       count_;
+    bool           stopping_;
 
     friend struct WorkerProbe;
 };

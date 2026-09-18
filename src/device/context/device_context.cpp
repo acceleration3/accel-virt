@@ -18,7 +18,7 @@ namespace av {
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
     : id_(id), binding_(host, blobs), fences_(host, interrupts), imports_(host, blobs, executor_),
-      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), worker_(host, ring_)
+      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
       {
           AV_SCOPE("DeviceContext::DeviceContext");
       }
@@ -26,6 +26,7 @@ DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &inte
 Status DeviceContext::start()
 {
     AV_SCOPE("DeviceContext::start");
+    worker_.connect_signal(signal_);
     return worker_.start();
 }
 
