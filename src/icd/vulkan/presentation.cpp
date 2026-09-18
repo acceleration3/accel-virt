@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
-#include "icd/vulkan/foreign_enum.hpp"
+#include "proto/wire/foreign_enum.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 

@@ -14,9 +14,13 @@ file(GLOB_RECURSE RVKGPU_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The kernel has no C++ standard headers, and the generated wire includes
 # <cstdint>. Nothing generated belongs in the miniport anyway: a graphics API's
-# commands are decoded on the host, never here (feature 063).
+# commands are decoded on the host, never here (feature 063). proto/vulkan/ is
+# the same rule by hand: what it holds reads an application's Vulkan
+# structures, which no miniport ever sees, and it includes Vulkan's own headers
+# (feature 047).
 file(GLOB_RECURSE RVKGPU_GENERATED CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/vulkan/*.cpp)
 list(REMOVE_ITEM RVKGPU_SOURCES ${RVKGPU_GENERATED})
 
 add_executable(rvkgpu ${RVKGPU_SOURCES})

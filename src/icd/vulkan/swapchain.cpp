@@ -4,7 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/window_surface.hpp"
-#include "icd/vulkan/foreign_enum.hpp"
+#include "proto/wire/foreign_enum.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 
 namespace av::icd {
