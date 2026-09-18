@@ -1,12 +1,19 @@
-/* The OpenGL ICD's ways to the rvkgpu adapter in a process (research.md §3):
- * the adapter found by enumeration - a session-0 window's DC opens none (050
- * T009) - and the devices on it that contexts' transports share. A device
- * opens with the first context made on it and closes with the last one gone.
- * When one context's transport faults, its whole device is lost (US3, T040):
- * the contexts on it keep their link until they are deleted, and the next
- * context made opens a new device beside it. */
-#ifndef AV_GLICD_GL_CONNECTION_HPP
-#define AV_GLICD_GL_CONNECTION_HPP
+/* An ICD's ways to the rvkgpu adapter in a process: the adapter found by
+ * enumeration - a session-0 window's DC opens none (feature 050, T009) - and
+ * the devices on it that contexts' transports share. A device opens with the
+ * first context made on it and closes with the last one gone. When one
+ * context's transport faults, its whole device is lost (050 US3, T040): the
+ * contexts on it keep their link until they are deleted, and the next context
+ * made opens a new device beside it.
+ *
+ * Nothing here is any one API's. It was the OpenGL ICD's `IcdConnection` until
+ * the OpenCL ICD needed the same thing, which is the same thing down to the
+ * loss policy: a cl_context outliving a fault has to keep answering errors
+ * rather than take the process with it, exactly as a GL context does. What an
+ * ICD adds on top is which sub-API its transports speak, and that is the
+ * transport's business rather than the device's. */
+#ifndef AV_ICD_CONNECTION_HPP
+#define AV_ICD_CONNECTION_HPP
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -20,19 +27,19 @@ class Kmt;
 class StateWriter;
 }  // namespace av
 
-namespace av::glicd {
+namespace av::icd {
 
-class GlConnection {
+class IcdConnection {
 public:
     /* A process that loses a device three times while contexts on each stay
      * alive has had enough devices. */
     static constexpr uint32_t max_links = 4u;
     static constexpr uint32_t no_link = max_links;
 
-    explicit GlConnection(Kmt &kmt);
-    ~GlConnection();
-    GlConnection(const GlConnection &) = delete;
-    GlConnection &operator=(const GlConnection &) = delete;
+    explicit IcdConnection(Kmt &kmt);
+    ~IcdConnection();
+    IcdConnection(const IcdConnection &) = delete;
+    IcdConnection &operator=(const IcdConnection &) = delete;
 
     /* One more context uses a device: the device new contexts share, or a
      * new one when there is none or it was lost. `link` names it; no_link on
@@ -68,9 +75,9 @@ private:
     /* The link new contexts join: held and not lost, or no_link. */
     uint32_t                       current_;
 
-    friend struct GlConnectionProbe;
+    friend struct IcdConnectionProbe;
 };
 
-}  // namespace av::glicd
+}  // namespace av::icd
 
-#endif  // AV_GLICD_GL_CONNECTION_HPP
+#endif  // AV_ICD_CONNECTION_HPP

@@ -14,7 +14,7 @@
 
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
-#include "icd/opengl/gl_connection.hpp"
+#include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/manual_calls.hpp"
@@ -163,7 +163,7 @@ private:
     PixelFormatQuery  query_;
     WindowTable       windows_;
     CurrentContexts   currents_;
-    GlConnection      connection_;
+    icd::IcdConnection      connection_;
     GlExtensionPolicy extensions_;
     GlContextTable    contexts_;
     ManualCalls       manual_;

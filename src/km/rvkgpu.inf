@@ -24,6 +24,7 @@ rvkgpu.sys = 1
 rvkvk.dll = 1
 rvkvk.json = 1
 rvkgl.dll = 1
+rvkcl.dll = 1
 
 ; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
 [Manufacturer]
@@ -55,6 +56,13 @@ HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"
 HKR,, OpenGLDriverName, 0x00010000, "%13%\rvkgl.dll"
 HKR,, OpenGLVersion, 0x00010001, 2
 HKR,, OpenGLFlags, 0x00010001, 1
+; The OpenCL ICD (feature 052, research.md §1): REG_SZ, not the REG_MULTI_SZ the
+; two values above use. The OpenCL loader's first discovery path asks
+; D3DKMTQueryAdapterInfo for this value with value_type = REG_SZ and returns
+; nothing for a value of another type; only its slower SetupAPI fallback
+; tolerates a multi-string. Written multi-string, the ICD is found on one path
+; and silently missed on the other.
+HKR,, OpenCLDriverName, 0x00000000, "%13%\rvkcl.dll"
 ; The WDDM features this driver implements and this adapter may use, turned on
 ; where the OS stages them off (feature 049, research.md §19). dxgkrnl's
 ; ConfigureFeature reads Features\<DXGK_FEATURE_ID in decimal>\Enabled from the
@@ -72,6 +80,7 @@ rvkgpu.sys
 rvkvk.dll
 rvkvk.json
 rvkgl.dll
+rvkcl.dll
 
 ; One message for each of the device's own sources - control, cursor and
 ; configuration changes - and eight the rvk contexts' fence queues share

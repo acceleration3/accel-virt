@@ -47,7 +47,7 @@ Guest user mode, `src/icd/opencl/` (namespace `av::clicd`):
 | `ClObject` | object | the dispatch pointer, its kind, its wire handle, its owning context | Be one object the application holds |
 | `ClObjectTable` | system | every live `ClObject`, by kind, with its generation | Judge an object pointer that came from the application |
 | `GuestClContext` | object | its link, staging, transport, blob arena, SVM table, mappings, state | Be one `cl_context` |
-| `ClConnection` | system | the adapter search, a device per link, users and losses | Give a context a device that is not lost |
+| ~~`ClConnection`~~ | - | - | Not written: `GlConnection` was already this, and moved to `src/icd/common/` as `icd::IcdConnection` for both ICDs |
 | `ClDeviceReport` | object | the adapter's LUID, the version cap, the capabilities this feature tests | Answer the device queries this ICD decides rather than forwards |
 | `ClExtensionPolicy` | object | the reportable rows and the test each names | Decide which extensions the application sees |
 | `SvmAllocation` | object | host base, guest mirror, bytes, map depth | Be one coarse-grained SVM allocation |

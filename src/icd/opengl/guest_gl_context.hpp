@@ -16,7 +16,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "icd/opengl/gl_connection.hpp"
+#include "icd/common/icd_connection.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
@@ -61,7 +61,7 @@ public:
     };
     enum : uint32_t { gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u };
 
-    GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, icd::LogSink &log,
+    GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, icd::LogSink &log,
                    const GlExtensionPolicy &extensions, int32_t pixel_format, const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
@@ -157,7 +157,7 @@ private:
     void                 cap_version();
     void                 teardown();
 
-    GlConnection                  &connection_;
+    icd::IcdConnection                  &connection_;
     BlockSource                   &memory_;
     icd::ThreadLock               &send_lock_;
     icd::LogSink                  &log_;

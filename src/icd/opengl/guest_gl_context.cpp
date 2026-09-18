@@ -6,7 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
-#include "icd/opengl/gl_connection.hpp"
+#include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -22,12 +22,12 @@ constexpr uint32_t no_error = 0u;
 
 }  // namespace
 
-GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
+GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
                                icd::LogSink &log, const GlExtensionPolicy &extensions, int32_t pixel_format,
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(GlConnection::no_link), loss_reported_(false),
+      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
       staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
@@ -328,7 +328,7 @@ bool GuestGlContext::invariants_hold() const
     AV_SCOPE("GuestGlContext::invariants_hold");
     const bool held = state_ != State::created;
     if (held != transport_.constructed() || held != locked_.constructed() ||
-        held != (link_ != GlConnection::no_link))
+        held != (link_ != icd::IcdConnection::no_link))
         return false;
     if (loss_reported_ && state_ != State::lost) return false;
     if (held != (staging_ != nullptr)) return false;
@@ -432,7 +432,7 @@ void GuestGlContext::teardown()
     if (staging_ != nullptr) memory_.release(staging_);
     staging_ = nullptr;
     connection_.release(link_);
-    link_ = GlConnection::no_link;
+    link_ = icd::IcdConnection::no_link;
     loss_reported_ = false;
     state_ = State::created;
     owner_ = 0u;

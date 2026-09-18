@@ -1,0 +1,36 @@
+; The OpenCL entry points rvkclprobe.exe calls in the guest through the
+; Khronos loader (feature 052): enumerate, query, run a kernel over buffers,
+; a map and a coarse-grained SVM allocation, and release what it made. The
+; guest has no OpenCL import library, so llvm-dlltool builds one from this.
+LIBRARY OpenCL.dll
+EXPORTS
+clBuildProgram
+clCreateBuffer
+clCreateCommandQueueWithProperties
+clCreateContext
+clCreateKernel
+clCreateProgramWithSource
+clEnqueueMapBuffer
+clEnqueueNDRangeKernel
+clEnqueueReadBuffer
+clEnqueueUnmapMemObject
+clEnqueueWriteBuffer
+clFinish
+clGetDeviceIDs
+clGetDeviceInfo
+clGetPlatformIDs
+clGetPlatformInfo
+clGetProgramBuildInfo
+clReleaseCommandQueue
+clReleaseContext
+clReleaseDevice
+clReleaseEvent
+clReleaseKernel
+clReleaseMemObject
+clReleaseProgram
+clSetEventCallback
+clSetKernelArg
+clSetKernelArgSVMPointer
+clSVMAlloc
+clSVMFree
+clWaitForEvents
