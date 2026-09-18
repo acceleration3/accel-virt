@@ -1,4 +1,4 @@
-#include "icd/vulkan/frame_pacer.hpp"
+#include "icd/common/frame_pacer.hpp"
 
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"

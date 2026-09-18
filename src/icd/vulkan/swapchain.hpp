@@ -5,7 +5,7 @@
 #ifndef AV_SWAPCHAIN_HPP
 #define AV_SWAPCHAIN_HPP
 
-#include "icd/vulkan/frame_pacer.hpp"
+#include "icd/common/frame_pacer.hpp"
 #include "icd/vulkan/present_device.hpp"
 
 #include <stddef.h>

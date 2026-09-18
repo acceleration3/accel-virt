@@ -39,7 +39,7 @@ UMD's redirection surface. It arrives with feature 055, for both APIs at once.
 
 ## Phase 3: US2 - the interval and the blank (P1)
 
-- [ ] T011 [US2] `FramePacer` moves from `src/icd/vulkan/frame_pacer.{hpp,cpp}` to `src/icd/common/frame_pacer.{hpp,cpp}` unchanged, with its test; every Vulkan include follows it. `ctest` proves the Vulkan side is untouched
+- [X] T011 [US2] `FramePacer` moves from `src/icd/vulkan/frame_pacer.{hpp,cpp}` to `src/icd/common/frame_pacer.{hpp,cpp}` unchanged, with its test; every Vulkan include follows it. `ctest` proves the Vulkan side is untouched
 - [ ] T012 [US2] `SwapInterval` (object) in `src/icd/opengl/swap_interval.{hpp,cpp}`: the interval (0..4) and the blanks this context has waited; an out-of-range interval is refused and leaves the old one (data-model.md). Tests `tests/unit/icd/opengl/test_swap_interval.cpp`
 - [ ] T013 [US2] `wglSwapIntervalEXT` and `wglGetSwapIntervalEXT` are answered through `DrvGetProcAddress`, and `WGL_EXT_swap_control` leaves `never_reported` in `src/icd/opengl/gl_extension_policy.cpp`. Tests: the contract's three refusals (out of range, no current context) and the string containing the extension
 - [ ] T014 [US2] `DrvSwapBuffers` waits the context's interval in vertical blanks through the shared `FramePacer` after the blit, and waits for nothing at interval 0. Tests over `MockKmt`: the blanks waited per swap, and a blank wait that fails logging once and leaving the swap successful

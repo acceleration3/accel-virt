@@ -5,7 +5,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "icd/vulkan/frame_pacer.hpp"
+#include "icd/common/frame_pacer.hpp"
 
 #include <cstdint>
 

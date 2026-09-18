@@ -1,5 +1,8 @@
-/* FIFO's pacing (feature 046, research.md §4): a presented frame is held until
- * the adapter's next vertical blank on source 0. */
+/* A presented frame held until the adapter's next vertical blank on source 0.
+ *
+ * Vulkan's FIFO present mode is what asked for it (feature 046, research.md
+ * §4); OpenGL's wglSwapIntervalEXT asks for the same thing, so it lives here
+ * rather than in either ICD (feature 051, research.md §5). */
 #ifndef AV_FRAME_PACER_HPP
 #define AV_FRAME_PACER_HPP
 
