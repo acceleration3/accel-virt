@@ -36,7 +36,7 @@ MockKmt::MockKmt()
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
-      queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(true), doorbells_{},
+      queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbells_{},
       doorbell_count_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
 
@@ -118,6 +118,11 @@ Status MockKmt::notify_work_submission(std::uint32_t doorbell)
 {
     if (!begin(Call::notify_work_submission)) return refuse(last_code_);
     return doorbell_of(doorbell) != nullptr ? succeed() : misuse();
+}
+
+void MockKmt::allow_hardware_scheduling()
+{
+    hardware_scheduling_ = true;
 }
 
 void MockKmt::refuse_hardware_scheduling()

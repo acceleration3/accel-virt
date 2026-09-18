@@ -25,7 +25,8 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
-      dma_address_(0u), context_(0u), ring_(), reply_(), fences_(), faulted_(false), answered_(false),
+      dma_address_(0u), context_(0u), ring_(), doorbell_(connection.kmt()),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -114,6 +115,11 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     const Status made = connection_.kmt().create_context_virtual(connection_.device(), private_data,
                                                                  sizeof private_data, context_);
     if (made != Status::ok) return made;
+    /* A doorbell for this context, where the OS gives one out: a refusal is an
+     * answer, not a failure - the transport then submits through the kernel,
+     * exactly as it did before (feature 049, research.md §11). */
+    if (doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok)
+        static_cast<void>(doorbell_.connect());
     undo.dismiss();
     return Status::ok;
 }
@@ -130,6 +136,18 @@ bool KmtTransport::record_carries(const GlContextOptions &options) const
     return decoded.decode(bytes, sizeof bytes) == Status::ok;
 }
 
+uint64_t KmtTransport::submissions_through_doorbell() const
+{
+    AV_SCOPE("KmtTransport::submissions_through_doorbell");
+    return path_.through_doorbell();
+}
+
+uint64_t KmtTransport::submissions_through_kernel() const
+{
+    AV_SCOPE("KmtTransport::submissions_through_kernel");
+    return path_.through_kernel();
+}
+
 uint32_t KmtTransport::ring() const
 {
     AV_SCOPE("KmtTransport::ring");
@@ -141,6 +159,8 @@ void KmtTransport::teardown()
     AV_SCOPE("KmtTransport::teardown");
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
+    /* Before the context: a doorbell names a queue of it. */
+    doorbell_.teardown();
     if (context_ != 0u) {
         static_cast<void>(kmt.destroy_context(context_));
         context_ = 0u;
@@ -213,8 +233,8 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     fence = fences_.open();
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
-    const Status submitted = connection_.kmt().submit(context_, dma_address_, SubmissionDescriptor::encoded_size,
-                                                      descriptor, sizeof descriptor);
+    const Status submitted = path_.submit(context_, dma_address_, descriptor, SubmissionDescriptor::encoded_size,
+                                          fence);
     if (submitted != Status::ok) {
         faulted_ = true;
         return TransportResult::failed;

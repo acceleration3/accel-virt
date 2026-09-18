@@ -153,6 +153,11 @@ public:
     /* What a test plays with: whether the OS gives this adapter a hardware
      * queue at all, what a process reads out of a doorbell's status page, and
      * the stores it made to the doorbell. */
+    /* Feature 049: whether this OS gives the adapter hardware queues at all.
+     * Off by default, as Windows is until hardware-accelerated GPU scheduling
+     * is turned on (research.md §11), so a test that wants the doorbell path
+     * asks for it. */
+    void          allow_hardware_scheduling();
     void          refuse_hardware_scheduling();
     void          set_doorbell_status(std::uint32_t doorbell, std::uint32_t status);
     /* What is in the doorbell's page now: a process's store is a four-byte

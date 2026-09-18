@@ -13,7 +13,9 @@
 #define AV_KMT_TRANSPORT_HPP
 
 #include "core/support/status.hpp"
+#include "guest/transport/guest_doorbell.hpp"
 #include "guest/transport/reply_reader.hpp"
+#include "guest/transport/submission_path.hpp"
 #include "guest/transport/transport_fence.hpp"
 #include "guest/transport/transport_ring.hpp"
 #include "proto/client_blob_arena.hpp"
@@ -56,6 +58,10 @@ public:
     /* A device-side failure (a refused submission, a faulted wait, a bad reply)
      * loses the context: every later send fails until it is torn down. */
     bool                 faulted() const;
+    /* How this transport's submissions went (feature 049): through the
+     * doorbell, and through the kernel. */
+    uint64_t             submissions_through_doorbell() const;
+    uint64_t             submissions_through_kernel() const;
     /* The virtual context's D3DKMT handle, for a call the driver takes beside
      * the transport - an escape on this context; 0 unless established. */
     uint32_t             context() const;
@@ -117,6 +123,11 @@ private:
     uint64_t         dma_address_;
     uint32_t         context_;
     TransportRing    ring_;
+    /* Feature 049: the doorbell this context submits through where the OS
+     * gives it one, and the choice made per submission. A context that never
+     * gets a doorbell submits exactly as it did before. */
+    GuestDoorbell    doorbell_;
+    SubmissionPath   path_;
     ReplyReader      reply_;
     TransportFence   fences_;
     bool             faulted_;

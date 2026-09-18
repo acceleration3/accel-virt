@@ -40,6 +40,7 @@ class Submitting {
 public:
     Submitting()
     {
+        kmt_.allow_hardware_scheduling();
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapters[1] = {};
         std::uint32_t count = 0u;

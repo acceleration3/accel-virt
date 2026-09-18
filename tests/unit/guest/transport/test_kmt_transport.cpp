@@ -85,6 +85,44 @@ private:
 
 }  // namespace
 
+/* Feature 049: where the transport submits. On a machine whose OS hands out no
+ * hardware queue - the default, and what Windows is until hardware-accelerated
+ * GPU scheduling is turned on - every submission goes through the kernel and
+ * the transport behaves exactly as it did before. Given a doorbell, the same
+ * batches go through it and the kernel hears nothing. */
+TEST(kmt_transport, submits_through_the_kernel_without_a_doorbell_and_through_one_with_it)
+{ { Fixture fixture;
+    CHECK_STATUS(fixture.open(), Status::ok);
+    std::uint8_t transport_staging[staging_bytes] = {};
+    KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                           sizeof transport_staging);
+    CHECK_STATUS(transport.initialize(), Status::ok);
+    WireWriter writer = transport.request_writer();
+    writer.write_u32(7u);
+    CHECK(transport.send_async(1u, writer) == av::TransportResult::ok);
+    CHECK_EQ(transport.submissions_through_kernel(), 1u);
+    CHECK_EQ(transport.submissions_through_doorbell(), 0u);
+    CHECK_EQ(fixture.kmt().calls(MockKmt::Call::create_doorbell), 0u);
+    transport.teardown(); }
+
+  Fixture fixture;
+  fixture.kmt().allow_hardware_scheduling();
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint32_t submitted_before = fixture.kmt().calls(MockKmt::Call::submit);
+  WireWriter          writer = transport.request_writer();
+  writer.write_u32(7u);
+  CHECK(transport.send_async(1u, writer) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 1u);
+  CHECK_EQ(transport.submissions_through_kernel(), 0u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submitted_before);
+  transport.teardown();
+  /* The doorbell went with the context it was made for. */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u); }
+
 TEST(kmt_transport, is_unestablished_until_initialized)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
