@@ -158,6 +158,27 @@ commands = [
     "clCreatePipe",
     "clGetPipeInfo",
     "clCreateProgramWithBuiltInKernels",
+
+    # Maps, and coarse-grained shared virtual memory (feature 052). These
+    # are the first commands on this wire to name an address rather than an
+    # object: what crosses is the host's own address, and the server turns
+    # it back into a pointer only after satisfying itself that the address
+    # and its extent lie inside something it handed out. The guest never
+    # dereferences one - the ICD keeps a mirror and translates.
+    "clEnqueueMapBuffer",
+    "clEnqueueUnmapMemObject",
+    "clSVMAlloc",
+    "clSVMFree",
+    "clEnqueueSVMMap",
+    "clEnqueueSVMUnmap",
+    "clEnqueueSVMMemcpy",
+    "clEnqueueSVMMemFill",
+    "clSetKernelArgSVMPointer",
+
+    # An event's completion, told to the guest. No guest function pointer
+    # crosses: the lowering drops the callback and its user data, and the
+    # host side registers one of its own.
+    "clSetEventCallback",
 ]
 
 # Commands the client does not wait for. Reference counting is the
@@ -458,3 +479,52 @@ role = "scalar_out"
 role = "handle_array"
 len = "num_devices"
 
+
+# ---------------------------------------------------------------------
+# Addresses (feature 052)
+#
+# A raw void* that names host memory, rather than bytes to copy. The
+# inference sends every non-const one to bytes_out and every const one
+# to bytes_in, and then refuses the command for having no length, which
+# is the right refusal for data and the wrong role for an address.
+#
+# Where a command says how much it will read or write from the address,
+# `len` names it and the server asks svm_for about the extent as well as
+# the address; where it says nothing - a free, an unmap, a kernel
+# argument - there is nothing to bound and the address alone is asked
+# about.
+# ---------------------------------------------------------------------
+
+[params."clEnqueueUnmapMemObject.mapped_ptr"]
+role = "svm_pointer"
+
+[params."clSVMFree.svm_pointer"]
+role = "svm_pointer"
+
+[params."clEnqueueSVMMap.svm_ptr"]
+role = "svm_pointer"
+len = "size"
+
+[params."clEnqueueSVMUnmap.svm_ptr"]
+role = "svm_pointer"
+
+[params."clEnqueueSVMMemcpy.dst_ptr"]
+role = "svm_pointer"
+len = "size"
+
+[params."clEnqueueSVMMemcpy.src_ptr"]
+role = "svm_pointer"
+len = "size"
+
+[params."clEnqueueSVMMemFill.svm_ptr"]
+role = "svm_pointer"
+len = "size"
+
+# The one parameter of the ten the existing machinery already handles:
+# a pattern is bytes, and it says how many.
+[params."clEnqueueSVMMemFill.pattern"]
+role = "bytes_in"
+len = "pattern_size"
+
+[params."clSetKernelArgSVMPointer.arg_value"]
+role = "svm_pointer"

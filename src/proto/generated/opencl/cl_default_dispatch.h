@@ -1239,6 +1239,127 @@ public:
         if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
         return static_cast<cl_program>(produce(HandleKind::program));
     }
+    void* on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map, cl_map_flags map_flags, size_t offset, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event, cl_int* errcode_ret) override {
+        (void)command_queue;
+        (void)buffer;
+        (void)blocking_map;
+        (void)map_flags;
+        (void)offset;
+        (void)size;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        (void)errcode_ret;
+        called(kCmd_clEnqueueMapBuffer);
+        handed(HandleKind::command_queue, command_queue);
+        handed(HandleKind::mem, buffer);
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
+        return nullptr;
+    }
+    cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void* mapped_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        (void)command_queue;
+        (void)memobj;
+        (void)mapped_ptr;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        called(kCmd_clEnqueueUnmapMemObject);
+        handed(HandleKind::command_queue, command_queue);
+        handed(HandleKind::mem, memobj);
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        return CL_SUCCESS;
+    }
+    void* on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size, cl_uint alignment) override {
+        (void)context;
+        (void)flags;
+        (void)size;
+        (void)alignment;
+        called(kCmd_clSVMAlloc);
+        handed(HandleKind::context, context);
+        return nullptr;
+    }
+    void on_clSVMFree(cl_context context, void* svm_pointer) override {
+        (void)context;
+        (void)svm_pointer;
+        called(kCmd_clSVMFree);
+        handed(HandleKind::context, context);
+    }
+    cl_int on_clEnqueueSVMMap(cl_command_queue command_queue, cl_bool blocking_map, cl_map_flags flags, void* svm_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        (void)command_queue;
+        (void)blocking_map;
+        (void)flags;
+        (void)svm_ptr;
+        (void)size;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        called(kCmd_clEnqueueSVMMap);
+        handed(HandleKind::command_queue, command_queue);
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        return CL_SUCCESS;
+    }
+    cl_int on_clEnqueueSVMUnmap(cl_command_queue command_queue, void* svm_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        (void)command_queue;
+        (void)svm_ptr;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        called(kCmd_clEnqueueSVMUnmap);
+        handed(HandleKind::command_queue, command_queue);
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        return CL_SUCCESS;
+    }
+    cl_int on_clEnqueueSVMMemcpy(cl_command_queue command_queue, cl_bool blocking_copy, void* dst_ptr, const void* src_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        (void)command_queue;
+        (void)blocking_copy;
+        (void)dst_ptr;
+        (void)src_ptr;
+        (void)size;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        called(kCmd_clEnqueueSVMMemcpy);
+        handed(HandleKind::command_queue, command_queue);
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        return CL_SUCCESS;
+    }
+    cl_int on_clEnqueueSVMMemFill(cl_command_queue command_queue, void* svm_ptr, const void* pattern, size_t pattern_size, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        (void)command_queue;
+        (void)svm_ptr;
+        (void)pattern;
+        (void)pattern_size;
+        (void)size;
+        (void)num_events_in_wait_list;
+        (void)event_wait_list;
+        (void)event;
+        called(kCmd_clEnqueueSVMMemFill);
+        handed(HandleKind::command_queue, command_queue);
+        if (pattern != nullptr) touched(pattern, static_cast<size_t>(static_cast<uint64_t>(pattern_size)));
+        for (size_t i = 0; event_wait_list != nullptr && i < static_cast<size_t>(static_cast<uint64_t>(num_events_in_wait_list)); ++i) handed(HandleKind::event, event_wait_list[i]);
+        if (event != nullptr) *event = static_cast<cl_event>(produce(HandleKind::event));
+        return CL_SUCCESS;
+    }
+    cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void* arg_value) override {
+        (void)kernel;
+        (void)arg_index;
+        (void)arg_value;
+        called(kCmd_clSetKernelArgSVMPointer);
+        handed(HandleKind::kernel, kernel);
+        return CL_SUCCESS;
+    }
+    cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override {
+        (void)event;
+        (void)command_exec_callback_type;
+        called(kCmd_clSetEventCallback);
+        handed(HandleKind::event, event);
+        return CL_SUCCESS;
+    }
 
 protected:
     virtual void called(uint32_t command_id) = 0;

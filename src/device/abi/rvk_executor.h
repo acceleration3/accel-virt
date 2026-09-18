@@ -10,7 +10,13 @@
  * Threading: sub_apis runs on QEMU's main loop. create, execute and destroy for
  * one executor run on that context's worker thread only, one call at a time.
  * Every call must return: destroying a context, or resetting the device, waits
- * on QEMU's main loop for the worker's call to finish. */
+ * on QEMU's main loop for the worker's call to finish.
+ *
+ * The one exception is `signal`, which the device gives the library and the
+ * library calls back: a host API that completes work on a thread of its own -
+ * OpenCL's event callbacks - has no other way to say so. It is the only call
+ * in this contract that may come from any thread, and it may arrive after the
+ * executor it names has been destroyed (feature 052). */
 #ifndef RVK_EXECUTOR_H
 #define RVK_EXECUTOR_H
 
@@ -28,16 +34,22 @@ extern "C" {
  * memory the guest names in its own commands (feature 045). Version 4 adds
  * create_with_options, so an OpenGL context is made with the version, profile
  * and flags the application asked for and shares another's objects (feature
- * 050). The device accepts all four: a version 1 library imports nothing, a
- * version 2 library imports nothing a guest can name, and a version 3 library
- * makes only default contexts. */
-#define RVK_EXECUTOR_ABI_VERSION 4u
+ * 050). Version 5 adds set_signal, the first thing in this table that runs the
+ * other way: the device hands the library something to call when a host API
+ * finishes work on a thread of its own, so an OpenCL event's completion
+ * reaches the guest without anyone polling for it (feature 052). The device
+ * accepts all five: a version 1 library imports nothing, a version 2 library
+ * imports nothing a guest can name, a version 3 library makes only default
+ * contexts, and a version 4 library signals nothing - a guest on one waits for
+ * its events at a synchronising call instead. */
+#define RVK_EXECUTOR_ABI_VERSION 5u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
 #define RVK_EXECUTOR_ABI_VERSION_IMPORTS 2u
 #define RVK_EXECUTOR_ABI_VERSION_HANDLES 3u
 #define RVK_EXECUTOR_ABI_VERSION_OPTIONS 4u
+#define RVK_EXECUTOR_ABI_VERSION_EVENTS 5u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -150,6 +162,25 @@ typedef struct RvkExecutorOps {
      * may be current on its own. */
     RvkExecutor *(*create_with_options)(void *opaque, uint32_t sub_api, const uint8_t *gpu_uuid,
                                         const RvkContextOptions *options, RvkExecutor *share);
+
+    /* Version 5 onwards. A version 4 table ends above. */
+
+    /* Gives `executor` something to call when the host API finishes work on a
+     * thread the device did not give it: `signal(context)` with the pointer
+     * handed here, from whatever thread the host API used. NULL for `signal`
+     * takes it back.
+     *
+     * What the device does with it is wake that context's worker; nothing
+     * about what completed crosses here, because the guest asks. The call must
+     * do almost nothing and must not call back into this table.
+     *
+     * It may arrive late. A host API that cannot unregister a callback -
+     * OpenCL cannot - may call one after destroy, so the device's `context`
+     * must stay valid for as long as the device runs, and the device must
+     * tolerate a signal for a context that is gone. Runs on the context's
+     * worker. */
+    void (*set_signal)(void *opaque, RvkExecutor *executor,
+                       void (*signal)(void *context), void *context);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

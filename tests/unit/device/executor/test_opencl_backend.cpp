@@ -45,6 +45,11 @@ namespace {
 
 constexpr std::size_t block_bytes = 65536u;
 
+/* Stands in for the device's wake. Nothing here completes on another thread,
+ * so it is never called; what it proves is that binding one is what lets a
+ * registration be attempted at all. */
+void nothing_to_wake(void *) {}
+
 }  // namespace
 
 TEST(opencl_backend, knows_the_ids_the_profile_carries_and_no_others)
@@ -374,3 +379,46 @@ TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
       }
   }
   backend.shut_down(); }
+
+/* ---- shared virtual memory, and the events the host completes on its own --
+ *
+ * What a backend with no host OpenCL behind it still has to be right about:
+ * an address the guest names before it allocated anything, and a callback
+ * asked for by a guest whose device cannot wake it.
+ */
+
+TEST(opencl_backend, svm_for_answers_nothing_before_the_guest_allocates_anything)
+{ OpenClBackend backend;
+  /* Every address is a guest's invention until clSVMAlloc answers one. */
+  CHECK(backend.svm_for(0x1000u, 1u) == nullptr);
+  CHECK(backend.svm_for(0u, 0u) == nullptr);
+  CHECK(backend.svm_for(~std::uint64_t{0}, 1u) == nullptr); }
+
+TEST(opencl_backend, on_clSVMFree_frees_nothing_it_did_not_allocate)
+{ OpenClBackend backend;
+  /* The decoder resolves an address inside a live allocation as well as one
+   * at its base, so the free has to judge it again: an address the host's
+   * allocator never answered must not reach clSVMFree. Nothing was allocated
+   * here at all, so nothing may be freed, and a backend with no host behind
+   * it must not call through to one. */
+  backend.on_clSVMFree(nullptr, nullptr);
+  backend.on_clSVMFree(nullptr, reinterpret_cast<void *>(std::uintptr_t{0x1000}));
+  CHECK(!backend.lost()); }
+
+TEST(opencl_backend, on_clSetEventCallback_is_refused_when_the_device_cannot_wake_the_guest)
+{ OpenClBackend backend;
+  /* A version 4 device binds nothing. A callback nobody could deliver is
+   * worse than a refusal the application can see: the guest would wait on it
+   * for ever. */
+  CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION); }
+
+TEST(opencl_backend, bind_signal_is_what_makes_an_event_callback_possible_at_all)
+{ OpenClBackend backend;
+  CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION);
+  backend.bind_signal(&nothing_to_wake, nullptr);
+  /* Bound, the refusal is no longer this one: with no host OpenCL the
+   * registration itself fails, which is the host's answer and not ours. */
+  CHECK(backend.on_clSetEventCallback(nullptr, CL_COMPLETE) != CL_INVALID_OPERATION);
+  /* And unbinding puts it back. */
+  backend.bind_signal(nullptr, nullptr);
+  CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION); }

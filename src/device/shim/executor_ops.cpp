@@ -177,6 +177,12 @@ uint64_t imported_handle(void *, RvkExecutor *executor, uint64_t blob_id)
     return library.root().imported_handle(session_of(executor), blob_id);
 }
 
+void set_signal(void *, RvkExecutor *executor, void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("set_signal");
+    library.root().set_signal(session_of(executor), signal, context);
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -187,7 +193,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               import_blob,
                               release_blob,
                               imported_handle,
-                              create_with_options};
+                              create_with_options,
+                              set_signal};
 
 }  // namespace
 

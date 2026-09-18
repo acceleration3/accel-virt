@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/cl_event_registration.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "proto/generated/opencl/cl_command_names.h"
@@ -23,7 +24,17 @@ constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE
 
 }  // namespace
 
-OpenClBackend::OpenClBackend() : bound_(nullptr), handles_(), ran_(0u), lost_(false)
+/* What the host's OpenCL calls when an event completes, on a thread of its
+ * own. An ABI boundary C requires: the callback is a bare function pointer
+ * with nowhere to put a `this`, so the slot is the user data and this
+ * forwards straight into it, with no logic of its own. */
+extern "C" void CL_CALLBACK rvk_cl_event_completed(cl_event, cl_int, void *user_data)
+{
+    static_cast<ClEventRegistration *>(user_data)->completed();
+}
+
+OpenClBackend::OpenClBackend()
+    : bound_(nullptr), handles_(), svm_(), events_(), ran_(0u), lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
@@ -159,6 +170,13 @@ void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
     handles_.release_all(*this);
+    /* Before the ranges go: a release may free an allocation, and nothing
+     * afterwards may resolve one. */
+    svm_.forget_all();
+    /* Every event callback still to come goes stale here. The host cannot be
+     * told to stop calling them, so being called and doing nothing is what
+     * they do from now on. */
+    events_.shut_down();
     bound_ = nullptr;
     ran_ = 0u;
     lost_ = false;
@@ -168,6 +186,59 @@ uint64_t OpenClBackend::ran() const
 {
     AV_SCOPE("OpenClBackend::ran");
     return ran_;
+}
+
+void *OpenClBackend::svm_for(uint64_t address, uint64_t bytes) const
+{
+    AV_SCOPE("OpenClBackend::svm_for");
+    return svm_.resolve(address, bytes);
+}
+
+void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size,
+                                   cl_uint alignment)
+{
+    AV_SCOPE("OpenClBackend::on_clSVMAlloc");
+    void *const allocated = ::clSVMAlloc(context, flags, size, alignment);
+    if (allocated == nullptr) return nullptr;
+    /* An allocation this cannot remember is one whose address could never be
+     * judged, so it is given back rather than handed to a guest that would
+     * find every use of it refused. */
+    if (!svm_.remember(allocated, static_cast<uint64_t>(size))) {
+        ::clSVMFree(context, allocated);
+        return nullptr;
+    }
+    return allocated;
+}
+
+void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
+{
+    AV_SCOPE("OpenClBackend::on_clSVMFree");
+    /* Only what this allocated is freed. The decoder has already refused an
+     * address in no range, but it resolves an address *inside* one too, and
+     * that is not a pointer the host's allocator was given. */
+    if (!svm_.forget(svm_pointer)) return;
+    ::clSVMFree(context, svm_pointer);
+}
+
+cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
+{
+    AV_SCOPE("OpenClBackend::on_clSetEventCallback");
+    /* A device that gave this library nothing to signal with cannot wake the
+     * guest, and a callback nobody hears is worse than a refusal: the guest
+     * would wait on it forever. */
+    if (!events_.bound()) return CL_INVALID_OPERATION;
+    ClEventRegistration *const slot = events_.take();
+    if (slot == nullptr) return CL_OUT_OF_RESOURCES;
+    const cl_int registered =
+        ::clSetEventCallback(event, command_exec_callback_type, &rvk_cl_event_completed, slot);
+    if (registered != CL_SUCCESS) events_.give_back(slot);
+    return registered;
+}
+
+void OpenClBackend::bind_signal(void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("OpenClBackend::bind_signal");
+    events_.bind(signal, context);
 }
 
 }  // namespace av

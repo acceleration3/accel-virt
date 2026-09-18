@@ -43,7 +43,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 }  // namespace
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
-    : block_(block), arena_(arena), handles_(), objects_{}, produced_(0u), calls_(0u),
+    : block_(block), arena_(arena), handles_(), svm_(), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
       answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
@@ -119,6 +119,22 @@ cl_int RecordingClDispatch::on_clEnqueueReadBuffer(cl_command_queue command_queu
 void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wire) const
 {
     return handles_.resolve(kind, wire);
+}
+
+void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) const
+{
+    void *const resolved = svm_.resolve(address, bytes);
+    if (resolved == nullptr && address != 0u) ++strangers_;
+    return resolved;
+}
+
+std::uint64_t RecordingClDispatch::make_svm(std::size_t bytes)
+{
+    if (bytes == 0u || bytes > max_shared - shared_used_) return 0u;
+    unsigned char *const allocated = &shared_[shared_used_];
+    if (!svm_.remember(allocated, static_cast<std::uint64_t>(bytes))) return 0u;
+    shared_used_ += bytes;
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(allocated));
 }
 
 cl_int RecordingClDispatch::on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_index,

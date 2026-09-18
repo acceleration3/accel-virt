@@ -112,5 +112,15 @@ inline constexpr uint32_t kCmd_clGetSamplerInfo = 0x0002003EU;
 inline constexpr uint32_t kCmd_clCreatePipe = 0x00020066U;
 inline constexpr uint32_t kCmd_clGetPipeInfo = 0x00020067U;
 inline constexpr uint32_t kCmd_clCreateProgramWithBuiltInKernels = 0x00020068U;
+inline constexpr uint32_t kCmd_clEnqueueMapBuffer = 0x0002006AU;
+inline constexpr uint32_t kCmd_clEnqueueUnmapMemObject = 0x0002006BU;
+inline constexpr uint32_t kCmd_clSVMAlloc = 0x0002006CU;
+inline constexpr uint32_t kCmd_clSVMFree = 0x0002006DU;
+inline constexpr uint32_t kCmd_clEnqueueSVMMap = 0x0002006EU;
+inline constexpr uint32_t kCmd_clEnqueueSVMUnmap = 0x0002006FU;
+inline constexpr uint32_t kCmd_clEnqueueSVMMemcpy = 0x00020070U;
+inline constexpr uint32_t kCmd_clEnqueueSVMMemFill = 0x00020071U;
+inline constexpr uint32_t kCmd_clSetKernelArgSVMPointer = 0x00020072U;
+inline constexpr uint32_t kCmd_clSetEventCallback = 0x00020073U;
 
 }  // namespace av::clproto

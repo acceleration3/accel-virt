@@ -150,6 +150,16 @@ uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id
     return owns(session) ? session->imported_handle(blob_id) : 0u;
 }
 
+void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("ExecutorRoot::set_signal");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        if (&sessions_[slot] != session) continue;
+        if (apis_of_[slot] == RVK_EXECUTOR_SUB_API_OPENCL) opencl_[slot].bind_signal(signal, context);
+        return;
+    }
+}
+
 void ExecutorRoot::report(StateWriter &writer)
 {
     AV_SCOPE("ExecutorRoot::report");

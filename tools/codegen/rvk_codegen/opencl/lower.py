@@ -101,6 +101,12 @@ def _infer(raw: RawCommand, index: int, handles: set[str],
 
 
 def _needs_len(param: Param) -> bool:
+    """An array with no count cannot be decoded, so generation stops.
+
+    An SVM pointer is not in the list: most of them carry no extent at all -
+    clSVMFree and clSetKernelArgSVMPointer name an address and nothing more -
+    and the server bounds what it can. Where a command does say how much it
+    will touch, the profile names it and svm_for is asked about that too."""
     return param.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY, Role.BYTES_IN,
                           Role.BYTES_OUT) and param.len_param is None
 

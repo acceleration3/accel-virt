@@ -114,6 +114,16 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_clCreatePipe: return "clCreatePipe";
         case kCmd_clGetPipeInfo: return "clGetPipeInfo";
         case kCmd_clCreateProgramWithBuiltInKernels: return "clCreateProgramWithBuiltInKernels";
+        case kCmd_clEnqueueMapBuffer: return "clEnqueueMapBuffer";
+        case kCmd_clEnqueueUnmapMemObject: return "clEnqueueUnmapMemObject";
+        case kCmd_clSVMAlloc: return "clSVMAlloc";
+        case kCmd_clSVMFree: return "clSVMFree";
+        case kCmd_clEnqueueSVMMap: return "clEnqueueSVMMap";
+        case kCmd_clEnqueueSVMUnmap: return "clEnqueueSVMUnmap";
+        case kCmd_clEnqueueSVMMemcpy: return "clEnqueueSVMMemcpy";
+        case kCmd_clEnqueueSVMMemFill: return "clEnqueueSVMMemFill";
+        case kCmd_clSetKernelArgSVMPointer: return "clSetKernelArgSVMPointer";
+        case kCmd_clSetEventCallback: return "clSetEventCallback";
         default: return "unknown";
     }
 }

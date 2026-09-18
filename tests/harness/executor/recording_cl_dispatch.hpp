@@ -17,6 +17,7 @@
 #define AV_RECORDING_CL_DISPATCH_HPP
 
 #include "device/executor/cl_handle_registry.hpp"
+#include "device/executor/host_svm_ranges.hpp"
 #include "proto/generated/opencl/cl_default_dispatch.h"
 
 #include <cstddef>
@@ -30,6 +31,8 @@ class RecordingClDispatch final : public clproto::DefaultDispatch {
 public:
     /* Enough for any test, and few enough that a fuzz input exhausts them. */
     static constexpr std::size_t max_objects = 256u;
+    /* The same, for shared virtual memory. */
+    static constexpr std::size_t max_shared = 4096u;
 
     /* `block` is the start of the memory `arena` hands out from. */
     RecordingClDispatch(const std::uint8_t *block, const WireArena &arena);
@@ -55,6 +58,15 @@ public:
     void answer_next_with(cl_int result, std::size_t reported);
 
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
+    /* As handle_for, for an address: a pointer only for one inside something
+     * this dispatch allocated, with room for `bytes` after it. Anything else
+     * is a stranger, which is what a decoder that let a guest name host
+     * memory would produce. */
+    void *svm_for(std::uint64_t address, std::uint64_t bytes) const override;
+
+    /* Makes `bytes` of shared virtual memory a guest may then name, and
+     * answers the address of it, or 0 when there is no room left. */
+    std::uint64_t make_svm(std::size_t bytes);
     cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) override;
     cl_int on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
                              cl_device_id *devices, cl_uint *num_devices) override;
@@ -115,11 +127,16 @@ private:
     const std::uint8_t *block_;
     const WireArena    &arena_;
     ClHandleRegistry    handles_;
+    HostSvmRanges       svm_;
+    /* What make_svm hands out of: real storage, so a decoder that writes
+     * through a resolved address writes somewhere it may. */
+    unsigned char       shared_[max_shared];
+    std::size_t         shared_used_;
     unsigned char       objects_[max_objects];
     std::size_t         produced_;
     std::uint32_t       calls_;
     std::uint32_t       last_called_;
-    std::uint32_t       strangers_;
+    mutable std::uint32_t strangers_;
     std::uint32_t       strays_;
     std::uint32_t       refused_;
     std::uint32_t       builds_without_argument_info_;
