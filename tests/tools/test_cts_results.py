@@ -121,6 +121,21 @@ class QpaReading(Logs):
         self.assertEqual(list(results.cases), ["dEQP-VK.api.real"])
         self.assertIsNone(results.unfinished)
 
+    def test_two_logs_read_as_one_keep_the_case_the_first_died_in(self):
+        """What a resumed shard leaves: the log that stopped inside a case, and
+        the log of the run that went on after it. Read together, the case that
+        killed the first is still recorded - dropping it would turn a crash
+        into a case nobody ran."""
+        died = session(case("dEQP-VK.api.first", "Pass"),
+                       "#beginTestCaseResult dEQP-VK.api.killer\n", ended=False)
+        resumed = session(case("dEQP-VK.api.after", "Pass"))
+        results = self.log(died + resumed)
+        self.assertEqual(results.cases["dEQP-VK.api.killer"], "Crash")
+        self.assertTrue(results.passed("dEQP-VK.api.first"))
+        self.assertTrue(results.passed("dEQP-VK.api.after"))
+        self.assertTrue(results.session_ended)
+        self.assertIsNone(results.unfinished)
+
     def test_a_duplicate_case_keeps_what_it_answered_last(self):
         """A resumed shard writes the case it died in again; the second answer
         is the one that ran to the end."""

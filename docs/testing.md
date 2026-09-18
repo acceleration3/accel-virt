@@ -731,6 +731,51 @@ can leave the guest with no display.
   and then reports every heap, verifier or `0xc0000374` event in the guest's
   Application log. A run that found one names it and fails; a run that found
   none says so.
+- **The conformance run** (feature 048) is `--cts`, a boot of its own on the
+  real executor: the pinned Vulkan CTS from `third_party/vulkan-cts/` and the
+  Khronos loader beside it in `C:\rvk\cts`. The run asks the guest's own build
+  what cases there are (`--deqp-runmode=stdout-caselist`), keeps the ones
+  `tools/cts_subset.txt`'s patterns name, and runs them a shard at a time - a
+  shard is one step, so a shard that runs past `--step-timeout` fails the run
+  rather than reporting. Each shard's `TestResults.qpa` is pulled before the
+  next starts, and a shard whose log ends *inside* a case is picked up from the
+  case after it: a crash, a TDR or a bugcheck leaves the log open at the case
+  that caused it, which is how the run knows both what died and where to go on.
+  The case that died is recorded as `Crash`, never dropped.
+
+  **The verdict is a comparison, never a count.** `tools/compare_cts.py` reads
+  the guest's log and a log of the same subset run natively on the host GPU:
+  a case that passes on the host and does not in the guest fails the run and is
+  named; one that fails on both is recorded and does not. `NotSupported` on
+  both sides is a match - neither side has the extension - and on the host
+  alone it means the two runs were not the same subset, which is exit 2 rather
+  than a pass. `tools/check_cts_ratchet.py` is the half that needs no host run:
+  `tools/cts_ratchet.txt` is what the guest passed, committed, so a change that
+  loses a case fails the day it is made, and a gain is printed with the line to
+  commit.
+
+  `tools/check_cts_subset.py` is a ctest: every extension the ICD's policy
+  table reports must have a group in the subset (FR-005), and every group must
+  be for something the ICD reports. Constitution VI says nothing is reported
+  that is not implemented; this says nothing is reported that is not measured.
+
+  **What is not here.** `tools/cts_pins.txt` is empty on purpose - the CTS has
+  never been downloaded on this machine and a hash written from memory pins a
+  guess - so `--cts` refuses before it boots anything, naming the fetch, and
+  the gate says it skipped. Everything that decides a verdict is built and
+  tested over `.qpa` logs the tests write, including the logs that matter most:
+  the ones a run left behind when it died.
+
+- **Frames** (feature 048, US2) are `--frames`: after an application run the
+  device's **scanout** is captured with QMP `screendump` - not a guest-side
+  screenshot, which would go through the guest's own composition, the thing
+  under test - and compared with the frame committed in
+  `specs/048-vulkan-conformance/references/`, within a per-channel step a GPU
+  may round by. A mismatch keeps the capture, the reference and a difference
+  image. No reference is committed yet, and the run says so and keeps the
+  capture rather than claiming a match: nothing the guest presents reaches the
+  scanout until features 049 and 055-057.
+
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
   functions with every wait bounded by an event and a timeout, and
   `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,

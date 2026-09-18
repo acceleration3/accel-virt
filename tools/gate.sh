@@ -83,6 +83,21 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         exit 1
     fi
     echo "gate: guest real passed after $((SECONDS - started)) s"
+    # The conformance run is a boot of its own: it is hours of CTS rather than
+    # minutes of scenarios, and it only runs at all when the build is pinned
+    # and fetched (feature 048, FR-006).
+    if python3 -B tools/fetch_cts.py --check >/dev/null 2>&1; then
+        echo "== gate: guest cts (build-qemu/librvk_executor.so)"
+        if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-cts --cts \
+                --executor build-qemu/librvk_executor.so; then
+            echo "gate: guest cts failed" >&2
+            exit 1
+        fi
+        echo "gate: guest cts passed after $((SECONDS - started)) s"
+    else
+        echo "gate: guest cts skipped: the Vulkan CTS is not fetched (tools/fetch_cts.py); "\
+             "tools/cts_pins.txt says why it is empty" >&2
+    fi
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"
     echo "gate: a feature does not merge on a skipped guest (feature 037, FR-006)"

@@ -52,6 +52,10 @@ class QpaResults:
         status = None
         for line in text.splitlines():
             if line.startswith(BEGIN_CASE):
+                # A case still open when the next one begins never ended: the
+                # shape of two logs read as one, where the first stopped in the
+                # middle of a case and the next run went on without it.
+                self.record(open_case, UNFINISHED)
                 open_case, status = self.named(line[len(BEGIN_CASE):]), None
                 continue
             if line.startswith(TERMINATE_CASE):

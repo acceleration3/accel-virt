@@ -842,6 +842,200 @@ class GuestSuiteRun(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(reason, result.stdout)
 
+    def cts_build(self, files=("deqp-vk.exe",), missing=(), empty_pins=False):
+        build = self.scratch / "vulkan-cts"
+        build.mkdir(exist_ok=True)
+        pins = [f"archive file:///nowhere/cts.zip {'0' * 64}"]
+        for name in files:
+            pinned = name.encode() * 30
+            pins.append(f"file {name} inside/{name} {hashlib.sha256(pinned).hexdigest()}")
+            if name in missing:
+                (build / name).unlink(missing_ok=True)
+            else:
+                (build / name).write_bytes(pinned)
+        text = "# empty on purpose\n" if empty_pins else "\n".join(pins) + "\n"
+        (self.scratch / "cts_pins.txt").write_text(text)
+        (self.scratch / "cts_ratchet.txt").write_text("")
+        return ("--cts-dir", build, "--cts-pins", self.scratch / "cts_pins.txt",
+                "--cts-ratchet", self.scratch / "cts_ratchet.txt",
+                "--cts-subset", ROOT / "tools" / "cts_subset.txt")
+
+    def cts_script(self, logs=None, **behaviour):
+        # What deqp-vk prints is what the caselist redirection captures: the
+        # runner asks the guest's own build what cases there are.
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "deqp-vk": CTS_CASELIST, "collect": COLLECTED}
+        outputs.update(behaviour.pop("outputs", {}))
+        files = dict(logs or {"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                                                              ("dEQP-VK.api.smoke.create_sampler", "Pass"),
+                                                              ("dEQP-VK.memory.budget.query", "Pass"))})
+        files.update(behaviour.pop("files", {}))
+        self.script(outputs=outputs, files=dict(GUEST_FILES, **files), **behaviour)
+
+    def run_cts(self, *extra, **kwargs):
+        return self.run_suite("--cts", "--executor", "/nowhere/librvk_executor.so",
+                              *self.vulkan_runtime(), *self.cts_build(**kwargs), *extra)
+
+    def test_a_cts_run_runs_what_the_subset_names_of_what_the_cts_listed(self):
+        self.cts_script()
+        result = self.run_cts("--cts-shard", "8")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        # The build and the loader beside it, in a directory of its own.
+        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\deqp-vk.exe ") for line in lines))
+        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\vulkan-1.dll ") for line in lines))
+        # The case list came from the guest's own build.
+        self.assertTrue(any("--deqp-runmode=stdout-caselist" in line for line in lines))
+        self.assertIn("pull C:\\rvk\\cts\\caselist.txt", lines)
+        # The three cases the subset names, and not the one it does not.
+        cases = (self.work / "cts" / "cases.txt").read_text()
+        self.assertIn("dEQP-VK.api.smoke.triangle", cases)
+        self.assertIn("dEQP-VK.memory.budget.query", cases)
+        self.assertNotIn("dEQP-VK.pipeline.enormous.case", cases)
+        self.assertIn("guest: cts: 3 case(s) in 1 shard(s), 1 log(s)", result.stdout)
+        self.assertIn("guest: cts: 3 case(s) answered, 3 passed", result.stdout)
+        self.assertIn("guest: cts.ratchet ok: 0 kept, 3 gained", result.stdout)
+        self.assertTrue((self.work / "cts" / "guest.qpa").exists())
+        self.assert_clean()
+
+    def test_a_shard_that_died_in_a_case_is_picked_up_after_it(self):
+        """A crash, a TDR or a bugcheck leaves the log open at the case that
+        caused it; the run continues from the next one, and the case that died
+        is recorded rather than dropped."""
+        self.cts_script(logs={
+            "C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"), ended=False) +
+                                        "#beginTestCaseResult dEQP-VK.api.smoke.create_sampler\r\n",
+            "C:\\rvk\\cts\\shard0.r1.qpa": qpa(("dEQP-VK.memory.budget.query", "Pass")),
+        })
+        result = self.run_cts("--cts-shard", "8")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: cts: shard0 died in dEQP-VK.api.smoke.create_sampler", result.stdout)
+        lines = self.journal_lines()
+        # The second run was given the case after the one that died, and never
+        # the one that died.
+        self.assertTrue(any(line.startswith("file C:\\rvk\\cts\\shard0.r1.cases.txt ") for line in lines),
+                        lines)
+        resumed = (self.work / "cts" / "shard0.r1.qpa").read_text()
+        self.assertIn("dEQP-VK.memory.budget.query", resumed)
+        self.assertIn("guest: cts: 3 case(s) answered, 2 passed", result.stdout)
+        # And the case that killed it is in the merged log as a crash.
+        whole = (self.work / "cts" / "guest.qpa").read_text()
+        self.assertIn("dEQP-VK.api.smoke.create_sampler", whole)
+
+    def test_a_shard_with_no_restarts_left_fails_naming_what_went_unrun(self):
+        """A resumed shard always shrinks, so the restart limit is reached only
+        by a guest that keeps dying - and then what it did not run is named
+        rather than counted as passed."""
+        dying = qpa(ended=False) + "#beginTestCaseResult dEQP-VK.api.smoke.triangle\r\n"
+        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": dying})
+        result = self.run_cts("--cts-shard", "8", "--cts-restarts", "0")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("cts.shard0 failed: died in a case 1 time(s) with 2 case(s) unrun", result.stdout)
+
+    def test_a_run_that_lost_a_case_the_guest_used_to_pass_fails(self):
+        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                                                              ("dEQP-VK.api.smoke.create_sampler", "Fail"),
+                                                              ("dEQP-VK.memory.budget.query", "Pass"))})
+        extra = self.cts_build()
+        (self.scratch / "cts_ratchet.txt").write_text("dEQP-VK.api.smoke.create_sampler\n")
+        result = self.run_suite("--cts", "--executor", "/nowhere/librvk_executor.so",
+                                *self.vulkan_runtime(), *extra, "--cts-shard", "8")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("guest: cts: dEQP-VK.api.smoke.create_sampler passed before and does not now",
+                      result.stdout)
+        self.assertIn("cts.ratchet failed: 1 case(s) lost of 1 recorded", result.stdout)
+
+    def test_the_verdict_is_the_comparison_with_the_hosts_run(self):
+        """FR-002: a case that passes on the host and not in the guest fails the
+        run; one that fails on both does not."""
+        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                                                              ("dEQP-VK.api.smoke.create_sampler", "Fail"),
+                                                              ("dEQP-VK.memory.budget.query", "Fail"))})
+        host = self.scratch / "host.qpa"
+        host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                            ("dEQP-VK.api.smoke.create_sampler", "Pass"),
+                            ("dEQP-VK.memory.budget.query", "Fail")))
+        failed = self.run_cts("--cts-shard", "8", "--cts-host", host)
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("guest: cts: dEQP-VK.api.smoke.create_sampler passes on the host and does not in the "
+                      "guest", failed.stdout)
+        self.assertIn("cts.compare failed: 1 guest-only failure(s) of 3 compared", failed.stdout)
+
+        # The same run against a host that failed it too passes, and says how
+        # many failures matched.
+        host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                            ("dEQP-VK.api.smoke.create_sampler", "Fail"),
+                            ("dEQP-VK.memory.budget.query", "Fail")))
+        self.cts_script(logs={"C:\\rvk\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
+                                                              ("dEQP-VK.api.smoke.create_sampler", "Fail"),
+                                                              ("dEQP-VK.memory.budget.query", "Fail"))})
+        passed = self.run_cts("--cts-shard", "8", "--cts-host", host)
+        self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
+        self.assertIn("guest: cts ok: 3 compared, 0 guest-only failures, 2 matching failure(s)", passed.stdout)
+
+    def test_a_cts_run_without_the_pinned_build_is_refused_before_qemu(self):
+        self.cts_script()
+        empty = self.run_cts(empty_pins=True)
+        self.assertEqual(empty.returncode, 1)
+        self.assertIn("--cts: ", empty.stdout)
+        self.assertIn("run tools/fetch_cts.py", empty.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+        self.cts_script()
+        gone = self.run_cts(missing=("deqp-vk.exe",))
+        self.assertEqual(gone.returncode, 1)
+        self.assertIn("--cts needs the pinned CTS", gone.stdout)
+        self.assertIn("deqp-vk.exe missing", gone.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+    def test_a_subset_that_matches_nothing_the_cts_listed_is_a_failure(self):
+        """A subset and a build that disagree is not a run of anything, and a
+        pass here would be a conformance claim nobody measured."""
+        self.cts_script(outputs={"deqp-vk": "TEST: dEQP-VK.nothing.this.names\r\n"})
+        result = self.run_cts()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the subset matched none of the", result.stdout)
+
+    def test_a_frame_with_no_reference_is_kept_and_said_so(self):
+        """Feature 048, US2: the first run of an application is where a
+        reference comes from, and a run that claimed to match one nobody
+        committed would be a claim nobody made."""
+        self.vulkan_script()
+        references = self.scratch / "references"
+        references.mkdir()
+        result = self.run_suite("--vulkan", "--frames", "--references", references,
+                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: frames: no reference committed for vulkan", result.stdout)
+        captured = self.work / "frames" / "vulkan.ppm"
+        self.assertTrue(captured.exists())
+        self.assertTrue(captured.read_bytes().startswith(b"P6"))
+
+    def test_a_frame_that_is_not_the_reference_fails_and_keeps_the_difference(self):
+        """FR-004: what is compared is the device's scanout, so a run that
+        composited something else is a failure with three files to look at."""
+        self.vulkan_script()
+        references = self.scratch / "references"
+        references.mkdir()
+        # A reference of the size the fake scans out, and nothing like its
+        # pixels.
+        (references / "vulkan.ppm").write_bytes(b"P6\n1280 800\n255\n" + bytes(1280 * 800 * 3))
+        result = self.run_suite("--vulkan", "--frames", "--references", references,
+                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("pixel(s) outside a step of 2", result.stdout)
+        self.assertTrue((self.work / "frames" / "vulkan-difference.ppm").exists())
+
+    def test_a_reference_of_another_size_is_named_rather_than_compared(self):
+        self.vulkan_script()
+        references = self.scratch / "references"
+        references.mkdir()
+        (references / "vulkan.ppm").write_bytes(b"P6\n4 2\n255\n" + bytes(4 * 2 * 3))
+        result = self.run_suite("--vulkan", "--frames", "--references", references,
+                                "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the capture is 1280x800 and the reference is 4x2", result.stdout)
+
     def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
         """Feature 050, T043: the probe runs with its report written to a guest
         file and pulled; every one of the nine steps passes, the renderer is a
@@ -1797,3 +1991,23 @@ class ScreendumpTest(unittest.TestCase):
             Screendump(self.scratch / "missing.ppm").capture(Writing(None))
         with self.assertRaises(StepFailed):
             Screendump(self.scratch / "empty.ppm").capture(Writing(b""))
+
+
+CTS_CASELIST = ("DEQP-VK\r\nTopLevel\r\n"
+                "GROUP: api\r\nTEST: dEQP-VK.api.smoke.triangle\r\n"
+                "TEST: dEQP-VK.api.smoke.create_sampler\r\n"
+                "TEST: dEQP-VK.pipeline.enormous.case\r\n"
+                "TEST: dEQP-VK.memory.budget.query\r\n")
+"""What deqp-vk --deqp-runmode=stdout-caselist prints: groups, cases, and a case
+this repository's subset does not name."""
+
+
+def qpa_case(name, status):
+    return (f"#beginTestCaseResult {name}\r\n"
+            f'<Result StatusCode="{status}">{status}</Result>\r\n'
+            "#endTestCaseResult\r\n")
+
+
+def qpa(*pairs, ended=True):
+    text = "#beginSession\r\n" + "".join(qpa_case(name, status) for name, status in pairs)
+    return text + ("#endSession\r\n" if ended else "")

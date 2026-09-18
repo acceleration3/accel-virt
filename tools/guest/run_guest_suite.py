@@ -38,6 +38,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from cts_results import CtsRatchet, QpaResults, SuiteComparison  # noqa: E402
+from cts_shards import CtsShards  # noqa: E402
+from cts_subset import CtsSubset  # noqa: E402
+from fetch_cts import CtsFetch, CtsPins  # noqa: E402
+from frame_reference import FrameReference  # noqa: E402
 from fetch_layers import LayerFetch, LayerPins, Refused as LayerRefused  # noqa: E402
 from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E402
 from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
@@ -107,6 +112,14 @@ D3D_PICTURES = ("d3d9-clear", "d3d11-clear", "d3d12-clear")
 # three probes (feature 047, FR-006).
 HEAP_CHECKS = re.compile(r"^heapchecks: (\d+)\r?$", re.M)
 HEAP_EVENT = re.compile(r"^heapcheck: (\d+) (.*?)\r?$", re.M)
+# Where the CTS and its logs live in the guest, and what a case list is called
+# there (feature 048, US1).
+CTS_DIRECTORY = GUEST_DIRECTORY + "\\cts"
+CTS_CASES = CTS_DIRECTORY + "\\cases.txt"
+# Where the frames an application run is judged against live (feature 048,
+# US2). A reference is the device's scanout, committed, so what a run compares
+# is what a monitor would have shown.
+REFERENCES = ROOT / "specs" / "048-vulkan-conformance" / "references"
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable
 # surfaces name devices too, always with more on the line. --summary prints no
@@ -260,6 +273,32 @@ def arguments():
                         help="run the three D3D probes through the pinned DXVK and vkd3d-proton beside them, on "
                              "the host GPU, instead of the suite; needs the fetched layers, the fetched Vulkan "
                              "runtime and --executor naming the real library (feature 047)")
+    parser.add_argument("--cts", action="store_true",
+                        help="run the pinned Vulkan CTS subset in the guest on the host GPU instead of the "
+                             "suite, shard by shard; needs the fetched CTS and --executor naming the real "
+                             "library (feature 048)")
+    parser.add_argument("--cts-dir", default=str(ROOT / "third_party" / "vulkan-cts"),
+                        help="where tools/fetch_cts.py put the CTS build")
+    parser.add_argument("--cts-pins", default=str(ROOT / "tools" / "cts_pins.txt"))
+    parser.add_argument("--cts-subset", default=str(ROOT / "tools" / "cts_subset.txt"),
+                        help="the patterns whose cases this runs (tools/check_cts_subset.py holds them to "
+                             "what the ICD reports)")
+    parser.add_argument("--cts-shard", type=int, default=200,
+                        help="cases per guest step: a shard is one step, so a shard that runs past "
+                             "--step-timeout fails the run rather than reporting")
+    parser.add_argument("--cts-restarts", type=int, default=2,
+                        help="how many times a shard that died in a case is picked up after it")
+    parser.add_argument("--cts-host", default=None,
+                        help="a .qpa of the same subset run natively on the host GPU; the verdict is the "
+                             "comparison with it (FR-002)")
+    parser.add_argument("--cts-ratchet", default=str(ROOT / "tools" / "cts_ratchet.txt"))
+    parser.add_argument("--frames", action="store_true",
+                        help="capture the device's scanout after each application run and compare it with the "
+                             "reference committed for it (feature 048, US2 and FR-004)")
+    parser.add_argument("--frame-tolerance", type=int, default=2,
+                        help="the per-channel step a GPU may round a captured frame by")
+    parser.add_argument("--references", default=str(REFERENCES),
+                        help="where the committed reference frames are")
     parser.add_argument("--page-heap", action="store_true",
                         help="run the D3D probes with full page heap on each of them, and report what Windows "
                              "logged for it either way (feature 047, FR-006); needs --d3d")
@@ -582,6 +621,8 @@ class GuestRun:
         self.unexpected_dump = None
         self.sleep_states = None
         self.region = None
+        # The CTS files a --cts run pushes, once its pins were honoured.
+        self.cts_files = []
         # What a --d3d run pushes, by layer, once its pins were honoured.
         self.layer_files = {}
 
@@ -613,6 +654,8 @@ class GuestRun:
                 raise StepFailed("prepare", f"{path} does not exist")
         if self.args.vulkan:
             self.vulkan_runtime()
+        if self.args.cts:
+            self.cts_build()
         if self.args.page_heap and not self.args.d3d:
             raise StepFailed("prepare", "--page-heap is what the D3D probes run under: it needs --d3d")
         if self.args.d3d:
@@ -684,6 +727,23 @@ class GuestRun:
                                             f"run tools/fetch_layers.py {layer}")
             pushed[layer] = [(into / name, name) for name in sorted(pins.files)]
         return pushed
+
+    def cts_build(self):
+        """The CTS a --cts run pushes, as it was pinned: a build nobody fetched
+        is refused before anything boots, naming the fetch - never a run that
+        reports conformance it did not measure."""
+        pins = CtsPins(pathlib.Path(self.args.cts_pins))
+        try:
+            pins.read()
+        except LayerRefused as refused:
+            raise StepFailed("prepare", f"--cts: {refused}: run tools/fetch_cts.py")
+        into = pathlib.Path(self.args.cts_dir)
+        problems = CtsFetch(pins, into, into).problems()
+        if problems:
+            listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
+            raise StepFailed("prepare", f"--cts needs the pinned CTS in {into} ({listed}): "
+                                        "run tools/fetch_cts.py")
+        self.cts_files = [(into / name, name) for name in sorted(pins.files)]
 
     def keep_symbols(self):
         """The driver under test and its PDB beside the dumps it produces: a rebuild replaces both."""
@@ -764,6 +824,13 @@ class GuestRun:
         if self.args.opengl_discovery or self.args.opengl:
             files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
 
+        if self.args.cts:
+            # The CTS and the loader it calls, in a directory of its own: it
+            # writes its logs beside itself and a run pulls them from there.
+            runtime = pathlib.Path(self.args.vulkan_runtime)
+            files.append((runtime / "vulkan-1.dll", CTS_DIRECTORY + "\\vulkan-1.dll"))
+            files += [(local, CTS_DIRECTORY + "\\" + name) for local, name in self.cts_files]
+
         if self.args.d3d:
             # The layers' DLLs and the loader they call, beside the probes that
             # import them: Windows looks in the program's own directory first,
@@ -778,7 +845,10 @@ class GuestRun:
                       (self.args.d3d12_probe, GUEST_DIRECTORY + "\\rvkd3d12probe.exe")]
 
         def send():
-            make = f"New-Item -ItemType Directory -Force -Path {PACKAGE_DIRECTORY}"
+            # The CTS keeps its build and its logs in a directory of its own,
+            # and only a --cts run has one.
+            directories = PACKAGE_DIRECTORY + (f",{CTS_DIRECTORY}" if self.args.cts else "")
+            make = f"New-Item -ItemType Directory -Force -Path {directories}"
             code, _, error = self.agent.run(POWERSHELL, ["-NoProfile", "-Command", make], self.args.step_timeout)
             if code != 0:
                 raise AgentError(f"cannot create {PACKAGE_DIRECTORY}: {error.decode(errors='replace')}")
@@ -1304,6 +1374,7 @@ class GuestRun:
         listed = self.vulkaninfo()
         steps = self.probe()
         self.pictures("vulkan", VULKAN_PICTURES)
+        self.frame("vulkan")
         adapter = self.probed_luid(steps, "adapter_luid")
         device = self.probed_luid(steps, "physical_device")
         if device != adapter:
@@ -1410,6 +1481,7 @@ class GuestRun:
                 self.page_heap(programs, enable=False)
                 self.heap_checks()
         self.pictures("d3d", D3D_PICTURES)
+        self.frame("d3d")
 
     def page_heap(self, programs, enable):
         """FR-006: full page heap on each probe, and off again afterwards - a
@@ -1460,6 +1532,151 @@ class GuestRun:
         self.say(f"d3d{api} ok: {int(summary.group(2))} passed through {D3D_LAYERS[api]}")
         return steps
 
+    def cts(self):
+        """US1: the subset run in the guest, shard by shard, and what it says
+        against the host's run and against what the guest passed before.
+
+        The CTS makes windows - the WSI groups are half the point - so it runs
+        in the console session, as the Vulkan probe does."""
+        cases = self.cts_cases()
+        shards = CtsShards(self.work / "cts" / "cases.txt", max(1, self.args.cts_shard))
+        logs = []
+        for number, shard in enumerate(shards.shards()):
+            logs += self.cts_shard(number, shards, shard)
+        self.say(f"cts: {len(cases)} case(s) in {len(shards.shards())} shard(s), {len(logs)} log(s)")
+        return self.cts_verdict(logs)
+
+    def cts_cases(self):
+        """The cases this subset names, out of the list the CTS itself printed:
+        one dEQP group is thousands of cases and the list changes with every
+        release, so the guest's own build says what there is to run."""
+        printed = f"{CTS_DIRECTORY}\\caselist.txt"
+        command = f"{CTS_DIRECTORY}\\deqp-vk.exe --deqp-runmode=stdout-caselist > {printed} 2>&1"
+        self.step("cts.caselist", lambda: self.agent.run(CMD, ["/c", command], self.args.step_timeout))
+        (self.work / "cts").mkdir(exist_ok=True)
+        self.step("cts.caselist.pull", lambda: self.agent.pull(printed, self.work / "cts" / "caselist.txt"))
+        listed = []
+        for line in (self.work / "cts" / "caselist.txt").read_text(errors="replace").splitlines():
+            # dEQP prints "TEST: <name>" for a case and "GROUP: ..." for a
+            # group; anything else is the build telling us about itself.
+            if line.startswith("TEST: "):
+                listed.append(line[len("TEST: "):].strip())
+        subset = CtsSubset(pathlib.Path(self.args.cts_subset))
+        try:
+            cases = subset.matching(listed)
+        except ValueError as refused:
+            raise StepFailed("cts.caselist", str(refused))
+        if not cases:
+            raise StepFailed("cts.caselist", f"the subset matched none of the {len(listed)} case(s) the CTS "
+                                             "listed; see cts/caselist.txt")
+        (self.work / "cts" / "cases.txt").write_text("".join(f"{name}\n" for name in cases))
+        return cases
+
+    def cts_shard(self, number, shards, shard):
+        """One shard, and the runs it took: a shard whose log ends inside a
+        case is picked up after that case, because the case that killed the
+        process is not a case to run again."""
+        logs = []
+        remaining = shard
+        for attempt in range(self.args.cts_restarts + 1):
+            name = f"shard{number}" if attempt == 0 else f"shard{number}.r{attempt}"
+            log = self.cts_run(name, remaining)
+            logs.append(log)
+            results = QpaResults(log)
+            if results.unfinished is None:
+                return logs
+            self.say(f"cts: {name} died in {results.unfinished}")
+            remaining = shards.after(remaining, results.unfinished)
+            if not remaining:
+                return logs
+            # A guest that bugchecked is not a guest to run the next shard on.
+            if self.panicked_while_booting() is not None:
+                self.reach_guest(True)
+        raise StepFailed(f"cts.shard{number}", f"died in a case {self.args.cts_restarts + 1} time(s) with "
+                                               f"{len(remaining)} case(s) unrun; see cts/shard{number}*.qpa")
+
+    def cts_run(self, name, cases):
+        """One run of the CTS over `cases`, its log pulled back."""
+        listed = f"{CTS_DIRECTORY}\\{name}.cases.txt"
+        self.step(f"cts.{name}.cases",
+                  lambda: self.agent.push("".join(f"{case}\n" for case in cases).encode(), listed))
+        log = f"{CTS_DIRECTORY}\\{name}.qpa"
+        console = ConsoleProgram(self.agent, self.args.step_timeout)
+        command = (f"{CTS_DIRECTORY}\\deqp-vk.exe --deqp-caselist-file={listed} "
+                   f"--deqp-log-filename={log} --deqp-log-images=disable")
+        # A case that hangs is the CTS's own to give up on, and a run that
+        # answers nothing is still a log to read: the exit code is recorded,
+        # never the verdict.
+        code = self.step(f"cts.{name}", lambda: console.run(command, f"{CTS_DIRECTORY}\\{name}.txt", name))
+        self.say(f"cts: {name} exited {code}")
+        local = self.work / "cts" / f"{name}.qpa"
+        self.step(f"cts.{name}.pull", lambda: self.agent.pull(log, local))
+        return local
+
+    def cts_verdict(self, logs):
+        """What the run answers: the ratchet always, and the comparison with a
+        host run when one was named (FR-002)."""
+        whole = self.work / "cts" / "guest.qpa"
+        whole.write_text("".join(log.read_text(errors="replace") for log in logs))
+        results = QpaResults(whole)
+        self.say(f"cts: {len(results.cases)} case(s) answered, {len(results.passing())} passed")
+        record = CtsRatchet(pathlib.Path(self.args.cts_ratchet))
+        lost = record.lost(results)
+        for name in lost:
+            self.say(f"cts: {name} passed before and does not now")
+        if lost:
+            raise StepFailed("cts.ratchet", f"{len(lost)} case(s) lost of {len(record.names)} recorded")
+        gained = record.gained(results)
+        self.say(f"cts.ratchet ok: {len(record.names)} kept, {len(gained)} gained")
+        if self.args.cts_host is None:
+            return results
+        host = QpaResults(pathlib.Path(self.args.cts_host))
+        compared = SuiteComparison(results, host)
+        for name in compared.guest_only_failures:
+            self.say(f"cts: {name} passes on the host and does not in the guest")
+        if compared.unjudged:
+            raise StepFailed("cts.compare", f"{len(compared.unjudged)} case(s) ran on one side only; "
+                                            "the two runs are not the same subset")
+        if compared.guest_only_failures:
+            raise StepFailed("cts.compare", f"{len(compared.guest_only_failures)} guest-only failure(s) of "
+                                            f"{compared.compared} compared")
+        self.say(f"cts ok: {compared.compared} compared, 0 guest-only failures, "
+                 f"{len(compared.matching_failures)} matching failure(s)")
+        return results
+
+    def frame(self, name):
+        """US2: the device's scanout after an application ran, against the
+        reference committed for it.
+
+        The scanout rather than a guest screenshot (FR-004), because a guest
+        screenshot goes through the guest's own composition - which is the
+        thing under test. A frame with no reference committed is kept and said
+        so: the first run of an application is where a reference comes from,
+        and a claim that it matched one would be a claim nobody made.
+        """
+        if not self.args.frames:
+            return None
+        frames = self.work / "frames"
+        frames.mkdir(exist_ok=True)
+        captured = frames / f"{name}.ppm"
+        self.step(f"frames.{name}", lambda: Screendump(captured).capture(self.qmp))
+        reference = pathlib.Path(self.args.references) / f"{name}.ppm"
+        if not reference.is_file():
+            self.say(f"frames: no reference committed for {name}; the capture is {captured}")
+            return None
+        frame = FrameReference(captured, reference, self.args.frame_tolerance)
+        unreadable = frame.unreadable() or frame.mismatched_size()
+        if unreadable is not None:
+            raise StepFailed(f"frames.{name}", unreadable)
+        differs = frame.differs()
+        if differs != 0:
+            difference = frame.write_difference(frames / f"{name}-difference.ppm")
+            raise StepFailed(f"frames.{name}", f"{differs} pixel(s) outside a step of "
+                                               f"{self.args.frame_tolerance}; see {captured}, {reference} "
+                                               f"and {difference}")
+        self.say(f"frames.{name} ok: the scanout is the reference")
+        return captured
+
     def probed_luid(self, steps, name):
         """A LUID LowPart the probe printed, in decimal."""
         if not steps[name].isdigit():
@@ -1490,7 +1707,8 @@ class GuestRun:
             return
         scenarios = [scenario for chosen, scenario in ((self.args.rvk, self.rvk), (self.args.vulkan, self.vulkan),
                                                         (self.args.opengl, self.opengl),
-                                                        (self.args.d3d, self.d3d)) if chosen]
+                                                        (self.args.d3d, self.d3d),
+                                                        (self.args.cts, self.cts)) if chosen]
         if scenarios:
             self.real_executor(scenarios)
             return
