@@ -9,6 +9,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -247,3 +248,67 @@ TEST(icd_extensions, a_device_naming_no_extension_is_made_through_its_physical_d
   CHECK_EQ(rig.create(nullptr, 0u, &refused), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK(refused == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().log().holding("no handle for host object"), 1u); }
+
+/* A swapchain is this ICD's own: it is reported to the application, and the
+ * host - a Vulkan driver on the host's platform, which presents nothing for
+ * this ICD - is never asked to enable it (feature 046). */
+TEST(icd_extensions, the_swapchain_the_application_enables_is_not_asked_of_the_host)
+{ ExtensionRig rig;
+  VkDevice     device = VK_NULL_HANDLE;
+  rig.rig().host().vk_handle(0, ScriptedHost::vk_device);
+  const char *const enabled[] = {"VK_KHR_swapchain"};
+  CHECK_EQ(rig.create(enabled, 1u, &device), VK_SUCCESS);
+  CHECK_EQ(handle_to_wire(device), ScriptedHost::vk_device);
+  const std::uint32_t sent = rig.kmt().commands() - 1u;
+  CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(kCmd_vkCreateDevice));
+  std::uint8_t        block[512] = {};
+  av::WireArena       arena(block, sizeof block);
+  const std::uint8_t *bytes = rig.kmt().command_bytes(sent);
+  WireReader          body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
+  CHECK_EQ(body.read_u64(), ScriptedHost::vk_physical_device);
+  VkDeviceCreateInfo forwarded = {};
+  CHECK(deserialize_VkDeviceCreateInfo(body, &forwarded, arena));
+  CHECK_EQ(forwarded.enabledExtensionCount, 0u); }
+
+/* The window-system instance extensions are this ICD's own too: an application
+ * that enables them gets its instance, and the host is asked only for what it
+ * can answer. Asking it for VK_KHR_win32_surface - which no host driver has -
+ * is how a real vulkaninfo was refused (feature 046). */
+TEST(icd_extensions, the_window_system_instance_extensions_are_not_asked_of_the_host)
+{ IcdRig            rig;
+  const char *const enabled[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
+  const VkInstance  instance = rig.create_instance(enabled, 2u);
+  CHECK(instance != VK_NULL_HANDLE);
+  const std::uint32_t sent = rig.kmt().commands() - 1u;
+  CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(kCmd_vkCreateInstance));
+  std::uint8_t        block[512] = {};
+  av::WireArena       arena(block, sizeof block);
+  const std::uint8_t *bytes = rig.kmt().command_bytes(sent);
+  WireReader          body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
+  VkInstanceCreateInfo forwarded = {};
+  CHECK(deserialize_VkInstanceCreateInfo(body, &forwarded, arena));
+  CHECK_EQ(forwarded.enabledExtensionCount, 0u);
+  CHECK(rig.root().invariants_hold());
+  rig.destroy_instance(instance); }
+
+/* A list longer than this driver passes on is refused before the host is asked
+ * for any of it, at an instance and at a device. */
+TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
+{ const char *too_many[av::icd::HostExtensionList::max_names + 1u] = {};
+  for (const char *&name : too_many) name = "VK_KHR_get_physical_device_properties2";
+  { IcdRig              rig;
+    const std::uint32_t quiet = rig.kmt().commands();
+    CHECK(rig.create_instance(too_many, av::icd::HostExtensionList::max_names + 1u) == VK_NULL_HANDLE);
+    CHECK_EQ(rig.kmt().commands(), quiet);
+    CHECK_EQ(rig.log().holding("not a list this driver can pass on"), 1u);
+    CHECK(rig.root().invariants_hold()); }
+  { ExtensionRig        rig;
+    const std::uint32_t quiet = rig.kmt().commands();
+    VkDevice            device = VK_NULL_HANDLE;
+    /* Every name is one the policy reports, so what refuses it is the length. */
+    const char *many[av::icd::HostExtensionList::max_names + 1u] = {};
+    for (const char *&name : many) name = "VK_EXT_memory_budget";
+    CHECK_EQ(rig.create(many, av::icd::HostExtensionList::max_names + 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
+    CHECK(device == VK_NULL_HANDLE);
+    CHECK_EQ(rig.kmt().commands(), quiet);
+    CHECK_EQ(rig.rig().log().holding("not a list this driver can pass on"), 1u); } }

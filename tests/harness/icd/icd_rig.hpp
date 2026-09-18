@@ -53,6 +53,9 @@ public:
     /* vkCreateInstance through the root's table, the host answering the handle
      * ScriptedHost names; null when it failed. */
     VkInstance       create_instance();
+    /* An instance the application enables `count` extensions on, as a real
+     * application does: what the host is then asked for is the test's point. */
+    VkInstance       create_instance(const char *const *names, std::uint32_t count);
     /* The instance's one physical device, asked for by the adapter's LUID. */
     VkPhysicalDevice physical_device(VkInstance instance);
     /* vkDestroyInstance through the instance's table. */

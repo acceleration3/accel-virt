@@ -32,12 +32,16 @@ RecordingLog         &IcdRig::log() { return log_; }
 ScriptedWindowSurface &IcdRig::windows() { return windows_; }
 icd::IcdRoot         &IcdRig::root() { return root_; }
 
-VkInstance IcdRig::create_instance()
+VkInstance IcdRig::create_instance() { return create_instance(nullptr, 0u); }
+
+VkInstance IcdRig::create_instance(const char *const *names, std::uint32_t count)
 {
     const auto create = entry<VkResult (*)(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
                                            VkInstance *)>(VK_NULL_HANDLE, "vkCreateInstance");
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    info.enabledExtensionCount = count;
+    info.ppEnabledExtensionNames = names;
     VkInstance instance = VK_NULL_HANDLE;
     host_.vk_handle(0, ScriptedHost::vk_instance);
     return create(&info, nullptr, &instance) == VK_SUCCESS ? instance : VK_NULL_HANDLE;

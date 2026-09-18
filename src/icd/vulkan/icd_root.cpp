@@ -6,6 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/context_fault.hpp"
+#include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
 #include "icd/common/log_sink.hpp"
@@ -264,7 +265,20 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
         return status == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     pending_ = opened;
-    const VkResult result = vkicd::generated::Wrap_vkCreateInstance(create, allocator, instance);
+    HostExtensionList asked;
+    if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
+        note("vkCreateInstance: the extensions it names are not a list this driver can pass on, count",
+             create->enabledExtensionCount);
+        release_connection(opened);
+        pending_ = nullptr;
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+    /* The window-system extensions are answered here, not by the host: it runs
+     * on the host's own platform and has none of them (feature 046). */
+    VkInstanceCreateInfo forwarded = *create;
+    forwarded.enabledExtensionCount = asked.count();
+    forwarded.ppEnabledExtensionNames = asked.names();
+    const VkResult result = vkicd::generated::Wrap_vkCreateInstance(&forwarded, allocator, instance);
     if (result != VK_SUCCESS) {
         note("vkCreateInstance: the host refused, result", static_cast<uint32_t>(result));
         return result;
@@ -351,9 +365,19 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         log_.write(text.text());
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
+    HostExtensionList asked;
+    if (asked.take(create->ppEnabledExtensionNames, create->enabledExtensionCount) != Status::ok) {
+        note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
+             create->enabledExtensionCount);
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+    /* A swapchain is this ICD's own, so the host's device is not asked for it. */
+    VkDeviceCreateInfo forwarded = *create;
+    forwarded.enabledExtensionCount = asked.count();
+    forwarded.ppEnabledExtensionNames = asked.names();
     uint64_t       host = 0u;
     const VkResult result =
-        vkproto::rvk_vkCreateDevice(made->connection()->transport(), physical_device, create, allocator, &host);
+        vkproto::rvk_vkCreateDevice(made->connection()->transport(), physical_device, &forwarded, allocator, &host);
     if (result != VK_SUCCESS) return result;
     *device = static_cast<VkDevice>(wrap_child(LoaderHandle::Kind::device, host, *made));
     /* Without a handle the host's device cannot be named to destroy it; it
