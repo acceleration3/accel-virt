@@ -57,9 +57,9 @@ asks the ICD to provide itself.
 
 ## Phase 4: US2 - vkd3d-proton finds everything it requires (P1)
 
-- [ ] T016 [US2] `tools/fetch_vkd3d_proton.py` + `tools/vkd3d_proton_pins.txt`, its release archive being `.tar.zst` (Python 3.14's `compression.zstd`); tests `tests/tools/test_fetch_vkd3d_proton.py`
-- [ ] T017 [US2] `LayerRequirements` reads vkd3d-proton's tables too, and `test_layer_requirements.cpp` holds the ICD to its required list as well; `VK_EXT_descriptor_buffer` stays out of the profile and a test states that it is not reported (FR-002, spec US2 scenario 3)
-- [ ] T018 [US2] The features vkd3d-proton requires - dynamic rendering, synchronization2, timeline semaphores, buffer device address, descriptor indexing, mutable descriptor types, demote-to-helper, image view min LOD, push descriptors - answered from the host unchanged, proven by a test that asks for each `VkPhysicalDeviceFeatures2` node and compares it with what the scripted host said (US2 scenario 1), and by one that makes a host missing one answer its absence (US2 scenario 2)
+- [X] T016 [US2] Delivered by T014's one tool: `fetch_layers.py vkd3d-proton` with `tools/vkd3d_proton_pins.txt`, `.tar.zst` read through Python 3.14's `compression.zstd`, and `tests/tools/test_fetch_layers.py` driving exactly that layer
+- [X] T017 [US2] `LayerRequirements` reads the table shape vkd3d-proton uses as well as the mode shape DXVK uses, and `check_layer_requirements.py` holds the ICD to both layers' lists. `VK_EXT_descriptor_buffer` stays out of the profile, and `reported_extensions.a_structure_the_wire_does_not_carry_is_not_sent` states that a node of it is not even sent (FR-002, US2 scenario 3)
+- [X] T018 [US2] The features vkd3d-proton requires - dynamic rendering, synchronization2, timeline semaphores, buffer device address, descriptor indexing, mutable descriptor types, demote-to-helper, image view min LOD, push descriptors - answered from the host unchanged, proven by a test that asks for each `VkPhysicalDeviceFeatures2` node and compares it with what the scripted host said (US2 scenario 1), and by one that makes a host missing one answer its absence (US2 scenario 2)
 
 **Checkpoint**: commit.
 

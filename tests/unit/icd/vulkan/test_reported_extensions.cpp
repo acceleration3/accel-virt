@@ -254,3 +254,87 @@ TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
   }
   CHECK(library_list);
   CHECK(library_parts); }
+
+/* US2 scenarios 1 and 2. What vkd3d-proton requires is mostly core features of
+ * Vulkan 1.2 and 1.3 rather than extensions: dynamic rendering,
+ * synchronization2, timeline semaphores, buffer device address, descriptor
+ * indexing, demote-to-helper. None of them is this driver's to decide - they
+ * are the host GPU's - so what must be true is that the host's answer arrives
+ * unchanged, and that a host without one reports its absence here too. */
+TEST(reported_extensions, the_core_features_vkd3d_requires_are_the_host_s_answer)
+{ ExtensionsRig rig;
+  const auto    features2 =
+      rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
+
+  /* The host says yes to every one of them. */
+  VkPhysicalDeviceVulkan13Features thirteen = {};
+  thirteen.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  thirteen.dynamicRendering = VK_TRUE;
+  thirteen.synchronization2 = VK_TRUE;
+  thirteen.shaderDemoteToHelperInvocation = VK_TRUE;
+  VkPhysicalDeviceVulkan12Features twelve = {};
+  twelve.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+  twelve.pNext = &thirteen;
+  twelve.timelineSemaphore = VK_TRUE;
+  twelve.bufferDeviceAddress = VK_TRUE;
+  twelve.descriptorIndexing = VK_TRUE;
+  VkPhysicalDeviceFeatures2 answered = {};
+  answered.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  answered.pNext = &twelve;
+  std::uint8_t   answer[MockKmt::max_answer] = {};
+  av::WireWriter writer(answer, sizeof answer);
+  writer.write_pod<std::int32_t>(0);
+  serialize_VkPhysicalDeviceFeatures2(writer, answered);
+  CHECK_STATUS(writer.status(), av::Status::ok);
+  rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
+
+  VkPhysicalDeviceVulkan13Features asked_thirteen = {};
+  asked_thirteen.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  VkPhysicalDeviceVulkan12Features asked_twelve = {};
+  asked_twelve.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+  asked_twelve.pNext = &asked_thirteen;
+  VkPhysicalDeviceFeatures2 asked = {};
+  asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  asked.pNext = &asked_twelve;
+  features2(rig.physical(), &asked);
+  CHECK_EQ(asked_thirteen.dynamicRendering, VK_TRUE);
+  CHECK_EQ(asked_thirteen.synchronization2, VK_TRUE);
+  CHECK_EQ(asked_thirteen.shaderDemoteToHelperInvocation, VK_TRUE);
+  CHECK_EQ(asked_twelve.timelineSemaphore, VK_TRUE);
+  CHECK_EQ(asked_twelve.bufferDeviceAddress, VK_TRUE);
+  CHECK_EQ(asked_twelve.descriptorIndexing, VK_TRUE);
+  /* Nothing else was invented along with them. */
+  CHECK_EQ(asked_twelve.hostQueryReset, VK_FALSE);
+  CHECK_EQ(asked_thirteen.inlineUniformBlock, VK_FALSE); }
+
+TEST(reported_extensions, a_feature_the_host_does_not_have_is_absent_here_too)
+{ ExtensionsRig rig;
+  const auto    features2 =
+      rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
+  /* A host missing dynamic rendering, which vkd3d-proton cannot do without:
+   * the guest must say so, so that the layer fails device creation with its own
+   * diagnostic rather than drawing into nothing. */
+  VkPhysicalDeviceVulkan13Features without = {};
+  without.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  without.synchronization2 = VK_TRUE;
+  VkPhysicalDeviceFeatures2 answered = {};
+  answered.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  answered.pNext = &without;
+  std::uint8_t   answer[MockKmt::max_answer] = {};
+  av::WireWriter writer(answer, sizeof answer);
+  writer.write_pod<std::int32_t>(0);
+  serialize_VkPhysicalDeviceFeatures2(writer, answered);
+  CHECK_STATUS(writer.status(), av::Status::ok);
+  rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
+
+  VkPhysicalDeviceVulkan13Features asked_thirteen = {};
+  asked_thirteen.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+  asked_thirteen.dynamicRendering = VK_TRUE;   /* what the application hoped for */
+  VkPhysicalDeviceFeatures2 asked = {};
+  asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  asked.pNext = &asked_thirteen;
+  features2(rig.physical(), &asked);
+  /* The host's no overwrote the application's hope: the answer is the host's,
+   * not whatever was in the structure before. */
+  CHECK_EQ(asked_thirteen.dynamicRendering, VK_FALSE);
+  CHECK_EQ(asked_thirteen.synchronization2, VK_TRUE); }
