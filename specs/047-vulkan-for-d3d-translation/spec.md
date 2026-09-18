@@ -198,6 +198,14 @@ extensions rather than adding new ones.
   path that wants placement belongs to feature 061 with the rest of the 32-bit
   ICD. FR-003 is therefore met in part - `vkMapMemory2` exists and is proven -
   and its placement half is recorded as not this layer's to give.
+- **Q: what do the three D3D probes draw?**
+  → A cleared frame, not a triangle. A triangle through DXVK or vkd3d-proton
+  needs shader bytecode - DXBC - and the only compilers for it are `fxc` and
+  `dxc`, neither pinned here nor available on this host. A clear still goes
+  through the device, the swap chain or render target, the command list and
+  fence where there is one, the read-back and the present, which is the whole
+  of what a layer has to get right before it draws anything. A triangle
+  belongs with a pinned shader compiler, which is its own decision.
 - **Q: two guest devices are two host devices - how can they share anything?**
   → Through the FD extensions the host already has, inside the one process both
   host devices live in (research.md §10): the ICD answers a handle of its own,
