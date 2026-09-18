@@ -102,6 +102,7 @@ LUID_LOW_PART_BYTES = 4
 KHRONOS_DRIVERS = "HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers"
 REG = "C:\\Windows\\System32\\reg.exe"
 CMD = "C:\\Windows\\System32\\cmd.exe"
+SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
 # reg.exe answers 1 for every failure and says which in English on this image:
 # only the one naming a missing key is an absent key.
 REG_FAILED = 1
@@ -458,6 +459,76 @@ class Screendump:
 
     def differs_from(self, other):
         return self.pixels() != other.pixels()
+
+
+class ConsoleProgram:
+    """A program run in the session a person is logged into.
+
+    The guest agent is a service, so everything it starts runs on the window
+    station Service-0x0-3e7$, where a window never becomes visible - feature 046
+    measured it: ShowWindow leaves IsWindowVisible false, and BitBlt of such a
+    window's device context fails with ERROR_INVALID_HANDLE. A frame presented
+    onto a window and read back off it therefore has to be made in the console
+    session, which a scheduled task with /it runs in. The task names a .cmd
+    file rather than a command line, because schtasks parses /tr itself and a
+    redirection in it is an invalid option.
+    """
+
+    task = "rvkconsole"
+    """Created with /f and deleted after each run, so a stale one is replaced."""
+    script = GUEST_DIRECTORY + "\\console.cmd"
+    poll_seconds = 2.0
+
+    def __init__(self, agent, timeout):
+        self.agent = agent
+        self.timeout = timeout
+
+    def console_user(self):
+        """Who is logged into the console session; a run needs one, since a
+        signed-out machine has no session to present in."""
+        code, out, error = self.agent.run(
+            POWERSHELL, ["-NoProfile", "-Command", "(Get-CimInstance Win32_ComputerSystem).UserName"], self.timeout)
+        user = out.decode(errors="replace").strip()
+        if code != 0 or not user:
+            raise StepFailed("console", "no one is logged into the console session: "
+                                        f"exit {code}, {error.decode(errors='replace').strip()[-200:]}")
+        return user
+
+    def schtasks(self, arguments, step):
+        code, out, error = self.agent.run(SCHTASKS, arguments, self.timeout)
+        if code != 0:
+            raise StepFailed(step, f"schtasks {arguments[0]} exited {code}: "
+                                   f"{(out + error).decode(errors='replace').strip()[-200:]}")
+        return out.decode(errors="replace")
+
+    def finished(self, step):
+        """The task's state and its program's exit code, once it has one."""
+        deadline = time.monotonic() + self.timeout
+        while True:
+            listing = self.schtasks(["/query", "/tn", self.task, "/fo", "list", "/v"], step)
+            running = re.search(r"^Status:\s+Running\s*$", listing, re.M)
+            result = re.search(r"^Last Result:\s+(-?\d+)\s*$", listing, re.M)
+            if running is None and result is not None:
+                return int(result.group(1))
+            if time.monotonic() >= deadline:
+                raise StepFailed(step, f"{self.task} was still running after {self.timeout} s")
+            time.sleep(self.poll_seconds)
+
+    def run(self, path, guest_output, step):
+        """`path` run in the console session, its output left in `guest_output`:
+        the exit code its task recorded."""
+        user = self.console_user()
+        self.agent.push(f"@echo off\r\n{path} > {guest_output} 2>&1\r\n".encode(), self.script)
+        self.schtasks(["/create", "/tn", self.task, "/tr", self.script, "/sc", "once", "/st", "23:59",
+                       "/ru", user, "/it", "/f"], step)
+        try:
+            self.schtasks(["/run", "/tn", self.task], step)
+            return self.finished(step)
+        finally:
+            code, _, _ = self.agent.run(SCHTASKS, ["/delete", "/tn", self.task, "/f"], self.timeout)
+            if code != 0:
+                print(f"guest: {step}: the {self.task} task was left behind (schtasks /delete exited {code})",
+                      flush=True)
 
 
 class GuestRun:
@@ -1207,13 +1278,20 @@ class GuestRun:
 
     def probe(self):
         """SC-002 and SC-003: rvkvkprobe.exe's report, every step of it; the
-        values the steps printed, by step."""
-        code, out, error = self.step("rvkvkprobe", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvkvkprobe.exe", [],
-                                                                         self.args.step_timeout))
-        (self.work / "vulkan.txt").write_bytes(out)
+        values the steps printed, by step.
+
+        It runs in the console session: its present steps make a window and read
+        the presented frame back off it, which the agent's own session cannot do
+        (ConsoleProgram)."""
+        console = ConsoleProgram(self.agent, self.args.step_timeout)
+        report = GUEST_DIRECTORY + "\\vulkan.txt"
+        code = self.step("rvkvkprobe",
+                         lambda: console.run(GUEST_DIRECTORY + "\\rvkvkprobe.exe", report, "rvkvkprobe"))
+        self.step("rvkvkprobe.pull", lambda: self.agent.pull(report, self.work / "vulkan.txt"))
+        out = (self.work / "vulkan.txt").read_bytes()
         summary = PROBE_SUMMARY.search(out)
         if summary is None:
-            raise StepFailed("vulkan", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+            raise StepFailed("vulkan", f"no summary line (exit {code}); see vulkan.txt")
         failed = int(summary.group(2))
         if failed != 0 or code != 0:
             raise StepFailed("vulkan", f"{failed} step(s) failed, exit {code}; see vulkan.txt")

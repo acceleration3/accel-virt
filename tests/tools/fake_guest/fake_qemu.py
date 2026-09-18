@@ -30,6 +30,10 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              scripted exits 1 and writes nothing
   powershell {"substring": "output"}: `powershell -File F` prints the output of
              the first key found in the script pushed to F
+  console_user   who is logged into the console session, which the runner asks
+             for before it makes a scheduled task (feature 046); "" is nobody
+  console_running  how many `schtasks /query` answers say Running before the
+             task is Ready
   trace_memory {"address": n, "b64": ...}: what pmemsave reads from guest
              physical memory at that address
   answer_delay seconds the agent takes over every answer, so two clients of
@@ -98,6 +102,7 @@ class Guest:
         self.files = {}
         self.written = {}
         self.processes = {}
+        self.tasks = {}
         self.qmp = None
         self.up = True
         self.suspended = False
@@ -167,6 +172,43 @@ class Guest:
             self.script.setdefault("files", {})[target] = base64.b64decode(ran["out-data"]).decode("latin-1")
         return dict(ran, **{"out-data": ""})
 
+    def schtasks(self, arguments):
+        """schtasks /create|/run|/query|/delete, as ConsoleProgram drives it: a
+        program run in the console session (feature 046). /run executes the .cmd
+        the task names, which the runner pushed, so its output lands in the file
+        that .cmd redirects to - exactly as a run through cmd.exe does.
+        """
+        verb = arguments[0].lstrip("/").lower() if arguments else ""
+        name = option(arguments, "/tn")
+        if verb == "create":
+            self.tasks[name] = {"command": option(arguments, "/tr"), "result": 0, "ran": False}
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(b"SUCCESS: created\n").decode(), "err-data": ""}
+        if name not in self.tasks:
+            return {"exited": True, "exitcode": 1,
+                    "out-data": "", "err-data": base64.b64encode(b"ERROR: cannot find the task\n").decode()}
+        if verb == "delete":
+            del self.tasks[name]
+            return {"exited": True, "exitcode": 0, "out-data": "", "err-data": ""}
+        if verb == "run":
+            task = self.tasks[name]
+            pushed = self.written.get(task["command"], b"").decode("latin-1")
+            line = next((text for text in pushed.splitlines() if ">" in text), "")
+            ran = self.shell(["/c", line]) if line else {"exited": True, "exitcode": 1}
+            task["result"] = ran.get("exitcode", 1)
+            task["ran"] = True
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(b"SUCCESS: attempted to run\n").decode(), "err-data": ""}
+        if verb == "query":
+            task = self.tasks[name]
+            task["queries"] = task.get("queries", 0) + 1
+            running = task["queries"] <= self.script.get("console_running", 0)
+            listing = (f"TaskName: {name}\r\nStatus: {'Running' if running else 'Ready'}\r\n"
+                       f"Last Result: {task['result']}\r\n")
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(listing.encode()).decode(), "err-data": ""}
+        return {"exited": True, "exitcode": 1, "out-data": "", "err-data": ""}
+
     def inspect(self, arguments):
         """rvkinspect.exe COMMAND ... --out F: the scripted answer lands in F."""
         answers = self.script.get("inspect", {})
@@ -199,9 +241,17 @@ class Guest:
         if program == "cmd":
             self.note(f"exec {path} {' '.join(arguments)}")
             return self.shell(arguments)
+        if program == "schtasks":
+            self.note(f"exec {path} {' '.join(arguments)}")
+            return self.schtasks(arguments)
         if program == INSPECTOR:
             self.note(f"exec {path} {' '.join(arguments)}")
             return self.inspect(arguments)
+        if program == "powershell" and "-Command" in arguments[:-1] and "UserName" in arguments[-1]:
+            self.note(f"exec {path} {' '.join(arguments)}")
+            user = self.script.get("console_user", "guest\\tester")
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(f"{user}\r\n".encode()).decode(), "err-data": ""}
         if program == "powershell" and "-File" in arguments[:-1] and "-Stage" not in arguments:
             self.note(f"exec {path} {' '.join(arguments)}")
             return self.powershell_script(arguments)

@@ -666,6 +666,19 @@ can leave the guest with no display.
   and `rvkvkprobe: N passed, 0 failed`, and requires
   `vulkan.physical_device` to equal `vulkan.adapter_luid`. The collect stage
   copies the ICD's `C:\ProgramData\rvk\*.log` into `diag/` on every run.
+
+  The probe runs in the **console session**, not in the agent's
+  (`ConsoleProgram`): the guest agent is a service, so what it starts lives on
+  the window station `Service-0x0-3e7$`, where a window never becomes visible -
+  `ShowWindow` leaves `IsWindowVisible` false, `BitBlt` of the window's device
+  context fails with `ERROR_INVALID_HANDLE` and `PrintWindow` fails too, all
+  measured in the guest for feature 046. A present the probe judges by reading
+  its own window back therefore needs the session a person is logged into,
+  which a scheduled task created with `/it` runs in; the runner writes a
+  one-line `console.cmd` for the redirection (schtasks parses `/tr` itself and
+  refuses a `>` in it), runs the task, waits for it to leave `Running`, takes
+  the program's exit code from `Last Result`, pulls `C:\rvk\vulkan.txt` and
+  deletes the task. A machine no one is logged into fails the run.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
   functions with every wait bounded by an event and a timeout, and
   `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,

@@ -401,6 +401,26 @@ class GuestSuiteRun(unittest.TestCase):
                                                 **pictures),
                     **exits, **behaviour)
 
+    def test_a_probe_needs_a_console_session_and_a_task_that_finishes(self):
+        """Feature 046: the probe's present steps make a window, which only the
+        session a person is logged into can show. A machine no one is logged
+        into has nowhere to run it, and a task that never finishes is a failure
+        naming itself rather than a run that hangs."""
+        self.vulkan_script(console_user="")
+        nobody = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(nobody.returncode, 1)
+        self.assertIn("guest: console failed: no one is logged into the console session", nobody.stdout)
+        self.assertNotIn("rvkconsole", "".join(self.journal_lines()))
+        self.assert_clean()
+        self.vulkan_script(console_running=1000)
+        stuck = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime(),
+                               "--step-timeout", "1")
+        self.assertEqual(stuck.returncode, 1)
+        self.assertIn("guest: rvkvkprobe failed: rvkconsole was still running after 1.0 s", stuck.stdout)
+        # Whatever it answered, the task is not left behind on the machine.
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn rvkconsole /f", self.journal_lines())
+        self.assert_clean()
+
     def test_a_vulkan_run_finds_the_icd_through_the_adapter_alone_and_runs_the_probe(self):
         """Feature 045, SC-001 to SC-003: no global Khronos key, vulkaninfo lists
         exactly the one device whose LUID is the adapter's, the probe's steps
@@ -414,7 +434,19 @@ class GuestSuiteRun(unittest.TestCase):
             self.assertIn(f"file {pushed}", lines)
         programs = [line.split()[1] for line in lines if line.startswith("exec") and "powershell" not in line]
         self.assertEqual(programs, ["C:\\Windows\\System32\\reg.exe", "C:\\Windows\\System32\\cmd.exe",
-                                    "C:\\rvk\\vulkaninfo.exe", "C:\\rvk\\rvkvkprobe.exe"])
+                                    "C:\\rvk\\vulkaninfo.exe",
+                                    "C:\\Windows\\System32\\schtasks.exe", "C:\\Windows\\System32\\schtasks.exe",
+                                    "C:\\rvk\\rvkvkprobe.exe", "C:\\Windows\\System32\\schtasks.exe",
+                                    "C:\\Windows\\System32\\schtasks.exe"])
+        # The probe's window has to be made where a window can be seen: the
+        # agent's own session has no visible desktop, so the probe runs in the
+        # console session through a scheduled task with /it (feature 046).
+        self.assertIn("file C:\\rvk\\console.cmd 59", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /create /tn rvkconsole /tr C:\\rvk\\console.cmd "
+                      "/sc once /st 23:59 /ru guest\\tester /it /f", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /run /tn rvkconsole", lines)
+        self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn rvkconsole /f", lines)
+        self.assertIn("pull C:\\rvk\\vulkan.txt", lines)
         # vulkaninfo's full listing is written to a guest file and pulled: the
         # agent's captured output stalled the program on a live guest.
         self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\vulkaninfo.exe "
