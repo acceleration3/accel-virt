@@ -156,3 +156,25 @@ page would be a mechanism with nothing to protect.
 This is worth stating rather than assuming, because it is the property that
 makes FR-005 hold: **every value the device reads from a user-written ring is
 already validated** (feature 030), and the doorbell carries no value at all.
+
+## 11. Whether a guest process may create a hardware queue at all
+
+A doorbell is created on an `hHwQueue` (§1), and a process gets one from
+`D3DKMTCreateHwQueue` - which dxgkrnl answers only when hardware-accelerated
+GPU scheduling is on for the adapter. Nothing in the WDK's DDI headers reports
+that: there is no `DXGKQAITYPE_HARDWARESCHEDULING*` in 10.0.26100's
+`d3dkmddi.h`, and `DXGK_VIDSCHCAPS` carries no such bit. It is an opt-in the
+driver makes in its INF's software settings and the OS confirms in its own
+policy, and `src/km/rvkgpu.inf` makes no such entry today.
+
+**This is not guessed at here, and it does not block the guest half.** The
+transport asks for a queue and a doorbell and uses them if it gets them; a
+refusal is the same path as a disconnect, which US2 requires anyway. So Phase 2
+is written the same way whichever answer the OS gives, and the live guest run
+is what answers it - at which point the INF entry, if that is what is missing,
+is a one-line change with a measurement behind it.
+
+What must not happen is the driver reporting user-mode submission and a process
+finding no way to use it. It cannot: the capability says what a doorbell *is*,
+and dxgkrnl only asks for one after it has decided a process may have a
+hardware queue.
