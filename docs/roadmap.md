@@ -58,13 +58,6 @@ spec under `specs/`.
 | [049](../specs/049-user-mode-submission-live/spec.md) | User-mode submission in the guest: doorbells and native fences | — | `implement` | — | 045, 024 |
 | [050](../specs/050-opengl-icd/spec.md) | OpenGL: an installable client driver | — | `implement` | — | 044 |
 | [051](../specs/051-opengl-compatibility-and-present/spec.md) | OpenGL: compatibility profile and presentation | — | `implement` | — | 050, 046 |
-<!-- 051 delivers: the compatibility profile asked for, granted and reported;
-     the 274 legacy entry points live behind it; display lists on the host;
-     WGL_EXT_swap_control pacing on the adapter's vertical blank; a swap on an
-     unseen window costing nothing; a single-buffered format presenting on
-     glFlush; and a front-buffer read answered from the frame on the window.
-     The GDI blit and the read-back stay until feature 055's UMD, which is
-     what makes a D3DKMT present reachable (051 research.md §4). -->
 | [052](../specs/052-opencl-icd/spec.md) | OpenCL: the ICD on rvkgpu | — | `implement` | — | 044 |
 | [053](../specs/053-cross-api-sharing/spec.md) | Sharing across APIs and processes | — | `implement` | — | 047, 051, 052 |
 | [054](../specs/054-opengl-opencl-conformance/spec.md) | OpenGL and OpenCL: conformance in the guest | — | `implement` | — | 051, 052, 053 |

@@ -94,7 +94,7 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertIn("table.entries = static_cast<int32_t>(kProcTableSlots);", self.table)
         self.assertEqual(self.slots(), [
             ("0", "reinterpret_cast<GlProc>(&Wrap_glNewList)"),
-            ("1", "::av::glicd::legacy_entry(1u)"),
+            ("1", "reinterpret_cast<GlProc>(&Wrap_glBegin)"),
             ("2", "reinterpret_cast<GlProc>(&Wrap_glColor3b)"),
             ("3", "reinterpret_cast<GlProc>(&Wrap_glEnable)"),
             ("4", "reinterpret_cast<GlProc>(&Wrap_glGetPointerv)"),
@@ -124,7 +124,18 @@ class GeneratedGlIcd(unittest.TestCase):
     def test_a_manual_entry_is_declared_for_the_icd_and_not_defined(self):
         self.assertIn("void APIENTRY Wrap_glGetPointerv(GLenum pname, void **params);", self.header)
         self.assertNotIn("Wrap_glGetPointerv(", self.source)
-        self.assertIn("GlProc legacy_entry(uint32_t index) noexcept;", self.table)
+        self.assertNotIn("legacy_entry", self.table)
+
+    def test_a_compatibility_entry_asks_the_granted_profile_before_it_sends(self):
+        """Feature 051: a compat-tier command exists only where the host
+        granted a compatibility profile, so the forwarder judges it and records
+        what a core context would."""
+        begin = body_of(self.source, "Wrap_glBegin")
+        self.assertIn("if (!::av::glicd::legacy_calls_live()) {", begin)
+        self.assertIn("::av::glicd::refuse_legacy();", begin)
+        self.assertIn("::av::glproto::rvk_glBegin(*rvk_t, mode);", begin)
+        # A core-tier command asks nothing.
+        self.assertNotIn("legacy_calls_live", body_of(self.source, "Wrap_glEnable"))
 
     def test_forwarding_entries_are_defined_and_handwritten_ones_are_left_to_the_icd(self):
         self.assertIn("void APIENTRY Wrap_glEnable(GLenum cap) {", self.source)
