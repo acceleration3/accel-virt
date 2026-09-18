@@ -143,10 +143,17 @@ bool skip_bind_sampler(GLuint unit, GLuint sampler) noexcept
     return state != nullptr && state->skip_bind_sampler(unit, sampler);
 }
 
-GlProc legacy_entry(uint32_t) noexcept
+bool legacy_calls_live() noexcept
 {
-    AV_SCOPE("legacy_entry");
-    return reinterpret_cast<GlProc>(&entry::legacy_call);
+    AV_SCOPE("legacy_calls_live");
+    const GuestGlContext *const context = current_context();
+    return context != nullptr && context->profile().legacy_calls_live();
+}
+
+void refuse_legacy() noexcept
+{
+    AV_SCOPE("refuse_legacy");
+    static_cast<void>(gl_icd_binding.root().record_legacy());
 }
 
 }  // namespace av::glicd

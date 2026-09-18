@@ -56,4 +56,13 @@ void *GlIcdRig::current_context(const char *renderer, const char *version)
     return opengl32_.make_current(dc(), context) ? context : nullptr;
 }
 
+void *GlIcdRig::current_core_context()
+{
+    void *const context = opengl32_.create_context(dc());
+    if (context == nullptr) return nullptr;
+    host_.gl_make_profile("host gpu", "4.6 (Core Profile) Mesa", 4, 6, 1);
+    host_.gl_window(1u, 1u);
+    return opengl32_.make_current(dc(), context) ? context : nullptr;
+}
+
 }  // namespace av

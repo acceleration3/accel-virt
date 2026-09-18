@@ -130,12 +130,6 @@ int32_t APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, const fl
     return gl_icd_binding.root().choose_pixel_format(dc, ints, floats, max, formats, count);
 }
 
-uintptr_t APIENTRY legacy_call()
-{
-    AV_SCOPE("legacy_call");
-    return gl_icd_binding.root().record_legacy();
-}
-
 GLenum APIENTRY get_error()
 {
     AV_SCOPE("get_error");

@@ -4596,6 +4596,10 @@ void APIENTRY Wrap_glWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout) {
 
 void APIENTRY Wrap_glAccum(GLenum op, GLfloat value) {
     AV_SCOPE("glAccum");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glAccum(*rvk_t, op, value);
@@ -4603,6 +4607,10 @@ void APIENTRY Wrap_glAccum(GLenum op, GLfloat value) {
 
 void APIENTRY Wrap_glAlphaFunc(GLenum func, GLfloat ref) {
     AV_SCOPE("glAlphaFunc");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glAlphaFunc(*rvk_t, func, ref);
@@ -4610,6 +4618,10 @@ void APIENTRY Wrap_glAlphaFunc(GLenum func, GLfloat ref) {
 
 GLboolean APIENTRY Wrap_glAreTexturesResident(GLsizei n, const GLuint* textures, GLboolean* residences) {
     AV_SCOPE("glAreTexturesResident");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return 0;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
     return ::av::glproto::rvk_glAreTexturesResident(*rvk_t, n, textures, residences);
@@ -4617,6 +4629,10 @@ GLboolean APIENTRY Wrap_glAreTexturesResident(GLsizei n, const GLuint* textures,
 
 void APIENTRY Wrap_glBegin(GLenum mode) {
     AV_SCOPE("glBegin");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glBegin(*rvk_t, mode);
@@ -4624,6 +4640,10 @@ void APIENTRY Wrap_glBegin(GLenum mode) {
 
 void APIENTRY Wrap_glBitmap(GLsizei width, GLsizei height, GLfloat xorig, GLfloat yorig, GLfloat xmove, GLfloat ymove, const GLubyte* bitmap) {
     AV_SCOPE("glBitmap");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glBitmap(*rvk_t, width, height, xorig, yorig, xmove, ymove, bitmap);
@@ -4631,6 +4651,10 @@ void APIENTRY Wrap_glBitmap(GLsizei width, GLsizei height, GLfloat xorig, GLfloa
 
 void APIENTRY Wrap_glCallList(GLuint list) {
     AV_SCOPE("glCallList");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::forget_bindings();
     if (rvk_t == nullptr) return;
@@ -4639,6 +4663,10 @@ void APIENTRY Wrap_glCallList(GLuint list) {
 
 void APIENTRY Wrap_glCallLists(GLsizei n, GLenum type, const void* lists) {
     AV_SCOPE("glCallLists");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::forget_bindings();
     if (rvk_t == nullptr) return;
@@ -4647,6 +4675,10 @@ void APIENTRY Wrap_glCallLists(GLsizei n, GLenum type, const void* lists) {
 
 void APIENTRY Wrap_glClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
     AV_SCOPE("glClearAccum");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glClearAccum(*rvk_t, red, green, blue, alpha);
@@ -4654,6 +4686,10 @@ void APIENTRY Wrap_glClearAccum(GLfloat red, GLfloat green, GLfloat blue, GLfloa
 
 void APIENTRY Wrap_glClearIndex(GLfloat c) {
     AV_SCOPE("glClearIndex");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glClearIndex(*rvk_t, c);
@@ -4661,6 +4697,10 @@ void APIENTRY Wrap_glClearIndex(GLfloat c) {
 
 void APIENTRY Wrap_glClipPlane(GLenum plane, const GLdouble* equation) {
     AV_SCOPE("glClipPlane");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glClipPlane(*rvk_t, plane, equation);
@@ -4668,6 +4708,10 @@ void APIENTRY Wrap_glClipPlane(GLenum plane, const GLdouble* equation) {
 
 void APIENTRY Wrap_glColor3b(GLbyte red, GLbyte green, GLbyte blue) {
     AV_SCOPE("glColor3b");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3b(*rvk_t, red, green, blue);
@@ -4675,6 +4719,10 @@ void APIENTRY Wrap_glColor3b(GLbyte red, GLbyte green, GLbyte blue) {
 
 void APIENTRY Wrap_glColor3bv(const GLbyte* v) {
     AV_SCOPE("glColor3bv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3bv(*rvk_t, v);
@@ -4682,6 +4730,10 @@ void APIENTRY Wrap_glColor3bv(const GLbyte* v) {
 
 void APIENTRY Wrap_glColor3d(GLdouble red, GLdouble green, GLdouble blue) {
     AV_SCOPE("glColor3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3d(*rvk_t, red, green, blue);
@@ -4689,6 +4741,10 @@ void APIENTRY Wrap_glColor3d(GLdouble red, GLdouble green, GLdouble blue) {
 
 void APIENTRY Wrap_glColor3dv(const GLdouble* v) {
     AV_SCOPE("glColor3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3dv(*rvk_t, v);
@@ -4696,6 +4752,10 @@ void APIENTRY Wrap_glColor3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glColor3f(GLfloat red, GLfloat green, GLfloat blue) {
     AV_SCOPE("glColor3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3f(*rvk_t, red, green, blue);
@@ -4703,6 +4763,10 @@ void APIENTRY Wrap_glColor3f(GLfloat red, GLfloat green, GLfloat blue) {
 
 void APIENTRY Wrap_glColor3fv(const GLfloat* v) {
     AV_SCOPE("glColor3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3fv(*rvk_t, v);
@@ -4710,6 +4774,10 @@ void APIENTRY Wrap_glColor3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glColor3i(GLint red, GLint green, GLint blue) {
     AV_SCOPE("glColor3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3i(*rvk_t, red, green, blue);
@@ -4717,6 +4785,10 @@ void APIENTRY Wrap_glColor3i(GLint red, GLint green, GLint blue) {
 
 void APIENTRY Wrap_glColor3iv(const GLint* v) {
     AV_SCOPE("glColor3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3iv(*rvk_t, v);
@@ -4724,6 +4796,10 @@ void APIENTRY Wrap_glColor3iv(const GLint* v) {
 
 void APIENTRY Wrap_glColor3s(GLshort red, GLshort green, GLshort blue) {
     AV_SCOPE("glColor3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3s(*rvk_t, red, green, blue);
@@ -4731,6 +4807,10 @@ void APIENTRY Wrap_glColor3s(GLshort red, GLshort green, GLshort blue) {
 
 void APIENTRY Wrap_glColor3sv(const GLshort* v) {
     AV_SCOPE("glColor3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3sv(*rvk_t, v);
@@ -4738,6 +4818,10 @@ void APIENTRY Wrap_glColor3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glColor3ub(GLubyte red, GLubyte green, GLubyte blue) {
     AV_SCOPE("glColor3ub");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3ub(*rvk_t, red, green, blue);
@@ -4745,6 +4829,10 @@ void APIENTRY Wrap_glColor3ub(GLubyte red, GLubyte green, GLubyte blue) {
 
 void APIENTRY Wrap_glColor3ubv(const GLubyte* v) {
     AV_SCOPE("glColor3ubv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3ubv(*rvk_t, v);
@@ -4752,6 +4840,10 @@ void APIENTRY Wrap_glColor3ubv(const GLubyte* v) {
 
 void APIENTRY Wrap_glColor3ui(GLuint red, GLuint green, GLuint blue) {
     AV_SCOPE("glColor3ui");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3ui(*rvk_t, red, green, blue);
@@ -4759,6 +4851,10 @@ void APIENTRY Wrap_glColor3ui(GLuint red, GLuint green, GLuint blue) {
 
 void APIENTRY Wrap_glColor3uiv(const GLuint* v) {
     AV_SCOPE("glColor3uiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3uiv(*rvk_t, v);
@@ -4766,6 +4862,10 @@ void APIENTRY Wrap_glColor3uiv(const GLuint* v) {
 
 void APIENTRY Wrap_glColor3us(GLushort red, GLushort green, GLushort blue) {
     AV_SCOPE("glColor3us");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3us(*rvk_t, red, green, blue);
@@ -4773,6 +4873,10 @@ void APIENTRY Wrap_glColor3us(GLushort red, GLushort green, GLushort blue) {
 
 void APIENTRY Wrap_glColor3usv(const GLushort* v) {
     AV_SCOPE("glColor3usv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor3usv(*rvk_t, v);
@@ -4780,6 +4884,10 @@ void APIENTRY Wrap_glColor3usv(const GLushort* v) {
 
 void APIENTRY Wrap_glColor4b(GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha) {
     AV_SCOPE("glColor4b");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4b(*rvk_t, red, green, blue, alpha);
@@ -4787,6 +4895,10 @@ void APIENTRY Wrap_glColor4b(GLbyte red, GLbyte green, GLbyte blue, GLbyte alpha
 
 void APIENTRY Wrap_glColor4bv(const GLbyte* v) {
     AV_SCOPE("glColor4bv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4bv(*rvk_t, v);
@@ -4794,6 +4906,10 @@ void APIENTRY Wrap_glColor4bv(const GLbyte* v) {
 
 void APIENTRY Wrap_glColor4d(GLdouble red, GLdouble green, GLdouble blue, GLdouble alpha) {
     AV_SCOPE("glColor4d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4d(*rvk_t, red, green, blue, alpha);
@@ -4801,6 +4917,10 @@ void APIENTRY Wrap_glColor4d(GLdouble red, GLdouble green, GLdouble blue, GLdoub
 
 void APIENTRY Wrap_glColor4dv(const GLdouble* v) {
     AV_SCOPE("glColor4dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4dv(*rvk_t, v);
@@ -4808,6 +4928,10 @@ void APIENTRY Wrap_glColor4dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glColor4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha) {
     AV_SCOPE("glColor4f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4f(*rvk_t, red, green, blue, alpha);
@@ -4815,6 +4939,10 @@ void APIENTRY Wrap_glColor4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat a
 
 void APIENTRY Wrap_glColor4fv(const GLfloat* v) {
     AV_SCOPE("glColor4fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4fv(*rvk_t, v);
@@ -4822,6 +4950,10 @@ void APIENTRY Wrap_glColor4fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glColor4i(GLint red, GLint green, GLint blue, GLint alpha) {
     AV_SCOPE("glColor4i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4i(*rvk_t, red, green, blue, alpha);
@@ -4829,6 +4961,10 @@ void APIENTRY Wrap_glColor4i(GLint red, GLint green, GLint blue, GLint alpha) {
 
 void APIENTRY Wrap_glColor4iv(const GLint* v) {
     AV_SCOPE("glColor4iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4iv(*rvk_t, v);
@@ -4836,6 +4972,10 @@ void APIENTRY Wrap_glColor4iv(const GLint* v) {
 
 void APIENTRY Wrap_glColor4s(GLshort red, GLshort green, GLshort blue, GLshort alpha) {
     AV_SCOPE("glColor4s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4s(*rvk_t, red, green, blue, alpha);
@@ -4843,6 +4983,10 @@ void APIENTRY Wrap_glColor4s(GLshort red, GLshort green, GLshort blue, GLshort a
 
 void APIENTRY Wrap_glColor4sv(const GLshort* v) {
     AV_SCOPE("glColor4sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4sv(*rvk_t, v);
@@ -4850,6 +4994,10 @@ void APIENTRY Wrap_glColor4sv(const GLshort* v) {
 
 void APIENTRY Wrap_glColor4ub(GLubyte red, GLubyte green, GLubyte blue, GLubyte alpha) {
     AV_SCOPE("glColor4ub");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4ub(*rvk_t, red, green, blue, alpha);
@@ -4857,6 +5005,10 @@ void APIENTRY Wrap_glColor4ub(GLubyte red, GLubyte green, GLubyte blue, GLubyte 
 
 void APIENTRY Wrap_glColor4ubv(const GLubyte* v) {
     AV_SCOPE("glColor4ubv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4ubv(*rvk_t, v);
@@ -4864,6 +5016,10 @@ void APIENTRY Wrap_glColor4ubv(const GLubyte* v) {
 
 void APIENTRY Wrap_glColor4ui(GLuint red, GLuint green, GLuint blue, GLuint alpha) {
     AV_SCOPE("glColor4ui");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4ui(*rvk_t, red, green, blue, alpha);
@@ -4871,6 +5027,10 @@ void APIENTRY Wrap_glColor4ui(GLuint red, GLuint green, GLuint blue, GLuint alph
 
 void APIENTRY Wrap_glColor4uiv(const GLuint* v) {
     AV_SCOPE("glColor4uiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4uiv(*rvk_t, v);
@@ -4878,6 +5038,10 @@ void APIENTRY Wrap_glColor4uiv(const GLuint* v) {
 
 void APIENTRY Wrap_glColor4us(GLushort red, GLushort green, GLushort blue, GLushort alpha) {
     AV_SCOPE("glColor4us");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4us(*rvk_t, red, green, blue, alpha);
@@ -4885,6 +5049,10 @@ void APIENTRY Wrap_glColor4us(GLushort red, GLushort green, GLushort blue, GLush
 
 void APIENTRY Wrap_glColor4usv(const GLushort* v) {
     AV_SCOPE("glColor4usv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColor4usv(*rvk_t, v);
@@ -4892,6 +5060,10 @@ void APIENTRY Wrap_glColor4usv(const GLushort* v) {
 
 void APIENTRY Wrap_glColorMaterial(GLenum face, GLenum mode) {
     AV_SCOPE("glColorMaterial");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glColorMaterial(*rvk_t, face, mode);
@@ -4899,6 +5071,10 @@ void APIENTRY Wrap_glColorMaterial(GLenum face, GLenum mode) {
 
 void APIENTRY Wrap_glCopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum type) {
     AV_SCOPE("glCopyPixels");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glCopyPixels(*rvk_t, x, y, width, height, type);
@@ -4906,6 +5082,10 @@ void APIENTRY Wrap_glCopyPixels(GLint x, GLint y, GLsizei width, GLsizei height,
 
 void APIENTRY Wrap_glDeleteLists(GLuint list, GLsizei range) {
     AV_SCOPE("glDeleteLists");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glDeleteLists(*rvk_t, list, range);
@@ -4913,6 +5093,10 @@ void APIENTRY Wrap_glDeleteLists(GLuint list, GLsizei range) {
 
 void APIENTRY Wrap_glDrawPixels(GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels) {
     AV_SCOPE("glDrawPixels");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
@@ -4922,6 +5106,10 @@ void APIENTRY Wrap_glDrawPixels(GLsizei width, GLsizei height, GLenum format, GL
 
 void APIENTRY Wrap_glEdgeFlag(GLboolean flag) {
     AV_SCOPE("glEdgeFlag");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEdgeFlag(*rvk_t, flag);
@@ -4929,6 +5117,10 @@ void APIENTRY Wrap_glEdgeFlag(GLboolean flag) {
 
 void APIENTRY Wrap_glEdgeFlagv(const GLboolean* flag) {
     AV_SCOPE("glEdgeFlagv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEdgeFlagv(*rvk_t, flag);
@@ -4936,6 +5128,10 @@ void APIENTRY Wrap_glEdgeFlagv(const GLboolean* flag) {
 
 void APIENTRY Wrap_glEnd(void) {
     AV_SCOPE("glEnd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEnd(*rvk_t);
@@ -4943,6 +5139,10 @@ void APIENTRY Wrap_glEnd(void) {
 
 void APIENTRY Wrap_glEndList(void) {
     AV_SCOPE("glEndList");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEndList(*rvk_t);
@@ -4950,6 +5150,10 @@ void APIENTRY Wrap_glEndList(void) {
 
 void APIENTRY Wrap_glEvalCoord1d(GLdouble u) {
     AV_SCOPE("glEvalCoord1d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord1d(*rvk_t, u);
@@ -4957,6 +5161,10 @@ void APIENTRY Wrap_glEvalCoord1d(GLdouble u) {
 
 void APIENTRY Wrap_glEvalCoord1dv(const GLdouble* u) {
     AV_SCOPE("glEvalCoord1dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord1dv(*rvk_t, u);
@@ -4964,6 +5172,10 @@ void APIENTRY Wrap_glEvalCoord1dv(const GLdouble* u) {
 
 void APIENTRY Wrap_glEvalCoord1f(GLfloat u) {
     AV_SCOPE("glEvalCoord1f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord1f(*rvk_t, u);
@@ -4971,6 +5183,10 @@ void APIENTRY Wrap_glEvalCoord1f(GLfloat u) {
 
 void APIENTRY Wrap_glEvalCoord1fv(const GLfloat* u) {
     AV_SCOPE("glEvalCoord1fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord1fv(*rvk_t, u);
@@ -4978,6 +5194,10 @@ void APIENTRY Wrap_glEvalCoord1fv(const GLfloat* u) {
 
 void APIENTRY Wrap_glEvalCoord2d(GLdouble u, GLdouble v) {
     AV_SCOPE("glEvalCoord2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord2d(*rvk_t, u, v);
@@ -4985,6 +5205,10 @@ void APIENTRY Wrap_glEvalCoord2d(GLdouble u, GLdouble v) {
 
 void APIENTRY Wrap_glEvalCoord2dv(const GLdouble* u) {
     AV_SCOPE("glEvalCoord2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord2dv(*rvk_t, u);
@@ -4992,6 +5216,10 @@ void APIENTRY Wrap_glEvalCoord2dv(const GLdouble* u) {
 
 void APIENTRY Wrap_glEvalCoord2f(GLfloat u, GLfloat v) {
     AV_SCOPE("glEvalCoord2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord2f(*rvk_t, u, v);
@@ -4999,6 +5227,10 @@ void APIENTRY Wrap_glEvalCoord2f(GLfloat u, GLfloat v) {
 
 void APIENTRY Wrap_glEvalCoord2fv(const GLfloat* u) {
     AV_SCOPE("glEvalCoord2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalCoord2fv(*rvk_t, u);
@@ -5006,6 +5238,10 @@ void APIENTRY Wrap_glEvalCoord2fv(const GLfloat* u) {
 
 void APIENTRY Wrap_glEvalMesh1(GLenum mode, GLint i1, GLint i2) {
     AV_SCOPE("glEvalMesh1");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalMesh1(*rvk_t, mode, i1, i2);
@@ -5013,6 +5249,10 @@ void APIENTRY Wrap_glEvalMesh1(GLenum mode, GLint i1, GLint i2) {
 
 void APIENTRY Wrap_glEvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint j2) {
     AV_SCOPE("glEvalMesh2");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalMesh2(*rvk_t, mode, i1, i2, j1, j2);
@@ -5020,6 +5260,10 @@ void APIENTRY Wrap_glEvalMesh2(GLenum mode, GLint i1, GLint i2, GLint j1, GLint 
 
 void APIENTRY Wrap_glEvalPoint1(GLint i) {
     AV_SCOPE("glEvalPoint1");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalPoint1(*rvk_t, i);
@@ -5027,6 +5271,10 @@ void APIENTRY Wrap_glEvalPoint1(GLint i) {
 
 void APIENTRY Wrap_glEvalPoint2(GLint i, GLint j) {
     AV_SCOPE("glEvalPoint2");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glEvalPoint2(*rvk_t, i, j);
@@ -5034,6 +5282,10 @@ void APIENTRY Wrap_glEvalPoint2(GLint i, GLint j) {
 
 void APIENTRY Wrap_glFeedbackBuffer(GLsizei size, GLenum type, GLfloat* buffer) {
     AV_SCOPE("glFeedbackBuffer");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFeedbackBuffer(*rvk_t, size, type, buffer);
@@ -5041,6 +5293,10 @@ void APIENTRY Wrap_glFeedbackBuffer(GLsizei size, GLenum type, GLfloat* buffer) 
 
 void APIENTRY Wrap_glFogCoordd(GLdouble coord) {
     AV_SCOPE("glFogCoordd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogCoordd(*rvk_t, coord);
@@ -5048,6 +5304,10 @@ void APIENTRY Wrap_glFogCoordd(GLdouble coord) {
 
 void APIENTRY Wrap_glFogCoorddv(const GLdouble* coord) {
     AV_SCOPE("glFogCoorddv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogCoorddv(*rvk_t, coord);
@@ -5055,6 +5315,10 @@ void APIENTRY Wrap_glFogCoorddv(const GLdouble* coord) {
 
 void APIENTRY Wrap_glFogCoordf(GLfloat coord) {
     AV_SCOPE("glFogCoordf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogCoordf(*rvk_t, coord);
@@ -5062,6 +5326,10 @@ void APIENTRY Wrap_glFogCoordf(GLfloat coord) {
 
 void APIENTRY Wrap_glFogCoordfv(const GLfloat* coord) {
     AV_SCOPE("glFogCoordfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogCoordfv(*rvk_t, coord);
@@ -5069,6 +5337,10 @@ void APIENTRY Wrap_glFogCoordfv(const GLfloat* coord) {
 
 void APIENTRY Wrap_glFogf(GLenum pname, GLfloat param) {
     AV_SCOPE("glFogf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogf(*rvk_t, pname, param);
@@ -5076,6 +5348,10 @@ void APIENTRY Wrap_glFogf(GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glFogfv(GLenum pname, const GLfloat* params) {
     AV_SCOPE("glFogfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogfv(*rvk_t, pname, params);
@@ -5083,6 +5359,10 @@ void APIENTRY Wrap_glFogfv(GLenum pname, const GLfloat* params) {
 
 void APIENTRY Wrap_glFogi(GLenum pname, GLint param) {
     AV_SCOPE("glFogi");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogi(*rvk_t, pname, param);
@@ -5090,6 +5370,10 @@ void APIENTRY Wrap_glFogi(GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glFogiv(GLenum pname, const GLint* params) {
     AV_SCOPE("glFogiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFogiv(*rvk_t, pname, params);
@@ -5097,6 +5381,10 @@ void APIENTRY Wrap_glFogiv(GLenum pname, const GLint* params) {
 
 void APIENTRY Wrap_glFrustum(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
     AV_SCOPE("glFrustum");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glFrustum(*rvk_t, left, right, bottom, top, zNear, zFar);
@@ -5104,6 +5392,10 @@ void APIENTRY Wrap_glFrustum(GLdouble left, GLdouble right, GLdouble bottom, GLd
 
 GLuint APIENTRY Wrap_glGenLists(GLsizei range) {
     AV_SCOPE("glGenLists");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return 0;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
     return ::av::glproto::rvk_glGenLists(*rvk_t, range);
@@ -5111,6 +5403,10 @@ GLuint APIENTRY Wrap_glGenLists(GLsizei range) {
 
 void APIENTRY Wrap_glGetClipPlane(GLenum plane, GLdouble* equation) {
     AV_SCOPE("glGetClipPlane");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetClipPlane(*rvk_t, plane, equation);
@@ -5118,6 +5414,10 @@ void APIENTRY Wrap_glGetClipPlane(GLenum plane, GLdouble* equation) {
 
 void APIENTRY Wrap_glGetLightfv(GLenum light, GLenum pname, GLfloat* params) {
     AV_SCOPE("glGetLightfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetLightfv(*rvk_t, light, pname, params);
@@ -5125,6 +5425,10 @@ void APIENTRY Wrap_glGetLightfv(GLenum light, GLenum pname, GLfloat* params) {
 
 void APIENTRY Wrap_glGetLightiv(GLenum light, GLenum pname, GLint* params) {
     AV_SCOPE("glGetLightiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetLightiv(*rvk_t, light, pname, params);
@@ -5132,6 +5436,10 @@ void APIENTRY Wrap_glGetLightiv(GLenum light, GLenum pname, GLint* params) {
 
 void APIENTRY Wrap_glGetMapdv(GLenum target, GLenum query, GLdouble* v) {
     AV_SCOPE("glGetMapdv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetMapdv(*rvk_t, target, query, v);
@@ -5139,6 +5447,10 @@ void APIENTRY Wrap_glGetMapdv(GLenum target, GLenum query, GLdouble* v) {
 
 void APIENTRY Wrap_glGetMapfv(GLenum target, GLenum query, GLfloat* v) {
     AV_SCOPE("glGetMapfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetMapfv(*rvk_t, target, query, v);
@@ -5146,6 +5458,10 @@ void APIENTRY Wrap_glGetMapfv(GLenum target, GLenum query, GLfloat* v) {
 
 void APIENTRY Wrap_glGetMapiv(GLenum target, GLenum query, GLint* v) {
     AV_SCOPE("glGetMapiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetMapiv(*rvk_t, target, query, v);
@@ -5153,6 +5469,10 @@ void APIENTRY Wrap_glGetMapiv(GLenum target, GLenum query, GLint* v) {
 
 void APIENTRY Wrap_glGetMaterialfv(GLenum face, GLenum pname, GLfloat* params) {
     AV_SCOPE("glGetMaterialfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetMaterialfv(*rvk_t, face, pname, params);
@@ -5160,6 +5480,10 @@ void APIENTRY Wrap_glGetMaterialfv(GLenum face, GLenum pname, GLfloat* params) {
 
 void APIENTRY Wrap_glGetMaterialiv(GLenum face, GLenum pname, GLint* params) {
     AV_SCOPE("glGetMaterialiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetMaterialiv(*rvk_t, face, pname, params);
@@ -5167,6 +5491,10 @@ void APIENTRY Wrap_glGetMaterialiv(GLenum face, GLenum pname, GLint* params) {
 
 void APIENTRY Wrap_glGetPixelMapfv(GLenum map, GLfloat* values) {
     AV_SCOPE("glGetPixelMapfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetPixelMapfv(*rvk_t, map, values);
@@ -5174,6 +5502,10 @@ void APIENTRY Wrap_glGetPixelMapfv(GLenum map, GLfloat* values) {
 
 void APIENTRY Wrap_glGetPixelMapuiv(GLenum map, GLuint* values) {
     AV_SCOPE("glGetPixelMapuiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetPixelMapuiv(*rvk_t, map, values);
@@ -5181,6 +5513,10 @@ void APIENTRY Wrap_glGetPixelMapuiv(GLenum map, GLuint* values) {
 
 void APIENTRY Wrap_glGetPixelMapusv(GLenum map, GLushort* values) {
     AV_SCOPE("glGetPixelMapusv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetPixelMapusv(*rvk_t, map, values);
@@ -5188,6 +5524,10 @@ void APIENTRY Wrap_glGetPixelMapusv(GLenum map, GLushort* values) {
 
 void APIENTRY Wrap_glGetPolygonStipple(GLubyte* mask) {
     AV_SCOPE("glGetPolygonStipple");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetPolygonStipple(*rvk_t, mask);
@@ -5195,6 +5535,10 @@ void APIENTRY Wrap_glGetPolygonStipple(GLubyte* mask) {
 
 void APIENTRY Wrap_glGetTexEnvfv(GLenum target, GLenum pname, GLfloat* params) {
     AV_SCOPE("glGetTexEnvfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetTexEnvfv(*rvk_t, target, pname, params);
@@ -5202,6 +5546,10 @@ void APIENTRY Wrap_glGetTexEnvfv(GLenum target, GLenum pname, GLfloat* params) {
 
 void APIENTRY Wrap_glGetTexEnviv(GLenum target, GLenum pname, GLint* params) {
     AV_SCOPE("glGetTexEnviv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetTexEnviv(*rvk_t, target, pname, params);
@@ -5209,6 +5557,10 @@ void APIENTRY Wrap_glGetTexEnviv(GLenum target, GLenum pname, GLint* params) {
 
 void APIENTRY Wrap_glGetTexGendv(GLenum coord, GLenum pname, GLdouble* params) {
     AV_SCOPE("glGetTexGendv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetTexGendv(*rvk_t, coord, pname, params);
@@ -5216,6 +5568,10 @@ void APIENTRY Wrap_glGetTexGendv(GLenum coord, GLenum pname, GLdouble* params) {
 
 void APIENTRY Wrap_glGetTexGenfv(GLenum coord, GLenum pname, GLfloat* params) {
     AV_SCOPE("glGetTexGenfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetTexGenfv(*rvk_t, coord, pname, params);
@@ -5223,6 +5579,10 @@ void APIENTRY Wrap_glGetTexGenfv(GLenum coord, GLenum pname, GLfloat* params) {
 
 void APIENTRY Wrap_glGetTexGeniv(GLenum coord, GLenum pname, GLint* params) {
     AV_SCOPE("glGetTexGeniv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glGetTexGeniv(*rvk_t, coord, pname, params);
@@ -5230,6 +5590,10 @@ void APIENTRY Wrap_glGetTexGeniv(GLenum coord, GLenum pname, GLint* params) {
 
 void APIENTRY Wrap_glIndexMask(GLuint mask) {
     AV_SCOPE("glIndexMask");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexMask(*rvk_t, mask);
@@ -5237,6 +5601,10 @@ void APIENTRY Wrap_glIndexMask(GLuint mask) {
 
 void APIENTRY Wrap_glIndexd(GLdouble c) {
     AV_SCOPE("glIndexd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexd(*rvk_t, c);
@@ -5244,6 +5612,10 @@ void APIENTRY Wrap_glIndexd(GLdouble c) {
 
 void APIENTRY Wrap_glIndexdv(GLdouble* c) {
     AV_SCOPE("glIndexdv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexdv(*rvk_t, c);
@@ -5251,6 +5623,10 @@ void APIENTRY Wrap_glIndexdv(GLdouble* c) {
 
 void APIENTRY Wrap_glIndexf(GLfloat c) {
     AV_SCOPE("glIndexf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexf(*rvk_t, c);
@@ -5258,6 +5634,10 @@ void APIENTRY Wrap_glIndexf(GLfloat c) {
 
 void APIENTRY Wrap_glIndexfv(GLfloat* c) {
     AV_SCOPE("glIndexfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexfv(*rvk_t, c);
@@ -5265,6 +5645,10 @@ void APIENTRY Wrap_glIndexfv(GLfloat* c) {
 
 void APIENTRY Wrap_glIndexi(GLint c) {
     AV_SCOPE("glIndexi");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexi(*rvk_t, c);
@@ -5272,6 +5656,10 @@ void APIENTRY Wrap_glIndexi(GLint c) {
 
 void APIENTRY Wrap_glIndexiv(GLint* c) {
     AV_SCOPE("glIndexiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexiv(*rvk_t, c);
@@ -5279,6 +5667,10 @@ void APIENTRY Wrap_glIndexiv(GLint* c) {
 
 void APIENTRY Wrap_glIndexs(GLshort c) {
     AV_SCOPE("glIndexs");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexs(*rvk_t, c);
@@ -5286,6 +5678,10 @@ void APIENTRY Wrap_glIndexs(GLshort c) {
 
 void APIENTRY Wrap_glIndexsv(GLshort* c) {
     AV_SCOPE("glIndexsv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexsv(*rvk_t, c);
@@ -5293,6 +5689,10 @@ void APIENTRY Wrap_glIndexsv(GLshort* c) {
 
 void APIENTRY Wrap_glIndexub(GLubyte c) {
     AV_SCOPE("glIndexub");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexub(*rvk_t, c);
@@ -5300,6 +5700,10 @@ void APIENTRY Wrap_glIndexub(GLubyte c) {
 
 void APIENTRY Wrap_glIndexubv(GLubyte* c) {
     AV_SCOPE("glIndexubv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glIndexubv(*rvk_t, c);
@@ -5307,6 +5711,10 @@ void APIENTRY Wrap_glIndexubv(GLubyte* c) {
 
 void APIENTRY Wrap_glInitNames(void) {
     AV_SCOPE("glInitNames");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glInitNames(*rvk_t);
@@ -5314,6 +5722,10 @@ void APIENTRY Wrap_glInitNames(void) {
 
 GLboolean APIENTRY Wrap_glIsList(GLuint list) {
     AV_SCOPE("glIsList");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return 0;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
     return ::av::glproto::rvk_glIsList(*rvk_t, list);
@@ -5321,6 +5733,10 @@ GLboolean APIENTRY Wrap_glIsList(GLuint list) {
 
 void APIENTRY Wrap_glLightModelf(GLenum pname, GLfloat param) {
     AV_SCOPE("glLightModelf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightModelf(*rvk_t, pname, param);
@@ -5328,6 +5744,10 @@ void APIENTRY Wrap_glLightModelf(GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glLightModelfv(GLenum pname, const GLfloat* params) {
     AV_SCOPE("glLightModelfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightModelfv(*rvk_t, pname, params);
@@ -5335,6 +5755,10 @@ void APIENTRY Wrap_glLightModelfv(GLenum pname, const GLfloat* params) {
 
 void APIENTRY Wrap_glLightModeli(GLenum pname, GLint param) {
     AV_SCOPE("glLightModeli");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightModeli(*rvk_t, pname, param);
@@ -5342,6 +5766,10 @@ void APIENTRY Wrap_glLightModeli(GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glLightModeliv(GLenum pname, const GLint* params) {
     AV_SCOPE("glLightModeliv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightModeliv(*rvk_t, pname, params);
@@ -5349,6 +5777,10 @@ void APIENTRY Wrap_glLightModeliv(GLenum pname, const GLint* params) {
 
 void APIENTRY Wrap_glLightf(GLenum light, GLenum pname, GLfloat param) {
     AV_SCOPE("glLightf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightf(*rvk_t, light, pname, param);
@@ -5356,6 +5788,10 @@ void APIENTRY Wrap_glLightf(GLenum light, GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glLightfv(GLenum light, GLenum pname, const GLfloat* params) {
     AV_SCOPE("glLightfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightfv(*rvk_t, light, pname, params);
@@ -5363,6 +5799,10 @@ void APIENTRY Wrap_glLightfv(GLenum light, GLenum pname, const GLfloat* params) 
 
 void APIENTRY Wrap_glLighti(GLenum light, GLenum pname, GLint param) {
     AV_SCOPE("glLighti");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLighti(*rvk_t, light, pname, param);
@@ -5370,6 +5810,10 @@ void APIENTRY Wrap_glLighti(GLenum light, GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glLightiv(GLenum light, GLenum pname, const GLint* params) {
     AV_SCOPE("glLightiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLightiv(*rvk_t, light, pname, params);
@@ -5377,6 +5821,10 @@ void APIENTRY Wrap_glLightiv(GLenum light, GLenum pname, const GLint* params) {
 
 void APIENTRY Wrap_glLineStipple(GLint factor, GLushort pattern) {
     AV_SCOPE("glLineStipple");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLineStipple(*rvk_t, factor, pattern);
@@ -5384,6 +5832,10 @@ void APIENTRY Wrap_glLineStipple(GLint factor, GLushort pattern) {
 
 void APIENTRY Wrap_glListBase(GLuint base) {
     AV_SCOPE("glListBase");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glListBase(*rvk_t, base);
@@ -5391,6 +5843,10 @@ void APIENTRY Wrap_glListBase(GLuint base) {
 
 void APIENTRY Wrap_glLoadIdentity(void) {
     AV_SCOPE("glLoadIdentity");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadIdentity(*rvk_t);
@@ -5398,6 +5854,10 @@ void APIENTRY Wrap_glLoadIdentity(void) {
 
 void APIENTRY Wrap_glLoadMatrixd(const GLdouble* m) {
     AV_SCOPE("glLoadMatrixd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadMatrixd(*rvk_t, m);
@@ -5405,6 +5865,10 @@ void APIENTRY Wrap_glLoadMatrixd(const GLdouble* m) {
 
 void APIENTRY Wrap_glLoadMatrixf(const GLfloat* m) {
     AV_SCOPE("glLoadMatrixf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadMatrixf(*rvk_t, m);
@@ -5412,6 +5876,10 @@ void APIENTRY Wrap_glLoadMatrixf(const GLfloat* m) {
 
 void APIENTRY Wrap_glLoadName(GLuint name) {
     AV_SCOPE("glLoadName");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadName(*rvk_t, name);
@@ -5419,6 +5887,10 @@ void APIENTRY Wrap_glLoadName(GLuint name) {
 
 void APIENTRY Wrap_glLoadTransposeMatrixd(const GLdouble* m) {
     AV_SCOPE("glLoadTransposeMatrixd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadTransposeMatrixd(*rvk_t, m);
@@ -5426,6 +5898,10 @@ void APIENTRY Wrap_glLoadTransposeMatrixd(const GLdouble* m) {
 
 void APIENTRY Wrap_glLoadTransposeMatrixf(const GLfloat* m) {
     AV_SCOPE("glLoadTransposeMatrixf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glLoadTransposeMatrixf(*rvk_t, m);
@@ -5433,6 +5909,10 @@ void APIENTRY Wrap_glLoadTransposeMatrixf(const GLfloat* m) {
 
 void APIENTRY Wrap_glMap1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride, GLint order, const GLdouble* points) {
     AV_SCOPE("glMap1d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMap1d(*rvk_t, target, u1, u2, stride, order, points);
@@ -5440,6 +5920,10 @@ void APIENTRY Wrap_glMap1d(GLenum target, GLdouble u1, GLdouble u2, GLint stride
 
 void APIENTRY Wrap_glMap1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride, GLint order, const GLfloat* points) {
     AV_SCOPE("glMap1f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMap1f(*rvk_t, target, u1, u2, stride, order, points);
@@ -5447,6 +5931,10 @@ void APIENTRY Wrap_glMap1f(GLenum target, GLfloat u1, GLfloat u2, GLint stride, 
 
 void APIENTRY Wrap_glMap2d(GLenum target, GLdouble u1, GLdouble u2, GLint ustride, GLint uorder, GLdouble v1, GLdouble v2, GLint vstride, GLint vorder, const GLdouble* points) {
     AV_SCOPE("glMap2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMap2d(*rvk_t, target, u1, u2, ustride, uorder, v1, v2, vstride, vorder, points);
@@ -5454,6 +5942,10 @@ void APIENTRY Wrap_glMap2d(GLenum target, GLdouble u1, GLdouble u2, GLint ustrid
 
 void APIENTRY Wrap_glMap2f(GLenum target, GLfloat u1, GLfloat u2, GLint ustride, GLint uorder, GLfloat v1, GLfloat v2, GLint vstride, GLint vorder, const GLfloat* points) {
     AV_SCOPE("glMap2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMap2f(*rvk_t, target, u1, u2, ustride, uorder, v1, v2, vstride, vorder, points);
@@ -5461,6 +5953,10 @@ void APIENTRY Wrap_glMap2f(GLenum target, GLfloat u1, GLfloat u2, GLint ustride,
 
 void APIENTRY Wrap_glMapGrid1d(GLint un, GLdouble u1, GLdouble u2) {
     AV_SCOPE("glMapGrid1d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMapGrid1d(*rvk_t, un, u1, u2);
@@ -5468,6 +5964,10 @@ void APIENTRY Wrap_glMapGrid1d(GLint un, GLdouble u1, GLdouble u2) {
 
 void APIENTRY Wrap_glMapGrid1f(GLint un, GLfloat u1, GLfloat u2) {
     AV_SCOPE("glMapGrid1f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMapGrid1f(*rvk_t, un, u1, u2);
@@ -5475,6 +5975,10 @@ void APIENTRY Wrap_glMapGrid1f(GLint un, GLfloat u1, GLfloat u2) {
 
 void APIENTRY Wrap_glMapGrid2d(GLint un, GLdouble u1, GLdouble u2, GLint vn, GLdouble v1, GLdouble v2) {
     AV_SCOPE("glMapGrid2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMapGrid2d(*rvk_t, un, u1, u2, vn, v1, v2);
@@ -5482,6 +5986,10 @@ void APIENTRY Wrap_glMapGrid2d(GLint un, GLdouble u1, GLdouble u2, GLint vn, GLd
 
 void APIENTRY Wrap_glMapGrid2f(GLint un, GLfloat u1, GLfloat u2, GLint vn, GLfloat v1, GLfloat v2) {
     AV_SCOPE("glMapGrid2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMapGrid2f(*rvk_t, un, u1, u2, vn, v1, v2);
@@ -5489,6 +5997,10 @@ void APIENTRY Wrap_glMapGrid2f(GLint un, GLfloat u1, GLfloat u2, GLint vn, GLflo
 
 void APIENTRY Wrap_glMaterialf(GLenum face, GLenum pname, GLfloat param) {
     AV_SCOPE("glMaterialf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMaterialf(*rvk_t, face, pname, param);
@@ -5496,6 +6008,10 @@ void APIENTRY Wrap_glMaterialf(GLenum face, GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glMaterialfv(GLenum face, GLenum pname, const GLfloat* params) {
     AV_SCOPE("glMaterialfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMaterialfv(*rvk_t, face, pname, params);
@@ -5503,6 +6019,10 @@ void APIENTRY Wrap_glMaterialfv(GLenum face, GLenum pname, const GLfloat* params
 
 void APIENTRY Wrap_glMateriali(GLenum face, GLenum pname, GLint param) {
     AV_SCOPE("glMateriali");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMateriali(*rvk_t, face, pname, param);
@@ -5510,6 +6030,10 @@ void APIENTRY Wrap_glMateriali(GLenum face, GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glMaterialiv(GLenum face, GLenum pname, const GLint* params) {
     AV_SCOPE("glMaterialiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMaterialiv(*rvk_t, face, pname, params);
@@ -5517,6 +6041,10 @@ void APIENTRY Wrap_glMaterialiv(GLenum face, GLenum pname, const GLint* params) 
 
 void APIENTRY Wrap_glMatrixMode(GLenum mode) {
     AV_SCOPE("glMatrixMode");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMatrixMode(*rvk_t, mode);
@@ -5524,6 +6052,10 @@ void APIENTRY Wrap_glMatrixMode(GLenum mode) {
 
 void APIENTRY Wrap_glMultMatrixd(const GLdouble* m) {
     AV_SCOPE("glMultMatrixd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultMatrixd(*rvk_t, m);
@@ -5531,6 +6063,10 @@ void APIENTRY Wrap_glMultMatrixd(const GLdouble* m) {
 
 void APIENTRY Wrap_glMultMatrixf(const GLfloat* m) {
     AV_SCOPE("glMultMatrixf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultMatrixf(*rvk_t, m);
@@ -5538,6 +6074,10 @@ void APIENTRY Wrap_glMultMatrixf(const GLfloat* m) {
 
 void APIENTRY Wrap_glMultTransposeMatrixd(const GLdouble* m) {
     AV_SCOPE("glMultTransposeMatrixd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultTransposeMatrixd(*rvk_t, m);
@@ -5545,6 +6085,10 @@ void APIENTRY Wrap_glMultTransposeMatrixd(const GLdouble* m) {
 
 void APIENTRY Wrap_glMultTransposeMatrixf(const GLfloat* m) {
     AV_SCOPE("glMultTransposeMatrixf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultTransposeMatrixf(*rvk_t, m);
@@ -5552,6 +6096,10 @@ void APIENTRY Wrap_glMultTransposeMatrixf(const GLfloat* m) {
 
 void APIENTRY Wrap_glMultiTexCoord1d(GLenum target, GLdouble s) {
     AV_SCOPE("glMultiTexCoord1d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1d(*rvk_t, target, s);
@@ -5559,6 +6107,10 @@ void APIENTRY Wrap_glMultiTexCoord1d(GLenum target, GLdouble s) {
 
 void APIENTRY Wrap_glMultiTexCoord1dv(GLenum target, const GLdouble* v) {
     AV_SCOPE("glMultiTexCoord1dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1dv(*rvk_t, target, v);
@@ -5566,6 +6118,10 @@ void APIENTRY Wrap_glMultiTexCoord1dv(GLenum target, const GLdouble* v) {
 
 void APIENTRY Wrap_glMultiTexCoord1f(GLenum target, GLfloat s) {
     AV_SCOPE("glMultiTexCoord1f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1f(*rvk_t, target, s);
@@ -5573,6 +6129,10 @@ void APIENTRY Wrap_glMultiTexCoord1f(GLenum target, GLfloat s) {
 
 void APIENTRY Wrap_glMultiTexCoord1fv(GLenum target, const GLfloat* v) {
     AV_SCOPE("glMultiTexCoord1fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1fv(*rvk_t, target, v);
@@ -5580,6 +6140,10 @@ void APIENTRY Wrap_glMultiTexCoord1fv(GLenum target, const GLfloat* v) {
 
 void APIENTRY Wrap_glMultiTexCoord1i(GLenum target, GLint s) {
     AV_SCOPE("glMultiTexCoord1i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1i(*rvk_t, target, s);
@@ -5587,6 +6151,10 @@ void APIENTRY Wrap_glMultiTexCoord1i(GLenum target, GLint s) {
 
 void APIENTRY Wrap_glMultiTexCoord1iv(GLenum target, const GLint* v) {
     AV_SCOPE("glMultiTexCoord1iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1iv(*rvk_t, target, v);
@@ -5594,6 +6162,10 @@ void APIENTRY Wrap_glMultiTexCoord1iv(GLenum target, const GLint* v) {
 
 void APIENTRY Wrap_glMultiTexCoord1s(GLenum target, GLshort s) {
     AV_SCOPE("glMultiTexCoord1s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1s(*rvk_t, target, s);
@@ -5601,6 +6173,10 @@ void APIENTRY Wrap_glMultiTexCoord1s(GLenum target, GLshort s) {
 
 void APIENTRY Wrap_glMultiTexCoord1sv(GLenum target, const GLshort* v) {
     AV_SCOPE("glMultiTexCoord1sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord1sv(*rvk_t, target, v);
@@ -5608,6 +6184,10 @@ void APIENTRY Wrap_glMultiTexCoord1sv(GLenum target, const GLshort* v) {
 
 void APIENTRY Wrap_glMultiTexCoord2d(GLenum target, GLdouble s, GLdouble t) {
     AV_SCOPE("glMultiTexCoord2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2d(*rvk_t, target, s, t);
@@ -5615,6 +6195,10 @@ void APIENTRY Wrap_glMultiTexCoord2d(GLenum target, GLdouble s, GLdouble t) {
 
 void APIENTRY Wrap_glMultiTexCoord2dv(GLenum target, const GLdouble* v) {
     AV_SCOPE("glMultiTexCoord2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2dv(*rvk_t, target, v);
@@ -5622,6 +6206,10 @@ void APIENTRY Wrap_glMultiTexCoord2dv(GLenum target, const GLdouble* v) {
 
 void APIENTRY Wrap_glMultiTexCoord2f(GLenum target, GLfloat s, GLfloat t) {
     AV_SCOPE("glMultiTexCoord2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2f(*rvk_t, target, s, t);
@@ -5629,6 +6217,10 @@ void APIENTRY Wrap_glMultiTexCoord2f(GLenum target, GLfloat s, GLfloat t) {
 
 void APIENTRY Wrap_glMultiTexCoord2fv(GLenum target, const GLfloat* v) {
     AV_SCOPE("glMultiTexCoord2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2fv(*rvk_t, target, v);
@@ -5636,6 +6228,10 @@ void APIENTRY Wrap_glMultiTexCoord2fv(GLenum target, const GLfloat* v) {
 
 void APIENTRY Wrap_glMultiTexCoord2i(GLenum target, GLint s, GLint t) {
     AV_SCOPE("glMultiTexCoord2i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2i(*rvk_t, target, s, t);
@@ -5643,6 +6239,10 @@ void APIENTRY Wrap_glMultiTexCoord2i(GLenum target, GLint s, GLint t) {
 
 void APIENTRY Wrap_glMultiTexCoord2iv(GLenum target, const GLint* v) {
     AV_SCOPE("glMultiTexCoord2iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2iv(*rvk_t, target, v);
@@ -5650,6 +6250,10 @@ void APIENTRY Wrap_glMultiTexCoord2iv(GLenum target, const GLint* v) {
 
 void APIENTRY Wrap_glMultiTexCoord2s(GLenum target, GLshort s, GLshort t) {
     AV_SCOPE("glMultiTexCoord2s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2s(*rvk_t, target, s, t);
@@ -5657,6 +6261,10 @@ void APIENTRY Wrap_glMultiTexCoord2s(GLenum target, GLshort s, GLshort t) {
 
 void APIENTRY Wrap_glMultiTexCoord2sv(GLenum target, const GLshort* v) {
     AV_SCOPE("glMultiTexCoord2sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord2sv(*rvk_t, target, v);
@@ -5664,6 +6272,10 @@ void APIENTRY Wrap_glMultiTexCoord2sv(GLenum target, const GLshort* v) {
 
 void APIENTRY Wrap_glMultiTexCoord3d(GLenum target, GLdouble s, GLdouble t, GLdouble r) {
     AV_SCOPE("glMultiTexCoord3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3d(*rvk_t, target, s, t, r);
@@ -5671,6 +6283,10 @@ void APIENTRY Wrap_glMultiTexCoord3d(GLenum target, GLdouble s, GLdouble t, GLdo
 
 void APIENTRY Wrap_glMultiTexCoord3dv(GLenum target, const GLdouble* v) {
     AV_SCOPE("glMultiTexCoord3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3dv(*rvk_t, target, v);
@@ -5678,6 +6294,10 @@ void APIENTRY Wrap_glMultiTexCoord3dv(GLenum target, const GLdouble* v) {
 
 void APIENTRY Wrap_glMultiTexCoord3f(GLenum target, GLfloat s, GLfloat t, GLfloat r) {
     AV_SCOPE("glMultiTexCoord3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3f(*rvk_t, target, s, t, r);
@@ -5685,6 +6305,10 @@ void APIENTRY Wrap_glMultiTexCoord3f(GLenum target, GLfloat s, GLfloat t, GLfloa
 
 void APIENTRY Wrap_glMultiTexCoord3fv(GLenum target, const GLfloat* v) {
     AV_SCOPE("glMultiTexCoord3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3fv(*rvk_t, target, v);
@@ -5692,6 +6316,10 @@ void APIENTRY Wrap_glMultiTexCoord3fv(GLenum target, const GLfloat* v) {
 
 void APIENTRY Wrap_glMultiTexCoord3i(GLenum target, GLint s, GLint t, GLint r) {
     AV_SCOPE("glMultiTexCoord3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3i(*rvk_t, target, s, t, r);
@@ -5699,6 +6327,10 @@ void APIENTRY Wrap_glMultiTexCoord3i(GLenum target, GLint s, GLint t, GLint r) {
 
 void APIENTRY Wrap_glMultiTexCoord3iv(GLenum target, const GLint* v) {
     AV_SCOPE("glMultiTexCoord3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3iv(*rvk_t, target, v);
@@ -5706,6 +6338,10 @@ void APIENTRY Wrap_glMultiTexCoord3iv(GLenum target, const GLint* v) {
 
 void APIENTRY Wrap_glMultiTexCoord3s(GLenum target, GLshort s, GLshort t, GLshort r) {
     AV_SCOPE("glMultiTexCoord3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3s(*rvk_t, target, s, t, r);
@@ -5713,6 +6349,10 @@ void APIENTRY Wrap_glMultiTexCoord3s(GLenum target, GLshort s, GLshort t, GLshor
 
 void APIENTRY Wrap_glMultiTexCoord3sv(GLenum target, const GLshort* v) {
     AV_SCOPE("glMultiTexCoord3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord3sv(*rvk_t, target, v);
@@ -5720,6 +6360,10 @@ void APIENTRY Wrap_glMultiTexCoord3sv(GLenum target, const GLshort* v) {
 
 void APIENTRY Wrap_glMultiTexCoord4d(GLenum target, GLdouble s, GLdouble t, GLdouble r, GLdouble q) {
     AV_SCOPE("glMultiTexCoord4d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4d(*rvk_t, target, s, t, r, q);
@@ -5727,6 +6371,10 @@ void APIENTRY Wrap_glMultiTexCoord4d(GLenum target, GLdouble s, GLdouble t, GLdo
 
 void APIENTRY Wrap_glMultiTexCoord4dv(GLenum target, const GLdouble* v) {
     AV_SCOPE("glMultiTexCoord4dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4dv(*rvk_t, target, v);
@@ -5734,6 +6382,10 @@ void APIENTRY Wrap_glMultiTexCoord4dv(GLenum target, const GLdouble* v) {
 
 void APIENTRY Wrap_glMultiTexCoord4f(GLenum target, GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
     AV_SCOPE("glMultiTexCoord4f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4f(*rvk_t, target, s, t, r, q);
@@ -5741,6 +6393,10 @@ void APIENTRY Wrap_glMultiTexCoord4f(GLenum target, GLfloat s, GLfloat t, GLfloa
 
 void APIENTRY Wrap_glMultiTexCoord4fv(GLenum target, const GLfloat* v) {
     AV_SCOPE("glMultiTexCoord4fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4fv(*rvk_t, target, v);
@@ -5748,6 +6404,10 @@ void APIENTRY Wrap_glMultiTexCoord4fv(GLenum target, const GLfloat* v) {
 
 void APIENTRY Wrap_glMultiTexCoord4i(GLenum target, GLint s, GLint t, GLint r, GLint q) {
     AV_SCOPE("glMultiTexCoord4i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4i(*rvk_t, target, s, t, r, q);
@@ -5755,6 +6415,10 @@ void APIENTRY Wrap_glMultiTexCoord4i(GLenum target, GLint s, GLint t, GLint r, G
 
 void APIENTRY Wrap_glMultiTexCoord4iv(GLenum target, const GLint* v) {
     AV_SCOPE("glMultiTexCoord4iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4iv(*rvk_t, target, v);
@@ -5762,6 +6426,10 @@ void APIENTRY Wrap_glMultiTexCoord4iv(GLenum target, const GLint* v) {
 
 void APIENTRY Wrap_glMultiTexCoord4s(GLenum target, GLshort s, GLshort t, GLshort r, GLshort q) {
     AV_SCOPE("glMultiTexCoord4s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4s(*rvk_t, target, s, t, r, q);
@@ -5769,6 +6437,10 @@ void APIENTRY Wrap_glMultiTexCoord4s(GLenum target, GLshort s, GLshort t, GLshor
 
 void APIENTRY Wrap_glMultiTexCoord4sv(GLenum target, const GLshort* v) {
     AV_SCOPE("glMultiTexCoord4sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glMultiTexCoord4sv(*rvk_t, target, v);
@@ -5776,6 +6448,10 @@ void APIENTRY Wrap_glMultiTexCoord4sv(GLenum target, const GLshort* v) {
 
 void APIENTRY Wrap_glNewList(GLuint list, GLenum mode) {
     AV_SCOPE("glNewList");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNewList(*rvk_t, list, mode);
@@ -5783,6 +6459,10 @@ void APIENTRY Wrap_glNewList(GLuint list, GLenum mode) {
 
 void APIENTRY Wrap_glNormal3b(GLbyte nx, GLbyte ny, GLbyte nz) {
     AV_SCOPE("glNormal3b");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3b(*rvk_t, nx, ny, nz);
@@ -5790,6 +6470,10 @@ void APIENTRY Wrap_glNormal3b(GLbyte nx, GLbyte ny, GLbyte nz) {
 
 void APIENTRY Wrap_glNormal3bv(const GLbyte* v) {
     AV_SCOPE("glNormal3bv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3bv(*rvk_t, v);
@@ -5797,6 +6481,10 @@ void APIENTRY Wrap_glNormal3bv(const GLbyte* v) {
 
 void APIENTRY Wrap_glNormal3d(GLdouble nx, GLdouble ny, GLdouble nz) {
     AV_SCOPE("glNormal3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3d(*rvk_t, nx, ny, nz);
@@ -5804,6 +6492,10 @@ void APIENTRY Wrap_glNormal3d(GLdouble nx, GLdouble ny, GLdouble nz) {
 
 void APIENTRY Wrap_glNormal3dv(const GLdouble* v) {
     AV_SCOPE("glNormal3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3dv(*rvk_t, v);
@@ -5811,6 +6503,10 @@ void APIENTRY Wrap_glNormal3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glNormal3f(GLfloat nx, GLfloat ny, GLfloat nz) {
     AV_SCOPE("glNormal3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3f(*rvk_t, nx, ny, nz);
@@ -5818,6 +6514,10 @@ void APIENTRY Wrap_glNormal3f(GLfloat nx, GLfloat ny, GLfloat nz) {
 
 void APIENTRY Wrap_glNormal3fv(const GLfloat* v) {
     AV_SCOPE("glNormal3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3fv(*rvk_t, v);
@@ -5825,6 +6525,10 @@ void APIENTRY Wrap_glNormal3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glNormal3i(GLint nx, GLint ny, GLint nz) {
     AV_SCOPE("glNormal3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3i(*rvk_t, nx, ny, nz);
@@ -5832,6 +6536,10 @@ void APIENTRY Wrap_glNormal3i(GLint nx, GLint ny, GLint nz) {
 
 void APIENTRY Wrap_glNormal3iv(const GLint* v) {
     AV_SCOPE("glNormal3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3iv(*rvk_t, v);
@@ -5839,6 +6547,10 @@ void APIENTRY Wrap_glNormal3iv(const GLint* v) {
 
 void APIENTRY Wrap_glNormal3s(GLshort nx, GLshort ny, GLshort nz) {
     AV_SCOPE("glNormal3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3s(*rvk_t, nx, ny, nz);
@@ -5846,6 +6558,10 @@ void APIENTRY Wrap_glNormal3s(GLshort nx, GLshort ny, GLshort nz) {
 
 void APIENTRY Wrap_glNormal3sv(const GLshort* v) {
     AV_SCOPE("glNormal3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glNormal3sv(*rvk_t, v);
@@ -5853,6 +6569,10 @@ void APIENTRY Wrap_glNormal3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glOrtho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar) {
     AV_SCOPE("glOrtho");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glOrtho(*rvk_t, left, right, bottom, top, zNear, zFar);
@@ -5860,6 +6580,10 @@ void APIENTRY Wrap_glOrtho(GLdouble left, GLdouble right, GLdouble bottom, GLdou
 
 void APIENTRY Wrap_glPassThrough(GLfloat token) {
     AV_SCOPE("glPassThrough");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPassThrough(*rvk_t, token);
@@ -5867,6 +6591,10 @@ void APIENTRY Wrap_glPassThrough(GLfloat token) {
 
 void APIENTRY Wrap_glPixelMapfv(GLenum map, GLsizei mapsize, const GLfloat* values) {
     AV_SCOPE("glPixelMapfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelMapfv(*rvk_t, map, mapsize, values);
@@ -5874,6 +6602,10 @@ void APIENTRY Wrap_glPixelMapfv(GLenum map, GLsizei mapsize, const GLfloat* valu
 
 void APIENTRY Wrap_glPixelMapuiv(GLenum map, GLsizei mapsize, const GLuint* values) {
     AV_SCOPE("glPixelMapuiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelMapuiv(*rvk_t, map, mapsize, values);
@@ -5881,6 +6613,10 @@ void APIENTRY Wrap_glPixelMapuiv(GLenum map, GLsizei mapsize, const GLuint* valu
 
 void APIENTRY Wrap_glPixelMapusv(GLenum map, GLsizei mapsize, const GLushort* values) {
     AV_SCOPE("glPixelMapusv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelMapusv(*rvk_t, map, mapsize, values);
@@ -5888,6 +6624,10 @@ void APIENTRY Wrap_glPixelMapusv(GLenum map, GLsizei mapsize, const GLushort* va
 
 void APIENTRY Wrap_glPixelTransferf(GLenum pname, GLfloat param) {
     AV_SCOPE("glPixelTransferf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelTransferf(*rvk_t, pname, param);
@@ -5895,6 +6635,10 @@ void APIENTRY Wrap_glPixelTransferf(GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glPixelTransferi(GLenum pname, GLint param) {
     AV_SCOPE("glPixelTransferi");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelTransferi(*rvk_t, pname, param);
@@ -5902,6 +6646,10 @@ void APIENTRY Wrap_glPixelTransferi(GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glPixelZoom(GLfloat xfactor, GLfloat yfactor) {
     AV_SCOPE("glPixelZoom");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPixelZoom(*rvk_t, xfactor, yfactor);
@@ -5909,6 +6657,10 @@ void APIENTRY Wrap_glPixelZoom(GLfloat xfactor, GLfloat yfactor) {
 
 void APIENTRY Wrap_glPolygonStipple(const GLubyte* mask) {
     AV_SCOPE("glPolygonStipple");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPolygonStipple(*rvk_t, mask);
@@ -5916,6 +6668,10 @@ void APIENTRY Wrap_glPolygonStipple(const GLubyte* mask) {
 
 void APIENTRY Wrap_glPopAttrib(void) {
     AV_SCOPE("glPopAttrib");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::forget_bindings();
     if (rvk_t == nullptr) return;
@@ -5924,6 +6680,10 @@ void APIENTRY Wrap_glPopAttrib(void) {
 
 void APIENTRY Wrap_glPopClientAttrib(void) {
     AV_SCOPE("glPopClientAttrib");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPopClientAttrib(*rvk_t);
@@ -5931,6 +6691,10 @@ void APIENTRY Wrap_glPopClientAttrib(void) {
 
 void APIENTRY Wrap_glPopMatrix(void) {
     AV_SCOPE("glPopMatrix");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPopMatrix(*rvk_t);
@@ -5938,6 +6702,10 @@ void APIENTRY Wrap_glPopMatrix(void) {
 
 void APIENTRY Wrap_glPopName(void) {
     AV_SCOPE("glPopName");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPopName(*rvk_t);
@@ -5945,6 +6713,10 @@ void APIENTRY Wrap_glPopName(void) {
 
 void APIENTRY Wrap_glPrioritizeTextures(GLsizei n, const GLuint* textures, const GLfloat* priorities) {
     AV_SCOPE("glPrioritizeTextures");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPrioritizeTextures(*rvk_t, n, textures, priorities);
@@ -5952,6 +6724,10 @@ void APIENTRY Wrap_glPrioritizeTextures(GLsizei n, const GLuint* textures, const
 
 void APIENTRY Wrap_glPushAttrib(GLbitfield mask) {
     AV_SCOPE("glPushAttrib");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPushAttrib(*rvk_t, mask);
@@ -5959,6 +6735,10 @@ void APIENTRY Wrap_glPushAttrib(GLbitfield mask) {
 
 void APIENTRY Wrap_glPushClientAttrib(GLbitfield mask) {
     AV_SCOPE("glPushClientAttrib");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPushClientAttrib(*rvk_t, mask);
@@ -5966,6 +6746,10 @@ void APIENTRY Wrap_glPushClientAttrib(GLbitfield mask) {
 
 void APIENTRY Wrap_glPushMatrix(void) {
     AV_SCOPE("glPushMatrix");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPushMatrix(*rvk_t);
@@ -5973,6 +6757,10 @@ void APIENTRY Wrap_glPushMatrix(void) {
 
 void APIENTRY Wrap_glPushName(GLuint name) {
     AV_SCOPE("glPushName");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glPushName(*rvk_t, name);
@@ -5980,6 +6768,10 @@ void APIENTRY Wrap_glPushName(GLuint name) {
 
 void APIENTRY Wrap_glRasterPos2d(GLdouble x, GLdouble y) {
     AV_SCOPE("glRasterPos2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2d(*rvk_t, x, y);
@@ -5987,6 +6779,10 @@ void APIENTRY Wrap_glRasterPos2d(GLdouble x, GLdouble y) {
 
 void APIENTRY Wrap_glRasterPos2dv(const GLdouble* v) {
     AV_SCOPE("glRasterPos2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2dv(*rvk_t, v);
@@ -5994,6 +6790,10 @@ void APIENTRY Wrap_glRasterPos2dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glRasterPos2f(GLfloat x, GLfloat y) {
     AV_SCOPE("glRasterPos2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2f(*rvk_t, x, y);
@@ -6001,6 +6801,10 @@ void APIENTRY Wrap_glRasterPos2f(GLfloat x, GLfloat y) {
 
 void APIENTRY Wrap_glRasterPos2fv(const GLfloat* v) {
     AV_SCOPE("glRasterPos2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2fv(*rvk_t, v);
@@ -6008,6 +6812,10 @@ void APIENTRY Wrap_glRasterPos2fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glRasterPos2i(GLint x, GLint y) {
     AV_SCOPE("glRasterPos2i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2i(*rvk_t, x, y);
@@ -6015,6 +6823,10 @@ void APIENTRY Wrap_glRasterPos2i(GLint x, GLint y) {
 
 void APIENTRY Wrap_glRasterPos2iv(const GLint* v) {
     AV_SCOPE("glRasterPos2iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2iv(*rvk_t, v);
@@ -6022,6 +6834,10 @@ void APIENTRY Wrap_glRasterPos2iv(const GLint* v) {
 
 void APIENTRY Wrap_glRasterPos2s(GLshort x, GLshort y) {
     AV_SCOPE("glRasterPos2s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2s(*rvk_t, x, y);
@@ -6029,6 +6845,10 @@ void APIENTRY Wrap_glRasterPos2s(GLshort x, GLshort y) {
 
 void APIENTRY Wrap_glRasterPos2sv(const GLshort* v) {
     AV_SCOPE("glRasterPos2sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos2sv(*rvk_t, v);
@@ -6036,6 +6856,10 @@ void APIENTRY Wrap_glRasterPos2sv(const GLshort* v) {
 
 void APIENTRY Wrap_glRasterPos3d(GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glRasterPos3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3d(*rvk_t, x, y, z);
@@ -6043,6 +6867,10 @@ void APIENTRY Wrap_glRasterPos3d(GLdouble x, GLdouble y, GLdouble z) {
 
 void APIENTRY Wrap_glRasterPos3dv(const GLdouble* v) {
     AV_SCOPE("glRasterPos3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3dv(*rvk_t, v);
@@ -6050,6 +6878,10 @@ void APIENTRY Wrap_glRasterPos3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glRasterPos3f(GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glRasterPos3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3f(*rvk_t, x, y, z);
@@ -6057,6 +6889,10 @@ void APIENTRY Wrap_glRasterPos3f(GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glRasterPos3fv(const GLfloat* v) {
     AV_SCOPE("glRasterPos3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3fv(*rvk_t, v);
@@ -6064,6 +6900,10 @@ void APIENTRY Wrap_glRasterPos3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glRasterPos3i(GLint x, GLint y, GLint z) {
     AV_SCOPE("glRasterPos3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3i(*rvk_t, x, y, z);
@@ -6071,6 +6911,10 @@ void APIENTRY Wrap_glRasterPos3i(GLint x, GLint y, GLint z) {
 
 void APIENTRY Wrap_glRasterPos3iv(const GLint* v) {
     AV_SCOPE("glRasterPos3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3iv(*rvk_t, v);
@@ -6078,6 +6922,10 @@ void APIENTRY Wrap_glRasterPos3iv(const GLint* v) {
 
 void APIENTRY Wrap_glRasterPos3s(GLshort x, GLshort y, GLshort z) {
     AV_SCOPE("glRasterPos3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3s(*rvk_t, x, y, z);
@@ -6085,6 +6933,10 @@ void APIENTRY Wrap_glRasterPos3s(GLshort x, GLshort y, GLshort z) {
 
 void APIENTRY Wrap_glRasterPos3sv(const GLshort* v) {
     AV_SCOPE("glRasterPos3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos3sv(*rvk_t, v);
@@ -6092,6 +6944,10 @@ void APIENTRY Wrap_glRasterPos3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glRasterPos4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
     AV_SCOPE("glRasterPos4d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4d(*rvk_t, x, y, z, w);
@@ -6099,6 +6955,10 @@ void APIENTRY Wrap_glRasterPos4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w)
 
 void APIENTRY Wrap_glRasterPos4dv(const GLdouble* v) {
     AV_SCOPE("glRasterPos4dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4dv(*rvk_t, v);
@@ -6106,6 +6966,10 @@ void APIENTRY Wrap_glRasterPos4dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glRasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
     AV_SCOPE("glRasterPos4f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4f(*rvk_t, x, y, z, w);
@@ -6113,6 +6977,10 @@ void APIENTRY Wrap_glRasterPos4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
 
 void APIENTRY Wrap_glRasterPos4fv(const GLfloat* v) {
     AV_SCOPE("glRasterPos4fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4fv(*rvk_t, v);
@@ -6120,6 +6988,10 @@ void APIENTRY Wrap_glRasterPos4fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glRasterPos4i(GLint x, GLint y, GLint z, GLint w) {
     AV_SCOPE("glRasterPos4i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4i(*rvk_t, x, y, z, w);
@@ -6127,6 +6999,10 @@ void APIENTRY Wrap_glRasterPos4i(GLint x, GLint y, GLint z, GLint w) {
 
 void APIENTRY Wrap_glRasterPos4iv(const GLint* v) {
     AV_SCOPE("glRasterPos4iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4iv(*rvk_t, v);
@@ -6134,6 +7010,10 @@ void APIENTRY Wrap_glRasterPos4iv(const GLint* v) {
 
 void APIENTRY Wrap_glRasterPos4s(GLshort x, GLshort y, GLshort z, GLshort w) {
     AV_SCOPE("glRasterPos4s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4s(*rvk_t, x, y, z, w);
@@ -6141,6 +7021,10 @@ void APIENTRY Wrap_glRasterPos4s(GLshort x, GLshort y, GLshort z, GLshort w) {
 
 void APIENTRY Wrap_glRasterPos4sv(const GLshort* v) {
     AV_SCOPE("glRasterPos4sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRasterPos4sv(*rvk_t, v);
@@ -6148,6 +7032,10 @@ void APIENTRY Wrap_glRasterPos4sv(const GLshort* v) {
 
 void APIENTRY Wrap_glRectd(GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2) {
     AV_SCOPE("glRectd");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectd(*rvk_t, x1, y1, x2, y2);
@@ -6155,6 +7043,10 @@ void APIENTRY Wrap_glRectd(GLdouble x1, GLdouble y1, GLdouble x2, GLdouble y2) {
 
 void APIENTRY Wrap_glRectdv(const GLdouble* v1, const GLdouble* v2) {
     AV_SCOPE("glRectdv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectdv(*rvk_t, v1, v2);
@@ -6162,6 +7054,10 @@ void APIENTRY Wrap_glRectdv(const GLdouble* v1, const GLdouble* v2) {
 
 void APIENTRY Wrap_glRectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2) {
     AV_SCOPE("glRectf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectf(*rvk_t, x1, y1, x2, y2);
@@ -6169,6 +7065,10 @@ void APIENTRY Wrap_glRectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2) {
 
 void APIENTRY Wrap_glRectfv(const GLfloat* v1, const GLfloat* v2) {
     AV_SCOPE("glRectfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectfv(*rvk_t, v1, v2);
@@ -6176,6 +7076,10 @@ void APIENTRY Wrap_glRectfv(const GLfloat* v1, const GLfloat* v2) {
 
 void APIENTRY Wrap_glRecti(GLint x1, GLint y1, GLint x2, GLint y2) {
     AV_SCOPE("glRecti");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRecti(*rvk_t, x1, y1, x2, y2);
@@ -6183,6 +7087,10 @@ void APIENTRY Wrap_glRecti(GLint x1, GLint y1, GLint x2, GLint y2) {
 
 void APIENTRY Wrap_glRectiv(const GLint* v1, const GLint* v2) {
     AV_SCOPE("glRectiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectiv(*rvk_t, v1, v2);
@@ -6190,6 +7098,10 @@ void APIENTRY Wrap_glRectiv(const GLint* v1, const GLint* v2) {
 
 void APIENTRY Wrap_glRects(GLshort x1, GLshort y1, GLshort x2, GLshort y2) {
     AV_SCOPE("glRects");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRects(*rvk_t, x1, y1, x2, y2);
@@ -6197,6 +7109,10 @@ void APIENTRY Wrap_glRects(GLshort x1, GLshort y1, GLshort x2, GLshort y2) {
 
 void APIENTRY Wrap_glRectsv(const GLshort* v1, const GLshort* v2) {
     AV_SCOPE("glRectsv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRectsv(*rvk_t, v1, v2);
@@ -6204,6 +7120,10 @@ void APIENTRY Wrap_glRectsv(const GLshort* v1, const GLshort* v2) {
 
 GLint APIENTRY Wrap_glRenderMode(GLenum mode) {
     AV_SCOPE("glRenderMode");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return 0;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
     return ::av::glproto::rvk_glRenderMode(*rvk_t, mode);
@@ -6211,6 +7131,10 @@ GLint APIENTRY Wrap_glRenderMode(GLenum mode) {
 
 void APIENTRY Wrap_glRotated(GLdouble angle, GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glRotated");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRotated(*rvk_t, angle, x, y, z);
@@ -6218,6 +7142,10 @@ void APIENTRY Wrap_glRotated(GLdouble angle, GLdouble x, GLdouble y, GLdouble z)
 
 void APIENTRY Wrap_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glRotatef");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glRotatef(*rvk_t, angle, x, y, z);
@@ -6225,6 +7153,10 @@ void APIENTRY Wrap_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glScaled(GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glScaled");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glScaled(*rvk_t, x, y, z);
@@ -6232,6 +7164,10 @@ void APIENTRY Wrap_glScaled(GLdouble x, GLdouble y, GLdouble z) {
 
 void APIENTRY Wrap_glScalef(GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glScalef");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glScalef(*rvk_t, x, y, z);
@@ -6239,6 +7175,10 @@ void APIENTRY Wrap_glScalef(GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glSecondaryColor3b(GLbyte red, GLbyte green, GLbyte blue) {
     AV_SCOPE("glSecondaryColor3b");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3b(*rvk_t, red, green, blue);
@@ -6246,6 +7186,10 @@ void APIENTRY Wrap_glSecondaryColor3b(GLbyte red, GLbyte green, GLbyte blue) {
 
 void APIENTRY Wrap_glSecondaryColor3bv(const GLbyte* v) {
     AV_SCOPE("glSecondaryColor3bv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3bv(*rvk_t, v);
@@ -6253,6 +7197,10 @@ void APIENTRY Wrap_glSecondaryColor3bv(const GLbyte* v) {
 
 void APIENTRY Wrap_glSecondaryColor3d(GLdouble red, GLdouble green, GLdouble blue) {
     AV_SCOPE("glSecondaryColor3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3d(*rvk_t, red, green, blue);
@@ -6260,6 +7208,10 @@ void APIENTRY Wrap_glSecondaryColor3d(GLdouble red, GLdouble green, GLdouble blu
 
 void APIENTRY Wrap_glSecondaryColor3dv(const GLdouble* v) {
     AV_SCOPE("glSecondaryColor3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3dv(*rvk_t, v);
@@ -6267,6 +7219,10 @@ void APIENTRY Wrap_glSecondaryColor3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glSecondaryColor3f(GLfloat red, GLfloat green, GLfloat blue) {
     AV_SCOPE("glSecondaryColor3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3f(*rvk_t, red, green, blue);
@@ -6274,6 +7230,10 @@ void APIENTRY Wrap_glSecondaryColor3f(GLfloat red, GLfloat green, GLfloat blue) 
 
 void APIENTRY Wrap_glSecondaryColor3fv(const GLfloat* v) {
     AV_SCOPE("glSecondaryColor3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3fv(*rvk_t, v);
@@ -6281,6 +7241,10 @@ void APIENTRY Wrap_glSecondaryColor3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glSecondaryColor3i(GLint red, GLint green, GLint blue) {
     AV_SCOPE("glSecondaryColor3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3i(*rvk_t, red, green, blue);
@@ -6288,6 +7252,10 @@ void APIENTRY Wrap_glSecondaryColor3i(GLint red, GLint green, GLint blue) {
 
 void APIENTRY Wrap_glSecondaryColor3iv(const GLint* v) {
     AV_SCOPE("glSecondaryColor3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3iv(*rvk_t, v);
@@ -6295,6 +7263,10 @@ void APIENTRY Wrap_glSecondaryColor3iv(const GLint* v) {
 
 void APIENTRY Wrap_glSecondaryColor3s(GLshort red, GLshort green, GLshort blue) {
     AV_SCOPE("glSecondaryColor3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3s(*rvk_t, red, green, blue);
@@ -6302,6 +7274,10 @@ void APIENTRY Wrap_glSecondaryColor3s(GLshort red, GLshort green, GLshort blue) 
 
 void APIENTRY Wrap_glSecondaryColor3sv(const GLshort* v) {
     AV_SCOPE("glSecondaryColor3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3sv(*rvk_t, v);
@@ -6309,6 +7285,10 @@ void APIENTRY Wrap_glSecondaryColor3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glSecondaryColor3ub(GLubyte red, GLubyte green, GLubyte blue) {
     AV_SCOPE("glSecondaryColor3ub");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3ub(*rvk_t, red, green, blue);
@@ -6316,6 +7296,10 @@ void APIENTRY Wrap_glSecondaryColor3ub(GLubyte red, GLubyte green, GLubyte blue)
 
 void APIENTRY Wrap_glSecondaryColor3ubv(const GLubyte* v) {
     AV_SCOPE("glSecondaryColor3ubv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3ubv(*rvk_t, v);
@@ -6323,6 +7307,10 @@ void APIENTRY Wrap_glSecondaryColor3ubv(const GLubyte* v) {
 
 void APIENTRY Wrap_glSecondaryColor3ui(GLuint red, GLuint green, GLuint blue) {
     AV_SCOPE("glSecondaryColor3ui");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3ui(*rvk_t, red, green, blue);
@@ -6330,6 +7318,10 @@ void APIENTRY Wrap_glSecondaryColor3ui(GLuint red, GLuint green, GLuint blue) {
 
 void APIENTRY Wrap_glSecondaryColor3uiv(const GLuint* v) {
     AV_SCOPE("glSecondaryColor3uiv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3uiv(*rvk_t, v);
@@ -6337,6 +7329,10 @@ void APIENTRY Wrap_glSecondaryColor3uiv(const GLuint* v) {
 
 void APIENTRY Wrap_glSecondaryColor3us(GLushort red, GLushort green, GLushort blue) {
     AV_SCOPE("glSecondaryColor3us");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3us(*rvk_t, red, green, blue);
@@ -6344,6 +7340,10 @@ void APIENTRY Wrap_glSecondaryColor3us(GLushort red, GLushort green, GLushort bl
 
 void APIENTRY Wrap_glSecondaryColor3usv(const GLushort* v) {
     AV_SCOPE("glSecondaryColor3usv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSecondaryColor3usv(*rvk_t, v);
@@ -6351,6 +7351,10 @@ void APIENTRY Wrap_glSecondaryColor3usv(const GLushort* v) {
 
 void APIENTRY Wrap_glSelectBuffer(GLsizei size, GLuint* buffer) {
     AV_SCOPE("glSelectBuffer");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glSelectBuffer(*rvk_t, size, buffer);
@@ -6358,6 +7362,10 @@ void APIENTRY Wrap_glSelectBuffer(GLsizei size, GLuint* buffer) {
 
 void APIENTRY Wrap_glShadeModel(GLenum mode) {
     AV_SCOPE("glShadeModel");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glShadeModel(*rvk_t, mode);
@@ -6365,6 +7373,10 @@ void APIENTRY Wrap_glShadeModel(GLenum mode) {
 
 void APIENTRY Wrap_glTexCoord1d(GLdouble s) {
     AV_SCOPE("glTexCoord1d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1d(*rvk_t, s);
@@ -6372,6 +7384,10 @@ void APIENTRY Wrap_glTexCoord1d(GLdouble s) {
 
 void APIENTRY Wrap_glTexCoord1dv(const GLdouble* v) {
     AV_SCOPE("glTexCoord1dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1dv(*rvk_t, v);
@@ -6379,6 +7395,10 @@ void APIENTRY Wrap_glTexCoord1dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glTexCoord1f(GLfloat s) {
     AV_SCOPE("glTexCoord1f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1f(*rvk_t, s);
@@ -6386,6 +7406,10 @@ void APIENTRY Wrap_glTexCoord1f(GLfloat s) {
 
 void APIENTRY Wrap_glTexCoord1fv(const GLfloat* v) {
     AV_SCOPE("glTexCoord1fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1fv(*rvk_t, v);
@@ -6393,6 +7417,10 @@ void APIENTRY Wrap_glTexCoord1fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glTexCoord1i(GLint s) {
     AV_SCOPE("glTexCoord1i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1i(*rvk_t, s);
@@ -6400,6 +7428,10 @@ void APIENTRY Wrap_glTexCoord1i(GLint s) {
 
 void APIENTRY Wrap_glTexCoord1iv(const GLint* v) {
     AV_SCOPE("glTexCoord1iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1iv(*rvk_t, v);
@@ -6407,6 +7439,10 @@ void APIENTRY Wrap_glTexCoord1iv(const GLint* v) {
 
 void APIENTRY Wrap_glTexCoord1s(GLshort s) {
     AV_SCOPE("glTexCoord1s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1s(*rvk_t, s);
@@ -6414,6 +7450,10 @@ void APIENTRY Wrap_glTexCoord1s(GLshort s) {
 
 void APIENTRY Wrap_glTexCoord1sv(const GLshort* v) {
     AV_SCOPE("glTexCoord1sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord1sv(*rvk_t, v);
@@ -6421,6 +7461,10 @@ void APIENTRY Wrap_glTexCoord1sv(const GLshort* v) {
 
 void APIENTRY Wrap_glTexCoord2d(GLdouble s, GLdouble t) {
     AV_SCOPE("glTexCoord2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2d(*rvk_t, s, t);
@@ -6428,6 +7472,10 @@ void APIENTRY Wrap_glTexCoord2d(GLdouble s, GLdouble t) {
 
 void APIENTRY Wrap_glTexCoord2dv(const GLdouble* v) {
     AV_SCOPE("glTexCoord2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2dv(*rvk_t, v);
@@ -6435,6 +7483,10 @@ void APIENTRY Wrap_glTexCoord2dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glTexCoord2f(GLfloat s, GLfloat t) {
     AV_SCOPE("glTexCoord2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2f(*rvk_t, s, t);
@@ -6442,6 +7494,10 @@ void APIENTRY Wrap_glTexCoord2f(GLfloat s, GLfloat t) {
 
 void APIENTRY Wrap_glTexCoord2fv(const GLfloat* v) {
     AV_SCOPE("glTexCoord2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2fv(*rvk_t, v);
@@ -6449,6 +7505,10 @@ void APIENTRY Wrap_glTexCoord2fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glTexCoord2i(GLint s, GLint t) {
     AV_SCOPE("glTexCoord2i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2i(*rvk_t, s, t);
@@ -6456,6 +7516,10 @@ void APIENTRY Wrap_glTexCoord2i(GLint s, GLint t) {
 
 void APIENTRY Wrap_glTexCoord2iv(const GLint* v) {
     AV_SCOPE("glTexCoord2iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2iv(*rvk_t, v);
@@ -6463,6 +7527,10 @@ void APIENTRY Wrap_glTexCoord2iv(const GLint* v) {
 
 void APIENTRY Wrap_glTexCoord2s(GLshort s, GLshort t) {
     AV_SCOPE("glTexCoord2s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2s(*rvk_t, s, t);
@@ -6470,6 +7538,10 @@ void APIENTRY Wrap_glTexCoord2s(GLshort s, GLshort t) {
 
 void APIENTRY Wrap_glTexCoord2sv(const GLshort* v) {
     AV_SCOPE("glTexCoord2sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord2sv(*rvk_t, v);
@@ -6477,6 +7549,10 @@ void APIENTRY Wrap_glTexCoord2sv(const GLshort* v) {
 
 void APIENTRY Wrap_glTexCoord3d(GLdouble s, GLdouble t, GLdouble r) {
     AV_SCOPE("glTexCoord3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3d(*rvk_t, s, t, r);
@@ -6484,6 +7560,10 @@ void APIENTRY Wrap_glTexCoord3d(GLdouble s, GLdouble t, GLdouble r) {
 
 void APIENTRY Wrap_glTexCoord3dv(const GLdouble* v) {
     AV_SCOPE("glTexCoord3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3dv(*rvk_t, v);
@@ -6491,6 +7571,10 @@ void APIENTRY Wrap_glTexCoord3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glTexCoord3f(GLfloat s, GLfloat t, GLfloat r) {
     AV_SCOPE("glTexCoord3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3f(*rvk_t, s, t, r);
@@ -6498,6 +7582,10 @@ void APIENTRY Wrap_glTexCoord3f(GLfloat s, GLfloat t, GLfloat r) {
 
 void APIENTRY Wrap_glTexCoord3fv(const GLfloat* v) {
     AV_SCOPE("glTexCoord3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3fv(*rvk_t, v);
@@ -6505,6 +7593,10 @@ void APIENTRY Wrap_glTexCoord3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glTexCoord3i(GLint s, GLint t, GLint r) {
     AV_SCOPE("glTexCoord3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3i(*rvk_t, s, t, r);
@@ -6512,6 +7604,10 @@ void APIENTRY Wrap_glTexCoord3i(GLint s, GLint t, GLint r) {
 
 void APIENTRY Wrap_glTexCoord3iv(const GLint* v) {
     AV_SCOPE("glTexCoord3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3iv(*rvk_t, v);
@@ -6519,6 +7615,10 @@ void APIENTRY Wrap_glTexCoord3iv(const GLint* v) {
 
 void APIENTRY Wrap_glTexCoord3s(GLshort s, GLshort t, GLshort r) {
     AV_SCOPE("glTexCoord3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3s(*rvk_t, s, t, r);
@@ -6526,6 +7626,10 @@ void APIENTRY Wrap_glTexCoord3s(GLshort s, GLshort t, GLshort r) {
 
 void APIENTRY Wrap_glTexCoord3sv(const GLshort* v) {
     AV_SCOPE("glTexCoord3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord3sv(*rvk_t, v);
@@ -6533,6 +7637,10 @@ void APIENTRY Wrap_glTexCoord3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glTexCoord4d(GLdouble s, GLdouble t, GLdouble r, GLdouble q) {
     AV_SCOPE("glTexCoord4d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4d(*rvk_t, s, t, r, q);
@@ -6540,6 +7648,10 @@ void APIENTRY Wrap_glTexCoord4d(GLdouble s, GLdouble t, GLdouble r, GLdouble q) 
 
 void APIENTRY Wrap_glTexCoord4dv(const GLdouble* v) {
     AV_SCOPE("glTexCoord4dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4dv(*rvk_t, v);
@@ -6547,6 +7659,10 @@ void APIENTRY Wrap_glTexCoord4dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glTexCoord4f(GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
     AV_SCOPE("glTexCoord4f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4f(*rvk_t, s, t, r, q);
@@ -6554,6 +7670,10 @@ void APIENTRY Wrap_glTexCoord4f(GLfloat s, GLfloat t, GLfloat r, GLfloat q) {
 
 void APIENTRY Wrap_glTexCoord4fv(const GLfloat* v) {
     AV_SCOPE("glTexCoord4fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4fv(*rvk_t, v);
@@ -6561,6 +7681,10 @@ void APIENTRY Wrap_glTexCoord4fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glTexCoord4i(GLint s, GLint t, GLint r, GLint q) {
     AV_SCOPE("glTexCoord4i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4i(*rvk_t, s, t, r, q);
@@ -6568,6 +7692,10 @@ void APIENTRY Wrap_glTexCoord4i(GLint s, GLint t, GLint r, GLint q) {
 
 void APIENTRY Wrap_glTexCoord4iv(const GLint* v) {
     AV_SCOPE("glTexCoord4iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4iv(*rvk_t, v);
@@ -6575,6 +7703,10 @@ void APIENTRY Wrap_glTexCoord4iv(const GLint* v) {
 
 void APIENTRY Wrap_glTexCoord4s(GLshort s, GLshort t, GLshort r, GLshort q) {
     AV_SCOPE("glTexCoord4s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4s(*rvk_t, s, t, r, q);
@@ -6582,6 +7714,10 @@ void APIENTRY Wrap_glTexCoord4s(GLshort s, GLshort t, GLshort r, GLshort q) {
 
 void APIENTRY Wrap_glTexCoord4sv(const GLshort* v) {
     AV_SCOPE("glTexCoord4sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexCoord4sv(*rvk_t, v);
@@ -6589,6 +7725,10 @@ void APIENTRY Wrap_glTexCoord4sv(const GLshort* v) {
 
 void APIENTRY Wrap_glTexEnvf(GLenum target, GLenum pname, GLfloat param) {
     AV_SCOPE("glTexEnvf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexEnvf(*rvk_t, target, pname, param);
@@ -6596,6 +7736,10 @@ void APIENTRY Wrap_glTexEnvf(GLenum target, GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glTexEnvfv(GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("glTexEnvfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexEnvfv(*rvk_t, target, pname, params);
@@ -6603,6 +7747,10 @@ void APIENTRY Wrap_glTexEnvfv(GLenum target, GLenum pname, const GLfloat* params
 
 void APIENTRY Wrap_glTexEnvi(GLenum target, GLenum pname, GLint param) {
     AV_SCOPE("glTexEnvi");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexEnvi(*rvk_t, target, pname, param);
@@ -6610,6 +7758,10 @@ void APIENTRY Wrap_glTexEnvi(GLenum target, GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glTexEnviv(GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("glTexEnviv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexEnviv(*rvk_t, target, pname, params);
@@ -6617,6 +7769,10 @@ void APIENTRY Wrap_glTexEnviv(GLenum target, GLenum pname, const GLint* params) 
 
 void APIENTRY Wrap_glTexGend(GLenum coord, GLenum pname, GLdouble param) {
     AV_SCOPE("glTexGend");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGend(*rvk_t, coord, pname, param);
@@ -6624,6 +7780,10 @@ void APIENTRY Wrap_glTexGend(GLenum coord, GLenum pname, GLdouble param) {
 
 void APIENTRY Wrap_glTexGendv(GLenum coord, GLenum pname, const GLdouble* params) {
     AV_SCOPE("glTexGendv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGendv(*rvk_t, coord, pname, params);
@@ -6631,6 +7791,10 @@ void APIENTRY Wrap_glTexGendv(GLenum coord, GLenum pname, const GLdouble* params
 
 void APIENTRY Wrap_glTexGenf(GLenum coord, GLenum pname, GLfloat param) {
     AV_SCOPE("glTexGenf");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGenf(*rvk_t, coord, pname, param);
@@ -6638,6 +7802,10 @@ void APIENTRY Wrap_glTexGenf(GLenum coord, GLenum pname, GLfloat param) {
 
 void APIENTRY Wrap_glTexGenfv(GLenum coord, GLenum pname, const GLfloat* params) {
     AV_SCOPE("glTexGenfv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGenfv(*rvk_t, coord, pname, params);
@@ -6645,6 +7813,10 @@ void APIENTRY Wrap_glTexGenfv(GLenum coord, GLenum pname, const GLfloat* params)
 
 void APIENTRY Wrap_glTexGeni(GLenum coord, GLenum pname, GLint param) {
     AV_SCOPE("glTexGeni");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGeni(*rvk_t, coord, pname, param);
@@ -6652,6 +7824,10 @@ void APIENTRY Wrap_glTexGeni(GLenum coord, GLenum pname, GLint param) {
 
 void APIENTRY Wrap_glTexGeniv(GLenum coord, GLenum pname, const GLint* params) {
     AV_SCOPE("glTexGeniv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTexGeniv(*rvk_t, coord, pname, params);
@@ -6659,6 +7835,10 @@ void APIENTRY Wrap_glTexGeniv(GLenum coord, GLenum pname, const GLint* params) {
 
 void APIENTRY Wrap_glTranslated(GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glTranslated");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTranslated(*rvk_t, x, y, z);
@@ -6666,6 +7846,10 @@ void APIENTRY Wrap_glTranslated(GLdouble x, GLdouble y, GLdouble z) {
 
 void APIENTRY Wrap_glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glTranslatef");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glTranslatef(*rvk_t, x, y, z);
@@ -6673,6 +7857,10 @@ void APIENTRY Wrap_glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glVertex2d(GLdouble x, GLdouble y) {
     AV_SCOPE("glVertex2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2d(*rvk_t, x, y);
@@ -6680,6 +7868,10 @@ void APIENTRY Wrap_glVertex2d(GLdouble x, GLdouble y) {
 
 void APIENTRY Wrap_glVertex2dv(const GLdouble* v) {
     AV_SCOPE("glVertex2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2dv(*rvk_t, v);
@@ -6687,6 +7879,10 @@ void APIENTRY Wrap_glVertex2dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glVertex2f(GLfloat x, GLfloat y) {
     AV_SCOPE("glVertex2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2f(*rvk_t, x, y);
@@ -6694,6 +7890,10 @@ void APIENTRY Wrap_glVertex2f(GLfloat x, GLfloat y) {
 
 void APIENTRY Wrap_glVertex2fv(const GLfloat* v) {
     AV_SCOPE("glVertex2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2fv(*rvk_t, v);
@@ -6701,6 +7901,10 @@ void APIENTRY Wrap_glVertex2fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glVertex2i(GLint x, GLint y) {
     AV_SCOPE("glVertex2i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2i(*rvk_t, x, y);
@@ -6708,6 +7912,10 @@ void APIENTRY Wrap_glVertex2i(GLint x, GLint y) {
 
 void APIENTRY Wrap_glVertex2iv(const GLint* v) {
     AV_SCOPE("glVertex2iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2iv(*rvk_t, v);
@@ -6715,6 +7923,10 @@ void APIENTRY Wrap_glVertex2iv(const GLint* v) {
 
 void APIENTRY Wrap_glVertex2s(GLshort x, GLshort y) {
     AV_SCOPE("glVertex2s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2s(*rvk_t, x, y);
@@ -6722,6 +7934,10 @@ void APIENTRY Wrap_glVertex2s(GLshort x, GLshort y) {
 
 void APIENTRY Wrap_glVertex2sv(const GLshort* v) {
     AV_SCOPE("glVertex2sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex2sv(*rvk_t, v);
@@ -6729,6 +7945,10 @@ void APIENTRY Wrap_glVertex2sv(const GLshort* v) {
 
 void APIENTRY Wrap_glVertex3d(GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glVertex3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3d(*rvk_t, x, y, z);
@@ -6736,6 +7956,10 @@ void APIENTRY Wrap_glVertex3d(GLdouble x, GLdouble y, GLdouble z) {
 
 void APIENTRY Wrap_glVertex3dv(const GLdouble* v) {
     AV_SCOPE("glVertex3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3dv(*rvk_t, v);
@@ -6743,6 +7967,10 @@ void APIENTRY Wrap_glVertex3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glVertex3f(GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glVertex3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3f(*rvk_t, x, y, z);
@@ -6750,6 +7978,10 @@ void APIENTRY Wrap_glVertex3f(GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glVertex3fv(const GLfloat* v) {
     AV_SCOPE("glVertex3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3fv(*rvk_t, v);
@@ -6757,6 +7989,10 @@ void APIENTRY Wrap_glVertex3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glVertex3i(GLint x, GLint y, GLint z) {
     AV_SCOPE("glVertex3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3i(*rvk_t, x, y, z);
@@ -6764,6 +8000,10 @@ void APIENTRY Wrap_glVertex3i(GLint x, GLint y, GLint z) {
 
 void APIENTRY Wrap_glVertex3iv(const GLint* v) {
     AV_SCOPE("glVertex3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3iv(*rvk_t, v);
@@ -6771,6 +8011,10 @@ void APIENTRY Wrap_glVertex3iv(const GLint* v) {
 
 void APIENTRY Wrap_glVertex3s(GLshort x, GLshort y, GLshort z) {
     AV_SCOPE("glVertex3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3s(*rvk_t, x, y, z);
@@ -6778,6 +8022,10 @@ void APIENTRY Wrap_glVertex3s(GLshort x, GLshort y, GLshort z) {
 
 void APIENTRY Wrap_glVertex3sv(const GLshort* v) {
     AV_SCOPE("glVertex3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex3sv(*rvk_t, v);
@@ -6785,6 +8033,10 @@ void APIENTRY Wrap_glVertex3sv(const GLshort* v) {
 
 void APIENTRY Wrap_glVertex4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
     AV_SCOPE("glVertex4d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4d(*rvk_t, x, y, z, w);
@@ -6792,6 +8044,10 @@ void APIENTRY Wrap_glVertex4d(GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
 
 void APIENTRY Wrap_glVertex4dv(const GLdouble* v) {
     AV_SCOPE("glVertex4dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4dv(*rvk_t, v);
@@ -6799,6 +8055,10 @@ void APIENTRY Wrap_glVertex4dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glVertex4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
     AV_SCOPE("glVertex4f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4f(*rvk_t, x, y, z, w);
@@ -6806,6 +8066,10 @@ void APIENTRY Wrap_glVertex4f(GLfloat x, GLfloat y, GLfloat z, GLfloat w) {
 
 void APIENTRY Wrap_glVertex4fv(const GLfloat* v) {
     AV_SCOPE("glVertex4fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4fv(*rvk_t, v);
@@ -6813,6 +8077,10 @@ void APIENTRY Wrap_glVertex4fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glVertex4i(GLint x, GLint y, GLint z, GLint w) {
     AV_SCOPE("glVertex4i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4i(*rvk_t, x, y, z, w);
@@ -6820,6 +8088,10 @@ void APIENTRY Wrap_glVertex4i(GLint x, GLint y, GLint z, GLint w) {
 
 void APIENTRY Wrap_glVertex4iv(const GLint* v) {
     AV_SCOPE("glVertex4iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4iv(*rvk_t, v);
@@ -6827,6 +8099,10 @@ void APIENTRY Wrap_glVertex4iv(const GLint* v) {
 
 void APIENTRY Wrap_glVertex4s(GLshort x, GLshort y, GLshort z, GLshort w) {
     AV_SCOPE("glVertex4s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4s(*rvk_t, x, y, z, w);
@@ -6834,6 +8110,10 @@ void APIENTRY Wrap_glVertex4s(GLshort x, GLshort y, GLshort z, GLshort w) {
 
 void APIENTRY Wrap_glVertex4sv(const GLshort* v) {
     AV_SCOPE("glVertex4sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glVertex4sv(*rvk_t, v);
@@ -6841,6 +8121,10 @@ void APIENTRY Wrap_glVertex4sv(const GLshort* v) {
 
 void APIENTRY Wrap_glWindowPos2d(GLdouble x, GLdouble y) {
     AV_SCOPE("glWindowPos2d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2d(*rvk_t, x, y);
@@ -6848,6 +8132,10 @@ void APIENTRY Wrap_glWindowPos2d(GLdouble x, GLdouble y) {
 
 void APIENTRY Wrap_glWindowPos2dv(const GLdouble* v) {
     AV_SCOPE("glWindowPos2dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2dv(*rvk_t, v);
@@ -6855,6 +8143,10 @@ void APIENTRY Wrap_glWindowPos2dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glWindowPos2f(GLfloat x, GLfloat y) {
     AV_SCOPE("glWindowPos2f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2f(*rvk_t, x, y);
@@ -6862,6 +8154,10 @@ void APIENTRY Wrap_glWindowPos2f(GLfloat x, GLfloat y) {
 
 void APIENTRY Wrap_glWindowPos2fv(const GLfloat* v) {
     AV_SCOPE("glWindowPos2fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2fv(*rvk_t, v);
@@ -6869,6 +8165,10 @@ void APIENTRY Wrap_glWindowPos2fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glWindowPos2i(GLint x, GLint y) {
     AV_SCOPE("glWindowPos2i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2i(*rvk_t, x, y);
@@ -6876,6 +8176,10 @@ void APIENTRY Wrap_glWindowPos2i(GLint x, GLint y) {
 
 void APIENTRY Wrap_glWindowPos2iv(const GLint* v) {
     AV_SCOPE("glWindowPos2iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2iv(*rvk_t, v);
@@ -6883,6 +8187,10 @@ void APIENTRY Wrap_glWindowPos2iv(const GLint* v) {
 
 void APIENTRY Wrap_glWindowPos2s(GLshort x, GLshort y) {
     AV_SCOPE("glWindowPos2s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2s(*rvk_t, x, y);
@@ -6890,6 +8198,10 @@ void APIENTRY Wrap_glWindowPos2s(GLshort x, GLshort y) {
 
 void APIENTRY Wrap_glWindowPos2sv(const GLshort* v) {
     AV_SCOPE("glWindowPos2sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos2sv(*rvk_t, v);
@@ -6897,6 +8209,10 @@ void APIENTRY Wrap_glWindowPos2sv(const GLshort* v) {
 
 void APIENTRY Wrap_glWindowPos3d(GLdouble x, GLdouble y, GLdouble z) {
     AV_SCOPE("glWindowPos3d");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3d(*rvk_t, x, y, z);
@@ -6904,6 +8220,10 @@ void APIENTRY Wrap_glWindowPos3d(GLdouble x, GLdouble y, GLdouble z) {
 
 void APIENTRY Wrap_glWindowPos3dv(const GLdouble* v) {
     AV_SCOPE("glWindowPos3dv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3dv(*rvk_t, v);
@@ -6911,6 +8231,10 @@ void APIENTRY Wrap_glWindowPos3dv(const GLdouble* v) {
 
 void APIENTRY Wrap_glWindowPos3f(GLfloat x, GLfloat y, GLfloat z) {
     AV_SCOPE("glWindowPos3f");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3f(*rvk_t, x, y, z);
@@ -6918,6 +8242,10 @@ void APIENTRY Wrap_glWindowPos3f(GLfloat x, GLfloat y, GLfloat z) {
 
 void APIENTRY Wrap_glWindowPos3fv(const GLfloat* v) {
     AV_SCOPE("glWindowPos3fv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3fv(*rvk_t, v);
@@ -6925,6 +8253,10 @@ void APIENTRY Wrap_glWindowPos3fv(const GLfloat* v) {
 
 void APIENTRY Wrap_glWindowPos3i(GLint x, GLint y, GLint z) {
     AV_SCOPE("glWindowPos3i");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3i(*rvk_t, x, y, z);
@@ -6932,6 +8264,10 @@ void APIENTRY Wrap_glWindowPos3i(GLint x, GLint y, GLint z) {
 
 void APIENTRY Wrap_glWindowPos3iv(const GLint* v) {
     AV_SCOPE("glWindowPos3iv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3iv(*rvk_t, v);
@@ -6939,6 +8275,10 @@ void APIENTRY Wrap_glWindowPos3iv(const GLint* v) {
 
 void APIENTRY Wrap_glWindowPos3s(GLshort x, GLshort y, GLshort z) {
     AV_SCOPE("glWindowPos3s");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3s(*rvk_t, x, y, z);
@@ -6946,6 +8286,10 @@ void APIENTRY Wrap_glWindowPos3s(GLshort x, GLshort y, GLshort z) {
 
 void APIENTRY Wrap_glWindowPos3sv(const GLshort* v) {
     AV_SCOPE("glWindowPos3sv");
+    if (!::av::glicd::legacy_calls_live()) {
+        ::av::glicd::refuse_legacy();
+        return;
+    }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     ::av::glproto::rvk_glWindowPos3sv(*rvk_t, v);

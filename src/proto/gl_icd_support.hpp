@@ -34,6 +34,11 @@ void             forget_bindings() noexcept;
 bool             skip_active_texture(GLenum texture) noexcept;
 bool             skip_bind_texture(GLenum target, GLuint texture) noexcept;
 bool             skip_bind_sampler(GLuint unit, GLuint sampler) noexcept;
+/* Whether the current context has the fixed-function pipeline: a compatibility
+ * profile, or a context made before profiles existed (feature 051). A
+ * compatibility command called without one is refused rather than sent. */
+bool             legacy_calls_live() noexcept;
+void             refuse_legacy() noexcept;
 
 }  // namespace av::glicd
 

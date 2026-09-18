@@ -39,10 +39,6 @@ int32_t     APIENTRY wglGetPixelFormatAttribfvARB(void *dc, int32_t format, int3
 int32_t     APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, const float *floats, uint32_t max,
                                              int32_t *formats, uint32_t *count);
 
-/* Every legacy slot's entry. Win64's convention lets one function stand for
- * any signature: the caller cleans up, and the zero it returns is what a
- * legacy query such as glIsList answers. */
-uintptr_t APIENTRY legacy_call();
 /* glGetError: the context's own error first, then the host's. */
 GLenum    APIENTRY get_error();
 /* glGetGraphicsResetStatus in every spelling: a lost context answers it. */

@@ -70,7 +70,7 @@ namespace {
 using ClearFn = void (APIENTRY *)(GLbitfield);
 /* The legacy recorder's own type: Win64 lets opengl32 call it as any GL 1.1
  * signature, which UBSan's function check would flag here. */
-using LegacyFn = std::uintptr_t (APIENTRY *)();
+using NewListFn = void (APIENTRY *)(unsigned int, unsigned int);
 using GetErrorFn = GLenum (APIENTRY *)();
 using GetStringFn = const GLubyte *(APIENTRY *)(GLenum);
 using GetIntegervFn = void (APIENTRY *)(GLenum, GLint *);
@@ -375,18 +375,32 @@ TEST(gl_icd_root, the_profile_the_host_granted_is_logged_once)
   CHECK(rig.current_context("host gpu", "4.6 (Compatibility Profile) Mesa") != nullptr);
   CHECK_EQ(rig.log().holding("compatibility"), 1u); }
 
-TEST(gl_icd_root, a_legacy_command_is_invalid_operation_without_a_host_call)
+/* Feature 051: a compatibility command is what the granted profile says it is
+ * - sent on a compatibility context, and on a core one the
+ * GL_INVALID_OPERATION a core context records for an entry point its profile
+ * does not have. */
+TEST(gl_icd_root, a_legacy_command_on_a_core_context_is_invalid_operation_without_a_host_call)
 { GlIcdRig rig;
   rig.load_with_format();
-  CHECK(rig.current_context() != nullptr);
+  CHECK(rig.current_core_context() != nullptr);
   const std::uint32_t commands = rig.kmt().commands();
-  CHECK_EQ(rig.opengl32().gl<LegacyFn>(slot_new_list)(), 0u);
+  rig.opengl32().gl<NewListFn>(slot_new_list)(1u, 0x1300u /* GL_COMPILE */);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), gl_invalid_operation);
   CHECK_EQ(rig.kmt().commands(), commands);
   /* With nothing local, the host is asked. */
   rig.host().gl_varint(0x0505u);
   CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0x0505u);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glGetError), 1u); }
+
+TEST(gl_icd_root, a_legacy_command_on_a_compatibility_context_reaches_the_host)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  rig.opengl32().gl<NewListFn>(slot_new_list)(1u, 0x1300u);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glNewList), 1u);
+  /* And nothing was recorded against the context for it. */
+  rig.host().gl_varint(0u);
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u); }
 
 /* The call that faulted answers nothing; the loss is glGetError's next
  * answer, once (T040), and nothing is sent after it. */

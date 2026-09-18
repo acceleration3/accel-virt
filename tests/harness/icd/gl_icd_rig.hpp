@@ -51,6 +51,9 @@ public:
     /* A context on dc() made current on the calling thread, the host
      * answering the make; null when that failed. */
     void *current_context(const char *renderer = "host gpu", const char *version = "4.6.0 host");
+    /* The same, with a host that grants a core context: every compatibility
+     * entry point is then refused (feature 051). */
+    void *current_core_context();
 
 private:
     MockPlatform          platform_;

@@ -2222,11 +2222,6 @@ def _table_slot(reg: Registry, index: int, name: str) -> str:
     if cmd is None:
         raise GenerationError(
             f"proc table slot {index}: {name} is neither generated nor a driver entry")
-    # The compatibility profile's commands have no host to go to before 051
-    # makes compatibility contexts: the ICD answers each with the error a
-    # core context would record, and knows the slot it was called through.
-    if cmd.tier == "compat":
-        return f"::av::glicd::legacy_entry({index}u)"
     return f"reinterpret_cast<GlProc>(&Wrap_{name})"
 
 
@@ -2251,6 +2246,17 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
         out.append(f"{_icd_entry_declaration(cmd)} {{")
         # One trace scope per API call (docs/trace.md).
         out.append(f'    AV_SCOPE("{cmd.name}");')
+        if cmd.tier == "compat":
+            # A compatibility command exists only where the host granted a
+            # compatibility context: on a core one it is the GL_INVALID_OPERATION
+            # a core context records for an entry point its profile does not have
+            # (feature 051, research.md §3).
+            zero = {"void": "return;", "sync": "return nullptr;"}.get(
+                _ret_kind(cmd), "return 0;")
+            out.append("    if (!::av::glicd::legacy_calls_live()) {")
+            out.append("        ::av::glicd::refuse_legacy();")
+            out.append(f"        {zero}")
+            out.append("    }")
         args = ", ".join(["*rvk_t"] + _icd_forward_args(cmd))
         out.append("    auto* rvk_t = ::av::glicd::wire();")
         for rewritten in _framebuffer_names(cmd):
@@ -2314,8 +2320,6 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
              '#include "gl_icd_entries.h"\n',
              "namespace av::glicd {\n",
              "using GlProc = void (APIENTRY *)();\n",
-             "// The slot's entry for a compatibility command, defined by the ICD.",
-             "GlProc legacy_entry(uint32_t index) noexcept;\n",
              "}  // namespace av::glicd\n",
              "namespace av::glicd::generated {\n",
              "using ::av::glicd::GlProc;\n",
