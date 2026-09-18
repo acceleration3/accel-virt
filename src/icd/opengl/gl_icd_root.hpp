@@ -60,6 +60,7 @@ public:
         error_invalid_handle = 6u, error_not_enough_memory = 8u, error_not_supported = 50u,
         error_invalid_parameter = 87u, error_busy = 170u, error_invalid_pixel_format = 2000u,
         error_invalid_operation = 4317u, error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u,
+        error_invalid_data = 13u,
     };
     enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
     static constexpr uint32_t swap_main_plane = 1u;
@@ -99,6 +100,11 @@ public:
      * describe and chooses none. */
     bool        pixel_format_attribs(void *dc, int32_t format, int32_t layer, uint32_t count, const int32_t *names,
                                      int32_t *ints, float *floats);
+    /* wglSwapIntervalEXT: false for an interval no extension this ICD reports
+     * defines, or with no current context, with the error set. */
+    bool        set_swap_interval(int32_t interval);
+    /* wglGetSwapIntervalEXT: 0 with no current context. */
+    int32_t     swap_interval();
     bool        choose_pixel_format(void *dc, const int32_t *ints, const float *floats, uint32_t max,
                                     int32_t *formats, uint32_t *count);
 

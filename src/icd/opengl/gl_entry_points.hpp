@@ -36,6 +36,10 @@ int32_t     APIENTRY wglGetPixelFormatAttribivARB(void *dc, int32_t format, int3
                                                   const int32_t *names, int32_t *values);
 int32_t     APIENTRY wglGetPixelFormatAttribfvARB(void *dc, int32_t format, int32_t layer, uint32_t count,
                                                   const int32_t *names, float *values);
+/* WGL_EXT_swap_control: how many vertical blanks a swap waits for
+ * (feature 051). */
+int32_t     APIENTRY wglSwapIntervalEXT(int32_t interval);
+int32_t     APIENTRY wglGetSwapIntervalEXT();
 int32_t     APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, const float *floats, uint32_t max,
                                              int32_t *formats, uint32_t *count);
 

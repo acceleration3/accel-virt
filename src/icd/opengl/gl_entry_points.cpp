@@ -130,6 +130,18 @@ int32_t APIENTRY wglChoosePixelFormatARB(void *dc, const int32_t *ints, const fl
     return gl_icd_binding.root().choose_pixel_format(dc, ints, floats, max, formats, count);
 }
 
+int32_t APIENTRY wglSwapIntervalEXT(int32_t interval)
+{
+    AV_SCOPE("wglSwapIntervalEXT");
+    return gl_icd_binding.root().set_swap_interval(interval) ? 1 : 0;
+}
+
+int32_t APIENTRY wglGetSwapIntervalEXT()
+{
+    AV_SCOPE("wglGetSwapIntervalEXT");
+    return gl_icd_binding.root().swap_interval();
+}
+
 GLenum APIENTRY get_error()
 {
     AV_SCOPE("get_error");

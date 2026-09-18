@@ -49,6 +49,7 @@ constexpr icd::ExtensionPolicy::Row reported_wgl_extensions[] = {
     {"WGL_ARB_create_context_robustness", 1u, "context_attributes.flags_and_the_reset_strategy_become_option_flags"},
     {"WGL_ARB_multisample", 1u, "back_buffer_presenter.a_multisampled_frame_is_resolved_before_it_is_read"},
     {"WGL_ARB_framebuffer_sRGB", 1u, "back_buffer_presenter.an_srgb_format_stores_srgb_colour"},
+    {"WGL_EXT_swap_control", 1u, "gl_icd_root_set_swap_interval.a_swap_waits_for_the_blanks_its_interval_asks_for"},
 };
 constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof reported_wgl_extensions[0];
 
@@ -260,6 +261,10 @@ void *GlIcdRoot::get_proc_address(const char *name)
         return reinterpret_cast<void *>(&entry::wglGetPixelFormatAttribfvARB);
     if (__builtin_strcmp(name, "wglChoosePixelFormatARB") == 0)
         return reinterpret_cast<void *>(&entry::wglChoosePixelFormatARB);
+    if (__builtin_strcmp(name, "wglSwapIntervalEXT") == 0)
+        return reinterpret_cast<void *>(&entry::wglSwapIntervalEXT);
+    if (__builtin_strcmp(name, "wglGetSwapIntervalEXT") == 0)
+        return reinterpret_cast<void *>(&entry::wglGetSwapIntervalEXT);
     /* A lost context answers its reset status without the host. */
     for (const char *const spelling : reset_status_names)
         if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
@@ -298,8 +303,35 @@ bool GlIcdRoot::swap_buffers(void *dc)
     if (transport == nullptr) return true;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
-    return framebuffers.present(*transport, context->arrays(), dc, window,
-                                formats_.format(context->pixel_format()), surface_);
+    if (!framebuffers.present(*transport, context->arrays(), dc, window,
+                              formats_.format(context->pixel_format()), surface_))
+        return false;
+    /* The frame is on its window; what the interval buys is the wait after it
+     * (feature 051, US2.2). */
+    context->pace();
+    return true;
+}
+
+bool GlIcdRoot::set_swap_interval(int32_t interval)
+{
+    AV_SCOPE("GlIcdRoot::set_swap_interval");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr) {
+        fail(error_invalid_operation);
+        return false;
+    }
+    if (!context->interval().ask(interval)) {
+        fail(error_invalid_data);
+        return false;
+    }
+    return true;
+}
+
+int32_t GlIcdRoot::swap_interval()
+{
+    AV_SCOPE("GlIcdRoot::swap_interval");
+    GuestGlContext *const context = currents_.current();
+    return context != nullptr ? static_cast<int32_t>(context->interval().blanks()) : 0;
 }
 
 void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *attributes)

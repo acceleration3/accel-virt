@@ -28,7 +28,7 @@ GuestGlContext::GuestGlContext(GlConnection &connection, BlockSource &memory, ic
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), error_(no_error), share_target_(0u), link_(GlConnection::no_link), loss_reported_(false),
-      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
+      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -226,6 +226,22 @@ const char *GuestGlContext::string(uint32_t name) const
     return nullptr;
 }
 
+SwapInterval &GuestGlContext::interval()
+{
+    AV_SCOPE("GuestGlContext::interval");
+    return interval_;
+}
+
+void GuestGlContext::pace()
+{
+    AV_SCOPE("GuestGlContext::pace");
+    if (state_ != State::made) return;
+    for (uint32_t blank = 0u; blank < interval_.blanks(); blank++) {
+        pacer_.object().wait();
+        interval_.waited_one();
+    }
+}
+
 const GrantedProfile &GuestGlContext::profile() const
 {
     AV_SCOPE("GuestGlContext::profile");
@@ -325,6 +341,8 @@ Status GuestGlContext::build()
         return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
     }
     static_cast<void>(locked_.construct(transport_.object(), send_lock_));
+    static_cast<void>(pacer_.construct(connection_.device(link_).kmt(), log_, connection_.device(link_).adapter(),
+                                       connection_.device(link_).device()));
     static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
     if (arena_.object().open(arena_bytes) != Status::ok)
         log_.write("rvkgl: no blob arena for the context; bulk data crosses inline");
@@ -397,6 +415,7 @@ void GuestGlContext::teardown()
         arena_.destroy();
     }
     locked_.destroy();
+    pacer_.destroy();
     transport_.destroy();
     if (staging_ != nullptr) memory_.release(staging_);
     staging_ = nullptr;

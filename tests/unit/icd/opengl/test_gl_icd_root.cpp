@@ -325,13 +325,16 @@ TEST(gl_icd_root, answers_gl_and_wgl_names_it_implements)
         reinterpret_cast<void *>(&av::glicd::entry::wglGetExtensionsStringARB));
   CHECK(rig.opengl32().driver_proc_address("glDrawBuffers") != nullptr);
   CHECK(rig.opengl32().driver_proc_address("glBindVertexArray") != nullptr);
-  CHECK(rig.opengl32().driver_proc_address("wglSwapIntervalEXT") == nullptr);
+  CHECK(rig.opengl32().driver_proc_address("wglSwapIntervalEXT") ==
+        reinterpret_cast<void *>(&av::glicd::entry::wglSwapIntervalEXT));
+  CHECK(rig.opengl32().driver_proc_address("wglGetSwapIntervalEXT") ==
+        reinterpret_cast<void *>(&av::glicd::entry::wglGetSwapIntervalEXT));
   CHECK(rig.opengl32().driver_proc_address("glNotACommand") == nullptr);
   CHECK(rig.root().get_proc_address(nullptr) == nullptr);
   const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().driver_proc_address("wglGetExtensionsStringARB"));
   CHECK(std::strcmp(extensions(rig.dc()), "WGL_ARB_extensions_string WGL_ARB_pixel_format WGL_ARB_create_context "
                                           "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness "
-                                          "WGL_ARB_multisample WGL_ARB_framebuffer_sRGB") == 0);
+                                          "WGL_ARB_multisample WGL_ARB_framebuffer_sRGB WGL_EXT_swap_control") == 0);
   CHECK(rig.root().extensions_string(rig.memory_dc()) == extensions(rig.dc())); }
 
 TEST(gl_icd_root, a_gl_call_with_nothing_current_does_nothing)
@@ -459,6 +462,58 @@ TEST(gl_icd_root, a_lost_context_reports_its_loss_once_and_sends_nothing)
 /* A swap puts the calling thread's context's frame on the DC's window: a DC of
  * a window with another format, a memory DC and a thread with nothing current
  * swap nothing, and only the main plane is a layer that swaps. */
+/* Feature 051, US2.2: what wglSwapIntervalEXT buys is a wait on the adapter's
+ * vertical blank after the frame is on its window, and what it refuses is an
+ * interval no extension this ICD reports defines. */
+TEST(gl_icd_root_set_swap_interval, a_swap_waits_for_the_blanks_its_interval_asks_for)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  using GetIntervalFn = std::int32_t (APIENTRY *)();
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+  const auto get = reinterpret_cast<GetIntervalFn>(rig.root().get_proc_address("wglGetSwapIntervalEXT"));
+  CHECK(set != nullptr && get != nullptr);
+  /* With nothing current there is no drawable to pace. */
+  CHECK_EQ(set(1), 0);
+  check_error(rig, Root::error_invalid_operation);
+  CHECK_EQ(get(), 0);
+
+  CHECK(rig.current_context() != nullptr);
+  CHECK_EQ(get(), 1);   /* a context waits for one blank until told otherwise */
+  const std::uint32_t blanks = rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks + 1u);
+
+  /* Two blanks a swap, then none at all. */
+  CHECK_EQ(set(2), 1);
+  CHECK_EQ(get(), 2);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks + 3u);
+  CHECK_EQ(set(0), 1);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks + 3u);
+
+  /* An interval nobody defines leaves the one that was set. */
+  CHECK_EQ(set(-1), 0);
+  check_error(rig, Root::error_invalid_data);
+  CHECK_EQ(set(99), 0);
+  check_error(rig, Root::error_invalid_data);
+  CHECK_EQ(get(), 0);
+
+  /* The root's own entry is what the WGL function is: an interval set through
+   * it is the one the next swap waits for. */
+  CHECK(rig.root().set_swap_interval(1));
+  CHECK_EQ(rig.root().swap_interval(), 1);
+
+  /* And the extension that defines it is reported, now that it does something. */
+  const char *const wgl = rig.root().extensions_string(rig.dc());
+  CHECK(wgl != nullptr);
+  CHECK(std::strstr(wgl, "WGL_EXT_swap_control") != nullptr);
+  CHECK(std::strstr(wgl, "WGL_EXT_swap_control_tear") == nullptr); }
+
 TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
 { GlIcdRig rig;
   rig.load_with_format();

@@ -11,7 +11,9 @@ namespace av::glicd {
 
 namespace {
 
-const char *const never_reported[] = {"WGL_EXT_swap_control", "WGL_EXT_swap_control_tear"};
+/* Tear control means a negative interval, which nothing here honours: the
+ * pacing is a wait for whole blanks (feature 051, SwapInterval). */
+const char *const never_reported[] = {"WGL_EXT_swap_control_tear"};
 
 }  // namespace
 

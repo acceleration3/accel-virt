@@ -44,10 +44,10 @@ constexpr Row one_row[] = {
     {"GL_ARB_debug_output", 1u, "gl_extension_policy.stops_asking_once_every_row_is_found"},
 };
 constexpr Row wgl_rows[] = {
-    {"WGL_ARB_extensions_string", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_swap_control"},
-    {"WGL_EXT_swap_control", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_swap_control"},
-    {"WGL_ARB_pixel_format", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_swap_control"},
-    {"WGL_EXT_swap_control_tear", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_swap_control"},
+    {"WGL_ARB_extensions_string", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_tear_control"},
+    {"WGL_EXT_swap_control", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_tear_control"},
+    {"WGL_ARB_pixel_format", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_tear_control"},
+    {"WGL_EXT_swap_control_tear", 1u, "gl_extension_policy.wgl_names_come_from_their_rows_without_tear_control"},
 };
 
 constexpr const char *renderer = "host gpu";
@@ -181,13 +181,16 @@ TEST(gl_extension_policy, no_rows_or_no_host_names_ask_nothing_more)
   }
   CHECK_EQ(list.count(), 0u); }
 
-TEST(gl_extension_policy, wgl_names_come_from_their_rows_without_swap_control)
+/* Feature 051: swap control is reported now that an interval is honoured; tear
+ * control, which is a negative interval, still is not. */
+TEST(gl_extension_policy, wgl_names_come_from_their_rows_without_tear_control)
 { const GlExtensionPolicy policy(nullptr, 0u, wgl_rows, 4u);
-  CHECK(std::strcmp(policy.wgl_extensions(), "WGL_ARB_extensions_string WGL_ARB_pixel_format") == 0);
+  CHECK(std::strcmp(policy.wgl_extensions(),
+                    "WGL_ARB_extensions_string WGL_EXT_swap_control WGL_ARB_pixel_format") == 0);
   CHECK(policy.invariants_hold());
   const GlExtensionPolicy nothing(nullptr, 0u, nullptr, 3u);
   CHECK(std::strcmp(nothing.wgl_extensions(), "") == 0);
-  const GlExtensionPolicy only_withheld(nullptr, 0u, wgl_rows + 1, 1u);
+  const GlExtensionPolicy only_withheld(nullptr, 0u, wgl_rows + 3, 1u);
   CHECK(std::strcmp(only_withheld.wgl_extensions(), "") == 0);
   CHECK(only_withheld.invariants_hold()); }
 

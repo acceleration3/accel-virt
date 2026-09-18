@@ -20,7 +20,9 @@
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
+#include "icd/common/frame_pacer.hpp"
 #include "icd/opengl/granted_profile.hpp"
+#include "icd/opengl/swap_interval.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
@@ -121,6 +123,11 @@ public:
     const char *string(uint32_t name) const;
     /* What the host granted this context, learned at make (feature 051). */
     const GrantedProfile &profile() const;
+    /* How many vertical blanks this context's swaps wait for. */
+    SwapInterval         &interval();
+    /* Waits for them, once the frame is on its window; nothing at interval 0,
+     * and nothing before the context is made. */
+    void                  pace();
     /* Which ask is being answered, recorded before the make that asks it. */
     void                  asking(GrantedProfile::Rung rung);
     void        set_debug_callback(uint64_t callback, uint64_t user);
@@ -168,6 +175,10 @@ private:
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;
     GrantedProfile                 profile_;
+    SwapInterval                   interval_;
+    /* Made with the device, since a blank is waited for on the adapter it
+     * belongs to. */
+    ObjectStorage<icd::FramePacer> pacer_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     MappedBuffers                  mappings_;
