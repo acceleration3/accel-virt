@@ -187,6 +187,17 @@ extensions rather than adding new ones.
   property and both sides need it. `vkMapMemory2` joins `vkMapMemory` in
   `[commands].exclude` and is written as a local ICD entry, because a mapping's
   address is the guest's business and never crosses the wire.
+- **Q: FR-003 asks for `VK_EXT_map_memory_placed` over host-visible
+  allocations. Can this ICD place a mapping?** → No, and for the reason 041
+  already recorded one level down: a chunk's process view is whatever
+  `D3DKMTLockAllocation` returned, VidMm chose it, and no lock flag takes an
+  address (research.md §9). `VK_KHR_map_memory2` is reported, because that
+  shape the ICD does answer and it is what an application probes for;
+  `VK_EXT_map_memory_placed` is **not** reported, because claiming placement
+  the ICD cannot perform is what constitution VI forbids. The WoW64 mapping
+  path that wants placement belongs to feature 061 with the rest of the 32-bit
+  ICD. FR-003 is therefore met in part - `vkMapMemory2` exists and is proven -
+  and its placement half is recorded as not this layer's to give.
 - **Q: what does an exported Win32 handle mean when no host driver has the
   extension?** → within one process it names a host object the device already
   holds, and an import finds it again through `ExternalObjectTable`; the host

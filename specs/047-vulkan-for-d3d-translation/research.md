@@ -142,3 +142,37 @@ handle from rvkgpu - is FR-005's, and only the in-process case is proven here.
 - Whether FR-006's heap corruption on "render-server's current transport" is
   reproducible here at all: this repository owns its transport (feature 043),
   so the claim has to be tested before it can be fixed.
+
+## 9. Placement is not this ICD's to give either
+
+FR-003 asks for `VK_EXT_map_memory_placed` "implemented over host-visible
+allocations". It cannot be, and the reason is the one feature 041 already
+recorded for the same layer of the stack.
+
+The extension's whole content is that the pointer `vkMapMemory2` returns *is*
+the caller's `pPlacedAddress`. This ICD's host-visible memory is a chunk of
+guest RAM locked through D3DKMT: `HostVisibleChunk::lock`
+(`src/guest/transport/host_visible_chunk.hpp:30-46`) calls
+`D3DKMTLockAllocation`, and the process's view is the address **VidMm chose** -
+`DeviceMemory::map` (`src/icd/vulkan/device_memory.cpp:104-113`) hands out
+`placed->view() + offset` and has nothing else to hand out. Nothing in
+`D3DKMT_LOCKFLAGS` or `D3DKMT_LOCK2FLAGS` takes an address, and
+`specs/041-kmd-host-visible-memory/tasks.md:79-107` (T023) is the same finding
+one level down: "the view's address is VidMm's alone".
+
+Mapping the same pages a second time at an address of our choosing needs a
+section object to map (`MapViewOfFile3` with `MEM_REPLACE_PLACEHOLDER`), and a
+D3DKMT allocation is not one.
+
+So `VK_KHR_map_memory2` is reported - it is a shape the ICD answers, and it is
+what an application probes for - and `VK_EXT_map_memory_placed` is not:
+reporting it would be claiming placement the ICD cannot perform, which is
+exactly what constitution VI forbids and what
+`tools/codegen/profiles/vulkan.toml:159-174` says was tried once already
+("It was in this list for a while with no entry points behind it at all, which
+is strictly worse than not advertising it").
+
+What that costs is the WoW64 mapping path: winevulkan asks for placement
+because a 32-bit process needs the mapping inside its own address space. That
+is feature 061's problem together with the rest of the 32-bit ICD, and it is
+recorded there rather than half-answered here.
