@@ -48,4 +48,4 @@ description: "Tasks: Vulkan presentation (046)"
 ## Phase 6: Polish and merge
 
 - [X] T013 docs: `docs/testing.md` (WSI layers, the present step, the desktop), `docs/kb/07-usermode.md` (the present path before a UMD, citing the RE)
-- [ ] T014 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
+- [X] T014 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh` passed whole, both boots, with the probe's twelve steps on the host GPU (`present 4096`, `pacing 64`, `resized 9216`); merged; pushed
