@@ -17,7 +17,7 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The ICDs' shims, rvkvkprobe.exe's and rvkinspect.exe's are their own
 # targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|probe|inspect)/")
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|opencl|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -156,6 +156,46 @@ target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
 target_link_options(rvkgl PRIVATE /ENTRY:rvkgl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
 set_property(TARGET rvkgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
 target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS} ${USER32_IMPORT})
+
+# rvkcl.dll, the OpenCL ICD (feature 052): the ICD's decisions in src/icd over
+# the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
+# own in opencl/. gdi32, kernel32 and ntdll are the whole import list - this ICD
+# makes no window, so no user32.
+file(GLOB_RECURSE RVKCL_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opencl/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/opencl/*.cpp)
+# The recursive proto glob above sweeps the generated tree, the host's server
+# dispatch included; only the OpenCL client belongs in a guest DLL. The window
+# surface goes too: it is the one thing in icd/ that calls user32, and an
+# OpenCL ICD presents nothing.
+list(REMOVE_ITEM RVKCL_SOURCES ${RVKTEST_GENERATED}
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/gdi_window_surface.cpp)
+list(APPEND RVKCL_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
+  ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
+add_library(rvkcl SHARED ${RVKCL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_dependencies(rvkcl rvktest_imports)
+set_target_properties(rvkcl PROPERTIES PREFIX "")
+# compat/ first: it answers the <type_traits> the generated ICD stubs include,
+# which a build with no C++ standard library has nothing else to resolve.
+target_include_directories(rvkcl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/opencl/compat
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include
+  ${RVKTEST_GENERATED_DIR}/opencl
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opencl)
+target_link_options(rvkcl PRIVATE /ENTRY:rvkcl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opencl/rvkcl.def)
+set_property(TARGET rvkcl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opencl/rvkcl.def)
+target_link_libraries(rvkcl PRIVATE ${RVKTEST_IMPORTS})
 
 # rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)

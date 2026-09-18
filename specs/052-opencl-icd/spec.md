@@ -246,6 +246,12 @@ timeout that fails the test instead of hanging.
 ## Out of Scope
 
 - Fine-grained or system SVM.
+- Host reads and writes of a coarse-grained SVM allocation between
+  `clEnqueueSVMMap` and `clEnqueueSVMUnmap`: the allocation, its translation
+  and its use as a kernel argument are implemented, but no command on this wire
+  carries bytes between guest memory and an SVM address, so the guest's mirror
+  is not synchronised with it (research §7.3). The ICD logs this once per
+  allocation rather than reporting a capability it does not have.
 - The 32-bit (WoW64) ICD and `OpenCLDriverNameWow`: feature 061.
 - Sharing with OpenGL, Vulkan or D3D and across processes: feature 053.
 - Conformance runs: feature 054.

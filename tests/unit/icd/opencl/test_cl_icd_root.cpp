@@ -333,3 +333,134 @@ TEST(cl_icd_root, a_state_dump_says_what_the_process_holds)
 { ClIcdRig rig;
   CHECK(opened_device(rig) != nullptr);
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- shared virtual memory and maps (US2) ---------------------------------
+ *
+ * The application holds mirrors and the wire carries host addresses, so what
+ * is asserted here is the translation and what happens to a pointer that is
+ * inside no allocation - which never reaches the wire at all.
+ */
+
+TEST(cl_icd_root, svm_alloc_hands_back_a_mirror_and_svm_free_takes_it_back)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  CHECK(context != nullptr);
+
+  /* The host allocated at an address of its own; the application is handed a
+   * mirror, which is a pointer in this process it may dereference. */
+  constexpr std::uint64_t host_svm = 0x0000'7F22'0000'3000ull;
+  rig.host().cl_handle(host_svm, CL_SUCCESS);
+  void *const mirror = rig.root().svm_alloc(context, 0u, 256u, 0u);
+  CHECK(mirror != nullptr);
+  CHECK(mirror != reinterpret_cast<void *>(host_svm));
+  /* Written through, which is the whole point of a mirror: the application
+   * dereferences this, and the host address it stands for it never sees. The
+   * bytes are not zeroed - clSVMAlloc promises nothing about them either. */
+  unsigned char *const bytes = static_cast<unsigned char *>(mirror);
+  bytes[0] = 0x5Au;
+  bytes[255] = 0xA3u;
+  CHECK_EQ(bytes[0], 0x5Au);
+  CHECK_EQ(bytes[255], 0xA3u);
+
+  rig.host().cl_result(CL_SUCCESS);
+  rig.root().svm_free(context, mirror);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, an_allocation_of_nothing_or_on_something_that_is_not_a_context_answers_nothing)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  CHECK(rig.root().svm_alloc(context, 0u, 0u, 0u) == nullptr);
+  void *not_an_object = nullptr;
+  CHECK(rig.root().svm_alloc(reinterpret_cast<cl_context>(&not_an_object), 0u, 64u, 0u) == nullptr);
+  /* And freeing something that was never allocated frees nothing. */
+  int elsewhere = 0;
+  rig.root().svm_free(context, &elsewhere);
+  rig.root().svm_free(context, nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_kernel_argument_is_translated_and_an_invented_address_never_reaches_the_wire)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  rig.host().cl_handle(host_program, CL_SUCCESS);
+  cl_program program = rig.loader().create_program(context, "__kernel void k(void) {}", nullptr);
+  rig.host().cl_handle(host_kernel, CL_SUCCESS);
+  cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
+  CHECK(kernel != nullptr);
+
+  constexpr std::uint64_t host_svm = 0x0000'7F22'0000'4000ull;
+  rig.host().cl_handle(host_svm, CL_SUCCESS);
+  unsigned char *const mirror =
+      static_cast<unsigned char *>(rig.root().svm_alloc(context, 0u, 256u, 0u));
+  CHECK(mirror != nullptr);
+
+  /* An address inside the allocation is a legal kernel argument, and what
+   * crosses is the host address of that same byte. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, mirror + 64u), CL_SUCCESS);
+
+  /* One inside no allocation is the application's mistake, and it is refused
+   * here rather than sent for the device to refuse. */
+  const std::uint32_t before = rig.kmt().commands();
+  int                 elsewhere = 0;
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, &elsewhere), CL_INVALID_ARG_VALUE);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, mirror + 256u), CL_INVALID_ARG_VALUE);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, nullptr), CL_INVALID_ARG_VALUE);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, mapping_and_unmapping_shared_memory_is_refused_for_an_address_of_no_allocation)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
+  CHECK(queue != nullptr);
+
+  int elsewhere = 0;
+  CHECK_EQ(rig.root().svm_map(queue, CL_TRUE, CL_MAP_READ, &elsewhere, 4u, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().svm_unmap(queue, &elsewhere, nullptr), CL_INVALID_VALUE);
+  /* And on something that is not a queue at all. */
+  void *not_an_object = nullptr;
+  CHECK_EQ(rig.root().svm_map(reinterpret_cast<cl_command_queue>(&not_an_object), CL_TRUE,
+                              CL_MAP_READ, &elsewhere, 4u, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().svm_unmap(reinterpret_cast<cl_command_queue>(&not_an_object), &elsewhere,
+                                nullptr),
+           CL_INVALID_COMMAND_QUEUE); }
+
+TEST(cl_icd_root, unmapping_a_buffer_pointer_no_mapping_answered_is_refused)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  cl_mem buffer = rig.loader().create_buffer(context, CL_MEM_READ_WRITE, 256u, nullptr);
+  CHECK(buffer != nullptr);
+  int elsewhere = 0;
+  CHECK_EQ(rig.root().unmap(queue, buffer, &elsewhere, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().unmap(queue, buffer, nullptr, nullptr), CL_INVALID_VALUE); }

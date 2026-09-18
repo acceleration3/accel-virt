@@ -657,4 +657,218 @@ cl_int ClIcdRoot::flush(cl_command_queue queue)
     return av::clproto::rvk_clFlush(*wire, held->wire());
 }
 
+
+void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
+                            cl_map_flags flags, size_t offset, size_t bytes, cl_event *event,
+                            cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::map_buffer");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) {
+        report_error(error, CL_INVALID_COMMAND_QUEUE);
+        return nullptr;
+    }
+    ClObject *const named = judged(buffer, ClObject::Kind::mem);
+    if (named == nullptr) {
+        report_error(error, CL_INVALID_MEM_OBJECT);
+        return nullptr;
+    }
+    if (bytes == 0u) {
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
+    GuestClContext *const context = held->context();
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    if (wire == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    /* Staged: the guest gets a block of its own, filled from the buffer. The
+     * host's own map is what says the bytes are settled, so it is asked
+     * first; where the buffer's memory is already the guest's this is where
+     * the arena's view would be handed back instead (feature 041). */
+    uint64_t     mapped_event = 0u;
+    cl_int       host_error = CL_SUCCESS;
+    const uint64_t mapped = av::clproto::rvk_clEnqueueMapBuffer(
+        *wire, held->wire(), named->wire(), blocking, flags, offset, bytes, 0u, nullptr,
+        event != nullptr ? &mapped_event : nullptr, &host_error);
+    if (mapped == 0u) {
+        report_error(error, host_error != CL_SUCCESS ? host_error : CL_MAP_FAILURE);
+        return nullptr;
+    }
+    uint8_t *const at = context->take_mapping(named->wire(), mapped, offset, bytes, flags);
+    if (at == nullptr) {
+        report_error(error, CL_OUT_OF_HOST_MEMORY);
+        return nullptr;
+    }
+    /* What the application is entitled to read: the buffer's own bytes. A
+     * write-invalidate map promises nothing about them, so it is not read. */
+    if ((flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u) {
+        const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
+            *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, at, 0u, nullptr, nullptr);
+        if (read != CL_SUCCESS) {
+            MappedRegion *const region = context->mapping_at(at);
+            if (region != nullptr) context->give_back_mapping(*region);
+            report_error(error, read);
+            return nullptr;
+        }
+    }
+    if (event != nullptr) {
+        *event = static_cast<cl_event>(
+            wrap(ClObject::Kind::event, mapped_event, context, held, nullptr));
+    }
+    report_error(error, CL_SUCCESS);
+    return at;
+}
+
+cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::unmap");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(buffer, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    GuestClContext *const context = held->context();
+    if (context == nullptr) return CL_INVALID_CONTEXT;
+    /* The pointer the map answered, and not an address inside it. */
+    MappedRegion *const region = context->mapping_at(pointer);
+    if (region == nullptr || region->buffer() != named->wire()) return CL_INVALID_VALUE;
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    cl_int written = CL_SUCCESS;
+    if (region->writes_back()) {
+        written = av::clproto::rvk_clEnqueueWriteBuffer(*wire, held->wire(), named->wire(), CL_TRUE,
+                                                        region->offset(), region->bytes(),
+                                                        region->at(), 0u, nullptr, nullptr);
+    }
+    uint64_t     produced = 0u;
+    const cl_int unmapped = av::clproto::rvk_clEnqueueUnmapMemObject(
+        *wire, held->wire(), named->wire(), region->host(), 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
+    context->give_back_mapping(*region);
+    if (written != CL_SUCCESS) return written;
+    if (unmapped == CL_SUCCESS && event != nullptr) {
+        *event = static_cast<cl_event>(wrap(ClObject::Kind::event, produced, context, held, nullptr));
+    }
+    return unmapped;
+}
+
+void *ClIcdRoot::svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t bytes,
+                           cl_uint alignment)
+{
+    AV_SCOPE("ClIcdRoot::svm_alloc");
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr || bytes == 0u) return nullptr;
+    GuestClContext *const owner = held->context();
+    ClientTransport *const wire = owner != nullptr ? owner->wire() : nullptr;
+    if (wire == nullptr) return nullptr;
+    const uint64_t host = av::clproto::rvk_clSVMAlloc(*wire, held->wire(), flags, bytes, alignment);
+    if (host == 0u) return nullptr;
+    /* The application is handed the mirror, because it is the pointer the
+     * application dereferences; the host address is what crosses the wire. */
+    void *const mirror = owner->svm().take(host, bytes);
+    if (mirror == nullptr) {
+        av::clproto::rvk_clSVMFree(*wire, held->wire(), host);
+        return nullptr;
+    }
+    return mirror;
+}
+
+void ClIcdRoot::svm_free(cl_context context, void *pointer)
+{
+    AV_SCOPE("ClIcdRoot::svm_free");
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr || pointer == nullptr) return;
+    GuestClContext *const owner = held->context();
+    if (owner == nullptr) return;
+    /* Only the base the application was handed frees anything: an address
+     * inside an allocation is not what clSVMAlloc answered. */
+    const uint64_t host = owner->svm().give_back(pointer);
+    if (host == 0u) return;
+    ClientTransport *const wire = owner->wire();
+    if (wire != nullptr) av::clproto::rvk_clSVMFree(*wire, held->wire(), host);
+}
+
+cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags flags,
+                          void *pointer, size_t bytes, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::svm_map");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    GuestClContext *const context = held->context();
+    if (context == nullptr) return CL_INVALID_CONTEXT;
+    SvmAllocation *const allocation = context->svm().covering(pointer);
+    if (allocation == nullptr || bytes == 0u) return CL_INVALID_VALUE;
+    const uint64_t host = context->svm().host_address_of(pointer);
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr || host == 0u) return CL_OUT_OF_RESOURCES;
+    uint64_t     produced = 0u;
+    const cl_int mapped = av::clproto::rvk_clEnqueueSVMMap(
+        *wire, held->wire(), blocking, flags, host, bytes, 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
+    if (mapped != CL_SUCCESS) return mapped;
+    /* The host's map is what makes the allocation coherent on its side, and
+     * this is where the mirror would be filled from it - except that no
+     * command on this wire carries bytes between a host SVM address and guest
+     * memory. clEnqueueSVMMemcpy names two SVM addresses, both the host's;
+     * read and write carry bytes but only for a cl_mem. So a kernel's view of
+     * shared memory is whole, and the host's view of it between map and
+     * unmap is not yet: what an application writes into the mirror does not
+     * reach the allocation (research §7.3).
+     *
+     * Said once, into the log, rather than pretended (constitution VI). */
+    if (allocation->map_depth() == 0u) {
+        log_.write("rvkcl: shared memory is mapped, and the mirror is not synchronised yet");
+    }
+    allocation->mapped();
+    if (event != nullptr) {
+        *event = static_cast<cl_event>(wrap(ClObject::Kind::event, produced, context, held, nullptr));
+    }
+    return CL_SUCCESS;
+}
+
+cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::svm_unmap");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    GuestClContext *const context = held->context();
+    if (context == nullptr) return CL_INVALID_CONTEXT;
+    SvmAllocation *const allocation = context->svm().covering(pointer);
+    if (allocation == nullptr) return CL_INVALID_VALUE;
+    const uint64_t host = context->svm().host_address_of(pointer);
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr || host == 0u) return CL_OUT_OF_RESOURCES;
+    /* Where what the application wrote would go back; see svm_map for why it
+     * does not yet. */
+    uint64_t     produced = 0u;
+    const cl_int unmapped = av::clproto::rvk_clEnqueueSVMUnmap(
+        *wire, held->wire(), host, 0u, nullptr, event != nullptr ? &produced : nullptr);
+    if (unmapped == CL_SUCCESS) {
+        static_cast<void>(allocation->unmapped());
+        if (event != nullptr) {
+            *event = static_cast<cl_event>(
+                wrap(ClObject::Kind::event, produced, context, held, nullptr));
+        }
+    }
+    return unmapped;
+}
+
+cl_int ClIcdRoot::set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const void *pointer)
+{
+    AV_SCOPE("ClIcdRoot::set_kernel_svm_argument");
+    ClObject *const held = judged(kernel, ClObject::Kind::kernel);
+    if (held == nullptr) return CL_INVALID_KERNEL;
+    GuestClContext *const context = held->context();
+    if (context == nullptr) return CL_INVALID_CONTEXT;
+    /* An address inside a live allocation, which a kernel argument is allowed
+     * to be; one inside none is the application's mistake and never reaches
+     * the wire. */
+    const uint64_t host = context->svm().host_address_of(pointer);
+    if (host == 0u) return CL_INVALID_ARG_VALUE;
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clSetKernelArgSVMPointer(*wire, held->wire(), index, host);
+}
+
 }  // namespace av::clicd

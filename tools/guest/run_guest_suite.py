@@ -653,7 +653,7 @@ class GuestRun:
         required = [self.args.image, self.args.provision]
         if not self.args.prepare_image:
             required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest,
-                         self.args.gl_icd, self.args.test, self.args.inspect]
+                         self.args.gl_icd, self.args.cl_icd, self.args.test, self.args.inspect]
         if self.args.vulkan:
             required.append(self.args.probe)
         if self.args.opengl_discovery or self.args.opengl:
@@ -822,6 +822,7 @@ class GuestRun:
                       (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
                       (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
+                      (self.args.cl_icd, PACKAGE_DIRECTORY + "\\rvkcl.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:

@@ -14,7 +14,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                                icd::ThreadLock &send_lock, icd::LogSink &log)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log),
       link_(icd::IcdConnection::no_link), staging_(nullptr), transport_(), locked_(), arena_(),
-      svm_(memory), state_(State::created)
+      svm_(memory), mappings_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -73,6 +73,9 @@ Status GuestClContext::build()
 void GuestClContext::teardown()
 {
     AV_SCOPE("GuestClContext::teardown");
+    /* A buffer released with a mapping live keeps the mapping's memory until
+     * the unmap, so the blocks go here rather than with the buffer. */
+    for (uint32_t slot = 0u; slot < max_mappings; ++slot) give_back_mapping(mappings_[slot]);
     svm_.give_back_all();
     if (arena_.constructed()) {
         /* A lost context's import is forgotten rather than released: the
@@ -143,6 +146,47 @@ bool GuestClContext::has_arena() const
     return arena_.constructed() && arena_.object().lending();
 }
 
+uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+                                      cl_map_flags flags)
+{
+    AV_SCOPE("GuestClContext::take_mapping");
+    if (buffer == 0u || host == 0u || bytes == 0u) return nullptr;
+    uint32_t slot = 0u;
+    while (slot < max_mappings && mappings_[slot].held()) ++slot;
+    if (slot == max_mappings) return nullptr;
+    uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    if (block == nullptr) return nullptr;
+    mappings_[slot].take(buffer, host, offset, bytes, flags, block, true);
+    return block;
+}
+
+MappedRegion *GuestClContext::mapping_at(const void *pointer)
+{
+    AV_SCOPE("GuestClContext::mapping_at");
+    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
+        if (mappings_[slot].answers(pointer)) return &mappings_[slot];
+    }
+    return nullptr;
+}
+
+void GuestClContext::give_back_mapping(MappedRegion &region)
+{
+    AV_SCOPE("GuestClContext::give_back_mapping");
+    if (!region.held()) return;
+    if (region.staged()) memory_.release(region.at());
+    region.give_up();
+}
+
+uint32_t GuestClContext::mappings() const
+{
+    AV_SCOPE("GuestClContext::mappings");
+    uint32_t held = 0u;
+    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
+        if (mappings_[slot].held()) ++held;
+    }
+    return held;
+}
+
 void GuestClContext::report(StateWriter &writer) const
 {
     AV_SCOPE("GuestClContext::report");
@@ -150,6 +194,7 @@ void GuestClContext::report(StateWriter &writer) const
     writer.number("state", static_cast<uint32_t>(state_));
     writer.number("link", link_);
     writer.flag("arena", has_arena());
+    writer.number("mappings", mappings());
     svm_.report(writer);
     writer.close();
 }
@@ -158,6 +203,17 @@ bool GuestClContext::invariants_hold() const
 {
     AV_SCOPE("GuestClContext::invariants_hold");
     if (!svm_.invariants_hold()) return false;
+    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
+        if (!mappings_[slot].invariants_hold()) return false;
+        /* No two live mappings answer the same pointer: an unmap would then
+         * have two mappings to choose between. */
+        for (uint32_t other = slot + 1u; other < max_mappings; ++other) {
+            if (mappings_[slot].held() && mappings_[other].held() &&
+                mappings_[slot].at() == mappings_[other].at()) {
+                return false;
+            }
+        }
+    }
     if (state_ == State::created) {
         /* Nothing is held before a make, and a make that failed held nothing
          * after it either. */

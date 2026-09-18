@@ -507,6 +507,14 @@ add_test(NAME rvkgl_image
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
 
+# The OpenCL ICD exports exactly the two names the Khronos loader may resolve
+# (feature 052, research §1); it presents nothing, so it wants no user32.
+add_test(NAME rvkcl_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkcl.dll --dll --only-exports
+                 --require-export clGetExtensionFunctionAddress
+                 --require-export clIcdGetPlatformIDsKHR)
+
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
 add_test(NAME rvkglprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py

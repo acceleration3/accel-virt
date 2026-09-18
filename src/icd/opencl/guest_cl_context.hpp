@@ -22,6 +22,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/locked_transport.hpp"
+#include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/svm_table.hpp"
 
 #include <stdint.h>
@@ -57,6 +58,9 @@ public:
      * large ones, and anything larger crosses as a blob. */
     static constexpr size_t   staging_bytes = 256u * 1024u;
     static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
+    /* Mappings one context may hold at once. An application that maps more
+     * buffers than this at the same time is told so at the map. */
+    static constexpr uint32_t max_mappings = 64u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
                    icd::LogSink &log);
@@ -80,6 +84,18 @@ public:
     bool             lost() const;
     /* The shared allocations made on this context. */
     SvmTable        &svm();
+
+    /* Takes a mapping of `bytes` at `offset` into `buffer`, staging the bytes
+     * in guest memory. Null when there is no room for another mapping or no
+     * memory for the block; the caller is what fills it. */
+    uint8_t         *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+                                  cl_map_flags flags);
+    /* The mapping `pointer` answers, or null for a pointer no live mapping
+     * returned. */
+    MappedRegion    *mapping_at(const void *pointer);
+    /* Gives one back, freeing the staged block. */
+    void             give_back_mapping(MappedRegion &region);
+    uint32_t         mappings() const;
     /* Whether the arena opened; bulk data crosses inline when it did not. */
     bool             has_arena() const;
 
@@ -102,6 +118,7 @@ private:
     ObjectStorage<icd::LockedTransport>  locked_;
     ObjectStorage<KmtBlobArena>          arena_;
     SvmTable                             svm_;
+    MappedRegion                         mappings_[max_mappings];
     State                                state_;
 };
 

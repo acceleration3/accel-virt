@@ -479,6 +479,31 @@ context made, which is a bounds check, not a lookup table.
 `CL_DEVICE_SVM_CAPABILITIES` reports `CL_DEVICE_SVM_COARSE_GRAIN_BUFFER` alone,
 and only when the host device reports it.
 
+### 7.3 What the mirror cannot do yet, and why
+
+Filling the mirror turned out to need something no command on this wire
+carries. `clEnqueueSVMMemcpy` names two addresses and both of them are the
+host's - that is what an SVM pointer is - and the commands that do carry bytes
+between guest memory and the host, `clEnqueueReadBuffer` and
+`clEnqueueWriteBuffer`, carry them for a `cl_mem` and not for an address.
+
+So as built, a kernel's view of shared memory is whole: an allocation is made,
+its address translates, a kernel takes it as an argument, and what one kernel
+writes another reads. The host's view between `clEnqueueSVMMap` and
+`clEnqueueSVMUnmap` is not: what an application writes into the mirror does not
+reach the allocation. The ICD says so once into its log rather than pretending
+otherwise, and `CL_DEVICE_SVM_CAPABILITIES` still reports coarse-grained
+because that is what the device does - the gap is in this ICD's data path, not
+in what the host offers.
+
+Closing it needs one of two things, and both are a change to the wire rather
+than to the ICD: a command that carries bytes to and from an SVM address, or a
+way to wrap an SVM allocation as a `cl_mem` so that read and write reach it -
+`clCreateBuffer` with `CL_MEM_USE_HOST_PTR` over an SVM pointer is exactly
+that, and it needs `host_ptr` to be expressible as an address on a command
+where it is otherwise bytes. Neither is a small change to the profile, and
+neither is this feature's to make quietly.
+
 **Alternatives considered.** Sending guest addresses and translating on the
 device: rejected, it puts a guest-chosen address in the device's arithmetic for
 no gain. Backing SVM with the host-visible chunk: rejected, a kernel cannot

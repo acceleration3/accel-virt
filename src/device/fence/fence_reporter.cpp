@@ -61,6 +61,18 @@ void FenceReporter::heartbeat()
     static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
 }
 
+/* The guest's FenceProgress accepts progress advancing on its own and nothing
+ * else out of band, so completed_ is what this must not touch. */
+void FenceReporter::nudge()
+{
+    AV_SCOPE("FenceReporter::nudge");
+    host_.require_worker("FenceReporter::nudge");
+    if (!prepared_ || faulted_) return;
+    progress_++;
+    pending_ = true;
+    static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
+}
+
 void FenceReporter::fault(FaultCode code)
 {
     AV_SCOPE("FenceReporter::fault");

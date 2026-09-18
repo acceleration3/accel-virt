@@ -106,6 +106,29 @@ public:
     cl_int           finish(cl_command_queue queue);
     cl_int           flush(cl_command_queue queue);
 
+    /* ---- maps and shared virtual memory (US2) --------------------------- */
+
+    /* A pointer the application may read and write, staged in guest memory
+     * and filled from the buffer; null with the API's own error. */
+    void  *map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool blocking, cl_map_flags flags,
+                      size_t offset, size_t bytes, cl_event *event, cl_int *error);
+    /* Writes a staged mapping back where the application asked to write, then
+     * gives it up. CL_INVALID_VALUE for a pointer no live mapping answered. */
+    cl_int unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event);
+
+    /* Coarse-grained shared virtual memory: the application is handed a
+     * mirror, and the host address it stands for is what crosses the wire. */
+    void  *svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t bytes, cl_uint alignment);
+    void   svm_free(cl_context context, void *pointer);
+    /* Fills the mirror from the host; an unmap writes it back. Host access to
+     * a coarse-grained allocation is defined only between the two. */
+    cl_int svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags flags, void *pointer,
+                   size_t bytes, cl_event *event);
+    cl_int svm_unmap(cl_command_queue queue, void *pointer, cl_event *event);
+    /* A kernel argument that is an address rather than an object: translated
+     * before it is sent, and refused here when it is inside no allocation. */
+    cl_int set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const void *pointer);
+
     /* Retain and release for every kind the ICD carries: the application's
      * count is the ICD's, and the host is told once the last one goes. */
     cl_int retain(void *object, ClObject::Kind kind);

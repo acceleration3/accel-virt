@@ -271,6 +271,66 @@ cl_int CL_API_CALL retain_event(cl_event event)
     return root.retain(event, ClObject::Kind::event);
 }
 
+void *CL_API_CALL map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
+                             cl_map_flags flags, size_t offset, size_t bytes, cl_uint,
+                             const cl_event *, cl_event *event, cl_int *error)
+{
+    AV_SCOPE("map_buffer");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_COMMAND_QUEUE;
+        return nullptr;
+    }
+    return cl_icd_binding.root().map_buffer(queue, buffer, blocking, flags, offset, bytes, event,
+                                            error);
+}
+
+cl_int CL_API_CALL unmap_mem_object(cl_command_queue queue, cl_mem buffer, void *pointer, cl_uint,
+                                    const cl_event *, cl_event *event)
+{
+    AV_SCOPE("unmap_mem_object");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.unmap(queue, buffer, pointer, event);
+}
+
+void *CL_API_CALL svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t bytes,
+                            cl_uint alignment)
+{
+    AV_SCOPE("svm_alloc");
+    if (!cl_icd_binding.bound()) return nullptr;
+    return cl_icd_binding.root().svm_alloc(context, flags, bytes, alignment);
+}
+
+void CL_API_CALL svm_free(cl_context context, void *pointer)
+{
+    AV_SCOPE("svm_free");
+    if (!cl_icd_binding.bound()) return;
+    cl_icd_binding.root().svm_free(context, pointer);
+}
+
+cl_int CL_API_CALL enqueue_svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags flags,
+                                   void *pointer, size_t bytes, cl_uint, const cl_event *,
+                                   cl_event *event)
+{
+    AV_SCOPE("enqueue_svm_map");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.svm_map(queue, blocking, flags, pointer, bytes, event);
+}
+
+cl_int CL_API_CALL enqueue_svm_unmap(cl_command_queue queue, void *pointer, cl_uint,
+                                     const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_svm_unmap");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.svm_unmap(queue, pointer, event);
+}
+
+cl_int CL_API_CALL set_kernel_arg_svm_pointer(cl_kernel kernel, cl_uint index, const void *pointer)
+{
+    AV_SCOPE("set_kernel_arg_svm_pointer");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.set_kernel_svm_argument(kernel, index, pointer);
+}
+
 cl_int CL_API_CALL release_event(cl_event event)
 {
     AV_SCOPE("release_event");
@@ -320,7 +380,14 @@ void ClDispatchTable::fill()
     table_.clFlush = &flush_queue;
     table_.clRetainEvent = &retain_event;
     table_.clReleaseEvent = &release_event;
-    claimed_ = 29u;
+    table_.clEnqueueMapBuffer = &map_buffer;
+    table_.clEnqueueUnmapMemObject = &unmap_mem_object;
+    table_.clSVMAlloc = &svm_alloc;
+    table_.clSVMFree = &svm_free;
+    table_.clEnqueueSVMMap = &enqueue_svm_map;
+    table_.clEnqueueSVMUnmap = &enqueue_svm_unmap;
+    table_.clSetKernelArgSVMPointer = &set_kernel_arg_svm_pointer;
+    claimed_ = 36u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
@@ -361,7 +428,7 @@ bool ClDispatchTable::invariants_hold() const
      * something; the ones this ICD claims hold its own. */
     return claimed_ != 0u && table_.clGetPlatformIDs == &get_platform_ids &&
            table_.clGetPlatformInfo == &get_platform_info && table_.clCreateContext != nullptr &&
-           table_.clEnqueueMapBuffer != nullptr;
+           table_.clEnqueueMapBuffer == &map_buffer && table_.clCreateImage != nullptr;
 }
 
 }  // namespace av::clicd
