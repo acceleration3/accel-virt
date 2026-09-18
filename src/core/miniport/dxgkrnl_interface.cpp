@@ -1,5 +1,6 @@
 #include "core/miniport/dxgkrnl_interface.hpp"
 
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/trace/function_scope.hpp"
@@ -152,6 +153,19 @@ Status DxgkrnlInterface::query_vidpn_interface(void *vidpn, const DxgkVidPnInter
                               .status();
     if (status == Status::ok && vidpn_interface == nullptr) return Status::malformed;
     return status;
+}
+
+bool DxgkrnlInterface::feature_enabled(uint32_t feature_id, uint32_t support_state)
+{
+    AV_SCOPE("DxgkrnlInterface::feature_enabled");
+    platform_.require_irql_at_most(Irql::passive, "DxgkrnlInterface::feature_enabled");
+    if (!initialized_ || record_.DxgkCbQueryFeatureSupport == nullptr) return false;
+    DxgkargcbQueryFeatureSupportRecord request = {};
+    request.DeviceHandle = record_.DeviceHandle;
+    request.FeatureId = feature_id;
+    request.DriverSupportState = support_state;
+    const Status asked = NtStatus(record_.DxgkCbQueryFeatureSupport(&request)).status();
+    return asked == Status::ok && request.Enabled != 0u;
 }
 
 bool DxgkrnlInterface::initialized() const

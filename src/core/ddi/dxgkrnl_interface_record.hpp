@@ -18,6 +18,9 @@
 
 namespace av {
 
+struct DxgkargcbQueryFeatureSupportRecord;
+using DxgkCbQueryFeatureSupport = int32_t (*)(DxgkargcbQueryFeatureSupportRecord *arguments);
+
 using DxgkCbGetDeviceInformation = int32_t (*)(void *device_handle, DxgkDeviceInfoRecord *device_info);
 using DxgkCbMapMemory = int32_t (*)(void *device_handle, int64_t translated_address, uint32_t length,
                                     uint8_t in_io_space, uint8_t map_to_user_mode, int32_t cache_type,
@@ -72,8 +75,14 @@ struct DxgkrnlInterfaceRecord {
     void                      *LaterCallbacks[13];
     DxgkCbAcquireHandleData    DxgkCbAcquireHandleData;
     DxgkCbReleaseHandleData    DxgkCbReleaseHandleData;
-    /* DxgkCbHardwareContentProtectionTeardown through DxgkCbDisconnectDoorbell. */
-    void                      *RemainingCallbacks[34];
+    /* DxgkCbHardwareContentProtectionTeardown through DxgkCbNotifyCursorSupportChange. */
+    void                      *CallbacksBeforeFeatureSupport[23];
+    /* What the OS answers about a feature the driver implements, which is what
+     * a driver must ask before it reports a scheduling capability (feature
+     * 049, research.md §15). */
+    DxgkCbQueryFeatureSupport  DxgkCbQueryFeatureSupport;
+    /* DxgkCbCreatePhysicalMemoryObject through DxgkCbDisconnectDoorbell. */
+    void                      *CallbacksAfterFeatureSupport[10];
 };
 
 }  // namespace av

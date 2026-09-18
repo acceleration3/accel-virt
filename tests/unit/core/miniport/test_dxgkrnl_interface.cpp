@@ -1,3 +1,4 @@
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/ddi/dxgk_device_info_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -56,6 +57,11 @@ public:
         record_.DxgkCbQueueDpc = +[](void *handle) {
             return static_cast<Callbacks *>(handle)->queue_dpc();
         };
+        /* Feature 049: what this OS answers about a feature the driver
+         * implements. */
+        record_.DxgkCbQueryFeatureSupport = +[](av::DxgkargcbQueryFeatureSupportRecord *request) {
+            return static_cast<Callbacks *>(request->DeviceHandle)->query_feature_support(*request);
+        };
         record_.DxgkCbReadDeviceSpace = +[](void *handle, std::uint32_t space, void *buffer,
                                             std::uint32_t offset, std::uint32_t length,
                                             std::uint32_t *read) {
@@ -111,6 +117,20 @@ public:
         *mapped = mapping;
         return answer;
     }
+
+    std::int32_t query_feature_support(av::DxgkargcbQueryFeatureSupportRecord &request)
+    {
+        feature_queries++;
+        feature_asked = request.FeatureId;
+        feature_support_asked = request.DriverSupportState;
+        request.Enabled = (allowed_features & (1u << request.FeatureId)) != 0u ? 1u : 0u;
+        return answer;
+    }
+
+    std::uint32_t allowed_features = 0u;
+    std::uint32_t feature_queries = 0u;
+    std::uint32_t feature_asked = 0xFFFFFFFFu;
+    std::uint32_t feature_support_asked = 0xFFFFFFFFu;
 
     std::uint8_t queue_dpc() { dpcs++; return dpc_answer; }
 
@@ -389,5 +409,41 @@ TEST(dxgkrnl_interface_query_vidpn_interface, answers_version_one_of_the_table)
   CHECK_STATUS(interface.query_vidpn_interface(&callbacks, table), Status::no_memory);
   platform.set_irql(Irql::dispatch);
   static_cast<void>(interface.query_vidpn_interface(&callbacks, table));
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }
+
+/* Feature 049: a driver must ask the OS before it reports a scheduling
+ * capability, because reporting one the OS has not enabled fails the whole
+ * adapter start (research.md §15). An answer this driver cannot get - no
+ * callback, a refusal, or a table it never initialized - is "not allowed",
+ * which is the answer that keeps the adapter alive. */
+TEST(dxgkrnl_interface_feature_enabled, answers_what_the_os_allows_and_no_for_anything_else)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  CHECK(!interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
+  CHECK_EQ(callbacks.feature_queries, 0u);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  CHECK(!interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
+  CHECK_EQ(callbacks.feature_queries, 1u);
+  CHECK_EQ(callbacks.feature_asked, av::feature_hwsch);
+  CHECK_EQ(callbacks.feature_support_asked, av::feature_support_stable);
+
+  callbacks.allowed_features = 1u << av::feature_hwsch;
+  CHECK(interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
+  CHECK(!interface.feature_enabled(av::feature_user_mode_submission, av::feature_support_stable));
+
+  /* A refusal is not an answer of yes. */
+  callbacks.answer = no_memory;
+  CHECK(!interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
+  callbacks.answer = 0;
+
+  /* A table without the callback at all is every table older than WDDM 2.9. */
+  DxgkrnlInterface older(platform);
+  Callbacks        without;
+  without.record().DxgkCbQueryFeatureSupport = nullptr;
+  CHECK_STATUS(older.initialize(&without.record()), Status::ok);
+  CHECK(!older.feature_enabled(av::feature_hwsch, av::feature_support_stable));
+
+  platform.set_irql(Irql::dispatch);
+  static_cast<void>(interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }

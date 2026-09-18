@@ -386,6 +386,10 @@ private:
     /* What each hardware queue runs on, which a submission at DISPATCH reads
      * without taking the queue table's mutex (feature 049). */
     HwQueueContexts                hw_queue_contexts_;
+    /* Whether this OS lets the adapter be hardware scheduled, asked once at
+     * StartDevice: a node that reports context scheduling the OS has not
+     * enabled fails the whole adapter start (feature 049, research.md §15). */
+    bool                           hardware_scheduling_;
     ExecutionNode                  node_;
     EngineProgress                 progress_;
     PowerTransition                transition_;

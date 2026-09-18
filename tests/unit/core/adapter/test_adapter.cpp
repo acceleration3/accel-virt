@@ -12,6 +12,7 @@
 #include "core/ddi/dxgk_gpu_clock_data_record.hpp"
 #include "core/ddi/dxgk_gpu_mmu_caps_record.hpp"
 #include "core/ddi/dxgk_node_metadata_record.hpp"
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
 #include "core/ddi/dxgk_page_table_level_desc_record.hpp"
@@ -1574,19 +1575,42 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
   for (unsigned index = 0u; index < sizeof expected; index++)
       CHECK_EQ(metadata.FriendlyName[index], static_cast<unsigned>(expected[index]));
   CHECK_EQ(metadata.FriendlyName[31], 0u);
-  /* What the node is scheduled by: context scheduling, with the depth this
-   * driver can hold in flight - which is what lets the OS hand a process a
-   * hardware queue on it. User-mode submission is *not* claimed: dxgkrnl
-   * refuses the adapter outright for a node that reports it without the
-   * native-fence capability, and this driver has no native fences
-   * (research.md §14). Nothing else is claimed either: no ring-buffer fence
-   * release, no tracked workload, no test command buffers. */
-  CHECK_EQ(metadata.Flags, 0x1u | (av::HwQueueSubmissions::capacity << 16u));
+  /* An OS that has not enabled hardware scheduling is told the node is not
+   * scheduled that way: reporting it anyway fails the whole adapter start
+   * (research.md §15). */
+  CHECK_EQ(metadata.Flags, 0u);
   CHECK_EQ(metadata.GpuMmuSupported, 1u);
   CHECK_EQ(metadata.IoMmuSupported, 0u);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
+
+/* Feature 049: what the node reports is what the OS allowed at StartDevice.
+ * With hardware scheduling on it is context scheduling and the depth this
+ * driver can hold in flight - which is what lets the OS hand a process a
+ * hardware queue on it - and never user-mode submission, which dxgkrnl refuses
+ * the adapter for without the native-fence capability this driver has none of
+ * (research.md §14). Nothing else is claimed: no ring-buffer fence release, no
+ * tracked workload, no test command buffers. */
+TEST(adapter_get_node_metadata, reports_context_scheduling_only_where_the_os_allowed_it)
+{ Fixture fixture;
+  fixture.dxgkrnl().allow_feature(av::feature_hwsch);
+  CHECK_EQ(fixture.start(), success);
+  /* Asked once, at the start, before anything is reported. */
+  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 1u);
+  CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
+  av::DxgkNodeMetadataRecord metadata;
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
+  CHECK_EQ(metadata.Flags, 0x1u | (av::HwQueueSubmissions::capacity << 16u));
+
+  /* An OS that refuses the ask is an OS that has not enabled it. */
+  Fixture refused;
+  refused.dxgkrnl().allow_feature(av::feature_hwsch);
+  refused.dxgkrnl().refuse_feature_queries(0xC0000001u);
+  CHECK_EQ(refused.start(), success);
+  CHECK_EQ(nt(refused.adapter().get_node_metadata(0u, &metadata)), success);
+  CHECK_EQ(metadata.Flags, 0u);
+  CHECK(refused.platform().logged_line("rvkgpu: hardware scheduling status 0x00000000")); }
 
 TEST(adapter_control_interrupt2, enables_and_disables_the_synthetic_vsync)
 { Fixture fixture;

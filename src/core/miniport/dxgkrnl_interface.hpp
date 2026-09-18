@@ -46,6 +46,13 @@ public:
     void                 notify_dpc();
     /* DxgkCbQueryVidPnInterface, version 1. */
     [[nodiscard]] Status query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface);
+    /* Whether this OS allows a feature the driver implements to be turned on.
+     * A driver that reports a scheduling capability the OS has not enabled
+     * fails the whole adapter start, so this is asked first (feature 049,
+     * research.md §15). false for a table too old to have the callback, and
+     * for any refusal: the answer is then "not allowed", which is the safe
+     * one. */
+    bool                 feature_enabled(uint32_t feature_id, uint32_t support_state);
 
     bool initialized() const;
     /* DXGKRNL_INTERFACE.DeviceHandle: null before initialize. */

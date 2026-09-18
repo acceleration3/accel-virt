@@ -97,6 +97,7 @@
 #include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
 #include "core/ddi/rect_record.hpp"
@@ -143,15 +144,31 @@ AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbExcludeAdapterAccess, DXGKRNL_INTER
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, LaterCallbacks, DXGKRNL_INTERFACE, DxgkCbCreateContextAllocation);
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbAcquireHandleData, DXGKRNL_INTERFACE, DxgkCbAcquireHandleData);
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbReleaseHandleData, DXGKRNL_INTERFACE, DxgkCbReleaseHandleData);
-AV_SAME_OFFSET(DxgkrnlInterfaceRecord, RemainingCallbacks, DXGKRNL_INTERFACE,
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, CallbacksBeforeFeatureSupport, DXGKRNL_INTERFACE,
                DxgkCbHardwareContentProtectionTeardown);
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbQueryFeatureSupport, DXGKRNL_INTERFACE, DxgkCbQueryFeatureSupport);
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, CallbacksAfterFeatureSupport, DXGKRNL_INTERFACE,
+               DxgkCbCreatePhysicalMemoryObject);
 AV_SAME_SIZE(DxgkargcbReleaseHandleDataRecord, DXGKARGCB_RELEASEHANDLEDATA);
 AV_SAME_OFFSET(DxgkargcbReleaseHandleDataRecord, ReleaseHandle, DXGKARGCB_RELEASEHANDLEDATA, ReleaseHandle);
 AV_SAME_OFFSET(DxgkargcbReleaseHandleDataRecord, Type, DXGKARGCB_RELEASEHANDLEDATA, Type);
-static_assert(offsetof(av::DxgkrnlInterfaceRecord, RemainingCallbacks) +
-                      sizeof(av::DxgkrnlInterfaceRecord::RemainingCallbacks) ==
+static_assert(offsetof(av::DxgkrnlInterfaceRecord, CallbacksAfterFeatureSupport) +
+                      sizeof(av::DxgkrnlInterfaceRecord::CallbacksAfterFeatureSupport) ==
                   offsetof(DXGKRNL_INTERFACE, DxgkCbDisconnectDoorbell) + sizeof(void *),
-              "RemainingCallbacks does not end at DxgkCbDisconnectDoorbell");
+              "the callbacks after DxgkCbQueryFeatureSupport do not end at DxgkCbDisconnectDoorbell");
+
+AV_SAME_SIZE(DxgkargcbQueryFeatureSupportRecord, DXGKARGCB_QUERYFEATURESUPPORT);
+AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, DeviceHandle, DXGKARGCB_QUERYFEATURESUPPORT, DeviceHandle);
+AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, FeatureId, DXGKARGCB_QUERYFEATURESUPPORT, FeatureId);
+AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, DriverSupportState, DXGKARGCB_QUERYFEATURESUPPORT,
+               DriverSupportState);
+AV_SAME_OFFSET(DxgkargcbQueryFeatureSupportRecord, Enabled, DXGKARGCB_QUERYFEATURESUPPORT, Enabled);
+static_assert(av::feature_hwsch == static_cast<unsigned>(DXGK_FEATURE_HWSCH), "DXGK_FEATURE_HWSCH");
+static_assert(av::feature_user_mode_submission == static_cast<unsigned>(DXGK_FEATURE_USER_MODE_SUBMISSION),
+              "DXGK_FEATURE_USER_MODE_SUBMISSION");
+static_assert(av::feature_support_stable == DXGK_FEATURE_SUPPORT_STABLE, "DXGK_FEATURE_SUPPORT_STABLE");
+static_assert(av::node_context_scheduling_supported == 0x1u, "ContextSchedulingSupported");
+static_assert(av::node_user_mode_submission == 0x8u, "UserModeSubmission");
 
 AV_SAME_SIZE(DxgkDeviceInfoRecord, DXGK_DEVICE_INFO);
 AV_SAME_OFFSET(DxgkDeviceInfoRecord, MiniportDeviceContext, DXGK_DEVICE_INFO, MiniportDeviceContext);

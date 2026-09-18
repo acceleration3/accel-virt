@@ -285,3 +285,35 @@ in-flight depth, which is what lets the OS hand out a hardware queue. Reporting
 user-mode submission before the fences exist is a capability nobody can use,
 and constitution VI forbids it - which is exactly what the live run proved by
 failing the adapter start.
+
+## 15. Why reporting a scheduling capability is an ask, not a statement
+
+The run after §14 still refused the adapter, with `ContextScheduling` alone,
+and `DXGADAPTER::Initialize` (dxgkrnl, the function that logs those messages)
+says why: a node's flags are validated against the **OS's own policy**, not
+only against the driver.
+
+```
+if ((metadata.Flags & ContextSchedulingSupported) != 0) {
+    if (!IoMmuSupported && !adapter->gpu_va)     -> "doesn't support GPU VA"
+    if ((os_policy & 0x20000) == 0)              -> "the OS didn't allow HwSch to be enabled"
+}
+if ((metadata.Flags & UserModeSubmission) != 0) {
+    if (wddm < 3.1)                              -> refused
+    if (!ContextSchedulingSupported)             -> refused
+    if ((os_policy & 0x8000000) == 0)            -> "the OS didn't allow UserModeSubmission"
+    if ((caps & 0x800) == 0)                     -> "NativeGpuFence cap is not set"
+}
+```
+
+Each of those refusals fails **StartAdapter**, not the feature: the adapter
+ends at `problem=43` and nothing renders at all. So a capability here is not
+something a driver states; it is something it may state only once the OS has
+agreed, and the agreement is asked for through `DxgkCbQueryFeatureSupport`
+(`DXGKARGCB_QUERYFEATURESUPPORT`, WDDM 2.9) with `DXGK_FEATURE_HWSCH` or
+`DXGK_FEATURE_USER_MODE_SUBMISSION` and the driver's own support state.
+
+That is what this driver now does at StartDevice, and the node reports context
+scheduling only where the answer was yes. It is the same rule constitution VI
+already asks for - never report a capability that is not implemented - with the
+OS added to what "implemented" has to mean.

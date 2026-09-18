@@ -1,5 +1,7 @@
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
+
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
@@ -54,6 +56,12 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
     record_.DxgkCbQueueDpc = +[](void *handle) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->queue_dpc();
     };
+    /* What the OS answers about a feature the driver implements: nothing is
+     * enabled until a test says so, as a machine with hardware scheduling off
+     * answers (feature 049). */
+    record_.DxgkCbQueryFeatureSupport = +[](DxgkargcbQueryFeatureSupportRecord *request) {
+        return static_cast<FakeDxgkrnlAdapter *>(request->DeviceHandle)->query_feature_support(*request);
+    };
 }
 
 FakeDxgkrnlAdapter::~FakeDxgkrnlAdapter()
@@ -66,6 +74,23 @@ FakeDxgkrnlAdapter::~FakeDxgkrnlAdapter()
 }
 
 DxgkrnlInterfaceRecord &FakeDxgkrnlAdapter::record() { return record_; }
+
+void FakeDxgkrnlAdapter::allow_feature(std::uint32_t feature_id) { allowed_features_ |= 1u << feature_id; }
+
+void FakeDxgkrnlAdapter::refuse_feature_queries(std::uint32_t status) { feature_query_status_ = status; }
+
+std::int32_t FakeDxgkrnlAdapter::query_feature_support(DxgkargcbQueryFeatureSupportRecord &request)
+{
+    feature_queries_++;
+    request.Enabled = 0u;
+    if (feature_query_status_ != 0u) return static_cast<std::int32_t>(feature_query_status_);
+    /* A driver that says its implementation is off gets no from any OS. */
+    if (request.DriverSupportState == 0u) return 0;
+    request.Enabled = (allowed_features_ & (1u << request.FeatureId)) != 0u ? 1u : 0u;
+    return 0;
+}
+
+std::uint32_t FakeDxgkrnlAdapter::feature_queries() const { return feature_queries_; }
 
 void FakeDxgkrnlAdapter::refuse_device_information(std::uint32_t status) { device_information_status_ = status; }
 void FakeDxgkrnlAdapter::refuse_config_read(std::uint32_t status) { config_read_status_ = status; }

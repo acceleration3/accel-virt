@@ -16,6 +16,8 @@
 
 namespace av {
 
+struct DxgkargcbQueryFeatureSupportRecord;
+
 class FakeDxgkrnlAdapter {
 public:
     static constexpr std::uint32_t max_mappings = 6u;
@@ -28,6 +30,12 @@ public:
     FakeDxgkrnlAdapter &operator=(const FakeDxgkrnlAdapter &) = delete;
 
     DxgkrnlInterfaceRecord &record();
+    /* Which features this OS lets the driver turn on, and what it answers when
+     * the ask itself fails (feature 049). Nothing is allowed until asked for. */
+    void                    allow_feature(std::uint32_t feature_id);
+    void                    refuse_feature_queries(std::uint32_t status);
+    std::int32_t            query_feature_support(DxgkargcbQueryFeatureSupportRecord &request);
+    std::uint32_t           feature_queries() const;
 
     /* Knobs: the NTSTATUS the next such callback answers. */
     void refuse_device_information(std::uint32_t status);
@@ -87,6 +95,11 @@ private:
     std::uint32_t          map_refusal_countdown_;
     std::uint32_t          map_refusal_status_;
     std::uint32_t          unmap_status_;
+    /* Feature 049: which features this OS allows, one bit per feature id, and
+     * how many times the driver asked. */
+    std::uint32_t          allowed_features_ = 0u;
+    std::uint32_t          feature_query_status_ = 0u;
+    std::uint32_t          feature_queries_ = 0u;
     Mapping                mappings_[max_mappings];
     std::uint32_t          mapping_count_;
     std::uint32_t          maps_;

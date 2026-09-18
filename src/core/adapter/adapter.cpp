@@ -11,6 +11,7 @@
 #include "core/ddi/dxgk_display_information_record.hpp"
 #include "core/ddi/dxgk_gpu_clock_data_record.hpp"
 #include "core/ddi/dxgk_node_metadata_record.hpp"
+#include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "core/ddi/dxgkarg_close_allocation_record.hpp"
@@ -110,7 +111,8 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
+      hardware_scheduling_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
@@ -134,6 +136,13 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
 {
     AV_SCOPE("Adapter::discover_and_map");
     Status status = dxgkrnl_.initialize(dxgkrnl_interface);
+    /* What this OS allows before anything is reported: the queue DDIs are
+     * implemented and tested, and whether a node may say so is the OS's to
+     * answer (research.md §15). */
+    if (status == Status::ok) {
+        hardware_scheduling_ = dxgkrnl_.feature_enabled(feature_hwsch, feature_support_stable);
+        log_status("rvkgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
+    }
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
     if (status == Status::ok) status = segment_.initialize(info.SystemMemorySize);
@@ -1380,19 +1389,23 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
     metadata->GpuMmuSupported = 1u;
-    /* What this node is scheduled by, which is what lets the OS give a process
-     * a hardware queue on it (feature 019): the queue DDIs are implemented and
-     * tested, and the depth is what this driver can hold in flight.
+    /* What this node is scheduled by, where the OS allows it: the queue DDIs
+     * are implemented and tested (feature 019), and the depth is what this
+     * driver can hold in flight. A node that reports context scheduling the OS
+     * has not enabled fails the adapter start outright, so what it reports is
+     * what the OS answered at StartDevice (research.md §15).
      *
-     * Not user-mode submission, yet. dxgkrnl refuses the whole adapter for a
-     * node that reports it without the native-fence capability - "Driver
-     * reported UserModeSubmission support, but NativeGpuFence cap is not set"
-     * - and this driver has no native fences (research.md §14). The doorbell
-     * DDIs are implemented and tested; what is missing is the fence half of
-     * WDDM 3.1, and reporting the flag before it exists is a capability nobody
-     * can use (constitution VI). */
-    metadata->Flags = node_context_scheduling_supported |
-                      (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift);
+     * Not user-mode submission, yet. dxgkrnl refuses the adapter for a node
+     * that reports it without the native-fence capability - "Driver reported
+     * UserModeSubmission support, but NativeGpuFence cap is not set" - and
+     * this driver has no native fences (research.md §14). The doorbell DDIs
+     * are implemented and tested; what is missing is the fence half of WDDM
+     * 3.1, and reporting the flag before it exists is a capability nobody can
+     * use (constitution VI). */
+    metadata->Flags = hardware_scheduling_
+                          ? node_context_scheduling_supported |
+                                (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift)
+                          : 0u;
     for (uint32_t index = 0u; index + 1u < sizeof name; index++)
         metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);
     return NtStatus(Status::ok).value();
