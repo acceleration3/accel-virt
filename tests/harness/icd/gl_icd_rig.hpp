@@ -43,6 +43,8 @@ public:
 
     /* A DC on a window, a second DC on another window, and a memory DC. */
     void *dc();
+    /* The window dc() draws on, for a test that resizes or closes it. */
+    void *window();
     void *other_dc();
     void *memory_dc();
 

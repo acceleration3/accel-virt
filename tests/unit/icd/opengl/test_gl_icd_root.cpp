@@ -514,6 +514,28 @@ TEST(gl_icd_root_set_swap_interval, a_swap_waits_for_the_blanks_its_interval_ask
   CHECK(std::strstr(wgl, "WGL_EXT_swap_control") != nullptr);
   CHECK(std::strstr(wgl, "WGL_EXT_swap_control_tear") == nullptr); }
 
+/* Feature 051, US2.3 and SC-003: a swap on a window nobody can see costs
+ * nothing at all - no read-back through the host GPU, no blit, no blank waited
+ * for - and still succeeds, because an application that keeps drawing while
+ * minimized is not in error. */
+TEST(gl_icd_root, a_swap_on_a_window_nobody_can_see_reads_nothing_back)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  const std::uint32_t read = sent(rig, av::glproto::kCmd_glGetTextureSubImage);
+  const std::uint32_t blits = rig.surface().blits();
+  const std::uint32_t blanks = rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank);
+  rig.surface().resize(rig.window(), 0u, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), read);
+  CHECK_EQ(rig.surface().blits(), blits);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks);
+  /* Restored, it presents again. */
+  rig.surface().resize(rig.window(), GlIcdRig::window_width, GlIcdRig::window_height);
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), blits + 1u); }
+
 TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
 { GlIcdRig rig;
   rig.load_with_format();

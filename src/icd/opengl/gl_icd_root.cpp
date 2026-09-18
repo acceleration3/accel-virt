@@ -1,6 +1,7 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
 #include "icd/opengl/granted_profile.hpp"
+#include "icd/opengl/window_visibility.hpp"
 
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
@@ -301,6 +302,10 @@ bool GlIcdRoot::swap_buffers(void *dc)
     ClientTransport *const transport = context->wire();
     /* A lost context has nothing to show and fails nothing by swapping. */
     if (transport == nullptr) return true;
+    /* Nor does a window nobody can see: the frame is read back through the
+     * host GPU and blitted for a client area that is not there, and the
+     * application's render thread waits for both (feature 051, US2.3). */
+    if (!WindowVisibility(surface_, window).showing()) return true;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
     if (!framebuffers.present(*transport, context->arrays(), dc, window,

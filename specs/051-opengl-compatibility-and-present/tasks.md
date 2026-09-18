@@ -48,7 +48,7 @@ UMD's redirection surface. It arrives with feature 055, for both APIs at once.
 
 ## Phase 4: US2 - what a swap does now (P1)
 
-- [ ] T015 [US2] `WindowVisibility` (object) in `src/icd/opengl/window_visibility.{hpp,cpp}`: a window and the `WindowSurface` that answers for it; `showing()` is false for an iconic window or an empty client area. A swap on such a window reads nothing back, blits nothing, waits for no blank and succeeds (SC-003). Tests: the device's read accounting is untouched across such a swap
+- [X] T015 [US2] `WindowVisibility` (object) in `src/icd/opengl/window_visibility.{hpp,cpp}`: a window and the `WindowSurface` that answers for it; `showing()` is false for an iconic window or an empty client area. A swap on such a window reads nothing back, blits nothing, waits for no blank and succeeds (SC-003). Tests: the device's read accounting is untouched across such a swap
 - [ ] T016 [US2] A window resized between swaps presents the frame it had, then remakes its buffers at the new extent before the next one; an extent past the 8192 edge is refused without touching the old buffers. Tests in `tests/unit/icd/opengl/test_window_framebuffers.cpp`
 - [ ] T017 [US2] Several windows in one process present independently: each keeps its own extent and its own last frame, and a refusal on one disturbs no other. Tests over the scripted window surface
 - [ ] T018 [US2] `ManualCalls::flush` presents the window when the current context's pixel format is single-buffered and otherwise only flushes; `DrvSwapBuffers` on a single-buffered format succeeds without presenting (contracts/wgl.md). Tests both ways

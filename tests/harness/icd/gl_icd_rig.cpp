@@ -39,6 +39,7 @@ glicd::GlIcdRoot      &GlIcdRig::root() { return root_; }
 void                  *GlIcdRig::dc() { return &dc_; }
 void                  *GlIcdRig::other_dc() { return &other_dc_; }
 void                  *GlIcdRig::memory_dc() { return &memory_dc_; }
+void                  *GlIcdRig::window() { return &window_; }
 
 void GlIcdRig::load_with_format()
 {
