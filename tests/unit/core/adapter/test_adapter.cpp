@@ -1597,24 +1597,38 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
  * that reports a capability the OS has not enabled fails the whole adapter
  * start (research.md §15).
  *
- * The answer is still no flags: dxgkrnl checks context scheduling against the
- * node's *IoMmu* support, which this driver has no path for, and refuses the
- * adapter for a single-node GpuMmu one that claims it (§16). What the node
- * reports is what it can back - and never user-mode submission, which needs
- * the native-fence capability this driver has none of (§14). */
+ * The packet node reports nothing either way. The hardware-scheduled one
+ * reports context scheduling where the OS allowed it, and user-mode submission
+ * only where it allowed the native fences the OS demands beside it - a node
+ * that reports the one without the other fails the adapter start (§14, §20). */
 TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_scheduled)
 { Fixture fixture;
   fixture.dxgkrnl().allow_feature(av::feature_hwsch);
   CHECK_EQ(fixture.start(), success);
-  /* Asked at the start, before anything is reported: hardware scheduling,
-   * native fences, and user-mode submission - the last only where hardware
-   * scheduling was allowed, since a node cannot report one without the
-   * other. */
-  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 3u);
+  /* Asked at the start, before anything is reported: hardware scheduling and
+   * native fences. User-mode submission is not asked at all where the fences
+   * were refused, since a node may not report one without the other. */
+  CHECK_EQ(fixture.dxgkrnl().feature_queries(), 2u);
   CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
+  CHECK(fixture.platform().logged_line("rvkgpu: user-mode submission status 0x00000000"));
   av::DxgkNodeMetadataRecord metadata;
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
   CHECK_EQ(metadata.Flags, 0u);
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), success);
+  CHECK_EQ(metadata.Flags & 0x8u, 0u);   /* no user-mode submission without fences */
+  CHECK_EQ(metadata.Flags & 0x1u, 0x1u);
+
+  /* An OS that allows both gets the whole flag set, depth included. */
+  Fixture allowed;
+  allowed.dxgkrnl().allow_feature(av::feature_hwsch);
+  allowed.dxgkrnl().allow_feature(av::feature_native_fence);
+  allowed.dxgkrnl().allow_feature(av::feature_user_mode_submission);
+  CHECK_EQ(allowed.start(), success);
+  CHECK_EQ(allowed.dxgkrnl().feature_queries(), 3u);
+  CHECK(allowed.platform().logged_line("rvkgpu: user-mode submission status 0x00000001"));
+  CHECK_EQ(nt(allowed.adapter().get_node_metadata(1u, &metadata)), success);
+  CHECK_EQ(metadata.Flags & 0x9u, 0x9u);
+  CHECK_EQ(metadata.Flags >> 16u, av::HwQueueSubmissions::capacity);
 
   /* An OS that refuses the ask is an OS that has not enabled it. */
   Fixture refused;

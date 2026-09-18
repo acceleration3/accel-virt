@@ -397,3 +397,64 @@ So the INF turns on exactly the two this driver implements: 4
 (`DXGK_FEATURE_USER_MODE_SUBMISSION`) and 37 (`DXGK_FEATURE_NATIVE_FENCE`).
 That is the "one-line INF change with a measurement behind it" §11 guessed at,
 and it took the whole chain above to find out which line.
+
+## 20. Why the doorbell cannot open on this build of Windows
+
+The run after §19 turned both features on the only way the OS offers - the
+INF's `Features\4` and `Features\37` keys, and the same keys under
+`HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers` for the global
+database - and got:
+
+```
+rvkgpu: native fences status 0x00000000
+rvkgpu: hardware scheduling status 0x00000001
+rvkgpu: user-mode submission status 0x00000001
+```
+
+The same key worked for feature 4 and did nothing for feature 37, and
+`dxgkrnl.sys` says why. `IsFeatureEnabledUncached` enables a feature only when
+three things agree - its dependencies, the driver's answer through the feature
+interface, and `CheckFeatureOSSupport`:
+
+```c
+local_55 = CheckFeatureOSSupport(descriptor_slot, descriptor, feature_id);
+...
+if ((dependencies_ok != '\0') && (local_55 != '\0') && (driver_and_version_ok != '\0'))
+    flags |= enabled;
+```
+
+and `CheckFeatureOSSupport` answers for two feature ids without consulting
+anything at all:
+
+```c
+if ((param_3 == 0x20) || (param_3 == 0x25)) {
+    return false;
+}
+```
+
+`0x25` is 37, `DXGK_DRIVER_FEATURE_NATIVE_FENCE`; `0x20` is 32,
+`DXGK_DRIVER_FEATURE_PAGE_BASED_MEMORY_MANAGER`. Both are staged off in this
+build of the OS itself, and no registry value, driver answer or version range
+reaches that decision. (The ids around them confirm the mapping: 41
+`SYNC_PRESENT_RENDER_HWQ_ONLY` returns true, and 45, 46 and 49 each call the
+matching `Feature_*_IsEnabled` helper.) The one path that bypasses it is
+`IsFeatureEnabledHost`, taken only for an adapter-specific feature in a VM that
+`DxgkIsVmConnectedToHost` recognises - the GPU-PV partition talking to its host,
+which this device is not.
+
+That closes the chain the earlier sections opened, in the other direction:
+
+- `DXGADAPTER::Initialize` refuses an adapter whose `DXGK_VIDSCHCAPS` sets
+  `NativeGpuFence` while feature 37 is disabled (§17), which it always is here;
+- it refuses a node that reports `UserModeSubmission` without that capability
+  (§14);
+- so on this build the node may not report user-mode submission, and a process
+  is never handed a doorbell page.
+
+So the driver asks the OS for both features at StartDevice and reports the node
+flag only where both were granted. Everything behind the flag stays built and
+tested - the five doorbell DDIs, the four native fence ones, the hardware queue
+path, the user-mode ring publish and `GuestDoorbell::recover` - and the guest
+suite exercises the fallback it was written to have: `submit.doorbell none`,
+kernel submission, 45/45. The doorbell opens on the first Windows build whose
+`CheckFeatureOSSupport` does not refuse 37, with no driver change.

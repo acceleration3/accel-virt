@@ -152,8 +152,12 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
         } else {
             log_status("rvkgpu: native fences", 0);
         }
-        user_mode_submission_ =
-            hardware_scheduling_ && dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
+        /* And only where the fence half of WDDM 3.1 is live beside it: a node
+         * that reports user-mode submission without the NativeGpuFence
+         * capability fails the adapter start (research.md §14), and this OS
+         * build refuses the native fence feature outright (§20). */
+        user_mode_submission_ = hardware_scheduling_ && capabilities_.native_fences_reportable() &&
+                                dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
         log_status("rvkgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
         log_status("rvkgpu: user-mode submission", user_mode_submission_ ? 1 : 0);
     }
@@ -1491,14 +1495,7 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
      * has not enabled fails the adapter start outright, so what it reports is
      * what the OS answered at StartDevice (research.md §15).
      *
-     * Not user-mode submission, yet. dxgkrnl refuses the adapter for a node
-     * that reports it without the native-fence capability - "Driver reported
-     * UserModeSubmission support, but NativeGpuFence cap is not set" - and
-     * this driver has no native fences (research.md §14). The doorbell DDIs
-     * are implemented and tested; what is missing is the fence half of WDDM
-     * 3.1, and reporting the flag before it exists is a capability nobody can
-     * use (constitution VI). */
-    /* The hardware-scheduled node is the second one, because dxgkrnl checks a
+     * The hardware-scheduled node is the second one, because dxgkrnl checks a
      * node's context scheduling against the node before it: it is satisfied by
      * an earlier node's GpuMmu support, and node 0 supplies that (§16). What
      * the second node reports is what the OS allowed and this driver
