@@ -40,7 +40,7 @@ which is a feature's work beside the doorbell's. The wait stays
 
 ## Phase 3: US2 - disconnection is survived (P1)
 
-- [ ] T011 [US2] `MockKmt` scripts a disconnect mid-stream: the status page it hands out changes under the transport, as dxgkrnl's does. Tests: the store after it is not made, the submission goes through `D3DKMTSubmitCommand`, and the transport reconnects when the status says connected again
+- [X] T011 [US2] `MockKmt` scripts a disconnect mid-stream: the status page it hands out changes under the transport, as dxgkrnl's does. Tests: the store after it is not made, the submission goes through `D3DKMTSubmitCommand`, and the transport reconnects when the status says connected again
 - [ ] T012 [US2] No record is executed twice and none is lost across a disconnect (US2 scenario 2): the ring's tail is published once and the fallback submits the same tail, so a resubmission the device already consumed is a tail it has already passed. Tests over the loopback rig: a disconnect between the ring write and the store, and one between the store and the completion
 - [ ] T013 [US2] The full-stack rig shows both halves together: a user-mode store reaches the device worker with no `SubmitCommand`, a disconnect makes the next store harmless, and the fallback's work completes. `tests/loopback/test_fullstack_doorbell.cpp`
 - [ ] T014 [US2] Hostile input (FR-005, constitution V): a store of an arbitrary value, a store to a disconnected doorbell, a ring tail past the ring, and a fence value past what was queued - each faults that context and no other, and `RingConsumer`'s existing tail validation is shown to hold for a tail user mode wrote

@@ -188,3 +188,67 @@ TEST(guest_doorbell, a_doorbell_that_cannot_be_made_leaves_no_queue_behind)
   doorbell.teardown();
   doorbell.teardown();
   CHECK(doorbell.invariants_hold()); }
+
+/* What a process does about a status that refused it (US2): a retry is the
+ * same doorbell connected again, an abort is another doorbell entirely, and a
+ * connection that is fine is left alone. */
+TEST(guest_doorbell, a_refusal_is_recovered_from_the_way_the_status_asked)
+{ Made          made;
+  GuestDoorbell doorbell(made.kmt());
+  CHECK_STATUS(doorbell.initialize(made.device(), made.context(), made.ring()), Status::ok);
+  CHECK_STATUS(doorbell.connect(), Status::ok);
+  const std::uint32_t connects = made.kmt().calls(MockKmt::Call::connect_doorbell);
+
+  /* Connected: nothing to recover, and no call made looking for something to
+   * do. */
+  CHECK(doorbell.recover());
+  made.kmt().set_doorbell_status(doorbell.handle(),
+                                 static_cast<std::uint32_t>(DoorbellStatus::connected_notify_kmd));
+  CHECK(doorbell.recover());
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::connect_doorbell), connects);
+
+  /* Retry: the same doorbell, connected again, and storing again. */
+  made.kmt().set_doorbell_status(doorbell.handle(),
+                                 static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry));
+  const std::uint32_t kept = doorbell.handle();
+  CHECK(doorbell.recover());
+  CHECK_EQ(doorbell.handle(), kept);
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::connect_doorbell), connects + 1u);
+  CHECK(doorbell.ring(1u));
+
+  /* Abort: that doorbell and its queue are given back, and the process holds
+   * another on the same context. */
+  made.kmt().set_doorbell_status(doorbell.handle(),
+                                 static_cast<std::uint32_t>(DoorbellStatus::disconnected_abort));
+  CHECK(doorbell.recover());
+  CHECK(doorbell.handle() != kept);
+  CHECK(doorbell.established());
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u);
+  CHECK(doorbell.ring(2u));
+  CHECK_EQ(made.kmt().doorbell_page(doorbell.handle()), 1u);
+  CHECK_EQ(made.kmt().queued_fence(doorbell.handle()), 2u);
+  CHECK(doorbell.invariants_hold()); }
+
+/* An abort there is no answer to leaves the process on the kernel path rather
+ * than holding a doorbell it cannot store to. */
+TEST(guest_doorbell, an_abort_that_cannot_be_answered_leaves_no_doorbell)
+{ Made          made;
+  GuestDoorbell never(made.kmt());
+  /* One that was never set up has nothing to make another from. */
+  CHECK(!never.recover());
+  CHECK(!never.established());
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::create_hw_queue), 0u);
+
+  GuestDoorbell doorbell(made.kmt());
+  CHECK_STATUS(doorbell.initialize(made.device(), made.context(), made.ring()), Status::ok);
+  CHECK_STATUS(doorbell.connect(), Status::ok);
+  made.kmt().set_doorbell_status(doorbell.handle(),
+                                 static_cast<std::uint32_t>(DoorbellStatus::disconnected_abort));
+  /* And an OS that has stopped giving out hardware queues - which is what a
+   * reset that turned scheduling off looks like - answers no second time. */
+  made.kmt().refuse_hardware_scheduling();
+  CHECK(!doorbell.recover());
+  CHECK(!doorbell.established());
+  CHECK(!doorbell.ring(1u));
+  CHECK(doorbell.invariants_hold()); }

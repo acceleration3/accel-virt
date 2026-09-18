@@ -166,6 +166,9 @@ public:
     std::uint32_t doorbell_page(std::uint32_t doorbell) const;
     void          clear_doorbell_page(std::uint32_t doorbell);
     std::uint64_t queued_fence(std::uint32_t doorbell) const;
+    /* The handle of the `index`th doorbell ever made here, 0 past the end: how
+     * a test reaches the doorbell a transport made for itself. */
+    std::uint32_t doorbell_handle(std::uint32_t index) const;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     /* As the driver answers a HostVisibleBindRecord: a bind of a host-visible
      * allocation of `device` answers first_chunk_resource + the binds so far

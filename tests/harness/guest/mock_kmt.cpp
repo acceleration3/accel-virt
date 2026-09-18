@@ -156,6 +156,11 @@ std::uint64_t MockKmt::queued_fence(std::uint32_t doorbell) const
     return 0u;
 }
 
+std::uint32_t MockKmt::doorbell_handle(std::uint32_t index) const
+{
+    return index < doorbell_count_ ? doorbells_[index].handle : 0u;
+}
+
 MockKmt::DoorbellPages *MockKmt::doorbell_of(std::uint32_t handle)
 {
     for (std::uint32_t index = 0u; index < doorbell_count_; index++)

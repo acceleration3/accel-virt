@@ -26,6 +26,10 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
             doorbell_submissions_++;
             return Status::ok;
         }
+        /* Refused: this submission goes through the kernel, and the doorbell
+         * is put back the way the status asked - connected again, or made
+         * anew - so the next one need not (US2 scenario 1). */
+        static_cast<void>(doorbell_.recover());
     }
     /* Disconnected, never connected, or a machine that gives out no doorbell
      * at all: the same batch at the same tail, through the kernel. */

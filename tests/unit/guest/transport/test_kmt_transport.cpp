@@ -3,6 +3,7 @@
  * as private data; a command sent async lands a batch in the ring and a
  * submission on the context; a synchronous command reads back the answer the
  * device wrote to the reply slot (the test plays the device). */
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -24,6 +25,7 @@ using av::BatchHeader;
 using av::CommandHeader;
 using av::GuestConnection;
 using av::KmtTransport;
+using av::DoorbellStatus;
 using av::MockKmt;
 using av::PciIdentity;
 using av::ReplyHeader;
@@ -882,3 +884,58 @@ TEST(kmt_transport_send_batch, a_refused_submission_or_a_stale_answer_fails)
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
   CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
   CHECK(transport.faulted()); }
+
+/* US2 at the transport: dxgkrnl disconnects the doorbell between two
+ * submissions, and nothing above the transport hears of it. A retry is
+ * connected again and a submission later the doorbell path is back; an abort
+ * costs a doorbell, and the transport makes another rather than staying on the
+ * kernel path forever. */
+TEST(kmt_transport, a_disconnect_under_the_transport_is_recovered_from_by_the_transport)
+{ Fixture fixture;
+  fixture.kmt().allow_hardware_scheduling();
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint32_t first = fixture.kmt().doorbell_handle(0u);
+  CHECK(first != 0u);
+
+  WireWriter opening = transport.request_writer();
+  opening.write_u32(7u);
+  CHECK(transport.send_async(1u, opening) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 1u);
+
+  /* Retry, and the submission that finds it. */
+  fixture.kmt().set_doorbell_status(first, static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry));
+  WireWriter refused = transport.request_writer();
+  refused.write_u32(8u);
+  CHECK(transport.send_async(2u, refused) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_kernel(), 1u);
+  CHECK_EQ(transport.submissions_through_doorbell(), 1u);
+
+  /* Nothing told it to reconnect: it did that when it was refused, so the next
+   * submission is through the doorbell again. */
+  WireWriter after = transport.request_writer();
+  after.write_u32(9u);
+  CHECK(transport.send_async(3u, after) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 2u);
+  CHECK_EQ(transport.submissions_through_kernel(), 1u);
+  CHECK_EQ(fixture.kmt().doorbell_handle(1u), 0u);
+
+  /* Abort: one submission through the kernel, a second doorbell made, and the
+   * one after it through that. */
+  fixture.kmt().set_doorbell_status(first, static_cast<std::uint32_t>(DoorbellStatus::disconnected_abort));
+  WireWriter aborted = transport.request_writer();
+  aborted.write_u32(10u);
+  CHECK(transport.send_async(4u, aborted) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_kernel(), 2u);
+  const std::uint32_t second = fixture.kmt().doorbell_handle(1u);
+  CHECK(second != 0u && second != first);
+  WireWriter remade = transport.request_writer();
+  remade.write_u32(11u);
+  CHECK(transport.send_async(5u, remade) == av::TransportResult::ok);
+  CHECK_EQ(transport.submissions_through_doorbell(), 3u);
+  CHECK_EQ(transport.submissions_through_kernel(), 2u);
+  CHECK_EQ(fixture.kmt().doorbell_page(second), 1u);
+  transport.teardown(); }

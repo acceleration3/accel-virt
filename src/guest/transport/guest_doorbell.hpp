@@ -51,6 +51,12 @@ public:
      * written at all. */
     [[nodiscard]] bool ring(uint64_t fence);
 
+    /* What the status page asked for, once a store was refused: a retry
+     * connects the doorbell again, an abort makes a new one (research.md §6).
+     * Answers whether it is usable now - a caller that just fell back does not
+     * store again for this submission either way. */
+    bool               recover();
+
     uint32_t handle() const;
 
     /* Either everything is mapped or nothing is, and a doorbell exists only on
@@ -59,6 +65,11 @@ public:
 
 private:
     Kmt            *kmt_;
+    /* What a doorbell of this context is made from, kept so an abort can make
+     * another without the transport being told. */
+    uint32_t        device_;
+    uint32_t        context_;
+    uint32_t        ring_;
     uint32_t        queue_;
     uint32_t        doorbell_;
     /* The queue's progress, as the driver writes it; kept because the kernel

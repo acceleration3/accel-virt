@@ -15,8 +15,8 @@ constexpr uint32_t store_value = 1u;
 }  // namespace
 
 GuestDoorbell::GuestDoorbell(Kmt &kmt)
-    : kmt_(&kmt), queue_(0u), doorbell_(0u), progress_(nullptr), page_(nullptr), status_(nullptr),
-      queued_(nullptr)
+    : kmt_(&kmt), device_(0u), context_(0u), ring_(0u), queue_(0u), doorbell_(0u), progress_(nullptr),
+      page_(nullptr), status_(nullptr), queued_(nullptr)
 {
     AV_SCOPE("GuestDoorbell::GuestDoorbell");
 }
@@ -46,6 +46,9 @@ Status GuestDoorbell::initialize(uint32_t device, uint32_t context, uint32_t rin
         static_cast<void>(kmt_->destroy_hw_queue(queue));
         return opened != Status::ok ? opened : Status::invalid_state;
     }
+    device_ = device;
+    context_ = context;
+    ring_ = ring;
     queue_ = queue;
     doorbell_ = doorbell;
     progress_ = progress;
@@ -70,6 +73,8 @@ void GuestDoorbell::teardown()
     queue_ = 0u;
     doorbell_ = 0u;
     progress_ = nullptr;
+    /* device_, context_ and ring_ stay: they are what another doorbell of this
+     * context would be made from. */
     page_ = nullptr;
     status_ = nullptr;
     queued_ = nullptr;
@@ -108,6 +113,22 @@ bool GuestDoorbell::ring(uint64_t fence)
     if (now == DoorbellStatus::connected_notify_kmd)
         static_cast<void>(kmt_->notify_work_submission(doorbell_));
     return true;
+}
+
+bool GuestDoorbell::recover()
+{
+    AV_SCOPE("GuestDoorbell::recover");
+    const DoorbellStatus now = status();
+    if (now == DoorbellStatus::connected || now == DoorbellStatus::connected_notify_kmd) return true;
+    /* A retry is the same doorbell asked for again; a status page can only say
+     * retry while there is one to ask about. */
+    if (now == DoorbellStatus::disconnected_retry) return kmt_->connect_doorbell(doorbell_) == Status::ok;
+    /* Abort: this doorbell is gone for good, and what a process does about it
+     * is make another on the same context. */
+    teardown();
+    if (ring_ == 0u) return false;
+    if (initialize(device_, context_, ring_) != Status::ok) return false;
+    return connect() == Status::ok;
 }
 
 uint32_t GuestDoorbell::handle() const
