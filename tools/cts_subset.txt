@@ -1,0 +1,40 @@
+# The Vulkan CTS subset this repository runs in the guest (feature 048, US1).
+#
+# Case-name patterns, not case names: one dEQP group is thousands of cases and
+# the list changes with every CTS release, so the runner asks the CTS itself
+# for its case list and keeps the ones these patterns match. A pattern is a
+# glob over a case name.
+#
+# Every extension the Vulkan ICD reports must be exercised by a pattern here
+# (FR-005, constitution VI): tools/check_cts_subset.py reads the ICD's policy
+# table and fails the build naming any reported extension with no group. The
+# `for:` tag is what it matches on, so a new policy row without a group here is
+# visible the moment it is added.
+#
+#   <pattern>    for: <extension> [, <extension>...]
+#   <pattern>    for: core        # what every run must pass whatever is reported
+
+dEQP-VK.api.smoke.*                             for: core
+dEQP-VK.api.device_init.*                       for: core
+dEQP-VK.api.info.device.*                       for: core
+dEQP-VK.api.object_management.single.*          for: core
+dEQP-VK.memory.allocation.basic.*               for: core
+dEQP-VK.memory.mapping.suballocation.*          for: core
+
+# Feature 045-046: the ICD's own mapping and presentation.
+dEQP-VK.memory.mapping.dedicated_alloc.*        for: VK_KHR_map_memory2
+dEQP-VK.wsi.win32.surface.*                     for: VK_KHR_surface, VK_KHR_win32_surface
+dEQP-VK.wsi.win32.swapchain.simulate_oom.*      for: VK_KHR_swapchain
+dEQP-VK.wsi.win32.swapchain.render.*            for: VK_KHR_swapchain
+dEQP-VK.memory.budget.*                         for: VK_EXT_memory_budget
+
+# Feature 047: what DXVK and vkd3d-proton need.
+dEQP-VK.binding_model.descriptor_update.*       for: VK_KHR_descriptor_update_template
+dEQP-VK.binding_model.push_descriptor.*         for: VK_KHR_push_descriptor
+dEQP-VK.api.external.memory.opaque_win32.*      for: VK_KHR_external_memory_win32
+dEQP-VK.api.external.semaphore.opaque_win32.*   for: VK_KHR_external_semaphore_win32
+
+# The surface queries the ICD answers itself (046), which vkd3d-proton resolves
+# whether or not it enabled them.
+dEQP-VK.wsi.win32.surface.query_capabilities2.* for: VK_KHR_get_surface_capabilities2
+dEQP-VK.api.info.instance.*                     for: VK_KHR_get_physical_device_properties2

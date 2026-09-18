@@ -561,6 +561,12 @@ add_test(NAME extension_policy
 add_test(NAME layer_requirements
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_layer_requirements.py ${CMAKE_SOURCE_DIR})
 
+# Every extension the ICD reports is exercised by a group in the CTS subset
+# (feature 048, FR-005): constitution VI says nothing is reported that is not
+# implemented, and this says nothing is reported that is not measured.
+add_test(NAME cts_subset
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_cts_subset.py ${CMAKE_SOURCE_DIR})
+
 # ---- constitution III and IV.5 --------------------------------------------
 add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
