@@ -9,7 +9,8 @@ namespace av {
 
 GuestContext::GuestContext(Platform &platform, RegisterWindow &doorbells)
     : platform_(platform), lock_(platform, LockRank::rvk_context), pages_(), sequence_(platform), fences_(),
-      submitter_(platform, doorbells, fences_), observer_(platform, fences_), order_(0u), doorbell_(0u),
+      submitter_(platform, doorbells, fences_), observer_(platform, fences_), progress_(nullptr), order_(0u),
+      doorbell_(0u),
       state_(State::idle)
       {
           AV_SCOPE("GuestContext::GuestContext");
@@ -82,6 +83,25 @@ Status GuestContext::submit(const SubmissionDescriptor &submission)
     return status;
 }
 
+void GuestContext::user_mode_submits(uint64_t *progress)
+{
+    AV_SCOPE("GuestContext::user_mode_submits");
+    platform_.require_irql_at_most(Irql::dispatch, "GuestContext::user_mode_submits");
+    SpinLockGuard guard(lock_);
+    progress_ = progress;
+    submitter_.user_mode_publishes();
+    fences_.user_mode_submits();
+}
+
+void GuestContext::driver_submits()
+{
+    AV_SCOPE("GuestContext::driver_submits");
+    platform_.require_irql_at_most(Irql::dispatch, "GuestContext::driver_submits");
+    SpinLockGuard guard(lock_);
+    progress_ = nullptr;
+    fences_.driver_submits();
+}
+
 Status GuestContext::serve()
 {
     AV_SCOPE("GuestContext::serve");
@@ -90,6 +110,10 @@ Status GuestContext::serve()
     if (state_ != State::established) return Status::invalid_state;
     const Status status = observer_.observe();
     if (observer_.failed()) state_ = State::failed;
+    /* What the device has finished, where the process that submits for itself
+     * reads it: the hardware queue's progress is the only thing it has to wait
+     * on, since none of its submissions passed through the driver. */
+    if (progress_ != nullptr) *progress_ = fences_.completed_fence();
     return status;
 }
 

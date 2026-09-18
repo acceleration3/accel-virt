@@ -178,3 +178,44 @@ What must not happen is the driver reporting user-mode submission and a process
 finding no way to use it. It cannot: the capability says what a doorbell *is*,
 and dxgkrnl only asks for one after it has decided a process may have a
 hardware queue.
+
+## 12. What the driver gives up when the process submits for itself
+
+Found while building Phase 3, and it is the part of §8 that was not obvious:
+handing the last two writes to the process takes two judgements away from the
+driver, and a third one has to be built.
+
+- **What was submitted.** `FenceProgress` refuses a fence page that completes
+  more than the driver published (`unsubmitted`, `fence_progress.cpp`). On the
+  doorbell path the driver published nothing, so every completion would fail
+  the context. Windows has the same shape and answers it the same way: the
+  location user mode writes its queued fence into is
+  `HwQueueProgressFenceLastQueuedValueCPUVirtualAddress` (`d3dkmthk.h:898`),
+  which `D3DKMT_CREATE_DOORBELL` hands the **process**, and no field of
+  `DXGKARG_CREATEHWQUEUE` or `DXGKARG_CONNECTDOORBELL` hands it to the KMD. So
+  the KMD cannot make that judgement, and this driver stops making it for a
+  context whose doorbell is connected - keeping the ones it still can: nothing
+  moves backwards, and a fault stays.
+- **Where the tail is.** `RingSubmitter` publishes the tail and remembers it. A
+  process that publishes its own leaves the driver's copy behind, and the batch
+  it falls back to `SubmitCommandVirtual` with begins past it. Once a doorbell
+  has been connected on a ring, the header is the tail both sides share: the
+  driver takes the submission's own beginning, after checking that the header
+  ends exactly where that submission does. That check is what keeps a user
+  written tail from carrying anything (FR-005).
+- **What a wait waits for.** `Kmt::wait_for_context` was going to stay as it is
+  (§9), and it cannot: with no submission through the driver there is no DMA
+  packet to complete, so a wait would time out. What the wait is for is already
+  in the DDI - `HwQueueProgressFenceCPUVirtualAddress`, the read-only mapping
+  dxgkrnl gives the process and the KMD - and this driver writes the device's
+  completed fence there for a context that submits for itself. dxgkrnl waits
+  until that reaches what user mode queued, which is what the full-stack rig
+  now does. Native fences remain the thing that removes the kernel transition
+  from the wait; this is what makes the wait correct without them.
+
+  On a machine the process still waits the way it always has -
+  `GdiKmt::wait_for_context` signals a CPU-notification object from the GPU,
+  broadcast on the context - and whether dxgkrnl orders that signal behind work
+  a process queued through its doorbell is a question only the guest run
+  answers, exactly like §11's. Both are answered on the same boot, and neither
+  changes the shape of what is written here.

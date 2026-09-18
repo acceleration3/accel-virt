@@ -277,6 +277,9 @@ TEST(guest_context, runs_at_the_levels_it_declares)
   static_cast<void>(fixture.context().accept(bytes, 0u));
   static_cast<void>(fixture.context().submit(SubmissionDescriptor(1u, 0u, 1u)));
   static_cast<void>(fixture.context().serve());
+  std::uint64_t progress = 0u;
+  fixture.context().user_mode_submits(&progress);
+  fixture.context().driver_submits();
   static_cast<void>(fixture.context().tear_down());
   fixture.context().abandon();
   fixture.platform().set_irql(Irql::dispatch);
@@ -302,3 +305,39 @@ TEST(guest_context_invariants, an_established_context_with_nothing_attached_is_d
   Fixture released;
   av::GuestContextProbe::establish_unattached(released.context());
   CHECK(!released.context().invariants_hold()); }
+
+/* Feature 049: a process with a doorbell publishes this context's tail and
+ * rings the page itself, so what the context does for it is the other half -
+ * it stops judging submissions it never saw, and it writes what the device has
+ * finished where the process reads the hardware queue's progress. */
+TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_the_process_reads_it)
+{ Fixture      fixture;
+  std::uint64_t progress = 0u;
+  fixture.established();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().user_mode_submits(&progress);
+  fixture.platform().set_irql(Irql::passive);
+
+  /* Four batches the process wrote and rang for, and a completion the driver
+   * never submitted: it is believed, and reported. */
+  std::uint64_t tail = 96u;
+  std::memcpy(fixture.memory().ring() + 8u, &tail, 8u);
+  static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), 32u));
+  CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
+  CHECK_EQ(progress, 3u);
+
+  /* A batch it falls back with is one the process already published the tail
+   * for: the driver takes it from where the submission begins. */
+  tail = 128u;
+  std::memcpy(fixture.memory().ring() + 8u, &tail, 8u);
+  CHECK_STATUS(fixture.submit(4u, 96u, 128u), Status::ok);
+
+  /* Handed back, the progress location is let go of and nothing more is
+   * written through it. */
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().driver_submits();
+  fixture.platform().set_irql(Irql::passive);
+  static_cast<void>(FencePage(4u, 128u).encode(fixture.page(), 32u));
+  CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
+  CHECK_EQ(progress, 3u);
+  CHECK_EQ(fixture.context().completed(), 4u); }

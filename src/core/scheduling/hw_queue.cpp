@@ -4,9 +4,17 @@
 
 namespace av {
 
-HwQueue::HwQueue(Platform &platform, Context &context) : platform_(platform), context_(context)
+HwQueue::HwQueue(Platform &platform, Context &context, uint64_t *progress)
+    : platform_(platform), context_(context), progress_(progress)
 {
     AV_SCOPE("HwQueue::HwQueue");
+}
+
+uint64_t *HwQueue::progress() const
+{
+    AV_SCOPE("HwQueue::progress");
+    platform_.require_irql_at_most(Irql::apc, "HwQueue::progress");
+    return progress_;
 }
 
 Context &HwQueue::context() const

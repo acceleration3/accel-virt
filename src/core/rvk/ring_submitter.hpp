@@ -40,6 +40,12 @@ public:
      * invalid_state when not attached, or for a head the device could not have
      * written, which fails the ring. Refused submissions touch nothing. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
+    /* DISPATCH. A doorbell was connected on this context (feature 049): the
+     * process publishes this ring's tail now, and from here the header is the
+     * only tail either side can trust - a submission the process falls back to
+     * the driver with carries the tail it published itself, and a doorbell it
+     * reconnects lets it publish again. */
+    void                 user_mode_publishes();
     bool                 attached() const;
     uint64_t             tail() const;
     uint64_t             head() const;
@@ -52,6 +58,11 @@ private:
     static constexpr uint64_t head_offset = 16u;
 
     [[nodiscard]] Status judge_head();
+    /* Where `submission` begins, adopted as this ring's tail when the header
+     * the process published says exactly that submission is what it added;
+     * invalid_parameter for anything else, which is a ring the device would
+     * fault the context for anyway (research.md §8). */
+    [[nodiscard]] Status adopt_published_tail(const SubmissionDescriptor &submission);
 
     Platform       &platform_;
     RegisterWindow &doorbells_;
@@ -60,6 +71,7 @@ private:
     uint8_t         order_;
     uint32_t        doorbell_;
     uint64_t        tail_;
+    bool            shared_tail_;
     uint64_t        published_;
     RingProgress    device_;
     bool            failed_;

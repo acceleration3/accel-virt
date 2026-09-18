@@ -5,9 +5,25 @@
 
 namespace av {
 
-FenceProgress::FenceProgress() : submitted_(0u), completed_(0u), progress_(0u), faulted_(false)
+FenceProgress::FenceProgress()
+    : submitted_(0u), driver_submits_(true), completed_(0u), progress_(0u), faulted_(false)
 {
     AV_SCOPE("FenceProgress::FenceProgress");
+}
+
+void FenceProgress::user_mode_submits()
+{
+    AV_SCOPE("FenceProgress::user_mode_submits");
+    driver_submits_ = false;
+}
+
+void FenceProgress::driver_submits()
+{
+    AV_SCOPE("FenceProgress::driver_submits");
+    driver_submits_ = true;
+    /* What user mode queued while it had the doorbell is not known here, and
+     * what it completed is: the driver starts again from that. */
+    if (completed_ > submitted_) submitted_ = completed_;
 }
 
 Status FenceProgress::record_submission(uint64_t fence_id)
@@ -22,7 +38,7 @@ Status FenceProgress::observe(const FencePage &page)
 {
     AV_SCOPE("FenceProgress::observe");
     const bool regressed = page.completed_fence() < completed_ || page.progress() < progress_;
-    const bool unsubmitted = page.completed_fence() > submitted_;
+    const bool unsubmitted = driver_submits_ && page.completed_fence() > submitted_;
     const bool unfaulted = faulted_ && !page.faulted();
     if (regressed || unsubmitted || unfaulted) return Status::invalid_state;
     completed_ = page.completed_fence();
@@ -55,7 +71,9 @@ bool     FenceProgress::faulted() const
 bool FenceProgress::invariants_hold() const
 {
     AV_SCOPE("FenceProgress::invariants_hold");
-    return completed_ <= submitted_;
+    /* While user mode submits, what was submitted is not this object's to
+     * know, and there is nothing left to order the completion against. */
+    return !driver_submits_ || completed_ <= submitted_;
 }
 
 }  // namespace av

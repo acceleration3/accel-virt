@@ -1535,6 +1535,24 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
     return NtStatus(status).value();
 }
 
+/* A doorbell belongs to a hardware queue on a context, and only an rvk context
+ * has a ring the process could publish a tail into: for any other, there is
+ * nothing to hand over and the refusal is the answer. */
+void Adapter::submissions_to_user_mode(void *doorbell)
+{
+    AV_SCOPE("Adapter::submissions_to_user_mode");
+    const HwQueue *const queue = doorbell_table_.object().queue_of(doorbell);
+    if (queue != nullptr)
+        static_cast<void>(rvk_contexts_.user_mode_submits(&queue->context(), queue->progress()));
+}
+
+void Adapter::submissions_to_driver(void *doorbell)
+{
+    AV_SCOPE("Adapter::submissions_to_driver");
+    const HwQueue *const queue = doorbell_table_.object().queue_of(doorbell);
+    if (queue != nullptr) static_cast<void>(rvk_contexts_.driver_submits(&queue->context()));
+}
+
 int32_t Adapter::create_doorbell(DxgkargCreateDoorbellRecord *request)
 {
     AV_SCOPE("Adapter::create_doorbell");
@@ -1569,6 +1587,9 @@ int32_t Adapter::connect_doorbell(DxgkargConnectDoorbellRecord *request)
      * anyway is answered the one page there is. */
     request->SecondaryKernelCpuVirtualAddress = nullptr;
     request->Status = static_cast<uint32_t>(status);
+    /* From here the process publishes the tail and rings the page itself, and
+     * neither is the driver's to judge until the doorbell goes away. */
+    submissions_to_user_mode(request->hDoorbell);
     return NtStatus(Status::ok).value();
 }
 
@@ -1578,6 +1599,10 @@ int32_t Adapter::disconnect_doorbell(const DxgkargDisconnectDoorbellRecord *requ
     platform_.require_irql_at_most(Irql::passive, "Adapter::disconnect_doorbell");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    /* Before the disconnect, while the doorbell still names its queue: a
+     * process that stores after this has submitted nothing, and the fallback
+     * it makes instead goes through the driver again. */
+    submissions_to_driver(request->hDoorbell);
     return NtStatus(doorbell_table_.object().disconnect(request->hDoorbell)).value();
 }
 
@@ -1587,6 +1612,7 @@ int32_t Adapter::destroy_doorbell(const DxgkargDestroyDoorbellRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_doorbell");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
+    submissions_to_driver(request->hDoorbell);
     return NtStatus(doorbell_table_.object().destroy(request->hDoorbell)).value();
 }
 

@@ -1264,3 +1264,35 @@ TEST(rvk_context_table_bind, an_abandoned_gl_context_is_no_share_context)
   CHECK_EQ(fixture.handles().outstanding(), 0u);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Feature 049: a doorbell connected on a context's hardware queue moves its
+ * submissions out of the driver, and the table is what tells the context so.
+ * Only a context it bound has anywhere to send that. */
+TEST(rvk_context_table, tells_the_context_whose_process_submits_for_itself)
+{ Fixture fixture;
+  Host    host(fixture.mapped());
+  std::uint64_t progress = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().user_mode_submits(&first_context, &progress), Status::invalid_parameter);
+  CHECK_STATUS(fixture.table().driver_submits(&first_context), Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().user_mode_submits(&first_context, &progress), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  /* A completion of work the driver never published is believed now, and is
+   * reported where the process reads its hardware queue's progress. */
+  fixture.complete_through(4u);
+  fixture.serve();
+  CHECK_EQ(progress, 4u);
+
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().driver_submits(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().driver_submits(&second_context), Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(5u);
+  fixture.serve();
+  CHECK_EQ(progress, 4u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

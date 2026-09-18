@@ -350,6 +350,28 @@ uint32_t RvkContextTable::doorbell_of(const void *context) const
     return slot_of(context);
 }
 
+Status RvkContextTable::user_mode_submits(const void *context, uint64_t *progress)
+{
+    AV_SCOPE("RvkContextTable::user_mode_submits");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::user_mode_submits");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot]) return Status::invalid_parameter;
+    bindings_[slot].object().user_mode_submits(progress);
+    return Status::ok;
+}
+
+Status RvkContextTable::driver_submits(const void *context)
+{
+    AV_SCOPE("RvkContextTable::driver_submits");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::driver_submits");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot]) return Status::invalid_parameter;
+    bindings_[slot].object().driver_submits();
+    return Status::ok;
+}
+
 uint32_t RvkContextTable::bound() const
 {
     AV_SCOPE("RvkContextTable::bound");

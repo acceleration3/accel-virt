@@ -105,3 +105,38 @@ TEST(fence_progress_invariants, completion_beyond_submission_is_detected)
   CHECK_STATUS(progress.record_submission(2u), Status::ok);
   FenceProgressProbe(progress).set_completed(3u);
   CHECK(!progress.invariants_hold()); }
+
+/* Feature 049: once a process submits through its own doorbell, the driver
+ * sees no submissions at all, so "nothing unsubmitted completes" is a
+ * judgement it can no longer make - and it must not fail a context for the
+ * completions that follow. Everything else it judges still holds. */
+TEST(fence_progress, what_user_mode_submitted_is_completed_without_the_driver_having_seen_it)
+{ FenceProgress progress;
+  /* While the driver submits, a completion it never issued is a device that
+   * contradicts what was seen. */
+  CHECK_STATUS(progress.observe(FencePage(4u, 1u)), Status::invalid_state);
+  CHECK(progress.completed_fence() == 0u);
+
+  progress.user_mode_submits();
+  CHECK_STATUS(progress.observe(FencePage(4u, 1u)), Status::ok);
+  CHECK(progress.completed_fence() == 4u);
+  CHECK(progress.highest_submitted() == 0u);
+  CHECK(progress.invariants_hold());
+  /* What it still judges: nothing moves backwards, and a fault stays. */
+  CHECK_STATUS(progress.observe(FencePage(3u, 2u)), Status::invalid_state);
+  CHECK_STATUS(progress.observe(FencePage(9u, 5u, 12u)), Status::ok);
+  CHECK(progress.faulted());
+  CHECK_STATUS(progress.observe(FencePage(10u, 6u)), Status::invalid_state);
+
+  /* Handed back, the driver starts from what the device has finished rather
+   * than from what it remembers issuing, which is nothing. */
+  FenceProgress second;
+  second.user_mode_submits();
+  CHECK_STATUS(second.observe(FencePage(7u, 3u)), Status::ok);
+  second.driver_submits();
+  CHECK(second.highest_submitted() == 7u);
+  CHECK(second.invariants_hold());
+  CHECK_STATUS(second.record_submission(7u), Status::invalid_state);
+  CHECK_STATUS(second.record_submission(8u), Status::ok);
+  CHECK_STATUS(second.observe(FencePage(9u, 4u)), Status::invalid_state);
+  CHECK_STATUS(second.observe(FencePage(8u, 4u)), Status::ok); }

@@ -141,7 +141,7 @@ public:
      * will not give this adapter one; a doorbell answers three pages of this
      * mock's own memory, which a test reads to see what the transport stored.
      */
-    Status        create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence,
+    Status        create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
                                   std::uint32_t &queue) override;
     Status        destroy_hw_queue(std::uint32_t queue) override;
     Status        create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
@@ -394,6 +394,10 @@ private:
     bool          hardware_scheduling_;
     DoorbellPages doorbells_[max_doorbells];
     std::uint32_t doorbell_count_;
+    /* What a hardware queue has finished, as dxgkrnl maps it read-only into
+     * the process that made the queue. */
+    std::uint64_t queue_progress_[max_doorbells];
+    std::uint32_t queue_progress_taken_;
     std::uint32_t journal_ids_[max_journal];
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];

@@ -50,6 +50,10 @@ public:
     /* What a process would read: a handle this table does not know is
      * disconnected for good. */
     DoorbellStatus       status_of(void *handle);
+    /* The queue a doorbell hangs off, null for a handle this table did not
+     * make: what tells the caller whose context's submissions have moved to
+     * user mode. */
+    HwQueue             *queue_of(void *handle);
     bool                 serves(const HwQueue *queue);
     uint32_t             live() const;
 

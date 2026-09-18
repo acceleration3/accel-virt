@@ -385,3 +385,28 @@ TEST(rvk_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_publi
   cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u));
   CHECK_EQ(host.queue().requests(), 0u); }
 
+
+/* Feature 049: which side of the kernel boundary submits on this context is
+ * the binding's to pass on, and its context's to act on - what a process with
+ * a doorbell queues is completed where the process reads it. */
+TEST(rvk_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host              host(fixture.mapped());
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
+  CHECK(binding.established());
+  std::uint64_t progress = 0u;
+  fixture.mapped().platform().set_irql(av::Irql::dispatch);
+  binding.user_mode_submits(&progress);
+  /* A fence page completing what the driver never submitted is believed now,
+   * and reported where the process waits. */
+  static_cast<void>(av::FencePage(2u, 64u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), 32u));
+  CHECK_STATUS(binding.serve(), Status::ok);
+  CHECK_EQ(progress, 2u);
+  binding.driver_submits();
+  static_cast<void>(av::FencePage(3u, 96u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), 32u));
+  CHECK_STATUS(binding.serve(), Status::invalid_state);
+  CHECK_EQ(progress, 2u);
+  fixture.mapped().platform().set_irql(av::Irql::passive);
+  CHECK(binding.invariants_hold()); }

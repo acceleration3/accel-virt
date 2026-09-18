@@ -37,22 +37,27 @@ MockKmt::MockKmt()
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbells_{},
-      doorbell_count_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
+      doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
 
 /* ---- feature 049: hardware queues and doorbells -------------------------- */
 
-Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence, std::uint32_t &queue)
+Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
+                                std::uint32_t &queue)
 {
     if (!begin(Call::create_hw_queue)) return refuse(last_code_);
     queue = 0u;
+    progress = nullptr;
     const Object *const on = find(Kind::context, context);
-    if (on == nullptr || on->owner != device || fence == nullptr) return misuse();
+    if (on == nullptr || on->owner != device) return misuse();
     /* Hardware scheduling is the OS's decision, not the driver's
      * (049 research.md §11): a machine without it gives out no queue, and the
      * transport submits the way it always has. */
     if (!hardware_scheduling_) return refuse(not_supported);
     queue = open(Kind::hw_queue, context, 0u, 0u);
+    /* Where dxgkrnl writes what this queue has finished, read-only to the
+     * process, as the real mapping is. */
+    progress = &queue_progress_[queue_progress_taken_++ % max_doorbells];
     return succeed();
 }
 

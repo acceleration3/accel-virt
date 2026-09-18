@@ -67,12 +67,14 @@ public:
     /* Until everything submitted on the context so far has completed. */
     virtual Status   wait_for_context(uint32_t device, uint32_t context) = 0;
     /* A hardware queue on `context`, which is what a doorbell is created for
-     * (feature 049, research.md §1). `fence` is where the driver writes the
-     * queue's progress, which the process reads. not_supported when the OS
+     * (feature 049, research.md §1). `progress` is answered: where the driver
+     * writes the queue's progress, which the process reads and never writes.
+     * not_supported when the OS
      * will not give this adapter one - hardware scheduling is its decision,
      * not the driver's (research.md §11) - and the transport then submits the
      * way it always has. */
-    virtual Status   create_hw_queue(uint32_t device, uint32_t context, void *fence, uint32_t &queue) = 0;
+    virtual Status   create_hw_queue(uint32_t device, uint32_t context, const uint64_t *&progress,
+                                     uint32_t &queue) = 0;
     virtual Status   destroy_hw_queue(uint32_t queue) = 0;
     /* D3DKMTCreateDoorbell on `queue` over the process's `ring` allocation: the
      * three addresses it answers are the doorbell itself, the status page a

@@ -137,8 +137,14 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK(status == DoorbellStatus::connected);
 
   /* The handle is the QueueDoorbell itself, as a hardware queue's handle is
-   * its HwQueue: what dxgkrnl passes back is what the driver made. */
+   * its HwQueue: what dxgkrnl passes back is what the driver made, and the
+   * queue it names is what tells the driver whose context has moved its
+   * submissions into user mode (feature 049). */
   CHECK(&static_cast<QueueDoorbell *>(made)->queue() == &held.first());
+  CHECK(held.table().queue_of(made) == &held.first());
+  int outside = 0;
+  CHECK(held.table().queue_of(&outside) == nullptr);
+  CHECK(held.table().queue_of(nullptr) == nullptr);
   CHECK_EQ(static_cast<QueueDoorbell *>(made)->page(), 3u);
 
   CHECK_STATUS(held.table().destroy(made), Status::ok);

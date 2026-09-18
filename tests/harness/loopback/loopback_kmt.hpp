@@ -62,7 +62,7 @@ public:
      * - so a process asking for a hardware queue is answered not_supported and
      * submits the way it always has. The full-stack rig is where a user-mode
      * store is driven end to end. */
-    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence,
+    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
                              std::uint32_t &queue) override;
     Status   destroy_hw_queue(std::uint32_t queue) override;
     Status   create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,

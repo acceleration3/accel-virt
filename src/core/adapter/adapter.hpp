@@ -293,6 +293,10 @@ private:
     /* The doorbell pages, when the device has them: a device without them is
      * one no rvk context can run on, and runs everything else as before. */
     [[nodiscard]] Status map_doorbells(const PciBaseAddresses &bars);
+    /* Which side of the boundary publishes the tail of the context a doorbell
+     * hangs off, told to the context itself (feature 049). */
+    void                 submissions_to_user_mode(void *doorbell);
+    void                 submissions_to_driver(void *doorbell);
     /* CreateContext for a context that asked with a record: the host context
      * set up on the process's own memory (feature 043). */
     [[nodiscard]] Status bind_rvk(Context &context);

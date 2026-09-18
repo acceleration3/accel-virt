@@ -20,6 +20,8 @@
 #include "core/miniport/ddi_slot.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
+#include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "harness/fullstack/doorbell_fabric.hpp"
 #include "harness/fullstack/node_fences.hpp"
 
 #include <cstdint>
@@ -42,6 +44,8 @@ public:
     static constexpr std::uint32_t max_allocations = 32u;
     static constexpr std::uint32_t max_contexts = NodeFences::max_contexts;
     static constexpr std::uint32_t max_queues = 8u;
+    /* One hardware queue and one doorbell per context a process runs. */
+    static constexpr std::uint32_t max_hardware_queues = DoorbellFabric::max_pages;
     /* A host-visible chunk of 64 MiB (feature 045). */
     static constexpr std::uint32_t max_pages = 16384u;
     static constexpr std::uint32_t max_private_data = 256u;
@@ -95,12 +99,14 @@ public:
     Status   submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                     const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status   wait_for_context(std::uint32_t device, std::uint32_t context) override;
-    /* Feature 049's doorbells are not modelled here: this rig is the one below
-     * the doorbell - it publishes tails and rings the device's own page itself
-     * - so a process asking for a hardware queue is answered not_supported and
-     * submits the way it always has. The full-stack rig is where a user-mode
-     * store is driven end to end. */
-    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, void *fence,
+    /* Feature 049: a hardware queue is DxgkDdiCreateHwQueue on the context,
+     * with the progress fence dxgkrnl would allocate; a doorbell is
+     * DxgkDdiCreateDoorbell on that queue, its status page and queued-fence
+     * word this rig's memory as they are dxgkrnl's on a machine. Connecting
+     * one asks the driver which device page it is and arms a page of real
+     * memory that carries a store there (DoorbellFabric), because the driver's
+     * own mapping is an address only MockPlatform can reach. */
+    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
                              std::uint32_t &queue) override;
     Status   destroy_hw_queue(std::uint32_t queue) override;
     Status   create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
@@ -108,6 +114,27 @@ public:
     Status   connect_doorbell(std::uint32_t doorbell) override;
     Status   destroy_doorbell(std::uint32_t doorbell) override;
     Status   notify_work_submission(std::uint32_t doorbell) override;
+    /* Hardware-accelerated GPU scheduling is the OS's decision and off unless
+     * it is turned on (049 research.md §11), so a rig that wants the doorbell
+     * path asks for it and every other rig keeps submitting through the
+     * kernel. */
+    void     allow_hardware_scheduling();
+    /* dxgkrnl's side of a disconnect, which a process is never asked about:
+     * the driver is told, and the status page the process reads says what to
+     * do about it - retry for one that may come back, abort for one that will
+     * not. */
+    Status   disconnect_doorbell(std::uint32_t doorbell, DoorbellStatus says);
+    /* The handle of the `index`th doorbell this process holds, 0 past the
+     * end, and the page it stores to: how a test reaches the doorbell a
+     * transport made for itself. */
+    std::uint32_t   doorbell_handle(std::uint32_t index);
+    void           *doorbell_page(std::uint32_t doorbell);
+    /* Where the process writes the fence value it has queued: dxgkrnl's
+     * memory, and a page a rogue process may write anything into. */
+    std::uint64_t  *queued_fence(std::uint32_t doorbell);
+    /* The stores a process made, carried to the device (nothing carries them
+     * by itself, as nothing delivers an interrupt by itself). */
+    DoorbellFabric &fabric();
 
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
@@ -161,6 +188,20 @@ private:
         std::uint32_t device;
         std::uint32_t fence_object;
     };
+    struct HardwareQueue {
+        std::uint32_t handle;
+        std::uint32_t context;
+        void         *driver;
+        std::uint64_t progress;
+    };
+    struct Doorbell {
+        std::uint32_t  handle;
+        std::uint32_t  queue;
+        void          *driver;
+        void          *page;
+        std::uint32_t  status;
+        std::uint64_t  queued;
+    };
 
     template <typename Routine>
     Routine routine(DdiSlot slot) const;
@@ -172,6 +213,12 @@ private:
     Allocation *find_allocation(std::uint32_t handle);
     Context    *find_context(std::uint32_t handle);
     Queue      *find_queue(std::uint32_t handle);
+    HardwareQueue *find_hardware_queue(std::uint32_t handle);
+    /* Whether `context`'s hardware queues have caught up with what user mode
+     * queued on them. */
+    Status         hardware_queue_idle(std::uint32_t context);
+    bool           waiting_on(const Doorbell &doorbell, std::uint32_t context);
+    Doorbell      *find_doorbell(std::uint32_t handle);
     std::uint32_t slot_of(const Context &context) const;
 
     /* The rest of create_allocation once the driver has answered: pages, a
@@ -197,6 +244,10 @@ private:
     Allocation                   allocations_[max_allocations];
     Context                      contexts_[max_contexts];
     Queue                        queues_[max_queues];
+    HardwareQueue                hardware_queues_[max_hardware_queues];
+    Doorbell                     doorbells_[max_hardware_queues];
+    DoorbellFabric               fabric_;
+    bool                         hardware_scheduling_;
     std::uint8_t                 kernel_copy_[max_private_data];
     std::uint32_t                next_handle_;
     std::uint64_t                next_aperture_page_;

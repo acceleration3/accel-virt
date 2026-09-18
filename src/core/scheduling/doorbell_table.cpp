@@ -91,6 +91,15 @@ DoorbellStatus DoorbellTable::status_of(void *handle)
     return doorbell != nullptr ? doorbell->status() : DoorbellStatus::disconnected_abort;
 }
 
+HwQueue *DoorbellTable::queue_of(void *handle)
+{
+    AV_SCOPE("DoorbellTable::queue_of");
+    platform_.require_irql_at_most(Irql::passive, "DoorbellTable::queue_of");
+    MutexGuard           lock(lock_);
+    QueueDoorbell *const found = find(handle);
+    return found != nullptr ? &found->queue() : nullptr;
+}
+
 bool DoorbellTable::serves(const HwQueue *queue)
 {
     AV_SCOPE("DoorbellTable::serves");

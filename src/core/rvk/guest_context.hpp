@@ -48,6 +48,12 @@ public:
     [[nodiscard]] Status accept(const uint8_t *bytes, size_t length);
     /* DISPATCH. The submitter's answer; invalid_state unless established. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
+    /* DISPATCH. A doorbell was connected on this context (feature 049): the
+     * process publishes the ring's tail and rings the doorbell itself, so
+     * neither the tail nor what has been submitted is the driver's to know
+     * until the doorbell goes away again. */
+    void                 user_mode_submits(uint64_t *progress);
+    void                 driver_submits();
     /* DISPATCH, from the DPC. The observer's answer; invalid_state unless established. */
     [[nodiscard]] Status serve();
     /* DISPATCH. Begins releasing what the device holds, from an established or
@@ -80,6 +86,9 @@ private:
     FenceProgress          fences_;
     RingSubmitter          submitter_;
     FenceObserver          observer_;
+    /* The hardware queue's progress, which the driver writes what the device
+     * has finished into while the process submits for itself; null otherwise. */
+    uint64_t              *progress_;
     uint8_t                order_;
     uint32_t               doorbell_;
     State                  state_;

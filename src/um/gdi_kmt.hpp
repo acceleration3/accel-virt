@@ -57,7 +57,8 @@ public:
      * what it has finished; the doorbell's three addresses are the page a
      * process stores to, the status it reads first, and where it writes the
      * fence value it has queued. */
-    Status   create_hw_queue(uint32_t device, uint32_t context, void *fence, uint32_t &queue) override;
+    Status   create_hw_queue(uint32_t device, uint32_t context, const uint64_t *&progress,
+                             uint32_t &queue) override;
     Status   destroy_hw_queue(uint32_t queue) override;
     Status   create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell, void *&page,
                              const uint32_t *&status, uint64_t *&queued) override;

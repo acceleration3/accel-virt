@@ -12,7 +12,7 @@ namespace av {
 
 RingSubmitter::RingSubmitter(Platform &platform, RegisterWindow &doorbells, FenceProgress &fences)
     : platform_(platform), doorbells_(doorbells), fences_(fences), ring_(nullptr), order_(0u), doorbell_(0u),
-      tail_(0u), published_(0u), device_(), failed_(false)
+      tail_(0u), shared_tail_(false), published_(0u), device_(), failed_(false)
       {
           AV_SCOPE("RingSubmitter::RingSubmitter");
       }
@@ -26,6 +26,7 @@ Status RingSubmitter::attach(uint8_t *ring, uint8_t order, uint32_t doorbell)
         doorbell >= doorbell_pages)
         return Status::invalid_parameter;
     ring_ = ring;
+    shared_tail_ = false;
     order_ = order;
     doorbell_ = doorbell;
     tail_ = 0u;
@@ -55,11 +56,39 @@ Status RingSubmitter::judge_head()
     return Status::invalid_state;
 }
 
+void RingSubmitter::user_mode_publishes()
+{
+    AV_SCOPE("RingSubmitter::user_mode_publishes");
+    platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::user_mode_publishes");
+    shared_tail_ = true;
+}
+
+/* The header is written by a process, so it is judged before it is believed:
+ * a submission that begins behind what this ring already holds, or whose end
+ * is not the tail the process published, is no submission of this ring. The
+ * process publishes the tail before it stores (SubmissionPath::submit), so a
+ * batch that falls back to the driver is one the header already ends at. */
+Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submission)
+{
+    AV_SCOPE("RingSubmitter::adopt_published_tail");
+    uint8_t bytes[sizeof(uint64_t)] = {};
+    platform_.copy(bytes, ring_ + tail_offset, sizeof bytes);
+    WireReader     reader(bytes, sizeof bytes);
+    const uint64_t published = reader.read_u64();
+    if (submission.begin() < tail_ || published != submission.end()) return Status::invalid_parameter;
+    tail_ = submission.begin();
+    return Status::ok;
+}
+
 Status RingSubmitter::submit(const SubmissionDescriptor &submission)
 {
     AV_SCOPE("RingSubmitter::submit");
     platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::submit");
     if (ring_ == nullptr || failed_) return Status::invalid_state;
+    /* A submission that falls back from a doorbell carries the tail the
+     * process already published, which is ahead of the last one this object
+     * wrote (US2 scenario 2). */
+    if (shared_tail_ && adopt_published_tail(submission) != Status::ok) return Status::invalid_parameter;
     if (submission.begin() != tail_ ||
         submission.validate_against(RingHeader(order_, tail_, tail_)) != Status::ok)
         return Status::invalid_parameter;

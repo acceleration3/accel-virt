@@ -29,7 +29,8 @@ Status HwQueueTable::create(void *context, DxgkargCreateHwQueueRecord &request)
         request.HwQueueProgressFenceCPUVirtualAddress == nullptr)
         return Status::invalid_parameter;
     HwQueue *queue = nullptr;
-    const Status status = queues_.create(queue, platform_, *owner);
+    const Status status = queues_.create(queue, platform_, *owner,
+                                         static_cast<uint64_t *>(request.HwQueueProgressFenceCPUVirtualAddress));
     if (status == Status::ok) request.hHwQueue = queue;
     return status;
 }

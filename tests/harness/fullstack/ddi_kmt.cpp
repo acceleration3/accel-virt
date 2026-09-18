@@ -10,6 +10,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
+#include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
@@ -42,6 +43,9 @@ constexpr std::int32_t  map_aperture_segment = 5;     /* DXGK_OPERATION_MAP_APER
 constexpr std::int32_t  unmap_aperture_segment = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
 constexpr std::uint32_t accessed_physically = 0x8000u; /* DXGK_ALLOCATIONINFOFLAGS */
 constexpr std::uint32_t virtual_addressing = 0x4u;     /* DXGK_CREATECONTEXTFLAGS */
+/* What dxgkrnl sets for a context a process may hang a hardware queue off,
+ * which is every context here: the rig's processes all ask for a doorbell. */
+constexpr std::uint32_t hw_queue_supported = 0x10u;
 constexpr std::uint32_t first_engine = 1u;
 constexpr std::uint32_t segment_aperture = 0x1u;              /* DXGK_SEGMENTFLAGS */
 constexpr std::uint32_t segment_from_system_memory = 0x40u;
@@ -77,11 +81,21 @@ std::uint16_t config_u16(const std::uint8_t *config, std::uint16_t offset)
 DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
                FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host)
     : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump), host_(host),
-      handles_(), fences_(), devices_{}, allocations_{}, contexts_{}, queues_{}, kernel_copy_{},
+      handles_(), fences_(), devices_{}, allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
+      fabric_(platform), hardware_scheduling_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
       next_chunk_address_(chunk_ram_address), last_code_(0u)
 {
     host_.add_guest_ram(chunk_ram_address, chunk_ram_bytes);
+    /* A doorbell and its queue are the adapter's, and dxgkrnl gives them back
+     * before the adapter stops. */
+    fdo_.on_stopping(
+        [](void *context) {
+            DdiKmt &kmt = *static_cast<DdiKmt *>(context);
+            for (HardwareQueue &queue : kmt.hardware_queues_)
+                if (queue.handle != 0u) static_cast<void>(kmt.destroy_hw_queue(queue.handle));
+        },
+        this);
     dxgkrnl_.on_interrupt(
         [](void *context, const DxgkargcbNotifyInterruptDataRecord &data) {
             static_cast<DdiKmt *>(context)->fences_.observe(data);
@@ -141,6 +155,20 @@ DdiKmt::Queue *DdiKmt::find_queue(std::uint32_t handle)
 {
     for (Queue &queue : queues_)
         if (handle != 0u && queue.handle == handle) return &queue;
+    return nullptr;
+}
+
+DdiKmt::HardwareQueue *DdiKmt::find_hardware_queue(std::uint32_t handle)
+{
+    for (HardwareQueue &queue : hardware_queues_)
+        if (handle != 0u && queue.handle == handle) return &queue;
+    return nullptr;
+}
+
+DdiKmt::Doorbell *DdiKmt::find_doorbell(std::uint32_t handle)
+{
+    for (Doorbell &doorbell : doorbells_)
+        if (handle != 0u && doorbell.handle == handle) return &doorbell;
     return nullptr;
 }
 
@@ -527,7 +555,7 @@ Status DdiKmt::create_context_on(std::uint32_t device, const std::uint8_t *priva
         if (size != 0u) std::memcpy(kernel_copy_, private_data, size);
         DxgkargCreateContextRecord request = {};
         request.EngineAffinity = first_engine;
-        request.Flags = virtual_addressing;
+        request.Flags = virtual_addressing | hw_queue_supported;
         request.pPrivateDriverData = size != 0u ? kernel_copy_ : nullptr;
         request.PrivateDriverDataSize = size;
         const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateContextRecord *)>(
@@ -587,14 +615,45 @@ Status DdiKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     if (found == nullptr || found->device != device) return refuse(Status::invalid_parameter);
     const std::uint64_t deadline = now_ms() + patience_ms;
     for (;;) {
+        /* A store the process made reaches the device here, as it reaches it
+         * on the bus while the process waits. */
+        static_cast<void>(fabric_.deliver());
         pump_.deliver();
+        /* Everything this context has outstanding, on both paths: what it
+         * queued through a doorbell is answered by the queue's progress, what
+         * it submitted through the driver by the node's fences. */
         const Status settled = fences_.settled(slot_of(*found));
-        if (settled != Status::not_found) return refuse(settled);
+        if (hardware_queue_idle(context) == Status::ok && settled != Status::not_found) return refuse(settled);
         if (now_ms() >= deadline) break;
         sched_yield();
     }
     last_code_ = timed_out;
     return Status::not_found;
+}
+
+/* What this context queued through a doorbell that is still connected is not
+ * in the driver's fences, so what dxgkrnl waits on for it is the queue's
+ * progress against the value user mode queued. A doorbell that was
+ * disconnected is not waited on: what it queued is behind whatever the process
+ * submitted through the kernel instead, and the device finishes a ring in
+ * order. */
+Status DdiKmt::hardware_queue_idle(std::uint32_t context)
+{
+    for (const Doorbell &doorbell : doorbells_) {
+        if (!waiting_on(doorbell, context)) continue;
+        const HardwareQueue *const on = find_hardware_queue(doorbell.queue);
+        if (on != nullptr && on->progress < doorbell.queued) return Status::not_found;
+    }
+    return Status::ok;
+}
+
+bool DdiKmt::waiting_on(const Doorbell &doorbell, std::uint32_t context)
+{
+    if (doorbell.handle == 0u || doorbell.queued == 0u ||
+        doorbell.status != static_cast<std::uint32_t>(DoorbellStatus::connected))
+        return false;
+    const HardwareQueue *const on = find_hardware_queue(doorbell.queue);
+    return on != nullptr && on->context == context;
 }
 
 /* dxgkrnl turns the blank on for a waiter and off once it is woken; the
@@ -654,6 +713,10 @@ std::uint32_t DdiKmt::last_code() const { return last_code_; }
 
 void DdiKmt::end_process()
 {
+    /* A process's hardware queues go before its contexts, as dxgkrnl's do: a
+     * queue names the context it runs on. */
+    for (HardwareQueue &queue : hardware_queues_)
+        if (queue.handle != 0u) static_cast<void>(destroy_hw_queue(queue.handle));
     for (Context &context : contexts_)
         if (context.handle != 0u) static_cast<void>(destroy_context(context.handle));
     for (Allocation &allocation : allocations_)
@@ -676,40 +739,170 @@ std::uint32_t DdiKmt::open_objects() const
 }
 
 
-Status DdiKmt::create_hw_queue(std::uint32_t, std::uint32_t, void *, std::uint32_t &queue)
+Status DdiKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
+                               std::uint32_t &queue)
 {
     queue = 0u;
-    return Status::not_supported;
+    progress = nullptr;
+    Context *const on = find_context(context);
+    if (on == nullptr || on->device != device) return refuse(Status::invalid_parameter);
+    if (!hardware_scheduling_) return refuse(Status::not_supported);
+    for (HardwareQueue &slot : hardware_queues_) {
+        if (slot.handle != 0u) continue;
+        slot.progress = 0u;
+        DxgkargCreateHwQueueRecord request = {};
+        request.HwQueueProgressFenceCPUVirtualAddress = &slot.progress;
+        const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateHwQueueRecord *)>(
+            DdiSlot::DxgkDdiCreateHwQueue)(on->driver, &request));
+        if (created != Status::ok) return created;
+        slot.handle = next_handle_++;
+        slot.context = context;
+        slot.driver = request.hHwQueue;
+        queue = slot.handle;
+        /* Read-only to the process, as dxgkrnl maps it. */
+        progress = &slot.progress;
+        return Status::ok;
+    }
+    return refuse(Status::no_space);
 }
 
-Status DdiKmt::destroy_hw_queue(std::uint32_t)
+Status DdiKmt::destroy_hw_queue(std::uint32_t queue)
 {
-    return Status::not_supported;
+    HardwareQueue *const found = find_hardware_queue(queue);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    /* A queue destroyed takes its doorbells, as dxgkrnl's does: the driver is
+     * told about the doorbell first, because it is the thing that names the
+     * queue. */
+    for (Doorbell &doorbell : doorbells_)
+        if (doorbell.handle != 0u && doorbell.queue == queue) static_cast<void>(destroy_doorbell(doorbell.handle));
+    const Status destroyed =
+        answer(routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyHwQueue)(found->driver));
+    *found = HardwareQueue{};
+    return destroyed;
 }
 
-Status DdiKmt::create_doorbell(std::uint32_t, std::uint32_t, std::uint32_t &doorbell, void *&page,
+Status DdiKmt::create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
                               const std::uint32_t *&status, std::uint64_t *&queued)
 {
     doorbell = 0u;
     page = nullptr;
     status = nullptr;
     queued = nullptr;
-    return Status::not_supported;
+    HardwareQueue *const on = find_hardware_queue(queue);
+    const Allocation *const buffer = find_allocation(ring);
+    if (on == nullptr || buffer == nullptr) return refuse(Status::invalid_parameter);
+    for (Doorbell &slot : doorbells_) {
+        if (slot.handle != 0u) continue;
+        DxgkargCreateDoorbellRecord request = {};
+        request.hHwQueue = on->driver;
+        request.hRingBuffer = buffer->opened;
+        const Status created = answer(routine<std::int32_t (*)(DxgkargCreateDoorbellRecord *)>(
+            DdiSlot::DxgkDdiCreateDoorbell)(&request));
+        if (created != Status::ok) return created;
+        slot.handle = next_handle_++;
+        slot.queue = queue;
+        slot.driver = request.hDoorbell;
+        slot.page = fabric_.reserve();
+        if (slot.page == nullptr) return refuse(Status::no_space);
+        /* Created is not connected: what the process reads says to submit the
+         * other way until it asks for a connection. */
+        slot.status = static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry);
+        slot.queued = 0u;
+        doorbell = slot.handle;
+        page = slot.page;
+        status = &slot.status;
+        queued = &slot.queued;
+        return Status::ok;
+    }
+    return refuse(Status::no_space);
 }
 
-Status DdiKmt::connect_doorbell(std::uint32_t)
+Status DdiKmt::connect_doorbell(std::uint32_t doorbell)
 {
-    return Status::not_supported;
+    Doorbell *const found = find_doorbell(doorbell);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    DxgkargConnectDoorbellRecord request = {};
+    request.hDoorbell = found->driver;
+    const Status connected = answer(routine<std::int32_t (*)(DxgkargConnectDoorbellRecord *)>(
+        DdiSlot::DxgkDdiConnectDoorbell)(&request));
+    if (connected != Status::ok) return connected;
+    /* Connected, the page the process holds carries to the device page the
+     * driver just named. */
+    fabric_.aim(found->page, request.KernelCpuVirtualAddress);
+    found->status = request.Status;
+    return Status::ok;
 }
 
-Status DdiKmt::destroy_doorbell(std::uint32_t)
+Status DdiKmt::disconnect_doorbell(std::uint32_t doorbell, DoorbellStatus says)
 {
-    return Status::not_supported;
+    Doorbell *const found = find_doorbell(doorbell);
+    if (found == nullptr || says == DoorbellStatus::connected || says == DoorbellStatus::connected_notify_kmd)
+        return refuse(Status::invalid_parameter);
+    const DxgkargDisconnectDoorbellRecord request = {found->driver, 0u, 0u};
+    const Status                          gone = answer(routine<std::int32_t (*)(const DxgkargDisconnectDoorbellRecord *)>(
+        DdiSlot::DxgkDdiDisconnectDoorbell)(&request));
+    if (gone != Status::ok) return gone;
+    /* The page goes with the connection: a store the process makes after this
+     * reaches nothing, which is what dxgkrnl's dummy page is for on a machine
+     * whose device needs one (research.md §10). */
+    fabric_.blind(found->page);
+    found->status = static_cast<std::uint32_t>(says);
+    return Status::ok;
 }
 
-Status DdiKmt::notify_work_submission(std::uint32_t)
+Status DdiKmt::destroy_doorbell(std::uint32_t doorbell)
 {
-    return Status::not_supported;
+    Doorbell *const found = find_doorbell(doorbell);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    const DxgkargDestroyDoorbellRecord request = {found->driver};
+    const Status                       destroyed = answer(routine<std::int32_t (*)(const DxgkargDestroyDoorbellRecord *)>(
+        DdiSlot::DxgkDdiDestroyDoorbell)(&request));
+    fabric_.release(found->page);
+    *found = Doorbell{};
+    return destroyed;
+}
+
+Status DdiKmt::notify_work_submission(std::uint32_t doorbell)
+{
+    const Doorbell *const found = find_doorbell(doorbell);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    const HardwareQueue *const on = find_hardware_queue(found->queue);
+    if (on == nullptr) return refuse(Status::invalid_parameter);
+    const DxgkargNotifyWorkSubmissionRecord request = {on->driver, 0u, 0u};
+    return answer(routine<std::int32_t (*)(const DxgkargNotifyWorkSubmissionRecord *)>(
+        DdiSlot::DxgkDdiNotifyWorkSubmission)(&request));
+}
+
+std::uint32_t DdiKmt::doorbell_handle(std::uint32_t index)
+{
+    std::uint32_t seen = 0u;
+    for (const Doorbell &doorbell : doorbells_) {
+        if (doorbell.handle == 0u) continue;
+        if (seen++ == index) return doorbell.handle;
+    }
+    return 0u;
+}
+
+void *DdiKmt::doorbell_page(std::uint32_t doorbell)
+{
+    const Doorbell *const found = find_doorbell(doorbell);
+    return found != nullptr ? found->page : nullptr;
+}
+
+std::uint64_t *DdiKmt::queued_fence(std::uint32_t doorbell)
+{
+    Doorbell *const found = find_doorbell(doorbell);
+    return found != nullptr ? &found->queued : nullptr;
+}
+
+void DdiKmt::allow_hardware_scheduling()
+{
+    hardware_scheduling_ = true;
+}
+
+DoorbellFabric &DdiKmt::fabric()
+{
+    return fabric_;
 }
 
 }  // namespace av

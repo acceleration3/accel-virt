@@ -106,6 +106,12 @@ public:
      * a context that is not bound: what a doorbell of that context's hardware
      * queue names (feature 049). */
     uint32_t             doorbell_of(const void *context) const;
+    /* DISPATCH. Which side publishes `context`'s tail and rings its doorbell
+     * from now on (feature 049): user mode once its doorbell is connected, the
+     * driver again once it is not. invalid_parameter for a context that is not
+     * bound. */
+    [[nodiscard]] Status user_mode_submits(const void *context, uint64_t *progress);
+    [[nodiscard]] Status driver_submits(const void *context);
 
     /* One line per live rvk context and its bound chunks; `busy=true` and
      * nothing more while a submission or the DPC holds the slots. */

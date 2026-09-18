@@ -31,9 +31,9 @@ Status GuestDoorbell::initialize(uint32_t device, uint32_t context, uint32_t rin
 {
     AV_SCOPE("GuestDoorbell::initialize");
     if (established()) return Status::invalid_state;
-    uint32_t     queue = 0u;
-    void        *progress = nullptr;
-    const Status made = kmt_->create_hw_queue(device, context, &progress, queue);
+    uint32_t        queue = 0u;
+    const uint64_t *progress = nullptr;
+    const Status    made = kmt_->create_hw_queue(device, context, progress, queue);
     if (made != Status::ok) return made;
     uint32_t                 doorbell = 0u;
     void                    *page = nullptr;

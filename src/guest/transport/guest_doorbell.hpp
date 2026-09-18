@@ -75,7 +75,7 @@ private:
     /* The queue's progress, as the driver writes it; kept because the kernel
      * hands it out with the queue and a wait will read it (feature 049's
      * native fences are another feature's - research.md §9). */
-    void           *progress_;
+    const uint64_t *progress_;
     volatile uint32_t *page_;
     const volatile uint32_t *status_;
     volatile uint64_t *queued_;

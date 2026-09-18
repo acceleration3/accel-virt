@@ -141,9 +141,16 @@ void FakeDxgkrnlFdo::reset_device()
     platform_.set_irql(Irql::passive);
 }
 
+void FakeDxgkrnlFdo::on_stopping(Stopping stopping, void *context)
+{
+    stopping_ = stopping;
+    stopping_context_ = context;
+}
+
 std::int32_t FakeDxgkrnlFdo::stop_device()
 {
     platform_.set_irql(Irql::passive);
+    if (stopping_ != nullptr) stopping_(stopping_context_);
     started_ = false;
     return reinterpret_cast<ContextOnly>(table_.routine(DdiSlot::DxgkDdiStopDevice))(context_);
 }

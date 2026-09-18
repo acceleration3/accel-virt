@@ -58,6 +58,14 @@ public:
         return tail;
     }
     void device_consumes(std::uint64_t head) { std::memcpy(ring_ + 16u, &head, 8u); }
+    /* What a process publishing its own tail writes into the header. */
+    void publish_tail(std::uint64_t tail) { std::memcpy(ring_ + 8u, &tail, 8u); }
+    void user_mode_publishes()
+    {
+        platform_.set_irql(Irql::dispatch);
+        submitter_.user_mode_publishes();
+        platform_.set_irql(Irql::passive);
+    }
     Status submit(std::uint64_t fence, std::uint64_t begin, std::uint64_t end)
     {
         platform_.set_irql(Irql::dispatch);
@@ -189,3 +197,40 @@ TEST(ring_submitter_invariants, a_published_tail_the_driver_never_wrote_is_detec
   CHECK_STATUS(rewound.submit(2u, 64u, 128u), Status::ok);   /* the device's view now has tail 64 */
   av::RingSubmitterProbe::rewind(rewound.submitter());
   CHECK(!rewound.submitter().invariants_hold()); }
+
+/* Feature 049: once a doorbell is connected the process publishes this ring's
+ * tail, and a batch it falls back to the driver with is one the header already
+ * ends at. The driver takes the submission's own beginning as its tail then -
+ * and judges it, because the header is memory a process writes. */
+TEST(ring_submitter_submit, a_tail_the_process_published_is_taken_and_judged)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.attach(), Status::ok);
+  CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
+  fixture.user_mode_publishes();
+
+  /* Four batches the process wrote and published for itself, and a fifth it
+   * falls back to the driver with: the driver's own tail is 64, the ring's is
+   * 320, and the submission is what closes the gap. */
+  fixture.publish_tail(320u);
+  CHECK_STATUS(fixture.submit(6u, 256u, 320u), Status::ok);
+  CHECK(fixture.submitter().tail() == 320u);
+  CHECK(fixture.fences().highest_submitted() == 6u);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u);
+
+  /* A header that does not end where the submission does is no header of this
+   * batch: neither a tail short of it nor one past it is believed. */
+  fixture.publish_tail(360u);
+  CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::invalid_parameter);
+  fixture.publish_tail(400u);
+  CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::invalid_parameter);
+  /* Nor is a batch that begins behind what the driver already published. */
+  fixture.publish_tail(300u);
+  CHECK_STATUS(fixture.submit(7u, 256u, 300u), Status::invalid_parameter);
+  CHECK(fixture.submitter().tail() == 320u);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u);
+
+  /* And the ring still fills up: a tail the device has not caught up with is
+   * no space, however it was published. */
+  fixture.publish_tail(320u + capacity + 1u);
+  CHECK_STATUS(fixture.submit(7u, 320u, 320u + capacity + 1u), Status::invalid_parameter);
+  CHECK(fixture.submitter().invariants_hold()); }

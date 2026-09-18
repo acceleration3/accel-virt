@@ -364,10 +364,11 @@ Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, cons
     return answer(D3DKMTSubmitCommand(&request));
 }
 
-Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, void *fence, uint32_t &queue)
+Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, const uint64_t *&progress, uint32_t &queue)
 {
     AV_SCOPE("GdiKmt::create_hw_queue");
     queue = 0u;
+    progress = nullptr;
     D3DKMT_CREATEHWQUEUE request = {};
     request.hHwContext = context;
     const Status made = answer(D3DKMTCreateHwQueue(&request));
@@ -375,7 +376,7 @@ Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, void *fence, uint32_t
     queue = request.hHwQueue;
     /* The read-only mapping of the queue's progress is the process's own view
      * of what the driver has finished. */
-    *static_cast<void **>(fence) = request.HwQueueProgressFenceCPUVirtualAddress;
+    progress = static_cast<const uint64_t *>(request.HwQueueProgressFenceCPUVirtualAddress);
     return Status::ok;
 }
 
