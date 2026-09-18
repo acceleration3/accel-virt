@@ -40,7 +40,16 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `DescriptorTemplateLayout` (proto) | object | one template's entries: offset, stride, count and descriptor type each | Says how many bytes one update through this template reads |
+| `DescriptorTemplateTable` (icd) | system | the templates a device made, by handle | Owns the layout a template's blob is sized by |
+| `HostTemplateTable` (device) | system | the templates the guest made on this context | Refuses a blob length the guest's template does not account for |
+| `PlacedMapping` (icd) | object | the address a caller chose, the chunk and the length behind it | Maps host-visible memory where `VkMemoryMapPlacedInfoEXT` says |
+| `MemoryWin32HandleRecord` (icd) | object | the fields of `VkMemoryGetWin32HandleInfoKHR` | Reads an export request the vendored headers cannot declare |
+| `SemaphoreWin32HandleRecord` (icd) | object | the fields of the two semaphore Win32 structures | Reads a semaphore export or import request |
+| `ExternalObjectTable` (icd) | system | the handles this process exported, each naming a host object | Finds again the host object a handle was exported for |
+| `LayerRequirements` (tools) | object | one pinned layer archive and the names it read out of it | Says which extensions a release requires and which it prefers |
+| `D3dProbeReport` (guest suite) | object | the steps a D3D probe ran and their values | Prints what a D3D run proved, in the runner's grammar |
+| `D3d11Work` / `D3d9Work` / `D3d12Work` (guest suite) | object | one device, its swap chain or render target, the frame it drew | Draws and reads back one reference frame through its own API |
 
 ### Test requirements
 
@@ -149,6 +158,40 @@ extensions rather than adding new ones.
   succeed by eviction where the extension promises it, fail otherwise.
 - A pipeline-library-heavy title compiling thousands of pipelines: no
   transport stall trips TDR.
+
+## Clarifications
+
+### Session 2026-09-18
+
+- **Q: FR-004 and SC-001 name a 32-bit ICD, but `specs/061-driver-package/spec.md:204-208`
+  already owns building and registering one, and `specs/045-vulkan-icd/research.md:252-255`
+  deferred it there. Which feature builds it?** → 061 builds and registers
+  `rvkvk32.dll`; 047 delivers what a 32-bit process needs *from the ICD's
+  behaviour* - `VK_KHR_map_memory2` and `VK_EXT_map_memory_placed`, without
+  which a 32-bit DXVK cannot map memory at all
+  (`tools/codegen/profiles/vulkan.toml:141-174`) - and keeps the reported set
+  independent of pointer width. The 32-bit halves of US1 scenario 3 and SC-001
+  are 061's acceptance. `specs/041-kmd-host-visible-memory/tasks.md:79-107`
+  records that placing a host-visible view below 4 GiB is not the miniport's to
+  control, so it is not promised here either.
+- **Q: how is a layer's required list "read from the pinned release at test
+  time" without a network?** → the pin is a source archive with a SHA-256, like
+  every other pin (`tools/fetch_vulkan_runtime.py`); `LayerRequirements` parses
+  the archive on disk, and its own test drives it over a small archive the test
+  writes, so the parser is proven without the release being present. A run
+  whose pins are not fetched is refused, not skipped silently.
+- **Q: `VK_KHR_push_descriptor` and `VK_KHR_map_memory2` are in the generator's
+  profile but never reach its output. Which route fixes them?** → different
+  ones. Descriptor templates get a generator hook that sizes their blob, the
+  way `host_image_copy_bytes` is shaped, because the size is the template's
+  property and both sides need it. `vkMapMemory2` joins `vkMapMemory` in
+  `[commands].exclude` and is written as a local ICD entry, because a mapping's
+  address is the guest's business and never crosses the wire.
+- **Q: what does an exported Win32 handle mean when no host driver has the
+  extension?** → within one process it names a host object the device already
+  holds, and an import finds it again through `ExternalObjectTable`; the host
+  is asked for the FD-based extensions it does have. A handle from another
+  process is refused until feature 053 gives objects a device-global identity.
 
 ## Requirements *(mandatory)*
 
