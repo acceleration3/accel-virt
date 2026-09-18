@@ -19,3 +19,5 @@ third_party/.cache/
 /re/
 third_party/qemu/
 third_party/vulkan-runtime/
+third_party/opencl-loader/
+.claude/worktrees/

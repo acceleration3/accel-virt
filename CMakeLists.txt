@@ -29,7 +29,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-2")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
@@ -440,10 +440,12 @@ ExternalProject_Add(rvktest
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe)
+                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
-  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
 add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
@@ -518,7 +520,11 @@ add_test(NAME rvkd3d12probe_image
 # registers them.
 if(NOT AV_COVERAGE AND NOT AV_FUZZ)
   set(AV_TOOLS_SHARDED test_run_guest_suite)
-  set(AV_TOOLS_SHARDS 12)
+  # 24 on a 32-core machine: the run is bound by its slowest shard, not by how
+  # many run at once, and at 12 one shard took as long as the whole rest of
+  # the suite. run_test_shard.py fails a shard that selects nothing, so this
+  # cannot be raised past the module's test count without saying so.
+  set(AV_TOOLS_SHARDS 24)
   file(GLOB AV_TOOLS_TESTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/tools/test_*.py)
   foreach(module_file ${AV_TOOLS_TESTS})
     get_filename_component(module ${module_file} NAME_WE)

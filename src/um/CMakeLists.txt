@@ -2,7 +2,7 @@
 # an external project with cmake/windows_user_toolchain.cmake. The suite is
 # src/guest; this directory translates it to Windows.
 cmake_minimum_required(VERSION 3.24)
-project(rvktest CXX)
+project(rvktest C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -200,3 +200,53 @@ add_dependencies(rvkvk rvkglprobe_imports)
 target_link_libraries(rvkvk PRIVATE ${USER32_IMPORT})
 add_dependencies(rvkvkprobe rvkglprobe_imports)
 target_link_libraries(rvkvkprobe PRIVATE ${USER32_IMPORT})
+
+# OpenCL.dll, the Khronos ICD loader, cross-built from the source
+# tools/fetch_opencl_loader.py pins (feature 052, research §2). It is a guest
+# *test* artifact: the runner pushes it beside rvkclprobe.exe so the proof runs
+# through the real loader's own discovery of OpenCLDriverName, and the driver
+# package ships no loader. Built only when the pinned tree is there.
+set(OPENCL_LOADER_TREE ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/opencl-loader)
+if(EXISTS ${OPENCL_LOADER_TREE}/loader/icd.c)
+  # cfgmgr32 is the SetupAPI discovery path; the app-package path reaches
+  # kernel32 through GetProcAddress and needs no import library of its own.
+  set(OPENCL_LOADER_IMPORTS "")
+  foreach(module cfgmgr32 advapi32 ole32)
+    set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
+    add_custom_command(OUTPUT ${library}
+      COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+    list(APPEND OPENCL_LOADER_IMPORTS ${library})
+  endforeach()
+  add_custom_target(opencl_loader_imports DEPENDS ${OPENCL_LOADER_IMPORTS})
+
+  add_library(OpenCL SHARED
+    ${OPENCL_LOADER_TREE}/loader/icd.c
+    ${OPENCL_LOADER_TREE}/loader/icd_dispatch.c
+    ${OPENCL_LOADER_TREE}/loader/icd_dispatch_generated.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_apppackage.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_dxgk.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_envvars.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_hkr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencl_loader/loader_crt.c)
+  add_dependencies(OpenCL rvktest_imports opencl_loader_imports)
+  set_target_properties(OpenCL PROPERTIES PREFIX "")
+  # compat/ first: it answers the handful of C library names the loader calls,
+  # which the guest build has no runtime for.
+  target_include_directories(OpenCL PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencl_loader/compat
+    ${OPENCL_LOADER_TREE}/loader
+    ${OPENCL_LOADER_TREE}/loader/windows
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
+  target_compile_definitions(OpenCL PRIVATE CL_TARGET_OPENCL_VERSION=300 UNICODE _UNICODE)
+  # Forced: the loader's sources call malloc and the string functions without
+  # including the headers that declare them, which a build with a C runtime
+  # gets away with and this one does not.
+  target_compile_options(OpenCL PRIVATE /FIwindows.h /FIav_loader_prelude.h /FIstdlib.h /FIstring.h /FIstdio.h)
+  target_link_options(OpenCL PRIVATE /NODEFAULTLIB /ENTRY:av_opencl_loader_entry
+    /DEF:${OPENCL_LOADER_TREE}/loader/windows/OpenCL.def)
+  target_link_libraries(OpenCL PRIVATE ${RVKTEST_IMPORTS} ${OPENCL_LOADER_IMPORTS})
+else()
+  message(STATUS "OpenCL loader: skipped, no pinned tree; run tools/fetch_opencl_loader.py")
+endif()

@@ -7,6 +7,10 @@ set(CMAKE_SYSTEM_PROCESSOR AMD64)
 
 set(CMAKE_CXX_COMPILER clang-cl)
 set(CMAKE_CXX_COMPILER_TARGET x86_64-pc-windows-msvc)
+# C is here for one thing only: the Khronos OpenCL loader, cross-built as a
+# guest test artifact (feature 052).
+set(CMAKE_C_COMPILER clang-cl)
+set(CMAKE_C_COMPILER_TARGET x86_64-pc-windows-msvc)
 set(CMAKE_LINKER lld-link)
 set(CMAKE_AR llvm-lib)
 set(CMAKE_RC_COMPILER llvm-rc)
@@ -17,3 +21,4 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES AV_WINDOWS_KIT_DIR)
 
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_LIST_DIR}/windows_user_flags.cmake)
+set(CMAKE_USER_MAKE_RULES_OVERRIDE_C ${CMAKE_CURRENT_LIST_DIR}/windows_user_flags_c.cmake)

@@ -1,0 +1,21 @@
+# The Khronos OpenCL ICD loader the guest proof runs against, pinned by URL and
+# hash. What is pinned is source: Khronos publishes no binary for this loader -
+# its GitHub releases carry no assets at all - so unlike the Vulkan runtime
+# there is nothing prebuilt to pin, and the build cross-compiles OpenCL.dll for
+# the guest with the same clang-cl toolchain that builds rvkgpu.sys (feature
+# 052, research §2).
+#
+# It is a test artifact. It is never committed, and the driver package ships no
+# loader: rvkcl.dll is found through the adapter's OpenCLDriverName, and which
+# loader the guest has is the guest's business.
+#
+# The URL names a tag, never a branch: a loader that moved under a guest run is
+# a change to what the proof proves.
+#
+# The tag is the one the OpenCL headers in tools/khronos_pins.txt carry -
+# Khronos releases the two together, and a loader newer than the headers reaches
+# for enumerators the headers do not define (CL_PLATFORM_UNLOADABLE_KHR, from
+# cl_khr_icd_unloadable). The two pins move together or not at all.
+#
+#   <name> <url> <sha256>
+loader https://github.com/KhronosGroup/OpenCL-ICD-Loader/archive/refs/tags/v2024.10.24.tar.gz 95f2f0cda375b13d2760290df044ebea9c6ff954a7d7faa0867422442c9174dc

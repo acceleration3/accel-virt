@@ -1,0 +1,13 @@
+; What the Khronos OpenCL loader calls to read a vendor's registration
+; (feature 052). Its registry path opens the adapter's software key through
+; cfgmgr32 and reads OpenCLDriverName here.
+LIBRARY advapi32.dll
+EXPORTS
+GetSidSubAuthority
+GetSidSubAuthorityCount
+GetTokenInformation
+OpenProcessToken
+RegCloseKey
+RegEnumValueA
+RegOpenKeyExA
+RegQueryValueExA
