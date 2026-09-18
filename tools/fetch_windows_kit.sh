@@ -23,13 +23,21 @@ UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h d
             realtimeapiset.h reason.h securityappcontainer.h securitybaseapi.h stringapiset.h synchapi.h
             sysinfoapi.h systemtopologyapi.h threadpoolapiset.h threadpoollegacyapiset.h timezoneapi.h
             utilapiset.h verrsrc.h WinBase.h wincon.h wincontypes.h Windows.h wingdi.h winnetwk.h WinNls.h
-            winnt.h winreg.h winsvc.h WinUser.h winver.h wow64apiset.h)
+            winnt.h winreg.h winsvc.h WinUser.h winver.h wow64apiset.h
+# What the D3D probes reach (feature 047, T028): d3d11.h and d3d12.h, their
+# COM closure, and the D3D10 and debug-layer headers d3d11.h includes of its
+# own accord. d3d9.h, dxgi.h and the RPC headers are in shared/, which is
+# taken whole. Together 5.6 MB of the um directory's 120.
+            combaseapi.h objbase.h objidl.h objidlbase.h Unknwn.h Unknwnbase.h oaidl.h ocidl.h oleidl.h
+            oleauto.h ole2.h PropIdl.h PropIdlBase.h servprov.h coml2api.h cguid.h rpcnsi.h rpcnsip.h
+            urlmon.h msxml.h d3dcommon.h d3d11.h d3d11sdklayers.h d3d12.h d3d12sdklayers.h d3d10.h
+            d3d10_1.h d3d10_1shader.h d3d10effect.h d3d10misc.h d3d10sdklayers.h d3d10shader.h)
 
 KIT=third_party/windows-kit
 CACHE=third_party/.cache
 PINNED="$WDK_ID $WDK_VERSION
 $SDK_ID $SDK_VERSION
-headers km shared um-closure-1"
+headers km shared um-closure-2"
 
 if [ -f "$KIT/VERSION" ] && [ "$(cat "$KIT/VERSION")" = "$PINNED" ]; then
     echo "windows kit: $KIT already at pinned versions"
