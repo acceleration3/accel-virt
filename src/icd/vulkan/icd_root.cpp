@@ -10,12 +10,14 @@
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_icd_entries.h"
+#include "proto/wire/foreign_enum.hpp"
 
 namespace av::icd {
 
@@ -74,6 +76,27 @@ const Entry        local_rows[] = {
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDescriptorUpdateTemplate), Level::device},
     {"vkDestroyDescriptorUpdateTemplateKHR",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDescriptorUpdateTemplateKHR), Level::device},
+    {"vkGetMemoryWin32HandleKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetMemoryWin32HandleKHR),
+            Level::device},
+    {"vkGetMemoryWin32HandlePropertiesKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetMemoryWin32HandlePropertiesKHR), Level::device},
+    {"vkGetSemaphoreWin32HandleKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetSemaphoreWin32HandleKHR),
+            Level::device},
+    {"vkImportSemaphoreWin32HandleKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkImportSemaphoreWin32HandleKHR), Level::device},
+    {"vkDestroySemaphore", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroySemaphore), Level::device},
+    {"vkGetPhysicalDeviceExternalBufferProperties",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceExternalBufferProperties),
+            Level::physical_device},
+    {"vkGetPhysicalDeviceExternalBufferPropertiesKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceExternalBufferProperties),
+            Level::physical_device},
+    {"vkGetPhysicalDeviceExternalSemaphoreProperties",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceExternalSemaphoreProperties),
+            Level::physical_device},
+    {"vkGetPhysicalDeviceExternalSemaphorePropertiesKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceExternalSemaphoreProperties),
+            Level::physical_device},
     {"vkMapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory), Level::device},
     {"vkMapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory2KHR), Level::device},
     {"vkUnmapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkUnmapMemory2KHR), Level::device},
@@ -123,6 +146,20 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
             "icd_descriptor_templates.a_template_is_remembered_and_sizes_the_blob_it_carries"},
     {"VK_KHR_push_descriptor", 2u,
             "fullstack_templates.a_descriptor_set_updated_through_a_template_reaches_the_host"},
+    /* The two Win32 external-object extensions, answered over the host's own
+     * fd extensions: no Linux driver has a Win32 handle to give, so what the
+     * host must have is the mechanism behind them (feature 047, US3,
+     * research.md §10). Their version is this ICD's, since the host's is a
+     * different extension's. VK_KHR_external_memory_win32's KMT and Direct3D
+     * handle types are deliberately absent - answered as absent by the
+     * external-property queries - because nothing here turns a Direct3D object
+     * into a host one. */
+    {"VK_KHR_external_memory_win32", 1u,
+            "icd_external_handles.a_handle_exported_is_imported_as_a_fresh_fd_of_what_it_names",
+            "VK_KHR_external_memory_fd"},
+    {"VK_KHR_external_semaphore_win32", 1u,
+            "icd_external_handles.a_semaphore_handle_becomes_the_host_s_own_fd_import",
+            "VK_KHR_external_semaphore_fd"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry
@@ -164,7 +201,12 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
-      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock)
+      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock),
+      externals_(lock),
+      memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
+                      VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
+      semaphore_handles_(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT,
+                         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)
 {
     AV_SCOPE("IcdRoot::IcdRoot");
     binding_.bind(*this);
@@ -463,10 +505,204 @@ void IcdRoot::destroy_descriptor_update_template(VkDevice device, VkDescriptorUp
     vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, made, allocator);
 }
 
+VkResult IcdRoot::export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle)
+{
+    AV_SCOPE("IcdRoot::export_memory_handle");
+    if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    /* Nothing is asked of the host: the fd it shares by is asked for at the
+     * import, because a driver takes ownership of one it imports. */
+    return externals_.export_memory(device, request, handle);
+}
+
+VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin32HandleRecord *request,
+                                          void **handle)
+{
+    AV_SCOPE("IcdRoot::export_semaphore_handle");
+    if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    return externals_.export_semaphore(device, request, handle);
+}
+
+VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)
+{
+    AV_SCOPE("IcdRoot::memory_handle_properties");
+    if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    /* The query answers for a handle from outside, and a handle this ICD did
+     * not export names nothing here (contracts/external_objects.md). */
+    log_.write("rvkvk: vkGetMemoryWin32HandlePropertiesKHR: a handle this driver did not export names nothing");
+    return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+}
+
+VkResult IcdRoot::host_memory_fd(VkDevice owner, VkDeviceMemory memory, int &fd)
+{
+    AV_SCOPE("IcdRoot::host_memory_fd");
+    LoaderHandle *const made = allocating_device(owner);
+    if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (lost(*made->connection(), "vkGetMemoryFdKHR")) return VK_ERROR_DEVICE_LOST;
+    VkMemoryGetFdInfoKHR get = {};
+    get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+    get.memory = memory;
+    get.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_handles_.host_type());
+    return vkproto::rvk_vkGetMemoryFdKHR(made->connection()->transport(), owner, &get, &fd);
+}
+
+VkResult IcdRoot::host_semaphore_fd(VkDevice owner, VkSemaphore semaphore, int &fd)
+{
+    AV_SCOPE("IcdRoot::host_semaphore_fd");
+    LoaderHandle *const made = allocating_device(owner);
+    if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (lost(*made->connection(), "vkGetSemaphoreFdKHR")) return VK_ERROR_DEVICE_LOST;
+    VkSemaphoreGetFdInfoKHR get = {};
+    get.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+    get.semaphore = semaphore;
+    get.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
+    return vkproto::rvk_vkGetSemaphoreFdKHR(made->connection()->transport(), owner, &get, &fd);
+}
+
+VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphoreWin32HandleRecord *request)
+{
+    AV_SCOPE("IcdRoot::import_semaphore_handle");
+    LoaderHandle *const made = allocating_device(device);
+    if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (lost(*made->connection(), "vkImportSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
+    VkDevice          owner = VK_NULL_HANDLE;
+    const VkSemaphore exported = externals_.imported_semaphore(request, owner);
+    if (exported == VK_NULL_HANDLE) {
+        log_.write("rvkvk: vkImportSemaphoreWin32HandleKHR names a handle this driver did not export");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    int            fd = -1;
+    const VkResult shared = host_semaphore_fd(owner, exported, fd);
+    if (shared != VK_SUCCESS) return shared;
+    VkImportSemaphoreFdInfoKHR importing = {};
+    importing.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+    importing.semaphore = request->semaphore_;
+    importing.flags = request->flags_;
+    importing.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
+    importing.fd = fd;
+    return vkproto::rvk_vkImportSemaphoreFdKHR(made->connection()->transport(), device, &importing);
+}
+
+void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator)
+{
+    AV_SCOPE("IcdRoot::destroy_semaphore");
+    externals_.forget_semaphore(semaphore);
+    vkicd::generated::Wrap_vkDestroySemaphore(device, semaphore, allocator);
+}
+
+void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
+                                         const VkPhysicalDeviceExternalBufferInfo *info,
+                                         VkExternalBufferProperties               *properties)
+{
+    AV_SCOPE("IcdRoot::external_buffer_properties");
+    if (info == nullptr || properties == nullptr) return;
+    Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (connection == nullptr) return;
+    if (!memory_handles_.answers(info->handleType)) {
+        /* Not a type this ICD shares by: answered as absent rather than asked
+         * of a host that means something else by it. */
+        properties->externalMemoryProperties = VkExternalMemoryProperties{};
+        return;
+    }
+    VkPhysicalDeviceExternalBufferInfo asked = *info;
+    asked.pNext = nullptr;
+    asked.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_handles_.host_type());
+    VkExternalBufferProperties answered = {};
+    answered.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
+    vkproto::rvk_vkGetPhysicalDeviceExternalBufferProperties(connection->transport(), physical_device, &asked,
+                                                             &answered);
+    properties->externalMemoryProperties.externalMemoryFeatures =
+        answered.externalMemoryProperties.externalMemoryFeatures;
+    properties->externalMemoryProperties.exportFromImportedHandleTypes =
+        memory_handles_.reported(answered.externalMemoryProperties.exportFromImportedHandleTypes);
+    properties->externalMemoryProperties.compatibleHandleTypes =
+        memory_handles_.reported(answered.externalMemoryProperties.compatibleHandleTypes);
+}
+
+void IcdRoot::external_semaphore_properties(VkPhysicalDevice physical_device,
+                                            const VkPhysicalDeviceExternalSemaphoreInfo *info,
+                                            VkExternalSemaphoreProperties               *properties)
+{
+    AV_SCOPE("IcdRoot::external_semaphore_properties");
+    if (info == nullptr || properties == nullptr) return;
+    Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (connection == nullptr) return;
+    if (!semaphore_handles_.answers(info->handleType)) {
+        properties->exportFromImportedHandleTypes = 0u;
+        properties->compatibleHandleTypes = 0u;
+        properties->externalSemaphoreFeatures = 0u;
+        return;
+    }
+    VkPhysicalDeviceExternalSemaphoreInfo asked = *info;
+    asked.pNext = nullptr;
+    asked.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
+    VkExternalSemaphoreProperties answered = {};
+    answered.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+    vkproto::rvk_vkGetPhysicalDeviceExternalSemaphoreProperties(connection->transport(), physical_device, &asked,
+                                                                &answered);
+    properties->externalSemaphoreFeatures = answered.externalSemaphoreFeatures;
+    properties->exportFromImportedHandleTypes =
+        semaphore_handles_.reported(answered.exportFromImportedHandleTypes);
+    properties->compatibleHandleTypes = semaphore_handles_.reported(answered.compatibleHandleTypes);
+}
+
+bool IcdRoot::shares_memory(const void *chain) const
+{
+    AV_SCOPE("IcdRoot::shares_memory");
+    uint32_t read = 0u;
+    for (const auto *node = static_cast<const VkBaseInStructure *>(chain); node != nullptr && read < max_chain;
+         node = node->pNext, read++) {
+        const VkStructureType type = static_cast<VkStructureType>(foreign_enum(node->sType));
+        if (type == import_memory_win32_handle_info || type == export_memory_win32_handle_info) return true;
+        if (type != VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO) continue;
+        const auto *const asked = reinterpret_cast<const VkExportMemoryAllocateInfo *>(node);
+        if (memory_handles_.answers(asked->handleTypes)) return true;
+    }
+    return false;
+}
+
+const ImportMemoryWin32HandleRecord *IcdRoot::imported_memory_record(const void *chain) const
+{
+    AV_SCOPE("IcdRoot::imported_memory_record");
+    uint32_t read = 0u;
+    for (const auto *node = static_cast<const VkBaseInStructure *>(chain); node != nullptr && read < max_chain;
+         node = node->pNext, read++)
+        if (static_cast<VkStructureType>(foreign_enum(node->sType)) == import_memory_win32_handle_info)
+            return reinterpret_cast<const ImportMemoryWin32HandleRecord *>(node);
+    return nullptr;
+}
+
+VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const VkMemoryAllocateInfo &info,
+                                    const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
+{
+    AV_SCOPE("IcdRoot::shared_allocation");
+    const ImportMemoryWin32HandleRecord *const importing = imported_memory_record(info.pNext);
+    int                                        fd = -1;
+    if (importing != nullptr) {
+        VkDevice             owner = VK_NULL_HANDLE;
+        const VkDeviceMemory exported = externals_.imported_memory(importing, owner);
+        if (exported == VK_NULL_HANDLE) {
+            log_.write("rvkvk: vkAllocateMemory names a handle this driver did not export");
+            return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+        }
+        const VkResult shared = host_memory_fd(owner, exported, fd);
+        if (shared != VK_SUCCESS) return shared;
+    }
+    MemoryAllocateChain chain;
+    const Status        built = chain.take(info, memory_handles_, fd);
+    if (built != Status::ok) {
+        note("vkAllocateMemory: the chain of a shared allocation is not one this driver can send, status",
+             static_cast<uint64_t>(built));
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    return vkproto::rvk_vkAllocateMemory(made.connection()->transport(), device, chain.forwarded(), allocator,
+                                         &memory);
+}
+
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_device");
     templates_.forget_device(device);
+    externals_.forget_device(device);
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     /* A swapchain frees its memory through the device: before the device's own. */
@@ -566,6 +802,10 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
     memory_lock_.acquire();
     ScopeExit           release([&] { memory_lock_.release(); });
+    /* An allocation that shares memory is the host's whole and never a chunk
+     * of this process's RAM: its chain is rebuilt over the host's own fd
+     * mechanism (feature 047, US3). */
+    if (shares_memory(info->pNext)) return shared_allocation(*made, device, *info, allocator, *memory);
     DeviceMemory *const owned = memory_of(*made);
     if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
     const auto physical = static_cast<VkPhysicalDevice>(static_cast<void *>(made->parent()));

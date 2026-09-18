@@ -66,6 +66,15 @@ public:
     void vk_handle(std::int32_t result, std::uint64_t handle);
     /* How many physical devices, for the call that asks only that. */
     void vk_count(std::int32_t result, std::uint32_t count);
+    /* An fd the host exported, as vkGetMemoryFdKHR and vkGetSemaphoreFdKHR
+     * answer one (feature 047, US3). */
+    void vk_fd(std::int32_t result, int fd);
+    /* What the host says of an external handle type: the features, and the
+     * types it can be exported from and is compatible with. */
+    void vk_external_buffer_properties(std::uint32_t features, std::uint32_t export_from,
+                                       std::uint32_t compatible);
+    void vk_external_semaphore_properties(std::uint32_t features, std::uint32_t export_from,
+                                          std::uint32_t compatible);
     /* `count` devices numbered from vk_physical_device. */
     void vk_physical_devices(std::int32_t result, std::uint32_t count);
     void vk_memory_requirements(std::uint32_t memory_types);

@@ -267,6 +267,59 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkUnmapMemory2KHR(VkDevice, const VkMemoryU
     return VK_SUCCESS;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandleKHR(VkDevice device,
+                                                               const MemoryGetWin32HandleRecord *pGetWin32HandleInfo,
+                                                               void                            **pHandle)
+{
+    AV_SCOPE("local_vkGetMemoryWin32HandleKHR");
+    return icd_binding.root().export_memory_handle(device, pGetWin32HandleInfo, pHandle);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandlePropertiesKHR(VkDevice device, VkFlags, void *handle,
+                                                                         void *)
+{
+    AV_SCOPE("local_vkGetMemoryWin32HandlePropertiesKHR");
+    return icd_binding.root().memory_handle_properties(device, handle);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSemaphoreWin32HandleKHR(
+    VkDevice device, const SemaphoreGetWin32HandleRecord *pGetWin32HandleInfo, void **pHandle)
+{
+    AV_SCOPE("local_vkGetSemaphoreWin32HandleKHR");
+    return icd_binding.root().export_semaphore_handle(device, pGetWin32HandleInfo, pHandle);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkImportSemaphoreWin32HandleKHR(
+    VkDevice device, const ImportSemaphoreWin32HandleRecord *pImportSemaphoreWin32HandleInfo)
+{
+    AV_SCOPE("local_vkImportSemaphoreWin32HandleKHR");
+    return icd_binding.root().import_semaphore_handle(device, pImportSemaphoreWin32HandleInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
+                                                    const VkAllocationCallbacks *pAllocator)
+{
+    AV_SCOPE("local_vkDestroySemaphore");
+    icd_binding.root().destroy_semaphore(device, semaphore, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalBufferProperties(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,
+    VkExternalBufferProperties *pExternalBufferProperties)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceExternalBufferProperties");
+    icd_binding.root().external_buffer_properties(physicalDevice, pExternalBufferInfo, pExternalBufferProperties);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalSemaphoreProperties(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties *pExternalSemaphoreProperties)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceExternalSemaphoreProperties");
+    icd_binding.root().external_semaphore_properties(physicalDevice, pExternalSemaphoreInfo,
+                                                     pExternalSemaphoreProperties);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, uint32_t, const VkMappedMemoryRange *)
 {
     AV_SCOPE("local_vkFlushMappedMemoryRanges");

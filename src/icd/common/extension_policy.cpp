@@ -31,19 +31,25 @@ const ExtensionPolicy::Row *ExtensionPolicy::reportable(const char *name) const
     return nullptr;
 }
 
-/* The first host entry of the row's name: the row's name and its terminator
- * against as many of the host's bytes, which the invariant keeps inside the
- * host's field. */
+/* The first host entry of the extension the row is answered over - its own
+ * name, or the one it names: that name and its terminator against as many of
+ * the host's bytes, which the invariant keeps inside the host's field. What
+ * the application is told is always the row's own name, and its version is the
+ * host's only where they are the same extension. */
 bool ExtensionPolicy::reported_by_host(const Row &row, const VkExtensionProperties *host, uint32_t host_count,
                                        VkExtensionProperties &entry) const
 {
     AV_SCOPE("ExtensionPolicy::reported_by_host");
-    const size_t compared = __builtin_strlen(row.name_) + 1u;
+    const char *const wanted = row.host_ != nullptr ? row.host_ : row.name_;
+    const size_t      compared = __builtin_strlen(wanted) + 1u;
+    const size_t      named = __builtin_strlen(row.name_) + 1u;
     for (uint32_t index = 0u; index < host_count; index++) {
-        if (__builtin_memcmp(host[index].extensionName, row.name_, compared) != 0) continue;
+        if (__builtin_memcmp(host[index].extensionName, wanted, compared) != 0) continue;
         entry = VkExtensionProperties{};
-        __builtin_memcpy(entry.extensionName, row.name_, compared);
-        entry.specVersion = host[index].specVersion < row.spec_version_ ? host[index].specVersion : row.spec_version_;
+        __builtin_memcpy(entry.extensionName, row.name_, named);
+        const uint32_t host_version = host[index].specVersion < row.spec_version_ ? host[index].specVersion
+                                                                                  : row.spec_version_;
+        entry.specVersion = row.host_ != nullptr ? row.spec_version_ : host_version;
         return true;
     }
     return false;
@@ -83,6 +89,7 @@ bool ExtensionPolicy::invariants_hold() const
         uint32_t length = 0u;
         while (length < VK_MAX_EXTENSION_NAME_SIZE && row.name_[length] != '\0') length++;
         if (row.spec_version_ == 0u || length == VK_MAX_EXTENSION_NAME_SIZE) return false;
+        if (row.host_ != nullptr && row.host_[0] == '\0') return false;
         for (uint32_t earlier = 0u; earlier < index; earlier++)
             if (__builtin_strcmp(rows_[earlier].name_, row.name_) == 0) return false;
     }

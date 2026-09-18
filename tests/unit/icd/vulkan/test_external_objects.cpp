@@ -114,7 +114,8 @@ private:
 /* US3 scenario 1, the guest half: a handle exported for one device is the
  * memory another device in the same process imports. */
 TEST(external_objects, a_handle_exported_names_the_memory_an_import_follows)
-{ Exported held;
+{ VkDevice owner = VK_NULL_HANDLE;
+  Exported held;
   CHECK(held.objects().invariants_hold());
   CHECK_EQ(held.objects().live(), 0u);
   void *handle = nullptr;
@@ -125,7 +126,10 @@ TEST(external_objects, a_handle_exported_names_the_memory_an_import_follows)
   CHECK(held.objects().invariants_hold());
   /* The second device imports it and gets the same memory. */
   const ImportMemoryWin32HandleRecord importing = memory_import(handle);
-  CHECK(held.objects().imported_memory(&importing) == memory);
+  CHECK(held.objects().imported_memory(&importing, owner) == memory);
+  /* And names the device it was exported for, which is what a fresh fd of the
+   * memory is asked of (feature 047, US3). */
+  CHECK(owner == device);
   /* The same memory exported again is the same handle: one object, one
    * handle, as Windows has it. */
   void *again = nullptr;
@@ -139,7 +143,8 @@ TEST(external_objects, a_handle_exported_names_the_memory_an_import_follows)
 /* A semaphore is the same story, and the two kinds do not answer for each
  * other: a memory handle imported as a semaphore is nothing. */
 TEST(external_objects, a_semaphore_handle_is_a_semaphore_and_not_a_memory)
-{ Exported held;
+{ VkDevice owner = VK_NULL_HANDLE;
+  Exported held;
   void    *memory_handle = nullptr;
   void    *semaphore_handle = nullptr;
   const MemoryGetWin32HandleRecord    exporting_memory = memory_export(memory);
@@ -149,14 +154,16 @@ TEST(external_objects, a_semaphore_handle_is_a_semaphore_and_not_a_memory)
   CHECK(memory_handle != semaphore_handle);
   CHECK_EQ(held.objects().live(), 2u);
   const ImportSemaphoreWin32HandleRecord importing_semaphore = semaphore_import(semaphore_handle);
-  CHECK(held.objects().imported_semaphore(&importing_semaphore) == semaphore);
+  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == semaphore);
   const ImportMemoryWin32HandleRecord importing_memory = memory_import(memory_handle);
-  CHECK(held.objects().imported_memory(&importing_memory) == memory);
+  CHECK(held.objects().imported_memory(&importing_memory, owner) == memory);
   /* Crossed: a semaphore's handle names no memory, and the other way round. */
   const ImportMemoryWin32HandleRecord memory_from_semaphore = memory_import(semaphore_handle);
-  CHECK(held.objects().imported_memory(&memory_from_semaphore) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&memory_from_semaphore, owner) == VK_NULL_HANDLE);
+  /* A handle that names nothing names no device either. */
+  CHECK(owner == VK_NULL_HANDLE);
   const ImportSemaphoreWin32HandleRecord semaphore_from_memory = semaphore_import(memory_handle);
-  CHECK(held.objects().imported_semaphore(&semaphore_from_memory) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(&semaphore_from_memory, owner) == VK_NULL_HANDLE);
   CHECK(held.objects().invariants_hold()); }
 
 /* Every refusal of contracts/external_objects.md, on the export side. */
@@ -211,56 +218,58 @@ TEST(external_objects, an_export_it_cannot_answer_is_refused)
 /* And on the import side, where a wrong answer would hand one application
  * another's memory. */
 TEST(external_objects, an_import_it_did_not_export_follows_nothing)
-{ Exported held;
+{ VkDevice owner = VK_NULL_HANDLE;
+  Exported held;
   void    *handle = nullptr;
   const MemoryGetWin32HandleRecord exporting = memory_export(memory);
   CHECK_EQ(held.objects().export_memory(device, &exporting, &handle), VK_SUCCESS);
   ImportMemoryWin32HandleRecord importing = memory_import(handle);
   /* A handle this process did not export. */
   importing.handle_ = reinterpret_cast<void *>(0x1234u);
-  CHECK(held.objects().imported_memory(&importing) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
   importing.handle_ = nullptr;
-  CHECK(held.objects().imported_memory(&importing) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
   importing.handle_ = handle;
   /* A named handle: a name is what another process would open, and
    * cross-process identity is feature 053's. */
   const char name[] = "Local\\rvk";
   importing.name_ = name;
-  CHECK(held.objects().imported_memory(&importing) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
   importing.name_ = nullptr;
   /* A handle type or a structure type this path does not answer. */
   importing.handle_type_ = 0x00000004u;
-  CHECK(held.objects().imported_memory(&importing) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
   importing.handle_type_ = av::icd::opaque_win32_memory;
   importing.type_ = static_cast<VkStructureType>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-  CHECK(held.objects().imported_memory(&importing) == VK_NULL_HANDLE);
-  CHECK(held.objects().imported_memory(nullptr) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(nullptr, owner) == VK_NULL_HANDLE);
   /* The same refusals for a semaphore. */
   void *semaphore_handle = nullptr;
   const SemaphoreGetWin32HandleRecord exporting_semaphore = semaphore_export(semaphore);
   CHECK_EQ(held.objects().export_semaphore(device, &exporting_semaphore, &semaphore_handle), VK_SUCCESS);
   ImportSemaphoreWin32HandleRecord importing_semaphore = semaphore_import(semaphore_handle);
   importing_semaphore.name_ = name;
-  CHECK(held.objects().imported_semaphore(&importing_semaphore) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
   importing_semaphore.name_ = nullptr;
   importing_semaphore.handle_type_ = 0u;
-  CHECK(held.objects().imported_semaphore(&importing_semaphore) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
   importing_semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
   importing_semaphore.type_ = static_cast<VkStructureType>(0x7FFFFFFF);
-  CHECK(held.objects().imported_semaphore(&importing_semaphore) == VK_NULL_HANDLE);
-  CHECK(held.objects().imported_semaphore(nullptr) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(nullptr, owner) == VK_NULL_HANDLE);
   /* A well-formed import of a handle this table never gave out: the lookup
    * finds no slot at all rather than the nearest one. */
   ImportSemaphoreWin32HandleRecord stranger = semaphore_import(reinterpret_cast<void *>(0x4321u));
-  CHECK(held.objects().imported_semaphore(&stranger) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_semaphore(&stranger, owner) == VK_NULL_HANDLE);
   /* What was exported is still there after all of that. */
   const ImportMemoryWin32HandleRecord good = memory_import(handle);
-  CHECK(held.objects().imported_memory(&good) == memory); }
+  CHECK(held.objects().imported_memory(&good, owner) == memory); }
 
 /* An object destroyed takes its handle with it, and so does its device: a
  * handle that outlived what it names is one an import could still follow. */
 TEST(external_objects, what_is_destroyed_takes_its_handle_with_it)
-{ Exported held;
+{ VkDevice owner = VK_NULL_HANDLE;
+  Exported held;
   void    *first = nullptr;
   void    *second = nullptr;
   void    *third = nullptr;
@@ -274,7 +283,7 @@ TEST(external_objects, what_is_destroyed_takes_its_handle_with_it)
 
   held.objects().forget_memory(memory);
   const ImportMemoryWin32HandleRecord gone = memory_import(first);
-  CHECK(held.objects().imported_memory(&gone) == VK_NULL_HANDLE);
+  CHECK(held.objects().imported_memory(&gone, owner) == VK_NULL_HANDLE);
   CHECK_EQ(held.objects().live(), 2u);
   /* One it never had, and none at all: neither takes a slot away. */
   held.objects().forget_memory(memory);

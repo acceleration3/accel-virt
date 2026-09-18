@@ -32,7 +32,8 @@ TESTS_DIRECTORY = "tests"
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
 EMPTY = re.compile(r"ExtensionPolicy::Row\s*\*\s*reported_extensions\s*=\s*nullptr\s*;")
-ROW = re.compile(r'\s*\{\s*"(?P<name>[^"]*)"\s*,\s*(?P<version>\d+)u?\s*,\s*"(?P<test>[^"]*)"\s*\}\s*,?')
+ROW = re.compile(r'\s*\{\s*"(?P<name>[^"]*)"\s*,\s*(?P<version>\d+)u?\s*,\s*"(?P<test>[^"]*)"'
+                 r'(\s*,\s*"(?P<host>[^"]*)")?\s*\}\s*,?')
 TEST_NAME = re.compile(r"^(\w+)\.(\w+)$")
 
 
@@ -82,7 +83,8 @@ class PolicyCheck:
             if not match:
                 violations.append(f"{where}: unreadable row: {text[at:].strip()[:60]}")
                 break
-            rows.append((match.group("name"), int(match.group("version")), match.group("test")))
+            rows.append((match.group("name"), int(match.group("version")), match.group("test"),
+                         match.group("host")))
             at = match.end()
         return rows, violations
 
@@ -138,7 +140,7 @@ class PolicyCheck:
         WGL names when there is no generated list for them."""
         violations = []
         seen = set()
-        for name, version, test in rows:
+        for name, version, test, host in rows:
             if name in seen:
                 violations.append(f"{where}: {name} is named twice")
             seen.add(name)
@@ -146,6 +148,11 @@ class PolicyCheck:
                 violations.append(f"{where}: {name} is not a WGL extension")
             elif implemented is not None and name not in implemented[1]:
                 violations.append(f"{where}: {name} is not in {implemented[0]}")
+            if host is not None and implemented is not None and host not in implemented[1]:
+                # A row answered over another extension is a promise about that
+                # mechanism: the ICD cannot translate to something this build
+                # never generated.
+                violations.append(f"{where}: {name} is answered over {host}, which is not in {implemented[0]}")
             if version == 0:
                 violations.append(f"{where}: {name} has spec version 0")
             if not TEST_NAME.match(test):

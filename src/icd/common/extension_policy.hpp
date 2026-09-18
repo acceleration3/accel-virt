@@ -5,6 +5,10 @@
  * which tools/check_extension_policy.py holds every row to. The row's spec
  * version caps the host's, since a newer revision was not what was tested.
  *
+ * A row may name the host extension it is answered over, for one this ICD
+ * implements on top of a different host mechanism; its version is then the
+ * row's own, since the host's version is a different extension's.
+ *
  * Four are never reported whatever says otherwise: the surface and swapchain
  * extensions until presentation exists (046), and host-memory import, which is
  * the ICD's own mechanism for host-visible memory rather than something an
@@ -61,6 +65,13 @@ public:
         /* The test that exercises the extension through this ICD, as
          * suite.case. */
         const char *test_;
+        /* The host extension this one is answered over, when it is not the
+         * host's own spelling of it: VK_KHR_external_memory_win32 is answered
+         * over the host's VK_KHR_external_memory_fd, since no Linux driver has
+         * a Win32 handle to give (feature 047, research.md §10). Null - the
+         * usual case - means the host must have this extension itself, and is
+         * what a row that says nothing about it gets. */
+        const char *host_ = nullptr;
     };
 };
 

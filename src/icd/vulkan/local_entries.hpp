@@ -10,6 +10,8 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include "icd/vulkan/memory_win32_handle_record.hpp"
+#include "icd/vulkan/semaphore_win32_handle_record.hpp"
 #include "icd/vulkan/win32_surface_create_record.hpp"
 
 namespace av::icd {
@@ -106,6 +108,37 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, 
                                                                const VkMappedMemoryRange *pMemoryRanges);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
                                                                     const VkMappedMemoryRange *pMemoryRanges);
+
+/* The Win32 external objects (feature 047, US3). A HANDLE is Windows' own type
+ * and no portable header declares it, so the structures arrive as the records
+ * beside these declarations and a handle as the opaque pointer it is; the
+ * layouts are the same either way (memory_win32_handle_record.hpp). All four
+ * are this ICD's own because what a handle names is a row of its own table,
+ * shared with the host by fd (research.md §10). */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandleKHR(VkDevice device,
+                                                               const MemoryGetWin32HandleRecord *pGetWin32HandleInfo,
+                                                               void                            **pHandle);
+/* Which memory types a handle from *outside* may be imported as, which is
+ * nothing here: a handle this ICD did not export names no object. */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandlePropertiesKHR(VkDevice device, VkFlags handleType,
+                                                                         void *handle,
+                                                                         void *pMemoryWin32HandleProperties);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSemaphoreWin32HandleKHR(
+    VkDevice device, const SemaphoreGetWin32HandleRecord *pGetWin32HandleInfo, void **pHandle);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkImportSemaphoreWin32HandleKHR(
+    VkDevice device, const ImportSemaphoreWin32HandleRecord *pImportSemaphoreWin32HandleInfo);
+/* A semaphore destroyed takes any handle that named it with it. */
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
+                                                    const VkAllocationCallbacks *pAllocator);
+/* What the host says of its own opaque fd, said in Win32's spelling; every
+ * other handle type is answered as absent rather than asked of a host that
+ * means something else by it. */
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalBufferProperties(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,
+    VkExternalBufferProperties *pExternalBufferProperties);
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalSemaphoreProperties(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties *pExternalSemaphoreProperties);
 
 /* WSI (feature 046). */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateWin32SurfaceKHR(VkInstance instance,

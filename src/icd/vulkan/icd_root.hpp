@@ -31,6 +31,8 @@
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/icd_entry_lookup.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
+#include "icd/vulkan/external_objects.hpp"
+#include "icd/vulkan/win32_handle_kind.hpp"
 #include "icd/vulkan/presentation.hpp"
 
 #include <stdint.h>
@@ -169,6 +171,35 @@ public:
                                                VkDescriptorUpdateTemplate *made);
     void     destroy_descriptor_update_template(VkDevice device, VkDescriptorUpdateTemplate made,
                                                 const VkAllocationCallbacks *allocator);
+    /* The Win32 external objects of VK_KHR_external_memory_win32 and
+     * VK_KHR_external_semaphore_win32 (feature 047, US3, research.md §10). A
+     * handle is this ICD's own and names an object of one device; an import
+     * asks the host for a fresh fd of that object and forwards the host's own
+     * import in the Win32 structure's place, which works because both host
+     * devices are in the one process the device library runs in. Sharing
+     * between two instances is not: the fd is a context's, and each instance
+     * has its own. */
+    VkResult export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle);
+    VkResult export_semaphore_handle(VkDevice device, const SemaphoreGetWin32HandleRecord *request,
+                                     void **handle);
+    VkResult import_semaphore_handle(VkDevice device, const ImportSemaphoreWin32HandleRecord *request);
+    /* Which memory types a handle from outside this process may be imported
+     * as: none, because a handle this ICD did not export names nothing
+     * (contracts/external_objects.md). */
+    VkResult memory_handle_properties(VkDevice device, void *handle);
+    /* What the host says of its own opaque fd, said in Win32's spelling; every
+     * other handle type is answered as absent, since nothing here turns a
+     * Direct3D object into a host one. */
+    void     external_buffer_properties(VkPhysicalDevice physical_device,
+                                        const VkPhysicalDeviceExternalBufferInfo *info,
+                                        VkExternalBufferProperties               *properties);
+    void     external_semaphore_properties(VkPhysicalDevice physical_device,
+                                           const VkPhysicalDeviceExternalSemaphoreInfo *info,
+                                           VkExternalSemaphoreProperties               *properties);
+    /* vkDestroySemaphore through the generated wrapper, with a handle that
+     * named it forgotten: a handle outliving what it names is one an import
+     * could still follow. */
+    void     destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator);
     /* What a swapchain of `device` needs: its physical device, and the adapter
      * and D3DKMT device its vertical blank is waited on; false for a device
      * this ICD did not make. */
@@ -239,6 +270,23 @@ private:
     IcdEntryLookup         entries_;
     Presentation           presentation_;
     DescriptorTemplateTable templates_;
+    ExternalObjects         externals_;
+    Win32HandleKind         memory_handles_;
+    Win32HandleKind         semaphore_handles_;
+    /* A fresh fd of an object of `owner`, asked of the host each time an
+     * import names it: a driver takes ownership of an fd it imports, so one fd
+     * could not serve two imports. */
+    VkResult                host_memory_fd(VkDevice owner, VkDeviceMemory memory, int &fd);
+    VkResult                host_semaphore_fd(VkDevice owner, VkSemaphore semaphore, int &fd);
+    /* The Win32 import node of an allocation's chain, or null. */
+    const ImportMemoryWin32HandleRecord *imported_memory_record(const void *chain) const;
+    /* Whether an allocation's chain exports or imports a Win32 handle, which
+     * is what makes it the host's to allocate whole. */
+    bool                    shares_memory(const void *chain) const;
+    /* An allocation that shares memory: the chain rebuilt over the host's own
+     * mechanism, and sent. */
+    VkResult                shared_allocation(LoaderHandle &made, VkDevice device, const VkMemoryAllocateInfo &info,
+                                              const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
 
     friend struct IcdRootProbe;
 };

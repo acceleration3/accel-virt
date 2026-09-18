@@ -6,7 +6,9 @@
  * it. The host is a Vulkan driver on the host's platform, which has no
  * VK_KHR_win32_surface at all, so passing those names on is how a real
  * vulkaninfo failed with VK_ERROR_EXTENSION_NOT_PRESENT. Everything else is the
- * host's to answer, and is passed on unchanged. */
+ * host's to answer, and is passed on - in the host's own spelling of it, which
+ * for the two Win32 external-object extensions is the fd extension the ICD
+ * answers them over (feature 047, research.md §10). */
 #ifndef AV_ICD_HOST_EXTENSION_LIST_HPP
 #define AV_ICD_HOST_EXTENSION_LIST_HPP
 
@@ -40,6 +42,9 @@ public:
 private:
     /* Whether this ICD, rather than the host, implements `name`. */
     bool is_the_icd_s(const char *name) const;
+    /* The host's own spelling of `name`, which is `name` itself unless this
+     * ICD answers it over a different host extension. */
+    const char *host_spelling_of(const char *name) const;
 
     const char *names_[max_names];
     uint32_t    count_;

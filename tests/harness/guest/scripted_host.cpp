@@ -59,6 +59,42 @@ void ScriptedHost::vk_count(std::int32_t result, std::uint32_t count)
     queue(writer);
 }
 
+void ScriptedHost::vk_fd(std::int32_t result, int fd)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod(result);
+    writer.write_pod(fd);
+    queue(writer);
+}
+
+void ScriptedHost::vk_external_buffer_properties(std::uint32_t features, std::uint32_t export_from,
+                                                 std::uint32_t compatible)
+{
+    WireWriter                 writer(answer_, sizeof answer_);
+    VkExternalBufferProperties properties = {};
+    properties.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
+    properties.externalMemoryProperties.externalMemoryFeatures = features;
+    properties.externalMemoryProperties.exportFromImportedHandleTypes = export_from;
+    properties.externalMemoryProperties.compatibleHandleTypes = compatible;
+    writer.write_pod<std::int32_t>(0);
+    vkproto::serialize_VkExternalBufferProperties(writer, properties);
+    queue(writer);
+}
+
+void ScriptedHost::vk_external_semaphore_properties(std::uint32_t features, std::uint32_t export_from,
+                                                    std::uint32_t compatible)
+{
+    WireWriter                    writer(answer_, sizeof answer_);
+    VkExternalSemaphoreProperties properties = {};
+    properties.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+    properties.externalSemaphoreFeatures = features;
+    properties.exportFromImportedHandleTypes = export_from;
+    properties.compatibleHandleTypes = compatible;
+    writer.write_pod<std::int32_t>(0);
+    vkproto::serialize_VkExternalSemaphoreProperties(writer, properties);
+    queue(writer);
+}
+
 void ScriptedHost::vk_physical_devices(std::int32_t result, std::uint32_t count)
 {
     WireWriter writer(answer_, sizeof answer_);

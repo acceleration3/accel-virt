@@ -207,7 +207,13 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
        * each forwards to its generated wrapper and remembers or forgets what
        * it made around it. */
       "vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR",
-      "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR"};
+      "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR",
+      /* And feature 047's US3: a semaphore destroyed takes any handle that
+       * named it with it, and the two external-property queries are answered
+       * over the host's fd rather than passed on as Win32 (research.md §10). */
+      "vkDestroySemaphore", "vkGetPhysicalDeviceExternalBufferProperties",
+      "vkGetPhysicalDeviceExternalBufferPropertiesKHR", "vkGetPhysicalDeviceExternalSemaphoreProperties",
+      "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
@@ -265,10 +271,14 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
   /* Three before the WSI, the twelve window-system entries this platform's
-   * manual list names (the two Win32-only ones are not on it), and feature
-   * 047's two mapping entries. */
-  CHECK_EQ(answered, 19u);
-  CHECK_EQ(through_an_instance, 17u);
+   * manual list names (the two Win32-only ones are not on it), feature 047's
+   * two mapping entries and its four Win32 external-object ones. */
+  CHECK_EQ(answered, 23u);
+  CHECK_EQ(through_an_instance, 21u);
+  CHECK(rig.root().instance_proc_addr(instance, "vkGetMemoryWin32HandleKHR") ==
+        entry_of(&av::icd::local_vkGetMemoryWin32HandleKHR));
+  CHECK(rig.root().instance_proc_addr(instance, "vkImportSemaphoreWin32HandleKHR") ==
+        entry_of(&av::icd::local_vkImportSemaphoreWin32HandleKHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkMapMemory2KHR") == entry_of(&av::icd::local_vkMapMemory2KHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkUnmapMemory2KHR") == entry_of(&av::icd::local_vkUnmapMemory2KHR));
   rig.destroy_instance(instance); }

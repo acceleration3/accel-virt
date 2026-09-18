@@ -45,9 +45,10 @@ VkResult ExternalObjects::export_semaphore(VkDevice device, const SemaphoreGetWi
     return VK_SUCCESS;
 }
 
-VkDeviceMemory ExternalObjects::imported_memory(const ImportMemoryWin32HandleRecord *request) const
+VkDeviceMemory ExternalObjects::imported_memory(const ImportMemoryWin32HandleRecord *request, VkDevice &owner) const
 {
     AV_SCOPE("ExternalObjects::imported_memory");
+    owner = VK_NULL_HANDLE;
     if (request == nullptr || request->name_ != nullptr) return VK_NULL_HANDLE;
     if (foreign_enum(request->type_) != static_cast<int32_t>(import_memory_win32_handle_info) ||
         request->handle_type_ != opaque_win32_memory)
@@ -55,12 +56,18 @@ VkDeviceMemory ExternalObjects::imported_memory(const ImportMemoryWin32HandleRec
     lock_.acquire();
     ScopeExit                       released([&] { lock_.release(); });
     const ExternalObjectSlot *const slot = slot_of(request->handle_);
-    return slot != nullptr ? slot->memory_ : VK_NULL_HANDLE;
+    /* A slot found holding the other kind of object names no memory, and so
+     * names no device to ask for one either. */
+    if (slot == nullptr || slot->memory_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
+    owner = slot->device_;
+    return slot->memory_;
 }
 
-VkSemaphore ExternalObjects::imported_semaphore(const ImportSemaphoreWin32HandleRecord *request) const
+VkSemaphore ExternalObjects::imported_semaphore(const ImportSemaphoreWin32HandleRecord *request,
+                                                VkDevice &owner) const
 {
     AV_SCOPE("ExternalObjects::imported_semaphore");
+    owner = VK_NULL_HANDLE;
     if (request == nullptr || request->name_ != nullptr) return VK_NULL_HANDLE;
     if (foreign_enum(request->type_) != static_cast<int32_t>(import_semaphore_win32_handle_info) ||
         request->handle_type_ != opaque_win32_semaphore)
@@ -68,7 +75,9 @@ VkSemaphore ExternalObjects::imported_semaphore(const ImportSemaphoreWin32Handle
     lock_.acquire();
     ScopeExit                       released([&] { lock_.release(); });
     const ExternalObjectSlot *const slot = slot_of(request->handle_);
-    return slot != nullptr ? slot->semaphore_ : VK_NULL_HANDLE;
+    if (slot == nullptr || slot->semaphore_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
+    owner = slot->device_;
+    return slot->semaphore_;
 }
 
 void ExternalObjects::forget_memory(VkDeviceMemory memory)

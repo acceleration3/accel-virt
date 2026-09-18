@@ -53,11 +53,13 @@ public:
      * is not one, a handle type this path does not answer, or no memory;
      * VK_ERROR_TOO_MANY_OBJECTS when every slot is taken. */
     VkResult export_memory(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle);
-    /* The memory a handle names, or null for one this process did not export,
-     * a named one, or a handle type this path does not answer. */
-    VkDeviceMemory imported_memory(const ImportMemoryWin32HandleRecord *request) const;
+    /* The memory a handle names and the device it was exported for, or null
+     * for a handle this process did not export, a named one, or a handle type
+     * this path does not answer. `owner` is what a fresh fd of the memory is
+     * asked of, since memory belongs to one device. */
+    VkDeviceMemory imported_memory(const ImportMemoryWin32HandleRecord *request, VkDevice &owner) const;
     VkResult       export_semaphore(VkDevice device, const SemaphoreGetWin32HandleRecord *request, void **handle);
-    VkSemaphore    imported_semaphore(const ImportSemaphoreWin32HandleRecord *request) const;
+    VkSemaphore    imported_semaphore(const ImportSemaphoreWin32HandleRecord *request, VkDevice &owner) const;
 
     /* An object destroyed takes its handle with it: a handle that outlived
      * what it names would be one an import could still follow. */

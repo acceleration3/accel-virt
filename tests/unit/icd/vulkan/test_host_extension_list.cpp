@@ -65,3 +65,25 @@ TEST(host_extension_list, a_list_it_cannot_hold_or_cannot_read_is_refused)
   const char *const unnamed[] = {"VK_EXT_memory_budget", nullptr};
   CHECK_STATUS(asked.take(unnamed, 2u), Status::invalid_parameter);
   CHECK(asked.invariants_hold()); }
+
+/* The two Win32 external-object extensions are asked for in the host's own
+ * spelling (feature 047, US3): no Linux driver has a Win32 handle to give, and
+ * what the ICD answers them over is the host's fd extensions, so the host's
+ * device is made with those names in their place. */
+TEST(host_extension_list, a_win32_external_object_extension_is_asked_for_as_an_fd_one)
+{ HostExtensionList asked;
+  const char *const enabled[] = {"VK_KHR_external_memory_win32", "VK_EXT_memory_budget",
+                                 "VK_KHR_external_semaphore_win32"};
+  CHECK_STATUS(asked.take(enabled, 3u), Status::ok);
+  CHECK(asked.invariants_hold());
+  CHECK_EQ(asked.count(), 3u);
+  CHECK_EQ(asked.kept(), 0u);
+  CHECK(std::strcmp(asked.names()[0], "VK_KHR_external_memory_fd") == 0);
+  CHECK(std::strcmp(asked.names()[1], "VK_EXT_memory_budget") == 0);
+  CHECK(std::strcmp(asked.names()[2], "VK_KHR_external_semaphore_fd") == 0);
+  /* A name that only begins like one of them is passed on as it is. */
+  const char *const nearly[] = {"VK_KHR_external_memory_win32_and_more", "VK_KHR_external_memory"};
+  CHECK_STATUS(asked.take(nearly, 2u), Status::ok);
+  CHECK(std::strcmp(asked.names()[0], "VK_KHR_external_memory_win32_and_more") == 0);
+  CHECK(std::strcmp(asked.names()[1], "VK_KHR_external_memory") == 0);
+  CHECK(asked.invariants_hold()); }

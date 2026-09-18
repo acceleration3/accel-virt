@@ -11,6 +11,20 @@ namespace {
 const char *const icd_extensions[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_KHR_swapchain"};
 constexpr uint32_t icd_extension_count = sizeof icd_extensions / sizeof icd_extensions[0];
 
+/* What the host is asked for in place of an extension this ICD answers over a
+ * different host mechanism: a Win32 external object is a host object shared by
+ * fd, so the host's device is made with the fd extension the ICD will call
+ * (feature 047, research.md §10). */
+struct HostSpelling {
+    const char *asked_;
+    const char *host_;
+};
+constexpr HostSpelling host_spellings[] = {
+    {"VK_KHR_external_memory_win32", "VK_KHR_external_memory_fd"},
+    {"VK_KHR_external_semaphore_win32", "VK_KHR_external_semaphore_fd"},
+};
+constexpr uint32_t host_spelling_count = sizeof host_spellings / sizeof host_spellings[0];
+
 }  // namespace
 
 HostExtensionList::HostExtensionList() : names_{}, count_(0u), given_(0u), kept_(0u)
@@ -35,7 +49,7 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
             kept_++;
             continue;
         }
-        names_[count_++] = name;
+        names_[count_++] = host_spelling_of(name);
     }
     return Status::ok;
 }
@@ -56,6 +70,14 @@ uint32_t HostExtensionList::kept() const
 {
     AV_SCOPE("HostExtensionList::kept");
     return kept_;
+}
+
+const char *HostExtensionList::host_spelling_of(const char *name) const
+{
+    AV_SCOPE("HostExtensionList::host_spelling_of");
+    for (uint32_t index = 0u; index < host_spelling_count; index++)
+        if (__builtin_strcmp(name, host_spellings[index].asked_) == 0) return host_spellings[index].host_;
+    return name;
 }
 
 bool HostExtensionList::is_the_icd_s(const char *name) const
