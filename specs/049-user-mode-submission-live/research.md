@@ -458,3 +458,28 @@ path, the user-mode ring publish and `GuestDoorbell::recover` - and the guest
 suite exercises the fallback it was written to have: `submit.doorbell none`,
 kernel submission, 45/45. The doorbell opens on the first Windows build whose
 `CheckFeatureOSSupport` does not refuse 37, with no driver change.
+
+## 21. The one door left, and why it is not one
+
+`dxgkrnl` has a global, `g_NativeFenceDebugTest`, that the node validator reads
+right before the checks §14 listed:
+
+```c
+if ((node_flags & UserModeSubmission) == 0) {
+    if ((g_NativeFenceDebugTest != 0) && ((node_flags & ContextScheduling) != 0)) {
+        node_flags |= UserModeSubmission;            /* the OS opts the node in */
+        adapter->ums_caps_flags |= 1;
+        adapter->doorbell_size = 0x200;
+        adapter->secondary_doorbell_size = 0x200;
+    }
+}
+```
+
+Set, it turns user-mode submission on for any context-scheduled node and skips
+the NativeGpuFence check entirely - which is exactly the wall §20 ends at. It
+has no writer anywhere in the image: no registry parameter table names it, and
+nothing in `DriverEntry` assigns it. It is a variable for a kernel debugger to
+poke, so seeing this driver's doorbells live on 26100 would mean attaching one
+(or writing guest memory through the QEMU gdbstub) and patching a byte in
+`dxgkrnl`'s data section every boot. That is a demonstration, not a gate, and
+nothing in the driver would differ; so it is written down here and not done.

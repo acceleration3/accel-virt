@@ -106,12 +106,37 @@ process publishes its own ring tail and rings its own page:
   both the process and the KMD — which this driver writes the device's
   completed fence into for any context that submits for itself.
 
-**Native fences are not implemented** (`CreateNativeFence`, `Open`, `Close`,
-`Destroy`, `UpdateMonitoredValues`, `UpdateCurrentValuesFromCpu`,
-`SetNativeFenceLogBuffer`, `UpdateNativeFenceLogs` and their caps, slots
-162-165 and 186-189). They are what removes the kernel transition from the
-*wait*, as the doorbell removes it from the submission; until they are here a
-process still waits through `D3DKMT`, and nothing reports otherwise.
+**Native fences** are `CreateNativeFence`, `DestroyNativeFence`,
+`UpdateMonitoredValues` and `UpdateCurrentValuesFromCpu` (slots 162-165), which
+this driver implements over `NativeFenceTable`, plus `DXGKQAITYPE_NATIVE_FENCE_CAPS`.
+Sharing and the log buffer (`Open`, `Close`, `SetNativeFenceLogBuffer`,
+`UpdateNativeFenceLogs`, slots 186-189) are not implemented and nothing reports
+them.
+
+#### What the OS demands before any of it runs (feature 049, research.md §14-§20)
+
+Reporting one of these capabilities is an *ask*, not a statement, and
+`DXGADAPTER::Initialize` fails the whole adapter start - `problem=43` in the
+guest - for an adapter that asks wrongly:
+
+- a node that reports `UserModeSubmission` must also report
+  `ContextSchedulingSupported`, implement all five doorbell DDIs, and the
+  adapter must set `DXGK_VIDSCHCAPS.NativeGpuFence`;
+- a node that reports `ContextSchedulingSupported` needs the OS's own hardware
+  scheduling policy enabled, and either IoMmu support or an earlier node with
+  GPU VA - hence two nodes here, the hardware-scheduled one second;
+- `NativeGpuFence` may be set only where the OS enabled
+  `DXGK_FEATURE_NATIVE_FENCE`, which the OS decides from its staged state, the
+  driver's answer through `DXGKDDI_FEATURE_INTERFACE` (asked for by GUID at
+  `DxgkDdiQueryInterface`, *before* StartDevice), the overlap of their version
+  ranges, and `…\Features\<id>\Enabled` in the registry.
+
+And on Windows 11 26100 none of it can be reached: `CheckFeatureOSSupport`
+answers feature 37 with a hard `false` before consulting any of that, so the
+native fence feature is never enabled, the capability may never be set, and no
+node may report user-mode submission. The driver asks for both features at
+StartDevice and reports what it was granted, which on this build is hardware
+scheduling alone.
 
 ## Fences
 

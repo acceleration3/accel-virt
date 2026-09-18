@@ -153,18 +153,25 @@ records both ways and reports per-submit cost.
   five times lower than through `D3DKMTSubmitCommand` on the first passing host;
   the measured ratio becomes the ratchet.
 
-  **Not met, and the live runs say why** (research.md §13-§16). The benchmark
-  is built, tested and reports all three numbers; the doorbell half of it does
-  not run in the guest, because Windows will not hand this adapter a hardware
-  queue - and so no doorbell - until the node may report user-mode submission,
-  which needs native fences (§14) and an IOMMU path or a second node (§16).
-  `tools/submit_ratchet.txt` therefore stays empty, and the runner says so.
-  Both are recorded as one-line changes behind the things they ask for.
+  **Not met, and this build of Windows is why** (research.md §13-§20). The
+  benchmark is built, tested and reports all three numbers; the doorbell half
+  of it does not run in the guest. Everything the OS asks for before it hands a
+  process a doorbell is implemented and live - the five doorbell DDIs, the
+  hardware queue path, the second node, the feature interface, the registry
+  keys - and the last requirement cannot be met here at all: a node may not
+  report user-mode submission without the NativeGpuFence capability (§14),
+  which may not be reported unless the OS enabled `DXGK_FEATURE_NATIVE_FENCE`
+  (§17), and `dxgkrnl.sys` on this build answers that feature with a hard
+  `false` before it consults the registry, the driver or the version range
+  (§20). `tools/submit_ratchet.txt` therefore stays empty, and the runner says
+  so. The driver reports the flag the moment a build of Windows enables the
+  feature, with no change to it.
 
 - **SC-002**: Not met, for the same reason: with no doorbell in the guest there
   is nothing to run the application suite "with doorbells on" against. The
   suite passes unchanged with the transport submitting as it always has, which
-  is what the guest run shows.
+  is what the guest run shows, and the doorbell path it would take instead is
+  covered end to end by the loopback fabric (`tests/loopback/test_fullstack_doorbell.cpp`).
 - **SC-002 (as written)**: The Vulkan application suite (feature 048) passes
   unchanged with doorbells on.
 - **SC-003**: A suspend-resume and a forced TDR during the benchmark lose and
