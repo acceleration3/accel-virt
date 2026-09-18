@@ -125,6 +125,10 @@ public:
     void          lose_the_swapchain_images();
     void          hand_out_one_image();
     std::uint32_t presents() const;
+    /* Whether the last instance or device was made with `name` enabled: what a
+     * real loader needs before the extension's entry points dispatch. */
+    bool          instance_enabled(const char *name) const;
+    bool          device_enabled(const char *name) const;
 
     /* After the fault every LUID is xored with `luid_xor` and every family has
      * `flags`: what a host that changed under the probe looks like. */
@@ -307,6 +311,11 @@ private:
     Kmt          *pacing_kmt_;
     std::uint32_t pacing_adapter_;
     std::uint32_t pacing_device_;
+    static constexpr std::uint32_t max_enabled = 8u;
+    const char   *instance_names_[max_enabled];
+    std::uint32_t instance_name_count_;
+    const char   *device_names_[max_enabled];
+    std::uint32_t device_name_count_;
     bool          held_extent_;
     bool          nothing_presentable_;
     bool          lost_surface_;

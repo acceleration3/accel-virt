@@ -25,7 +25,14 @@ public:
     ProbeDevice(const ProbeDevice &) = delete;
     ProbeDevice &operator=(const ProbeDevice &) = delete;
 
-    /* At API version 1.3. */
+    /* The window-system extensions an instance and a device are made with:
+     * what the present steps call is reachable only when they are enabled. */
+    static const char *const  instance_extensions[];
+    static const char *const  device_extensions[];
+    static constexpr uint32_t instance_extension_count = 2u;
+    static constexpr uint32_t device_extension_count = 1u;
+
+    /* At API version 1.3, with the window-system extensions enabled. */
     VkResult make_instance();
     /* The physical devices listed, as far as there is room: VK_INCOMPLETE is
      * a list, not a failure. */

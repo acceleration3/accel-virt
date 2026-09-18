@@ -36,7 +36,8 @@ ScriptedVulkan::ScriptedVulkan()
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
-      pacing_adapter_(0u), pacing_device_(0u), held_extent_(false), nothing_presentable_(false), lost_surface_(false),
+      pacing_adapter_(0u), pacing_device_(0u), instance_names_{}, instance_name_count_(0u), device_names_{},
+      device_name_count_(0u), held_extent_(false), nothing_presentable_(false), lost_surface_(false),
       lost_present_modes_(false), one_mode_(false), only_mode_(VK_PRESENT_MODE_FIFO_KHR),
       least_images_(images_per_swapchain), lost_swapchain_images_(false), one_image_(false),
       held_width_(0u), held_height_(0u), swapchain_(0u),
@@ -173,6 +174,9 @@ VkResult ScriptedVulkan::create_instance(const VkInstanceCreateInfo *info, VkIns
     const VkResult result = use(Call::create_instance);
     if (result != VK_SUCCESS) return result;
     api_version_ = info->pApplicationInfo != nullptr ? info->pApplicationInfo->apiVersion : 0u;
+    instance_name_count_ = 0u;
+    for (std::uint32_t index = 0u; index < info->enabledExtensionCount && index < max_enabled; index++)
+        instance_names_[instance_name_count_++] = info->ppEnabledExtensionNames[index];
     lost_ = false;
     *instance = as_handle<VkInstance>(make(Kind::instance, 0u));
     return VK_SUCCESS;
@@ -235,7 +239,10 @@ VkResult ScriptedVulkan::create_device(VkPhysicalDevice physical_device, const V
 {
     const VkResult result = use(Call::create_device);
     if (result != VK_SUCCESS) return result;
-    if (info->queueCreateInfoCount != 1u || info->enabledExtensionCount != 0u) misuses_++;
+    if (info->queueCreateInfoCount != 1u) misuses_++;
+    device_name_count_ = 0u;
+    for (std::uint32_t index = 0u; index < info->enabledExtensionCount && index < max_enabled; index++)
+        device_names_[device_name_count_++] = info->ppEnabledExtensionNames[index];
     device_parent_ = static_cast<std::uint32_t>(raw(physical_device) - physical_device_base);
     *device = as_handle<VkDevice>(make(Kind::device, 0u));
     return VK_SUCCESS;
@@ -630,6 +637,20 @@ void ScriptedVulkan::offer_only_the_mode(VkPresentModeKHR mode)
 {
     one_mode_ = true;
     only_mode_ = mode;
+}
+
+bool ScriptedVulkan::instance_enabled(const char *name) const
+{
+    for (std::uint32_t index = 0u; index < instance_name_count_; index++)
+        if (std::strcmp(instance_names_[index], name) == 0) return true;
+    return false;
+}
+
+bool ScriptedVulkan::device_enabled(const char *name) const
+{
+    for (std::uint32_t index = 0u; index < device_name_count_; index++)
+        if (std::strcmp(device_names_[index], name) == 0) return true;
+    return false;
 }
 
 std::uint32_t ScriptedVulkan::presents() const { return presents_; }

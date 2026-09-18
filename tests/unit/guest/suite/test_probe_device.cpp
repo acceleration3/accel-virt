@@ -197,3 +197,23 @@ TEST(probe_device, invariants_refuse_what_was_made_out_of_order)
   static_cast<void>(physical);
   vulkan.destroy_device(made);
   vulkan.destroy_instance(instance); }
+
+/* The present steps call vkCreateWin32SurfaceKHR and the swapchain entries.
+ * A loader fills a dispatch slot for those only when the extension was enabled,
+ * so an instance and a device made without them are a jump to address zero the
+ * first time one is called - which is how the live probe crashed (046). */
+TEST(probe_device, the_window_system_extensions_are_enabled_on_the_instance_and_the_device)
+{ ScriptedVulkan vulkan;
+  ProbeDevice    device(vulkan);
+  CHECK_EQ(device.make_instance(), VK_SUCCESS);
+  CHECK(vulkan.instance_enabled("VK_KHR_surface"));
+  CHECK(vulkan.instance_enabled("VK_KHR_win32_surface"));
+  CHECK(!vulkan.instance_enabled("VK_KHR_swapchain"));
+  CHECK_EQ(device.list_physical_devices(), VK_SUCCESS);
+  CHECK(device.choose(1u));
+  CHECK(device.choose_family());
+  CHECK_EQ(device.make_device(), VK_SUCCESS);
+  /* The swapchain is the device's, and the window's surface is not. */
+  CHECK(vulkan.device_enabled("VK_KHR_swapchain"));
+  CHECK(!vulkan.device_enabled("VK_KHR_win32_surface"));
+  CHECK_EQ(vulkan.misuses(), 0u); }

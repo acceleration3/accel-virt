@@ -28,6 +28,11 @@ ProbeDevice::~ProbeDevice()
     if (instance_ != VK_NULL_HANDLE) vulkan_.destroy_instance(instance_);
 }
 
+/* What a windowed application enables: a surface on a Win32 window, and the
+ * swapchain that presents on it. */
+const char *const ProbeDevice::instance_extensions[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
+const char *const ProbeDevice::device_extensions[] = {"VK_KHR_swapchain"};
+
 VkResult ProbeDevice::make_instance()
 {
     AV_SCOPE("ProbeDevice::make_instance");
@@ -38,6 +43,12 @@ VkResult ProbeDevice::make_instance()
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     info.pApplicationInfo = &application;
+    /* The window-system extensions the present steps use. An application that
+     * calls vkCreateWin32SurfaceKHR without enabling them reaches a dispatch
+     * slot the Khronos loader never filled, which is a jump to address zero -
+     * how the live probe of feature 046 first crashed. */
+    info.enabledExtensionCount = instance_extension_count;
+    info.ppEnabledExtensionNames = instance_extensions;
     return vulkan_.create_instance(&info, &instance_);
 }
 
@@ -97,6 +108,8 @@ VkResult ProbeDevice::make_device()
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = 1u;
     info.pQueueCreateInfos = &queue;
+    info.enabledExtensionCount = device_extension_count;
+    info.ppEnabledExtensionNames = device_extensions;
     const VkResult made = vulkan_.create_device(physical_device_, &info, &device_);
     if (made != VK_SUCCESS) return made;
     vulkan_.device_queue(device_, family_, 0u, &queue_);
