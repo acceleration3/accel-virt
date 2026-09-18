@@ -61,6 +61,8 @@ private:
     void                 version_step();
     /* The draw, reported under `name`: draw, or recreated. */
     void                 draw_step(const char *name);
+    /* The frame now on the window, judged and saved under `name`. */
+    void                 judge_frame(const char *name);
     void                 share_step(void *current);
     void                 busy_step(void *current);
     void                 attribs_step();

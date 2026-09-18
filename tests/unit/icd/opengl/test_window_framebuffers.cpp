@@ -291,6 +291,23 @@ TEST(window_framebuffers, a_read_of_the_windows_front_buffer_is_answered_without
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x1907u /* GL_RGB */, 0x1401u, pixels));
   rig.framebuffers.reading(0x0405u /* GL_BACK */);
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  /* A read the application moved off the window is the host's, whatever the
+   * read buffer is called. */
+  rig.framebuffers.reading(0x0400u /* GL_FRONT_LEFT */);
+  CHECK(rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  rig.framebuffers.bound(Windows::gl_read_framebuffer, 4u);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  CHECK(rig.framebuffers.invariants_hold()); }
+
+/* With no window current at all there is no frame to read - including for an
+ * application that bound framebuffer 0 before it had one. */
+TEST(window_framebuffers, a_front_read_with_no_window_current_is_the_hosts)
+{ Rig rig;
+  std::uint8_t pixels[16] = {};
+  rig.framebuffers.reading(0x0404u /* GL_FRONT */);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
+  rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   CHECK(rig.framebuffers.invariants_hold()); }
 
 TEST(window_framebuffers, gone_windows_are_given_up_and_release_gives_up_all)

@@ -34,7 +34,7 @@ std::uint8_t unorm(float value)
 ScriptedGl::ScriptedGl(std::uint32_t width, std::uint32_t height)
     : width_(width), height_(height), fail_at_{}, calls_{}, version_("4.6.0 scripted"), renderer_("scripted gpu"),
       error_(0u), shift_(0), accept_versions_(false), accept_profiles_(false), isolate_(false), shared_threads_(false),
-      hidden_hook_(false), survives_(false), forgets_resets_(false), unreported_(false), reported_forever_(false), format_(0), profile_mask_(2), hidden_swap_control_(false), refuses_resizes_(false), interval_(1),
+      hidden_hook_(false), survives_(false), forgets_resets_(false), unreported_(false), reported_forever_(false), format_(0), profile_mask_(2), hidden_swap_control_(false), refuses_resizes_(false), keeps_its_size_(false), refuses_lists_(false), forgets_intervals_(false), interval_(1),
       paced_blanks_(0u), pacing_kmt_(nullptr), pacing_adapter_(0u), pacing_device_(0u), lists_(0u), contexts_{}, current_(none),
       last_error_(0u), textures_{}, bound_texture_(0u), objects_(0u), next_name_(10u), program_(0u), linked_(0u), uncompiled_(0u),
       array_(0u), back_{}, clear_{}, misuses_(0u)
@@ -448,6 +448,10 @@ void ScriptedGl::pace_with(Kmt &kmt, std::uint32_t adapter, std::uint32_t device
 void ScriptedGl::hide_swap_control() { hidden_swap_control_ = true; }
 std::uint32_t ScriptedGl::paced_blanks() const { return paced_blanks_; }
 void ScriptedGl::refuse_resizes() { refuses_resizes_ = true; }
+void ScriptedGl::keep_its_size() { keeps_its_size_ = true; }
+void ScriptedGl::refuse_lists() { refuses_lists_ = true; }
+void ScriptedGl::forget_intervals() { forgets_intervals_ = true; }
+void ScriptedGl::stop_pacing() { pacing_kmt_ = nullptr; }
 
 std::int32_t ScriptedGl::integer(std::uint32_t pname)
 {
@@ -467,12 +471,14 @@ bool ScriptedGl::set_swap_interval(std::int32_t interval)
 std::int32_t ScriptedGl::swap_interval()
 {
     if (hidden_swap_control_) return -1;
+    if (forgets_intervals_) return 0;
     return current_or_misuse() ? interval_ : 0;
 }
 
 bool ScriptedGl::resize(std::uint32_t width, std::uint32_t height)
 {
     if (refuses_resizes_ || width == 0u || height == 0u || width > max_extent || height > max_extent) return false;
+    if (keeps_its_size_) return true;
     width_ = width;
     height_ = height;
     return true;
@@ -483,7 +489,7 @@ bool ScriptedGl::legacy_triangle()
     if (!current_or_misuse()) return false;
     /* A core context has no display lists: the ICD refuses them and glGenLists
      * answers nothing (feature 051). */
-    if (profile_mask_ != 2) {
+    if (profile_mask_ != 2 || refuses_lists_) {
         error_ = 0x0502u;   /* GL_INVALID_OPERATION */
         return false;
     }

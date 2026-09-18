@@ -88,14 +88,14 @@ Status GuestGlContext::make_once()
     return Status::ok;
 }
 
-/* Whether the application said what it wanted: a context from
- * wglCreateContextAttribsARB asks for what its attribute list named, and a
- * share target's version is asked for by `share`. */
+/* Whether the application said what it wanted. A version is the thing that
+ * says so: wglCreateContextAttribsARB names one, and a context that shares is
+ * given 1.0 by `share` before it is made - only a plain wglCreateContext
+ * arrives here with none, which is the context the ladder is for. */
 bool GuestGlContext::asked_for_itself() const
 {
     AV_SCOPE("GuestGlContext::asked_for_itself");
-    return options_.major() == 0u && options_.profile() == GlContextOptions::Profile::none &&
-           options_.share_context() == 0u;
+    return options_.major() == 0u;
 }
 
 GuestGlContext::State GuestGlContext::state() const

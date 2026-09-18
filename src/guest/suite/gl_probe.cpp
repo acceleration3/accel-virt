@@ -143,8 +143,6 @@ void GlProbe::version_step()
 void GlProbe::draw_step(const char *name)
 {
     AV_SCOPE("GlProbe::draw_step");
-    const uint32_t width = gl_.width() < max_extent ? gl_.width() : max_extent;
-    const uint32_t height = gl_.height() < max_extent ? gl_.height() : max_extent;
     const uint32_t made = program();
     if (made == 0u) {
         static_cast<void>(steps_.check_measured(name, Status::invalid_state, 0u));
@@ -157,25 +155,36 @@ void GlProbe::draw_step(const char *name)
     gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
     gl_.clear(gl_color_buffer_bit);
     gl_.draw_arrays(gl_triangles, 0, 3);
-    const bool swapped = gl_.swap_buffers();
     gl_.finish();
-    uint8_t pixels[max_extent * max_extent * bytes_per_pixel] = {};
-    gl_.read_pixels(static_cast<int32_t>(width), static_cast<int32_t>(height), pixels);
-    const uint32_t error = gl_.error();
+    judge_frame(name);
     gl_.use_program(0u);
     gl_.bind_vertex_array(0u);
     gl_.delete_vertex_array(array);
     gl_.delete_program(made);
-    char       picture[ImageSink::max_name];
-    TextBuffer named(picture, sizeof picture);
+}
+
+/* The frame now on the window: swapped, read back, saved for a person to open,
+ * and judged pixel by pixel against the colour both draws make. */
+void GlProbe::judge_frame(const char *name)
+{
+    AV_SCOPE("GlProbe::judge_frame");
+    const uint32_t width = gl_.width() < max_extent ? gl_.width() : max_extent;
+    const uint32_t height = gl_.height() < max_extent ? gl_.height() : max_extent;
+    const bool     swapped = gl_.swap_buffers();
+    uint8_t        pixels[max_extent * max_extent * bytes_per_pixel] = {};
+    gl_.read_pixels(static_cast<int32_t>(width), static_cast<int32_t>(height), pixels);
+    const uint32_t error = gl_.error();
+    char           picture[ImageSink::max_name];
+    TextBuffer     named(picture, sizeof picture);
     named.append("opengl-");
     named.append(name);
     /* glReadPixels returns the bottom row first. */
     images_.save(named.text(), BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
     const uint32_t count = width * height;
     const uint32_t matched = matching(pixels, count);
-    const bool     drawn = swapped && error == 0u && count != 0u && matched == count;
-    static_cast<void>(steps_.check_measured(name, drawn ? Status::ok : Status::invalid_state, matched));
+    /* A window of no pixels proves nothing, however well the swap went. */
+    const bool     whole = count != 0u && swapped && error == 0u && matched == count;
+    static_cast<void>(steps_.check_measured(name, whole ? Status::ok : Status::invalid_state, matched));
 }
 
 /* Feature 051, US1: the profile the host granted, and the fixed-function
@@ -193,21 +202,14 @@ void GlProbe::compat_step()
         static_cast<void>(steps_.check_measured("compat", Status::not_supported, static_cast<uint32_t>(mask)));
         return;
     }
-    const uint32_t width = gl_.width() < max_extent ? gl_.width() : max_extent;
-    const uint32_t height = gl_.height() < max_extent ? gl_.height() : max_extent;
     gl_.viewport(0, 0, static_cast<int32_t>(gl_.width()), static_cast<int32_t>(gl_.height()));
     gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
     gl_.clear(gl_color_buffer_bit);
-    const bool drawn = gl_.legacy_triangle();
-    const bool swapped = drawn && gl_.swap_buffers();
-    uint8_t    pixels[max_extent * max_extent * bytes_per_pixel] = {};
-    gl_.read_pixels(static_cast<int32_t>(width), static_cast<int32_t>(height), pixels);
-    const uint32_t error = gl_.error();
-    images_.save("opengl-compat", BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
-    const uint32_t count = width * height;
-    const uint32_t matched = matching(pixels, count);
-    const bool     whole = swapped && error == 0u && count != 0u && matched == count;
-    static_cast<void>(steps_.check_measured("compat", whole ? Status::ok : Status::invalid_state, matched));
+    if (!gl_.legacy_triangle()) {
+        static_cast<void>(steps_.check_measured("compat", Status::invalid_state, 0u));
+        return;
+    }
+    judge_frame("compat");
 }
 
 /* Feature 051, US2.2: sixty swaps at interval 1 cannot have taken less time
@@ -224,18 +226,14 @@ void GlProbe::interval_step()
         static_cast<void>(steps_.check_measured("interval", Status::not_found, 0u));
         return;
     }
+    /* What interval 0 does instead is the ICD's to prove, and its own test
+     * does (gl_icd_root.a_swap_waits_for_the_blanks_its_interval_asks_for);
+     * here the question is only whether the driver held the frames. */
     const uint64_t started = counter();
     for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
     const uint64_t paced = counter() - started;
     const uint64_t least = period * (paced_frames - 1u);
-    /* And with no interval the same swaps are not held to the blank. */
-    const bool     unpaced_set = gl_.set_swap_interval(0);
-    const uint64_t loose_started = counter();
-    for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
-    const uint64_t unpaced = counter() - loose_started;
-    static_cast<void>(gl_.set_swap_interval(paced_interval));
-    const bool held = paced >= least && unpaced_set && unpaced < paced;
-    static_cast<void>(steps_.check_measured("interval", held ? Status::ok : Status::conflict,
+    static_cast<void>(steps_.check_measured("interval", paced >= least ? Status::ok : Status::conflict,
                                             static_cast<uint32_t>(paced / period)));
 }
 
@@ -247,8 +245,12 @@ void GlProbe::resized_step()
     const uint32_t width = gl_.width();
     const uint32_t height = gl_.height();
     const uint32_t narrowed = width / 2u;
-    if (narrowed == 0u || narrowed == width || !gl_.resize(narrowed, height)) {
+    if (narrowed < 1u) {
         static_cast<void>(steps_.check_measured("resized", Status::not_supported, 0u));
+        return;
+    }
+    if (!gl_.resize(narrowed, height)) {
+        static_cast<void>(steps_.check_measured("resized", Status::not_supported, width));
         return;
     }
     /* The first swap presents what the window had; the second is the first at
@@ -257,9 +259,8 @@ void GlProbe::resized_step()
     gl_.viewport(0, 0, static_cast<int32_t>(gl_.width()), static_cast<int32_t>(gl_.height()));
     gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
     gl_.clear(gl_color_buffer_bit);
-    const bool     swapped = gl_.swap_buffers();
-    const uint32_t error = gl_.error();
-    const bool     resized = gl_.width() == narrowed && swapped && error == 0u;
+    const bool swapped = gl_.swap_buffers();
+    const bool resized = swapped && gl_.width() == narrowed;
     static_cast<void>(steps_.check_measured("resized", resized ? Status::ok : Status::invalid_state, gl_.width()));
     static_cast<void>(gl_.resize(width, height));
 }

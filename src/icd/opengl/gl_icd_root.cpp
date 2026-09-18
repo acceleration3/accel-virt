@@ -530,9 +530,6 @@ void GlIcdRoot::note_profile(const GuestGlContext &context)
     text.append_decimal(profile.major());
     text.append(".");
     text.append_decimal(profile.minor());
-    text.append(", ");
-    const char *const version = context.string(GuestGlContext::gl_version);
-    text.append(version != nullptr ? version : "(no version string)");
     log_.write(text.text());
 }
 

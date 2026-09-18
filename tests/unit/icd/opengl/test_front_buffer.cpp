@@ -20,6 +20,21 @@ constexpr std::uint8_t frame[] = {
 
 }  // namespace
 
+namespace av::glicd {
+
+struct FrontBufferProbe {
+    static void widen(FrontBuffer &front, std::uint32_t width) { front.width_ = width; }
+};
+
+}  // namespace av::glicd
+
+/* An extent with no pixels behind it is a frame nobody could read. */
+TEST(front_buffer_invariants, an_extent_without_pixels_is_caught)
+{ FrontBuffer front;
+  CHECK(front.invariants_hold());
+  av::glicd::FrontBufferProbe::widen(front, 4u);
+  CHECK(!front.invariants_hold()); }
+
 TEST(front_buffer, nothing_presented_answers_nothing)
 { FrontBuffer front;
   CHECK(front.invariants_hold());

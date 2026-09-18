@@ -54,6 +54,9 @@ public:
     }
 
     ScriptedGl  &gl() { return gl_; }
+    MockKmt     &kmt() { return kmt_; }
+    /* The rvkgpu this run can find: without it nothing times a blank. */
+    void         forget_adapter() { kmt_.fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter); }
     GuestReport &report() { return report_; }
     const ScriptedImageSink &images() const { return images_; }
     void         run()
@@ -95,7 +98,7 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "rvkglprobe: 12 passed, 0 failed\n") == 0);
   /* The two draws, the compatibility frame, the interval step's two runs of
    * sixty, and the resize's two (feature 051). */
-  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u + 1u + 2u * GlProbe::paced_frames + 2u);
+  CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u + 1u + GlProbe::paced_frames + 2u);
   /* Every swap at the default interval of one blank, and the interval step's
    * sixty paced ones; its sixty unpaced ones waited for nothing. */
   CHECK_EQ(rig.gl().paced_blanks(), GlProbe::paced_frames + 5u);
@@ -300,6 +303,115 @@ TEST(gl_probe, a_loss_that_is_not_reported_as_the_arb_says_fails_the_lost_step)
 
 /* recreated (T041): a context made after the loss draws again; one that
  * cannot be made or made current, or does not draw, fails. */
+/* Feature 051: a host with no compatibility profile is not this driver's
+ * failure - the step says which profile it got and stops. */
+TEST(gl_probe, a_core_only_host_fails_the_compat_step_with_its_mask)
+{ ProbeRig core;
+  core.gl().set_profile_mask(1);
+  core.run();
+  CHECK(core.holds("note opengl.compat the host granted no compatibility profile\n"));
+  CHECK(core.holds("FAIL opengl.compat status=6 1\n"));
+  /* And what it could not draw is not saved as a frame anybody judged. */
+  CHECK_EQ(core.images().saved(), 3u); }
+
+/* A compatibility context whose display list will not compile, and one whose
+ * swap fails, are failures of the step with what they drew. */
+TEST(gl_probe, a_legacy_draw_that_went_wrong_fails_the_compat_step)
+{ ProbeRig unlisted;
+  /* The draw's swap is the first; the compatibility frame's is the second. */
+  unlisted.gl().fail_at(Call::swap_buffers, 2u);
+  unlisted.run();
+  CHECK(unlisted.holds("ok opengl.draw 32\n"));
+  CHECK(unlisted.holds("FAIL opengl.compat status=7 32\n")); }
+
+/* An ICD with no WGL_EXT_swap_control has no interval to honour, and an
+ * adapter that answers no vertical blank cannot be timed against one. */
+TEST(gl_probe, an_icd_without_swap_control_or_an_adapter_without_blanks_ends_the_interval_step)
+{ ProbeRig unpaced;
+  unpaced.gl().hide_swap_control();
+  unpaced.run();
+  CHECK(unpaced.holds("FAIL opengl.interval status=6 0\n"));
+
+  ProbeRig blind;
+  /* The draw's swap and the compatibility frame's each waited for a blank at
+   * the default interval, so the step's own timing wait is the third. */
+  blind.kmt().fail_at(av::MockKmt::Call::wait_for_vertical_blank, 3u, av::MockKmt::invalid_parameter);
+  blind.run();
+  CHECK(blind.holds("FAIL opengl.interval status=3 0\n")); }
+
+/* A window that cannot be resized leaves the step unproven rather than
+ * failing what the driver did. */
+/* A compatibility context whose display list will not compile draws nothing,
+ * and a GL that takes an interval and then reports another is not one the step
+ * can time. */
+TEST(gl_probe, a_list_that_will_not_compile_or_an_interval_that_does_not_stick_ends_its_step)
+{ ProbeRig listless;
+  listless.gl().refuse_lists();
+  listless.run();
+  CHECK(listless.holds("FAIL opengl.compat status=7 0\n"));
+
+  ProbeRig forgetful;
+  forgetful.gl().forget_intervals();
+  forgetful.run();
+  CHECK(forgetful.holds("FAIL opengl.interval status=6 0\n")); }
+
+/* A driver that did not hold the frames: sixty swaps took no blanks at all. */
+TEST(gl_probe, frames_the_driver_did_not_pace_fail_the_interval_step)
+{ ProbeRig loose;
+  loose.gl().stop_pacing();
+  loose.run();
+  CHECK(loose.holds("FAIL opengl.interval status=4 0\n")); }
+
+/* An adapter this cannot open a device on, and one whose second blank never
+ * arrives, are both a step with nothing to time against. */
+TEST(gl_probe, an_adapter_that_cannot_be_timed_ends_the_interval_step)
+{ ProbeRig undeviced;
+  /* The probe's own device for the timing is the second this run makes. */
+  undeviced.kmt().fail_at(av::MockKmt::Call::create_device, 1u, av::MockKmt::invalid_parameter);
+  undeviced.run();
+  CHECK(undeviced.holds("FAIL opengl.interval status=3 0\n"));
+
+  ProbeRig once;
+  /* The draw's and the compatibility frame's blanks, the step's first, then
+   * the one it times against. */
+  once.kmt().fail_at(av::MockKmt::Call::wait_for_vertical_blank, 4u, av::MockKmt::invalid_parameter);
+  once.run();
+  CHECK(once.holds("FAIL opengl.interval status=3 0\n")); }
+
+/* A swap the driver refused after the window changed size, and a run with no
+ * rvkgpu to time a blank against. */
+TEST(gl_probe, a_swap_after_the_resize_that_fails_fails_the_step)
+{ ProbeRig unswapped;
+  /* The draw's, the compatibility frame's, the interval step's sixty, then the
+   * resize's first: the second is what this refuses. */
+  unswapped.gl().fail_at(Call::swap_buffers, 2u + 1u + GlProbe::paced_frames + 1u);
+  unswapped.run();
+  CHECK(unswapped.holds("FAIL opengl.resized status=7 4\n")); }
+
+TEST(gl_probe, a_run_with_no_rvkgpu_cannot_time_the_interval)
+{ ProbeRig lonely;
+  lonely.forget_adapter();
+  lonely.run();
+  CHECK(lonely.holds("FAIL opengl.interval status=3 0\n")); }
+
+/* A window that says it is the size it was, however the resize went. */
+TEST(gl_probe, a_window_that_keeps_its_size_fails_the_resized_step)
+{ ProbeRig stubborn;
+  stubborn.gl().keep_its_size();
+  stubborn.run();
+  CHECK(stubborn.holds("FAIL opengl.resized status=7 8\n")); }
+
+TEST(gl_probe, a_window_that_cannot_be_resized_ends_the_resized_step)
+{ ProbeRig fixed;
+  fixed.gl().refuse_resizes();
+  fixed.run();
+  CHECK(fixed.holds("FAIL opengl.resized status=6 8\n"));
+
+  /* A window one pixel wide cannot be narrowed at all. */
+  ProbeRig narrow(1u, 1u);
+  narrow.run();
+  CHECK(narrow.holds("FAIL opengl.resized status=6 0\n")); }
+
 TEST(gl_probe, a_context_that_cannot_be_made_again_fails_the_recreated_step)
 { ProbeRig uncreated;
   uncreated.gl().fail_at(Call::create_context, 5u);
@@ -311,9 +423,9 @@ TEST(gl_probe, a_context_that_cannot_be_made_again_fails_the_recreated_step)
   uncurrent.run();
   CHECK(uncurrent.holds("FAIL opengl.recreated status=7 123\n"));
   ProbeRig undrawn;
-  /* The draw's swap, the compatibility frame's, the interval step's hundred
-   * and twenty and the resize's two, then the recreated draw's. */
-  undrawn.gl().fail_at(Call::swap_buffers, 2u + 1u + 2u * GlProbe::paced_frames + 2u);
+  /* The draw's swap, the compatibility frame's, the interval step's sixty and
+   * the resize's two, then the recreated draw's. */
+  undrawn.gl().fail_at(Call::swap_buffers, 2u + 1u + GlProbe::paced_frames + 2u);
   undrawn.run();
   CHECK(undrawn.holds("ok opengl.draw 32\n"));
   CHECK(undrawn.holds("FAIL opengl.recreated status=7 32\n")); }

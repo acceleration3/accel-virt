@@ -14,6 +14,8 @@
 
 namespace av::glicd {
 
+struct FrontBufferProbe;
+
 class FrontBuffer {
 public:
     /* What a present leaves behind, and what a read may ask for. */
@@ -45,6 +47,8 @@ private:
     const uint8_t *pixels_;
     uint32_t       width_;
     uint32_t       height_;
+
+    friend struct FrontBufferProbe;
 };
 
 }  // namespace av::glicd

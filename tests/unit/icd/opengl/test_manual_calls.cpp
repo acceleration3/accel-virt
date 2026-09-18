@@ -96,6 +96,49 @@ std::uint64_t storage_flags(Current &current, std::uint32_t index)
  * the make, so a query for them is answered from what the host already said -
  * one fewer round trip, and one answer whatever a driver does with a repeated
  * query. */
+/* Feature 051: a read of the window's front buffer is answered from the frame
+ * the swap put there; every other read goes to the host, and one with nothing
+ * current goes nowhere. */
+TEST(manual_calls, a_front_buffer_read_is_answered_and_every_other_is_sent)
+{ Current      current;
+  ManualCalls &calls = current.rig().root().manual();
+  std::uint8_t pixels[64] = {};
+  const std::uint32_t before = current.sent();
+  /* Nothing presented and the read buffer is the back one: the host's. */
+  current.rig().host().gl_bytes(nullptr, 0u);
+  calls.read_pixels(0, 0, 1, 1, 0x80E1u /* GL_BGRA */, 0x1401u, pixels);
+  CHECK_EQ(current.sent(), before + 1u);
+
+  /* A frame on the window, and the front buffer named. */
+  current.rig().host().gl_bytes(nullptr, 0u);
+  CHECK(current.rig().opengl32().swap_buffers(current.rig().dc()));
+  calls.read_buffer(0x0404u /* GL_FRONT */);
+  const std::uint32_t asked = current.sent();
+  calls.read_pixels(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels);
+  CHECK_EQ(current.sent(), asked);
+  /* A format no present produced is still the host's. */
+  current.rig().host().gl_bytes(nullptr, 0u);
+  calls.read_pixels(0, 0, 1, 1, 0x1907u /* GL_RGB */, 0x1401u, pixels);
+  CHECK(current.sent() > asked); }
+
+/* With a pixel-pack buffer bound the read is an offset into it, and the room
+ * it carries is the buffer's, not a count of bytes. */
+TEST(manual_calls, a_read_into_a_pack_buffer_is_sent_as_an_offset)
+{ Current      current;
+  ManualCalls &calls = current.rig().root().manual();
+  calls.bind_buffer(pixel_pack_buffer, 3u);
+  const std::uint32_t before = current.sent();
+  calls.read_pixels(0, 0, 1, 1, 0x80E1u, 0x1401u, nullptr);
+  CHECK_EQ(current.sent(), before + 1u); }
+
+TEST(manual_calls, a_read_with_nothing_current_is_not_sent)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  std::uint8_t pixels[16] = {};
+  const std::uint32_t before = rig.kmt().commands();
+  rig.root().manual().read_pixels(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels);
+  CHECK_EQ(rig.kmt().commands(), before); }
+
 TEST(manual_calls, the_granted_profile_is_answered_without_the_host)
 { Current      current;
   ManualCalls &calls = current.rig().root().manual();

@@ -68,6 +68,9 @@ TEST(gl_hooks, answer_nothing_with_nothing_current)
   /* A dropped payload is logged by a bound root, current context or not. */
   CHECK_EQ(rig.log().lines(), lines + 1u);
   CHECK(glproto::mint_sync_token() != 0u);
+  /* Feature 051: a compatibility command with no context to judge is refused,
+   * as a core context's is. */
+  CHECK(!glicd::legacy_calls_live());
   CHECK(rig.opengl32().delete_context(context)); }
 
 TEST(gl_hooks, answer_from_the_current_context)

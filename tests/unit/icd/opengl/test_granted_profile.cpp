@@ -14,6 +14,23 @@
 using av::glicd::GrantedProfile;
 using Rung = GrantedProfile::Rung;
 
+namespace av::glicd {
+
+struct GrantedProfileProbe {
+    static void set_mask(GrantedProfile &profile, std::uint32_t mask) { profile.mask_ = mask; }
+};
+
+}  // namespace av::glicd
+
+/* A mask that is neither bit is one learn() never keeps, and the invariant is
+ * what says so. */
+TEST(granted_profile_invariants, a_mask_no_profile_defines_is_caught)
+{ GrantedProfile profile;
+  av::glicd::GrantedProfileProbe::set_mask(profile, 0x3u);
+  CHECK(!profile.invariants_hold());
+  av::glicd::GrantedProfileProbe::set_mask(profile, GrantedProfile::core_bit);
+  CHECK(profile.invariants_hold()); }
+
 TEST(granted_profile, a_context_nobody_asked_about_grants_nothing)
 { GrantedProfile profile;
   CHECK(profile.invariants_hold());
@@ -40,7 +57,7 @@ TEST(granted_profile, a_core_context_refuses_them)
 { GrantedProfile profile;
   profile.granted(Rung::core_46);
   profile.learn(4u, 6u, GrantedProfile::core_bit);
-  CHECK(profile.invariants_hold());
+  CHECK(profile.invariants_hold());   /* the core bit is a mask this holds */
   CHECK_EQ(profile.mask(), 1u);
   CHECK(profile.known());
   CHECK(!profile.legacy_calls_live()); }

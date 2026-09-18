@@ -377,6 +377,35 @@ TEST(gl_icd_root, gl_calls_go_through_the_threads_table_to_its_context)
    * test's own one. */
   CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 8u); }
 
+/* Every answer a host can give about profiles, each named once (feature 051,
+ * US1.4): core, a context from before profiles existed, and a host that said
+ * nothing at all. */
+TEST(gl_icd_root, the_line_names_whichever_profile_the_host_gave)
+{ GlIcdRig core;
+  core.load_with_format();
+  CHECK(core.current_core_context() != nullptr);
+  CHECK_EQ(core.log().holding("granted a core context, version 4.6"), 1u);
+
+  GlIcdRig profileless;
+  profileless.load_with_format();
+  void *const old_context = profileless.opengl32().create_context(profileless.dc());
+  CHECK(old_context != nullptr);
+  profileless.host().gl_make_profile("host gpu", "1.4 Mesa", 1, 4, 0);
+  profileless.host().gl_policy(0);
+  profileless.host().gl_window(1u, 1u);
+  CHECK(profileless.opengl32().make_current(profileless.dc(), old_context));
+  CHECK_EQ(profileless.log().holding("granted a profileless context, version 1.4"), 1u);
+
+  GlIcdRig silent;
+  silent.load_with_format();
+  void *const quiet = silent.opengl32().create_context(silent.dc());
+  CHECK(quiet != nullptr);
+  silent.host().gl_make_profile("host gpu", "", 0, 0, 0);
+  silent.host().gl_policy(0);
+  silent.host().gl_window(1u, 1u);
+  CHECK(silent.opengl32().make_current(silent.dc(), quiet));
+  CHECK_EQ(silent.log().holding("granted a silent context"), 1u); }
+
 /* Feature 051, US1.4: what profile the host granted is worth exactly one line,
  * whatever a process makes afterwards, and the line names the host's own
  * version string so a bug report says which driver answered. */
@@ -385,7 +414,7 @@ TEST(gl_icd_root, the_profile_the_host_granted_is_logged_once)
   rig.load_with_format();
   CHECK(rig.current_context("host gpu", "4.6 (Compatibility Profile) Mesa") != nullptr);
   CHECK_EQ(rig.log().holding("compatibility"), 1u);
-  CHECK_EQ(rig.log().holding("4.6 (Compatibility Profile) Mesa"), 1u);
+  CHECK_EQ(rig.log().holding("granted a compatibility context, version 4.6"), 1u);
   CHECK(rig.current_context("host gpu", "4.6 (Compatibility Profile) Mesa") != nullptr);
   CHECK_EQ(rig.log().holding("compatibility"), 1u); }
 
@@ -563,6 +592,27 @@ TEST(gl_icd_root, a_single_buffered_format_presents_on_flush)
   const std::uint32_t untouched = doubled.surface().blits();
   doubled.root().flush_current();
   CHECK_EQ(doubled.surface().blits(), untouched); }
+
+/* Feature 051: a flush with nothing current flushes nothing, and a present
+ * that the window refuses fails the swap that paced nothing. */
+TEST(gl_icd_root, a_flush_with_nothing_current_presents_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  const std::uint32_t blits = rig.surface().blits();
+  rig.root().flush_current();
+  CHECK_EQ(rig.surface().blits(), blits);
+
+  /* A window that refuses the frame is logged once and the swap still
+   * happened, as 050 defined it; what fails is a swap on a window this context
+   * never drew on. */
+  CHECK(rig.current_context() != nullptr);
+  rig.surface().refuse_next_blit();
+  rig.host().gl_bytes(nullptr, 0u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.log().holding("refused a frame"), 1u);
+  CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 1));
+  CHECK(!rig.opengl32().swap_buffers(rig.other_dc()));
+  CHECK(rig.root().invariants_hold()); }
 
 /* Feature 051, T020: what an application can hand the swap path. None of it is
  * this driver's to trust - a window can go between one call and the next, a DC

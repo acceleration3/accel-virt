@@ -14,6 +14,8 @@
 
 namespace av::glicd {
 
+struct GrantedProfileProbe;
+
 class GrantedProfile {
 public:
     /* Which ask the host answered (research.md §2). */
@@ -53,6 +55,8 @@ private:
     uint32_t minor_;
     uint32_t mask_;
     Rung     rung_;
+
+    friend struct GrantedProfileProbe;
 };
 
 }  // namespace av::glicd

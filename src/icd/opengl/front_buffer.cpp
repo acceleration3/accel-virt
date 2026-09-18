@@ -77,7 +77,8 @@ bool FrontBuffer::read(int32_t x, int32_t y, int32_t width, int32_t height, uint
 bool FrontBuffer::invariants_hold() const
 {
     AV_SCOPE("FrontBuffer::invariants_hold");
-    return pixels_ != nullptr || (width_ == 0u && height_ == 0u);
+    /* An extent without pixels is a frame nobody could read. */
+    return (pixels_ == nullptr) == (width_ == 0u);
 }
 
 }  // namespace av::glicd

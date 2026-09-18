@@ -244,6 +244,15 @@ TEST(guest_gl_context, it_remembers_the_dc_it_was_made_current_on)
   CHECK(context->current_dc() == nullptr);
   CHECK(context->invariants_hold()); }
 
+/* Feature 051: a context nobody made waits for no blank. */
+TEST(guest_gl_context, an_unmade_context_paces_nothing)
+{ GlContextRig rig;
+  Context context(rig);
+  /* Pacing an unmade context waits for nothing at all. */
+  const std::uint32_t blanks = rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank);
+  context->pace();
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks); }
+
 TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
 { GlContextRig rig;
   {

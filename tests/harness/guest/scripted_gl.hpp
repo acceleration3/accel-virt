@@ -53,8 +53,16 @@ public:
     void          pace_with(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
     /* Blanks the swaps waited for, as the interval asked. */
     std::uint32_t paced_blanks() const;
-    /* Windows this cannot resize. */
+    /* Windows this cannot resize, and one whose size never changes however the
+     * resize went. */
     void refuse_resizes();
+    void keep_its_size();
+    /* No display lists: a compatibility context whose list will not compile. */
+    void refuse_lists();
+    /* An interval this takes and then does not report. */
+    void forget_intervals();
+    /* A swap that waits for no blank, whatever the interval says. */
+    void stop_pacing();
     void set_strings(const char *version, const char *renderer);
     /* What glGetError answers after the draw. */
     void set_error(std::uint32_t error);
@@ -177,6 +185,9 @@ private:
     std::int32_t  profile_mask_;
     bool          hidden_swap_control_;
     bool          refuses_resizes_;
+    bool          keeps_its_size_;
+    bool          refuses_lists_;
+    bool          forgets_intervals_;
     std::int32_t  interval_;
     std::uint32_t paced_blanks_;
     Kmt          *pacing_kmt_;
