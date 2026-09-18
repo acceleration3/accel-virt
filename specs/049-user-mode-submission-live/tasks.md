@@ -58,7 +58,7 @@ which is a feature's work beside the doorbell's. The wait stays
 ## Phase 5: Polish and merge
 
 - [X] T018 docs: `docs/testing.md` (what the doorbell path is and how the rig drives it), `docs/kb/05-scheduling.md` (what this driver answers for the doorbell DDIs, and that native fences are not here)
-- [ ] T019 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
+- [X] T019 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
 
 ## Phase 6: US1 and US3 live - the hardware-queue half (P1)
 
