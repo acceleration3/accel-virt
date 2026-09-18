@@ -167,3 +167,25 @@ class Provisioning(unittest.TestCase):
         collect = script[script.index("'collect' {"):]
         copied = collect.index("Copy-Item 'C:\\ProgramData\\rvk\\*.log' $Diagnostics")
         self.assertLess(copied, collect.index("Get-ChildItem $Diagnostics -File"))
+
+
+class FeatureStaging(unittest.TestCase):
+    """Feature 049, research.md §19: dxgkrnl leaves a staged feature off unless
+    something turns it on, and what it reads is Features\\<id>\\Enabled under the
+    adapter's own key. The driver implements user-mode submission (4) and native
+    fences (37), so its INF enables exactly those two and no others."""
+
+    def setUp(self):
+        self.text = INF.read_text(encoding="utf-8-sig")
+
+    def test_the_two_features_this_driver_implements_are_enabled(self):
+        for feature in (4, 37):
+            self.assertRegex(self.text, rf"HKR,\s*Features\\{feature},\s*Enabled,\s*0x00010001,\s*1",
+                             f"rvkgpu.inf must enable DXGK feature {feature}")
+            self.assertRegex(self.text, rf"HKR,\s*Features\\{feature},\s*AllowExperimental,\s*0x00010001,\s*1",
+                             f"rvkgpu.inf must allow feature {feature} while the OS stages it")
+
+    def test_no_other_feature_is_turned_on(self):
+        enabled = set(re.findall(r"HKR,\s*Features\\(\d+),\s*Enabled", self.text))
+        self.assertEqual(enabled, {"4", "37"},
+                         "only the features this driver implements may be enabled (constitution VI)")

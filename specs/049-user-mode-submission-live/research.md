@@ -353,3 +353,47 @@ one-line change away once the thing it asks for exists:
 
 - the node's flags, `hardware_scheduling_ && io_mmu_supported` (§16), and
 - user-mode submission, which needs native fences besides (§14).
+
+## 17-§19. What the OS actually requires, decompiled
+
+Three more runs, three more rules, each read out of `dxgkrnl.sys` rather than
+guessed:
+
+**§17 - a capability may not be reported before the OS enables the feature.**
+"Driver reports NativeGpuFence cap when NativeFence feature is disabled,
+returning failure": reporting `DXGK_VIDSCHCAPS.NativeGpuFence` while
+`DXGK_FEATURE_NATIVE_FENCE` is off fails the adapter start, exactly as the node
+flags do. So the driver asks for that feature too, and reports the capability -
+and answers `DXGKQAITYPE_NATIVE_FENCE_CAPS` at all - only where the answer was
+yes.
+
+**§18 - the OS asks the driver, through an interface the driver must answer.**
+`DpiIsFeatureEnabled` enables a staged feature only when, among other things,
+`QueryDriverFeatureSupport` says the driver supports it *and* the driver's
+version range overlaps the OS's. That query arrives through
+`DXGKDDI_FEATURE_INTERFACE`, asked for by GUID at `DxgkDdiQueryInterface` - a
+DDI this driver used to refuse outright. Two things it taught immediately:
+
+- A narrow version range disables the feature. The OS enables it at the highest
+  version in both ranges, so a driver that says "version 1" and an OS staging
+  version 2 agree on nothing. This driver implements each mechanism as the WDDM
+  3.2 headers define it and has no revisions, so it reports every version.
+- The query arrives *before* StartDevice. Answering
+  `SupportedOnCurrentConfig` from what the driver had mapped so far answered no
+  for everything - and turned off hardware scheduling, which the OS had been
+  enabling by default before the driver answered at all.
+
+**§19 - and then the feature has to be turned on.** With all of that right, the
+live run still said: hardware scheduling 1, native fences 0, user-mode
+submission 0. `IsFeatureEnabledUncached` needs one more thing - the feature's
+configured state - and `ConfigureFeature` reads it from the registry:
+
+```
+<adapter's key>\Features\<DXGK_FEATURE_ID in decimal>
+    Enabled, MinVersion, MaxVersion, AllowExperimental   (REG_DWORD)
+```
+
+So the INF turns on exactly the two this driver implements: 4
+(`DXGK_FEATURE_USER_MODE_SUBMISSION`) and 37 (`DXGK_FEATURE_NATIVE_FENCE`).
+That is the "one-line INF change with a measurement behind it" §11 guessed at,
+and it took the whole chain above to find out which line.

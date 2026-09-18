@@ -55,6 +55,17 @@ HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"
 HKR,, OpenGLDriverName, 0x00010000, "%13%\rvkgl.dll"
 HKR,, OpenGLVersion, 0x00010001, 2
 HKR,, OpenGLFlags, 0x00010001, 1
+; The WDDM features this driver implements and this adapter may use, turned on
+; where the OS stages them off (feature 049, research.md §19). dxgkrnl's
+; ConfigureFeature reads Features\<DXGK_FEATURE_ID in decimal>\Enabled from the
+; adapter's own key, and a feature nobody enabled stays off however the driver
+; answers for it - which is what kept this adapter's doorbells unreachable.
+; 4 is DXGK_FEATURE_USER_MODE_SUBMISSION and 37 is DXGK_FEATURE_NATIVE_FENCE
+; (d3dukmdt.h); both are implemented and tested here.
+HKR, Features\4, Enabled, 0x00010001, 1
+HKR, Features\4, AllowExperimental, 0x00010001, 1
+HKR, Features\37, Enabled, 0x00010001, 1
+HKR, Features\37, AllowExperimental, 0x00010001, 1
 
 [Rvkgpu_Files]
 rvkgpu.sys
