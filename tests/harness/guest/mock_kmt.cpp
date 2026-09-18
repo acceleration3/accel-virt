@@ -36,7 +36,7 @@ MockKmt::MockKmt()
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
-      queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbells_{},
+      queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
 
@@ -92,9 +92,9 @@ Status MockKmt::create_doorbell(std::uint32_t queue, std::uint32_t ring, std::ui
      * way until it connects. */
     made.status = static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry);
     doorbell = made.handle;
-    page = &made.page;
-    status = &made.status;
-    queued = &made.queued;
+    if (doorbell_page_missing_ != 1u) page = &made.page;
+    if (doorbell_page_missing_ != 2u) status = &made.status;
+    if (doorbell_page_missing_ != 3u) queued = &made.queued;
     return succeed();
 }
 
@@ -128,6 +128,11 @@ Status MockKmt::notify_work_submission(std::uint32_t doorbell)
 void MockKmt::allow_hardware_scheduling()
 {
     hardware_scheduling_ = true;
+}
+
+void MockKmt::answer_doorbell_without_pages(std::uint32_t which)
+{
+    doorbell_page_missing_ = which;
 }
 
 void MockKmt::refuse_hardware_scheduling()

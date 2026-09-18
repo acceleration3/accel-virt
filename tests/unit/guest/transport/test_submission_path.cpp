@@ -28,6 +28,16 @@ using av::Status;
 using av::SubmissionPath;
 using av::TransportRing;
 
+namespace av {
+
+/* A submission counted for a ring nothing was written into: nothing reachable
+ * does that, so the invariant is broken here to see it caught. */
+struct SubmissionPathProbe {
+    static void count_a_doorbell_submission(SubmissionPath &path) { path.doorbell_submissions_++; }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint8_t  order = 12u;
@@ -201,4 +211,31 @@ TEST(submission_path, a_refused_submission_is_counted_nowhere)
         Status::ok);
   CHECK_EQ(submitting.path().through_kernel(), 0u);
   CHECK_EQ(submitting.path().through_doorbell(), 0u);
+  CHECK(submitting.path().invariants_hold()); }
+
+/* A ring that was never bound cannot publish a tail, so the submission stops
+ * there: nothing is stored and nothing goes through the kernel either, because
+ * what the kernel would carry is a tail nobody wrote. */
+TEST(submission_path, a_tail_that_cannot_be_published_stops_the_submission)
+{ Submitting submitting;
+  CHECK_STATUS(submitting.open_doorbell(), Status::ok);
+  av::TransportRing  unbound;
+  SubmissionPath     path(submitting.kmt(), submitting.doorbell(), unbound);
+  const std::uint8_t descriptor[24] = {};
+  CHECK_STATUS(path.submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::invalid_state);
+  CHECK_EQ(path.through_doorbell(), 0u);
+  CHECK_EQ(path.through_kernel(), 0u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u);
+  CHECK(path.invariants_hold()); }
+
+/* The invariant itself: every submission counted is a batch this process wrote
+ * into its ring. */
+TEST(submission_path_invariants, a_submission_counted_for_an_empty_ring_is_detected)
+{ Submitting submitting;
+  CHECK(submitting.path().invariants_hold());
+  av::SubmissionPathProbe::count_a_doorbell_submission(submitting.path());
+  CHECK(!submitting.path().invariants_hold());
+  /* A batch written puts the ring where that count says it should be. */
+  CHECK_STATUS(submitting.write_batch(1u), Status::ok);
   CHECK(submitting.path().invariants_hold()); }

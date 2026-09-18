@@ -96,12 +96,12 @@ uint32_t SubmitBenchmark::kernel_ns() const
 uint32_t SubmitBenchmark::ratio() const
 {
     AV_SCOPE("SubmitBenchmark::ratio");
-    /* No doorbell is no comparison, and a doorbell submission too fast for the
-     * clock is charged one nanosecond - which makes the ratio a lower bound on
-     * the gain rather than a division by nothing. */
+    /* No doorbell is no comparison. Where there was one, the doorbell cost is
+     * charged a nanosecond more than it measured: one too fast for the clock
+     * would otherwise divide by nothing, and the ratio is a lower bound on the
+     * gain either way. */
     if (!measured_) return 0u;
-    if (doorbell_ns_ == 0u) return kernel_ns_ * hundredths;
-    return kernel_ns_ * hundredths / doorbell_ns_;
+    return kernel_ns_ * hundredths / (doorbell_ns_ + 1u);
 }
 
 }  // namespace av

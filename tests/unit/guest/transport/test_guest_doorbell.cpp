@@ -18,6 +18,35 @@
 
 #include <cstdint>
 
+namespace av {
+
+/* The mappings a doorbell holds, taken away one at a time: nothing reachable
+ * leaves it half-mapped or on no queue, so a test of those invariants has to
+ * do it itself. */
+struct GuestDoorbellProbe {
+    explicit GuestDoorbellProbe(GuestDoorbell &doorbell)
+        : doorbell_(doorbell), page_(doorbell.page_), status_(doorbell.status_), queued_(doorbell.queued_),
+          queue_(doorbell.queue_)
+    {
+    }
+    void forget_page() { doorbell_.page_ = nullptr; }
+    void restore_page() { doorbell_.page_ = page_; }
+    void forget_status() { doorbell_.status_ = nullptr; }
+    void restore_status() { doorbell_.status_ = status_; }
+    void forget_queued() { doorbell_.queued_ = nullptr; }
+    void restore_queued() { doorbell_.queued_ = queued_; }
+    void forget_queue() { doorbell_.queue_ = 0u; }
+    void restore_queue() { doorbell_.queue_ = queue_; }
+
+    GuestDoorbell           &doorbell_;
+    volatile uint32_t       *page_;
+    const volatile uint32_t *status_;
+    volatile uint64_t       *queued_;
+    uint32_t                 queue_;
+};
+
+}  // namespace av
+
 using av::DoorbellStatus;
 using av::GuestDoorbell;
 using av::MockKmt;
@@ -251,4 +280,45 @@ TEST(guest_doorbell, an_abort_that_cannot_be_answered_leaves_no_doorbell)
   CHECK(!doorbell.recover());
   CHECK(!doorbell.established());
   CHECK(!doorbell.ring(1u));
+  CHECK(doorbell.invariants_hold()); }
+
+/* A driver that answers a doorbell and maps none of the three pages it is
+ * supposed to has given the process nothing to store to: believing it would be
+ * a store into a null pointer on the submission path. */
+TEST(guest_doorbell, a_doorbell_with_no_pages_behind_it_is_not_one)
+{ const std::uint32_t missing[] = {1u, 2u, 3u};
+  for (const std::uint32_t which : missing) {
+      Made made;
+      made.kmt().answer_doorbell_without_pages(which);
+      GuestDoorbell doorbell(made.kmt());
+      CHECK_STATUS(doorbell.initialize(made.device(), made.context(), made.ring()), Status::invalid_state);
+      CHECK(!doorbell.established());
+      CHECK(doorbell.invariants_hold());
+      /* And the queue it was going to hang off is given back. */
+      CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u);
+  } }
+
+/* The invariants themselves: everything mapped or nothing, and a doorbell only
+ * on a queue. Nothing reachable breaks them, so they are broken here. */
+TEST(guest_doorbell_invariants, a_doorbell_half_mapped_or_on_no_queue_is_detected)
+{ Made          made;
+  GuestDoorbell doorbell(made.kmt());
+  CHECK(doorbell.invariants_hold());
+  CHECK_STATUS(doorbell.initialize(made.device(), made.context(), made.ring()), Status::ok);
+  CHECK(doorbell.invariants_hold());
+  av::GuestDoorbellProbe probe(doorbell);
+  probe.forget_page();
+  CHECK(!doorbell.invariants_hold());
+  probe.restore_page();
+  CHECK(doorbell.invariants_hold());
+  probe.forget_status();
+  CHECK(!doorbell.invariants_hold());
+  probe.restore_status();
+  probe.forget_queued();
+  CHECK(!doorbell.invariants_hold());
+  probe.restore_queued();
+  CHECK(doorbell.invariants_hold());
+  probe.forget_queue();
+  CHECK(!doorbell.invariants_hold());
+  probe.restore_queue();
   CHECK(doorbell.invariants_hold()); }

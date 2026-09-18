@@ -43,14 +43,14 @@ void RingSubmitter::detach()
     ring_ = nullptr;
 }
 
-/* The head is copied once and judged against the tail this driver published. */
-Status RingSubmitter::judge_head()
+/* The head is copied once and judged against the tail the ring holds. */
+Status RingSubmitter::judge_head(uint64_t tail)
 {
     AV_SCOPE("RingSubmitter::judge_head");
     uint8_t bytes[sizeof(uint64_t)] = {};
     platform_.copy(bytes, ring_ + head_offset, sizeof bytes);
     WireReader reader(bytes, sizeof bytes);
-    if (device_.observe(RingHeader(order_, tail_, reader.read_u64())) == Status::ok) return Status::ok;
+    if (device_.observe(RingHeader(order_, tail, reader.read_u64())) == Status::ok) return Status::ok;
     failed_ = true;
     platform_.log("rvk: the device's ring head is inconsistent with the tail published");
     return Status::invalid_state;
@@ -70,13 +70,13 @@ void RingSubmitter::user_mode_publishes()
  * one left where the submission begins, which is a process that has stopped
  * publishing for itself and a ring the driver is writing again. A submission
  * that begins behind what this ring already holds is no submission of it. */
-Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submission)
+Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submission, uint64_t &published)
 {
     AV_SCOPE("RingSubmitter::adopt_published_tail");
     uint8_t bytes[sizeof(uint64_t)] = {};
     platform_.copy(bytes, ring_ + tail_offset, sizeof bytes);
-    WireReader     reader(bytes, sizeof bytes);
-    const uint64_t published = reader.read_u64();
+    WireReader reader(bytes, sizeof bytes);
+    published = reader.read_u64();
     if (submission.begin() < tail_) return Status::invalid_parameter;
     if (published != submission.end() && published != submission.begin()) return Status::invalid_parameter;
     tail_ = submission.begin();
@@ -91,11 +91,22 @@ Status RingSubmitter::submit(const SubmissionDescriptor &submission)
     /* A submission that falls back from a doorbell carries the tail the
      * process already published, which is ahead of the last one this object
      * wrote (US2 scenario 2). */
-    if (shared_tail_ && adopt_published_tail(submission) != Status::ok) return Status::invalid_parameter;
+    uint64_t published = tail_;
+    if (shared_tail_ && adopt_published_tail(submission, published) != Status::ok)
+        return Status::invalid_parameter;
     if (submission.begin() != tail_ ||
         submission.validate_against(RingHeader(order_, tail_, tail_)) != Status::ok)
         return Status::invalid_parameter;
-    if (judge_head() != Status::ok) return Status::invalid_state;
+    if (judge_head(published) != Status::ok) return Status::invalid_state;
+    /* The process publishes its tail before it stores, so a batch it fell back
+     * to the driver with is one the device may already have taken - a worker
+     * that looked at the ring for any reason after that tail moved. It runs
+     * once either way, and this submission is the driver being told about work
+     * already done: nothing is published and nothing is rung. */
+    if (shared_tail_ && submission.end() <= device_.head()) {
+        tail_ = submission.end();
+        return Status::ok;
+    }
     if (submission.end() - device_.head() > RingHeader(order_, 0u, 0u).capacity()) return Status::no_space;
     if (fences_.record_submission(submission.fence_id()) != Status::ok) return Status::invalid_parameter;
     uint8_t    bytes[sizeof(uint64_t)] = {};

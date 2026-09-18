@@ -39,9 +39,11 @@ public:
      * for no queue or a page past the BAR - a page no store could reach -
      * and no_space when the table is full. */
     [[nodiscard]] Status create(HwQueue &queue, uint32_t page, void *&handle);
-    /* The kernel address of the doorbell's page and the status a process is to
-     * read; invalid_parameter for a handle this table did not make. */
-    [[nodiscard]] Status connect(void *handle, void *&address, DoorbellStatus &status);
+    /* The kernel address of the doorbell's page, the status a process is to
+     * read and the queue it hangs off - which is what tells the caller whose
+     * context has moved its submissions into user mode; invalid_parameter for
+     * a handle this table did not make. */
+    [[nodiscard]] Status connect(void *handle, void *&address, DoorbellStatus &status, HwQueue *&queue);
     [[nodiscard]] Status disconnect(void *handle);
     [[nodiscard]] Status destroy(void *handle);
     /* DestroyHwQueue: a doorbell that outlived its queue would name the page of

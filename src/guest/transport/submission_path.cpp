@@ -54,9 +54,10 @@ uint64_t SubmissionPath::through_kernel() const
 bool SubmissionPath::invariants_hold() const
 {
     AV_SCOPE("SubmissionPath::invariants_hold");
-    /* Counters only grow, and a doorbell submission is one this process could
-     * have made: nothing is counted for a doorbell that was never set up. */
-    return doorbell_submissions_ == 0u || doorbell_.handle() != 0u;
+    /* Every submission counted is a batch this process wrote into its ring,
+     * whichever way it went: nothing is counted for a ring nothing was
+     * published into. */
+    return (doorbell_submissions_ == 0u && kernel_submissions_ == 0u) || ring_.tail() != 0u;
 }
 
 }  // namespace av

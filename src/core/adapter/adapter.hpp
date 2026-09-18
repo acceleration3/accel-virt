@@ -295,7 +295,7 @@ private:
     [[nodiscard]] Status map_doorbells(const PciBaseAddresses &bars);
     /* Which side of the boundary publishes the tail of the context a doorbell
      * hangs off, told to the context itself (feature 049). */
-    void                 submissions_to_user_mode(void *doorbell);
+    void                 submissions_to_user_mode(const HwQueue &queue);
     void                 submissions_to_driver(void *doorbell);
     /* CreateContext for a context that asked with a record: the host context
      * set up on the process's own memory (feature 043). */

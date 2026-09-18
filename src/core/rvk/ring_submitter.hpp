@@ -57,12 +57,14 @@ private:
     static constexpr uint64_t tail_offset = 8u;
     static constexpr uint64_t head_offset = 16u;
 
-    [[nodiscard]] Status judge_head();
+    /* `tail` is what the ring's header says now, which on a shared ring is the
+     * process's tail and not this object's. */
+    [[nodiscard]] Status judge_head(uint64_t tail);
     /* Where `submission` begins, adopted as this ring's tail when the header
      * the process published says exactly that submission is what it added;
      * invalid_parameter for anything else, which is a ring the device would
      * fault the context for anyway (research.md §8). */
-    [[nodiscard]] Status adopt_published_tail(const SubmissionDescriptor &submission);
+    [[nodiscard]] Status adopt_published_tail(const SubmissionDescriptor &submission, uint64_t &published);
 
     Platform       &platform_;
     RegisterWindow &doorbells_;

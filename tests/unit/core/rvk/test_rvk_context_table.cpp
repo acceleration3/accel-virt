@@ -1291,8 +1291,13 @@ TEST(rvk_context_table, tells_the_context_whose_process_submits_for_itself)
   CHECK_STATUS(fixture.table().driver_submits(&first_context), Status::ok);
   CHECK_STATUS(fixture.table().driver_submits(&second_context), Status::invalid_parameter);
   fixture.platform().set_irql(Irql::passive);
-  fixture.complete_through(5u);
-  fixture.serve();
-  CHECK_EQ(progress, 4u);
+
+  /* A device reset leaves the slot naming the context and holding nothing:
+   * there is no context left to tell either way. */
+  fixture.table().abandon_all();
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().user_mode_submits(&first_context, &progress), Status::invalid_parameter);
+  CHECK_STATUS(fixture.table().driver_submits(&first_context), Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

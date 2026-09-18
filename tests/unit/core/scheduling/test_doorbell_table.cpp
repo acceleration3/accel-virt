@@ -29,7 +29,12 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 
+#include "core/trace/state_writer.hpp"
+#include "harness/platform/violation.hpp"
+
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 using av::DoorbellStatus;
 using av::HwQueue;
@@ -121,9 +126,13 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_retry);
   void          *address = nullptr;
   DoorbellStatus status = DoorbellStatus::disconnected_abort;
-  CHECK_STATUS(held.table().connect(made, address, status), Status::ok);
+  HwQueue       *queue = nullptr;
+  CHECK_STATUS(held.table().connect(made, address, status, queue), Status::ok);
   CHECK(address == held.page(3u));
   CHECK(status == DoorbellStatus::connected);
+  /* The queue it hangs off, which is what tells the driver whose context has
+   * moved its submissions into user mode. */
+  CHECK(queue == &held.first());
   CHECK(held.table().status_of(made) == DoorbellStatus::connected);
   CHECK(held.table().invariants_hold());
 
@@ -132,7 +141,7 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK_STATUS(held.table().disconnect(made), Status::ok);
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_retry);
   void *again = nullptr;
-  CHECK_STATUS(held.table().connect(made, again, status), Status::ok);
+  CHECK_STATUS(held.table().connect(made, again, status, queue), Status::ok);
   CHECK(again == held.page(3u));
   CHECK(status == DoorbellStatus::connected);
 
@@ -164,14 +173,16 @@ TEST(doorbell_table, a_doorbell_nobody_made_is_no_doorbell)
   void          *address = nullptr;
   DoorbellStatus status = DoorbellStatus::connected;
   int            stack = 0;
-  CHECK_STATUS(held.table().connect(&stack, address, status), Status::invalid_parameter);
+  HwQueue       *queue = &held.first();
+  CHECK_STATUS(held.table().connect(&stack, address, status, queue), Status::invalid_parameter);
+  CHECK(queue == nullptr);
   CHECK_STATUS(held.table().disconnect(&stack), Status::invalid_parameter);
   CHECK_STATUS(held.table().destroy(&stack), Status::invalid_parameter);
-  CHECK_STATUS(held.table().connect(nullptr, address, status), Status::invalid_parameter);
+  CHECK_STATUS(held.table().connect(nullptr, address, status, queue), Status::invalid_parameter);
   /* And a handle destroyed is one nobody made. */
   CHECK_STATUS(held.table().destroy(made), Status::ok);
   CHECK_STATUS(held.table().destroy(made), Status::invalid_parameter);
-  CHECK_STATUS(held.table().connect(made, address, status), Status::invalid_parameter);
+  CHECK_STATUS(held.table().connect(made, address, status, queue), Status::invalid_parameter);
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_abort);
   CHECK(held.table().invariants_hold()); }
 
@@ -198,7 +209,9 @@ TEST(doorbell_table, a_queue_destroyed_takes_its_doorbells)
   /* The other queue's doorbell is untouched. */
   void          *address = nullptr;
   DoorbellStatus status = DoorbellStatus::disconnected_abort;
-  CHECK_STATUS(held.table().connect(other, address, status), Status::ok);
+  HwQueue       *queue = nullptr;
+  CHECK_STATUS(held.table().connect(other, address, status, queue), Status::ok);
+  CHECK(queue == &held.second());
   CHECK(address == held.page(2u));
   /* Forgetting a queue with no doorbells, and the null one, is no-one's
    * error. */
@@ -222,3 +235,50 @@ TEST(doorbell_table, a_table_with_no_room_refuses)
   held.table().forget_queue(&held.first());
   CHECK_EQ(held.table().live(), 0u);
   CHECK_STATUS(held.table().create(held.second(), 0u, past), Status::ok); }
+
+/* A doorbell the platform cannot find memory for is no doorbell, and the table
+ * is left as it was. */
+TEST(doorbell_table, a_doorbell_with_no_memory_behind_it_is_refused)
+{ Doorbells held;
+  held.platform().fail_allocation_at(1u);
+  void *made = &held;
+  CHECK(held.table().create(held.first(), 1u, made) != Status::ok);
+  CHECK(made == nullptr);
+  CHECK_EQ(held.table().live(), 0u);
+  CHECK(held.table().invariants_hold());
+  CHECK_STATUS(held.table().create(held.first(), 1u, made), Status::ok); }
+
+/* What rvk-inspect reads out of a running driver (docs/trace.md): a line for
+ * the table and one per doorbell, and nothing but `busy` while another thread
+ * holds it - a report must never wait on the path a submission takes. */
+TEST(doorbell_table_report, writes_each_doorbell_and_says_when_it_cannot)
+{ Doorbells held;
+  void     *made = nullptr;
+  CHECK_STATUS(held.table().create(held.first(), 2u, made), Status::ok);
+  void          *address = nullptr;
+  DoorbellStatus status = DoorbellStatus::disconnected_abort;
+  HwQueue       *queue = nullptr;
+  CHECK_STATUS(held.table().connect(made, address, status, queue), Status::ok);
+  char            bytes[256];
+  av::StateWriter writer(bytes, sizeof bytes);
+  held.table().report(writer);
+  char expected[256];
+  static_cast<void>(std::snprintf(expected, sizeof expected,
+                                  "doorbell_table/0 busy=false live=1\n"
+                                  "doorbell_table/0/doorbell/0 handle=0x%016llX queue=0x%016llX page=2 "
+                                  "connected=true",
+                                  static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(made)),
+                                  static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&held.first()))));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+
+  held.platform().hold_elsewhere(av::LockRank::doorbell_table);
+  av::StateWriter busy(bytes, sizeof bytes);
+  held.table().report(busy);
+  CHECK(std::strcmp(busy.dump(), "doorbell_table/0 busy=true") == 0);
+  held.platform().set_irql(av::Irql::dispatch);
+  held.table().report(busy);
+  CHECK(held.platform().claim(av::Violation::irql_ceiling));
+  CHECK(held.platform().claim(av::Violation::irql_ceiling));   /* the try-acquire inside it */
+  held.platform().set_irql(av::Irql::passive);
+  held.platform().released_elsewhere();
+  CHECK_STATUS(held.table().destroy(made), Status::ok); }

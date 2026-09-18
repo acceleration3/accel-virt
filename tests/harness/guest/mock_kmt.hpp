@@ -160,6 +160,11 @@ public:
     void          allow_hardware_scheduling();
     void          refuse_hardware_scheduling();
     void          set_doorbell_status(std::uint32_t doorbell, std::uint32_t status);
+    /* A driver that answers a doorbell and leaves out one of the three
+     * addresses it is supposed to map - the page, the status or the queued
+     * fence, numbered from 1 - which is what a process must not believe
+     * (feature 049). */
+    void          answer_doorbell_without_pages(std::uint32_t which);
     /* What is in the doorbell's page now: a process's store is a four-byte
      * write of a value that carries nothing, so what a test reads is whether
      * it was stored to since the page was last cleared. */
@@ -398,6 +403,7 @@ private:
     /* Feature 049: whether the OS gives this adapter hardware queues, and the
      * doorbells it handed out. */
     bool          hardware_scheduling_;
+    std::uint32_t doorbell_page_missing_;
     DoorbellPages doorbells_[max_doorbells];
     std::uint32_t doorbell_count_;
     /* What a hardware queue has finished, as dxgkrnl maps it read-only into

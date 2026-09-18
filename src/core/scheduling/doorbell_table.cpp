@@ -33,15 +33,17 @@ Status DoorbellTable::create(HwQueue &queue, uint32_t page, void *&handle)
     return Status::ok;
 }
 
-Status DoorbellTable::connect(void *handle, void *&address, DoorbellStatus &status)
+Status DoorbellTable::connect(void *handle, void *&address, DoorbellStatus &status, HwQueue *&queue)
 {
     AV_SCOPE("DoorbellTable::connect");
     platform_.require_irql_at_most(Irql::passive, "DoorbellTable");
     address = nullptr;
+    queue = nullptr;
     MutexGuard lock(lock_);
     QueueDoorbell *const doorbell = find(handle);
     if (doorbell == nullptr) return Status::invalid_parameter;
     doorbell->connect();
+    queue = &doorbell->queue();
     address = doorbells_.address_at(uint64_t{doorbell->page()} * RingSubmitter::doorbell_page_bytes);
     status = doorbell->status();
     return Status::ok;

@@ -234,3 +234,31 @@ TEST(ring_submitter_submit, a_tail_the_process_published_is_taken_and_judged)
   fixture.publish_tail(320u + capacity + 1u);
   CHECK_STATUS(fixture.submit(7u, 320u, 320u + capacity + 1u), Status::invalid_parameter);
   CHECK(fixture.submitter().invariants_hold()); }
+
+/* The tail goes out before the store (SubmissionPath::submit), so a batch a
+ * process falls back to the driver with may be one the device has already
+ * taken from the ring. It must run once: the driver publishes nothing, rings
+ * nothing, and answers the caller as if it had. */
+TEST(ring_submitter_submit, a_batch_the_device_already_took_is_not_published_again)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.attach(), Status::ok);
+  CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
+  fixture.user_mode_publishes();
+  /* The process published 128 and the device consumed all of it before the
+   * fallback reached the driver. */
+  fixture.publish_tail(128u);
+  fixture.device_consumes(128u);
+  CHECK_STATUS(fixture.submit(2u, 64u, 128u), Status::ok);
+  CHECK_EQ(fixture.doorbells().rings(5u), 1u);          /* the first submission's, and no second */
+  CHECK_EQ(fixture.published_tail(), 128u);
+  CHECK(fixture.submitter().tail() == 128u);
+  /* The fence was the device's to complete, not the driver's to record. */
+  CHECK(fixture.fences().highest_submitted() == 1u);
+
+  /* A batch it has not taken yet is published and rung as always, even where
+   * the device is partway through the one before it. */
+  fixture.publish_tail(192u);
+  CHECK_STATUS(fixture.submit(3u, 128u, 192u), Status::ok);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u);
+  CHECK(fixture.fences().highest_submitted() == 3u);
+  CHECK(fixture.submitter().invariants_hold()); }

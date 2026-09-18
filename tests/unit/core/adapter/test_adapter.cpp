@@ -3549,6 +3549,17 @@ public:
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
     }
 
+    /* A context a hardware queue may run on, which is what a doorbell hangs off
+     * (feature 049): the same rvk record, with the flag dxgkrnl sets for a
+     * process that asked for one. */
+    std::uint32_t create_hw_queue_context(av::DxgkargCreateContextRecord &request)
+    {
+        request.Flags = 0x14u;   /* VirtualAddressing | HwQueueSupported */
+        request.pPrivateDriverData = record_bytes_;
+        request.PrivateDriverDataSize = sizeof record_bytes_;
+        return nt(fixture_.adapter().create_context(device_.hDevice, &request));
+    }
+
     /* The record asks for an OpenGL context made with `options` instead. */
     void ask_for_gl(const av::GlContextOptions &options)
     {
@@ -3749,6 +3760,92 @@ TEST(adapter_rvk_context, a_device_that_is_gone_or_silent_runs_no_record)
   CHECK_EQ(process.create_context(removed), invalid_parameter);
   CHECK_EQ(fixture.context_requests(), 0u);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* Feature 049: every doorbell the driver refuses. A doorbell names a hardware
+ * queue, and its page is the one its context was bound to - so a queue on a
+ * context with no rvk binding has no page to give out, and there is no
+ * doorbell to be had. */
+TEST(adapter_doorbell, refuses_every_doorbell_nobody_could_have)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_hw_queue_context(context), success);
+  std::uint64_t                  progress = 0u;
+  av::DxgkargCreateHwQueueRecord queue = {};
+  queue.HwQueueProgressFenceCPUVirtualAddress = &progress;
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, &queue)), success);
+
+  /* A queue nobody made, and a record asking for what this driver has none
+   * of. */
+  av::DxgkargCreateDoorbellRecord create = {};
+  int                             stack = 0;
+  create.hHwQueue = &stack;
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(&create)), invalid_parameter);
+  create.hHwQueue = queue.hHwQueue;
+  create.PrivateDriverDataSize = 4u;
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(&create)), invalid_parameter);
+  create.PrivateDriverDataSize = 0u;
+  create.Flags = 1u;
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(&create)), invalid_parameter);
+  create.Flags = 0u;
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(&create)), success);
+
+  /* Connect: the record dxgkrnl passes, and a doorbell nobody made. */
+  av::DxgkargConnectDoorbellRecord connect = {};
+  connect.hDoorbell = create.hDoorbell;
+  connect.Flags = 1u;
+  CHECK_EQ(nt(fixture.adapter().connect_doorbell(&connect)), invalid_parameter);
+  connect.Flags = 0u;
+  CHECK_EQ(nt(fixture.adapter().connect_doorbell(nullptr)), invalid_parameter);
+  connect.hDoorbell = &stack;
+  CHECK_EQ(nt(fixture.adapter().connect_doorbell(&connect)), invalid_parameter);
+  connect.hDoorbell = create.hDoorbell;
+  CHECK_EQ(nt(fixture.adapter().connect_doorbell(&connect)), success);
+  CHECK_EQ(connect.Status, static_cast<std::uint32_t>(av::DoorbellStatus::connected));
+  CHECK(connect.SecondaryKernelCpuVirtualAddress == nullptr);
+
+  /* Disconnect, destroy and notify, each for a handle this adapter never
+   * gave: nothing is told about a context nobody named. */
+  av::DxgkargDisconnectDoorbellRecord disconnect = {&stack, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().disconnect_doorbell(&disconnect)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().disconnect_doorbell(nullptr)), invalid_parameter);
+  const av::DxgkargDestroyDoorbellRecord destroy = {&stack};
+  CHECK_EQ(nt(fixture.adapter().destroy_doorbell(&destroy)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_doorbell(nullptr)), invalid_parameter);
+  const av::DxgkargNotifyWorkSubmissionRecord notify = {&stack, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().notify_work_submission(&notify)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().notify_work_submission(nullptr)), invalid_parameter);
+  const av::DxgkargNotifyWorkSubmissionRecord asked = {queue.hHwQueue, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().notify_work_submission(&asked)), success);
+
+  /* And a hardware queue on a context that runs no rvk ring: its context was
+   * bound to no doorbell page, so there is none to hand out. */
+  av::DxgkargCreateContextRecord plain = {};
+  plain.Flags = 0x14u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &plain)), success);
+  av::DxgkargCreateHwQueueRecord elsewhere = {};
+  elsewhere.HwQueueProgressFenceCPUVirtualAddress = &progress;
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(plain.hContext, &elsewhere)), success);
+  av::DxgkargCreateDoorbellRecord pageless = {};
+  pageless.hHwQueue = elsewhere.hHwQueue;
+  CHECK_EQ(nt(fixture.adapter().create_doorbell(&pageless)), invalid_parameter);
+  CHECK(fixture.adapter().invariants_hold());
+  const av::DxgkargDestroyDoorbellRecord gone = {create.hDoorbell};
+  CHECK_EQ(nt(fixture.adapter().destroy_doorbell(&gone)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(elsewhere.hHwQueue)), success); }
+
+/* An adapter dxgkrnl starts twice without stopping it refuses rather than
+ * mapping the doorbell pages over the ones a process already holds. */
+TEST(adapter_start_device, a_second_start_without_a_stop_is_refused)
+{ Fixture fixture;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.start() != success);
+  CHECK(fixture.adapter().invariants_hold()); }
 
 /* A device whose doorbell pages cannot be mapped is not started half-way. */
 TEST(adapter_start_device, doorbell_pages_that_cannot_be_mapped_fail_the_start)

@@ -135,3 +135,30 @@ TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting
   CHECK(!has_line(report, "submit.ratio"));
   rig.close(); }
 
+
+/* Each step's failure stops the run where it happened: a first round trip the
+ * device does not answer, and a doorbell path that fails while being timed. */
+TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
+{ { Rig rig;
+    rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+    GuestReport     report;
+    SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+    benchmark.run();
+    CHECK(has_line(report, "FAIL submit.warm status=7"));
+    CHECK(!has_line(report, "submit.kernel"));
+    CHECK_EQ(benchmark.ratio(), 0u);
+    rig.close(); }
+
+  /* The doorbell path, timed and then refused: the first drain of the first
+   * block is the second wait of the run, the warm no-op's being the first. */
+  Rig rig;
+  rig.kmt().allow_hardware_scheduling();
+  rig.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, 0xC0000001u);
+  GuestReport     report;
+  SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+  benchmark.run();
+  CHECK(has_line(report, "FAIL submit.doorbell status=7"));
+  CHECK(!has_line(report, "submit.kernel_ns"));
+  CHECK_EQ(benchmark.doorbell_ns(), 0u);
+  CHECK_EQ(benchmark.kernel_ns(), 0u);
+  rig.close(); }

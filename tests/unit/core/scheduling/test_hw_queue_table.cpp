@@ -183,3 +183,17 @@ TEST(hw_queue_table_report, writes_each_queue_and_its_context)
   fixture.platform().set_irql(av::Irql::passive);
   fixture.platform().released_elsewhere();
   CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::ok); }
+
+/* Feature 049: a doorbell is created on the queue dxgkrnl names, so the table
+ * is asked for queues by handle - including handles nobody made. */
+TEST(hw_queue_table, finds_the_queue_a_handle_names_and_nothing_for_one_nobody_made)
+{ Fixture fixture;
+  DxgkargCreateHwQueueRecord request = fixture.request();
+  CHECK_STATUS(fixture.queues().create(fixture.hw_context(), request), Status::ok);
+  CHECK(fixture.queues().find(request.hHwQueue) != nullptr);
+  CHECK(&fixture.queues().find(request.hHwQueue)->context() == fixture.hw_context());
+  int stack = 0;
+  CHECK(fixture.queues().find(&stack) == nullptr);
+  CHECK(fixture.queues().find(nullptr) == nullptr);
+  CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::ok);
+  CHECK(fixture.queues().find(request.hHwQueue) == nullptr); }

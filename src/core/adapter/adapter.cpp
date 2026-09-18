@@ -157,8 +157,10 @@ Status Adapter::map_doorbells(const PciBaseAddresses &bars)
     if (!region.present()) return Status::ok;
     const Status mapped = mappings_.map_region(bars, resources_, region);
     if (mapped != Status::ok) return mapped;
-    const Status made = doorbells_.construct(platform_, mappings_.address_of(region), region.length());
-    if (made != Status::ok) return made;
+    /* Neither storage can already hold one: a start runs only on a stopped
+     * adapter, and both are destroyed on the way out of a failed start and on
+     * stop, so the only way construct answers anything else is unreachable. */
+    static_cast<void>(doorbells_.construct(platform_, mappings_.address_of(region), region.length()));
     return doorbell_table_.construct(platform_, doorbells_.object());
 }
 
@@ -1538,12 +1540,10 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
 /* A doorbell belongs to a hardware queue on a context, and only an rvk context
  * has a ring the process could publish a tail into: for any other, there is
  * nothing to hand over and the refusal is the answer. */
-void Adapter::submissions_to_user_mode(void *doorbell)
+void Adapter::submissions_to_user_mode(const HwQueue &queue)
 {
     AV_SCOPE("Adapter::submissions_to_user_mode");
-    const HwQueue *const queue = doorbell_table_.object().queue_of(doorbell);
-    if (queue != nullptr)
-        static_cast<void>(rvk_contexts_.user_mode_submits(&queue->context(), queue->progress()));
+    static_cast<void>(rvk_contexts_.user_mode_submits(&queue.context(), queue.progress()));
 }
 
 void Adapter::submissions_to_driver(void *doorbell)
@@ -1580,7 +1580,8 @@ int32_t Adapter::connect_doorbell(DxgkargConnectDoorbellRecord *request)
     if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
     void          *address = nullptr;
     DoorbellStatus status = DoorbellStatus::disconnected_abort;
-    const Status   connected = doorbell_table_.object().connect(request->hDoorbell, address, status);
+    HwQueue       *queue = nullptr;
+    const Status   connected = doorbell_table_.object().connect(request->hDoorbell, address, status, queue);
     if (connected != Status::ok) return NtStatus(connected).value();
     request->KernelCpuVirtualAddress = address;
     /* No secondary doorbell: the caps say so, and a process that asked for one
@@ -1589,7 +1590,7 @@ int32_t Adapter::connect_doorbell(DxgkargConnectDoorbellRecord *request)
     request->Status = static_cast<uint32_t>(status);
     /* From here the process publishes the tail and rings the page itself, and
      * neither is the driver's to judge until the doorbell goes away. */
-    submissions_to_user_mode(request->hDoorbell);
+    submissions_to_user_mode(*queue);
     return NtStatus(Status::ok).value();
 }
 
