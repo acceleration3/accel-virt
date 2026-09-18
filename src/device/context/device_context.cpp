@@ -59,6 +59,10 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = staging_.allocate(uint64_t{1} << setup.ring_order(), answer_bytes);
     if (status != Status::ok) return status;
     executor_.configure(setup.sub_api(), capset.gpu().uuid(), setup.options());
+    /* And what a host thread's completion reaches this context through: the
+     * landing pad the worker drains. Given here, on the main loop, because
+     * the executor is made on the worker and has to have it by then. */
+    executor_.signals_through(signal_);
     imports_.configure(setup.ring_resource());
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());

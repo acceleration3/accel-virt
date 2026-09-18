@@ -205,6 +205,27 @@ add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
+# rvkclprobe.exe, feature 052's proof through the Khronos loader (T030). The
+# import library is named apart from the loader target's below: both would
+# otherwise be OpenCL.lib in this directory, and the probe must build whether
+# or not the pinned loader tree is there.
+set(RVKCLPROBE_IMPORTS "")
+foreach(module OpenCL)
+  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}_import.lib)
+  add_custom_command(OUTPUT ${library}
+    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+  list(APPEND RVKCLPROBE_IMPORTS ${library})
+endforeach()
+add_custom_target(rvkclprobe_imports DEPENDS ${RVKCLPROBE_IMPORTS})
+
+file(GLOB RVKCLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/cl/*.cpp)
+add_executable(rvkclprobe ${RVKCLPROBE_SOURCES})
+add_dependencies(rvkclprobe rvkclprobe_imports)
+target_compile_definitions(rvkclprobe PRIVATE CL_TARGET_OPENCL_VERSION=300)
+target_link_options(rvkclprobe PRIVATE /ENTRY:rvkclprobe_entry)
+target_link_libraries(rvkclprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKCLPROBE_IMPORTS})
+
 # The three D3D probes (feature 047): DXVK's d3d9.dll and d3d11.dll and
 # vkd3d-proton's d3d12.dll are what they call, which is the whole point of the
 # run - the layer beside the probe, on the guest's Vulkan loader, on this ICD.

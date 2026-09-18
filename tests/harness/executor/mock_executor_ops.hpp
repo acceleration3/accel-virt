@@ -47,6 +47,14 @@ public:
     /* Version 4's creates, what the last one was asked, and whether its share
      * was an executor of this table still alive when that create returned. */
     std::uint32_t     option_creates();
+    /* What the device gave this library to call when a host thread finishes
+     * work (executor ABI version 5), and calling it: the one thing in the
+     * table that runs device-ward, so a test fires it rather than waits. */
+    std::uint32_t     signals_set();
+    bool              signal_bound() const;
+    /* Calls it, as a host API's own thread would. False when nothing is
+     * bound. */
+    bool              fire_signal();
     RvkContextOptions last_options();
     RvkExecutor      *last_share();
     bool              last_share_live();
@@ -127,6 +135,9 @@ private:
     std::uint32_t              withhold_handle_;
     std::uint64_t              answered_handle_;
     std::uint32_t              option_creates_;
+    std::uint32_t              signals_set_;
+    void                     (*signal_)(void *context);
+    void                      *signal_context_;
     RvkContextOptions          last_options_;
     RvkExecutor               *last_share_;
     bool                       last_share_live_;

@@ -62,7 +62,7 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         exit 1
     fi
     echo "gate: guest passed after $((SECONDS - started)) s"
-    # The rvk scenarios and both ICDs need the real executor on a host GPU, and
+    # The rvk scenarios and the three ICDs need the real executor on a host GPU, and
     # the suite's timeout scenario the echo library's stall, so they are a
     # second boot - one for all three, since each is a process of its own that
     # leaves the machine as it found it.
@@ -75,6 +75,11 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         real+=(--vulkan)
     else
         echo "gate: guest vulkan skipped: the Vulkan runtime is not fetched (tools/fetch_vulkan_runtime.py)" >&2
+    fi
+    if python3 -B tools/fetch_opencl_loader.py --check >/dev/null 2>&1; then
+        real+=(--opencl)
+    else
+        echo "gate: guest opencl skipped: the OpenCL loader is not fetched (tools/fetch_opencl_loader.py)" >&2
     fi
     echo "== gate: guest real (${real[*]}, build-qemu/librvk_executor.so)"
     if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-real "${real[@]}" \

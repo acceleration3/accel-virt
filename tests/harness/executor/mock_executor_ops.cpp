@@ -24,7 +24,7 @@ private:
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
       executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u), imports_{},
-      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), last_options_{},
+      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr), last_options_{},
       last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
@@ -67,6 +67,15 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
             return mock.answered_handle_ != 0u ? mock.answered_handle_ : blob_id | handle_bit;
         }
         return 0u;
+    };
+    table_.set_signal = [](void *opaque, RvkExecutor *executor, void (*signal)(void *),
+                           void *context) {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock             lock(mock.lock_);
+        static_cast<void>(executor);
+        mock.signals_set_++;
+        mock.signal_ = signal;
+        mock.signal_context_ = context;
     };
     table_.create_with_options = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
                                     const RvkContextOptions *options, RvkExecutor *share) -> RvkExecutor * {
@@ -254,6 +263,30 @@ std::uint32_t MockExecutorOps::live_imports()
     std::uint32_t count = 0u;
     for (const Import &import : imports_) count += import.live ? 1u : 0u;
     return count;
+}
+
+std::uint32_t MockExecutorOps::signals_set()
+{
+    Lock lock(lock_);
+    return signals_set_;
+}
+
+bool MockExecutorOps::signal_bound() const { return signal_ != nullptr; }
+
+bool MockExecutorOps::fire_signal()
+{
+    void (*signal)(void *) = nullptr;
+    void *context = nullptr;
+    {
+        Lock lock(lock_);
+        signal = signal_;
+        context = signal_context_;
+    }
+    if (signal == nullptr) return false;
+    /* Outside the lock, as a host API's own thread would call it: the pad it
+     * reaches takes no lock of this library's. */
+    signal(context);
+    return true;
 }
 
 }  // namespace av

@@ -64,8 +64,9 @@ void Worker::connect_signal(ContextSignal &signal)
     signal_ = &signal;
 }
 
-/* The event outlives every wake: the landing pad is closed on the main loop,
- * before stop() destroys what it signals. */
+/* A wake that outlived the worker would signal an event that is gone. Nothing
+ * raises after teardown because the registration a foreign thread reaches this
+ * through is made stale first, on the worker (ClEventSignals). */
 void Worker::wake()
 {
     AV_SCOPE("Worker::wake");

@@ -24,6 +24,9 @@ from run_guest_suite import Screendump, StepFailed, describe_panic, luid_low_par
 sys.path.insert(0, str(ROOT / "tools" / "mcp"))
 import rvk_inspect  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "tools"))
+from fetch_opencl_loader import CMAKE_CONFIG, WANTED  # noqa: E402
+
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
 ONE_MONITOR = "display: dwm=1 services=rvkgpu monitors=1\n"
@@ -111,7 +114,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
-                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
+                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkcl.dll", "rvkclprobe.exe",
+                     "OpenCL.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
                      "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
@@ -135,7 +139,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
-                     "--gl-icd", self.scratch / "rvkgl.dll",
+                     "--gl-icd", self.scratch / "rvkgl.dll", "--cl-icd", self.scratch / "rvkcl.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -174,7 +178,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 8)
+        self.assertEqual(events.count("file"), 9)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -655,6 +659,67 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(outputs=outputs, rvkglprobe=code,
                     files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}, **pictures))
 
+    CL_REPORT = ("ok opencl.platform_count 1\r\n"
+                 "ok opencl.platforms 1\r\n"
+                 "ok opencl.platform 1\r\n"
+                 "ok opencl.device_ids 1\r\n"
+                 "ok opencl.device 1\r\n"
+                 "note opencl.device_name rvk (NVIDIA GeForce RTX 4090)\r\n"
+                 "ok opencl.luid\r\n"
+                 "ok opencl.context\r\n"
+                 "ok opencl.queue\r\n"
+                 "ok opencl.buffers\r\n"
+                 "ok opencl.write\r\n"
+                 "ok opencl.write_second\r\n"
+                 "ok opencl.program\r\n"
+                 "ok opencl.build\r\n"
+                 "ok opencl.kernel\r\n"
+                 "ok opencl.arguments\r\n"
+                 "ok opencl.run\r\n"
+                 "ok opencl.finish\r\n"
+                 "ok opencl.read\r\n"
+                 "ok opencl.sum 0\r\n"
+                 "ok opencl.map 0\r\n"
+                 "ok opencl.unmap\r\n"
+                 "ok opencl.svm\r\n"
+                 "ok opencl.user_event\r\n"
+                 "ok opencl.wait\r\n"
+                 "ok opencl.callback 1\r\n"
+                 "ok opencl.release\r\n"
+                 "rvkclprobe: 26 passed, 0 failed\r\n")
+    """What rvkclprobe.exe prints when every step of feature 052 passed, in the
+    probe's own order (src/guest/suite/cl_probe.cpp)."""
+
+    def opencl_loader(self, pinned=True, missing=()):
+        """A fetched OpenCL loader source tree and the pins it was fetched by, as
+        tools/fetch_opencl_loader.py leaves them: what a --opencl run's OpenCL.dll
+        was cross-built from, and what the run refuses to boot without.
+        `missing` names files the pins name and disk does not."""
+        into = self.scratch / "opencl-loader"
+        digest = "2" * 64
+        for name in WANTED + (CMAKE_CONFIG,):
+            path = into / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if name in missing:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(f"/* {name} */\n")
+        marker = into / "PINNED"
+        if pinned:
+            marker.write_text(digest + "\n")
+        else:
+            marker.unlink(missing_ok=True)
+        (self.scratch / "cl_pins.txt").write_text(f"loader file:///nowhere/opencl-loader.tar.gz {digest}\n")
+        return ("--opencl-loader", into, "--opencl-pins", self.scratch / "cl_pins.txt",
+                "--cl-probe", self.scratch / "rvkclprobe.exe")
+
+    def opencl_script(self, report=None, code=0):
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "rvkclprobe": self.CL_REPORT if report is None else report,
+                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkcl-4242.log\r\n"}
+        self.script(outputs=outputs, rvkclprobe=code,
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkcl-4242.log": ""}))
+
     def d3d_layers(self, files=("d3d9.dll", "d3d11.dll", "dxgi.dll"),
                    vkd3d=("d3d12.dll", "d3d12core.dll"), missing=(), empty_pins=False, no_files=False):
         """A fetched DXVK and vkd3d-proton, pinned to what is on disk: what a
@@ -1112,6 +1177,90 @@ class GuestSuiteRun(unittest.TestCase):
                                  "--gl-probe", self.scratch / "noprobe.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
+
+    def test_an_opencl_run_proves_every_step_through_the_khronos_loader(self):
+        """Feature 052, T057: the probe runs beside the cross-built loader with its
+        report written to a guest file and pulled; every one of the probe's steps
+        passes, and the device it named is a host GPU's rather than a CPU
+        runtime's."""
+        self.opencl_script()
+        result = self.run_suite("--opencl", "--executor", "/nowhere/librvk_executor.so", *self.opencl_loader())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        # The loader the guest loads is the cross-built one beside the probe,
+        # never the pinned source tree it was built from.
+        self.assertIn("file C:\\rvk\\OpenCL.dll 1000", lines)
+        self.assertIn("file C:\\rvk\\rvkclprobe.exe 1400", lines)
+        self.assertIn("file C:\\rvk\\package\\rvkcl.dll 900", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkclprobe.exe "
+                      "> C:\\rvk\\opencl.txt 2>&1", lines)
+        self.assertIn("pull C:\\rvk\\opencl.txt", lines)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assertEqual((self.work / "opencl.txt").read_text(newline=""), self.CL_REPORT)
+        self.assertIn("guest: opencl ok: 26 passed, device rvk (NVIDIA GeForce RTX 4090)", result.stdout)
+        self.assertIn("opencl ok", (self.work / "verdict.txt").read_text())
+        self.assertTrue((self.work / "diag" / "rvkcl-4242.log").exists())
+        # The probe renders nothing, so no picture is asked of it.
+        self.assertFalse((self.work / "images").exists())
+        self.assertNotIn("rvkglprobe", "\n".join(lines))
+        self.assert_clean()
+
+    def test_an_opencl_run_fails_a_failed_missing_or_software_step(self):
+        report = self.CL_REPORT
+        cases = {
+            "failed step": (report.replace("ok opencl.sum 0", "fail opencl.sum 64").replace(
+                "26 passed, 0 failed", "25 passed, 1 failed"), 1,
+                "opencl failed: 1 step(s) failed, exit 1; see opencl.txt"),
+            "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("26 passed", "25 passed"), 0,
+                             "opencl failed: the probe reported no unmap; see opencl.txt"),
+            "no summary": (report.replace("rvkclprobe: 26 passed, 0 failed\r\n", ""), 0,
+                           "opencl failed: no summary in the probe's report, exit 0; see opencl.txt"),
+            "software": (report.replace("rvk (NVIDIA GeForce RTX 4090)", "Intel(R) Core(TM) i9, SwiftShader"), 0,
+                         "opencl failed: the device Intel(R) Core(TM) i9, SwiftShader is not a host GPU"),
+            "no device": (report.replace("note opencl.device_name rvk (NVIDIA GeForce RTX 4090)\r\n", ""), 0,
+                          "opencl failed: the probe named no device"),
+        }
+        for case, (text, code, reason) in cases.items():
+            with self.subTest(case):
+                self.opencl_script(text, code)
+                result = self.run_suite("--opencl", "--executor", "/nowhere/librvk_executor.so",
+                                        *self.opencl_loader())
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"guest: {reason}", result.stdout)
+                self.assertEqual((self.work / "opencl.txt").read_text(newline=""), text)
+
+    def test_an_opencl_run_without_the_pinned_loader_the_dll_or_the_probe_is_refused_before_qemu(self):
+        """The loader is cross-built from a pinned tree, so a run whose tree
+        nobody fetched would be reporting a loader nobody pinned."""
+        self.opencl_script()
+        unfetched = self.run_suite("--opencl", *self.opencl_loader(pinned=False))
+        self.assertEqual(unfetched.returncode, 1)
+        self.assertIn(f"guest: prepare failed: --opencl needs the pinned OpenCL loader in "
+                      f"{self.scratch / 'opencl-loader'} (PINNED missing): run tools/fetch_opencl_loader.py",
+                      unfetched.stdout)
+        gutted = self.run_suite("--opencl", *self.opencl_loader(missing=("loader/icd.c",)))
+        self.assertEqual(gutted.returncode, 1)
+        self.assertIn("(loader/icd.c missing)", gutted.stdout)
+        unpinned = self.run_suite("--opencl", *self.opencl_loader(), "--opencl-pins", self.scratch / "absent.txt")
+        self.assertEqual(unpinned.returncode, 1)
+        self.assertIn("guest: prepare failed: --opencl: no pins: ", unpinned.stdout)
+        (self.scratch / "cl_pins.txt").write_text("loader file:///nowhere/loader.tar.gz\n")
+        malformed = self.run_suite("--opencl", "--opencl-loader", self.scratch / "opencl-loader",
+                                   "--opencl-pins", self.scratch / "cl_pins.txt",
+                                   "--cl-probe", self.scratch / "rvkclprobe.exe")
+        self.assertEqual(malformed.returncode, 1)
+        self.assertIn("guest: prepare failed: --opencl: ", malformed.stdout)
+        (self.scratch / "OpenCL.dll").unlink()
+        unbuilt = self.run_suite("--opencl", *self.opencl_loader())
+        self.assertEqual(unbuilt.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "OpenCL.dll") + " does not exist",
+                      unbuilt.stdout)
+        missing = self.run_suite("--opencl", *self.opencl_loader(), "--cl-probe", self.scratch / "noprobe.exe")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist",
+                      missing.stdout)
+        self.assertEqual(self.journal_lines(), [])
+        self.assert_clean()
 
     def test_a_vulkan_run_without_the_pinned_runtime_or_the_probe_is_refused_before_qemu(self):
         self.vulkan_script()

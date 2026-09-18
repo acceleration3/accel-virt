@@ -223,3 +223,69 @@ TEST(executor_library_create, a_version_three_library_makes_only_default_context
   CHECK_EQ(ops.option_creates(), 0u);
   library.destroy(plain);
   CHECK_EQ(ops.misuses(), 0u); }
+
+/* Version 5 (feature 052): the first entry of this table that runs the other
+ * way. A host API that finishes work on a thread of its own - OpenCL's event
+ * callbacks - has no other way to say so, and a library that claims the
+ * version without carrying it would be found out on that thread, with a guest
+ * waiting for a wake that never comes. */
+TEST(executor_library_accept, version_five_needs_set_signal)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENCL);
+  RvkExecutorOps &table = ops.editable();
+  CHECK_EQ(table.abi_version, RVK_EXECUTOR_ABI_VERSION);
+  table.set_signal = nullptr;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&table), Status::invalid_parameter);
+  CHECK(!library.available());
+  CHECK_EQ(ops.misuses(), 0u); }
+
+namespace {
+
+/* A GPU to make an executor on; the mock reads all sixteen bytes. */
+constexpr std::uint8_t some_gpu[16] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
+                                       9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u};
+
+}  // namespace
+
+TEST(executor_library_signal, a_version_four_library_is_given_nothing_and_signals_nothing)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENCL);
+  ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_OPTIONS;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK(!library.names_events());
+  /* A guest on such a device waits for its events at a synchronising call
+   * instead, so handing the library a callback it cannot carry is not done at
+   * all rather than done and ignored. */
+  RvkExecutor *const executor = library.create(SubApi::opencl, some_gpu, nullptr, nullptr);
+  library.set_signal(executor, nullptr, nullptr);
+  CHECK_EQ(ops.signals_set(), 0u);
+  CHECK(!ops.signal_bound());
+  library.destroy(executor);
+  CHECK_EQ(ops.misuses(), 0u); }
+
+TEST(executor_library_signal, a_version_five_library_is_given_one_and_calls_it)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENCL);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK(library.names_events());
+  RvkExecutor *const executor = library.create(SubApi::opencl, some_gpu, nullptr, nullptr);
+  CHECK(executor != nullptr);
+
+  static std::uint32_t woken = 0u;
+  woken = 0u;
+  library.set_signal(executor, [](void *) { ++woken; }, nullptr);
+  CHECK_EQ(ops.signals_set(), 1u);
+  CHECK(ops.signal_bound());
+  /* Fired as the host API's own thread would. */
+  CHECK(ops.fire_signal());
+  CHECK_EQ(woken, 1u);
+  library.destroy(executor);
+  CHECK_EQ(ops.misuses(), 0u); }
+
+TEST(executor_library_signal, an_executor_that_is_not_there_is_given_nothing)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENCL);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  library.set_signal(nullptr, [](void *) {}, nullptr);
+  CHECK_EQ(ops.signals_set(), 0u);
+  CHECK_EQ(ops.misuses(), 0u); }

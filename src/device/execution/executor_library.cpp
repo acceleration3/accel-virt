@@ -29,6 +29,8 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
         return Status::invalid_parameter;
     if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS && ops->create_with_options == nullptr)
         return Status::invalid_parameter;
+    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_EVENTS && ops->set_signal == nullptr)
+        return Status::invalid_parameter;
     ops_ = ops;
     return Status::ok;
 }
@@ -86,6 +88,20 @@ bool ExecutorLibrary::names_options() const
 {
     AV_SCOPE("ExecutorLibrary::names_options");
     return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS;
+}
+
+bool ExecutorLibrary::names_events() const
+{
+    AV_SCOPE("ExecutorLibrary::names_events");
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_EVENTS;
+}
+
+void ExecutorLibrary::set_signal(RvkExecutor *executor, void (*signal)(void *context),
+                                 void *context) const
+{
+    AV_SCOPE("ExecutorLibrary::set_signal");
+    if (!names_events() || executor == nullptr) return;
+    ops_->set_signal(ops_->opaque, executor, signal, context);
 }
 
 RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid, const RvkContextOptions *options,

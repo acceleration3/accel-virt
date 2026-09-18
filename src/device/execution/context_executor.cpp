@@ -1,14 +1,25 @@
 #include "device/execution/context_executor.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/context/context_signal.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/host/host.hpp"
 
 namespace av {
 
+/* What the executor library calls when a host API finishes work on a thread
+ * the device did not give it. An ABI boundary C requires: the callback is a
+ * bare function pointer with nowhere to put a `this`, so the landing pad is
+ * the context and this forwards straight into it, with no logic of its own. */
+extern "C" void rvk_context_signalled(void *context)
+{
+    static_cast<ContextSignal *>(context)->raise();
+}
+
+
 ContextExecutor::ContextExecutor(Host &host, const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
-    : host_(host), library_(library), shares_(shares), id_(id), executor_(nullptr), api_(SubApi::vulkan), uuid_{},
+    : host_(host), library_(library), signal_(nullptr), shares_(shares), id_(id), executor_(nullptr), api_(SubApi::vulkan), uuid_{},
       options_(), configured_(false)
       {
           AV_SCOPE("ContextExecutor::ContextExecutor");
@@ -48,6 +59,13 @@ RvkExecutor *ContextExecutor::make() const
     return library_.create(api_, uuid_, options_.defaults() ? nullptr : &wanted);
 }
 
+void ContextExecutor::signals_through(ContextSignal &signal)
+{
+    AV_SCOPE("ContextExecutor::signals_through");
+    host_.require_main_loop("ContextExecutor::signals_through");
+    signal_ = &signal;
+}
+
 Status ContextExecutor::create()
 {
     AV_SCOPE("ContextExecutor::create");
@@ -55,6 +73,11 @@ Status ContextExecutor::create()
     if (executor_ != nullptr || !configured_) return Status::invalid_state;
     executor_ = make();
     if (executor_ == nullptr) return Status::no_memory;
+    /* Given as soon as there is an executor to give it to, and never taken
+     * back: the library's own registrations may outlive this - OpenCL cannot
+     * unregister a callback - and the pad is the context's, which lives as
+     * long as the device does. */
+    if (signal_ != nullptr) library_.set_signal(executor_, &rvk_context_signalled, signal_);
     if (api_ != SubApi::opengl) return Status::ok;
     const Status published = shares_.publish(id_, uuid_, executor_);
     if (published == Status::ok) return Status::ok;

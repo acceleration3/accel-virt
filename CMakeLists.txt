@@ -515,6 +515,13 @@ add_test(NAME rvkcl_image
                  --require-export clGetExtensionFunctionAddress
                  --require-export clIcdGetPlatformIDsKHR)
 
+# The OpenCL probe binds to the Khronos loader beside it and nothing else
+# (feature 052, T030); it opens no window, so it wants no user32.
+add_test(NAME rvkclprobe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
+                 --allow-import OpenCL.dll --require-import clGetPlatformIDs)
+
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
 add_test(NAME rvkglprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py

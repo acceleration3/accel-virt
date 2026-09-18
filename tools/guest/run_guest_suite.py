@@ -46,6 +46,8 @@ from fetch_cts import CtsFetch, CtsPins  # noqa: E402
 from frame_reference import FrameReference  # noqa: E402
 from fetch_layers import LayerFetch, LayerPins, Refused as LayerRefused  # noqa: E402
 from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E402
+from fetch_opencl_loader import Refused as ClRefused, pins_from as cl_pins_from  # noqa: E402
+from fetch_opencl_loader import problems_on_disk as cl_problems_on_disk  # noqa: E402
 from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -96,8 +98,20 @@ GL_STEP = re.compile(r"^ok opengl\.(\w+)(?: (\S+))?\r?$", re.M)
 GL_NOTE = re.compile(r"^note opengl\.(\w+) (.*?)\r?$", re.M)
 GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "compat", "interval", "resized",
             "attribs", "lost", "recreated")
-# Renderers that are not a GPU: Mesa's software rasterizers, and what
-# opengl32.dll answers itself when no ICD took the window.
+# Feature 052's probe through the Khronos OpenCL loader: the summary, each step,
+# and the device the platform answered with, which the probe prints as a note.
+CL_SUMMARY = re.compile(r"^rvkclprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+CL_STEP = re.compile(r"^ok opencl\.(\w+)(?: (\S+))?\r?$", re.M)
+CL_NOTE = re.compile(r"^note opencl\.(\w+) (.*?)\r?$", re.M)
+# The probe's own order, from the platform the loader listed to the objects it
+# released: a probe that stops printing one has not proven it, whatever its
+# summary counts.
+CL_STEPS = ("platform_count", "platforms", "platform", "device_ids", "device", "luid", "context", "queue",
+            "buffers", "write", "write_second", "program", "build", "kernel", "arguments", "run", "finish",
+            "read", "sum", "map", "unmap", "svm", "user_event", "wait", "callback", "release")
+# Renderers that are not a GPU: Mesa's software rasterizers, what opengl32.dll
+# answers itself when no ICD took the window, and what an OpenCL device that is
+# the CPU calls itself.
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
 # The renders each probe judged, which it leaves beside itself as bitmaps for a
 # person to open (docs/testing.md); pulled into <work>/images.
@@ -279,6 +293,14 @@ def arguments():
                         help="run rvkglprobe.exe's steps through the system opengl32.dll on the host GPU instead of "
                              "the suite; needs --executor naming the real library (feature 050, T043)")
     parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "rvkglprobe.exe"))
+    parser.add_argument("--opencl", action="store_true",
+                        help="run rvkclprobe.exe's steps through the Khronos OpenCL loader on the host GPU "
+                             "instead of the suite; needs the fetched loader and --executor naming the real "
+                             "library (feature 052)")
+    parser.add_argument("--cl-probe", default=str(ROOT / "build" / "guest" / "rvkclprobe.exe"))
+    parser.add_argument("--opencl-loader", default=str(ROOT / "third_party" / "opencl-loader"),
+                        help="where tools/fetch_opencl_loader.py put the loader's source")
+    parser.add_argument("--opencl-pins", default=str(ROOT / "tools" / "opencl_loader_pins.txt"))
     parser.add_argument("--d3d", action="store_true",
                         help="run the three D3D probes through the pinned DXVK and vkd3d-proton beside them, on "
                              "the host GPU, instead of the suite; needs the fetched layers, the fetched Vulkan "
@@ -658,6 +680,8 @@ class GuestRun:
             required.append(self.args.probe)
         if self.args.opengl_discovery or self.args.opengl:
             required.append(self.args.gl_probe)
+        if self.args.opencl:
+            required += [self.args.cl_probe, str(self.opencl_loader_dll())]
         if self.args.d3d:
             required += [self.args.d3d9_probe, self.args.d3d11_probe, self.args.d3d12_probe]
         for path in required:
@@ -665,6 +689,8 @@ class GuestRun:
                 raise StepFailed("prepare", f"{path} does not exist")
         if self.args.vulkan:
             self.vulkan_runtime()
+        if self.args.opencl:
+            self.opencl_loader()
         if self.args.cts:
             self.cts_build()
         if self.args.page_heap and not self.args.d3d:
@@ -708,6 +734,31 @@ class GuestRun:
             listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
             raise StepFailed("prepare", f"--vulkan needs the pinned Vulkan runtime in {runtime} ({listed}): "
                                         "run tools/fetch_vulkan_runtime.py")
+
+    def opencl_loader_dll(self):
+        """The Khronos loader a --opencl run pushes: the cross-built OpenCL.dll
+        the guest programs link against, which the build leaves beside the
+        probe. The pinned tree is the source it was built from and never
+        reaches the guest."""
+        return pathlib.Path(self.args.cl_probe).parent / "OpenCL.dll"
+
+    def opencl_loader(self):
+        """The loader source a --opencl run was built from, as it was pinned: a
+        tree nobody fetched, or one that is not the pinned one, is refused
+        before anything boots - the same as the Vulkan runtime, and for the same
+        reason."""
+        try:
+            _url, digest = cl_pins_from(pathlib.Path(self.args.opencl_pins))
+        except OSError as error:
+            raise StepFailed("prepare", f"--opencl: no pins: {error}")
+        except ClRefused as refused:
+            raise StepFailed("prepare", f"--opencl: {refused}")
+        into = pathlib.Path(self.args.opencl_loader)
+        problems = cl_problems_on_disk(into, digest)
+        if problems:
+            listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
+            raise StepFailed("prepare", f"--opencl needs the pinned OpenCL loader in {into} ({listed}): "
+                                        "run tools/fetch_opencl_loader.py")
 
     def d3d_layers(self):
         """The DLLs a --d3d run pushes, as they were pinned: a layer nobody
@@ -835,6 +886,13 @@ class GuestRun:
 
         if self.args.opengl_discovery or self.args.opengl:
             files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
+
+        if self.args.opencl:
+            # The loader beside the probe that imports it, where Windows looks
+            # first, so the run is the fetched loader's rather than whatever
+            # another runtime left in System32.
+            files += [(self.opencl_loader_dll(), GUEST_DIRECTORY + "\\OpenCL.dll"),
+                      (self.args.cl_probe, GUEST_DIRECTORY + "\\rvkclprobe.exe")]
 
         if self.args.cts:
             # The CTS and the loader it calls, in a directory of its own: it
@@ -1756,6 +1814,7 @@ class GuestRun:
             return
         scenarios = [scenario for chosen, scenario in ((self.args.rvk, self.rvk), (self.args.vulkan, self.vulkan),
                                                         (self.args.opengl, self.opengl),
+                                                        (self.args.opencl, self.opencl),
                                                         (self.args.d3d, self.d3d),
                                                         (self.args.cts, self.cts)) if chosen]
         if scenarios:
@@ -1842,6 +1901,36 @@ class GuestRun:
         self.say(f"opengl ok: {int(summary.group(1))} passed, renderer {renderer}, "
                  f"version {notes.get('version', '(none)')}")
         self.pictures("opengl", GL_PICTURES)
+
+    def opencl(self):
+        """Feature 052, SC-001 to SC-003: every step of rvkclprobe.exe through the
+        Khronos OpenCL loader, on a device that is the host GPU's. The report is
+        written to a guest file and pulled, as the OpenGL probe's is."""
+        report = GUEST_DIRECTORY + "\\opencl.txt"
+        command = f"{GUEST_DIRECTORY}\\rvkclprobe.exe > {report} 2>&1"
+        code, _out, _error = self.step("opencl.run", lambda: self.agent.run(CMD, ["/c", command],
+                                                                          self.args.step_timeout))
+        self.step("opencl.pull", lambda: self.agent.pull(report, self.work / "opencl.txt"))
+        text = (self.work / "opencl.txt").read_text(errors="replace")
+        summary = CL_SUMMARY.search(text)
+        if summary is None:
+            raise StepFailed("opencl", f"no summary in the probe's report, exit {code}; see opencl.txt")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("opencl", f"{failed} step(s) failed, exit {code}; see opencl.txt")
+        steps = dict(CL_STEP.findall(text))
+        missing = [name for name in CL_STEPS if name not in steps]
+        if missing:
+            raise StepFailed("opencl", f"the probe reported no {', '.join(missing)}; see opencl.txt")
+        notes = dict(CL_NOTE.findall(text))
+        device = notes.get("device_name", "")
+        if not device or device == "(none)":
+            raise StepFailed("opencl", "the probe named no device")
+        # A software device is the loader answering with a CPU runtime: the
+        # guest never reached the host GPU, whatever every step said.
+        if any(software in device.lower() for software in SOFTWARE_RENDERERS):
+            raise StepFailed("opencl", f"the device {device} is not a host GPU")
+        self.say(f"opencl ok: {int(summary.group(1))} passed, device {device}")
 
     def pictures(self, step, names):
         """The probe's renders into <work>/images: a probe whose steps all
