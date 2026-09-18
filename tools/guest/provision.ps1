@@ -30,12 +30,15 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
-                 'sleepstates', 'hibernate', 'cycle', 'upgrade', 'timeouts', 'collect')][string]$Stage,
+                 'sleepstates', 'hibernate', 'cycle', 'upgrade', 'timeouts', 'pageheap', 'heapchecks',
+                 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
     [int]$Minutes = 0,
-    [switch]$MemoryDump
+    [switch]$MemoryDump,
+    [switch]$Enable,
+    [string[]]$Programs = @()
 )
 $ErrorActionPreference = 'Stop'
 $RebootRequired = 3010
@@ -353,6 +356,44 @@ switch ($Stage) {
             Write-Output "timeout: $($event.TimeCreated.ToString('s')) $message"
         }
         Write-Output "timeouts: $($events.Count)"
+        exit 0
+    }
+    'pageheap' {
+        # What gflags /p /enable writes, written directly: the debugging tools
+        # are not in this image, and the flag is a registry value under Image
+        # File Execution Options either way (feature 047, FR-006). 0x02000000
+        # is FLG_HEAP_PAGE_ALLOCS; PageHeapFlags 3 is full page heap with
+        # backwards-compatible padding, which is what catches a write past an
+        # allocation at the moment it happens.
+        foreach ($program in $Programs) {
+            $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$program"
+            if ($Enable) {
+                New-Item -Path $key -Force | Out-Null
+                New-ItemProperty -Path $key -Name 'GlobalFlag' -Value '0x02000000' -PropertyType String -Force |
+                        Out-Null
+                New-ItemProperty -Path $key -Name 'PageHeapFlags' -Value '0x3' -PropertyType String -Force |
+                        Out-Null
+                Write-Output "pageheap: $program on"
+            } else {
+                Remove-Item -Path $key -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Output "pageheap: $program off"
+            }
+        }
+        exit 0
+    }
+    'heapchecks' {
+        # What page heap raises when it catches a write past an allocation: the
+        # process is terminated and Windows Error Reporting records it, and a
+        # verifier stop is logged under Application. Every event of either, so
+        # a run reports what it found rather than only that it found nothing.
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application' } -MaxEvents 200 `
+                        -ErrorAction SilentlyContinue |
+                Where-Object { $_.Message -match 'heap|verifier|0xc0000374|STATUS_HEAP_CORRUPTION' })
+        foreach ($event in $events) {
+            $message = ($event.Message -replace '\s+', ' ')
+            Write-Output "heapcheck: $($event.Id) $message"
+        }
+        Write-Output "heapchecks: $($events.Count)"
         exit 0
     }
     'collect' {

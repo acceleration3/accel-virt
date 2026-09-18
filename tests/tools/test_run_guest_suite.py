@@ -87,6 +87,18 @@ PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\
                 "ok vulkan.present 4096\r\nok vulkan.pacing 60\r\nok vulkan.resized 9216\r\n"
                 "rvkvkprobe: 12 passed, 0 failed\r\n")
 """What rvkvkprobe.exe prints when every step of features 045 and 046 passed."""
+D3D_REPORTS = {
+    "9": ("ok d3d9.device\r\nok d3d9.adapter_ids\r\nok d3d9.clear\r\nok d3d9.readback\r\n"
+          "ok d3d9.pixels 4096\r\nok d3d9.present\r\nrvkd3d9probe: 6 passed, 0 failed\r\n"),
+    "11": ("ok d3d11.device\r\nok d3d11.feature_level 45056\r\nok d3d11.adapter_luid\r\nok d3d11.target\r\n"
+           "ok d3d11.readback\r\nok d3d11.pixels 4096\r\nok d3d11.present\r\n"
+           "rvkd3d11probe: 7 passed, 0 failed\r\n"),
+    "12": ("ok d3d12.device\r\nok d3d12.feature_level 49152\r\nok d3d12.adapter_luid\r\nok d3d12.queue\r\n"
+           "ok d3d12.target\r\nok d3d12.clear\r\nok d3d12.fence\r\nok d3d12.readback\r\n"
+           "ok d3d12.pixels 4096\r\nrvkd3d12probe: 9 passed, 0 failed\r\n"),
+}
+"""What each D3D probe prints when every step of feature 047's US1 and US2 passed."""
+D3D_PICTURES = ("C:\\rvk\\d3d9-clear.bmp", "C:\\rvk\\d3d11-clear.bmp", "C:\\rvk\\d3d12-clear.bmp")
 KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
 ICD_LOG = "C:\\ProgramData\\rvk\\rvkvk-4242.log"
 
@@ -99,8 +111,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
-                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "OVMF_VARS.fd",
-                     "OVMF_CODE.fd"):
+                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
+                     "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -639,6 +651,196 @@ class GuestSuiteRun(unittest.TestCase):
             pictures = {f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES}
         self.script(outputs=outputs, rvkglprobe=code,
                     files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}, **pictures))
+
+    def d3d_layers(self, files=("d3d9.dll", "d3d11.dll", "dxgi.dll"),
+                   vkd3d=("d3d12.dll", "d3d12core.dll"), missing=(), empty_pins=False, no_files=False):
+        """A fetched DXVK and vkd3d-proton, pinned to what is on disk: what a
+        --d3d run needs before it boots anything. `missing` names files the
+        pins name and disk does not, and `empty_pins` leaves a pins file as it
+        is in the repository - named but naming nothing."""
+        layers = self.scratch / "layers"
+        tools = self.scratch / "tools"
+        tools.mkdir(exist_ok=True)
+        for layer, names in (("dxvk", files), ("vkd3d-proton", vkd3d)):
+            into = layers / layer
+            into.mkdir(parents=True, exist_ok=True)
+            (into / "source").mkdir(exist_ok=True)
+            (into / "source" / "device.c").write_text("/* what the requirement gate reads */\n")
+            pins = [f"source file:///nowhere/{layer}-source.tar.gz " + "0" * 64,
+                    f"release file:///nowhere/{layer}.tar.gz " + "1" * 64]
+            for name in names:
+                pinned = (layer + name).encode() * 40
+                pins.append(f"file {name} x64/{name} {hashlib.sha256(pinned).hexdigest()}")
+                if name in missing:
+                    (into / name).unlink(missing_ok=True)
+                else:
+                    (into / name).write_bytes(pinned)
+            if empty_pins:
+                text = "# empty on purpose\n"
+            elif no_files:
+                text = "\n".join(pins[:2]) + "\n"
+            else:
+                text = "\n".join(pins) + "\n"
+            (tools / f"{layer.replace('-', '_')}_pins.txt").write_text(text)
+        return ("--layers", layers, "--layer-pins", tools,
+                "--d3d9-probe", self.scratch / "rvkd3d9probe.exe",
+                "--d3d11-probe", self.scratch / "rvkd3d11probe.exe",
+                "--d3d12-probe", self.scratch / "rvkd3d12probe.exe")
+
+    def d3d_script(self, **behaviour):
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
+                   "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED}
+        outputs.update(behaviour.pop("outputs", {}))
+        pictures = behaviour.pop("pictures", {name: "BM d3d" for name in D3D_PICTURES})
+        self.script(outputs=outputs, files=dict(GUEST_FILES, **pictures), **behaviour)
+
+    def test_a_d3d_run_proves_every_step_of_all_three_layers(self):
+        """Feature 047, FR-005: the three probes run in the console session with
+        the layers' DLLs beside them, every step of each report passes, and the
+        frame each cleared is pulled back as a picture."""
+        self.d3d_script()
+        result = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                                *self.vulkan_runtime(), *self.d3d_layers())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        # The layers' DLLs and the loader they call, beside the probes.
+        for name in ("d3d9.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"):
+            self.assertTrue(any(line.startswith(f"file C:\\rvk\\{name} ") for line in lines),
+                            f"{name} was not pushed: {lines}")
+        self.assertTrue(any(line.startswith("file C:\\rvk\\vulkan-1.dll ") for line in lines))
+        for api in ("9", "11", "12"):
+            self.assertTrue(any(line.startswith(f"file C:\\rvk\\rvkd3d{api}probe.exe ") for line in lines))
+            self.assertIn(f"pull C:\\rvk\\d3d{api}.txt", lines)
+            self.assertEqual((self.work / f"d3d{api}.txt").read_text(newline=""), D3D_REPORTS[api])
+        self.assertIn("guest: d3d9 ok: 6 passed through dxvk", result.stdout)
+        self.assertIn("guest: d3d11 ok: 7 passed through dxvk", result.stdout)
+        self.assertIn("guest: d3d12 ok: 9 passed through vkd3d-proton", result.stdout)
+        # It ran in the console session, as a window needs.
+        self.assertTrue(any("schtasks.exe /create /tn rvkconsole" in line for line in lines))
+        for picture in ("d3d9-clear", "d3d11-clear", "d3d12-clear"):
+            self.assertEqual((self.work / "images" / f"{picture}.bmp").read_text(), "BM d3d")
+        self.assertIn(f"guest: d3d.images ok: 3 in {self.work / 'images'}", result.stdout)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assert_clean()
+
+    def test_a_d3d_run_under_page_heap_reports_what_windows_logged(self):
+        """Feature 047, FR-006: every probe runs with full page heap on it, the
+        Application log is read afterwards, and the flag is taken off the
+        machine again. A run that found a heap event names it and fails."""
+        self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
+                                "heapchecks": [0]},
+                        outputs={"check": ONE_MONITOR +
+                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                                 "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
+                                 "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
+                                 "pageheap": "pageheap: rvkd3d9probe.exe on\r\n",
+                                 "heapchecks": "heapchecks: 0\r\n"})
+        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/librvk_executor.so",
+                                *self.vulkan_runtime(), *self.d3d_layers())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: pageheap on: 3 program(s)", result.stdout)
+        self.assertIn("guest: heapchecks ok: no heap event under page heap", result.stdout)
+        self.assertIn("guest: pageheap off: 3 program(s)", result.stdout)
+        # On, then off: the machine is left as it was found.
+        programs = "rvkd3d9probe.exe,rvkd3d11probe.exe,rvkd3d12probe.exe"
+        self.assertEqual(self.stage_calls(),
+                         ["sign", "install", "check", f"pageheap -Programs {programs} -Enable",
+                          f"pageheap -Programs {programs}", "heapchecks", "collect"])
+        self.assert_clean()
+
+    def test_a_heap_event_under_page_heap_fails_the_run_naming_it(self):
+        """What page heap catching a write past an allocation looks like: the
+        event is reported and the run fails, and the flag still comes off."""
+        self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
+                                "heapchecks": [0]},
+                        outputs={"check": ONE_MONITOR +
+                                          "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                                 "rvkd3d9probe": D3D_REPORTS["9"], "rvkd3d11probe": D3D_REPORTS["11"],
+                                 "rvkd3d12probe": D3D_REPORTS["12"], "collect": COLLECTED,
+                                 "pageheap": "pageheap: rvkd3d9probe.exe on\r\n",
+                                 "heapchecks": ("heapcheck: 1000 Faulting application rvkd3d11probe.exe "
+                                                "exception code 0xc0000374\r\nheapchecks: 1\r\n")})
+        result = self.run_suite("--d3d", "--page-heap", "--executor", "/nowhere/librvk_executor.so",
+                                *self.vulkan_runtime(), *self.d3d_layers())
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("guest: heapcheck: event 1000: Faulting application rvkd3d11probe.exe", result.stdout)
+        self.assertIn("heapchecks failed: 1 heap event(s) while the probes ran under page heap", result.stdout)
+        self.assertTrue(any(call.startswith("pageheap") and not call.endswith("-Enable")
+                            for call in self.stage_calls()),
+                        f"the flag was not taken off: {self.stage_calls()}")
+
+    def test_page_heap_without_the_d3d_run_is_refused(self):
+        """It is what the D3D probes run under; on its own it would turn a flag
+        on and run nothing."""
+        self.d3d_script()
+        result = self.run_suite("--page-heap", "--executor", "/nowhere/librvk_executor.so")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--page-heap is what the D3D probes run under: it needs --d3d", result.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+    def test_a_d3d_run_without_the_pinned_layers_is_refused_before_qemu(self):
+        """The layers are two archives and their hashes; a run that cannot have
+        them says which fetch to run and boots nothing."""
+        self.d3d_script()
+        empty = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                               *self.vulkan_runtime(), *self.d3d_layers(empty_pins=True))
+        self.assertEqual(empty.returncode, 1)
+        # The pins file in the repository is comments alone, which is what this
+        # is: it names no archive, so there is nothing to check against.
+        self.assertIn("no source pin: run tools/fetch_layers.py dxvk", empty.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+        self.d3d_script()
+        nameless = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                                  *self.vulkan_runtime(), *self.d3d_layers(no_files=True))
+        self.assertEqual(nameless.returncode, 1)
+        self.assertIn("its pins name no files: run tools/fetch_layers.py dxvk", nameless.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+        self.d3d_script()
+        gone = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                              *self.vulkan_runtime(), *self.d3d_layers(missing=("d3d11.dll",)))
+        self.assertEqual(gone.returncode, 1)
+        self.assertIn("--d3d needs the pinned dxvk", gone.stdout)
+        self.assertIn("d3d11.dll missing", gone.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+        # A layer file that is not what it was pinned to is not the layer.
+        self.d3d_script()
+        layers = self.d3d_layers()
+        (self.scratch / "layers" / "dxvk" / "d3d9.dll").write_bytes(b"something else")
+        tampered = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                                  *self.vulkan_runtime(), *layers)
+        self.assertEqual(tampered.returncode, 1)
+        self.assertIn("d3d9.dll sha256", tampered.stdout)
+        self.assertEqual(self.journal_lines(), [])
+
+    def test_a_d3d_run_fails_a_failed_missing_or_unsummarised_step(self):
+        """What a layer that half works looks like: a failed step, a step the
+        probe never printed, and a report with no summary at all."""
+        cases = {
+            "failed step": ({"rvkd3d11probe": D3D_REPORTS["11"].replace(
+                "ok d3d11.pixels 4096", "FAIL d3d11.pixels status=6 0").replace(
+                "7 passed, 0 failed", "6 passed, 1 failed")},
+                "d3d11 failed: 1 step(s) failed, exit 0; see d3d11.txt"),
+            "missing step": ({"rvkd3d12probe": D3D_REPORTS["12"].replace("ok d3d12.fence\r\n", "").replace(
+                "9 passed", "8 passed")},
+                "d3d12 failed: the probe reported no fence; see d3d12.txt"),
+            "no summary": ({"rvkd3d9probe": D3D_REPORTS["9"].replace(
+                "rvkd3d9probe: 6 passed, 0 failed\r\n", "")},
+                "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
+            "another probe's summary": ({"rvkd3d9probe": D3D_REPORTS["9"].replace(
+                "rvkd3d9probe: 6 passed, 0 failed", "rvkd3d11probe: 6 passed, 0 failed")},
+                "d3d9 failed: no summary line (exit 0); see d3d9.txt"),
+        }
+        for case, (outputs, reason) in cases.items():
+            with self.subTest(case):
+                self.d3d_script(outputs=outputs)
+                result = self.run_suite("--d3d", "--executor", "/nowhere/librvk_executor.so",
+                                        *self.vulkan_runtime(), *self.d3d_layers())
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(reason, result.stdout)
 
     def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
         """Feature 050, T043: the probe runs with its report written to a guest

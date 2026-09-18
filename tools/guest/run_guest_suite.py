@@ -38,6 +38,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fetch_layers import LayerFetch, LayerPins, Refused as LayerRefused  # noqa: E402
 from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E402
 from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
 
@@ -89,6 +90,23 @@ SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
 # person to open (docs/testing.md); pulled into <work>/images.
 VULKAN_PICTURES = ("vulkan-draw", "vulkan-present", "vulkan-resized")
 GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
+# Feature 047's three D3D probes, each through the layer beside it: DXVK's
+# d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll. One summary and one step
+# list each, and the steps are the probe's own order - a probe that stops
+# printing one has not proven it, whatever its summary counts.
+D3D_SUMMARY = re.compile(rb"^rvkd3d(9|11|12)probe: (\d+) passed, (\d+) failed\r?$", re.M)
+D3D_STEP = re.compile(rb"^ok d3d(9|11|12)\.(\w+)(?: (\S+))?\r?$", re.M)
+D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "present"),
+             "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present"),
+             "12": ("device", "feature_level", "adapter_luid", "queue", "target", "clear", "fence", "readback",
+                    "pixels")}
+# Which layer each probe's DLLs come from, and what the probe is called.
+D3D_LAYERS = {"9": "dxvk", "11": "dxvk", "12": "vkd3d-proton"}
+D3D_PICTURES = ("d3d9-clear", "d3d11-clear", "d3d12-clear")
+# What provision.ps1's heapchecks stage counts: page heap's own verdict on the
+# three probes (feature 047, FR-006).
+HEAP_CHECKS = re.compile(r"^heapchecks: (\d+)\r?$", re.M)
+HEAP_EVENT = re.compile(r"^heapcheck: (\d+) (.*?)\r?$", re.M)
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable
 # surfaces name devices too, always with more on the line. --summary prints no
@@ -238,6 +256,20 @@ def arguments():
                         help="run rvkglprobe.exe's steps through the system opengl32.dll on the host GPU instead of "
                              "the suite; needs --executor naming the real library (feature 050, T043)")
     parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "rvkglprobe.exe"))
+    parser.add_argument("--d3d", action="store_true",
+                        help="run the three D3D probes through the pinned DXVK and vkd3d-proton beside them, on "
+                             "the host GPU, instead of the suite; needs the fetched layers, the fetched Vulkan "
+                             "runtime and --executor naming the real library (feature 047)")
+    parser.add_argument("--page-heap", action="store_true",
+                        help="run the D3D probes with full page heap on each of them, and report what Windows "
+                             "logged for it either way (feature 047, FR-006); needs --d3d")
+    parser.add_argument("--d3d9-probe", default=str(ROOT / "build" / "guest" / "rvkd3d9probe.exe"))
+    parser.add_argument("--d3d11-probe", default=str(ROOT / "build" / "guest" / "rvkd3d11probe.exe"))
+    parser.add_argument("--d3d12-probe", default=str(ROOT / "build" / "guest" / "rvkd3d12probe.exe"))
+    parser.add_argument("--layers", default=str(ROOT / "third_party"),
+                        help="where tools/fetch_layers.py put dxvk/ and vkd3d-proton/")
+    parser.add_argument("--layer-pins", default=str(ROOT / "tools"),
+                        help="where the layers' pins files are: <layer>_pins.txt each")
     parser.add_argument("--vulkan-runtime", default=str(ROOT / "third_party" / "vulkan-runtime"),
                         help="where tools/fetch_vulkan_runtime.py put vulkan-1.dll and vulkaninfo.exe")
     parser.add_argument("--vulkan-pins", default=str(ROOT / "tools" / "vulkan_runtime_pins.txt"))
@@ -550,6 +582,8 @@ class GuestRun:
         self.unexpected_dump = None
         self.sleep_states = None
         self.region = None
+        # What a --d3d run pushes, by layer, once its pins were honoured.
+        self.layer_files = {}
 
     def say(self, line):
         self.log.append(line)
@@ -572,11 +606,20 @@ class GuestRun:
             required.append(self.args.probe)
         if self.args.opengl_discovery or self.args.opengl:
             required.append(self.args.gl_probe)
+        if self.args.d3d:
+            required += [self.args.d3d9_probe, self.args.d3d11_probe, self.args.d3d12_probe]
         for path in required:
             if not os.path.isfile(path):
                 raise StepFailed("prepare", f"{path} does not exist")
         if self.args.vulkan:
             self.vulkan_runtime()
+        if self.args.page_heap and not self.args.d3d:
+            raise StepFailed("prepare", "--page-heap is what the D3D probes run under: it needs --d3d")
+        if self.args.d3d:
+            # The layers call the loader, so a --d3d run needs the pinned
+            # runtime as much as a --vulkan one.
+            self.vulkan_runtime()
+            self.layer_files = self.d3d_layers()
         for stale in ("overlay.qcow2", "vars.fd", "agent.sock", "qmp.sock", "rvkgpu.log", "rvkgpu-rescue.log",
                       "qemu-rescue.log", "panic.txt", "hostmem.bin"):
             (self.work / stale).unlink(missing_ok=True)
@@ -611,6 +654,36 @@ class GuestRun:
             listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
             raise StepFailed("prepare", f"--vulkan needs the pinned Vulkan runtime in {runtime} ({listed}): "
                                         "run tools/fetch_vulkan_runtime.py")
+
+    def d3d_layers(self):
+        """The DLLs a --d3d run pushes, as they were pinned: a layer nobody
+        fetched, or one that is not the pinned one, is refused before anything
+        boots - the same as the Vulkan runtime, and for the same reason. The
+        pins themselves are what says which files there are, so a layer whose
+        pins are empty is refused naming the fetch to run.
+
+        Answers the files to push, as (local path, name) by layer."""
+        pushed = {}
+        for layer in sorted(set(D3D_LAYERS.values())):
+            pins = LayerPins(pathlib.Path(self.args.layer_pins) / f"{layer.replace('-', '_')}_pins.txt")
+            try:
+                pins.read()
+            except LayerRefused as refused:
+                raise StepFailed("prepare", f"--d3d: {layer}: {refused}: run tools/fetch_layers.py {layer}")
+            if not pins.files:
+                raise StepFailed("prepare", f"--d3d: {layer}: its pins name no files: "
+                                            f"run tools/fetch_layers.py {layer}")
+            into = pathlib.Path(self.args.layers) / layer
+            problems = LayerFetch(layer, pins, into, into).problems()
+            # The source tree is what the requirement gate reads, not what a
+            # run pushes: a fetched release with no source is still a run.
+            problems.pop("source", None)
+            if problems:
+                listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
+                raise StepFailed("prepare", f"--d3d needs the pinned {layer} in {into} ({listed}): "
+                                            f"run tools/fetch_layers.py {layer}")
+            pushed[layer] = [(into / name, name) for name in sorted(pins.files)]
+        return pushed
 
     def keep_symbols(self):
         """The driver under test and its PDB beside the dumps it produces: a rebuild replaces both."""
@@ -690,6 +763,19 @@ class GuestRun:
 
         if self.args.opengl_discovery or self.args.opengl:
             files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
+
+        if self.args.d3d:
+            # The layers' DLLs and the loader they call, beside the probes that
+            # import them: Windows looks in the program's own directory first,
+            # so this is what makes the run the layer's rather than the
+            # system's.
+            runtime = pathlib.Path(self.args.vulkan_runtime)
+            files.append((runtime / "vulkan-1.dll", GUEST_DIRECTORY + "\\vulkan-1.dll"))
+            for _layer, pushed in sorted(self.layer_files.items()):
+                files += [(local, GUEST_DIRECTORY + "\\" + name) for local, name in pushed]
+            files += [(self.args.d3d9_probe, GUEST_DIRECTORY + "\\rvkd3d9probe.exe"),
+                      (self.args.d3d11_probe, GUEST_DIRECTORY + "\\rvkd3d11probe.exe"),
+                      (self.args.d3d12_probe, GUEST_DIRECTORY + "\\rvkd3d12probe.exe")]
 
         def send():
             make = f"New-Item -ItemType Directory -Force -Path {PACKAGE_DIRECTORY}"
@@ -1302,6 +1388,78 @@ class GuestRun:
         self.say(f"vulkan ok: {int(summary.group(1))} passed")
         return steps
 
+    def d3d(self):
+        """FR-005: each of the three D3D probes through the layer beside it,
+        every step of its report, and the frame it cleared pulled back.
+
+        They run in the console session: a D3D9 or D3D11 device is made on a
+        window, and a window of the agent's own session is not one a layer can
+        present on (ConsoleProgram)."""
+        programs = [f"rvkd3d{api}probe.exe" for api in ("9", "11", "12")]
+        if self.args.page_heap:
+            self.page_heap(programs, enable=True)
+        try:
+            for api in ("9", "11", "12"):
+                self.d3d_probe(api)
+        finally:
+            # The flag comes off first, so a machine is left as it was found
+            # whatever the probes did; then what Windows logged is read. A heap
+            # event takes precedence over a failed step, because it explains
+            # one.
+            if self.args.page_heap:
+                self.page_heap(programs, enable=False)
+                self.heap_checks()
+        self.pictures("d3d", D3D_PICTURES)
+
+    def page_heap(self, programs, enable):
+        """FR-006: full page heap on each probe, and off again afterwards - a
+        machine left with it on would run every later boot's probes under it."""
+        state = "on" if enable else "off"
+        extra = ["-Programs", ",".join(programs)] + (["-Enable"] if enable else [])
+        self.step(f"pageheap.{state}", lambda: self.provision("pageheap", extra))
+        self.say(f"pageheap {state}: {len(programs)} program(s)")
+
+    def heap_checks(self):
+        """What Windows logged while the probes ran under page heap: every
+        event, and the count. FR-006 expects none, and a run that found some
+        says what they were rather than only that it failed - whether the
+        corruption the spec looked for is reproducible here is the answer
+        either way."""
+        _code, out, _error = self.provision("heapchecks")
+        text = out.decode(errors="replace")
+        for identifier, message in HEAP_EVENT.findall(text):
+            self.say(f"heapcheck: event {identifier}: {message[:160]}")
+        counted = HEAP_CHECKS.search(text)
+        if counted is None:
+            raise StepFailed("heapchecks", "the guest reported no count; see the run's output")
+        found = int(counted.group(1))
+        if found != 0:
+            raise StepFailed("heapchecks", f"{found} heap event(s) while the probes ran under page heap")
+        self.say("heapchecks ok: no heap event under page heap")
+
+    def d3d_probe(self, api):
+        """One probe: run, pulled back, and judged against the steps its API
+        must report."""
+        console = ConsoleProgram(self.agent, self.args.step_timeout)
+        name = f"rvkd3d{api}probe"
+        report = f"{GUEST_DIRECTORY}\\d3d{api}.txt"
+        code = self.step(name, lambda: console.run(f"{GUEST_DIRECTORY}\\{name}.exe", report, name))
+        self.step(f"{name}.pull", lambda: self.agent.pull(report, self.work / f"d3d{api}.txt"))
+        out = (self.work / f"d3d{api}.txt").read_bytes()
+        summary = next((found for found in D3D_SUMMARY.finditer(out) if found.group(1).decode() == api), None)
+        if summary is None:
+            raise StepFailed(f"d3d{api}", f"no summary line (exit {code}); see d3d{api}.txt")
+        failed = int(summary.group(3))
+        if failed != 0 or code != 0:
+            raise StepFailed(f"d3d{api}", f"{failed} step(s) failed, exit {code}; see d3d{api}.txt")
+        steps = {step.decode(): (value or b"").decode()
+                 for found, step, value in D3D_STEP.findall(out) if found.decode() == api}
+        missing = [step for step in D3D_STEPS[api] if step not in steps]
+        if missing:
+            raise StepFailed(f"d3d{api}", f"the probe reported no {', '.join(missing)}; see d3d{api}.txt")
+        self.say(f"d3d{api} ok: {int(summary.group(2))} passed through {D3D_LAYERS[api]}")
+        return steps
+
     def probed_luid(self, steps, name):
         """A LUID LowPart the probe printed, in decimal."""
         if not steps[name].isdigit():
@@ -1331,7 +1489,8 @@ class GuestRun:
             self.opengl_discovery()
             return
         scenarios = [scenario for chosen, scenario in ((self.args.rvk, self.rvk), (self.args.vulkan, self.vulkan),
-                                                        (self.args.opengl, self.opengl)) if chosen]
+                                                        (self.args.opengl, self.opengl),
+                                                        (self.args.d3d, self.d3d)) if chosen]
         if scenarios:
             self.real_executor(scenarios)
             return

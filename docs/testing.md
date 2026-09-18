@@ -694,6 +694,43 @@ can leave the guest with no display.
   refuses a `>` in it), runs the task, waits for it to leave `Running`, takes
   the program's exit code from `Last Result`, pulls `C:\rvk\vulkan.txt` and
   deletes the task. A machine no one is logged into fails the run.
+- **The D3D run** (feature 047) is `--d3d`, a boot on the real executor with
+  the two translation layers beside the probes: DXVK's `d3d9.dll`, `d3d11.dll`
+  and `dxgi.dll` and vkd3d-proton's `d3d12.dll` and `d3d12core.dll` from
+  `third_party/dxvk/` and `third_party/vkd3d-proton/`, the pinned Khronos
+  loader with them, and `rvkd3d9probe.exe`, `rvkd3d11probe.exe` and
+  `rvkd3d12probe.exe` in `C:\rvk`. Windows searches a program's own directory
+  first, so that placement is what makes the run the layer's rather than the
+  system's. Each probe makes a device, clears a frame to one colour, reads it
+  back, judges every pixel and - where the API has one - presents; the runner
+  requires every step of that API's list and `rvkd3dNprobe: N passed, 0
+  failed`, and pulls the three bitmaps into `images/`. The D3D9 and D3D11
+  probes make a window, so all three run in the console session through
+  `ConsoleProgram`, as the Vulkan probe does.
+
+  A **cleared frame, not a triangle**: a triangle through either layer needs
+  DXBC and no shader compiler is pinned here. What the clear still proves is
+  the device, the swap chain or render target, the command list and fence, the
+  read-back and the present - everything a layer has to get right before it
+  draws anything.
+
+  The layers are refused before anything boots unless
+  `tools/fetch_layers.py <layer>` put the pinned files on disk, and the pins in
+  `tools/dxvk_pins.txt` and `tools/vkd3d_proton_pins.txt` are **empty on
+  purpose**: they are two URLs and a hash per file that no run here has ever
+  downloaded, and a hash written from memory is indistinguishable from a
+  tampered archive. Whoever first runs the fetch with a network fills them in.
+  Until then `--d3d` says which fetch to run, and
+  `tools/check_layer_requirements.py` says the layers' required extensions
+  could not be checked rather than passing quietly.
+
+  `--page-heap` (FR-006) adds full page heap to each probe - the
+  `GlobalFlag`/`PageHeapFlags` values under Image File Execution Options that
+  `gflags /p /enable` writes, since the debugging tools are not in the image -
+  runs the three probes under it, takes the flag off again whatever happened,
+  and then reports every heap, verifier or `0xc0000374` event in the guest's
+  Application log. A run that found one names it and fails; a run that found
+  none says so.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
   functions with every wait bounded by an event and a timeout, and
   `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,
