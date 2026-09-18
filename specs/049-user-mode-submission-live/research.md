@@ -317,3 +317,39 @@ That is what this driver now does at StartDevice, and the node reports context
 scheduling only where the answer was yes. It is the same rule constitution VI
 already asks for - never report a capability that is not implemented - with the
 OS added to what "implemented" has to mean.
+
+## 16. What a single-node GpuMmu adapter cannot report
+
+The OS *does* allow hardware scheduling on this machine - the driver asked and
+was told yes (`rvkgpu: hardware scheduling status 0x00000001`) - and the
+adapter still failed to start. The remaining check, decompiled from
+`DXGADAPTER::Initialize`, is the one before it:
+
+```
+if (metadata.Flags & ContextSchedulingSupported) {
+    if (metadata.IoMmuSupported == 0 && physical_adapter->any_node_gpu_mmu == 0)
+        -> "Driver reported ContextScheduling support for a node, but it doesn't support GPU VA"
+}
+...
+if (metadata.GpuMmuSupported) { ...; physical_adapter->any_node_gpu_mmu = 1; }
+```
+
+`any_node_gpu_mmu` is cached **inside the same loop, after** the context
+scheduling check, so a node's own GpuMmu support cannot satisfy it: only an
+earlier node's can. This adapter has one node, and addresses through a GPU MMU
+rather than an IOMMU, so there is no node before it and nothing to satisfy the
+check with. The refusal fails StartAdapter, which is `problem=43` and no
+display at all.
+
+So hardware scheduling here needs one of two things this driver does not have:
+`IoMmuSupported` on the node - an IOMMU path (`DxgkCbMapMdlToIoMmu`) it has no
+implementation for - or a second node reporting GpuMmu before it.
+
+Both are features of their own, and neither belongs to a doorbell. What 049
+leaves, then, is the whole submission path built, tested at every layer and
+driven end to end through the real driver and the real device core on Linux -
+with the guest half switched off by two OS rules, each recorded here, each a
+one-line change away once the thing it asks for exists:
+
+- the node's flags, `hardware_scheduling_ && io_mmu_supported` (§16), and
+- user-mode submission, which needs native fences besides (§14).

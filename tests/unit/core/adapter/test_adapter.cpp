@@ -1585,14 +1585,17 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
 
-/* Feature 049: what the node reports is what the OS allowed at StartDevice.
- * With hardware scheduling on it is context scheduling and the depth this
- * driver can hold in flight - which is what lets the OS hand a process a
- * hardware queue on it - and never user-mode submission, which dxgkrnl refuses
- * the adapter for without the native-fence capability this driver has none of
- * (research.md §14). Nothing else is claimed: no ring-buffer fence release, no
- * tracked workload, no test command buffers. */
-TEST(adapter_get_node_metadata, reports_context_scheduling_only_where_the_os_allowed_it)
+/* Feature 049: the driver asks this OS whether hardware scheduling is on
+ * before it reports anything about how the node is scheduled, because a node
+ * that reports a capability the OS has not enabled fails the whole adapter
+ * start (research.md §15).
+ *
+ * The answer is still no flags: dxgkrnl checks context scheduling against the
+ * node's *IoMmu* support, which this driver has no path for, and refuses the
+ * adapter for a single-node GpuMmu one that claims it (§16). What the node
+ * reports is what it can back - and never user-mode submission, which needs
+ * the native-fence capability this driver has none of (§14). */
+TEST(adapter_get_node_metadata, asks_the_os_before_reporting_how_the_node_is_scheduled)
 { Fixture fixture;
   fixture.dxgkrnl().allow_feature(av::feature_hwsch);
   CHECK_EQ(fixture.start(), success);
@@ -1601,7 +1604,7 @@ TEST(adapter_get_node_metadata, reports_context_scheduling_only_where_the_os_all
   CHECK(fixture.platform().logged_line("rvkgpu: hardware scheduling status 0x00000001"));
   av::DxgkNodeMetadataRecord metadata;
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
-  CHECK_EQ(metadata.Flags, 0x1u | (av::HwQueueSubmissions::capacity << 16u));
+  CHECK_EQ(metadata.Flags, 0u);
 
   /* An OS that refuses the ask is an OS that has not enabled it. */
   Fixture refused;

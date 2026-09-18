@@ -1385,6 +1385,9 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     AV_SCOPE("Adapter::get_node_metadata");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_node_metadata");
     if (metadata == nullptr || node_and_adapter != 0u) return NtStatus(Status::invalid_parameter).value();
+    /* This driver addresses through the GPU MMU and not an IOMMU: what
+     * DxgkCbMapMdlToIoMmu would need is a path it does not have. */
+    static constexpr bool io_mmu_supported = false;
     static constexpr char name[] = "3DNode00";
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
@@ -1402,7 +1405,13 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
      * are implemented and tested; what is missing is the fence half of WDDM
      * 3.1, and reporting the flag before it exists is a capability nobody can
      * use (constitution VI). */
-    metadata->Flags = hardware_scheduling_
+    /* And not context scheduling either, on a node like this one. dxgkrnl
+     * checks it against the node's *IoMmu* support, before it has cached that
+     * any node supports GpuMmu, so a single-node adapter that addresses
+     * through a GPU MMU is refused - with the adapter, not the flag
+     * (research.md §16). This driver has no IOMMU path to report, so what the
+     * node reports is what it can back: the depth it can hold in flight. */
+    metadata->Flags = hardware_scheduling_ && io_mmu_supported
                           ? node_context_scheduling_supported |
                                 (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift)
                           : 0u;
