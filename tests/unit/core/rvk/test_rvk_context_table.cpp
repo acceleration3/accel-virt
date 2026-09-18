@@ -15,6 +15,7 @@
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/rvk/rvk_context_table.hpp"
+#include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/support/status.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
@@ -214,7 +215,8 @@ public:
           segments_(mapped_.platform(), aperture_, host_visible_),
           allocations_(mapped_.platform(), aperture_, segments_),
           table_(mapped_.platform(), mapped_.interface(), allocations_),
-          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform())
+          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform()),
+          queues_(mapped_.platform())
     {
         mapped_.function().add_doorbell_region();
         CHECK_STATUS(mapped_.map(), Status::ok);
@@ -261,7 +263,7 @@ public:
     void serve()
     {
         mapped_.platform().set_irql(Irql::dispatch);
-        table_.serve(node_);
+        table_.serve(node_, queues_);
         CHECK_STATUS(node_.complete(notification_), Status::ok);
         mapped_.platform().set_irql(Irql::passive);
     }
@@ -273,6 +275,7 @@ public:
     av::AllocationTable      &allocations() { return allocations_; }
     RvkContextTable          &table() { return table_; }
     ExecutionNode            &node() { return node_; }
+    av::HwQueueSubmissions   &queues() { return queues_; }
     ProcessAllocation        &ring() { return *ring_; }
     ProcessAllocation        &fence() { return *fence_; }
     ProcessAllocation        &reply() { return *reply_; }
@@ -287,6 +290,9 @@ private:
     RvkContextTable                         table_;
     av::InterruptNotification               notification_;
     ExecutionNode                           node_;
+    /* Feature 049: what a hardware queue of a context waits on is the same
+     * completion its packets do, so a serve answers both. */
+    av::HwQueueSubmissions                  queues_;
     std::optional<av::VirtioGpuDevice>      device_;
     std::optional<ProcessAllocation>        ring_;
     std::optional<ProcessAllocation>        fence_;
@@ -570,7 +576,7 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   fixture.platform().set_irql(Irql::isr);
   std::uint64_t awaited = 0u;
   static_cast<void>(fixture.table().submit(&first_context, nullptr, 0u, awaited));
-  fixture.table().serve(fixture.node());
+  fixture.table().serve(fixture.node(), fixture.queues());
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}

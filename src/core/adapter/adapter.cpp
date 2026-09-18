@@ -110,7 +110,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
@@ -365,7 +365,7 @@ void Adapter::dpc_routine()
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
-    rvk_contexts_.serve(node_);
+    rvk_contexts_.serve(node_, hw_submissions_);
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
@@ -1380,6 +1380,12 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
     metadata->GpuMmuSupported = 1u;
+    /* What this node is scheduled by, which is what lets the OS give a process
+     * a hardware queue and a doorbell on it (features 019 and 049): the queue
+     * DDIs and the doorbell ones are implemented and tested, and the depth is
+     * what this driver can hold in flight. */
+    metadata->Flags = node_context_scheduling_supported | node_user_mode_submission |
+                      (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift);
     for (uint32_t index = 0u; index + 1u < sizeof name; index++)
         metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);
     return NtStatus(Status::ok).value();
@@ -1515,7 +1521,15 @@ int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *requ
     AV_SCOPE("Adapter::create_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_hw_queue");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(hw_queues_.create(context, *request)).value();
+    const Status created = hw_queues_.create(context, *request);
+    if (created != Status::ok) return NtStatus(created).value();
+    /* What the queue runs on, where a submission at DISPATCH can read it. */
+    const Status bound = hw_queue_contexts_.bind(request->hHwQueue, static_cast<HwQueue *>(request->hHwQueue)->context());
+    if (bound != Status::ok) {
+        static_cast<void>(hw_queues_.destroy(request->hHwQueue));
+        request->hHwQueue = nullptr;
+    }
+    return NtStatus(bound).value();
 }
 
 int32_t Adapter::destroy_hw_queue(void *queue)
@@ -1523,6 +1537,7 @@ int32_t Adapter::destroy_hw_queue(void *queue)
     AV_SCOPE("Adapter::destroy_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_hw_queue");
     hw_submissions_.forget(queue);
+    hw_queue_contexts_.forget(queue);
     return NtStatus(hw_queues_.destroy(queue)).value();
 }
 
@@ -1530,9 +1545,24 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
 {
     AV_SCOPE("Adapter::submit_command_to_hw_queue");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command_to_hw_queue");
-    if (request == nullptr || request->DmaBufferPrivateDataSize != 0u) return NtStatus(Status::invalid_parameter).value();
+    if (request == nullptr || request->hHwQueue == nullptr) return NtStatus(Status::invalid_parameter).value();
+    /* What the queue runs on, read without the queue table's mutex, which a
+     * submission at DISPATCH may not take (hw_queue_contexts.hpp). */
+    Context *const context = hw_queue_contexts_.context_of(request->hHwQueue);
+    if (context == nullptr) return NtStatus(Status::invalid_parameter).value();
+    uint64_t             awaited = 0u;
+    if (request->DmaBufferPrivateDataSize != 0u) {
+        /* The same descriptor the virtual path carries, into the same ring:
+         * a hardware-scheduled context submits this way and no other
+         * (feature 049, research.md §13). */
+        const Status published = rvk_contexts_.submit(context,
+                                                      static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
+                                                      request->DmaBufferPrivateDataSize, awaited);
+        if (published != Status::ok) return NtStatus(published).value();
+    }
     const Status status = hw_submissions_.submit(request->hHwQueue, request->HwQueueProgressFenceId,
-                                                 static_cast<uint64_t *>(request->HwQueueProgressFenceCpuVa));
+                                                 static_cast<uint64_t *>(request->HwQueueProgressFenceCpuVa),
+                                                 awaited != 0u ? context : nullptr, awaited);
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
     return NtStatus(status).value();
 }

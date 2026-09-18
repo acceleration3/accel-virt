@@ -326,11 +326,26 @@ Status GdiKmt::create_context(uint32_t device, uint32_t &context)
     return status;
 }
 
+Status GdiKmt::create_hw_queue_context(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                       uint32_t &context)
+{
+    AV_SCOPE("GdiKmt::create_hw_queue_context");
+    return make_context(device, private_data, size, true, context);
+}
+
 Status GdiKmt::create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                       uint32_t &context)
 {
     AV_SCOPE("GdiKmt::create_context_virtual");
+    return make_context(device, private_data, size, false, context);
+}
+
+Status GdiKmt::make_context(uint32_t device, const uint8_t *private_data, uint32_t size, bool hardware_queue,
+                            uint32_t &context)
+{
+    AV_SCOPE("GdiKmt::make_context");
     D3DKMT_CREATECONTEXTVIRTUAL request = {};
+    request.Flags.HwQueueSupported = hardware_queue ? 1u : 0u;
     request.hDevice = device;
     request.NodeOrdinal = 0u;
     request.EngineAffinity = 1u;
@@ -364,20 +379,51 @@ Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, cons
     return answer(D3DKMTSubmitCommand(&request));
 }
 
-Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, const uint64_t *&progress, uint32_t &queue)
+Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, GuestHwQueue &queue)
 {
     AV_SCOPE("GdiKmt::create_hw_queue");
-    queue = 0u;
-    progress = nullptr;
+    queue = GuestHwQueue{};
     D3DKMT_CREATEHWQUEUE request = {};
     request.hHwContext = context;
     const Status made = answer(D3DKMTCreateHwQueue(&request));
     if (made != Status::ok) return made;
-    queue = request.hHwQueue;
-    /* The read-only mapping of the queue's progress is the process's own view
-     * of what the driver has finished. */
-    progress = static_cast<const uint64_t *>(request.HwQueueProgressFenceCPUVirtualAddress);
+    /* The monitored fence a wait waits on, and the read-only mapping of its
+     * value: the process's own view of what the driver has finished. */
+    queue = GuestHwQueue(request.hHwQueue, request.hHwQueueProgressFence,
+                         static_cast<const uint64_t *>(request.HwQueueProgressFenceCPUVirtualAddress));
     return Status::ok;
+}
+
+Status GdiKmt::submit_to_hw_queue(uint32_t queue, uint64_t commands, uint64_t length, const uint8_t *private_data,
+                                  uint32_t private_size, uint64_t progress_fence_id)
+{
+    AV_SCOPE("GdiKmt::submit_to_hw_queue");
+    D3DKMT_SUBMITCOMMANDTOHWQUEUE request = {};
+    request.hHwQueue = queue;
+    request.HwQueueProgressFenceId = progress_fence_id;
+    request.CommandBuffer = commands;
+    request.CommandLength = static_cast<UINT>(length);
+    request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
+    request.PrivateDriverDataSize = private_size;
+    return answer(D3DKMTSubmitCommandToHwQueue(&request));
+}
+
+/* The queue's progress is a monitored fence, so the wait is dxgkrnl's own:
+ * it wakes when the driver reports the fence signalled and the value has been
+ * reached. */
+Status GdiKmt::wait_for_hw_queue(uint32_t device, uint32_t progress_fence, uint64_t value)
+{
+    AV_SCOPE("GdiKmt::wait_for_hw_queue");
+    const D3DKMT_HANDLE                        object = progress_fence;
+    const UINT64                               awaited = value;
+    D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request = {};
+    request.hDevice = device;
+    request.ObjectCount = 1u;
+    request.ObjectHandleArray = &object;
+    request.FenceValueArray = &awaited;
+    request.hAsyncEvent = event_;
+    const Status waited = answer(D3DKMTWaitForSynchronizationObjectFromCpu(&request));
+    return waited != Status::ok ? waited : await_event();
 }
 
 Status GdiKmt::destroy_hw_queue(uint32_t queue)

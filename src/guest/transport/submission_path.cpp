@@ -32,8 +32,13 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
         static_cast<void>(doorbell_.recover());
     }
     /* Disconnected, never connected, or a machine that gives out no doorbell
-     * at all: the same batch at the same tail, through the kernel. */
-    const Status submitted = kmt_.submit(context, dma_address, size, descriptor, size);
+     * at all: the same batch at the same tail, through the kernel - and where
+     * there is a hardware queue, through that, because a hardware-scheduled
+     * context refuses D3DKMTSubmitCommand outright (research.md §13). */
+    const Status submitted =
+        doorbell_.queue() != 0u
+            ? kmt_.submit_to_hw_queue(doorbell_.queue(), dma_address, size, descriptor, size, fence)
+            : kmt_.submit(context, dma_address, size, descriptor, size);
     if (submitted != Status::ok) return submitted;
     kernel_submissions_++;
     return Status::ok;

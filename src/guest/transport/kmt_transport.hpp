@@ -126,6 +126,10 @@ private:
     bool             locked_[allocation_count];
     uint64_t         dma_address_;
     uint32_t         context_;
+    /* Whether the OS gave this context out as one a hardware queue may run on:
+     * a context that is hardware scheduled cannot be submitted to through
+     * D3DKMTSubmitCommand at all (feature 049, research.md §13). */
+    bool             hardware_scheduled_;
     TransportRing    ring_;
     /* Feature 049: the doorbell this context submits through where the OS
      * gives it one, and the choice made per submission. A context that never

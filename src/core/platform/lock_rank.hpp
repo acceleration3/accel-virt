@@ -19,6 +19,7 @@ enum class LockRank : uint16_t {
     allocation_table = 110u,
     rvk_context_slots = 190u,  /* spin lock: which rvk contexts are live, around a submission and the DPC's serve */
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
+    hw_queue_contexts = 205u,  /* spin lock: what each hardware queue runs on, read at DISPATCH (feature 049) */
     hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */

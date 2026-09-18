@@ -15,6 +15,7 @@
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/miniport/ddi_table.hpp"
@@ -532,20 +533,31 @@ Status DdiKmt::wait_for_fence(std::uint32_t device, std::uint32_t fence_object, 
 
 Status DdiKmt::create_context(std::uint32_t device, std::uint32_t &context)
 {
-    return create_context_on(device, nullptr, 0u, context);
+    return create_context_on(device, nullptr, 0u, false, context);
 }
 
 Status DdiKmt::create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                       std::uint32_t &context)
 {
     if (private_data == nullptr && size != 0u) return refuse(Status::invalid_parameter);
-    return create_context_on(device, private_data, size, context);
+    return create_context_on(device, private_data, size, false, context);
+}
+
+/* Hardware scheduling is the OS's decision, and dxgkrnl gives a process a
+ * context a queue may run on only where it is on (feature 049). */
+Status DdiKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                       std::uint32_t &context)
+{
+    context = 0u;
+    if (private_data == nullptr && size != 0u) return refuse(Status::invalid_parameter);
+    if (!hardware_scheduling_) return refuse(Status::not_supported);
+    return create_context_on(device, private_data, size, true, context);
 }
 
 /* dxgkrnl copies the private data into its own memory before the driver sees
  * it, and VidSch gives the context its root before anything is submitted. */
 Status DdiKmt::create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
-                                 std::uint32_t &context)
+                                 bool hardware_queue, std::uint32_t &context)
 {
     context = 0u;
     const Device *const owner = find_device(device);
@@ -555,7 +567,7 @@ Status DdiKmt::create_context_on(std::uint32_t device, const std::uint8_t *priva
         if (size != 0u) std::memcpy(kernel_copy_, private_data, size);
         DxgkargCreateContextRecord request = {};
         request.EngineAffinity = first_engine;
-        request.Flags = virtual_addressing | hw_queue_supported;
+        request.Flags = hardware_queue ? (virtual_addressing | hw_queue_supported) : virtual_addressing;
         request.pPrivateDriverData = size != 0u ? kernel_copy_ : nullptr;
         request.PrivateDriverDataSize = size;
         const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateContextRecord *)>(
@@ -739,11 +751,9 @@ std::uint32_t DdiKmt::open_objects() const
 }
 
 
-Status DdiKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
-                               std::uint32_t &queue)
+Status DdiKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &made)
 {
-    queue = 0u;
-    progress = nullptr;
+    made = GuestHwQueue{};
     Context *const on = find_context(context);
     if (on == nullptr || on->device != device) return refuse(Status::invalid_parameter);
     if (!hardware_scheduling_) return refuse(Status::not_supported);
@@ -758,12 +768,56 @@ Status DdiKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, cons
         slot.handle = next_handle_++;
         slot.context = context;
         slot.driver = request.hHwQueue;
-        queue = slot.handle;
-        /* Read-only to the process, as dxgkrnl maps it. */
-        progress = &slot.progress;
+        /* Read-only to the process, as dxgkrnl maps it; the monitored fence it
+         * is reported on is named by the queue itself here. */
+        made = GuestHwQueue(slot.handle, slot.handle, &slot.progress);
         return Status::ok;
     }
     return refuse(Status::no_space);
+}
+
+/* What a hardware-scheduled context submits through, as dxgkrnl carries it:
+ * DxgkDdiSubmitCommandToHwQueue with the descriptor as private data and the
+ * progress fence value the queue reaches when the device has run it. */
+Status DdiKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
+                                  const std::uint8_t *private_data, std::uint32_t private_size,
+                                  std::uint64_t progress_fence_id)
+{
+    HardwareQueue *const on = find_hardware_queue(queue);
+    if (on == nullptr || private_size > max_private_data || (private_data == nullptr) != (private_size == 0u))
+        return refuse(Status::invalid_parameter);
+    if (private_size != 0u) std::memcpy(kernel_copy_, private_data, private_size);
+    DxgkargSubmitCommandToHwQueueRecord request = {};
+    request.hHwQueue = on->driver;
+    request.HwQueueProgressFenceId = progress_fence_id;
+    request.DmaBufferVirtualAddress = commands;
+    request.DmaBufferSize = static_cast<std::uint32_t>(length);
+    request.pDmaBufferPrivateData = private_size != 0u ? kernel_copy_ : nullptr;
+    request.DmaBufferPrivateDataSize = private_size;
+    request.HwQueueProgressFenceCpuVa = &on->progress;
+    const Status submitted = answer(routine<std::int32_t (*)(void *, const DxgkargSubmitCommandToHwQueueRecord *)>(
+        DdiSlot::DxgkDdiSubmitCommandToHwQueue)(fdo_.context(), &request));
+    pump_.deliver();
+    return submitted;
+}
+
+/* Until the queue's progress fence reaches `value`, which the driver writes
+ * when the device has finished what the queue carried. */
+Status DdiKmt::wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence, std::uint64_t value)
+{
+    const HardwareQueue *const on = find_hardware_queue(progress_fence);
+    const Context *const       context = on != nullptr ? find_context(on->context) : nullptr;
+    if (context == nullptr || context->device != device) return refuse(Status::invalid_parameter);
+    const std::uint64_t deadline = now_ms() + patience_ms;
+    for (;;) {
+        static_cast<void>(fabric_.deliver());
+        pump_.deliver();
+        if (on->progress >= value) return refuse(Status::ok);
+        if (now_ms() >= deadline) break;
+        sched_yield();
+    }
+    last_code_ = timed_out;
+    return Status::not_found;
 }
 
 Status DdiKmt::destroy_hw_queue(std::uint32_t queue)

@@ -93,6 +93,8 @@ public:
     Status   free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t pages) override;
     Status   wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence) override;
     Status   create_context(std::uint32_t device, std::uint32_t &context) override;
+    Status   create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                     std::uint32_t &context) override;
     Status   create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                     std::uint32_t &context) override;
     Status   destroy_context(std::uint32_t context) override;
@@ -106,8 +108,11 @@ public:
      * one asks the driver which device page it is and arms a page of real
      * memory that carries a store there (DoorbellFabric), because the driver's
      * own mapping is an address only MockPlatform can reach. */
-    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
-                             std::uint32_t &queue) override;
+    Status   create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &queue) override;
+    Status   submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
+                                const std::uint8_t *private_data, std::uint32_t private_size,
+                                std::uint64_t progress_fence_id) override;
+    Status   wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence, std::uint64_t value) override;
     Status   destroy_hw_queue(std::uint32_t queue) override;
     Status   create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
                              const std::uint32_t *&status, std::uint64_t *&queued) override;
@@ -228,6 +233,7 @@ private:
     Status open_on(Allocation &slot, void *driver_device);
     Status page(Allocation &slot, std::int32_t operation);
     Status create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                             bool hardware_queue,
                              std::uint32_t &context);
     void   release(Allocation &slot);
 

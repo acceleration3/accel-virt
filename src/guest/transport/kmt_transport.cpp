@@ -25,7 +25,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
-      dma_address_(0u), context_(0u), ring_(), doorbell_(connection.kmt()),
+      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
@@ -112,13 +112,21 @@ Status KmtTransport::initialize(const GlContextOptions &options)
                                   allocations_[reply_index], options);
     uint8_t      private_data[RvkContextRecord::encoded_size] = {};
     static_cast<void>(record.encode(private_data, sizeof private_data));
-    const Status made = connection_.kmt().create_context_virtual(connection_.device(), private_data,
-                                                                 sizeof private_data, context_);
+    /* A context a hardware queue may run on first: that is what a doorbell
+     * hangs off, and a machine whose OS hands out no hardware queue refuses it
+     * and gets the context this transport has always had (research.md §13). */
+    Status made = connection_.kmt().create_hw_queue_context(connection_.device(), private_data,
+                                                            sizeof private_data, context_);
+    hardware_scheduled_ = made == Status::ok;
+    if (made != Status::ok)
+        made = connection_.kmt().create_context_virtual(connection_.device(), private_data, sizeof private_data,
+                                                        context_);
     if (made != Status::ok) return made;
-    /* A doorbell for this context, where the OS gives one out: a refusal is an
-     * answer, not a failure - the transport then submits through the kernel,
-     * exactly as it did before (feature 049, research.md §11). */
-    if (doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok)
+    /* A doorbell for this context, where there is a queue to hang one off: a
+     * refusal is an answer, not a failure - the transport then submits through
+     * the kernel, exactly as it did before (research.md §11). */
+    if (hardware_scheduled_ &&
+        doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok)
         static_cast<void>(doorbell_.connect());
     undo.dismiss();
     return Status::ok;
@@ -294,7 +302,14 @@ TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, W
 TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::await");
-    const Status waited = connection_.kmt().wait_for_context(connection_.device(), context_);
+    /* What a hardware-scheduled context has in flight is not in any packet the
+     * kernel queued, so what it waits on is the queue's progress fence - the
+     * monitored fence dxgkrnl made with the queue, which this driver writes
+     * what the device finished into (research.md §12). */
+    const Status waited = doorbell_.queue() != 0u
+                              ? connection_.kmt().wait_for_hw_queue(connection_.device(),
+                                                                    doorbell_.progress_fence(), fence)
+                              : connection_.kmt().wait_for_context(connection_.device(), context_);
     if (waited != Status::ok) {
         faulted_ = true;
         return TransportResult::failed;
@@ -332,7 +347,7 @@ ClientBlobArena &KmtTransport::blobs()
 void KmtTransport::give_back_doorbell()
 {
     AV_SCOPE("KmtTransport::give_back_doorbell");
-    doorbell_.teardown();
+    doorbell_.give_back();
 }
 
 bool KmtTransport::invariants_hold() const

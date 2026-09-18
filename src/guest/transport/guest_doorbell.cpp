@@ -15,8 +15,8 @@ constexpr uint32_t store_value = 1u;
 }  // namespace
 
 GuestDoorbell::GuestDoorbell(Kmt &kmt)
-    : kmt_(&kmt), device_(0u), context_(0u), ring_(0u), queue_(0u), doorbell_(0u), progress_(nullptr),
-      page_(nullptr), status_(nullptr), queued_(nullptr)
+    : kmt_(&kmt), device_(0u), context_(0u), ring_(0u), queue_{}, doorbell_(0u), page_(nullptr),
+      status_(nullptr), queued_(nullptr)
 {
     AV_SCOPE("GuestDoorbell::GuestDoorbell");
 }
@@ -31,19 +31,18 @@ Status GuestDoorbell::initialize(uint32_t device, uint32_t context, uint32_t rin
 {
     AV_SCOPE("GuestDoorbell::initialize");
     if (established()) return Status::invalid_state;
-    uint32_t        queue = 0u;
-    const uint64_t *progress = nullptr;
-    const Status    made = kmt_->create_hw_queue(device, context, progress, queue);
+    GuestHwQueue queue;
+    const Status made = kmt_->create_hw_queue(device, context, queue);
     if (made != Status::ok) return made;
     uint32_t                 doorbell = 0u;
     void                    *page = nullptr;
     const uint32_t          *status = nullptr;
     uint64_t                *queued = nullptr;
-    const Status             opened = kmt_->create_doorbell(queue, ring, doorbell, page, status, queued);
+    const Status             opened = kmt_->create_doorbell(queue.handle(), ring, doorbell, page, status, queued);
     if (opened != Status::ok || page == nullptr || status == nullptr || queued == nullptr) {
         /* Nothing half-made: a queue with no doorbell on it is a queue this
          * process has no use for. */
-        static_cast<void>(kmt_->destroy_hw_queue(queue));
+        static_cast<void>(kmt_->destroy_hw_queue(queue.handle()));
         return opened != Status::ok ? opened : Status::invalid_state;
     }
     device_ = device;
@@ -51,7 +50,6 @@ Status GuestDoorbell::initialize(uint32_t device, uint32_t context, uint32_t rin
     ring_ = ring;
     queue_ = queue;
     doorbell_ = doorbell;
-    progress_ = progress;
     page_ = static_cast<volatile uint32_t *>(page);
     status_ = status;
     queued_ = queued;
@@ -69,12 +67,21 @@ void GuestDoorbell::teardown()
 {
     AV_SCOPE("GuestDoorbell::teardown");
     if (doorbell_ != 0u) static_cast<void>(kmt_->destroy_doorbell(doorbell_));
-    if (queue_ != 0u) static_cast<void>(kmt_->destroy_hw_queue(queue_));
-    queue_ = 0u;
+    if (queue_.established()) static_cast<void>(kmt_->destroy_hw_queue(queue_.handle()));
+    queue_ = GuestHwQueue();
     doorbell_ = 0u;
-    progress_ = nullptr;
     /* device_, context_ and ring_ stay: they are what another doorbell of this
      * context would be made from. */
+    page_ = nullptr;
+    status_ = nullptr;
+    queued_ = nullptr;
+}
+
+void GuestDoorbell::give_back()
+{
+    AV_SCOPE("GuestDoorbell::give_back");
+    if (doorbell_ != 0u) static_cast<void>(kmt_->destroy_doorbell(doorbell_));
+    doorbell_ = 0u;
     page_ = nullptr;
     status_ = nullptr;
     queued_ = nullptr;
@@ -137,12 +144,30 @@ uint32_t GuestDoorbell::handle() const
     return doorbell_;
 }
 
+uint32_t GuestDoorbell::queue() const
+{
+    AV_SCOPE("GuestDoorbell::queue");
+    return queue_.handle();
+}
+
+uint32_t GuestDoorbell::progress_fence() const
+{
+    AV_SCOPE("GuestDoorbell::progress_fence");
+    return queue_.progress_fence();
+}
+
+uint64_t GuestDoorbell::progress() const
+{
+    AV_SCOPE("GuestDoorbell::progress");
+    return queue_.progress();
+}
+
 bool GuestDoorbell::invariants_hold() const
 {
     AV_SCOPE("GuestDoorbell::invariants_hold");
     const bool mapped = page_ != nullptr && status_ != nullptr && queued_ != nullptr;
     if (mapped != established()) return false;
-    return !established() || queue_ != 0u;
+    return !established() || queue_.established();
 }
 
 }  // namespace av

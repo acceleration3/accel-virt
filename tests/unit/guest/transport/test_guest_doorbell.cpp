@@ -35,14 +35,14 @@ struct GuestDoorbellProbe {
     void restore_status() { doorbell_.status_ = status_; }
     void forget_queued() { doorbell_.queued_ = nullptr; }
     void restore_queued() { doorbell_.queued_ = queued_; }
-    void forget_queue() { doorbell_.queue_ = 0u; }
+    void forget_queue() { doorbell_.queue_ = av::GuestHwQueue(); }
     void restore_queue() { doorbell_.queue_ = queue_; }
 
     GuestDoorbell           &doorbell_;
     volatile uint32_t       *page_;
     const volatile uint32_t *status_;
     volatile uint64_t       *queued_;
-    uint32_t                 queue_;
+    GuestHwQueue             queue_;
 };
 
 }  // namespace av
@@ -322,3 +322,39 @@ TEST(guest_doorbell_invariants, a_doorbell_half_mapped_or_on_no_queue_is_detecte
   CHECK(!doorbell.invariants_hold());
   probe.restore_queue();
   CHECK(doorbell.invariants_hold()); }
+
+/* What the queue a doorbell hangs off is for (feature 049, research.md §13):
+ * a hardware-scheduled context submits through the queue and waits on its
+ * progress fence, so a process holds all three - the queue, the fence and the
+ * read-only view of what the driver has written into it. */
+TEST(guest_doorbell, holds_the_queue_its_submissions_and_waits_go_through)
+{ Made          made;
+  GuestDoorbell doorbell(made.kmt());
+  CHECK_EQ(doorbell.queue(), 0u);
+  CHECK_EQ(doorbell.progress_fence(), 0u);
+  CHECK_EQ(doorbell.progress(), 0u);
+  CHECK_STATUS(doorbell.initialize(made.device(), made.context(), made.ring()), Status::ok);
+  CHECK(doorbell.queue() != 0u);
+  CHECK_EQ(doorbell.progress_fence(), doorbell.queue());
+  CHECK_EQ(doorbell.progress(), 0u);
+  CHECK_STATUS(doorbell.connect(), Status::ok);
+  CHECK(doorbell.ring(4u));
+
+  /* A wait is what makes the driver write the progress, and the process reads
+   * it without a kernel call afterwards. */
+  CHECK_STATUS(made.kmt().wait_for_hw_queue(made.device(), doorbell.progress_fence(), 4u), Status::ok);
+  CHECK_EQ(doorbell.progress(), 4u);
+
+  /* Given back, the doorbell is gone and the queue stays: that is what the
+   * kernel path of a hardware-scheduled context goes through. */
+  const std::uint32_t queue = doorbell.queue();
+  doorbell.give_back();
+  CHECK(!doorbell.established());
+  CHECK_EQ(doorbell.queue(), queue);
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_hw_queue), 0u);
+  CHECK(!doorbell.ring(5u));
+  CHECK(doorbell.invariants_hold());
+  doorbell.teardown();
+  CHECK_EQ(doorbell.queue(), 0u);
+  CHECK_EQ(made.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u); }

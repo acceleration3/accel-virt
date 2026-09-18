@@ -1,5 +1,7 @@
 #include "core/rvk/rvk_context_table.hpp"
 
+#include "core/scheduling/hw_queue_submissions.hpp"
+
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/miniport/acquired_handle_data.hpp"
@@ -292,7 +294,7 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
  * left on the node would hold every context's work queued behind it until a
  * timeout reset. Serving it on every DPC also finishes a packet whose batch
  * was published before the fault was seen and which reached the node after. */
-void RvkContextTable::serve(ExecutionNode &node)
+void RvkContextTable::serve(ExecutionNode &node, HwQueueSubmissions &queues)
 {
     AV_SCOPE("RvkContextTable::serve");
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::serve");
@@ -301,7 +303,11 @@ void RvkContextTable::serve(ExecutionNode &node)
         if (!live_[slot]) continue;
         RvkContextBinding &binding = bindings_[slot].object();
         static_cast<void>(binding.serve());
-        node.finish(contexts_[slot], lost(slot) ? UINT64_MAX : binding.completed());
+        const uint64_t completed = lost(slot) ? UINT64_MAX : binding.completed();
+        node.finish(contexts_[slot], completed);
+        /* What a hardware queue of this context submitted waits on the same
+         * fence, and its progress is where the process reads it (feature 049). */
+        queues.completed_through(contexts_[slot], completed);
     }
 }
 

@@ -35,7 +35,13 @@ TEST(hw_queue_context, is_the_context_it_runs_on_and_leads_to_the_adapter)
   static_cast<void>(queue.context());
   static_cast<void>(queue.progress());
   CHECK_EQ(platform.unclaimed_violations(), 0u);
+  /* A submission to a hardware queue arrives at DISPATCH and reaches the
+   * context from the handle, so that is the ceiling; above it is not. */
   platform.set_irql(Irql::dispatch);
+  static_cast<void>(queue.context());
+  static_cast<void>(queue.progress());
+  CHECK_EQ(platform.unclaimed_violations(), 0u);
+  platform.set_irql(Irql::isr);
   static_cast<void>(queue.context());
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }

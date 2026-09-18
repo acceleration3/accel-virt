@@ -55,10 +55,13 @@ public:
         wait_for_fence,
         create_context,
         create_context_virtual,
+        create_hw_queue_context,
         destroy_context,
         submit,
         wait_for_context,
         create_hw_queue,
+        submit_to_hw_queue,
+        wait_for_hw_queue,
         destroy_hw_queue,
         create_doorbell,
         connect_doorbell,
@@ -130,6 +133,8 @@ public:
     Status        free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t pages) override;
     Status        wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence) override;
     Status        create_context(std::uint32_t device, std::uint32_t &context) override;
+    Status        create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data,
+                                          std::uint32_t size, std::uint32_t &context) override;
     Status        create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                         std::uint32_t &context) override;
     Status        destroy_context(std::uint32_t context) override;
@@ -141,8 +146,12 @@ public:
      * will not give this adapter one; a doorbell answers three pages of this
      * mock's own memory, which a test reads to see what the transport stored.
      */
-    Status        create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
-                                  std::uint32_t &queue) override;
+    Status        create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &queue) override;
+    Status        submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
+                                     const std::uint8_t *private_data, std::uint32_t private_size,
+                                     std::uint64_t progress_fence_id) override;
+    Status        wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence,
+                                    std::uint64_t value) override;
     Status        destroy_hw_queue(std::uint32_t queue) override;
     Status        create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uint32_t &doorbell, void *&page,
                                   const std::uint32_t *&status, std::uint64_t *&queued) override;
@@ -314,6 +323,9 @@ private:
         std::uint16_t allocation_kind;
         std::uint32_t ring;
         bool          lost;
+        /* A context created as one a hardware queue may run on: dxgkrnl
+         * refuses D3DKMTSubmitCommand for it outright (feature 049). */
+        bool          hardware_scheduled;
     };
     static constexpr std::uint32_t max_adapters = 8u;
     /* More than a transport holds: one per context it runs. */
@@ -333,6 +345,8 @@ private:
     Object       *find_mapping(std::uint64_t address);
     bool          is_locked(std::uint32_t allocation) const;
     void          write_answer(const Object &context);
+    Status        carry(const Object &context, std::uint64_t commands, std::uint64_t length,
+                        const std::uint8_t *private_data, std::uint32_t private_size);
     void          take_doorbell_store(const Object &context);
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
@@ -407,7 +421,9 @@ private:
     DoorbellPages doorbells_[max_doorbells];
     std::uint32_t doorbell_count_;
     /* What a hardware queue has finished, as dxgkrnl maps it read-only into
-     * the process that made the queue. */
+     * the process that made the queue, and the monitored fence object it is
+     * reported on: the handle of the queue itself, so a wait names what it
+     * waits for. */
     std::uint64_t queue_progress_[max_doorbells];
     std::uint32_t queue_progress_taken_;
     std::uint32_t journal_ids_[max_journal];

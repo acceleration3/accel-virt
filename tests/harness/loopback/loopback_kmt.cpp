@@ -159,6 +159,13 @@ Status LoopbackKmt::free_gpu_virtual_address(std::uint32_t, std::uint64_t, std::
 Status LoopbackKmt::wait_for_fence(std::uint32_t, std::uint32_t, std::uint64_t) { return Status::ok; }
 Status LoopbackKmt::create_context(std::uint32_t, std::uint32_t &context) { context = 0u; return Status::not_supported; }
 
+Status LoopbackKmt::create_hw_queue_context(std::uint32_t, const std::uint8_t *, std::uint32_t,
+                                            std::uint32_t &context)
+{
+    context = 0u;
+    return Status::not_supported;
+}
+
 Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *private_data, std::uint32_t size,
                                            std::uint32_t &context)
 {
@@ -245,11 +252,20 @@ std::uint64_t LoopbackKmt::performance_counter(std::uint64_t &frequency) const
 std::uint32_t LoopbackKmt::last_code() const { return 0u; }
 
 
-Status LoopbackKmt::create_hw_queue(std::uint32_t, std::uint32_t, const std::uint64_t *&progress,
-                                    std::uint32_t &queue)
+Status LoopbackKmt::create_hw_queue(std::uint32_t, std::uint32_t, GuestHwQueue &queue)
 {
-    queue = 0u;
-    progress = nullptr;
+    queue = GuestHwQueue();
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::submit_to_hw_queue(std::uint32_t, std::uint64_t, std::uint64_t, const std::uint8_t *,
+                                       std::uint32_t, std::uint64_t)
+{
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::wait_for_hw_queue(std::uint32_t, std::uint32_t, std::uint64_t)
+{
     return Status::not_supported;
 }
 

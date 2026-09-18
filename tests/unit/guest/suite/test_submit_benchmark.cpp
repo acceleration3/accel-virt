@@ -91,9 +91,12 @@ TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
    * per block are the only others. */
   /* The kernel path's timed submissions and its drains, and nothing else: the
    * doorbell path's - and the warm no-op, made while the doorbell was still
-   * connected - never reached the kernel at all. */
+   * connected - never reached the kernel at all. They go through the queue,
+   * not the context, because a hardware-scheduled context refuses
+   * D3DKMTSubmitCommand outright (research.md §13). */
   const std::uint32_t timed = SubmitBenchmark::rounds * SubmitBenchmark::block;
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), timed + SubmitBenchmark::rounds);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit_to_hw_queue), timed + SubmitBenchmark::rounds);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 0u);
   CHECK(report.invariants_hold());
   rig.close(); }
 
@@ -153,7 +156,7 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
    * block is the second wait of the run, the warm no-op's being the first. */
   Rig rig;
   rig.kmt().allow_hardware_scheduling();
-  rig.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, 0xC0000001u);
+  rig.kmt().fail_at(MockKmt::Call::wait_for_hw_queue, 2u, 0xC0000001u);
   GuestReport     report;
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.run();

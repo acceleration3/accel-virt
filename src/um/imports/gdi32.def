@@ -32,6 +32,7 @@ D3DKMTQueryAdapterInfo
 D3DKMTQueryVideoMemoryInfo
 D3DKMTSignalSynchronizationObjectFromGpu2
 D3DKMTSubmitCommand
+D3DKMTSubmitCommandToHwQueue
 D3DKMTUnlock2
 D3DKMTWaitForSynchronizationObjectFromCpu
 D3DKMTWaitForVerticalBlankEvent

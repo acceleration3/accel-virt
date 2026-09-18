@@ -33,6 +33,7 @@
 #include "core/pci/mapped_register_window.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
+#include "core/scheduling/hw_queue_contexts.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/scheduling/doorbell_table.hpp"
 #include "core/scheduling/hw_queue_table.hpp"
@@ -382,6 +383,9 @@ private:
     RvkContextTable                rvk_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
+    /* What each hardware queue runs on, which a submission at DISPATCH reads
+     * without taking the queue table's mutex (feature 049). */
+    HwQueueContexts                hw_queue_contexts_;
     ExecutionNode                  node_;
     EngineProgress                 progress_;
     PowerTransition                transition_;

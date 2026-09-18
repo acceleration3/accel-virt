@@ -46,6 +46,8 @@ public:
     Status   free_gpu_virtual_address(uint32_t adapter, uint64_t address, uint64_t pages) override;
     Status   wait_for_fence(uint32_t device, uint32_t fence_object, uint64_t fence) override;
     Status   create_context(uint32_t device, uint32_t &context) override;
+    Status   create_hw_queue_context(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                     uint32_t &context) override;
     Status   create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                     uint32_t &context) override;
     Status   destroy_context(uint32_t context) override;
@@ -57,8 +59,10 @@ public:
      * what it has finished; the doorbell's three addresses are the page a
      * process stores to, the status it reads first, and where it writes the
      * fence value it has queued. */
-    Status   create_hw_queue(uint32_t device, uint32_t context, const uint64_t *&progress,
-                             uint32_t &queue) override;
+    Status   create_hw_queue(uint32_t device, uint32_t context, GuestHwQueue &queue) override;
+    Status   submit_to_hw_queue(uint32_t queue, uint64_t commands, uint64_t length, const uint8_t *private_data,
+                                uint32_t private_size, uint64_t progress_fence_id) override;
+    Status   wait_for_hw_queue(uint32_t device, uint32_t progress_fence, uint64_t value) override;
     Status   destroy_hw_queue(uint32_t queue) override;
     Status   create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell, void *&page,
                              const uint32_t *&status, uint64_t *&queued) override;
@@ -71,6 +75,11 @@ public:
     uint32_t last_code() const override;
 
 private:
+    /* The one D3DKMTCreateContextVirtual both context calls make, with or
+     * without the flag that says a hardware queue may run on it. */
+    [[nodiscard]] Status make_context(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                      bool hardware_queue, uint32_t &context);
+
     Status answer(int32_t code);
     Status await_event();
 

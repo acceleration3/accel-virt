@@ -16,6 +16,7 @@
 
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
+#include "guest/kmt/guest_hw_queue.hpp"
 
 #include <stdint.h>
 
@@ -41,6 +42,10 @@ public:
      * disconnected and submits the other way. invalid_state without one. */
     [[nodiscard]] Status connect();
     void                 teardown();
+    /* Gives the doorbell back and keeps the queue: every submission after this
+     * goes through `submit_to_hw_queue`, which is the other half of what the
+     * in-guest benchmark measures (feature 049, US3). */
+    void                 give_back();
     bool                 established() const;
 
     /* What the status page says now. A doorbell that was never made, or whose
@@ -58,6 +63,14 @@ public:
     bool               recover();
 
     uint32_t handle() const;
+    /* The hardware queue this doorbell hangs off - what a submission that
+     * falls back to the kernel goes through, since a hardware-scheduled
+     * context refuses D3DKMTSubmitCommand (research.md §13) - the monitored
+     * fence its progress is reported on, and what the device has finished as
+     * the driver last wrote it. 0 without a queue. */
+    uint32_t queue() const;
+    uint32_t progress_fence() const;
+    uint64_t progress() const;
 
     /* Either everything is mapped or nothing is, and a doorbell exists only on
      * a queue. */
@@ -70,12 +83,11 @@ private:
     uint32_t        device_;
     uint32_t        context_;
     uint32_t        ring_;
-    uint32_t        queue_;
+    /* The queue this doorbell hangs off, its progress fence and the read-only
+     * view of that fence's value. */
+    GuestHwQueue    queue_;
     uint32_t        doorbell_;
-    /* The queue's progress, as the driver writes it; kept because the kernel
-     * hands it out with the queue and a wait will read it (feature 049's
-     * native fences are another feature's - research.md §9). */
-    const uint64_t *progress_;
+
     volatile uint32_t *page_;
     const volatile uint32_t *status_;
     volatile uint64_t *queued_;

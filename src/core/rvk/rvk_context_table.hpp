@@ -37,6 +37,7 @@ class AllocationTable;
 class CapsetInfo;
 class DxgkrnlInterface;
 class ExecutionNode;
+class HwQueueSubmissions;
 class GuestPageList;
 class HostVisibleBindRecord;
 class RegisterWindow;
@@ -85,7 +86,7 @@ public:
      * finished, so the node completes it in order and its process wakes to a
      * fence with no reply behind it (FR-006). dxgkrnl is not told of the
      * fault: DMA_FAULTED bugchecks a GPU MMU adapter (docs/kb/05-scheduling.md). */
-    void                 serve(ExecutionNode &node);
+    void                 serve(ExecutionNode &node, HwQueueSubmissions &queues);
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();

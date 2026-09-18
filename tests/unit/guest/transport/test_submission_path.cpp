@@ -164,7 +164,10 @@ TEST(submission_path, a_disconnect_mid_stream_is_survived_by_submitting_the_othe
                Status::ok);
   CHECK_EQ(submitting.path().through_doorbell(), 1u);
   CHECK_EQ(submitting.path().through_kernel(), 1u);
-  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 1u);
+  /* Through the queue, not through the context: a hardware-scheduled context
+   * refuses D3DKMTSubmitCommand outright (research.md §13). */
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit_to_hw_queue), 1u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u);
   /* Nothing was stored to the page that was disconnected. */
   CHECK_EQ(submitting.kmt().doorbell_page(submitting.doorbell().handle()), 0u);
   /* And the tail the process published before it learnt of the disconnect is

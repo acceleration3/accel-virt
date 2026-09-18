@@ -7,6 +7,7 @@
 #define AV_KMT_HPP
 
 #include "core/support/status.hpp"
+#include "guest/kmt/guest_hw_queue.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 
 #include <stdint.h>
@@ -55,6 +56,15 @@ public:
      * rvk transport asks its context with; the miniport decodes it. */
     virtual Status   create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                             uint32_t &context) = 0;
+    /* The same context, asked for as one a hardware queue may run on
+     * (`D3DDDI_CREATECONTEXTFLAGS.HwQueueSupported`): what a process must ask
+     * for before dxgkrnl will give it a queue, and so a doorbell (feature 049,
+     * research.md §13). A hardware-scheduled context cannot be submitted to
+     * with `submit` at all - `submit_to_hw_queue` is its path - so a process
+     * that is refused one asks for a plain context instead.
+     * not_supported where the OS hands out no hardware queues. */
+    virtual Status   create_hw_queue_context(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                             uint32_t &context) = 0;
     virtual Status   destroy_context(uint32_t context) = 0;
     /* On a context made with create_context_virtual, dxgkrnl routes this to the
      * DxgkDdiSubmitCommandVirtual DDI; `commands` is the DMA buffer's GPU
@@ -73,8 +83,17 @@ public:
      * will not give this adapter one - hardware scheduling is its decision,
      * not the driver's (research.md §11) - and the transport then submits the
      * way it always has. */
-    virtual Status   create_hw_queue(uint32_t device, uint32_t context, const uint64_t *&progress,
-                                     uint32_t &queue) = 0;
+    virtual Status   create_hw_queue(uint32_t device, uint32_t context, GuestHwQueue &queue) = 0;
+    /* What a hardware-scheduled context submits through, since
+     * `D3DKMTSubmitCommand` refuses one outright (research.md §13): the same
+     * batch and the same private data the kernel path carries, with the
+     * progress fence value the queue reaches when the device has run it. */
+    virtual Status   submit_to_hw_queue(uint32_t queue, uint64_t commands, uint64_t length,
+                                        const uint8_t *private_data, uint32_t private_size,
+                                        uint64_t progress_fence_id) = 0;
+    /* Until the queue's progress fence reaches `value`: the wait a process
+     * makes when what it submitted never went through a context's packets. */
+    virtual Status   wait_for_hw_queue(uint32_t device, uint32_t progress_fence, uint64_t value) = 0;
     virtual Status   destroy_hw_queue(uint32_t queue) = 0;
     /* D3DKMTCreateDoorbell on `queue` over the process's `ring` allocation: the
      * three addresses it answers are the doorbell itself, the status page a

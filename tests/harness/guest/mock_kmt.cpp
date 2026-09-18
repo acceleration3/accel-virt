@@ -42,22 +42,57 @@ MockKmt::MockKmt()
 
 /* ---- feature 049: hardware queues and doorbells -------------------------- */
 
-Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, const std::uint64_t *&progress,
-                                std::uint32_t &queue)
+Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &queue)
 {
     if (!begin(Call::create_hw_queue)) return refuse(last_code_);
-    queue = 0u;
-    progress = nullptr;
+    queue = GuestHwQueue{};
     const Object *const on = find(Kind::context, context);
     if (on == nullptr || on->owner != device) return misuse();
     /* Hardware scheduling is the OS's decision, not the driver's
      * (049 research.md §11): a machine without it gives out no queue, and the
      * transport submits the way it always has. */
     if (!hardware_scheduling_) return refuse(not_supported);
-    queue = open(Kind::hw_queue, context, 0u, 0u);
     /* Where dxgkrnl writes what this queue has finished, read-only to the
-     * process, as the real mapping is. */
-    progress = &queue_progress_[queue_progress_taken_++ % max_doorbells];
+     * process, as the real mapping is; the monitored fence it is reported on
+     * is named by the queue itself here. */
+    const std::uint32_t slot = queue_progress_taken_++ % max_doorbells;
+    const std::uint32_t handle = open(Kind::hw_queue, context, slot, 0u);
+    queue = GuestHwQueue(handle, handle, &queue_progress_[slot]);
+    return succeed();
+}
+
+/* What a hardware-scheduled context submits through: the same batch the
+ * kernel path carries, and the progress fence value the queue reaches when the
+ * device has run it (feature 049, research.md §13). */
+Status MockKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
+                                   const std::uint8_t *private_data, std::uint32_t private_size,
+                                   std::uint64_t progress_fence_id)
+{
+    if (!begin(Call::submit_to_hw_queue)) return refuse(last_code_);
+    ticks_ += submit_cost_;
+    const Object *const on = find(Kind::hw_queue, queue);
+    const Object *const context = on != nullptr ? find(Kind::context, on->owner) : nullptr;
+    if (context == nullptr || progress_fence_id == 0u || (private_data == nullptr) != (private_size == 0u))
+        return misuse();
+    return carry(*context, commands, length, private_data, private_size);
+}
+
+/* Until the queue's progress fence reaches `value`: the device runs what was
+ * queued while the process waits, as it does for a wait on a context. */
+Status MockKmt::wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence, std::uint64_t value)
+{
+    if (!begin(Call::wait_for_hw_queue)) return refuse(last_code_);
+    Object *const on = find(Kind::hw_queue, progress_fence);
+    Object *const context = on != nullptr ? find(Kind::context, on->owner) : nullptr;
+    if (find(Kind::device, device) == nullptr || context == nullptr || context->owner != device) return misuse();
+    ticks_ += wait_cost_;
+    if (played()) play_(play_context_);
+    take_doorbell_store(*context);
+    if (withheld()) context->lost = true;
+    else write_answer(*context);
+    consume(*context);
+    /* The driver writes what the device finished where the process reads it. */
+    queue_progress_[on->address % max_doorbells] = value;
     return succeed();
 }
 
@@ -225,7 +260,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false};
+        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false, false};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -522,6 +557,21 @@ Status MockKmt::create_context_virtual(std::uint32_t device, const std::uint8_t 
     return succeed();
 }
 
+/* A context a hardware queue may run on, which is what dxgkrnl gives only
+ * where hardware scheduling is on (feature 049, research.md §13): refused here
+ * otherwise, exactly as a machine without it refuses. */
+Status MockKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                        std::uint32_t &context)
+{
+    context = 0u;
+    if (!begin(Call::create_hw_queue_context)) return refuse(last_code_);
+    if (!hardware_scheduling_) return refuse(not_supported);
+    const Status created = create_context_virtual(device, private_data, size, context);
+    Object *const object = find(Kind::context, context);
+    if (object != nullptr) object->hardware_scheduled = true;
+    return created == Status::ok ? succeed() : created;
+}
+
 Status MockKmt::destroy_context(std::uint32_t context)
 {
     if (!begin(Call::destroy_context)) return refuse(last_code_);
@@ -535,14 +585,22 @@ Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint6
     ticks_ += submit_cost_;
     const Object *const submitting = find(Kind::context, context);
     if (submitting == nullptr || (private_data == nullptr) != (private_size == 0u)) return misuse();
+    return carry(*submitting, commands, length, private_data, private_size);
+}
+
+/* The batch both submission paths carry: the descriptor is kept for the answer
+ * a wait writes, and the command at its front is journalled. */
+Status MockKmt::carry(const Object &context, std::uint64_t commands, std::uint64_t length,
+                      const std::uint8_t *private_data, std::uint32_t private_size)
+{
     submission_size_ = private_size < max_private ? private_size : max_private;
     for (std::uint32_t i = 0u; i < submission_size_; i++) submission_[i] = private_data[i];
     const Object *const mapping = find_mapping(commands);
     const Object *const allocation = mapping != nullptr ? find(Kind::allocation, mapping->owner) : nullptr;
-    if (length == 0u || allocation == nullptr || allocation->owner != submitting->owner ||
+    if (length == 0u || allocation == nullptr || allocation->owner != context.owner ||
         commands - mapping->address + length > mapping->pages * page_bytes)
         return refuse(invalid_parameter);
-    journal(*submitting);
+    journal(context);
     return succeed();
 }
 

@@ -956,15 +956,22 @@ TEST(kmt_transport, give_back_doorbell_puts_every_submission_through_the_kernel)
   CHECK(transport.send_async(1u, first) == av::TransportResult::ok);
   CHECK_EQ(transport.submissions_through_doorbell(), 1u);
 
+  /* The doorbell goes back and the queue stays: a hardware-scheduled context
+   * submits through its queue and through nothing else (research.md §13), so
+   * that is what the kernel path is for it. */
   transport.give_back_doorbell();
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_hw_queue), 0u);
   WireWriter second = transport.request_writer();
   second.write_u32(8u);
   CHECK(transport.send_async(2u, second) == av::TransportResult::ok);
   CHECK_EQ(transport.submissions_through_doorbell(), 1u);
   CHECK_EQ(transport.submissions_through_kernel(), 1u);
-  /* Given back twice is no second doorbell to give. */
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit_to_hw_queue), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 0u);
+  /* Given back twice is no second doorbell to give, and the teardown is what
+   * gives the queue back. */
   transport.give_back_doorbell();
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
-  transport.teardown(); }
+  transport.teardown();
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u); }

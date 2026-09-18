@@ -12,6 +12,7 @@
 #include "core/ddi/dxgk_gpu_clock_data_record.hpp"
 #include "core/ddi/dxgk_gpu_mmu_caps_record.hpp"
 #include "core/ddi/dxgk_node_metadata_record.hpp"
+#include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
 #include "core/ddi/dxgk_page_table_level_desc_record.hpp"
 #include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
@@ -1573,8 +1574,14 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
   for (unsigned index = 0u; index < sizeof expected; index++)
       CHECK_EQ(metadata.FriendlyName[index], static_cast<unsigned>(expected[index]));
   CHECK_EQ(metadata.FriendlyName[31], 0u);
-  CHECK_EQ(metadata.Flags, 0u);
+  /* What the node is scheduled by: context scheduling and user-mode
+   * submission, with the depth this driver can hold in flight - which is what
+   * lets the OS hand a process a hardware queue and a doorbell on it
+   * (research.md §13). Nothing else is claimed: no ring-buffer fence release,
+   * no tracked workload, no test command buffers. */
+  CHECK_EQ(metadata.Flags, 0x9u | (av::HwQueueSubmissions::capacity << 16u));
   CHECK_EQ(metadata.GpuMmuSupported, 1u);
+  CHECK_EQ(metadata.IoMmuSupported, 0u);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
@@ -2758,12 +2765,41 @@ TEST(adapter_resume_hw_engine, resumes_the_one_engine)
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
+
+/* A hardware queue on a context of its own, which is the only thing dxgkrnl
+ * submits to one of (feature 049): a handle this driver never gave is refused
+ * rather than followed. */
+class HardwareQueue {
+public:
+    explicit HardwareQueue(Fixture &fixture) : fixture_(fixture)
+    {
+        av::DxgkargCreateDeviceRecord device = {};
+        CHECK_EQ(nt(fixture_.adapter().create_device(&device)), success);
+        context_.Flags = 0x14u;   /* VirtualAddressing | HwQueueSupported */
+        CHECK_EQ(nt(fixture_.adapter().create_context(device.hDevice, &context_)), success);
+        queue_.HwQueueProgressFenceCPUVirtualAddress = &progress_;
+        CHECK_EQ(nt(fixture_.adapter().create_hw_queue(context_.hContext, &queue_)), success);
+    }
+    HardwareQueue(const HardwareQueue &) = delete;
+    HardwareQueue &operator=(const HardwareQueue &) = delete;
+
+    void          *handle() const { return queue_.hHwQueue; }
+    std::uint64_t &progress() { return progress_; }
+
+private:
+    Fixture                       &fixture_;
+    av::DxgkargCreateContextRecord context_ = {};
+    av::DxgkargCreateHwQueueRecord queue_ = {};
+    std::uint64_t                  progress_ = 0u;
+};
+
 TEST(adapter_dpc_routine, a_refused_progress_fence_signal_is_logged)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
+  HardwareQueue queue(fixture);
   std::uint64_t fence = 0u;
   av::DxgkargSubmitCommandToHwQueueRecord submit = {};
-  submit.hHwQueue = &fixture;
+  submit.hHwQueue = queue.handle();
   submit.HwQueueProgressFenceId = 1u;
   submit.HwQueueProgressFenceCpuVa = &fence;
   CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
@@ -2822,9 +2858,10 @@ TEST(adapter_submit_command, queues_and_asks_for_the_dpc_that_completes_it)
 TEST(adapter_dpc_routine, a_storm_of_refusals_is_silent_once_the_window_is_spent)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
+  HardwareQueue hardware(fixture);
   std::uint64_t progress = 0u;
   av::DxgkargSubmitCommandToHwQueueRecord hw_submit = {};
-  hw_submit.hHwQueue = &fixture;
+  hw_submit.hHwQueue = hardware.handle();
   hw_submit.HwQueueProgressFenceId = 1u;
   hw_submit.HwQueueProgressFenceCpuVa = &progress;
   CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&hw_submit)), success);
