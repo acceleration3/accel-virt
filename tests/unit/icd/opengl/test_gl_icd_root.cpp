@@ -564,6 +564,42 @@ TEST(gl_icd_root, a_single_buffered_format_presents_on_flush)
   doubled.root().flush_current();
   CHECK_EQ(doubled.surface().blits(), untouched); }
 
+/* Feature 051, T020: what an application can hand the swap path. None of it is
+ * this driver's to trust - a window can go between one call and the next, a DC
+ * can belong to another context's format, and a thread can set an interval
+ * with nothing current. */
+TEST(gl_icd_root, the_swap_path_refuses_what_it_cannot_do_and_touches_nothing_else)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  using IntervalFn = std::int32_t (APIENTRY *)(std::int32_t);
+  const auto set = reinterpret_cast<IntervalFn>(rig.root().get_proc_address("wglSwapIntervalEXT"));
+
+  /* A DC whose window has another context's pixel format. */
+  CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 2));
+  CHECK(!rig.opengl32().swap_buffers(rig.other_dc()));
+  /* A memory DC has no window at all. */
+  CHECK(!rig.opengl32().swap_buffers(rig.memory_dc()));
+  /* A DC nobody declared. */
+  CHECK(!rig.opengl32().swap_buffers(reinterpret_cast<void *>(0xDEADu)));
+  CHECK(!rig.opengl32().swap_buffers(nullptr));
+
+  /* The window closes between the swap and the next one: the swap after it
+   * fails, and no other window's buffers went with it. */
+  const std::uint32_t blits = rig.surface().blits();
+  rig.surface().close_window(rig.window());
+  CHECK(!rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), blits);
+  CHECK(rig.root().invariants_hold());
+
+  /* An interval set from a thread with nothing current, after the context was
+   * released, is refused rather than kept for the next context. */
+  CHECK(rig.opengl32().make_current(nullptr, nullptr));
+  CHECK_EQ(set(1), 0);
+  check_error(rig, Root::error_invalid_operation);
+  CHECK_EQ(rig.root().swap_interval(), 0);
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
 { GlIcdRig rig;
   rig.load_with_format();
