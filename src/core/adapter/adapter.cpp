@@ -1381,10 +1381,17 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     metadata->EngineType = engine_type_3d;
     metadata->GpuMmuSupported = 1u;
     /* What this node is scheduled by, which is what lets the OS give a process
-     * a hardware queue and a doorbell on it (features 019 and 049): the queue
-     * DDIs and the doorbell ones are implemented and tested, and the depth is
-     * what this driver can hold in flight. */
-    metadata->Flags = node_context_scheduling_supported | node_user_mode_submission |
+     * a hardware queue on it (feature 019): the queue DDIs are implemented and
+     * tested, and the depth is what this driver can hold in flight.
+     *
+     * Not user-mode submission, yet. dxgkrnl refuses the whole adapter for a
+     * node that reports it without the native-fence capability - "Driver
+     * reported UserModeSubmission support, but NativeGpuFence cap is not set"
+     * - and this driver has no native fences (research.md §14). The doorbell
+     * DDIs are implemented and tested; what is missing is the fence half of
+     * WDDM 3.1, and reporting the flag before it exists is a capability nobody
+     * can use (constitution VI). */
+    metadata->Flags = node_context_scheduling_supported |
                       (HwQueueSubmissions::capacity << node_in_flight_hw_queue_buffers_shift);
     for (uint32_t index = 0u; index + 1u < sizeof name; index++)
         metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);

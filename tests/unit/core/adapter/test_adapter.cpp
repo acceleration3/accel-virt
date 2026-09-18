@@ -1574,12 +1574,14 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
   for (unsigned index = 0u; index < sizeof expected; index++)
       CHECK_EQ(metadata.FriendlyName[index], static_cast<unsigned>(expected[index]));
   CHECK_EQ(metadata.FriendlyName[31], 0u);
-  /* What the node is scheduled by: context scheduling and user-mode
-   * submission, with the depth this driver can hold in flight - which is what
-   * lets the OS hand a process a hardware queue and a doorbell on it
-   * (research.md §13). Nothing else is claimed: no ring-buffer fence release,
-   * no tracked workload, no test command buffers. */
-  CHECK_EQ(metadata.Flags, 0x9u | (av::HwQueueSubmissions::capacity << 16u));
+  /* What the node is scheduled by: context scheduling, with the depth this
+   * driver can hold in flight - which is what lets the OS hand a process a
+   * hardware queue on it. User-mode submission is *not* claimed: dxgkrnl
+   * refuses the adapter outright for a node that reports it without the
+   * native-fence capability, and this driver has no native fences
+   * (research.md §14). Nothing else is claimed either: no ring-buffer fence
+   * release, no tracked workload, no test command buffers. */
+  CHECK_EQ(metadata.Flags, 0x1u | (av::HwQueueSubmissions::capacity << 16u));
   CHECK_EQ(metadata.GpuMmuSupported, 1u);
   CHECK_EQ(metadata.IoMmuSupported, 0u);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);

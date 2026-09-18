@@ -254,3 +254,34 @@ the location this driver already writes what the device finished into (§12).
 That is what T020-T024 build. Nothing here is a new capability the driver does
 not implement: it is the same ring, the same doorbell and the same fences,
 reached the way a hardware-scheduled adapter is reached.
+
+## 14. What the OS requires before it will let a doorbell exist
+
+The second live run answered the rest of §13, and the answer is in dxgkrnl's
+own strings. A node that reports `UserModeSubmission` is checked against three
+things, and failing them does not refuse the doorbell - it refuses the
+**adapter**, which came back as `problem=43` and
+`StartAdapter_AddAdapterFailed` with STATUS_INVALID_PARAMETER:
+
+- "Driver reported UserModeSubmission support for a node which doesn't support
+  ContextScheduling."
+- "Driver reports UserModeSubmission support, but does not support all relevant
+  Doorbell DDIs."
+- "Driver reported UserModeSubmission support, but **NativeGpuFence cap is not
+  set**."
+
+The first two this driver satisfies. The third it does not: native fences are
+`DxgkDdiCreateNativeFence`, `DestroyNativeFence`, `UpdateMonitoredValues` and
+`UpdateCurrentValuesFromCpu` (slots 162-165, feature 024's other half) with
+`DXGKQAITYPE_NATIVE_FENCE_CAPS` reporting them, and none of it exists here.
+
+So §9's deferral does not hold: **user-mode submission cannot be turned on
+without native fences**. They are not the thing that makes the *wait* cheaper -
+they are the thing the OS insists on before it will hand a process a doorbell
+at all, and the roadmap's own title for 024 carries both for that reason.
+
+What the node reports meanwhile is what it can back: context scheduling and the
+in-flight depth, which is what lets the OS hand out a hardware queue. Reporting
+user-mode submission before the fences exist is a capability nobody can use,
+and constitution VI forbids it - which is exactly what the live run proved by
+failing the adapter start.
