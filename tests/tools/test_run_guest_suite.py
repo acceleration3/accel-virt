@@ -1071,11 +1071,11 @@ class GuestSuiteRun(unittest.TestCase):
         report = self.GL_REPORT
         cases = {
             "failed step": (report.replace("ok opengl.share 4", "fail opengl.share 0").replace(
-                "9 passed, 0 failed", "8 passed, 1 failed"), 1,
+                "12 passed, 0 failed", "11 passed, 1 failed"), 1,
                 "opengl failed: 1 step(s) failed, exit 1; see opengl.txt"),
             "missing step": (report.replace("ok opengl.busy 170\r\n", "").replace("12 passed", "11 passed"), 0,
                              "opengl failed: the probe reported no busy; see opengl.txt"),
-            "no summary": (report.replace("rvkglprobe: 9 passed, 0 failed\r\n", ""), 0,
+            "no summary": (report.replace("rvkglprobe: 12 passed, 0 failed\r\n", ""), 0,
                            "opengl failed: no summary in the probe's report, exit 0; see opengl.txt"),
             "software": (report.replace("Mesa Intel(R) Iris(R) Xe Graphics (ADL GT2)", "llvmpipe (LLVM 19.1.0)"), 0,
                          "opengl failed: the renderer llvmpipe (LLVM 19.1.0) is not a host GPU"),
