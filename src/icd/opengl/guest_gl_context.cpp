@@ -185,6 +185,18 @@ const char *GuestGlContext::string(uint32_t name) const
     return nullptr;
 }
 
+const GrantedProfile &GuestGlContext::profile() const
+{
+    AV_SCOPE("GuestGlContext::profile");
+    return profile_;
+}
+
+void GuestGlContext::asking(GrantedProfile::Rung rung)
+{
+    AV_SCOPE("GuestGlContext::asking");
+    profile_.granted(rung);
+}
+
 void GuestGlContext::set_debug_callback(uint64_t callback, uint64_t user)
 {
     AV_SCOPE("GuestGlContext::set_debug_callback");
@@ -293,6 +305,15 @@ bool GuestGlContext::learn()
         glproto::rvk_glGetIntegerv(wire, QueryShapes::length_queries[list], &length);
         queries_.learn(static_cast<QueryShapes::List>(list), length);
     }
+    /* What the host granted, which its version string does not say: on one of
+     * this project's two host GPUs the compatibility string is identical to
+     * the core one (feature 051, research.md §1). */
+    int32_t major = 0, minor = 0, mask = 0;
+    glproto::rvk_glGetIntegerv(wire, GrantedProfile::major_query, &major);
+    glproto::rvk_glGetIntegerv(wire, GrantedProfile::minor_query, &minor);
+    glproto::rvk_glGetIntegerv(wire, GrantedProfile::mask_query, &mask);
+    profile_.learn(major < 0 ? 0u : static_cast<uint32_t>(major), minor < 0 ? 0u : static_cast<uint32_t>(minor),
+                   static_cast<uint32_t>(mask));
     cap_version();
     policy_.learn(wire, extensions_);
     return !transport_.object().faulted();

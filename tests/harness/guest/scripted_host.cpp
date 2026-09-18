@@ -182,6 +182,12 @@ void ScriptedHost::gl_resource_property(std::int32_t value)
 
 void ScriptedHost::gl_make(const char *renderer, const char *version)
 {
+    gl_make_profile(renderer, version, 4, 6, 0x2 /* compatibility */);
+}
+
+void ScriptedHost::gl_make_profile(const char *renderer, const char *version, std::int32_t major,
+                                   std::int32_t minor, std::int32_t mask)
+{
     blob_import(0u, 0x0000600000000077ull);
     gl_string("rvk host vendor");
     gl_string(renderer);
@@ -190,6 +196,9 @@ void ScriptedHost::gl_make(const char *renderer, const char *version)
     gl_integer(3);
     gl_integer(1);
     gl_integer(0);
+    gl_integer(major);
+    gl_integer(minor);
+    gl_integer(mask);
 }
 
 void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first)

@@ -359,7 +359,9 @@ TEST(gl_icd_root, gl_calls_go_through_the_threads_table_to_its_context)
   rig.opengl32().gl<GetIntegervFn>(slot_get_integerv)(gl_viewport, viewport);
   CHECK_EQ(viewport[2], 64);
   CHECK_EQ(viewport[3], 48);
-  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 4u); }
+  /* Three list lengths and the three the granted profile is read from at the
+   * make (feature 051), then this test's own one. */
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 7u); }
 
 TEST(gl_icd_root, a_legacy_command_is_invalid_operation_without_a_host_call)
 { GlIcdRig rig;

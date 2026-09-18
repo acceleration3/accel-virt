@@ -5,6 +5,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
+#include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
@@ -124,6 +125,41 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
   CHECK_STATUS(context->make(), Status::invalid_state);
   CHECK(context->state() == State::made); }
 
+/* Feature 051: what the host granted is read at the make, from
+ * GL_CONTEXT_PROFILE_MASK - a version string does not say, and on one of this
+ * project's host GPUs the compatibility one is identical to the core one
+ * (research.md §1). */
+TEST(guest_gl_context, a_make_learns_the_profile_the_host_granted)
+{ GlContextRig rig;
+  Context context(rig);
+  context->asking(av::glicd::GrantedProfile::Rung::compatibility_46);
+  rig.host().gl_make_profile(renderer, "4.6.0 NVIDIA 580", 4, 6, 2);
+  CHECK_STATUS(context->make(), Status::ok);
+  CHECK(context->invariants_hold());
+  CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::compatibility_46);
+  CHECK_EQ(context->profile().major(), 4u);
+  CHECK_EQ(context->profile().minor(), 6u);
+  CHECK_EQ(context->profile().mask(), 2u);
+  CHECK(context->profile().legacy_calls_live()); }
+
+/* A host that answers a core context, or nothing at all, unlocks nothing. */
+TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
+{ GlContextRig core;
+  Context core_context(core);
+  core_context->asking(av::glicd::GrantedProfile::Rung::core_46);
+  core.host().gl_make_profile(renderer, "4.6 (Core Profile) Mesa", 4, 6, 1);
+  CHECK_STATUS(core_context->make(), Status::ok);
+  CHECK_EQ(core_context->profile().mask(), 1u);
+  CHECK(!core_context->profile().legacy_calls_live());
+
+  GlContextRig silent;
+  Context silent_context(silent);
+  silent.host().gl_make_profile(renderer, "1.1", -1, -1, 0);
+  CHECK_STATUS(silent_context->make(), Status::ok);
+  CHECK(silent_context->invariants_hold());
+  CHECK(!silent_context->profile().known());
+  CHECK(!silent_context->profile().legacy_calls_live()); }
+
 TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
 { GlContextRig rig;
   {
@@ -200,6 +236,10 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   rig.host().gl_integer(0);
   rig.host().gl_integer(0);
   rig.host().gl_integer(0);
+  /* GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_CONTEXT_PROFILE_MASK. */
+  rig.host().gl_integer(4);
+  rig.host().gl_integer(6);
+  rig.host().gl_integer(2);
   CHECK_STATUS(context->make(), Status::ok);
   CHECK_EQ(rig.log().holding("no blob arena"), 1u);
   char bytes[512];

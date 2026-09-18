@@ -118,13 +118,19 @@ public:
      * renderer, version and shading language strings, and the three list
      * lengths. */
     void gl_make(const char *renderer, const char *version);
+    /* The same, with the GL_MAJOR_VERSION, GL_MINOR_VERSION and
+     * GL_CONTEXT_PROFILE_MASK a host answers at the end of a make (feature
+     * 051): what profile a context got is read from the mask, since a version
+     * string does not say (research.md §1). */
+    void gl_make_profile(const char *renderer, const char *version, std::int32_t major, std::int32_t minor,
+                         std::int32_t mask);
     /* What the first make-current of a context on a window waits for: the
      * names of its framebuffer objects (two when multisampled), its colour
      * texture and its renderbuffers (a multisampled colour one, then the
      * depth one), numbered from `first`. */
     void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
     /* Waits a GL make takes. */
-    static constexpr std::uint32_t gl_make_waits = 8u;
+    static constexpr std::uint32_t gl_make_waits = 11u;
 
     /* The next answer queued stops after its first `bytes`, as a host that
      * wrote a short reply leaves it. */

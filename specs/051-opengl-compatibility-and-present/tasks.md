@@ -19,8 +19,8 @@ UMD's redirection surface. It arrives with feature 055, for both APIs at once.
 
 ## Phase 1: Foundational - what the host actually gave us
 
-- [ ] T001 `GrantedProfile` (object) in `src/icd/opengl/granted_profile.{hpp,cpp}`: the asked options, the host's `GL_MAJOR_VERSION`/`GL_MINOR_VERSION`/`GL_CONTEXT_PROFILE_MASK` and which rung answered (`compatibility_46`, `host_default`, `core_46`); `legacy_calls_live()` is `mask == 2 || (mask == 0 && major < 3)` (data-model.md). Tests `tests/unit/icd/opengl/test_granted_profile.cpp`: each rung, a mask the host never defines, a pre-3.2 default context, and the invariant
-- [ ] T002 `GuestGlContext::learn` reads the three integers beside the four strings it already learns, in one batch, and holds the answer in a `GrantedProfile`; `ScriptedGl` answers them so a test can make the host say anything. Tests in `tests/unit/icd/opengl/test_guest_gl_context.cpp`: a host that answers nothing leaves the profile unknown and the context still usable
+- [X] T001 `GrantedProfile` (object) in `src/icd/opengl/granted_profile.{hpp,cpp}`: the asked options, the host's `GL_MAJOR_VERSION`/`GL_MINOR_VERSION`/`GL_CONTEXT_PROFILE_MASK` and which rung answered (`compatibility_46`, `host_default`, `core_46`); `legacy_calls_live()` is `mask == 2 || (mask == 0 && major < 3)` (data-model.md). Tests `tests/unit/icd/opengl/test_granted_profile.cpp`: each rung, a mask the host never defines, a pre-3.2 default context, and the invariant
+- [X] T002 `GuestGlContext::learn` reads the three integers beside the four strings it already learns, in one batch, and holds the answer in a `GrantedProfile`; `ScriptedGl` answers them so a test can make the host say anything. Tests in `tests/unit/icd/opengl/test_guest_gl_context.cpp`: a host that answers nothing leaves the profile unknown and the context still usable
 
 **Checkpoint**: commit. Nothing behaves differently yet; the ICD simply knows what it has.
 

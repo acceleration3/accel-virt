@@ -74,6 +74,10 @@ struct Rig {
             host().gl_string("4.6");
             host().gl_string("4.60");
             for (int list = 0; list < 3; list++) host().gl_integer(0);
+            /* GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_CONTEXT_PROFILE_MASK. */
+            host().gl_integer(4);
+            host().gl_integer(6);
+            host().gl_integer(2);
         } else {
             host().gl_make("renderer", "4.6");
         }

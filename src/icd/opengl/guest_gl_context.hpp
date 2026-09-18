@@ -20,6 +20,7 @@
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
+#include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
@@ -118,6 +119,10 @@ public:
     /* The host's string for `name`, the version capped at 4.6; null for any
      * other name or before make. */
     const char *string(uint32_t name) const;
+    /* What the host granted this context, learned at make (feature 051). */
+    const GrantedProfile &profile() const;
+    /* Which ask is being answered, recorded before the make that asks it. */
+    void                  asking(GrantedProfile::Rung rung);
     void        set_debug_callback(uint64_t callback, uint64_t user);
     uint64_t    debug_callback() const;
     uint64_t    debug_user() const;
@@ -159,6 +164,7 @@ private:
     ClientArrayState               arrays_;
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;
+    GrantedProfile                 profile_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     MappedBuffers                  mappings_;
