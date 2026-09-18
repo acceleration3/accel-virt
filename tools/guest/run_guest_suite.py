@@ -822,7 +822,6 @@ class GuestRun:
                       (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
                       (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
-                      (self.args.cl_icd, PACKAGE_DIRECTORY + "\\rvkcl.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:
