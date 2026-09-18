@@ -122,8 +122,10 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 4u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 5u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EVENTS, 5u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
@@ -165,7 +167,9 @@ TEST(executor_library_import_blob, forwards_the_import_its_release_and_the_handl
 TEST(executor_library_accept, version_four_needs_create_with_options)
 { MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
   RvkExecutorOps &table = ops.editable();
-  CHECK_EQ(table.abi_version, RVK_EXECUTOR_ABI_VERSION_OPTIONS);
+  CHECK_EQ(table.abi_version, RVK_EXECUTOR_ABI_VERSION);
+  /* A table that says it carries options has to, whatever else it says. */
+  table.abi_version = RVK_EXECUTOR_ABI_VERSION_OPTIONS;
   table.create_with_options = nullptr;
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&table), Status::invalid_parameter);

@@ -308,6 +308,26 @@ if(AV_GENERATED)
     ${CMAKE_SOURCE_DIR}/src/icd/opengl)
   target_compile_options(av_gl_icd PRIVATE ${AV_TEST_FLAGS})
   target_link_options(av_gl_icd PUBLIC ${AV_TEST_FLAGS})
+
+  # The OpenCL client, built against the ICD's own hooks for the reason the
+  # OpenGL pair above gives (feature 052).
+  add_library(av_cl_generated OBJECT
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
+  target_link_libraries(av_cl_generated PRIVATE av_core)
+  target_include_directories(av_cl_generated PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl
+    ${CMAKE_SOURCE_DIR}/src/icd/opencl)
+  target_compile_options(av_cl_generated PRIVATE ${AV_TEST_FLAGS})
+
+  # The OpenCL ICD's portable core. Its own archive, for the reason the other
+  # two have theirs: each defines strong hooks that replace the generated
+  # defaults every other binary relies on.
+  file(GLOB_RECURSE AV_CL_ICD_SOURCES CONFIGURE_DEPENDS src/icd/common/*.cpp src/icd/opencl/*.cpp)
+  add_library(av_cl_icd STATIC ${AV_CL_ICD_SOURCES} $<TARGET_OBJECTS:av_cl_generated>)
+  target_link_libraries(av_cl_icd PUBLIC av_core)
+  target_include_directories(av_cl_icd PUBLIC ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl
+    ${CMAKE_SOURCE_DIR}/src/icd/opencl)
+  target_compile_options(av_cl_icd PRIVATE ${AV_TEST_FLAGS})
+  target_link_options(av_cl_icd PUBLIC ${AV_TEST_FLAGS})
 endif()
 
 # ---- unit tests: one binary per module, so a crash isolates -----------------
@@ -339,7 +359,9 @@ foreach(src ${AV_UNIT_TESTS})
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader
   # seam is tested through the ICD's own entry point, so it links it too.
-  if(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
+  if(src MATCHES "/tests/unit/icd/opencl/" OR name MATCHES "^test_(cl_seams|fake_cl_loader|fullstack_opencl_icd)$")
+      target_link_libraries(${name} PRIVATE av_cl_icd)
+    elseif(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
     target_link_libraries(${name} PRIVATE av_gl_icd)
   elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
@@ -639,6 +661,10 @@ if(AV_FUZZ)
     endif()
     if(name STREQUAL "fuzz_context_attributes" OR name STREQUAL "fuzz_pixel_format_query")
       target_link_libraries(${name} PRIVATE av_gl_icd)
+    endif()
+    if(name STREQUAL "fuzz_cl_property_list" OR name STREQUAL "fuzz_cl_info_query" OR
+       name STREQUAL "fuzz_cl_host_reply")
+      target_link_libraries(${name} PRIVATE av_cl_icd)
     endif()
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
