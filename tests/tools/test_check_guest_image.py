@@ -65,10 +65,16 @@ OPTIONAL_AT = 0x58
 OPTIONAL_SIZE = 240
 
 
+IMAGE_BASE = 0x180000000
+RELOCATED_DIR64 = 10
+
+
 def synthetic_pe(machine=0x8664, dll=True, subsystem=2, imports=None, delay_imports=None,
-                 exports=(), unnamed_exports=0):
+                 exports=(), unnamed_exports=0, relocated=(), relocation_block=None):
     """A PE32+ image laid out by hand: one section holding the import, delay
-    import and export tables. A symbol given as an int is imported by ordinal."""
+    import and export tables. A symbol given as an int is imported by ordinal.
+    `relocated` is one DIR64-relocated pointer per value, each holding that
+    value; `relocation_block` replaces the whole table with raw bytes."""
     section = bytearray()
 
     def place(raw):
@@ -109,6 +115,16 @@ def synthetic_pe(machine=0x8664, dll=True, subsystem=2, imports=None, delay_impo
                                               len(ordered) + unnamed_exports, len(ordered),
                                               functions, names, ordinals)), 40)
 
+    relocation_directory = (0, 0)
+    if relocated or relocation_block is not None:
+        pointers = [place(struct.pack("<Q", value)) for value in relocated]
+        if relocation_block is None:
+            entries = b"".join(struct.pack("<H", (RELOCATED_DIR64 << 12) | (rva & 0xFFF))
+                               for rva in pointers)
+            page = (pointers[0] & ~0xFFF) if pointers else SECTION_RVA
+            relocation_block = struct.pack("<II", page, 8 + len(entries)) + entries
+        relocation_directory = (place(relocation_block), len(relocation_block))
+
     raw_size = -(-len(section) // FILE_ALIGNMENT) * FILE_ALIGNMENT
     headers = bytearray(FILE_ALIGNMENT)
     headers[0:2] = b"MZ"
@@ -119,7 +135,9 @@ def synthetic_pe(machine=0x8664, dll=True, subsystem=2, imports=None, delay_impo
     struct.pack_into("<H", headers, OPTIONAL_AT, 0x20B)
     struct.pack_into("<H", headers, OPTIONAL_AT + 68, subsystem)
     struct.pack_into("<I", headers, OPTIONAL_AT + 108, 16)
-    for index, entry in ((0, export_directory), (1, import_directory), (13, delay_directory)):
+    struct.pack_into("<Q", headers, OPTIONAL_AT + 24, IMAGE_BASE)
+    for index, entry in ((0, export_directory), (1, import_directory), (5, relocation_directory),
+                         (13, delay_directory)):
         struct.pack_into("<II", headers, OPTIONAL_AT + 112 + 8 * index, *entry)
     struct.pack_into("<8sIIII", headers, OPTIONAL_AT + OPTIONAL_SIZE, b".rdata", len(section),
                      SECTION_RVA, raw_size, FILE_ALIGNMENT)
@@ -292,6 +310,53 @@ class SyntheticDllCheck(unittest.TestCase):
     def test_an_export_with_no_name_is_refused_under_only_exports(self):
         result = self.check(self.icd(unnamed_exports=1), *self.exactly_the_icd())
         self.assertEqual(self.refusals(result), ["exports ordinal 3 with no name"])
+
+    def test_a_relocated_pointer_to_the_image_base_is_refused_naming_where_it_is(self):
+        """A pointer the linker filled with nothing: RVA 0 is the DOS header,
+        never a symbol, and calling one jumps to the image base. This is how a
+        guest DLL built against a __declspec(dllimport) declaration with no
+        import library to satisfy it fails, and it fails at run time."""
+        result = self.check(self.icd(relocated=(IMAGE_BASE,)), *self.exactly_the_icd())
+        refusals = self.refusals(result)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertRegex(refusals[0], r"^the relocated pointer at RVA 0x[0-9A-F]+ holds the image base, "
+                                      r"so it points at nothing$")
+
+    def test_relocated_pointers_that_point_somewhere_are_accepted(self):
+        image = self.icd(relocated=(IMAGE_BASE + SECTION_RVA, IMAGE_BASE + SECTION_RVA + 8))
+        result = self.check(image, *self.exactly_the_icd())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_every_null_pointer_is_named_not_only_the_first(self):
+        image = self.icd(relocated=(IMAGE_BASE, IMAGE_BASE + SECTION_RVA, IMAGE_BASE))
+        self.assertEqual(len(self.refusals(self.check(image, *self.exactly_the_icd()))), 2)
+
+    def test_an_image_with_no_relocation_table_is_accepted(self):
+        result = self.check(self.icd(), *self.exactly_the_icd())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_padding_entry_relocates_nothing_and_is_not_read(self):
+        """Type 0 is IMAGE_REL_BASED_ABSOLUTE, which every linker pads blocks
+        with; reading a pointer at its offset would judge an unrelated word."""
+        block = struct.pack("<IIHH", SECTION_RVA, 12, 0, 0)
+        result = self.check(self.icd(relocation_block=block), *self.exactly_the_icd())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_relocation_block_shorter_than_its_header_is_refused(self):
+        block = struct.pack("<II", SECTION_RVA, 6)
+        refusals = self.refusals(self.check(self.icd(relocation_block=block), *self.exactly_the_icd()))
+        self.assertEqual(refusals, ["not a PE image: a relocation block of 6 bytes has no entries"])
+
+    def test_a_relocation_block_overrunning_the_table_is_refused(self):
+        block = struct.pack("<IIH", SECTION_RVA, 0x1000, (RELOCATED_DIR64 << 12))
+        refusals = self.refusals(self.check(self.icd(relocation_block=block), *self.exactly_the_icd()))
+        self.assertEqual(refusals, ["not a PE image: a relocation block of 4096 bytes overruns "
+                                    "the 10 bytes of the table"])
+
+    def test_a_relocation_naming_an_rva_in_no_section_is_refused(self):
+        block = struct.pack("<IIH", 0x900000, 10, (RELOCATED_DIR64 << 12) | 0x20)
+        refusals = self.refusals(self.check(self.icd(relocation_block=block), *self.exactly_the_icd()))
+        self.assertEqual(refusals, ["not a PE image: RVA 0x900020 is in no section's file data"])
 
     def test_a_truncated_image_is_refused_as_not_a_pe_image(self):
         image = self.icd()
