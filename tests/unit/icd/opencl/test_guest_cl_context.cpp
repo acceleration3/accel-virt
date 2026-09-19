@@ -185,6 +185,29 @@ struct GuestClContextProbe {
     { context.state_ = GuestClContext::State::made; }
     static void          say_it_was_never_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::created; }
+    /* The lock around the transport, taken away and put back: it owns
+     * nothing, so a context without it leaks nothing - it is simply a
+     * teardown that stopped halfway. */
+    static void          drop_the_lock(GuestClContext &context) { context.locked_.destroy(); }
+    static void          restore_the_lock(GuestClContext &context)
+    { static_cast<void>(context.locked_.construct(context.transport_.object(),
+                                                  context.send_lock_)); }
+    /* A staging block and a link on a context that says it has made nothing.
+     * Neither points at anything, so nothing is freed or released. */
+    static void          stray_staging(GuestClContext &context, uint8_t *block)
+    { context.staging_ = block; }
+    static void          stray_link(GuestClContext &context) { context.link_ = 0u; }
+    static SvmTable     &svm_of(GuestClContext &context) { return context.svm_; }
+};
+
+}  // namespace av::clicd
+
+namespace av::clicd {
+
+/* The shared allocations the context holds: a count that disagrees with the
+ * rows is a slot leaked or handed out twice. */
+struct SvmTableProbe {
+    static void miscount(SvmTable &table) { table.live_ += 1u; }
 };
 
 }  // namespace av::clicd
@@ -342,3 +365,48 @@ TEST(guest_cl_context, the_invariant_catches_an_unmade_context_still_holding_som
   CHECK(!context.invariants_hold());
   GuestClContextProbe::say_it_was_made(context);
   CHECK(context.invariants_hold()); }
+
+/* The transport and the lock around it are constructed together, so a context
+ * holding one without the other is a make or a teardown that stopped halfway
+ * - in either direction. */
+TEST(guest_cl_context, the_invariant_catches_a_transport_without_the_lock_around_it)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  CHECK(context.invariants_hold());
+  GuestClContextProbe::drop_the_lock(context);
+  CHECK(!context.invariants_hold());
+  GuestClContextProbe::restore_the_lock(context);
+  CHECK(context.invariants_hold()); }
+
+/* A context that says it has made nothing must hold none of what a make
+ * holds: each is checked on its own, because the first term to fail hides
+ * the rest. */
+TEST(guest_cl_context, the_invariant_catches_each_thing_an_unmade_context_should_not_hold)
+{ { ClContextRig rig;
+    GuestClContext context = made_context(rig);
+    CHECK(context.invariants_hold());
+    std::uint8_t block = 0u;
+    GuestClContextProbe::stray_staging(context, &block);
+    CHECK(!context.invariants_hold());
+    GuestClContextProbe::stray_staging(context, nullptr);
+    CHECK(context.invariants_hold()); }
+  { ClContextRig rig;
+    GuestClContext context = made_context(rig);
+    /* A link it never acquired: the adapter would be held open by a context
+     * that believes it opened nothing. */
+    GuestClContextProbe::stray_link(context);
+    CHECK(!context.invariants_hold()); } }
+
+/* The shared allocations are the context's, so a table that is unsound makes
+ * the context unsound: an address translating two ways is not something the
+ * context may believe it is fine with. */
+TEST(guest_cl_context, the_invariant_reaches_the_shared_allocations_it_holds)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  CHECK(context.invariants_hold());
+  av::clicd::SvmTableProbe::miscount(GuestClContextProbe::svm_of(context));
+  CHECK(!context.invariants_hold()); }

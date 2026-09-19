@@ -21,10 +21,12 @@ void *SvmTable::take(uint64_t host_base, size_t bytes)
 {
     AV_SCOPE("SvmTable::take");
     if (host_base == 0u || bytes == 0u) return nullptr;
-    if (live_ == max_allocations) return nullptr;
     /* A pair that cannot both be addressed is one whose translation could
      * wrap, so it is refused here rather than arithmetically later. */
     if (static_cast<uint64_t>(bytes) > ~uint64_t{0} - host_base) return nullptr;
+    /* The scan is what says there is room, and it is the only thing that
+     * may: a count checked first would make this bound unreachable, and the
+     * bound is what keeps the index below the array. */
     uint32_t slot = 0u;
     while (slot < max_allocations && allocations_[slot].held()) ++slot;
     if (slot == max_allocations) return nullptr;

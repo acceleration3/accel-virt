@@ -248,13 +248,18 @@ bool GuestClContext::invariants_hold() const
             }
         }
     }
+    /* The transport and the lock around it are constructed together and torn
+     * down together, so one without the other is a make or a teardown that
+     * stopped halfway - and checking them apart below would be checking a
+     * state neither ever produces. */
+    if (transport_.constructed() != locked_.constructed()) return false;
     if (state_ == State::created) {
         /* Nothing is held before a make, and a make that failed held nothing
          * after it either. */
-        return !transport_.constructed() && !locked_.constructed() && staging_ == nullptr &&
+        return !transport_.constructed() && staging_ == nullptr &&
                link_ == icd::IcdConnection::no_link;
     }
-    if (!transport_.constructed() || !locked_.constructed()) return false;
+    if (!transport_.constructed()) return false;
     if (staging_ == nullptr || link_ == icd::IcdConnection::no_link) return false;
     return transport_.object().invariants_hold();
 }
