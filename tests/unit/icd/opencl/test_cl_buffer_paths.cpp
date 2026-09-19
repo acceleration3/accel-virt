@@ -429,3 +429,133 @@ TEST(cl_buffer_paths, a_write_back_the_host_refuses_is_what_the_unmap_answers)
   CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_OUT_OF_RESOURCES);
   /* The mapping is gone either way: it is the host's that was ended. */
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- the arena path's own refusals, and the events both paths hand back --- */
+
+TEST(cl_buffer_paths, an_arena_backed_map_the_host_refuses_hands_back_nothing)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  /* The host is still asked to map even though the bytes are already here:
+   * its map is what says a kernel is no longer running over them. A refusal
+   * there is a refusal of the whole map. */
+  rig.host().cl_handle(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+
+  /* And a host that answers success with no address has contradicted itself. */
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MAP_FAILURE);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_map_past_the_end_of_its_backing_is_staged_rather_than_shared)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  /* The offset in the row is this ICD's, but the length is the
+   * application's, so the bounds are re-checked at the map. A length past
+   * the backing is not something to hand out a pointer into - it takes the
+   * staged path instead, which copies exactly what was asked for. */
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_INVALID_VALUE;
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ,
+                                             buffer_bytes - 8u, buffer_bytes, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(mapped != nullptr);
+  /* Two commands, which is the staged path: the host's map, then the read
+   * that fills the block. */
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueReadBuffer));
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_map_with_more_mappings_than_the_context_holds_is_refused_on_both_paths)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  /* Fill the context's mapping table through the shared path, then ask for
+   * one more: the host has already mapped it by then, so the refusal is the
+   * guest running out of rows rather than the host running out of memory. */
+  for (std::uint32_t index = 0u; index < 64u; ++index) {
+      rig.host().cl_handle(host_mapped + index, CL_SUCCESS);
+      CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
+                                  nullptr) != nullptr);
+  }
+  rig.host().cl_handle(host_mapped + 64u, CL_SUCCESS);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
+                              &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_map_asked_for_an_event_hands_one_back_on_either_path)
+{ { ClIcdRig rig;
+    Opened   opened(rig, true);
+    CHECK(opened.made());
+    if (!opened.made()) return;
+    cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+    CHECK(buffer != nullptr);
+    if (buffer == nullptr) return;
+    /* The shared path: the host answers an address and the event it made. */
+    rig.host().cl_mapped(host_mapped, 0x6900u, CL_SUCCESS);
+    cl_event    event = nullptr;
+    cl_int      error = CL_INVALID_VALUE;
+    void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u,
+                                               buffer_bytes, &event, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    CHECK(mapped != nullptr);
+    CHECK(event != nullptr);
+    /* And the unmap of it, asked for an event of its own. */
+    rig.host().cl_enqueued(CL_SUCCESS, 0x6901u);
+    cl_event given_back = nullptr;
+    CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, &given_back), CL_SUCCESS);
+    CHECK(given_back != nullptr);
+    CHECK(rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    Opened   opened(rig, false);
+    CHECK(opened.made());
+    if (!opened.made()) return;
+    cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+    CHECK(buffer != nullptr);
+    if (buffer == nullptr) return;
+    /* The staged path, with the read that fills the block behind the map. */
+    rig.host().cl_mapped(host_mapped, 0x6900u, CL_SUCCESS);
+    const unsigned char filled[buffer_bytes] = {};
+    rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+    cl_event    event = nullptr;
+    cl_int      error = CL_INVALID_VALUE;
+    void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_WRITE, 0u,
+                                               buffer_bytes, &event, &error);
+    CHECK_EQ(error, CL_SUCCESS);
+    CHECK(mapped != nullptr);
+    CHECK(event != nullptr);
+    /* The unmap answers an event too, and the write-back follows it. */
+    rig.host().cl_enqueued(CL_SUCCESS, 0x6901u);
+    rig.host().cl_result(CL_SUCCESS);
+    cl_event given_back = nullptr;
+    CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, &given_back), CL_SUCCESS);
+    CHECK(given_back != nullptr);
+    CHECK(rig.root().invariants_hold()); } }

@@ -96,6 +96,10 @@ public:
     void vk_queue_families(std::uint32_t count);
     void cl_result(std::int32_t result);
     void cl_handle(std::uint64_t handle, std::int32_t error);
+    /* What a map answers when an event was asked for as well: the address,
+     * then the event, then the error - which is the order the emitter writes
+     * an address-returning command's outputs in. */
+    void cl_mapped(std::uint64_t address, std::uint64_t event, std::int32_t error);
     /* An ID query's answer: the result, the `sent` ids that fit the room the
      * guest gave, and the `total` the host has. */
     void cl_ids(std::int32_t result, const std::uint64_t *ids, std::uint32_t sent, std::uint32_t total);
