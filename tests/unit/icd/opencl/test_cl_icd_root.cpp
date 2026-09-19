@@ -508,6 +508,13 @@ using av::clicd::ClIcdRootProbe;
 
 namespace {
 
+/* A callback that never runs: what is tested is the registration. */
+void nothing_ran(cl_event, cl_int, void *) {}
+
+}  // namespace
+
+namespace {
+
 constexpr std::uint64_t host_event = 0x6900u;
 
 /* What a callback saw, so a test can say it ran once and with what. */
@@ -1351,4 +1358,57 @@ TEST(cl_icd_root, a_status_query_with_no_room_for_a_status_delivers_nothing)
            CL_SUCCESS);
   /* One command, the query itself: no fetch followed it. */
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A callback the watcher cannot register after the host already has.
+ *
+ * The host is told first, then the guest takes a reference and records the
+ * registration. If that last step fails, the reference has to go back - the
+ * application holds one of its own, and leaking the ICD's would keep the
+ * event alive for the life of the context. The host's own registration is
+ * left: OpenCL has no way to unregister one, which is exactly why every
+ * callback carries an epoch. */
+TEST(cl_icd_root, a_callback_the_watcher_cannot_keep_gives_its_reference_back)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  cl_event event = rig.loader().create_user_event(context, nullptr);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+
+  const std::uint32_t live = ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event);
+  /* The host registers it, and the watcher has no thread to run it on. */
+  rig.host().cl_result(CL_SUCCESS);
+  rig.watcher().refuse_start();
+  CHECK_EQ(rig.root().watch_event(event, CL_COMPLETE, &nothing_ran, nullptr),
+           CL_OUT_OF_RESOURCES);
+  /* The reference the registration took is back, so the application's is
+   * the only one and releasing it still destroys the event. */
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), live);
+  CHECK(rig.root().invariants_hold());
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().release(event, ClObject::Kind::event), CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), live - 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A callback registration with no callback is the caller's own mistake, and
+ * it is judged after the root is found: with a root there is an event to
+ * name, so the missing argument is what is wrong. */
+TEST(cl_icd_root, a_callback_registration_with_no_callback_is_an_invalid_value)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  cl_event event = rig.loader().create_user_event(context, nullptr);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().dispatch().clSetEventCallback(event, CL_COMPLETE, nullptr, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
