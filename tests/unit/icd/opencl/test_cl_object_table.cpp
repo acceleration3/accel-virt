@@ -18,6 +18,25 @@
 using av::MockPlatform;
 using av::Status;
 using av::clicd::ClObject;
+using av::clicd::ClObjectProbe;
+
+namespace av::clicd {
+
+/* The states the table never builds. An object with no dispatch table is one
+ * the loader would jump through a null pointer for; one with no host handle
+ * names nothing; a parent of its own kind or higher makes the chain to a
+ * context unbounded; and a platform on a context is a platform the loader
+ * enumerated from somewhere this ICD never opened. */
+struct ClObjectProbe {
+    static void forget_dispatch(ClObject &object) { object.dispatch_ = nullptr; }
+    static void forget_wire(ClObject &object) { object.wire_ = 0u; }
+    static void parent_of_its_own_kind(ClObject &object, ClObject &parent)
+    { parent.kind_ = object.kind_; object.parent_ = &parent; }
+    static void a_platform_on_a_context(ClObject &object, GuestClContext *context)
+    { object.kind_ = ClObject::Kind::platform; object.parent_ = nullptr; object.context_ = context; }
+};
+
+}  // namespace av::clicd
 using av::clicd::ClObjectTable;
 
 namespace {
@@ -267,3 +286,35 @@ TEST(cl_object_table, only_a_buffer_given_arena_memory_says_it_is_backed)
   first->back_with(0u, 0u);
   CHECK(!first->backed());
   CHECK(first->invariants_hold()); }
+
+/* The invariant catches the states the table never builds. */
+TEST(cl_object_table, an_objects_invariant_catches_what_the_table_never_builds)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x901u);
+  CHECK(context != nullptr && queue != nullptr);
+  CHECK(context->invariants_hold());
+  CHECK(queue->invariants_hold());
+
+  ClObjectProbe::forget_dispatch(*queue);
+  CHECK(!queue->invariants_hold());
+
+  ClObject *const second = rig.make(ClObject::Kind::program, 0x902u);
+  CHECK(second != nullptr);
+  ClObjectProbe::forget_wire(*second);
+  CHECK(!second->invariants_hold());
+
+  /* A parent of its own kind: the walk from an object to its context would
+   * never have to end. */
+  ClObject *const child = rig.make(ClObject::Kind::kernel, 0x903u);
+  ClObject *const sibling = rig.make(ClObject::Kind::kernel, 0x904u);
+  CHECK(child != nullptr && sibling != nullptr);
+  ClObjectProbe::parent_of_its_own_kind(*child, *sibling);
+  CHECK(!child->invariants_hold());
+
+  /* A platform belongs to no context: one that names a context was made
+   * somewhere this ICD never opened. */
+  ClObject *const platform = rig.make(ClObject::Kind::mem, 0x905u);
+  CHECK(platform != nullptr);
+  ClObjectProbe::a_platform_on_a_context(*platform, context->context());
+  CHECK(!platform->invariants_hold()); }

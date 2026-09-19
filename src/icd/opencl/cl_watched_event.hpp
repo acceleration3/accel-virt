@@ -21,6 +21,8 @@ namespace av::clicd {
 
 class ClObject;
 
+struct ClWatchedEventProbe;
+
 class ClWatchedEvent {
 public:
     using Notify = void(CL_CALLBACK *)(cl_event, cl_int, void *);
@@ -50,6 +52,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClWatchedEventProbe;
+
     ClObject        *event_;
     ClientTransport *transport_;
     Notify           notify_;

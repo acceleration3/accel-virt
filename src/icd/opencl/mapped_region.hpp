@@ -20,6 +20,8 @@
 
 namespace av::clicd {
 
+struct MappedRegionProbe;
+
 class MappedRegion {
 public:
     MappedRegion();
@@ -54,6 +56,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct MappedRegionProbe;
+
     uint64_t     buffer_;
     uint64_t     host_;
     uint8_t     *at_;

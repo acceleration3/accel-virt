@@ -19,6 +19,26 @@ using av::ClContextRig;
 using av::Status;
 using av::clicd::GuestClContext;
 using av::clicd::MappedRegion;
+using av::clicd::MappedRegionProbe;
+
+namespace av::clicd {
+
+/* A mapping is either live or wholly empty. Each of these is a halfway state
+ * the class never builds: a live mapping of no bytes, or one naming neither
+ * the buffer nor the address the host's own map answered, could never be
+ * unmapped; and an empty one still naming a buffer would have the context
+ * believe a slot is free while an unmap could still find it. */
+struct MappedRegionProbe {
+    static void forget_length(MappedRegion &region) { region.bytes_ = 0u; }
+    static void forget_buffer(MappedRegion &region) { region.buffer_ = 0u; }
+    static void forget_host_address(MappedRegion &region) { region.host_ = 0u; }
+    static void stray_buffer(MappedRegion &region) { region.buffer_ = 1u; }
+    static void stray_length(MappedRegion &region) { region.bytes_ = 1u; }
+    static void stray_offset(MappedRegion &region) { region.offset_ = 1u; }
+    static void stray_staging(MappedRegion &region) { region.staged_ = true; }
+};
+
+}  // namespace av::clicd
 
 namespace {
 
@@ -151,3 +171,29 @@ TEST(guest_cl_context, mappings_left_live_go_with_the_context)
   /* An application that never unmapped is an application that leaked nothing:
    * the blocks were the context's. */
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
+
+/* The invariant catches the halfway states the class never builds. */
+TEST(mapped_region, the_invariant_catches_a_live_mapping_that_could_not_be_unmapped)
+{ std::uint8_t at[64] = {};
+  const auto broken = [&at](void (*corrupt)(MappedRegion &)) {
+      MappedRegion region;
+      region.take(0x6600u, 0x7000u, 0u, sizeof at, CL_MAP_WRITE, at, true);
+      CHECK(region.invariants_hold());
+      corrupt(region);
+      return region.invariants_hold();
+  };
+  CHECK(!broken(MappedRegionProbe::forget_length));
+  CHECK(!broken(MappedRegionProbe::forget_buffer));
+  CHECK(!broken(MappedRegionProbe::forget_host_address)); }
+
+TEST(mapped_region, the_invariant_catches_an_empty_mapping_that_still_names_something)
+{ const auto broken = [](void (*corrupt)(MappedRegion &)) {
+      MappedRegion region;
+      CHECK(region.invariants_hold());
+      corrupt(region);
+      return region.invariants_hold();
+  };
+  CHECK(!broken(MappedRegionProbe::stray_buffer));
+  CHECK(!broken(MappedRegionProbe::stray_length));
+  CHECK(!broken(MappedRegionProbe::stray_offset));
+  CHECK(!broken(MappedRegionProbe::stray_staging)); }

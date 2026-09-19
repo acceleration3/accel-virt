@@ -22,6 +22,7 @@
 #include "harness/icd/counting_event_owner.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_object.hpp"
+#include "icd/opencl/cl_watched_event.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 
 #include <cstdint>
@@ -32,8 +33,30 @@ using av::CountingEventOwner;
 using av::ScriptedThread;
 using av::Status;
 using av::clicd::ClEventWatcher;
+using av::clicd::ClWatchedEvent;
+using av::clicd::ClWatchedEventProbe;
 using av::clicd::ClObject;
 using av::clicd::GuestClContext;
+
+namespace av::clicd {
+
+/* A registration is either wholly live or wholly empty. Halfway is a
+ * callback that could not be run, or a slot believed free that a completion
+ * would still fire. */
+struct ClWatchedEventProbe {
+    static void forget_event(ClWatchedEvent &watched) { watched.event_ = nullptr; }
+    static void forget_transport(ClWatchedEvent &watched) { watched.transport_ = nullptr; }
+    static void forget_notify(ClWatchedEvent &watched) { watched.notify_ = nullptr; }
+    static void forget_wire(ClWatchedEvent &watched) { watched.wire_ = 0u; }
+    static void stray_event(ClWatchedEvent &watched, ClObject *event) { watched.event_ = event; }
+    static void stray_transport(ClWatchedEvent &watched, ClientTransport *wire)
+    { watched.transport_ = wire; }
+    static void stray_notify(ClWatchedEvent &watched, ClWatchedEvent::Notify notify)
+    { watched.notify_ = notify; }
+    static void stray_wire(ClWatchedEvent &watched) { watched.wire_ = 1u; }
+};
+
+}  // namespace av::clicd
 
 namespace {
 
@@ -297,3 +320,42 @@ TEST(cl_event_watcher, an_event_whose_context_is_forgotten_is_not_given_back)
   CHECK_EQ(watching.owner().releases(), 0u);
   CHECK_EQ(ran.times, 0u);
   CHECK(watching.watcher().invariants_hold()); }
+
+/* The invariant of one registration: live means every one of the four things
+ * a completion needs is there, and empty means none of them is. */
+namespace {
+
+void nothing_ran(cl_event, cl_int, void *) {}
+
+}  // namespace
+
+TEST(cl_event_watcher, a_registrations_invariant_catches_a_callback_that_could_not_run)
+{ Watching   rig;
+  ClObject  &event = rig.event();
+  const auto broken = [&rig, &event](void (*corrupt)(ClWatchedEvent &)) {
+      ClWatchedEvent watched;
+      CHECK(watched.take(&event, 0x6900u, rig.wire(), CL_COMPLETE, nothing_ran, nullptr));
+      CHECK(watched.invariants_hold());
+      corrupt(watched);
+      return watched.invariants_hold();
+  };
+  CHECK(!broken(ClWatchedEventProbe::forget_event));
+  CHECK(!broken(ClWatchedEventProbe::forget_transport));
+  CHECK(!broken(ClWatchedEventProbe::forget_notify));
+  CHECK(!broken(ClWatchedEventProbe::forget_wire));
+
+  /* And the empty half: a slot believed free that a completion would still
+   * find something in. */
+  ClWatchedEvent empty;
+  CHECK(empty.invariants_hold());
+  ClWatchedEventProbe::stray_event(empty, &event);
+  CHECK(!empty.invariants_hold());
+  ClWatchedEventProbe::stray_event(empty, nullptr);
+  ClWatchedEventProbe::stray_transport(empty, rig.wire());
+  CHECK(!empty.invariants_hold());
+  ClWatchedEventProbe::stray_transport(empty, nullptr);
+  ClWatchedEventProbe::stray_notify(empty, nothing_ran);
+  CHECK(!empty.invariants_hold());
+  ClWatchedEventProbe::stray_notify(empty, nullptr);
+  ClWatchedEventProbe::stray_wire(empty);
+  CHECK(!empty.invariants_hold()); }

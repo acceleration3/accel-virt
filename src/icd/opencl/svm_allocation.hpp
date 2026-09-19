@@ -18,6 +18,8 @@
 
 namespace av::clicd {
 
+struct SvmAllocationProbe;
+
 class SvmAllocation {
 public:
     SvmAllocation();
@@ -47,6 +49,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct SvmAllocationProbe;
+
     uint64_t host_base_;
     uint8_t *mirror_;
     size_t   bytes_;

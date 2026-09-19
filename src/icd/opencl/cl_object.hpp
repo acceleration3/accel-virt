@@ -21,6 +21,8 @@ namespace av::clicd {
 
 class GuestClContext;
 
+struct ClObjectProbe;
+
 class ClObject {
 public:
     /* In dependency order: a parent's kind is lower than its children's, so
@@ -62,6 +64,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClObjectProbe;
+
     /* First, and it stays first: the loader reads this word and calls through
      * it. Nothing may be declared before it. */
     const cl_icd_dispatch *dispatch_;
