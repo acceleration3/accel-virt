@@ -182,6 +182,12 @@ TEST(cl_platform, a_query_this_driver_does_not_answer_is_an_invalid_value)
   std::size_t room = 0u;
   CHECK_EQ(platform.info(nullptr, CL_PLATFORM_NUMERIC_VERSION, 0u, nullptr, &room), CL_SUCCESS);
   CHECK_EQ(room, sizeof(cl_version));
+  /* Asked for the value alone, with nowhere to report the size: the value is
+   * written and the size is not, because there is nothing to write it to. */
+  version = 0u;
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_NUMERIC_VERSION, sizeof version, &version, nullptr),
+           CL_SUCCESS);
+  CHECK(version != 0u);
   CHECK(platform.invariants_hold()); }
 
 /* The invariant catches the states the platform never builds. */

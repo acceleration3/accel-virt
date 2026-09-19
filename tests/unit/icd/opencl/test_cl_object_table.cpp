@@ -37,8 +37,14 @@ struct ClObjectTableProbe {
 struct ClObjectProbe {
     static void forget_dispatch(ClObject &object) { object.dispatch_ = nullptr; }
     static void forget_wire(ClObject &object) { object.wire_ = 0u; }
+    static void adopt(ClObject &object, ClObject &parent) { object.parent_ = &parent; }
     static void parent_of_its_own_kind(ClObject &object, ClObject &parent)
     { parent.kind_ = object.kind_; object.parent_ = &parent; }
+    /* A platform belongs to no context, which is the one kind that may hold
+     * none - and the only way that case is ever reached. */
+    static void call_it_a_platform(ClObject &object)
+    { object.kind_ = ClObject::Kind::platform; object.parent_ = nullptr;
+      object.context_ = nullptr; }
     static void a_platform_on_a_context(ClObject &object, GuestClContext *context)
     { object.kind_ = ClObject::Kind::platform; object.parent_ = nullptr; object.context_ = context; }
     /* A count that has saturated, which is where retain must stop and
@@ -378,3 +384,30 @@ TEST(cl_object_table, the_invariant_catches_an_object_of_its_own_that_is_unsound
    * than only checking its own count. */
   ClObjectProbe::forget_wire(*queue);
   CHECK(!rig.objects().invariants_hold()); }
+
+/* The one kind that may hold no context is a platform, and the invariant has
+ * to let that through: an object whose kind says it belongs to nothing is
+ * sound exactly when it belongs to nothing. */
+TEST(cl_object_table, a_platform_belongs_to_no_context_and_is_sound_that_way)
+{ Table rig;
+  ClObject *const object = rig.make(ClObject::Kind::mem, 0x6600u);
+  CHECK(object != nullptr);
+  ClObjectProbe::call_it_a_platform(*object);
+  CHECK(object->invariants_hold()); }
+
+/* Every parent is still held: a subtree is destroyed with its root, so a live
+ * child of a dead parent cannot happen - and if it did, the table would be
+ * holding an object whose chain to a context is broken. */
+TEST(cl_object_table, the_invariant_catches_a_child_whose_parent_the_table_lost)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  CHECK(context != nullptr);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x901u, context);
+  CHECK(queue != nullptr);
+  CHECK(rig.objects().invariants_hold());
+  /* The parent is pointed at something the pool never held. */
+  ClObject outside(dispatch, ClObject::Kind::context, 0x902u, some_context, nullptr);
+  ClObjectProbe::adopt(*queue, outside);
+  CHECK(!rig.objects().invariants_hold());
+  ClObjectProbe::adopt(*queue, *context);
+  CHECK(rig.objects().invariants_hold()); }

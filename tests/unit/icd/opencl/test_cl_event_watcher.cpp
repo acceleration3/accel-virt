@@ -45,6 +45,9 @@ namespace av::clicd {
  * would still fire. */
 struct ClWatchedEventProbe {
     static void forget_event(ClWatchedEvent &watched) { watched.event_ = nullptr; }
+    /* A registration with nothing to call. Running one is what a watcher
+     * would do to a row it believed was armed. */
+    static void forget_only_the_notify(ClWatchedEvent &watched) { watched.notify_ = nullptr; }
     static void forget_transport(ClWatchedEvent &watched) { watched.transport_ = nullptr; }
     static void forget_notify(ClWatchedEvent &watched) { watched.notify_ = nullptr; }
     static void forget_wire(ClWatchedEvent &watched) { watched.wire_ = 0u; }
@@ -441,3 +444,16 @@ TEST(cl_event_watcher, the_invariant_catches_a_count_or_a_registration_that_is_w
      * only checking its own count. */
     ClWatchedEventProbe::forget_notify(ClEventWatcherProbe::registration(rig.watcher(), 0u));
     CHECK(!rig.watcher().invariants_hold()); } }
+
+/* A registration with nothing to call runs nothing rather than jumping
+ * through a null pointer. The watcher never builds one - take() refuses a
+ * null notify - but run() is reached from the watcher's own thread, where a
+ * jump into nothing would be a crash with no diagnostic at all. */
+TEST(cl_event_watcher, a_registration_with_nothing_to_call_runs_nothing)
+{ Watching rig;
+  ClWatchedEvent watched;
+  CHECK(watched.take(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, nothing_ran, nullptr));
+  ClWatchedEventProbe::forget_only_the_notify(watched);
+  /* Nothing happens, and nothing crashes. */
+  watched.run(CL_COMPLETE);
+  CHECK(!watched.invariants_hold()); }

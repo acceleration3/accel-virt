@@ -35,6 +35,8 @@ struct ClDispatchTableProbe {
     { table.table_.clGetPlatformInfo = nullptr; }
     static void a_carried_slot_left_empty(ClDispatchTable &table)
     { table.table_.clCreateImage = nullptr; }
+    static void the_context_slot_left_empty(ClDispatchTable &table)
+    { table.table_.clCreateContext = nullptr; }
     static void a_map_slot_of_someone_elses(ClDispatchTable &table)
     { table.table_.clEnqueueMapBuffer = nullptr; }
     static void an_unfilled_table_that_claims_something(ClDispatchTable &table)
@@ -174,7 +176,15 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK(table.table().clCreateKernel(nullptr, nullptr, nullptr) == nullptr);
   CHECK(table.table().clEnqueueMapBuffer(nullptr, nullptr, CL_TRUE, 0u, 0u, 0u, 0u, nullptr,
                                          nullptr, nullptr) == nullptr);
-  CHECK(table.table().clCreateUserEvent(nullptr, nullptr) == nullptr); }
+  CHECK(table.table().clCreateUserEvent(nullptr, nullptr) == nullptr);
+
+  /* The deprecated 1.2 queue call is its own slot: an application built
+   * against the older header reaches it and not the properties one, so it
+   * needs the same answer. */
+  error = 7;
+  CHECK(table.table().clCreateCommandQueue(nullptr, nullptr, 0u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK(table.table().clCreateCommandQueue(nullptr, nullptr, 0u, nullptr) == nullptr); }
 
 /* The invariant catches the states the table never builds - every one of
  * which the loader would turn into a jump through a null pointer. */
@@ -191,6 +201,7 @@ TEST(cl_dispatch_table, the_invariant_catches_a_table_the_loader_would_jump_into
   CHECK(!broken(ClDispatchTableProbe::a_platform_info_slot_of_someone_elses));
   CHECK(!broken(ClDispatchTableProbe::a_carried_slot_left_empty));
   CHECK(!broken(ClDispatchTableProbe::a_map_slot_of_someone_elses));
+  CHECK(!broken(ClDispatchTableProbe::the_context_slot_left_empty));
 
   ClDispatchTable never_filled;
   CHECK(never_filled.invariants_hold());

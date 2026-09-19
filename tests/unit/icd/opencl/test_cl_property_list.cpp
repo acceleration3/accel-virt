@@ -11,6 +11,21 @@
 #include <cstdint>
 
 using av::clicd::ClPropertyList;
+using av::clicd::ClPropertyListProbe;
+
+namespace av::clicd {
+
+/* The states a read never leaves behind. A count past the table is a walk
+ * that would read off the end of it; a pair whose name is zero is the
+ * terminator stored as if it were a property, which would make the list end
+ * where a reader thinks a pair begins. */
+struct ClPropertyListProbe {
+    static void count_past_the_table(ClPropertyList &list)
+    { list.pairs_ = ClPropertyList::max_pairs + 1u; }
+    static void a_pair_named_nothing(ClPropertyList &list) { list.names_[0] = 0u; }
+};
+
+}  // namespace av::clicd
 
 TEST(cl_property_list, a_null_list_and_an_empty_one_are_both_no_properties)
 { ClPropertyList list;
@@ -92,3 +107,16 @@ TEST(cl_property_list, a_list_that_fills_the_bound_exactly_is_read_and_one_longe
   CHECK(!list.read(over));
   CHECK_EQ(list.pairs(), 0u);
   CHECK(list.invariants_hold()); }
+
+/* The invariant catches what a read never leaves behind. */
+TEST(cl_property_list, the_invariant_catches_a_list_a_read_would_never_leave)
+{ const std::uint64_t one[] = {0x1084u, 7u, 0u};
+  { ClPropertyList list;
+    CHECK(list.read(one));
+    CHECK(list.invariants_hold());
+    ClPropertyListProbe::count_past_the_table(list);
+    CHECK(!list.invariants_hold()); }
+  { ClPropertyList list;
+    CHECK(list.read(one));
+    ClPropertyListProbe::a_pair_named_nothing(list);
+    CHECK(!list.invariants_hold()); } }
