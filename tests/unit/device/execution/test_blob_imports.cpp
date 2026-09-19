@@ -57,6 +57,15 @@ namespace {
 
 constexpr std::uint64_t page = ImportRig::page;
 
+/* A little-endian u64 of a record's payload, as docs/protocol.md frames one. */
+std::uint64_t read_u64(const std::uint8_t *bytes)
+{
+    std::uint64_t value = 0u;
+    for (std::uint32_t index = 0u; index < 8u; index++)
+        value |= static_cast<std::uint64_t>(bytes[index]) << (8u * index);
+    return value;
+}
+
 /* The bytes behind a handle the executor was given, whichever kind it is: a
  * dma-buf mapped for as long as this lives, a host pointer as it stands. What
  * the host GPU would see, which is what every byte assertion here is about. */
@@ -446,24 +455,47 @@ TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_i
   av::RecordHeader    record;
   const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
   CHECK(payload != nullptr);
+  /* Every field the replay pairs an import with its release by: a blob record
+   * is action, memory type, id, offset and size (docs/protocol.md). */
+  std::uint64_t imported_id = 0u;
   if (payload != nullptr) {
       CHECK_EQ(payload[0], 1u);            /* imported */
       CHECK_EQ(payload[4], 5u);            /* the memory type the guest asked for */
-      CHECK_EQ(payload[16], page & 0xFFu); /* the offset */
-      CHECK_EQ(payload[17], (page >> 8) & 0xFFu);
+      imported_id = read_u64(payload + 8u);
+      CHECK_EQ(imported_id, 1u);           /* the first blob this context handed over */
+      CHECK_EQ(read_u64(payload + 16u), page);
+      CHECK_EQ(read_u64(payload + 24u), page);
   }
+  CHECK_EQ(record.length(), av::WireRecorder::blob_payload);
   CHECK_EQ(record.context(), 1u);
   payload = file.expect(av::RecordKind::blob_bytes, record);
   CHECK(payload != nullptr);
   CHECK_EQ(record.length(), 16u + page);
-  /* The second page of the blob is guest page 8, which the rig filled with
-   * 0x10 + 8; a replay recreates the import from exactly these bytes. */
-  if (payload != nullptr) CHECK_EQ(payload[16], 0x18u);
+  /* The snapshot names the blob and the offset it was taken from, or a replay
+   * cannot say which import it recreates. */
+  if (payload != nullptr) {
+      CHECK_EQ(read_u64(payload), imported_id);
+      CHECK_EQ(read_u64(payload + 8u), page);
+      /* The second page of the blob is guest page 8, which the rig filled with
+       * 0x10 + 8; a replay recreates the import from exactly these bytes. */
+      CHECK_EQ(payload[16], 0x18u);
+  }
   CHECK_EQ(file.remaining(), 0u);
 
   rig.on_worker([&] { rig.imports().release(device_memory); });
-  av::RecordedFile after(rig.host(), "imports.rvk");
-  CHECK_EQ(after.remaining(), 3u);
+  av::RecordedFile    after(rig.host(), "imports.rvk");
+  av::RecordHeader    released;
+  const std::uint8_t *last = after.expect(av::RecordKind::blob, released);
+  CHECK(after.expect(av::RecordKind::blob_bytes, released) != nullptr);
+  CHECK(last != nullptr);
+  last = after.expect(av::RecordKind::blob, released);
+  CHECK(last != nullptr);
+  if (last != nullptr) {
+      CHECK_EQ(last[0], 2u);               /* released */
+      CHECK_EQ(read_u64(last + 8u), imported_id);
+  }
+  CHECK_EQ(released.context(), 1u);
+  CHECK_EQ(after.remaining(), 0u);
   rig.recorder().close(); }
 
 TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_only_its_lifetime)
@@ -478,10 +510,19 @@ TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_o
       CHECK_STATUS(rig.imports().import(rig.chunk(4u), 0u, page, 0u, device_memory), Status::ok);
       rig.imports().release(device_memory);
   });
-  av::RecordedFile file(rig.host(), "lifetimes.rvk");
-  av::RecordHeader record;
-  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
-  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
+  av::RecordedFile    file(rig.host(), "lifetimes.rvk");
+  av::RecordHeader    record;
+  const std::uint8_t *imported = file.expect(av::RecordKind::blob, record);
+  CHECK(imported != nullptr);
+  if (imported != nullptr) CHECK_EQ(imported[0], 1u);
+  const std::uint8_t *released = file.expect(av::RecordKind::blob, record);
+  CHECK(released != nullptr);
+  /* An import and then its release, in that order: two records of the same
+   * action would read as a blob imported twice and never given back. */
+  if (released != nullptr && imported != nullptr) {
+      CHECK_EQ(released[0], 2u);
+      CHECK_EQ(read_u64(released + 8u), read_u64(imported + 8u));
+  }
   CHECK_EQ(file.remaining(), 0u);
   rig.recorder().close(); }
 

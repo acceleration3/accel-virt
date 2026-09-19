@@ -579,6 +579,7 @@ TEST(batch_executor_run, records_the_batch_before_a_command_runs_and_its_answer_
   payload = file.expect(av::RecordKind::reply, record);
   CHECK(payload != nullptr);
   CHECK(record.fence() == 7u);
+  CHECK_EQ(record.context(), 1u);
   CHECK_EQ(record.length(), 4u);
   if (payload != nullptr) CHECK_EQ(payload[0], 0x11u);
   CHECK_EQ(file.remaining(), 0u);
@@ -597,7 +598,15 @@ TEST(batch_executor_run, records_the_fault_of_a_batch_that_did_not_complete)
   const std::uint8_t *payload = file.expect(av::RecordKind::fault, record);
   CHECK(payload != nullptr);
   CHECK(record.fence() == 3u);
-  if (payload != nullptr) CHECK_EQ(payload[0], static_cast<std::uint8_t>(FaultCode::undecodable));
+  CHECK_EQ(record.context(), 1u);
+  /* A fault is a u32 code and a u32 the format reserves; a reader refuses a
+   * record whose reserved bytes are not zero, so a device that wrote anything
+   * there would make its own recordings unreadable. */
+  CHECK_EQ(record.length(), 8u);
+  if (payload != nullptr) {
+      CHECK_EQ(payload[0], static_cast<std::uint8_t>(FaultCode::undecodable));
+      for (std::uint32_t index = 1u; index < 8u; index++) CHECK_EQ(payload[index], 0u);
+  }
   CHECK_EQ(file.remaining(), 0u);
   fixture.recorder().close(); }
 

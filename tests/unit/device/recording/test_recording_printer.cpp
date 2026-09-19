@@ -338,9 +338,17 @@ TEST(recording_printer_next, prints_up_to_the_damage_and_says_where_it_is)
   /* Cut inside the second record: the first is printed whole, then the damage. */
   const Printed printed(cut, written.length() - 4u, filter, 0u);
   CHECK(printed.damaged());
-  CHECK(printed.count() >= 2u);
-  CHECK(std::strstr(printed.line(printed.count() - 1u), "damaged at ") != nullptr);
+  /* Nine of the ten lines: every whole record before the cut and its commands,
+   * and the damage line in place of the blob record the cut ate. */
+  CHECK_EQ(printed.count(), 10u);
   CHECK(printed.holds("setup api=vulkan"));
+  CHECK(printed.holds("fence=2 fault 6 undecodable"));
+  CHECK(!printed.holds("blob imported"));
+  const char *const last = printed.line(printed.count() - 1u);
+  CHECK(std::strstr(last, "a record length passes the end of the recording") != nullptr);
+  /* Where the record it could not frame begins, not where the file does. */
+  CHECK(std::strstr(last, "damaged at 00000000") == nullptr);
+  CHECK(std::strstr(last, "damaged at ") != nullptr);
   /* The damage line is the last, whatever follows it in the file. */
   for (std::size_t index = 0u; index + 1u < printed.count(); index++)
       CHECK(std::strstr(printed.line(index), "damaged at ") == nullptr); }
@@ -351,7 +359,8 @@ TEST(recording_printer_next, a_file_that_is_no_recording_prints_one_line_of_dama
   const Printed printed(nothing, sizeof nothing, filter, 0u);
   CHECK_EQ(printed.count(), 1u);
   CHECK(printed.damaged());
-  CHECK(std::strstr(printed.line(0u), "damaged at 00000000: ") != nullptr); }
+  CHECK(std::strstr(printed.line(0u),
+                    "damaged at 00000000: the file header is not a recording's") != nullptr); }
 
 TEST(recording_printer_next, a_batch_whose_commands_are_framed_wrong_says_where_it_stopped)
 { MockHost     host;
@@ -425,6 +434,28 @@ TEST(recording_printer_next, prints_the_time_a_record_was_taken_to_the_nanosecon
   CHECK(std::strstr(printed.line(0u), "+1.234 ") != nullptr);
   CHECK(std::strstr(printed.line(1u), "+2.468 ") != nullptr);
   CHECK(std::strstr(printed.line(2u), "+3.702 ") != nullptr); }
+
+/* The nanoseconds under a microsecond are padded, or a record taken 5 ns in
+ * reads as 500 ns to the person the printer is for. */
+TEST(recording_printer_next, pads_the_nanoseconds_of_a_record_taken_inside_a_microsecond)
+{ struct Case { std::uint64_t step; const char *shown; };
+  const Case cases[] = {{5u, "+0.005 "}, {45u, "+0.045 "}, {450u, "+0.450 "}, {1000u, "+1.000 "}};
+  for (const Case &c : cases) {
+      MockHost     host;
+      WireRecorder recorder(host);
+      const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0x31u};
+      host.advance_clock_per_read(c.step);
+      CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop,
+                                 GpuIdentity(1u, 2u, GpuIdentity::discrete_gpu, uuid, 0u, 0u, "mock"),
+                                 ProtocolVersion(1u, 1u)),
+                   Status::ok);
+      recorder.record_fence(1u, 1u);
+      recorder.close();
+      const RecordingFilter filter;
+      const Printed         printed(host.recording_bytes(path), host.recording_length(path), filter, 0u);
+      CHECK_EQ(printed.count(), 1u);
+      CHECK(std::strstr(printed.line(0u), c.shown) != nullptr);
+  } }
 
 TEST(recording_printer_next, a_record_whose_payload_is_not_what_its_kind_says_prints_what_it_can)
 { Handmade           made;
@@ -508,23 +539,40 @@ TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_th
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opencl, 40u, 16u, 41u, 1u, 42u)
                    .encode(opencl, sizeof opencl),
                Status::ok);
+  std::uint8_t opengl[ContextSetup::base_size] = {};
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 1u, 42u)
+                   .encode(opengl, sizeof opengl),
+               Status::ok);
   const std::uint8_t nothing[1] = {};
-  /* Two contexts, one of them set up twice, and a fence of a context that was
-   * never set up at all. */
+  /* Three contexts, one of them set up twice, and a fence of a context that
+   * was never set up at all. */
   made.add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
       .add(av::RecordKind::context_setup, 2u, 0u, opencl, sizeof opencl)
+      .add(av::RecordKind::context_setup, 3u, 0u, opengl, sizeof opengl)
       .add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
       .add(av::RecordKind::fence_completed, 1u, 7u, nothing, 0u)
       .add(av::RecordKind::fence_completed, 2u, 8u, nothing, 0u)
+      .add(av::RecordKind::fence_completed, 3u, 10u, nothing, 0u)
       .add(av::RecordKind::fence_completed, 9u, 9u, nothing, 0u);
-  RecordingFilter vulkan;
-  CHECK_STATUS(vulkan.keep_api("vulkan"), Status::ok);
-  const Printed kept(made.bytes(), made.length(), vulkan, 0u);
-  CHECK(kept.holds("setup api=vulkan"));
-  CHECK(kept.holds("ctx=1 fence=7"));
-  CHECK(!kept.holds("ctx=2 fence=8"));
-  CHECK(!kept.holds("ctx=9 fence=9"));
-  CHECK(!kept.holds("api=opencl")); }
+  /* Each sub-API names itself and keeps only its own contexts' records. The
+   * printer's table pairs a sub-API bit with a command-API half, and the two
+   * orders differ, so a row read across is a row that names the wrong API. */
+  struct Case { const char *api; const char *kept_fence; const char *other_fence; };
+  const Case cases[] = {{"vulkan", "ctx=1 fence=7", "ctx=3 fence=10"},
+                        {"opencl", "ctx=2 fence=8", "ctx=1 fence=7"},
+                        {"opengl", "ctx=3 fence=10", "ctx=2 fence=8"}};
+  for (const Case &c : cases) {
+      RecordingFilter only;
+      CHECK_STATUS(only.keep_api(c.api), Status::ok);
+      const Printed kept(made.bytes(), made.length(), only, 0u);
+      char names[32] = {};
+      std::snprintf(names, sizeof names, "setup api=%s", c.api);
+      CHECK(kept.holds(names));
+      CHECK(kept.holds(c.kept_fence));
+      CHECK(!kept.holds(c.other_fence));
+      /* A context nobody set up belongs to no API. */
+      CHECK(!kept.holds("ctx=9 fence=9"));
+  } }
 
 TEST(recording_printer_next, a_recording_of_more_contexts_than_it_remembers_keeps_reading)
 { Handmade made;
@@ -537,7 +585,14 @@ TEST(recording_printer_next, a_recording_of_more_contexts_than_it_remembers_keep
   const RecordingFilter filter;
   const Printed         printed(made.bytes(), made.length(), filter, 0u);
   CHECK_EQ(printed.count(), RecordingPrinter::max_contexts + 2u);
-  CHECK(!printed.damaged()); }
+  CHECK(!printed.damaged());
+  /* And the contexts it did remember are still the first ones: a table that
+   * overwrote a slot to make room would answer `--api vulkan` with the wrong
+   * set, which is a filter silently hiding records that match. */
+  RecordingFilter vulkan;
+  CHECK_STATUS(vulkan.keep_api("vulkan"), Status::ok);
+  const Printed kept(made.bytes(), made.length(), vulkan, 0u);
+  CHECK_EQ(kept.count(), RecordingPrinter::max_contexts); }
 
 TEST(recording_printer_invariants, catch_a_printer_that_lost_the_batch_it_is_showing)
 { const Written        written;

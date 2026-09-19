@@ -233,6 +233,38 @@ TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
   CHECK_EQ(ops.id_at(0u), 0x00010006u);
   CHECK_STATUS(replay.run(reader, filter), Status::invalid_state); }
 
+/* US3 scenario 1 at the place it is easiest to get wrong: the answer a context
+ * kept from one batch must not be compared against the next batch's recorded
+ * reply. A second batch that asked for nothing and a recorded reply that says
+ * otherwise is a difference, and reporting it as a match would be the replay
+ * quietly agreeing with a host it never asked. */
+TEST(recording_replay_run, an_answer_is_never_carried_from_one_batch_into_the_next)
+{ Written written;
+  written.set_up(3u, SubApi::vulkan);
+  Batch replying;
+  replying.add(0x00010006u, 4u, CommandHeader::generate_reply, 0x7Au);
+  const std::uint8_t answer[4] = {0x7Au, 0x7Au, 0x7Au, 0x7Au};
+  written.ran(3u, 1u, replying, answer, sizeof answer);
+  /* The same bytes recorded against a batch that asks the library for none. */
+  Batch silent;
+  silent.add(0x00010007u, 4u, 0u, 0x7Au);
+  written.ran(3u, 2u, silent, answer, sizeof answer);
+  written.close();
+
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(written.bytes(), written.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(ops.executed(), 2u);
+  CHECK_EQ(replay.replies(), 2u);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(std::strstr(replay.finding(0u), "fence=2") != nullptr);
+  CHECK(std::strstr(replay.finding(0u), "replied 0 bytes, recorded 4") != nullptr);
+  CHECK(replay.invariants_hold()); }
+
 TEST(recording_replay_run, destroys_every_executor_it_made)
 { Written written;
   written.set_up(3u, SubApi::vulkan);
@@ -415,6 +447,7 @@ TEST(recording_replay_run, more_contexts_than_it_holds_is_a_finding_and_the_rest
   CHECK_EQ(replay.contexts(), RecordingReplay::max_contexts);
   CHECK_EQ(replay.findings(), 2u);
   CHECK(std::strstr(replay.finding(0u), "more contexts than this replay holds") != nullptr);
+  CHECK(std::strstr(replay.finding(1u), "more contexts than this replay holds") != nullptr);
   CHECK(replay.invariants_hold()); }
 
 TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_read)
@@ -428,13 +461,24 @@ TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::malformed);
   CHECK_EQ(replay.contexts(), 1u);
+  /* US3 scenario 4: what a recording holds before the damage is replayed, not
+   * thrown away with it - the batch that crashed the host is the whole point
+   * of replaying a recording that ends in the middle of one. The cut lands in
+   * the fence record, so the batch ran and its answer was compared. */
+  CHECK_EQ(replay.commands(), 1u);
+  CHECK_EQ(replay.replies(), 1u);
+  CHECK_EQ(replay.findings(), 0u);
+  CHECK_EQ(ops.executed(), 1u);
+  CHECK_EQ(ops.id_at(0u), 0x00010006u);
   CHECK(replay.invariants_hold());
   /* A file that is no recording at all replays nothing. */
   const std::uint8_t nothing[8] = {};
   RecordingReader    empty(nothing, sizeof nothing);
   RecordingReplay    none(library);
   CHECK_STATUS(none.run(empty, filter), Status::malformed);
-  CHECK_EQ(none.contexts(), 0u); }
+  CHECK_EQ(none.contexts(), 0u);
+  CHECK_EQ(none.commands(), 0u);
+  CHECK_EQ(ops.executed(), 1u); }
 
 TEST(recording_replay_run, a_filter_narrows_what_is_replayed)
 { Written written;
@@ -492,6 +536,9 @@ TEST(replay_context, names_each_sub_apis_command_half)
       ReplayContext context;
       CHECK_STATUS(context.create(library, 1u, c.api, uuid), Status::ok);
       CHECK_EQ(context.command_api(), c.half);
+      /* And the library was asked for that API, not for the one the last
+       * context happened to want. */
+      CHECK_EQ(ops.last_sub_api(), static_cast<std::uint32_t>(c.api));
       context.destroy(library);
   } }
 
@@ -569,12 +616,30 @@ TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
   RecordingReader reader(written.bytes(), written.length());
   RecordingReplay replay(library);
   const std::uint8_t other[GpuIdentity::uuid_bytes] = {0x99u};
-  replay.use_gpu(nullptr);                 /* no GPU named: the recording's own stands */
   replay.use_gpu(other);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(ops.last_uuid_byte(), 0x99u);
   CHECK(replay.invariants_hold()); }
+
+/* The other half of the same sentence: with no GPU named - and with a null one
+ * named, which names none - the recording's own is what the library is asked
+ * for, so a replay reproduces the run on the GPU it was recorded on. */
+TEST(recording_replay_run, with_no_gpu_named_it_asks_the_library_for_the_recordings_own)
+{ for (std::uint32_t named = 0u; named < 2u; named++) {
+      Written written;
+      one_batch(written, 0x33u);
+      MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+      RecordingReader reader(written.bytes(), written.length());
+      RecordingReplay replay(library);
+      if (named != 0u) replay.use_gpu(nullptr);
+      const RecordingFilter filter;
+      CHECK_STATUS(replay.run(reader, filter), Status::ok);
+      CHECK_EQ(ops.last_uuid_byte(), uuid[0]);
+      CHECK_EQ(ops.created(), 1u);
+  } }
 
 TEST(recording_replay_run, a_setup_that_does_not_decode_and_a_context_set_up_twice)
 { Handmade           made;

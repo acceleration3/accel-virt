@@ -30,19 +30,24 @@ RecordingHeader a_header()
 
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
-    RecordingHeader header;
-    const Status status = header.decode(bytes, length);
-    if (status == Status::ok) {
-        if (!header.invariants_hold())
+    /* Loaded with a header a test can recognise: a refusal must leave it as it
+     * was, which is what "unchanged unless ok" promises every caller. */
+    RecordingHeader header = a_header();
+    const Status    status = header.decode(bytes, length);
+    if (status != Status::ok) {
+        if (header.limit() != (1u << 20) || header.kinds() != 0x3Fu || header.wraps() != 0u)
             av::TestRegistry::instance().record_failure(__FILE__, __LINE__,
-                                                        "an accepted header broke its invariant");
-        std::uint8_t again[RecordingHeader::encoded_size] = {};
-        if (header.encode(again, sizeof again) != Status::ok
-            || std::memcmp(again, bytes, sizeof again) != 0)
-            av::TestRegistry::instance().record_failure(__FILE__, __LINE__,
-                                                        "accepted input did not round trip");
+                                                        "a refused header was changed anyway");
+        return true;
     }
-    return status != Status::ok;
+    if (!header.invariants_hold())
+        av::TestRegistry::instance().record_failure(__FILE__, __LINE__,
+                                                    "an accepted header broke its invariant");
+    std::uint8_t again[RecordingHeader::encoded_size] = {};
+    if (header.encode(again, sizeof again) != Status::ok || std::memcmp(again, bytes, sizeof again) != 0)
+        av::TestRegistry::instance().record_failure(__FILE__, __LINE__,
+                                                    "accepted input did not round trip");
+    return false;
 }
 
 }  // namespace
@@ -182,7 +187,9 @@ TEST(recording_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(a_header().encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 512u); }
+  /* Every truncation, every bit flipped, and the all-zero and all-ones cases:
+   * a sweep that quietly stopped short would still be a passing sweep. */
+  CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u); }
 
 TEST(recording_header_invariants, catch_a_major_this_writer_never_wrote)
 { RecordingHeader header = a_header();

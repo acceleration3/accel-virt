@@ -551,3 +551,82 @@ TEST(virtio_gpu_rvk_realize, opens_the_recording_its_properties_asked_for)
   CHECK_EQ(header_only.remaining(), 0u);
   device.reset();
   CHECK(device.invariants_hold()); }
+
+namespace {
+
+/* The ring and the fence page a bound context reads, made once. */
+void make_the_ring(VirtioGpuRvk &device)
+{
+    for (std::uint32_t id = 1u; id <= 2u; id++) {
+        GpuRequestBuilder blob(0x010Cu);
+        blob.u32(id).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x2000u);
+        MockRequest blob_request(blob.bytes(), blob.size());
+        CHECK(device.control(&blob_request, 0x010Cu));
+        CHECK_EQ(blob_request.response_type(), 0x1100u);
+    }
+    av::VirtioGpuRvkProbe::write_ring_header(device, 1u);
+}
+
+/* Binds `context` on that ring, which is what makes a realized device record a
+ * setup, then takes the context away again so the next one may have the ring. */
+void bind_and_destroy(VirtioGpuRvk &device, std::uint32_t context)
+{
+    GpuRequestBuilder create(0x0200u);
+    create.context(context).u32(0u).u32(0x72u).zeros(64u);
+    MockRequest create_request(create.bytes(), create.size());
+    CHECK(device.control(&create_request, 0x0200u));
+    CHECK_EQ(create_request.response_type(), 0x1100u);
+    std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
+    CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
+                     .encode(setup_bytes, sizeof setup_bytes),
+                 Status::ok);
+    GpuRequestBuilder submit(0x0207u);
+    submit.context(context).u32(av::ContextSetup::base_size).u32(0u).append(setup_bytes, sizeof setup_bytes);
+    MockRequest submit_request(submit.bytes(), submit.size());
+    CHECK(device.control(&submit_request, 0x0207u));
+    CHECK_EQ(submit_request.response_type(), 0x1100u);
+    GpuRequestBuilder destroy(0x0201u);
+    destroy.context(context).zeros(8u);
+    MockRequest destroy_request(destroy.bytes(), destroy.size());
+    CHECK(device.control(&destroy_request, 0x0201u));
+    CHECK_EQ(destroy_request.response_type(), 0x1100u);
+}
+
+}  // namespace
+
+/* FR-001 and US1 scenario 5: `record-wrap` is what decides whether a recording
+ * that reaches its ceiling rotates or stops, and the property has to reach the
+ * recorder for either to happen. The ceiling here holds the file header and
+ * exactly one setup record, so the second context is the one at the edge. */
+TEST(virtio_gpu_rvk_realize, record_wrap_decides_what_the_ceiling_does)
+{ struct Case { int wrap; std::uint32_t wraps; std::uint32_t kept; };
+  const Case cases[] = {{1, 1u, 8u}, {0, 0u, 7u}};
+  for (const Case &c : cases) {
+      MockHost host;
+      host.add_gpu(first);
+      host.set_hostmem_size(0x20000u);
+      av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+      VirtioGpuRvk        device(host);
+      char                bytes[160];
+      TextBuffer          message(bytes, sizeof bytes);
+      const std::uint64_t ceiling =
+          av::RecordingHeader::encoded_size + av::RecordHeader::encoded_size + av::ContextSetup::base_size;
+      const RvkRecordingOptions options = {"run.rvk", ceiling, "setup", c.wrap};
+      CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, message), Status::ok);
+      device.status(DriverStatus::driver_ok);
+      make_the_ring(device);
+      bind_and_destroy(device, 7u);
+      bind_and_destroy(device, 8u);
+      av::RecordedFile file(host, "run.rvk");
+      CHECK_EQ(file.header().wraps(), c.wraps);
+      /* Either way the file never passes the ceiling, and holds one record:
+       * the newest when it wrapped, the oldest when it stopped. */
+      CHECK(host.recording_length("run.rvk") <= ceiling);
+      av::RecordHeader    record;
+      const std::uint8_t *payload = file.expect(av::RecordKind::context_setup, record);
+      CHECK(payload != nullptr);
+      CHECK_EQ(record.context(), c.kept);
+      CHECK_EQ(file.remaining(), 0u);
+      device.reset();
+      CHECK(device.invariants_hold());
+  } }
