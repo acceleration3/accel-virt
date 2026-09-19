@@ -20,6 +20,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
+#include "icd/opencl/cl_arena_blocks.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opencl/mapped_region.hpp"
@@ -80,6 +81,10 @@ public:
      * transport makes the context lost here, which is why every call goes
      * through this and not around it. */
     ClientTransport *wire();
+    /* The blocks this context's buffers are carved out of its blob arena.
+     * Empty of blocks, and not ready, where the capset offered no
+     * host-visible memory - which is what makes a buffer staged instead. */
+    ClArenaBlocks   &blocks();
     /* Whether the context has been lost, without asking for a transport. */
     bool             lost() const;
     /* The shared allocations made on this context. */
@@ -90,6 +95,12 @@ public:
      * memory for the block; the caller is what fills it. */
     uint8_t         *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                   cl_map_flags flags);
+    /* Takes a mapping whose memory is the arena's rather than a staged block
+     * of its own: `at` is that memory, nothing is read in at the map and
+     * nothing written back at the unmap, because both sides are looking at
+     * one allocation. Null when there is no room for another mapping. */
+    MappedRegion    *take_shared_mapping(uint64_t buffer, uint64_t host, size_t offset,
+                                         size_t bytes, uint8_t *at);
     /* The mapping `pointer` answers, or null for a pointer no live mapping
      * returned. */
     MappedRegion    *mapping_at(const void *pointer);
@@ -117,6 +128,7 @@ private:
     ObjectStorage<KmtTransport>          transport_;
     ObjectStorage<icd::LockedTransport>  locked_;
     ObjectStorage<KmtBlobArena>          arena_;
+    ClArenaBlocks                        blocks_;
     SvmTable                             svm_;
     MappedRegion                         mappings_[max_mappings];
     State                                state_;

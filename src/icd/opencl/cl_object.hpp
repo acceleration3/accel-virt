@@ -39,6 +39,16 @@ public:
     GuestClContext *context() const;
     ClObject       *parent() const;
 
+    /* For a mem alone: where in its context's blob arena its memory is, and
+     * how much of it. A buffer backed there is one the device made over the
+     * same bytes, so a map hands the application this memory and an unmap
+     * writes nothing back. `backed()` is false for every other kind and for
+     * a buffer the arena had no room for, which is staged instead. */
+    void     back_with(uint64_t offset, uint64_t bytes);
+    bool     backed() const;
+    uint64_t backing_offset() const;
+    uint64_t backing_bytes() const;
+
     /* Whether this object is `other` or is somewhere below it. */
     bool descends_from(const ClObject &other) const;
 
@@ -58,6 +68,8 @@ private:
     GuestClContext        *context_;
     ClObject              *parent_;
     uint64_t               wire_;
+    uint64_t               backing_offset_;
+    uint64_t               backing_bytes_;
     uint32_t               references_;
     Kind                   kind_;
 };

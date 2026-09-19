@@ -317,7 +317,13 @@ public:
         CHECK_EQ(error, CL_SUCCESS);
         if (queue_ == nullptr) return false;
 
-        const cl_mem_flags flags[3] = {CL_MEM_READ_ONLY, CL_MEM_READ_ONLY, CL_MEM_READ_WRITE};
+        /* The first is the one the mapping case maps, and it asks for host
+         * memory the way an application that intends to map does - which is
+         * what takes it down the arena path, where the device makes its
+         * cl_mem over the very bytes the guest is handed (T033). The other
+         * two are ordinary, so both paths are live in one run. */
+        const cl_mem_flags flags[3] = {CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, CL_MEM_READ_ONLY,
+                                       CL_MEM_READ_WRITE};
         for (std::uint32_t index = 0u; index < 3u; ++index) {
             buffers_[index] = loader_.create_buffer(context_, flags[index], vector_bytes, &error);
             CHECK_EQ(error, CL_SUCCESS);

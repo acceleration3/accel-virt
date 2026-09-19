@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), references_(1u), kind_(kind)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), references_(1u), kind_(kind)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -33,6 +33,31 @@ ClObject *ClObject::parent() const
 {
     AV_SCOPE("ClObject::parent");
     return parent_;
+}
+
+void ClObject::back_with(uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("ClObject::back_with");
+    backing_offset_ = offset;
+    backing_bytes_ = bytes;
+}
+
+bool ClObject::backed() const
+{
+    AV_SCOPE("ClObject::backed");
+    return backing_bytes_ != 0u;
+}
+
+uint64_t ClObject::backing_offset() const
+{
+    AV_SCOPE("ClObject::backing_offset");
+    return backing_offset_;
+}
+
+uint64_t ClObject::backing_bytes() const
+{
+    AV_SCOPE("ClObject::backing_bytes");
+    return backing_bytes_;
 }
 
 bool ClObject::descends_from(const ClObject &other) const

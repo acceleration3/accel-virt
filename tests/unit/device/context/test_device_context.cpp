@@ -176,11 +176,15 @@ TEST(device_context_bind, a_host_that_finishes_on_its_own_thread_reaches_the_gue
   GuestRing guest = fixture.guest();
   static_cast<void>(guest.tail());
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
-  /* The executor is made on the worker, when the ring attaches. */
-  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().created() == 0u; spins++)
+  /* The executor is made on the worker, when the ring attaches, and the
+   * library is given somewhere to call straight after - so the wait is for
+   * the second of the two. Waiting for create() alone and then asking about
+   * the signal is a race: the worker is between them often enough to see. */
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().signals_set() == 0u; spins++)
       sched_yield();
-  /* And the library was given somewhere to call: signals_through hands the
-   * context's landing pad to create(), and a version 5 library takes it. */
+  /* signals_through hands the context's landing pad to create(), and a
+   * version 5 library takes it. */
+  CHECK_EQ(fixture.ops().created(), 1u);
   CHECK(fixture.ops().signal_bound());
   CHECK_EQ(fixture.ops().signals_set(), 1u);
 

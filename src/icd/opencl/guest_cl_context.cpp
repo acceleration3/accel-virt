@@ -66,7 +66,14 @@ Status GuestClContext::build()
             return Status::invalid_state;
         }
         log_.write("rvkcl: no blob arena for the context; bulk data crosses inline");
+        log_.write("rvkcl: buffers are staged; a map copies in and out");
+        return Status::ok;
     }
+    /* The arena is the memory a mappable buffer is made over, on both sides:
+     * the device holds it as one import, so an offset names the same bytes
+     * here and there and a map costs no copy. */
+    blocks_.lend(arena_.object().view(), arena_.object().bytes());
+    log_.write("rvkcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }
 
@@ -91,6 +98,9 @@ void GuestClContext::teardown()
         }
         arena_.destroy();
     }
+    /* After the arena, never before: a block naming memory that is gone is
+     * an address this context must not be able to hand out. */
+    blocks_.lend(nullptr, 0u);
     if (locked_.constructed()) locked_.destroy();
     if (transport_.constructed()) {
         transport_.object().teardown();
@@ -130,6 +140,12 @@ ClientTransport *GuestClContext::wire()
     return &locked_.object();
 }
 
+ClArenaBlocks &GuestClContext::blocks()
+{
+    AV_SCOPE("GuestClContext::blocks");
+    return blocks_;
+}
+
 bool GuestClContext::lost() const
 {
     AV_SCOPE("GuestClContext::lost");
@@ -160,6 +176,22 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
     if (block == nullptr) return nullptr;
     mappings_[slot].take(buffer, host, offset, bytes, flags, block, true);
     return block;
+}
+
+MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host, size_t offset,
+                                                  size_t bytes, uint8_t *at)
+{
+    AV_SCOPE("GuestClContext::take_shared_mapping");
+    if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
+    uint32_t slot = 0u;
+    while (slot < max_mappings && mappings_[slot].held()) ++slot;
+    if (slot == max_mappings) return nullptr;
+    /* Not staged: no block was allocated for it, so none is freed with it,
+     * and the unmap has nothing to write back. The flags are the map's, but
+     * they change nothing here - what a write through this mapping reaches
+     * is the buffer itself. */
+    mappings_[slot].take(buffer, host, offset, bytes, 0u, at, false);
+    return &mappings_[slot];
 }
 
 MappedRegion *GuestClContext::mapping_at(const void *pointer)

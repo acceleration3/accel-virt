@@ -230,3 +230,40 @@ TEST(cl_object_table, every_object_carries_the_dispatch_table_the_loader_reads)
    * jumps, checking nothing. */
   const void *const first_word = *reinterpret_cast<void *const *>(context);
   CHECK(first_word == static_cast<const void *>(&dispatch)); }
+
+/* Where a buffer's memory is, when it is the context's blob arena.
+ *
+ * Only a mem ever carries one, and only when the arena had room; everything
+ * else, and a staged buffer, answers that it is backed by nothing - which is
+ * what sends a map down the staging path. */
+TEST(cl_object_table, only_a_buffer_given_arena_memory_says_it_is_backed)
+{ Table rig;
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x6600u);
+  CHECK(buffer != nullptr);
+  /* Made backed by nothing: a buffer the arena had no room for takes the
+   * staged path, and so does every object that is not a buffer at all. */
+  CHECK(!buffer->backed());
+  CHECK_EQ(buffer->backing_offset(), 0u);
+  CHECK_EQ(buffer->backing_bytes(), 0u);
+  CHECK(buffer->invariants_hold());
+
+  buffer->back_with(0x2000u, 256u);
+  CHECK(buffer->backed());
+  CHECK_EQ(buffer->backing_offset(), 0x2000u);
+  CHECK_EQ(buffer->backing_bytes(), 256u);
+  CHECK(buffer->invariants_hold());
+
+  /* Offset zero is where the first block of the arena sits, so a length is
+   * what says a buffer is backed and never the offset. */
+  ClObject *const first = rig.make(ClObject::Kind::mem, 0x6601u);
+  CHECK(first != nullptr);
+  first->back_with(0u, 4096u);
+  CHECK(first->backed());
+  CHECK_EQ(first->backing_offset(), 0u);
+  CHECK(first->invariants_hold());
+
+  /* Given back when the buffer is released, which leaves it naming nothing
+   * again - the block may be another buffer's by then. */
+  first->back_with(0u, 0u);
+  CHECK(!first->backed());
+  CHECK(first->invariants_hold()); }

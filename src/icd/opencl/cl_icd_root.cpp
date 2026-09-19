@@ -1,5 +1,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "proto/cl_blob_backing.hpp"
+
 #include "icd/common/sliced_wait.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -413,6 +415,11 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
             }
             case ClObject::Kind::mem:
                 static_cast<void>(av::clproto::rvk_clReleaseMemObject(*wire, wire_handle));
+                /* A buffer made over the arena gives its block back with it,
+                 * so the next buffer can have that memory. After the host
+                 * has let go, not before: the device's cl_mem is still over
+                 * those bytes until it does. */
+                if (held->backed()) context->blocks().give_back(held->backing_offset());
                 break;
             case ClObject::Kind::program:
                 static_cast<void>(av::clproto::rvk_clReleaseProgram(*wire, wire_handle));
@@ -539,14 +546,59 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    cl_int         host_error = CL_SUCCESS;
-    const uint64_t buffer =
-        av::clproto::rvk_clCreateBuffer(*wire, held->wire(), flags, bytes, host_pointer, &host_error);
+    /* A buffer the application says it wants host-accessible is the one worth
+     * the arena: CL_MEM_ALLOC_HOST_PTR is exactly the ask, and backing every
+     * buffer there would put memory a kernel reads hardest in host memory
+     * rather than the device's. Where the capset offered no host-visible
+     * memory the blocks are not ready and every buffer is staged, which is
+     * the path this had before.
+     *
+     * Not when the application brought its own pointer: USE_HOST_PTR and
+     * COPY_HOST_PTR both name memory of its own, which is not the arena's. */
+    GuestClContext *const on = held->context();
+    const bool            wants_host_memory =
+        (flags & static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR)) != 0u &&
+        (flags & static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR)) == 0u;
+    uint64_t block = 0u;
+    bool     backed = false;
+    if (wants_host_memory && on != nullptr && on->blocks().ready())
+        backed = on->blocks().take(bytes, block);
+
+    cl_int   host_error = CL_SUCCESS;
+    uint64_t buffer = 0u;
+    if (backed) {
+        ClBlobBacking backing;
+        backing.set(block);
+        uint64_t named[4] = {};
+        static_cast<void>(backing.write(named));
+        buffer = av::clproto::rvk_clCreateBufferWithProperties(*wire, held->wire(), named, flags,
+                                                               bytes, nullptr, &host_error);
+        if (buffer == 0u) {
+            /* The device would not make it over that memory, so the block is
+             * given back and the ordinary buffer is asked for instead: a
+             * staged buffer is slower and never wrong. */
+            on->blocks().give_back(block);
+            backed = false;
+            host_error = CL_SUCCESS;
+        }
+    }
+    if (buffer == 0u) {
+        buffer = av::clproto::rvk_clCreateBuffer(*wire, held->wire(), flags, bytes, host_pointer,
+                                                 &host_error);
+    }
     if (buffer == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_mem>(wrap(ClObject::Kind::mem, buffer, held->context(), held, error));
+    void *const made = wrap(ClObject::Kind::mem, buffer, held->context(), held, error);
+    if (made == nullptr) {
+        /* The buffer exists on the host but the guest has nowhere to keep
+         * it; wrap has released it, and the block goes back with it. */
+        if (backed) on->blocks().give_back(block);
+        return nullptr;
+    }
+    if (backed) static_cast<ClObject *>(made)->back_with(block, bytes);
+    return static_cast<cl_mem>(made);
 }
 
 cl_program ClIcdRoot::create_program(cl_context context, cl_uint count, const char **sources,
@@ -814,10 +866,50 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
+    /* Where the buffer's memory is already the guest's, the map costs no copy
+     * at all: the device made the host's cl_mem over these very bytes, so
+     * what the application is handed is the arena's own view of them and the
+     * unmap writes nothing back. The host is still asked to map, because its
+     * map is what says the bytes are settled - a kernel may still be running
+     * over them - but what it answers is a pointer this side already has.
+     *
+     * Bounds are re-checked here rather than trusted from the create: the
+     * offset in the row is this ICD's, but the length is the application's. */
+    if (named->backed() && offset <= named->backing_bytes() &&
+        bytes <= named->backing_bytes() - offset) {
+        uint8_t *const shared =
+            context->blocks().at(named->backing_offset(), named->backing_bytes());
+        if (shared != nullptr) {
+            uint64_t       settled = 0u;
+            cl_int         settle_error = CL_SUCCESS;
+            const uint64_t host_mapped = av::clproto::rvk_clEnqueueMapBuffer(
+                *wire, held->wire(), named->wire(), blocking, flags, offset, bytes, 0u, nullptr,
+                event != nullptr ? &settled : nullptr, &settle_error);
+            if (host_mapped == 0u) {
+                report_error(error, settle_error != CL_SUCCESS ? settle_error : CL_MAP_FAILURE);
+                return nullptr;
+            }
+            uint8_t *const at = shared + offset;
+            /* Remembered like any other mapping, and with the host's pointer,
+             * because the unmap names that one; what makes it the zero-copy
+             * kind is that its memory is the arena's rather than a block of
+             * its own, so nothing is read in and nothing written out. */
+            if (context->take_shared_mapping(named->wire(), host_mapped, offset, bytes, at) ==
+                nullptr) {
+                report_error(error, CL_OUT_OF_HOST_MEMORY);
+                return nullptr;
+            }
+            if (event != nullptr) {
+                *event = static_cast<cl_event>(
+                    wrap(ClObject::Kind::event, settled, context, held, nullptr));
+            }
+            report_error(error, CL_SUCCESS);
+            return at;
+        }
+    }
     /* Staged: the guest gets a block of its own, filled from the buffer. The
      * host's own map is what says the bytes are settled, so it is asked
-     * first; where the buffer's memory is already the guest's this is where
-     * the arena's view would be handed back instead (feature 041). */
+     * first. */
     uint64_t     mapped_event = 0u;
     cl_int       host_error = CL_SUCCESS;
     const uint64_t mapped = av::clproto::rvk_clEnqueueMapBuffer(
