@@ -224,3 +224,33 @@ TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken
   other.shut_down();
   host.close();
   CHECK(!display->open()); }
+
+/* Feature 053. Nothing in OpenGL hands out a descriptor, so the export is a
+ * refusal on every host; the import needs a driver, and a backend that never
+ * opened a context has none, which is what this can judge without a GPU. */
+TEST(opengl_backend, a_backend_with_no_context_exports_imports_and_releases_nothing)
+{ OpenGlBackend backend;
+  std::uint32_t handle_kind = 9u;
+  int           fd = 9;
+  CHECK(!backend.export_object(RVK_SHARED_MEMORY, 1u, handle_kind, fd));
+  CHECK_EQ(handle_kind, 0u);
+  CHECK_EQ(fd, -1);
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK_EQ(made, 0u);
+  backend.release_object(RVK_SHARED_MEMORY, 1u);
+  backend.shut_down(); }
+
+/* What is refused before any driver is asked, which is every question the
+ * wire's answer depends on: a descriptor of the wrong kind, no descriptor at
+ * all, a kind this protocol does not have, and memory of no size. */
+TEST(opengl_backend, an_import_of_the_wrong_shape_never_reaches_a_driver)
+{ OpenGlBackend backend;
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_OPAQUE_FD, 0, 4096u, made));
+  CHECK_EQ(made, 0u);
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, -1, 4096u, made));
+  CHECK(!backend.import_object(RVK_SHARED_NATIVE_FENCE + 1u, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(0u, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 0u, made));
+  CHECK_EQ(made, 0u); }

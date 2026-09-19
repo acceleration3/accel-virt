@@ -9,10 +9,12 @@
 #define AV_OPENGL_BACKEND_HPP
 
 #include "device/abi/rvk_executor.h"
+#include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/executor/sync_tokens.hpp"
 #include "device/shim/gl_context.hpp"
+#include "device/shim/gl_host_import.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
 #include <stdint.h>
@@ -42,14 +44,21 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
-    /* This API exports no descriptor and imports none (feature 053,
-     * contracts/wire_additions.md): only Vulkan does, so a guest sharing
-     * through this API is refused by the device with a status rather than
-     * handed an object nothing made. */
+    /* This API exports no descriptor (feature 053,
+     * contracts/wire_additions.md): nothing in OpenGL hands one out, so a
+     * guest sharing through this API is refused by the device with a status
+     * rather than handed an object nothing made. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
+    /* It does import one, as a memory object or a semaphore of this context,
+     * answered as the GL name the guest names it by from then on. Only a
+     * dma-buf: what Vulkan exports as an opaque fd is a handle private to that
+     * driver, which glImportMemoryFdEXT would read as one of its own. A host
+     * without the matching GL_EXT_*_fd extension imports nothing. */
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
                                      uint64_t &wire_handle) override;
+    /* What an import made, destroyed; nothing for a name this context did not
+     * import, which is what stops a guest deleting an object of another's. */
     void               release_object(uint32_t kind, uint64_t wire_handle) override;
 
     /* How many of the table's entry points this host actually has. A driver
@@ -71,8 +80,13 @@ private:
      * capset's bit 2, which is a remap worth reading twice. */
     static constexpr uint32_t opengl_api = 3u;
 
+    /* The entry point a kind is destroyed through. */
+    void destroy_made(uint32_t kind, uint32_t name);
+
     GlContext   context_;
     glproto::RealGl gl_;
+    GlHostImport    import_;
+    GlSharedObjects objects_;
     SyncTokens  fences_;
     GuestRegion region_;
     uint32_t    resolved_;

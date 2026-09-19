@@ -6,8 +6,10 @@
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
+#include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/opengl_backend.hpp"
 #include "device/shim/gl_display.hpp"
+#include "device/shim/probe_dma_buf.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
@@ -328,5 +330,80 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       CHECK_EQ(region[0], 0u);
       CHECK_EQ(region[page + pixels], 0u);
       backend.abandon(blob);
+      backend.shut_down();
+  } }
+
+/* Feature 053: a descriptor of this process's own making imported as a memory
+ * object of a real GL context, and as a semaphore, and deleted again. A host
+ * whose GL has neither fd extension imports nothing and says so, which is the
+ * answer the device turns into status 4. */
+TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaphore)
+{ Displays          displays;
+  av::ProbeDmaBuf   descriptor;
+  if (!descriptor.make()) { std::fprintf(stderr, "this host makes no dma-buf\n"); return; }
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      OpenGlBackend backend;
+      CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
+      std::uint64_t memory = 9u;
+      if (!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                 av::ProbeDmaBuf::page_size, memory)) {
+          std::fprintf(stderr, "display %u imports no memory object from a descriptor\n", index);
+          CHECK_EQ(memory, 0u);
+          backend.shut_down();
+          continue;
+      }
+      CHECK(memory != 0u);
+      /* The descriptor stays the caller's: GL took a duplicate, so it can be
+       * imported again, which is what a second context opening one object
+       * does. */
+      std::uint64_t again = 0u;
+      CHECK(backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                  av::ProbeDmaBuf::page_size, again));
+      CHECK(again != 0u);
+      CHECK(again != memory);
+
+      /* A name this context did not import, and one no GL name could be, are
+       * released by nobody. */
+      backend.release_object(RVK_SHARED_MEMORY, memory + again + 1u);
+      backend.release_object(RVK_SHARED_MEMORY, 0x1'0000'0000ull | memory);
+      backend.release_object(RVK_SHARED_MONITORED_FENCE, memory);
+      backend.release_object(RVK_SHARED_MEMORY, memory);
+      backend.release_object(RVK_SHARED_MEMORY, memory);
+
+      /* A semaphore is the other name space, and one number can be both. */
+      std::uint64_t fence = 0u;
+      if (backend.import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                0u, fence)) {
+          CHECK(fence != 0u);
+          /* Either guest fence kind is the one host semaphore. */
+          backend.release_object(RVK_SHARED_NATIVE_FENCE, fence);
+      }
+      /* Whatever is left is deleted by the shut down, while the context can
+       * still delete it. */
+      backend.shut_down();
+  } }
+
+/* A context holds as many shared objects as it has rows for, and the one past
+ * that is refused with nothing made - not an object no guest could name. */
+TEST(opengl_backend_device, a_context_full_of_imports_makes_no_object_it_cannot_name)
+{ Displays        displays;
+  av::ProbeDmaBuf descriptor;
+  if (!descriptor.make()) { std::fprintf(stderr, "this host makes no dma-buf\n"); return; }
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      OpenGlBackend backend;
+      CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
+      std::uint64_t made = 0u;
+      if (!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                 av::ProbeDmaBuf::page_size, made)) {
+          backend.shut_down();
+          continue;
+      }
+      for (std::uint32_t i = 1u; i < av::GlSharedObjects::max_objects; i++)
+          CHECK(backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                      av::ProbeDmaBuf::page_size, made));
+      std::uint64_t past = 9u;
+      CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                   av::ProbeDmaBuf::page_size, past));
+      CHECK_EQ(past, 0u);
       backend.shut_down();
   } }

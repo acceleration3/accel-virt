@@ -50,7 +50,8 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
 }  // namespace
 
 OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), fences_(), region_(), resolved_(0u), ran_(0u), lost_(false)
+    : context_(), gl_(), import_(), objects_(), fences_(), region_(), resolved_(0u), ran_(0u),
+      lost_(false)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
@@ -68,6 +69,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions
     gl_.rvk_sync_user = this;
     gl_.rvk_blob = blob_at;
     gl_.rvk_blob_user = this;
+    import_.configure(context_);
     /* Opened is served. A driver that resolves fewer entry points than the
      * table has is not refused here: the decoder refuses each command whose
      * entry point is null, one command at a time, which is the degradation a
@@ -78,6 +80,12 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions
 void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
+    /* What this context imported is deleted while the context is still open:
+     * after the close there is nothing left to delete it with. */
+    uint32_t kind = 0u;
+    uint32_t name = 0u;
+    while (objects_.take_any(kind, name)) destroy_made(kind, name);
+    import_.give_back();
     fences_.forget_all();
     region_.give_back();
     context_.close();
@@ -176,16 +184,48 @@ bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
     return false;
 }
 
-bool OpenGlBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle)
+bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  uint64_t &wire_handle)
 {
     AV_SCOPE("OpenGlBackend::import_object");
     wire_handle = 0u;
+    if (handle_kind != RVK_SHARED_HANDLE_DMA_BUF || fd < 0) return false;
+    uint32_t name = 0u;
+    if (kind == RVK_SHARED_MEMORY) {
+        if (size == 0u || !import_.import_memory(fd, size, name)) return false;
+    } else if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
+        /* The size is the memory kind's and is judged where the object is
+         * published; a semaphore's payload carries its own. */
+        if (!import_.import_semaphore(fd, name)) return false;
+    } else {
+        return false;
+    }
+    if (objects_.remember(kind, name)) {
+        wire_handle = name;
+        return true;
+    }
+    /* A row this context has no room for is an object nothing could name and
+     * nothing would free. */
+    destroy_made(kind, name);
     return false;
 }
 
-void OpenGlBackend::release_object(uint32_t, uint64_t)
+void OpenGlBackend::release_object(uint32_t kind, uint64_t wire_handle)
 {
     AV_SCOPE("OpenGlBackend::release_object");
+    uint32_t name = 0u;
+    if (!objects_.forget(kind, wire_handle, name)) return;
+    destroy_made(kind, name);
+}
+
+void OpenGlBackend::destroy_made(uint32_t kind, uint32_t name)
+{
+    AV_SCOPE("OpenGlBackend::destroy_made");
+    if (kind == RVK_SHARED_MEMORY) {
+        import_.delete_memory(name);
+        return;
+    }
+    import_.delete_semaphore(name);
 }
 
 }  // namespace av
