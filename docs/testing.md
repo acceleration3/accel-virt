@@ -1048,3 +1048,44 @@ derived from: when the guest disagrees with the harness, one of them is wrong
 and the citation says where to look. It happened once: the fake accepted
 `DMA_FAULTED`, and dxgmms2.sys bugchecks 0x119/0xD on it (see
 `docs/kb/05-scheduling.md`).
+
+## When the host GPU stops importing guest memory
+
+Feature 047's host-visible import hands the host GPU a pointer into guest
+memory and asks it to make a `VkDeviceMemory` over it, through
+`VK_EXT_external_memory_host`. That guest memory is a **memfd mapped
+`MAP_SHARED`** — in the L4 rig (`MockHost`) and in real QEMU alike, because
+that is what a guest's RAM is.
+
+On kernel 7.2.6 `amdgpu` refuses to pin a userptr whose pages are file-backed.
+`vkGetMemoryHostPointerPropertiesEXT` still answers a memory-type mask, so the
+pointer looks importable; `vkAllocateMemory` then fails with
+`VK_ERROR_INVALID_EXTERNAL_HANDLE` (-1000072003). The guest sees blob import
+status 5, `executor_refused`, and every scenario that imports fails.
+
+`tools/re/probe_host_pointer_import.c` is the ten-second check, and it needs
+none of this repository:
+
+```
+clang -O0 -D_GNU_SOURCE -I third_party/khronos/include \
+      tools/re/probe_host_pointer_import.c -lvulkan -o /tmp/probe && /tmp/probe
+```
+
+It imports anonymous memory at four sizes and memfd-backed shared memory at
+one. If the anonymous imports succeed and the memfd one answers
+-1000072003, the host kernel is refusing file-backed userptr and the four
+import tests cannot pass on it — `test_fullstack_rvk`,
+`test_fullstack_vulkan_icd`, `test_fullstack_external_objects` and
+`test_opengl_backend_device`. Nothing in the driver is wrong; the capability
+the feature is built on is not there.
+
+Two things this rules out, both of which looked likely first:
+
+- **It is not the Mesa version.** The same Mesa passes when the memory is
+  anonymous.
+- **It is not memlock.** The import works at 8 MiB against a `RLIMIT_MEMLOCK`
+  of 8 MiB when the pages are anonymous.
+
+A kernel that has this behaviour is reported by `uname -r`; the one before it
+did not, which is why a checkout that was green before a reboot can fail
+after one with nothing changed in it.
