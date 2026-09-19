@@ -21,6 +21,8 @@
 
 namespace av::clicd {
 
+struct ClPlatformProbe;
+
 class ClPlatform {
 public:
     /* What the loader appends to a suffixed extension function's name to
@@ -64,6 +66,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClPlatformProbe;
+
     /* The one query whose answer is a string this builds rather than holds. */
     cl_int answer(const char *text, size_t value_bytes, void *value, size_t *size_ret) const;
 

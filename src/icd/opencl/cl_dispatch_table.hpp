@@ -20,6 +20,8 @@
 
 namespace av::clicd {
 
+struct ClDispatchTableProbe;
+
 class ClDispatchTable {
 public:
     ClDispatchTable();
@@ -44,6 +46,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClDispatchTableProbe;
+
     cl_icd_dispatch table_;
     uint32_t        claimed_;
     bool            filled_;

@@ -13,6 +13,30 @@
 #include <cstdint>
 
 using av::HostSvmRanges;
+using av::HostSvmRangesProbe;
+
+namespace av {
+
+/* The states the table never builds. Two rows at one base would make a free
+ * ambiguous; a row past the count is a range that resolve() skips but that
+ * still holds an address; and a range whose sum wraps could be resolved
+ * through either end. */
+struct HostSvmRangesProbe {
+    static void count_past_the_table(HostSvmRanges &ranges)
+    { ranges.count_ = HostSvmRanges::max_ranges + 1u; }
+    static void a_range_of_nothing(HostSvmRanges &ranges) { ranges.sizes_[0] = 0u; }
+    static void a_range_at_no_address(HostSvmRanges &ranges) { ranges.bases_[0] = 0u; }
+    static void a_range_that_wraps(HostSvmRanges &ranges)
+    { ranges.sizes_[0] = ~std::uint64_t{0} - ranges.bases_[0] + 1u; }
+    static void two_rows_at_one_base(HostSvmRanges &ranges)
+    { ranges.bases_[1] = ranges.bases_[0]; }
+    static void a_base_behind_the_count(HostSvmRanges &ranges)
+    { ranges.bases_[ranges.count_] = 0x1000u; }
+    static void a_length_behind_the_count(HostSvmRanges &ranges)
+    { ranges.sizes_[ranges.count_] = 0x1000u; }
+};
+
+}  // namespace av
 
 namespace {
 
@@ -165,3 +189,23 @@ TEST(host_svm_ranges, forgetting_everything_leaves_nothing_resolving)
   CHECK(ranges.resolve(base, 1u) == nullptr);
   CHECK(ranges.resolve(base + bytes, 1u) == nullptr);
   CHECK(ranges.invariants_hold()); }
+
+/* The invariant catches the states the table never builds. */
+TEST(host_svm_ranges, the_invariant_catches_the_states_it_is_there_to_catch)
+{ std::uint8_t first[64] = {};
+  std::uint8_t second[64] = {};
+  const auto broken = [&first, &second](void (*corrupt)(HostSvmRanges &)) {
+      HostSvmRanges ranges;
+      CHECK(ranges.remember(first, sizeof first));
+      CHECK(ranges.remember(second, sizeof second));
+      CHECK(ranges.invariants_hold());
+      corrupt(ranges);
+      return ranges.invariants_hold();
+  };
+  CHECK(!broken(HostSvmRangesProbe::count_past_the_table));
+  CHECK(!broken(HostSvmRangesProbe::a_range_of_nothing));
+  CHECK(!broken(HostSvmRangesProbe::a_range_at_no_address));
+  CHECK(!broken(HostSvmRangesProbe::a_range_that_wraps));
+  CHECK(!broken(HostSvmRangesProbe::two_rows_at_one_base));
+  CHECK(!broken(HostSvmRangesProbe::a_base_behind_the_count));
+  CHECK(!broken(HostSvmRangesProbe::a_length_behind_the_count)); }

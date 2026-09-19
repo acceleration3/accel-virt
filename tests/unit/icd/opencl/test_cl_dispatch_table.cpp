@@ -19,6 +19,29 @@
 
 using av::ClIcdRig;
 using av::clicd::ClDispatchTable;
+using av::clicd::ClDispatchTableProbe;
+
+namespace av::clicd {
+
+/* The states the table never builds. The ICD ABI is positional and unchecked
+ * - the loader reads a slot and jumps - so a filled table that claims nothing,
+ * or whose own entries are not this ICD's, is a jump into nothing with no
+ * diagnostic at all. */
+struct ClDispatchTableProbe {
+    static void filled_but_claiming_nothing(ClDispatchTable &table) { table.claimed_ = 0u; }
+    static void a_slot_this_icd_does_not_own(ClDispatchTable &table)
+    { table.table_.clGetPlatformIDs = nullptr; }
+    static void a_platform_info_slot_of_someone_elses(ClDispatchTable &table)
+    { table.table_.clGetPlatformInfo = nullptr; }
+    static void a_carried_slot_left_empty(ClDispatchTable &table)
+    { table.table_.clCreateImage = nullptr; }
+    static void a_map_slot_of_someone_elses(ClDispatchTable &table)
+    { table.table_.clEnqueueMapBuffer = nullptr; }
+    static void an_unfilled_table_that_claims_something(ClDispatchTable &table)
+    { table.filled_ = false; table.claimed_ = 1u; }
+};
+
+}  // namespace av::clicd
 using av::clicd::ClIcdBinding;
 using av::clicd::ClIcdRoot;
 
@@ -97,3 +120,24 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK_EQ(table.table().clGetPlatformInfo(nullptr, CL_PLATFORM_NAME, 0u, nullptr, nullptr),
            CL_INVALID_PLATFORM);
   CHECK_EQ(table.table().clReleaseContext(nullptr), CL_INVALID_CONTEXT); }
+
+/* The invariant catches the states the table never builds - every one of
+ * which the loader would turn into a jump through a null pointer. */
+TEST(cl_dispatch_table, the_invariant_catches_a_table_the_loader_would_jump_into_nothing_through)
+{ const auto broken = [](void (*corrupt)(ClDispatchTable &)) {
+      ClDispatchTable table;
+      table.fill();
+      CHECK(table.invariants_hold());
+      corrupt(table);
+      return table.invariants_hold();
+  };
+  CHECK(!broken(ClDispatchTableProbe::filled_but_claiming_nothing));
+  CHECK(!broken(ClDispatchTableProbe::a_slot_this_icd_does_not_own));
+  CHECK(!broken(ClDispatchTableProbe::a_platform_info_slot_of_someone_elses));
+  CHECK(!broken(ClDispatchTableProbe::a_carried_slot_left_empty));
+  CHECK(!broken(ClDispatchTableProbe::a_map_slot_of_someone_elses));
+
+  ClDispatchTable never_filled;
+  CHECK(never_filled.invariants_hold());
+  ClDispatchTableProbe::an_unfilled_table_that_claims_something(never_filled);
+  CHECK(!never_filled.invariants_hold()); }

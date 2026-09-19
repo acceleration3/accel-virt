@@ -16,6 +16,25 @@
 #include <cstring>
 
 using av::clicd::ClPlatform;
+using av::clicd::ClPlatformProbe;
+
+namespace av::clicd {
+
+/* The states the platform never builds. A version past what is implemented
+ * would have the loader believe this driver answers calls it does not; an
+ * empty or unterminated version string is one the loader reads off the end
+ * of. */
+struct ClPlatformProbe {
+    static void a_version_past_what_is_implemented(ClPlatform &platform)
+    { platform.major_ += 1u; }
+    static void a_minor_past_what_is_implemented(ClPlatform &platform)
+    { platform.minor_ += 1u; }
+    static void an_empty_version(ClPlatform &platform) { platform.version_[0] = '\0'; }
+    static void an_unterminated_version(ClPlatform &platform)
+    { for (char &byte : platform.version_) byte = 'X'; }
+};
+
+}  // namespace av::clicd
 
 namespace {
 
@@ -145,3 +164,35 @@ TEST(cl_platform, a_platform_the_loader_would_drop_is_one_with_no_dispatch)
   platform.dispatch_through(table);
   CHECK(platform.dispatchable());
   CHECK(platform.invariants_hold()); }
+
+/* A name this driver does not answer is the API's own refusal, not a slot
+ * that falls through to something else. */
+TEST(cl_platform, a_query_this_driver_does_not_answer_is_an_invalid_value)
+{ ClPlatform platform;
+  std::size_t bytes = 0xEEu;
+  CHECK_EQ(platform.info(nullptr, 0x9999u, 0u, nullptr, &bytes), CL_INVALID_VALUE);
+  /* And the numeric version, which is the one query answered from the two
+   * numbers rather than a string: too little room is refused rather than
+   * half-written. */
+  cl_version version = 0u;
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_NUMERIC_VERSION, sizeof version - 1u, &version,
+                         nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(version, 0u);
+  std::size_t room = 0u;
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_NUMERIC_VERSION, 0u, nullptr, &room), CL_SUCCESS);
+  CHECK_EQ(room, sizeof(cl_version));
+  CHECK(platform.invariants_hold()); }
+
+/* The invariant catches the states the platform never builds. */
+TEST(cl_platform, the_invariant_catches_a_version_it_could_not_have)
+{ const auto broken = [](void (*corrupt)(ClPlatform &)) {
+      ClPlatform platform;
+      CHECK(platform.invariants_hold());
+      corrupt(platform);
+      return platform.invariants_hold();
+  };
+  CHECK(!broken(ClPlatformProbe::a_version_past_what_is_implemented));
+  CHECK(!broken(ClPlatformProbe::a_minor_past_what_is_implemented));
+  CHECK(!broken(ClPlatformProbe::an_empty_version));
+  CHECK(!broken(ClPlatformProbe::an_unterminated_version)); }
