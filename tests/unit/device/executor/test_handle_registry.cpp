@@ -229,6 +229,33 @@ TEST(handle_registry, forgetting_everything_leaves_a_registry_that_knows_nothing
 
 /* A table end past the table is one `knows` would walk off, reading whatever
  * lies beyond as handles this host made. */
+/* The five handles the loader dispatches on are told apart by kind: it reads a
+ * dispatchable handle as a pointer to the table it calls through, so a queue
+ * where a device belongs aborts the process. A handle made as one kind is no
+ * more the other than a number this registry never made. */
+TEST(handle_registry, a_handle_is_known_only_as_the_kind_it_was_made)
+{ HandleRegistry registry;
+  CHECK(registry.remember(0x1000u, 0u, av::HandleKind::device));
+  CHECK(registry.remember(0x2000u, 0u, av::HandleKind::queue));
+  CHECK(registry.remember(0x3000u, 0u));
+  CHECK(registry.knows(0x1000u, av::HandleKind::device));
+  CHECK(!registry.knows(0x1000u, av::HandleKind::queue));
+  CHECK(!registry.knows(0x1000u, av::HandleKind::other));
+  CHECK(registry.knows(0x2000u, av::HandleKind::queue));
+  CHECK(registry.knows(0x3000u, av::HandleKind::other));
+  CHECK(!registry.knows(0x3000u, av::HandleKind::device));
+  /* A number nobody made is no kind at all, and the null handle is every
+   * kind: the API defines it and a guest may legitimately send it. */
+  CHECK(!registry.knows(0x4000u, av::HandleKind::device));
+  CHECK(registry.knows(0u, av::HandleKind::device));
+  CHECK(registry.knows(0u, av::HandleKind::other));
+  /* And a slot reused for another handle carries the new one's kind. */
+  registry.forget(0x1000u);
+  CHECK(registry.remember(0x5000u, 0u, av::HandleKind::instance));
+  CHECK(registry.knows(0x5000u, av::HandleKind::instance));
+  CHECK(!registry.knows(0x5000u, av::HandleKind::device));
+  CHECK(registry.invariants_hold()); }
+
 TEST(handle_registry_invariants, an_end_past_the_table_breaks_them)
 { HandleRegistry registry;
   for (std::uint64_t handle = 1u; handle <= HandleRegistry::max_handles; handle++)

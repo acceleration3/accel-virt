@@ -14,6 +14,7 @@
  * a host pointer may become. */
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/host_exported_fds.hpp"
 #include "device/executor/host_gpu.hpp"
@@ -36,6 +37,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -128,7 +130,9 @@ public:
     std::uint64_t create_device(std::uint64_t physical, std::uint32_t count = 0u,
                                 const char *const *extensions = nullptr)
     {
-        std::uint8_t frame[1024];
+        /* Room for a guest list as long as ExtensionList holds, which is what
+         * says whether the backend had any room left of its own. */
+        std::uint8_t frame[16384];
         WireWriter   writer(frame, sizeof frame);
         writer.write_pod(physical);
         VkDeviceCreateInfo create = {};
@@ -1357,5 +1361,25 @@ TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
       unshared.memory = plain;
       int refused = -1;
       CHECK(vkproto::rvk_vkGetMemoryFdKHR(wire, device, &unshared, &refused) != VK_SUCCESS);
+  }
+}
+
+/* A guest whose own extension list fills every slot the backend has leaves it
+ * nothing to add, so the list the driver is asked with is the guest's own and
+ * a name that does not exist is refused on the spot rather than asked again
+ * with the same names. */
+TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_wrote_it)
+{ av::LoaderHostApis &host = opened_host();
+  static char        spelled[av::ExtensionList::capacity][32] = {};
+  const char        *names[av::ExtensionList::capacity] = {};
+  for (std::uint32_t index = 0u; index < av::ExtensionList::capacity; index++) {
+      std::snprintf(spelled[index], sizeof spelled[index], "VK_RVK_no_such_extension_%u", index);
+      names[index] = spelled[index];
+  }
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i, av::ExtensionList::capacity, names);
+      CHECK(made.instance() != 0u);
+      CHECK(made.physical() != 0u);
+      CHECK_EQ(made.device(), 0u);
   }
 }

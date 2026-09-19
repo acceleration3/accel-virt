@@ -51,12 +51,18 @@ namespace {
 
 constexpr std::size_t block_bytes = 65536u;
 
-std::size_t create_instance_frame(std::uint8_t *frame, std::size_t capacity)
+/* VK_API_VERSION_1_0 and 1.1, spelled out: the macros are full of C casts
+ * this build refuses. */
+constexpr std::uint32_t api_1_0 = 1u << 22;
+constexpr std::uint32_t api_1_1 = (1u << 22) | (1u << 12);
+
+std::size_t create_instance_frame(std::uint8_t *frame, std::size_t capacity,
+                                  std::uint32_t api_version = api_1_1)
 { WireWriter writer(frame, capacity);
   VkApplicationInfo application = {};
   application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   application.pApplicationName = "test";
-  application.apiVersion = (1u << 22) | (1u << 12);
+  application.apiVersion = api_version;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   create.pApplicationInfo = &application;
@@ -95,6 +101,52 @@ TEST(vulkan_backend, a_well_formed_command_decodes_and_answers)
   CHECK_EQ(answer.offset(), 12u);
   CHECK(!backend.lost());
   backend.shut_down(); }
+
+/* A version below 1.0 - major zero - is not a version, and the loader only
+ * warns about it: the layers behind it then read state no create ever made and
+ * the host process dies, which no guest may be able to do. Refused here, and
+ * the two versions that are legitimate still pass (T064, found by
+ * tests/fuzz/fuzz_executor_vulkan.cpp). */
+TEST(vulkan_backend, an_instance_asking_for_a_version_below_one_zero_is_refused)
+{ constexpr std::uint32_t refused[] = {1u, api_1_0 - 1u, 65664u};
+  for (const std::uint32_t version : refused) {
+      VulkanBackend backend;
+      std::uint8_t  frame[1024];
+      const std::size_t length = create_instance_frame(frame, sizeof frame, version);
+      std::uint8_t  block[block_bytes];
+      WireArena     arena(block, sizeof block);
+      std::uint8_t  reply[256] = {};
+      WireReader    payload(frame, length);
+      WireWriter    answer(reply, sizeof reply);
+      CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+      std::int32_t result = 0;
+      std::memcpy(&result, reply, sizeof result);
+      CHECK_EQ(result, static_cast<std::int32_t>(VK_ERROR_INCOMPATIBLE_DRIVER));
+      /* Nothing was made, so nothing is a handle the guest may name back. */
+      std::uint64_t made = 0u;
+      std::memcpy(&made, reply + sizeof result, sizeof made);
+      CHECK_EQ(made, 0u);
+      CHECK(!backend.lost());
+      backend.shut_down();
+  }
+  /* Zero is the application saying it asks for nothing in particular, and 1.0
+   * is the lowest that is a version at all: both reach the driver. */
+  constexpr std::uint32_t allowed[] = {0u, api_1_0};
+  for (const std::uint32_t version : allowed) {
+      VulkanBackend backend;
+      std::uint8_t  frame[1024];
+      const std::size_t length = create_instance_frame(frame, sizeof frame, version);
+      std::uint8_t  block[block_bytes];
+      WireArena     arena(block, sizeof block);
+      std::uint8_t  reply[256] = {};
+      WireReader    payload(frame, length);
+      WireWriter    answer(reply, sizeof reply);
+      CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+      std::int32_t result = 0;
+      std::memcpy(&result, reply, sizeof result);
+      CHECK(result != static_cast<std::int32_t>(VK_ERROR_INCOMPATIBLE_DRIVER));
+      backend.shut_down();
+  } }
 
 /* A frame that stops short is refused rather than read past: every truncation
  * of a real command, not just a convenient one. */

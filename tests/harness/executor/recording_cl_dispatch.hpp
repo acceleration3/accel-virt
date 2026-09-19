@@ -59,9 +59,10 @@ public:
 
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
     /* As handle_for, for an address: a pointer only for one inside something
-     * this dispatch allocated, with room for `bytes` after it. Anything else
-     * is a stranger, which is what a decoder that let a guest name host
-     * memory would produce. */
+     * this dispatch allocated, with room for `bytes` after it, and null
+     * otherwise - which the decoder reads as a refusal. An address that
+     * reaches a call without being one of these is the stranger, and each
+     * call below is where that is judged. */
     void *svm_for(std::uint64_t address, std::uint64_t bytes) const override;
 
     /* Makes `bytes` of shared virtual memory a guest may then name, and
@@ -78,6 +79,26 @@ public:
     cl_int on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_index, cl_kernel_arg_info param_name,
                                  std::size_t param_value_size, void *param_value,
                                  std::size_t *param_value_size_ret) override;
+    /* Every call the decoder hands a resolved address: the pointer it got is
+     * one this dispatch allocated, or a decoder let a guest name host memory. */
+    cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void *mapped_ptr,
+                                      cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                      cl_event *event) override;
+    void   on_clSVMFree(cl_context context, void *svm_pointer) override;
+    cl_int on_clEnqueueSVMMap(cl_command_queue command_queue, cl_bool blocking_map, cl_map_flags flags,
+                              void *svm_ptr, std::size_t size, cl_uint num_events_in_wait_list,
+                              const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueSVMUnmap(cl_command_queue command_queue, void *svm_ptr,
+                                cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                cl_event *event) override;
+    cl_int on_clEnqueueSVMMemcpy(cl_command_queue command_queue, cl_bool blocking_copy, void *dst_ptr,
+                                 const void *src_ptr, std::size_t size, cl_uint num_events_in_wait_list,
+                                 const cl_event *event_wait_list, cl_event *event) override;
+    cl_int on_clEnqueueSVMMemFill(cl_command_queue command_queue, void *svm_ptr, const void *pattern,
+                                  std::size_t pattern_size, std::size_t size,
+                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                  cl_event *event) override;
+    cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void *arg_value) override;
     cl_int on_clSetKernelArg(cl_kernel kernel, cl_uint arg_index, std::size_t arg_size,
                              const void *arg_value) override;
     cl_int on_clBuildProgram(cl_program program, cl_uint num_devices, const cl_device_id *device_list,
@@ -119,6 +140,10 @@ protected:
 private:
     /* Counts a build whose options lack -cl-kernel-arg-info. */
     void built(const char *options);
+    /* Counts a stranger unless `pointer` is inside something this dispatch
+     * allocated, with room for `bytes` after it. Null is no address at all,
+     * which is what the guest asked for. */
+    void from_svm(const void *pointer, std::uint64_t bytes) const;
     /* Whether answer_next_with is waiting for a call; the call takes it. */
     bool take_answer();
     /* An ID query's answer: garbage past the ids reported, and the count. */

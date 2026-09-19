@@ -108,10 +108,10 @@ VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instanc
     return on_vkEnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
-void VulkanBackend::made(uint64_t raw)
+void VulkanBackend::made(uint64_t raw, HandleKind kind)
 {
     AV_SCOPE("VulkanBackend::made");
-    if (!handles_.remember(raw, parent_)) lost_ = true;
+    if (!handles_.remember(raw, parent_, kind)) lost_ = true;
 }
 
 void VulkanBackend::made_through(uint64_t parent)
@@ -136,6 +136,12 @@ bool VulkanBackend::knows_handle(uint64_t raw) const
 {
     AV_SCOPE("VulkanBackend::knows_handle");
     return handles_.knows(raw);
+}
+
+bool VulkanBackend::knows_handle(uint64_t raw, HandleKind kind) const
+{
+    AV_SCOPE("VulkanBackend::knows_handle");
+    return handles_.knows(raw, kind);
 }
 
 VulkanBackend *VulkanBackend::deciding()
@@ -175,6 +181,14 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateInstance");
+    /* A version below 1.0 - major zero - is refused here rather than passed
+     * on. The loader only warns about it (VUID-VkApplicationInfo-apiVersion)
+     * and then builds a chain the layers behind it read as one that was never
+     * made: Mesa's device-select layer dereferences a table it never
+     * allocated and the host process dies, which no guest may be able to do. */
+    if (pCreateInfo->pApplicationInfo != nullptr && pCreateInfo->pApplicationInfo->apiVersion != 0u &&
+        pCreateInfo->pApplicationInfo->apiVersion < lowest_api_version)
+        return VK_ERROR_INCOMPATIBLE_DRIVER;
     VkInstanceCreateInfo create = *pCreateInfo;
     enable_identity(create);
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
@@ -585,13 +599,13 @@ namespace {
  * registry that is full makes the executor lose its device rather than hand out
  * a handle it will refuse later. */
 template <typename H>
-uint64_t remember(VulkanBackend *backend, H value)
+uint64_t remember(VulkanBackend *backend, H value, HandleKind kind = HandleKind::other)
 {
     AV_SCOPE("remember");
     uint64_t raw = 0u;
     static_assert(sizeof(H) <= sizeof raw);
     memcpy(&raw, &value, sizeof value);
-    if (backend != nullptr) backend->made(raw);
+    if (backend != nullptr) backend->made(raw, kind);
     return raw;
 }
 
@@ -606,7 +620,7 @@ uint64_t remember(VulkanBackend *backend, H value)
  * (feature 042). */
 /* A handle the loader dispatches on. */
 template <typename H>
-bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
+bool answer(const VulkanBackend *backend, uint64_t raw, H &out, HandleKind kind)
 {
     AV_SCOPE("answer");
     if (backend == nullptr) {
@@ -617,9 +631,11 @@ bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
      * these five: the loader dereferences a dispatchable handle to find the
      * table to call through, so a guest naming the null instance aborts the
      * process rather than getting an error back. The fuzz target found that in
-     * vkCmdResetEvent2 (feature 042). */
+     * vkCmdResetEvent2 (feature 042). And it must be this kind of handle: the
+     * table a queue is dereferenced through is not a device's, so naming one
+     * where the other belongs aborts the process the same way (T064). */
     if (raw == 0u) return false;
-    if (!backend->knows_handle(raw)) return false;
+    if (!backend->knows_handle(raw, kind)) return false;
     memcpy(&out, &raw, sizeof out);
     return true;
 }
@@ -660,31 +676,31 @@ uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
 bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out);
+    return answer(VulkanBackend::deciding(), raw, out, HandleKind::instance);
 }
 
 bool wire_to_handle(uint64_t raw, VkPhysicalDevice &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out);
+    return answer(VulkanBackend::deciding(), raw, out, HandleKind::physical_device);
 }
 
 bool wire_to_handle(uint64_t raw, VkDevice &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out);
+    return answer(VulkanBackend::deciding(), raw, out, HandleKind::device);
 }
 
 bool wire_to_handle(uint64_t raw, VkQueue &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out);
+    return answer(VulkanBackend::deciding(), raw, out, HandleKind::queue);
 }
 
 bool wire_to_handle(uint64_t raw, VkCommandBuffer &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out);
+    return answer(VulkanBackend::deciding(), raw, out, HandleKind::command_buffer);
 }
 
 bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR &out) noexcept
@@ -906,7 +922,7 @@ uint64_t handle_to_wire(VkBufferView v) noexcept
 uint64_t handle_to_wire(VkCommandBuffer v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
+    return remember(VulkanBackend::deciding(), v, HandleKind::command_buffer);
 }
 
 uint64_t handle_to_wire(VkCommandPool v) noexcept
@@ -948,7 +964,7 @@ uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept
 uint64_t handle_to_wire(VkDevice v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
+    return remember(VulkanBackend::deciding(), v, HandleKind::device);
 }
 
 uint64_t handle_to_wire(VkDeviceMemory v) noexcept
@@ -990,7 +1006,7 @@ uint64_t handle_to_wire(VkImageView v) noexcept
 uint64_t handle_to_wire(VkInstance v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
+    return remember(VulkanBackend::deciding(), v, HandleKind::instance);
 }
 
 uint64_t handle_to_wire(VkMicromapEXT v) noexcept
@@ -1002,7 +1018,7 @@ uint64_t handle_to_wire(VkMicromapEXT v) noexcept
 uint64_t handle_to_wire(VkPhysicalDevice v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
+    return remember(VulkanBackend::deciding(), v, HandleKind::physical_device);
 }
 
 uint64_t handle_to_wire(VkPipeline v) noexcept
@@ -1044,7 +1060,7 @@ uint64_t handle_to_wire(VkQueryPool v) noexcept
 uint64_t handle_to_wire(VkQueue v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
+    return remember(VulkanBackend::deciding(), v, HandleKind::queue);
 }
 
 uint64_t handle_to_wire(VkRenderPass v) noexcept

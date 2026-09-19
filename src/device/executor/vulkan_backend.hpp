@@ -142,7 +142,7 @@ public:
      * whatever the command being decoded named with made_through. A registry
      * with no room left loses the device rather than hand out one it would
      * refuse when the guest sent it back. */
-    void     made(uint64_t raw);
+    void     made(uint64_t raw, HandleKind kind = HandleKind::other);
     /* The object the command being decoded makes its handles through - its
      * device, its pool - so that they end when it does. Nothing between
      * commands: every run forgets it when the decode returns. */
@@ -155,6 +155,9 @@ public:
     /* Whether this backend made the handle a guest just named. What the
      * generated decoder asks through wire_to_handle. */
     bool     knows_handle(uint64_t raw) const;
+    /* And that it made it as this kind, which is what the five handles the
+     * loader dispatches on are judged by. */
+    bool     knows_handle(uint64_t raw, HandleKind kind) const;
     /* The backend whose handles the decoder is inside. One context runs on one
      * worker and one call at a time - the ABI says so - so the answer is the
      * thread's, which is the only shape a hook with no user pointer can take. */
@@ -220,6 +223,10 @@ private:
     VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
+
+    /* VK_API_VERSION_1_0, spelled out: the macro is full of C casts this
+     * build refuses. Nothing below it is a version at all. */
+    static constexpr uint32_t lowest_api_version = 1u << 22;
 
     /* Every Vulkan command id has this in its top 16 bits; the device filters
      * by API before calling, so anything else is the device disagreeing with

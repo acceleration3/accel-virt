@@ -709,5 +709,12 @@ if(AV_FUZZ)
                      -artifact_prefix=${CMAKE_BINARY_DIR}/corpus/${name}-)
     # The fuzz configuration's own work; its unit tests are the default one's.
     set_tests_properties(${name}_smoke PROPERTIES LABELS fuzz)
+    # A target that reaches a real driver loads it with the host's own loader,
+    # and what that brings in is not this repository's to fix: Mesa's shader
+    # cache leaves allocations nothing can attribute, and the LLVM inside radv
+    # frees an aligned operator new with free() from a static initialiser.
+    # Neither is reachable from the bytes being fuzzed.
+    set_tests_properties(${name}_smoke PROPERTIES
+      ENVIRONMENT "MESA_SHADER_CACHE_DISABLE=true;ASAN_OPTIONS=alloc_dealloc_mismatch=0")
   endforeach()
 endif()

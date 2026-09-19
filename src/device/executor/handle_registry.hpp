@@ -20,6 +20,21 @@
 
 namespace av {
 
+/* What a handle is, for the five the loader dispatches on. Everything else is
+ * `other`: the loader passes a non-dispatchable handle to the driver as the
+ * number it is, while a dispatchable one it dereferences to find the table to
+ * call through - so a guest that names a queue where a device belongs aborts
+ * the host process rather than getting an error back. Found by
+ * tests/fuzz/fuzz_executor_vulkan.cpp in vkAllocateMemory. */
+enum class HandleKind : uint8_t {
+    other,
+    instance,
+    physical_device,
+    device,
+    queue,
+    command_buffer
+};
+
 class HandleRegistry {
 public:
     /* A Vulkan context of any size lives well inside this: it is objects the
@@ -35,10 +50,13 @@ public:
      * null handle or one it does not know for a handle made through nothing.
      * One already known keeps the parent it was made through. False when full,
      * which the caller turns into a refusal rather than a silent forget. */
-    [[nodiscard]] bool remember(uint64_t handle, uint64_t parent);
+    [[nodiscard]] bool remember(uint64_t handle, uint64_t parent, HandleKind kind = HandleKind::other);
     /* Whether this executor made `handle`. The null handle is always known:
      * the API defines it and a guest may legitimately send it. */
     bool               knows(uint64_t handle) const;
+    /* Whether this executor made `handle` as `kind`. A handle it made as
+     * something else is no more this one than a number it never made. */
+    bool               knows(uint64_t handle, HandleKind kind) const;
     /* Forgets one it made, and everything made through it at any depth.
      * Nothing for one it did not. */
     void               forget(uint64_t handle);
@@ -68,8 +86,9 @@ private:
      * the same index in both. A parent is a slot rather than a handle so that
      * finding the orphans of a free slot is one pass, not one search per
      * entry; a slot is only reused once nothing names it as a parent. */
-    uint64_t handles_[max_handles];
-    uint16_t parents_[max_handles];
+    uint64_t   handles_[max_handles];
+    uint16_t   parents_[max_handles];
+    HandleKind kinds_[max_handles];
     uint32_t end_;
     uint32_t count_;
 };

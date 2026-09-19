@@ -1000,7 +1000,9 @@ TEST(opencl_dispatch, an_svm_address_the_host_never_allocated_is_refused)
   frame.write_pod<std::uint64_t>(0x7F0000001000u);
   CHECK(!session.run(av::clproto::kCmd_clSVMFree, frame, bytes));
   CHECK_EQ(session.dispatch().calls(), before);
-  CHECK(session.dispatch().strangers() > 0u); }
+  /* Refused at the decoder, so no call was handed the address at all: a
+   * stranger is one that got through. */
+  CHECK_EQ(session.dispatch().strangers(), 0u); }
 
 TEST(opencl_dispatch, an_svm_address_the_host_allocated_resolves)
 { ClSession session;

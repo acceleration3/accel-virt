@@ -3,6 +3,8 @@
  * where every command still decodes and the platform count is zero. */
 #include "device/executor/imported_blob.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/cl_event_signals.hpp"
+#include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/opencl_backend.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/opencl_device.hpp"
@@ -1088,4 +1090,144 @@ TEST(opencl_backend, a_callback_on_a_session_with_no_device_to_wake_is_refused)
   CHECK(command.decodes(backend));
   CHECK_EQ(command.result(), CL_INVALID_OPERATION);
   command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* ---- the three tables a session cannot grow --------------------------------
+ *
+ * Shared allocations, mappings and callback registrations all live in
+ * fixed-size tables, because nothing on the submission path allocates. What
+ * happens at the end of each is not a detail: a guest that asked often enough
+ * would reach it, and an address or a mapping the session could not judge
+ * afterwards is worse than a refusal it can see. These need a host with
+ * OpenCL, and say nothing on one without.
+ */
+namespace {
+
+/* One real context on the host's OpenCL device, with a queue and a buffer for
+ * the tests that need to map something. Null throughout where the host has no
+ * OpenCL at all. */
+class HostSession {
+public:
+    explicit HostSession(HostOpenCl &host)
+        : context_(nullptr), queue_(nullptr), buffer_(nullptr)
+    { if (host.device() == nullptr) return;
+      cl_device_id device = static_cast<cl_device_id>(host.device()->device());
+      cl_int       error = CL_SUCCESS;
+      context_ = ::clCreateContext(nullptr, 1u, &device, nullptr, nullptr, &error);
+      if (context_ == nullptr) return;
+      queue_ = ::clCreateCommandQueueWithProperties(context_, device, nullptr, &error);
+      buffer_ = ::clCreateBuffer(context_, CL_MEM_READ_WRITE, buffer_bytes, nullptr, &error); }
+    ~HostSession()
+    { if (buffer_ != nullptr) CHECK_EQ(::clReleaseMemObject(buffer_), CL_SUCCESS);
+      if (queue_ != nullptr) CHECK_EQ(::clReleaseCommandQueue(queue_), CL_SUCCESS);
+      if (context_ != nullptr) CHECK_EQ(::clReleaseContext(context_), CL_SUCCESS); }
+    HostSession(const HostSession &) = delete;
+    HostSession &operator=(const HostSession &) = delete;
+
+    /* Room for one mapping per table slot, each at its own offset so each
+     * answers its own address. */
+    static constexpr std::size_t mapping_bytes = 64u;
+    static constexpr std::size_t buffer_bytes =
+        (av::HostSvmRanges::max_ranges + 1u) * mapping_bytes;
+
+    cl_context       context() const { return context_; }
+    cl_command_queue queue() const { return queue_; }
+    cl_mem           buffer() const { return buffer_; }
+
+private:
+    cl_context       context_;
+    cl_command_queue queue_;
+    cl_mem           buffer_;
+};
+
+}  // namespace
+
+TEST(opencl_backend, more_shared_allocations_than_the_table_holds_are_given_straight_back)
+{ HostOpenCl  host;
+  HostSession session(host);
+  if (session.context() == nullptr) return;
+  OpenClBackend backend;
+  void         *held[av::HostSvmRanges::max_ranges] = {};
+  for (std::uint32_t index = 0u; index < av::HostSvmRanges::max_ranges; ++index) {
+      held[index] = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u);
+      if (held[index] == nullptr) return;   /* a device without shared memory */
+  }
+  /* One more than the table holds: the host allocates it and it is freed
+   * again, because an address this session could never resolve is worse than
+   * a refusal the guest can see at the allocation. */
+  CHECK(backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u) == nullptr);
+  for (void *const address : held) backend.on_clSVMFree(session.context(), address);
+  /* And with the table drained, the next one is answered again. */
+  void *const after = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u);
+  CHECK(after != nullptr);
+  backend.on_clSVMFree(session.context(), after);
+  CHECK(!backend.lost());
+  backend.shut_down(); }
+
+TEST(opencl_backend, more_mappings_than_the_table_holds_are_unmapped_again)
+{ HostOpenCl  host;
+  HostSession session(host);
+  if (session.queue() == nullptr || session.buffer() == nullptr) return;
+  OpenClBackend backend;
+  void         *held[av::HostSvmRanges::max_ranges] = {};
+  for (std::uint32_t index = 0u; index < av::HostSvmRanges::max_ranges; ++index) {
+      cl_int error = CL_SUCCESS;
+      held[index] = backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE,
+                                                  CL_MAP_WRITE, index * HostSession::mapping_bytes,
+                                                  HostSession::mapping_bytes, 0u, nullptr, nullptr,
+                                                  &error);
+      if (held[index] == nullptr) return;   /* a device that maps no buffer */
+      CHECK_EQ(error, CL_SUCCESS);
+  }
+  /* The one past the end, both ways the guest can ask: with somewhere to
+   * report the refusal and with nowhere. Either way the mapping the host made
+   * is given back, because a buffer the guest could never unmap would be held
+   * for the life of the context. */
+  cl_int refused = CL_SUCCESS;
+  CHECK(backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
+                                      av::HostSvmRanges::max_ranges * HostSession::mapping_bytes,
+                                      HostSession::mapping_bytes, 0u, nullptr, nullptr,
+                                      &refused) == nullptr);
+  CHECK_EQ(refused, CL_OUT_OF_RESOURCES);
+  CHECK(backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
+                                      av::HostSvmRanges::max_ranges * HostSession::mapping_bytes,
+                                      HostSession::mapping_bytes, 0u, nullptr, nullptr,
+                                      nullptr) == nullptr);
+  for (void *const address : held)
+      CHECK_EQ(backend.on_clEnqueueUnmapMemObject(session.queue(), session.buffer(), address, 0u,
+                                                  nullptr, nullptr),
+               CL_SUCCESS);
+  CHECK_EQ(::clFinish(session.queue()), CL_SUCCESS);
+  CHECK(!backend.lost());
+  backend.shut_down(); }
+
+TEST(opencl_backend, more_callback_registrations_than_the_table_holds_are_refused)
+{ HostOpenCl  host;
+  HostSession session(host);
+  if (session.context() == nullptr) return;
+  OpenClBackend backend;
+  int           device = 0;
+  backend.bind_signal(&nothing_to_wake, &device);
+  cl_event events[av::ClEventSignals::max_registrations + 1u] = {};
+  for (cl_event &event : events) {
+      cl_int error = CL_SUCCESS;
+      event = ::clCreateUserEvent(session.context(), &error);
+      if (event == nullptr) return;   /* a device with no user events */
+  }
+  for (std::uint32_t index = 0u; index < av::ClEventSignals::max_registrations; ++index) {
+      const cl_int registered = backend.on_clSetEventCallback(events[index], CL_COMPLETE);
+      if (registered != CL_SUCCESS) {
+          for (cl_event event : events) CHECK_EQ(::clReleaseEvent(event), CL_SUCCESS);
+          backend.shut_down();
+          return;   /* a host that registers no callback at all */
+      }
+  }
+  /* Every slot taken: the guest is refused rather than handed a registration
+   * whose completion nothing could deliver. */
+  CHECK_EQ(backend.on_clSetEventCallback(events[av::ClEventSignals::max_registrations], CL_COMPLETE),
+           CL_OUT_OF_RESOURCES);
+  /* Completed so the host's own callbacks run while the slots are still this
+   * session's, rather than after it is torn down. */
+  for (cl_event event : events) CHECK_EQ(::clSetUserEventStatus(event, CL_COMPLETE), CL_SUCCESS);
+  for (cl_event event : events) CHECK_EQ(::clReleaseEvent(event), CL_SUCCESS);
   backend.shut_down(); }
