@@ -41,7 +41,9 @@ public:
      * a call made, retained or released. */
     void *handle_for(clproto::HandleKind kind, uint64_t wire) const override;
     /* An address the guest names, as a pointer, or null unless it and the
-     * bytes after it lie inside one allocation this context made. */
+     * bytes after it lie inside one allocation this context made or one
+     * mapping one of its maps answered. Those are the only two kinds of host
+     * address the guest is ever told, so they are the only two it may name. */
     void *svm_for(uint64_t address, uint64_t bytes) const override;
     void  made(clproto::HandleKind kind, void *object) override;
     void  retained(clproto::HandleKind kind, void *object) override;
@@ -66,6 +68,19 @@ public:
     void *on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size,
                         cl_uint alignment) override;
     void  on_clSVMFree(cl_context context, void *svm_pointer) override;
+
+    /* A map answers a host address, and the unmap that ends it names that
+     * address back - so the decoder has to be able to judge it, exactly as it
+     * judges an SVM address. Kept apart from the allocations on purpose: they
+     * share a decoder seam but not a lifetime, and one table would let
+     * clSVMFree be handed a mapping's pointer and free it. */
+    void  *on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map,
+                                 cl_map_flags map_flags, size_t offset, size_t size,
+                                 cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                 cl_event *event, cl_int *errcode_ret) override;
+    cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void *mapped_ptr,
+                                      cl_uint num_events_in_wait_list,
+                                      const cl_event *event_wait_list, cl_event *event) override;
 
     /* No guest function pointer crosses the wire, so the callback registered
      * here is this backend's own: it signals the device, which wakes the
@@ -95,6 +110,7 @@ private:
     const OpenClDevice *bound_;
     ClHandleRegistry handles_;
     HostSvmRanges    svm_;
+    HostSvmRanges    mapped_;
     ClEventSignals   events_;
     uint64_t       ran_;
     bool           lost_;

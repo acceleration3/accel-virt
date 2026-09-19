@@ -6,6 +6,7 @@
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
 #include "harness/executor/executor_root_probe.hpp"
+#include "harness/executor/root_under_test.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -15,6 +16,7 @@
 
 using av::ContextSession;
 using av::ExecutorRoot;
+using av::RootUnderTest;
 using av::MockHostApis;
 using av::StateWriter;
 using av::Status;
@@ -31,7 +33,8 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
 { MockHostApis apis;
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL, 0u, 0u, 0u);
   apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   ContextSession *const on_intel = root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel);
   ContextSession *const on_nvidia = root.open(RVK_EXECUTOR_SUB_API_VULKAN, nvidia);
@@ -59,7 +62,8 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
 { MockHostApis apis;
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL | RVK_EXECUTOR_SUB_API_OPENGL,
                0u, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   av::ExecutorRootProbe probe(root);
   av::MockSessionBackend backends[3];
@@ -77,7 +81,8 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   for (std::uint32_t slot = 0u; slot < 3u; slot++) probe.session_at(slot).release(); }
 
 TEST(executor_root_report, a_root_that_never_asked_has_nothing_but_its_line)
-{ ExecutorRoot root;
+{ RootUnderTest held;
+  ExecutorRoot &root = *held;
   char bytes[256];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);

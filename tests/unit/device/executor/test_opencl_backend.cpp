@@ -587,6 +587,52 @@ TEST(opencl_backend, clSVMFree_of_an_address_no_allocation_answered_is_refused_b
   none.is_refused_at_every_shorter_length(backend);
   backend.shut_down(); }
 
+/* The other host address the guest is ever told: the one a map answers.
+ *
+ * clEnqueueUnmapMemObject names that address back, so the decoder judges it
+ * through the same seam it judges an SVM address through - and a backend that
+ * remembered only what clSVMAlloc answered refused every real unmap, which is
+ * what T040 found. The two are kept in separate tables on purpose: one table
+ * would let clSVMFree be handed a mapping's pointer and free it. */
+TEST(opencl_backend, an_unmap_of_an_address_no_map_answered_is_refused_before_the_host)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clEnqueueUnmapMemObject);
+  invented.frame().write_pod<std::uint64_t>(0u);     /* the queue */
+  invented.frame().write_pod<std::uint64_t>(0u);     /* the buffer */
+  invented.frame().write_pod<std::uint64_t>(invented_address);
+  invented.frame().write_varint<std::uint64_t>(0u);  /* no events waited on */
+  invented.frame().write_pod<std::uint8_t>(0u);
+  invented.frame().write_pod<std::uint8_t>(0u);      /* no event wanted */
+  /* Refused at the decoder, so the host's clEnqueueUnmapMemObject is never
+   * reached with an address of the guest's invention. */
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+TEST(opencl_backend, a_map_the_host_refuses_answers_a_null_address_and_remembers_no_mapping)
+{ OpenClBackend backend;
+  ClCommand command(av::clproto::kCmd_clEnqueueMapBuffer);
+  command.frame().write_pod<std::uint64_t>(0u);        /* no queue, so the host refuses */
+  command.frame().write_pod<std::uint64_t>(0u);        /* no buffer */
+  command.frame().write_varint<std::uint64_t>(CL_TRUE);
+  command.frame().write_varint<std::uint64_t>(CL_MAP_WRITE);
+  command.frame().write_varint<std::uint64_t>(0u);     /* offset */
+  command.frame().write_varint<std::uint64_t>(256u);   /* size */
+  command.frame().write_varint<std::uint64_t>(0u);     /* no events waited on */
+  command.frame().write_pod<std::uint8_t>(0u);
+  command.frame().write_pod<std::uint8_t>(0u);         /* no event wanted */
+  command.frame().write_pod<std::uint8_t>(1u);         /* the error is */
+  CHECK(command.decodes(backend));
+  CHECK_EQ(backend.ran(), 1u);
+  CHECK_EQ(command.address(), 0u);
+  /* A map that answered nothing left nothing to name, so the unmap of any
+   * address is still refused. */
+  CHECK(backend.svm_for(invented_address, 1u) == nullptr);
+  CHECK(!backend.lost());
+  command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
 /* 5. clEnqueueSVMMap - an address with an extent. */
 TEST(opencl_backend, clEnqueueSVMMap_of_an_address_outside_every_range_is_refused)
 { OpenClBackend backend;

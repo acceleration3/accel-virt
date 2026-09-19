@@ -173,6 +173,7 @@ void OpenClBackend::shut_down()
     /* Before the ranges go: a release may free an allocation, and nothing
      * afterwards may resolve one. */
     svm_.forget_all();
+    mapped_.forget_all();
     /* Every event callback still to come goes stale here. The host cannot be
      * told to stop calling them, so being called and doing nothing is what
      * they do from now on. */
@@ -191,7 +192,9 @@ uint64_t OpenClBackend::ran() const
 void *OpenClBackend::svm_for(uint64_t address, uint64_t bytes) const
 {
     AV_SCOPE("OpenClBackend::svm_for");
-    return svm_.resolve(address, bytes);
+    void *const allocated = svm_.resolve(address, bytes);
+    if (allocated != nullptr) return allocated;
+    return mapped_.resolve(address, bytes);
 }
 
 void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size,
@@ -218,6 +221,43 @@ void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
      * that is not a pointer the host's allocator was given. */
     if (!svm_.forget(svm_pointer)) return;
     ::clSVMFree(context, svm_pointer);
+}
+
+void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer,
+                                           cl_bool blocking_map, cl_map_flags map_flags,
+                                           size_t offset, size_t size,
+                                           cl_uint num_events_in_wait_list,
+                                           const cl_event *event_wait_list, cl_event *event,
+                                           cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueMapBuffer");
+    void *const mapped =
+        ::clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size,
+                             num_events_in_wait_list, event_wait_list, event, errcode_ret);
+    if (mapped == nullptr) return nullptr;
+    /* A mapping this cannot remember is one whose unmap could never be
+     * judged, and a buffer that can never be unmapped is worse than a map
+     * that failed: the guest would hold it for the life of the context. */
+    if (!mapped_.remember(mapped, static_cast<uint64_t>(size))) {
+        static_cast<void>(::clEnqueueUnmapMemObject(command_queue, buffer, mapped, 0u, nullptr,
+                                                    nullptr));
+        if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+        return nullptr;
+    }
+    return mapped;
+}
+
+cl_int OpenClBackend::on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj,
+                                                 void *mapped_ptr, cl_uint num_events_in_wait_list,
+                                                 const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueUnmapMemObject");
+    const cl_int unmapped = ::clEnqueueUnmapMemObject(
+        command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event);
+    /* Forgotten only once the host has taken it: a refused unmap leaves the
+     * mapping live, and an address the guest may still name. */
+    if (unmapped == CL_SUCCESS) static_cast<void>(mapped_.forget(mapped_ptr));
+    return unmapped;
 }
 
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)

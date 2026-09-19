@@ -866,22 +866,28 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
     if (region == nullptr || region->buffer() != named->wire()) return CL_INVALID_VALUE;
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    cl_int written = CL_SUCCESS;
-    if (region->writes_back()) {
-        written = av::clproto::rvk_clEnqueueWriteBuffer(*wire, held->wire(), named->wire(), CL_TRUE,
-                                                        region->offset(), region->bytes(),
-                                                        region->at(), 0u, nullptr, nullptr);
-    }
     uint64_t     produced = 0u;
     const cl_int unmapped = av::clproto::rvk_clEnqueueUnmapMemObject(
         *wire, held->wire(), named->wire(), region->host(), 0u, nullptr,
         event != nullptr ? &produced : nullptr);
+    /* The write-back follows the unmap, and not the other way round. A host
+     * that cannot hand a guest its buffer maps by staging a copy, and its
+     * unmap copies that staging area over the buffer - so bytes written
+     * before the unmap are exactly the bytes the unmap discards. The mirror
+     * is the application's own writes, so it goes last and wins. */
+    cl_int written = CL_SUCCESS;
+    if (unmapped == CL_SUCCESS && region->writes_back()) {
+        written = av::clproto::rvk_clEnqueueWriteBuffer(*wire, held->wire(), named->wire(), CL_TRUE,
+                                                        region->offset(), region->bytes(),
+                                                        region->at(), 0u, nullptr, nullptr);
+    }
     context->give_back_mapping(*region);
+    if (unmapped != CL_SUCCESS) return unmapped;
     if (written != CL_SUCCESS) return written;
-    if (unmapped == CL_SUCCESS && event != nullptr) {
+    if (event != nullptr) {
         *event = static_cast<cl_event>(wrap(ClObject::Kind::event, produced, context, held, nullptr));
     }
-    return unmapped;
+    return CL_SUCCESS;
 }
 
 void *ClIcdRoot::svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t bytes,
