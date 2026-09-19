@@ -1283,3 +1283,72 @@ TEST(cl_icd_root, a_watched_event_with_no_context_delivers_nothing)
   rig.root().deliver_watched(*event);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
+
+/* Releasing an object whose context is gone: there is nothing to tell the
+ * host, so the guest's own record goes and nothing is sent. The application
+ * is still entitled to release what it holds. */
+TEST(cl_icd_root, releasing_an_object_with_no_context_tells_the_host_nothing)
+{ ClIcdRig rig;
+  ClObject *const buffer =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::mem, 0x6600u);
+  ClObject *const context =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::context, 0x6400u);
+  CHECK(buffer != nullptr && context != nullptr);
+  if (buffer == nullptr || context == nullptr) return;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().release(buffer, ClObject::Kind::mem), CL_SUCCESS);
+  CHECK_EQ(rig.root().release(context, ClObject::Kind::context), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::mem), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A wait naming events of two different contexts. This ICD has one transport
+ * per context and no way to wait on two at once, so it refuses rather than
+ * waiting on one of them and calling that the answer. */
+TEST(cl_icd_root, a_wait_over_two_contexts_is_refused_before_anything_is_asked)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  cl_event mine = rig.loader().create_user_event(context, nullptr);
+  CHECK(mine != nullptr);
+  if (mine == nullptr) return;
+
+  /* An event of no context at all is an event of a different one. */
+  ClObject *const stranger =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::event, 0x6901u);
+  CHECK(stranger != nullptr);
+  if (stranger == nullptr) return;
+  const cl_event both[] = {mine, reinterpret_cast<cl_event>(stranger)};
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().wait_for_events(2u, both), CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A status query with room for less than a status: the host answers it, and
+ * there is nothing for the ICD to read a completion out of, so no deferred
+ * read is delivered. */
+TEST(cl_icd_root, a_status_query_with_no_room_for_a_status_delivers_nothing)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  cl_event event = rig.loader().create_user_event(context, nullptr);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+
+  /* The host answers what the room allows, which is less than a status. */
+  const char byte_of_a_status = 0;
+  rig.host().cl_info(CL_SUCCESS, &byte_of_a_status, 1u);
+  unsigned char cramped[1] = {0u};
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof cramped,
+                                 cramped, nullptr),
+           CL_SUCCESS);
+  /* One command, the query itself: no fetch followed it. */
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK(rig.root().invariants_hold()); }
