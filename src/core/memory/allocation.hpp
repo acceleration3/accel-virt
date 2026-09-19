@@ -35,13 +35,20 @@ public:
     const AllocationDescriptor &descriptor() const;
     uint64_t                    size() const;
     uint32_t                    opens() const;
+    /* The identity the adapter minted for it, or 0 for one that is not shared
+     * (feature 053). A shared allocation may be held by more than one device,
+     * which is the whole point of it. */
+    uint64_t                    shared_id() const;
+    void                        shared_as(uint64_t id);
 
     /* The DXGK_ALLOCATIONINFO fields the driver answers. */
     void report_to(DxgkAllocationInfoRecord &info);
     /* `device` is the device opening it. The pages an rvk context runs on - its
      * ring and its fence page - belong to the device that made them, and a
      * second device asking for them is refused: they are the transport's, not
-     * shared memory (feature 041, FR-003). */
+     * shared memory (feature 041, FR-003). Nothing else is refused a second
+     * device: an allocation the adapter gave an identity to was created to be
+     * held by more than one (feature 053). */
     [[nodiscard]] Status open(const void *device);
     [[nodiscard]] Status close();
     /* Whether the same device holds both, or neither is held: two rvk contexts
@@ -74,6 +81,8 @@ private:
     AllocationDescriptor descriptor_;
     uint64_t             size_;
     uint32_t             opens_;
+    /* 0 unless the adapter minted one at create. */
+    uint64_t             shared_id_;
     /* Which device holds it, while any does; only a ring or a fence page keeps
      * anyone else out. */
     const void          *owner_;

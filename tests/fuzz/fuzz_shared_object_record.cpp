@@ -23,14 +23,16 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     std::uint8_t again[av::SharedObjectRecord::encoded_size] = {};
     if (record.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
     if (std::memcmp(again, data, sizeof again) != 0) __builtin_trap();
-    if (!record.kind().known() || record.adapter_luid() == 0u) __builtin_trap();
+    if (!record.kind().known()) __builtin_trap();
+    if ((record.object_id() == 0u) != (record.adapter_id() == 0u)) __builtin_trap();
     if (record.size() == 0u || record.size() % av::SharedObjectRecord::page_size != 0u) __builtin_trap();
 
     /* Minting an id into a record a creator wrote must leave something the
      * opening process can read back: the whole point of the journey. */
     av::SharedObjectRecord minted = record;
-    minted.assign(record.object_id() + 1u);
-    if (minted.object_id() != 0u && !minted.assigned()) __builtin_trap();
+    /* An id and an adapter travel together, so a mint sets both or neither. */
+    minted.assign(record.object_id() | 1u, record.adapter_id() | 1u);
+    if (!minted.assigned()) __builtin_trap();
     if (minted.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
     av::SharedObjectRecord reread;
     if (reread.decode(again, sizeof again) != av::Status::ok) __builtin_trap();

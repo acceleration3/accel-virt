@@ -6,14 +6,14 @@
 
 namespace av {
 
-SharedObjectRecord::SharedObjectRecord() : object_id_(0u), kind_(), adapter_luid_(0u), size_(0u)
+SharedObjectRecord::SharedObjectRecord() : object_id_(0u), kind_(), adapter_id_(0u), size_(0u)
 {
     AV_SCOPE("SharedObjectRecord::SharedObjectRecord");
 }
 
-SharedObjectRecord::SharedObjectRecord(uint64_t object_id, const SharedObjectKind &kind, uint64_t adapter_luid,
+SharedObjectRecord::SharedObjectRecord(uint64_t object_id, const SharedObjectKind &kind, uint64_t adapter_id,
                                        uint64_t size)
-    : object_id_(object_id), kind_(kind), adapter_luid_(adapter_luid), size_(size)
+    : object_id_(object_id), kind_(kind), adapter_id_(adapter_id), size_(size)
     {
         AV_SCOPE("SharedObjectRecord::SharedObjectRecord");
     }
@@ -30,10 +30,10 @@ const SharedObjectKind &SharedObjectRecord::kind() const
     return kind_;
 }
 
-uint64_t SharedObjectRecord::adapter_luid() const
+uint64_t SharedObjectRecord::adapter_id() const
 {
-    AV_SCOPE("SharedObjectRecord::adapter_luid");
-    return adapter_luid_;
+    AV_SCOPE("SharedObjectRecord::adapter_id");
+    return adapter_id_;
 }
 
 uint64_t SharedObjectRecord::size() const
@@ -45,13 +45,14 @@ uint64_t SharedObjectRecord::size() const
 bool SharedObjectRecord::assigned() const
 {
     AV_SCOPE("SharedObjectRecord::assigned");
-    return object_id_ != 0u;
+    return object_id_ != 0u && adapter_id_ != 0u;
 }
 
-void SharedObjectRecord::assign(uint64_t object_id)
+void SharedObjectRecord::assign(uint64_t object_id, uint64_t adapter_id)
 {
     AV_SCOPE("SharedObjectRecord::assign");
     object_id_ = object_id;
+    adapter_id_ = adapter_id;
 }
 
 Status SharedObjectRecord::encode(uint8_t *bytes, size_t capacity) const
@@ -64,7 +65,7 @@ Status SharedObjectRecord::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u64(object_id_);
     writer.write_u32(kind_.value());
     writer.write_zeros(4u);
-    writer.write_u64(adapter_luid_);
+    writer.write_u64(adapter_id_);
     writer.write_u64(size_);
     return writer.status();
 }
@@ -72,7 +73,10 @@ Status SharedObjectRecord::encode(uint8_t *bytes, size_t capacity) const
 bool SharedObjectRecord::fields_valid() const
 {
     AV_SCOPE("SharedObjectRecord::fields_valid");
-    if (!kind_.known() || adapter_luid_ == 0u) return false;
+    if (!kind_.known()) return false;
+    /* An id and an adapter travel together: a record naming one without the
+     * other is one no miniport ever wrote. */
+    if ((object_id_ == 0u) != (adapter_id_ == 0u)) return false;
     return size_ != 0u && size_ % page_size == 0u;
 }
 
@@ -87,7 +91,7 @@ Status SharedObjectRecord::decode(const uint8_t *bytes, size_t length)
     candidate.object_id_ = reader.read_u64();
     candidate.kind_ = SharedObjectKind(reader.read_u32());
     const uint32_t reserved = reader.read_u32();
-    candidate.adapter_luid_ = reader.read_u64();
+    candidate.adapter_id_ = reader.read_u64();
     candidate.size_ = reader.read_u64();
     if (found_magic != magic || found_version != version || reserved != 0u || !candidate.fields_valid())
         return Status::invalid_parameter;

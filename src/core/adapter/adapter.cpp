@@ -112,7 +112,8 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform), host_visible_(platform), region_blob_(platform),
       memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
-      allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
+      shared_(platform), allocations_(platform, segment_, memory_, shared_),
+      devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
@@ -164,6 +165,10 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
     if (status == Status::ok) status = segment_.initialize(info.SystemMemorySize);
+    /* The number this adapter stamps into every shared object it mints, so a
+     * record another adapter of this kernel wrote is one it refuses (053). A
+     * start that follows a stop keeps the one it already has. */
+    if (status == Status::ok && shared_.adapter() == 0u) status = shared_.initialize();
     if (status == Status::ok) status = resources_.initialize(info.TranslatedResourceList, ResourceList::max_bytes);
     uint8_t config[config_space_bytes] = {};
     if (status == Status::ok) status = dxgkrnl_.read_config_space(config, config_space_bytes);
@@ -1849,6 +1854,7 @@ void Adapter::report(StateWriter &writer)
     writer.number("vsync_reported", vsync_.reported());
     devices_.report(writer);
     allocations_.report(writer);
+    shared_.report(writer);
     contexts_.report(writer);
     hw_queues_.report(writer);
     node_.report(writer);

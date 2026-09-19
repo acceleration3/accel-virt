@@ -4,6 +4,7 @@
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/device_allocation.hpp"
+#include "core/memory/shared_object.hpp"
 #include "core/scheduling/device.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -16,7 +17,7 @@ using av::Device;
 using av::DeviceAllocation;
 using av::MockPlatform;
 
-TEST(device_allocation, joins_one_device_to_one_allocation)
+TEST(device_allocation, joins_one_device_to_one_allocation_and_names_no_shared_object)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
   Device device(platform, adapter, nullptr, 0u);
@@ -24,6 +25,22 @@ TEST(device_allocation, joins_one_device_to_one_allocation)
   av::HostVisibleSegment host_visible(platform);
   const av::MemorySegments segments(platform, aperture, host_visible);
   Allocation allocation(platform, segments, AllocationDescriptor(), 0x1000u);
-  const DeviceAllocation open(device, allocation);
+  const DeviceAllocation open(device, allocation, nullptr);
   CHECK(&open.device() == &device);
-  CHECK(&open.allocation() == &allocation); }
+  CHECK(&open.allocation() == &allocation);
+  CHECK(open.shared() == nullptr); }
+
+/* An open of a shared allocation counts the object, and the close has to
+ * uncount exactly that one: the allocation alone cannot say which (053). */
+TEST(device_allocation, carries_the_shared_object_its_open_counted)
+{ MockPlatform platform; int pdo = 0;
+  Adapter adapter(platform, &pdo);
+  Device device(platform, adapter, nullptr, 0u);
+  av::ApertureSegment aperture(platform);
+  av::HostVisibleSegment host_visible(platform);
+  const av::MemorySegments segments(platform, aperture, host_visible);
+  Allocation allocation(platform, segments, AllocationDescriptor(), 0x1000u);
+  av::SharedObject object(platform, 7u, av::SharedObjectKind(av::SharedObjectKind::memory), 0x1000u,
+                          allocation);
+  const DeviceAllocation open(device, allocation, &object);
+  CHECK(open.shared() == &object); }

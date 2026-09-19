@@ -14,6 +14,7 @@
 #include "core/display/hardware_cursor.hpp"
 #include "core/display/synthetic_vsync.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/host_visible_blob.hpp"
 #include "core/memory/host_visible_segment.hpp"
@@ -399,6 +400,9 @@ private:
     DisplayModeList                modes_;
     Edid                           edid_;
     DisplaySources                 sources_;
+    /* Before the allocation table, which mints into it, and before the device
+     * table, which opens from it (feature 053). */
+    SharedObjectTable              shared_;
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;

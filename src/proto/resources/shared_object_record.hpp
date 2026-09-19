@@ -7,9 +7,11 @@
  * mints at create is what the second process's open reads back. Everything in
  * it came from user mode, on both sides of that journey.
  *
- * A record arrives from a creator with `object_id` 0, meaning "mint me one";
- * the miniport writes the minted id back into it. A record with 0 is therefore
- * decodable and is not openable, which `assigned` is the question for. */
+ * A record arrives from a creator with `object_id` and `adapter_id` both 0 -
+ * a creator knows the kind and the size of what it is sharing and can know
+ * neither of the other two - and the miniport writes both back into it. A
+ * record with zeros is therefore decodable and is not openable, which
+ * `assigned` is the question for. */
 #ifndef AV_SHARED_OBJECT_RECORD_HPP
 #define AV_SHARED_OBJECT_RECORD_HPP
 
@@ -28,24 +30,29 @@ public:
     static constexpr uint64_t page_size = 4096u;
 
     SharedObjectRecord();
-    SharedObjectRecord(uint64_t object_id, const SharedObjectKind &kind, uint64_t adapter_luid, uint64_t size);
+    SharedObjectRecord(uint64_t object_id, const SharedObjectKind &kind, uint64_t adapter_id, uint64_t size);
 
     uint64_t                object_id() const;
     const SharedObjectKind &kind() const;
-    uint64_t                adapter_luid() const;
+    /* The adapter that minted the id, which is what makes a record from
+     * another adapter refusable (spec, Edge Cases). It is the adapter's own
+     * number rather than its LUID: a miniport is never told its LUID, and what
+     * this has to tell apart is two adapters of one running kernel. */
+    uint64_t                adapter_id() const;
     uint64_t                size() const;
     /* Whether an id has been minted into it, which is what an open needs and a
      * create must not have. */
     bool                    assigned() const;
-    /* The id the miniport minted, written back so the runtime keeps it and the
+    /* What the miniport minted, written back so the runtime keeps it and the
      * opening process reads it. */
-    void                    assign(uint64_t object_id);
+    void                    assign(uint64_t object_id, uint64_t adapter_id);
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* malformed for any length but encoded_size; invalid_parameter for a magic
      * that is not this record's, a version this build does not know, a kind it
-     * does not know, a non-zero reserved field, a LUID of 0, or a size that is
-     * zero or not a whole number of pages. Unchanged unless ok. */
+     * does not know, a non-zero reserved field, an id without an adapter or an
+     * adapter without an id, or a size that is zero or not a whole number of
+     * pages. Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
@@ -56,7 +63,7 @@ private:
 
     uint64_t         object_id_;
     SharedObjectKind kind_;
-    uint64_t         adapter_luid_;
+    uint64_t         adapter_id_;
     uint64_t         size_;
 };
 

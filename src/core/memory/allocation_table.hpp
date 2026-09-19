@@ -20,6 +20,7 @@ class StateWriter;
 
 class ApertureSegment;
 class MemorySegments;
+class SharedObjectTable;
 struct AllocationTableProbe;
 class DisplaySources;
 struct DxgkargCreateAllocationRecord;
@@ -30,10 +31,16 @@ class AllocationTable {
 public:
     static constexpr uint32_t max_per_call = 1024u;
 
-    AllocationTable(Platform &platform, const ApertureSegment &segment, const MemorySegments &segments);
+    AllocationTable(Platform &platform, const ApertureSegment &segment, const MemorySegments &segments,
+                    SharedObjectTable &shared);
     AllocationTable(const AllocationTable &) = delete;
     AllocationTable &operator=(const AllocationTable &) = delete;
 
+    /* Private data of exactly AllocationDescriptor::encoded_size is an
+     * allocation that is not shared; that many bytes followed by a
+     * SharedObjectRecord asks the adapter for an identity, which is minted
+     * into the record the creator keeps (feature 053). Any other length is
+     * refused. */
     [[nodiscard]] Status create(DxgkargCreateAllocationRecord &request);
     [[nodiscard]] Status destroy(const DxgkargDestroyAllocationRecord &request);
     [[nodiscard]] Status describe(DxgkargDescribeAllocationRecord &request, const DisplaySources &sources);
@@ -51,13 +58,19 @@ public:
 
 private:
     static constexpr int32_t rotation_identity = 1;   /* D3DDDI_ROTATION_IDENTITY */
+    /* A descriptor followed by a SharedObjectRecord: 48 + 40. */
+    static constexpr uint32_t shareable_private_size = 88u;
 
     [[nodiscard]] Status create_one(struct DxgkAllocationInfoRecord &info);
+    /* Mints an identity for `allocation` into the record that follows the
+     * descriptor in `private_data`, and writes it back there. */
+    [[nodiscard]] Status share(Allocation &allocation, uint8_t *private_data);
     void                 destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count);
 
     Platform               &platform_;
     const ApertureSegment  &segment_;
     const MemorySegments   &segments_;
+    SharedObjectTable      &shared_;
     Mutex                   mutex_;
     ObjectPool<Allocation>  allocations_;
 

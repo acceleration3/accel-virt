@@ -14,6 +14,7 @@
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/memory/host_visible_segment.hpp"
@@ -55,8 +56,8 @@ class Doorbells {
 public:
     Doorbells()
         : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), host_visible_(platform_),
-          segments_(platform_, segment_, host_visible_), allocations_(platform_, segment_, segments_),
-          devices_(platform_, allocations_, interface_), geometry_(platform_),
+          segments_(platform_, segment_, host_visible_), shared_(platform_), allocations_(platform_, segment_, segments_, shared_),
+          devices_(platform_, allocations_, shared_, interface_), geometry_(platform_),
           contexts_(platform_, devices_, geometry_), queues_(platform_, contexts_),
           window_(platform_, bytes_, sizeof bytes_), table_(platform_, window_),
           first_(make_queue()), second_(make_queue())
@@ -96,6 +97,7 @@ private:
     av::ApertureSegment    segment_;
     av::HostVisibleSegment host_visible_;
     av::MemorySegments     segments_;
+    av::SharedObjectTable shared_;
     av::AllocationTable    allocations_;
     av::DeviceTable        devices_;
     av::GpuMmuGeometry     geometry_;

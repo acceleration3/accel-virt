@@ -6,6 +6,9 @@
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 #include "core/miniport/acquired_handle_data.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/platform/mutex_guard.hpp"
@@ -17,8 +20,10 @@
 
 namespace av {
 
-DeviceTable::DeviceTable(Platform &platform, AllocationTable &allocations, DxgkrnlInterface &dxgkrnl)
-    : platform_(platform), allocations_(allocations), dxgkrnl_(dxgkrnl), mutex_(platform, LockRank::device_table),
+DeviceTable::DeviceTable(Platform &platform, AllocationTable &allocations, SharedObjectTable &shared,
+                         DxgkrnlInterface &dxgkrnl)
+    : platform_(platform), allocations_(allocations), shared_(shared), dxgkrnl_(dxgkrnl),
+      mutex_(platform, LockRank::device_table),
       devices_(platform), opens_(platform)
       {
           AV_SCOPE("DeviceTable::DeviceTable");
@@ -46,6 +51,9 @@ Status DeviceTable::destroy(void *device)
     if (target == nullptr) return Status::invalid_parameter;
     opens_.destroy_if([&](const DeviceAllocation &open) {
         if (&open.device() != target) return false;
+        /* A process that exits holding a shared object lets go of it here, and
+         * every other process keeps what it has (US1 scenario 3). */
+        if (open.shared() != nullptr) static_cast<void>(shared_.close(*open.shared()));
         static_cast<void>(allocations_.close(open.allocation()));
         return true;
     });
@@ -69,17 +77,46 @@ Status DeviceTable::resolve(DxgkargOpenAllocationRecord &request)
     return Status::ok;
 }
 
+Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocationInfoRecord &info,
+                          SharedObject *&object)
+{
+    AV_SCOPE("DeviceTable::claim");
+    object = nullptr;
+    if (allocation.shared_id() == 0u) return Status::ok;
+    if (info.pPrivateDriverData == nullptr ||
+        info.PrivateDriverDataSize != AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size)
+        return Status::invalid_parameter;
+    SharedObjectRecord record;
+    const auto *const  at =
+        static_cast<const uint8_t *>(info.pPrivateDriverData) + AllocationDescriptor::encoded_size;
+    if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
+    /* The allocation dxgkrnl resolved and the record the creator wrote have to
+     * be the same object: either alone is something a process can arrange. */
+    if (record.object_id() != allocation.shared_id()) return Status::invalid_parameter;
+    return shared_.open(record, object);
+}
+
 Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
 {
     AV_SCOPE("DeviceTable::open_one");
     Allocation *allocation = allocations_.find(info.hDeviceSpecificAllocation);
     info.hDeviceSpecificAllocation = nullptr;
     if (allocation == nullptr) return Status::invalid_parameter;
+    SharedObject *object = nullptr;
+    const Status  claimed = claim(*allocation, info, object);
+    if (claimed != Status::ok) return claimed;
+    ScopeExit give_back([&] { if (object != nullptr) static_cast<void>(shared_.close(*object)); });
     DeviceAllocation *open = nullptr;
-    const Status created = opens_.create(open, device, *allocation);
+    const Status created = opens_.create(open, device, *allocation, object);
     if (created != Status::ok) return created;
+    const Status opened = allocations_.open(*allocation, &device);
+    if (opened != Status::ok) {
+        static_cast<void>(opens_.destroy(open));
+        return opened;
+    }
+    give_back.dismiss();
     info.hDeviceSpecificAllocation = open;
-    return allocations_.open(*allocation, &device);
+    return Status::ok;
 }
 
 /* The first `count` entries hold opens; the rest may still hold resolved
@@ -91,6 +128,7 @@ void DeviceTable::close_opened(DxgkargOpenAllocationRecord &request, uint32_t co
         DxgkOpenAllocationInfoRecord &info = request.pOpenAllocation[index];
         auto *open = static_cast<DeviceAllocation *>(info.hDeviceSpecificAllocation);
         if (index < count) {
+            if (open->shared() != nullptr) static_cast<void>(shared_.close(*open->shared()));
             static_cast<void>(allocations_.close(open->allocation()));
             static_cast<void>(opens_.destroy(open));
         }
@@ -141,6 +179,7 @@ Status DeviceTable::close(void *device, const DxgkargCloseAllocationRecord &requ
     }
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         auto *open = static_cast<DeviceAllocation *>(request.pOpenHandleList[index]);
+        if (open->shared() != nullptr) static_cast<void>(shared_.close(*open->shared()));
         static_cast<void>(allocations_.close(open->allocation()));
         static_cast<void>(opens_.destroy(open));
     }

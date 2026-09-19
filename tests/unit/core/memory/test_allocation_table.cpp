@@ -5,6 +5,7 @@
 #include "core/display/display_sources.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
@@ -15,6 +16,7 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -71,8 +73,11 @@ const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10
 class Fixture {
 public:
     Fixture() : segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
-        sources_(platform_), table_(platform_, segment_, segments_), infos_{}, descriptors_{}, request_{}
+        sources_(platform_), shared_(platform_), table_(platform_, segment_, segments_, shared_),
+        infos_{}, descriptors_{}, request_{}
     {
+        if (shared_.initialize() != Status::ok)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "shared objects");
         if (segment_.initialize(segment_bytes) != Status::ok)
             av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "segment");
         set_count(1u, shadow);
@@ -94,6 +99,29 @@ public:
 
     Status create() { return table_.create(request_); }
 
+    /* What a creator that wants an identity hands the miniport: the descriptor
+     * and, after it, a record naming a kind and a size and nothing else. */
+    void ask_to_share(std::uint32_t index, std::uint64_t size,
+                      std::uint32_t kind = av::SharedObjectKind::memory)
+    {
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(kind), 0u, size);
+        CHECK_STATUS(asking.encode(descriptors_[index] + AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        infos_[index].PrivateDriverDataSize =
+            AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
+    }
+
+    /* The record the miniport wrote back, as the opening process reads it. */
+    av::SharedObjectRecord minted(std::uint32_t index) const
+    {
+        av::SharedObjectRecord record;
+        CHECK_STATUS(record.decode(descriptors_[index] + AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        return record;
+    }
+
     Status destroy(std::uint32_t count)
     {
         void *handles[max_infos] = {};
@@ -106,6 +134,7 @@ public:
 
     MockPlatform                  &platform() { return platform_; }
     AllocationTable               &table() { return table_; }
+    av::SharedObjectTable         &shared() { return shared_; }
     DisplaySources                &sources() { return sources_; }
     DxgkAllocationInfoRecord      &info(std::uint32_t i) { return infos_[i]; }
     std::uint8_t                  *descriptor(std::uint32_t i) { return descriptors_[i]; }
@@ -117,9 +146,13 @@ private:
     av::HostVisibleSegment        host_visible_;
     av::MemorySegments            segments_;
     DisplaySources                sources_;
+    av::SharedObjectTable         shared_;
     AllocationTable               table_;
     DxgkAllocationInfoRecord      infos_[max_infos];
-    std::uint8_t                  descriptors_[max_infos][AllocationDescriptor::encoded_size];
+    /* Room for a descriptor and, where a test asks to share, the record that
+     * follows it (feature 053). */
+    std::uint8_t                  descriptors_[max_infos][AllocationDescriptor::encoded_size +
+                                                          av::SharedObjectRecord::encoded_size];
     DxgkargCreateAllocationRecord request_;
 };
 
@@ -336,3 +369,78 @@ TEST(allocation_table_report, is_apc_at_most)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::passive); }
+
+/* Feature 053: an allocation whose private data asks for an identity gets one,
+ * written back into the creator's own bytes - the only thing that reaches the
+ * process that opens it (docs/kb/04-memory.md). */
+TEST(allocation_table_create, mints_an_identity_for_a_creator_that_asked_for_one)
+{ Fixture fixture;
+  fixture.set_count(1u, shadow);
+  fixture.ask_to_share(0u, 4096u);
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 1u);
+  const av::SharedObjectRecord record = fixture.minted(0u);
+  CHECK(record.assigned());
+  CHECK_EQ(record.adapter_id(), fixture.shared().adapter());
+  CHECK_EQ(record.size(), 4096u);
+  const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  CHECK_EQ(allocation->shared_id(), record.object_id());
+  CHECK(fixture.table().invariants_hold());
+  CHECK(fixture.shared().invariants_hold()); }
+
+TEST(allocation_table_create, leaves_an_allocation_that_asked_for_nothing_without_one)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  CHECK_EQ(allocation->shared_id(), 0u); }
+
+TEST(allocation_table_create, refuses_private_data_of_any_other_length_than_the_two_it_knows)
+{ const std::uint32_t lengths[] = {0u, 1u, AllocationDescriptor::encoded_size - 1u,
+                                   AllocationDescriptor::encoded_size + 1u,
+                                   AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size - 1u,
+                                   AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size + 1u};
+  for (const std::uint32_t length : lengths) {
+      Fixture fixture;
+      fixture.ask_to_share(0u, 4096u);
+      fixture.info(0u).PrivateDriverDataSize = length;
+      CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+      CHECK_EQ(fixture.table().live(), 0u);
+      CHECK_EQ(fixture.shared().live(), 0u);
+  } }
+
+TEST(allocation_table_create, refuses_a_record_that_does_not_decode_and_leaves_no_allocation_behind)
+{ Fixture fixture;
+  fixture.ask_to_share(0u, 4096u);
+  fixture.descriptor(0u)[AllocationDescriptor::encoded_size] ^= 0xFFu;   /* the magic */
+  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(allocation_table_create, refuses_a_record_whose_size_is_not_the_allocations)
+{ Fixture fixture;
+  fixture.ask_to_share(0u, 8192u);   /* the descriptor rounds to one page */
+  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK_EQ(fixture.shared().live(), 0u); }
+
+TEST(allocation_table_create, unwinds_the_identity_of_an_earlier_allocation_when_a_later_one_fails)
+{ Fixture fixture;
+  fixture.set_count(2u, shadow);
+  fixture.ask_to_share(0u, 4096u);
+  fixture.ask_to_share(1u, 4096u);
+  fixture.info(1u).PrivateDriverDataSize = 7u;
+  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+TEST(allocation_table_destroy, takes_the_identity_with_the_allocation)
+{ Fixture fixture;
+  fixture.ask_to_share(0u, 4096u);
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 1u);
+  CHECK_STATUS(fixture.destroy(1u), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }

@@ -98,6 +98,24 @@ public:
         }
     }
 
+    /* The first live object `matches`, or null: a table that names its objects
+     * by something of their own - an id rather than a handle - has no address
+     * to hand find(), and reaching one through for_each would mean casting
+     * away the const it visits with. Legal at DISPATCH, as for_each is. */
+    template <typename Predicate>
+    T *find_if(Predicate matches)
+    {
+        AV_SCOPE("ObjectPool::find_if");
+        platform_.require_irql_at_most(Irql::dispatch, "ObjectPool::find_if");
+        for (Chunk *chunk = chunks_; chunk != nullptr; chunk = chunk->next_)
+            for (uint32_t slot = 0u; slot < chunk_slots; slot++) {
+                if ((chunk->used_ & (uint64_t{1} << slot)) == 0u) continue;
+                T *const object = object_at(*chunk, slot);
+                if (matches(static_cast<const T &>(*object))) return object;
+            }
+        return nullptr;
+    }
+
     void destroy_all()
     {
         AV_SCOPE("ObjectPool::destroy_all");

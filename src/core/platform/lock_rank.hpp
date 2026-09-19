@@ -18,6 +18,8 @@ enum class LockRank : uint16_t {
     rvk_control_requests = 105u, /* wait mutex: an rvk context's setup, teardown or chunk request sequence,
                                     which resolves its allocations in AllocationTable */
     allocation_table = 110u,
+    shared_objects = 115u,     /* SharedObjectTable: minted inside the allocation table's create,
+                                  and opened beside it from the device table (feature 053) */
     rvk_context_slots = 190u,  /* spin lock: which rvk contexts are live, around a submission and the DPC's serve */
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
     hw_queue_contexts = 205u,  /* spin lock: what each hardware queue runs on, read at DISPATCH (feature 049) */

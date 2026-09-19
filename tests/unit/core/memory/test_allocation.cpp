@@ -455,3 +455,32 @@ TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
   allocation.unmap_aperture(unmapping);
   CHECK_EQ(allocation.pages().count(), 0u);
   CHECK(allocation.invariants_hold()); }
+
+/* Feature 053: the identity the adapter minted, kept on the allocation so that
+ * an open can find the object it has to count and a destroy can forget it. */
+TEST(allocation, carries_no_shared_identity_until_the_adapter_mints_one)
+{ MockPlatform platform;
+  Segments     segments(platform);
+  Allocation   allocation(platform, segments.segments(), shadow, 0x1000u);
+  CHECK_EQ(allocation.shared_id(), 0u);
+  CHECK(allocation.invariants_hold());
+  allocation.shared_as(0x2A00000000000001u);
+  CHECK_EQ(allocation.shared_id(), 0x2A00000000000001u);
+  CHECK(allocation.invariants_hold()); }
+
+/* A shared allocation is held by more than one device, which is the whole
+ * point of it: only a ring or a fence page keeps a second device out. */
+TEST(allocation_open, a_shared_allocation_takes_a_second_device_where_a_ring_would_not)
+{ MockPlatform platform;
+  Segments     segments(platform);
+  Allocation   allocation(platform, segments.segments(), shadow, 0x1000u);
+  allocation.shared_as(9u);
+  int first = 0;
+  int second = 0;
+  CHECK_STATUS(allocation.open(&first), Status::ok);
+  CHECK_STATUS(allocation.open(&second), Status::ok);
+  CHECK_EQ(allocation.opens(), 2u);
+  CHECK(allocation.invariants_hold());
+  CHECK_STATUS(allocation.close(), Status::ok);
+  CHECK_STATUS(allocation.close(), Status::ok);
+  CHECK(allocation.invariants_hold()); }

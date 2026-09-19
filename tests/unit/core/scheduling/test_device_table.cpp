@@ -7,6 +7,7 @@
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
@@ -23,7 +24,9 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
+#include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -85,7 +88,7 @@ public:
     Fixture()
         : dxgkrnl_(platform_, function_), interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_),
           host_visible_(platform_), segments_(platform_, segment_, host_visible_),
-          allocations_(platform_, segment_, segments_), devices_(platform_, allocations_, interface_), infos_{}, descriptors_{},
+          shared_(platform_), allocations_(platform_, segment_, segments_, shared_), devices_(platform_, allocations_, shared_, interface_), infos_{}, descriptors_{},
           handles_{}, opens_{}
     {
         const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10u, 10u, 21u, 40u), 400u,
@@ -98,7 +101,8 @@ public:
             infos_[i].pPrivateDriverData = descriptors_[i];
             infos_[i].PrivateDriverDataSize = AllocationDescriptor::encoded_size;
         }
-        const bool ready = interface_.initialize(&dxgkrnl_.record()) == Status::ok &&
+        const bool ready = shared_.initialize() == Status::ok &&
+                           interface_.initialize(&dxgkrnl_.record()) == Status::ok &&
                            segment_.initialize(std::int64_t{1} << 30u) == Status::ok &&
                            allocations_.create(request) == Status::ok;
         if (!ready) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "fixture");
@@ -138,6 +142,58 @@ public:
 
     Allocation *allocation(std::uint32_t i) { return allocations_.find(infos_[i].hAllocation); }
 
+    /* Allocation `i` created again, this time asking for an identity, so an
+     * open has a shared object to count. Answers the record the miniport
+     * wrote back, which is what the opening process is handed. */
+    av::SharedObjectRecord share(std::uint32_t i)
+    {
+        av::DxgkargDestroyAllocationRecord destroy = {};
+        void *const list[] = {infos_[i].hAllocation};
+        destroy.NumAllocations = 1u;
+        destroy.pAllocationList = const_cast<void **>(list);
+        CHECK_STATUS(allocations_.destroy(destroy), Status::ok);
+
+        const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10u, 10u, 21u, 40u),
+                                          400u, ScanoutTarget());
+        CHECK_STATUS(shadow.encode(descriptors_[i], AllocationDescriptor::encoded_size), Status::ok);
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
+                                            0x1000u);
+        CHECK_STATUS(asking.encode(descriptors_[i] + AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        std::memset(&infos_[i], 0, sizeof infos_[i]);
+        infos_[i].pPrivateDriverData = descriptors_[i];
+        infos_[i].PrivateDriverDataSize =
+            AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
+        DxgkargCreateAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationInfo = &infos_[i];
+        CHECK_STATUS(allocations_.create(request), Status::ok);
+        kernel_handles_.remove(handles_[i]);
+        handles_[i] = kernel_handles_.insert(infos_[i].hAllocation);
+
+        av::SharedObjectRecord record;
+        CHECK_STATUS(record.decode(descriptors_[i] + AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        return record;
+    }
+
+    /* What dxgkrnl hands the opening process: the creator's own private data. */
+    void hand_over_creator_data(std::uint32_t i)
+    {
+        opens_[i].pPrivateDriverData = descriptors_[i];
+        opens_[i].PrivateDriverDataSize =
+            AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
+    }
+
+    av::SharedObjectTable &shared() { return shared_; }
+
+    /* The creator's own record bytes, which a test may rewrite as a hostile
+     * process would. */
+    std::uint8_t *creator_record(std::uint32_t i)
+    { return descriptors_[i] + AllocationDescriptor::encoded_size; }
+
     MockPlatform                 &platform() { return platform_; }
     Adapter                      &adapter() { return adapter_; }
     AllocationTable              &allocations() { return allocations_; }
@@ -160,10 +216,14 @@ private:
     ApertureSegment              segment_;
     av::HostVisibleSegment        host_visible_;
     av::MemorySegments            segments_;
+    av::SharedObjectTable shared_;
     AllocationTable              allocations_;
     DeviceTable                  devices_;
     DxgkAllocationInfoRecord     infos_[allocation_count];
-    std::uint8_t                 descriptors_[allocation_count][AllocationDescriptor::encoded_size];
+    /* Room for the record a shareable allocation carries after its
+     * descriptor (feature 053). */
+    std::uint8_t                 descriptors_[allocation_count][AllocationDescriptor::encoded_size +
+                                                                av::SharedObjectRecord::encoded_size];
     std::uint32_t                handles_[allocation_count];
     DxgkOpenAllocationInfoRecord opens_[allocation_count];
 };
@@ -362,3 +422,119 @@ TEST(device_table_report, a_table_another_thread_holds_is_only_busy)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::passive); }
+
+/* ---- shared allocations (feature 053) ------------------------------------------ */
+
+/* The second process's open is a second device's, with the creating process's
+ * private data in front of it: the identity is what joins them, and the count
+ * on the object is what keeps the host resource alive. */
+TEST(device_table_open, a_second_device_opening_a_shared_allocation_counts_the_object)
+{ Fixture fixture;
+  const av::SharedObjectRecord record = fixture.share(0u);
+  CHECK(record.assigned());
+  void *const first = fixture.create_device();
+  int         second_runtime = 0;
+  DxgkargCreateDeviceRecord make_second = {};
+  make_second.hDevice = &second_runtime;
+  CHECK_STATUS(fixture.devices().create(fixture.adapter(), make_second), Status::ok);
+  void *const second = make_second.hDevice;
+
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(first, open), Status::ok);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK(fixture.shared().invariants_hold());
+  void *const held_by_first = fixture.open_info(0u).hDeviceSpecificAllocation;
+
+  DxgkargOpenAllocationRecord again = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(second, again), Status::ok);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK_EQ(fixture.allocation(0u)->opens(), 2u);
+  CHECK_EQ(fixture.shared().live(), 1u);
+
+  /* The first process exits holding it; the second keeps what it has. */
+  CHECK_STATUS(fixture.devices().destroy(first), Status::ok);
+  CHECK(fixture.shared().invariants_hold());
+  CHECK_EQ(fixture.allocation(0u)->opens(), 1u);
+  CHECK_EQ(fixture.shared().live(), 1u);
+  static_cast<void>(held_by_first);
+
+  void *list[] = {fixture.open_info(0u).hDeviceSpecificAllocation};
+  DxgkargCloseAllocationRecord close = {};
+  close.NumAllocations = 1u;
+  close.pOpenHandleList = list;
+  CHECK_STATUS(fixture.devices().close(second, close), Status::ok);
+  CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+TEST(device_table_open, refuses_private_data_that_does_not_carry_the_creators_record)
+{ const std::uint32_t lengths[] = {0u, AllocationDescriptor::encoded_size,
+                                   AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size - 1u};
+  for (const std::uint32_t length : lengths) {
+      Fixture fixture;
+      static_cast<void>(fixture.share(0u));
+      void *const device = fixture.create_device();
+      DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+      fixture.hand_over_creator_data(0u);
+      fixture.open_info(0u).PrivateDriverDataSize = length;
+      if (length == 0u) fixture.open_info(0u).pPrivateDriverData = nullptr;
+      CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
+      CHECK_EQ(fixture.devices().opens(), 0u);
+      CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
+      CHECK(fixture.devices().invariants_hold());
+      CHECK(fixture.shared().invariants_hold());
+  } }
+
+/* A process that writes its own record over the creator's names an object the
+ * allocation is not: neither half alone is enough to open. */
+TEST(device_table_open, refuses_a_record_that_names_another_object_than_the_allocation)
+{ Fixture fixture;
+  const av::SharedObjectRecord record = fixture.share(0u);
+  void *const device = fixture.create_device();
+  const av::SharedObjectRecord forged(record.object_id() + 1u, record.kind(), record.adapter_id(), 0x1000u);
+  CHECK_STATUS(forged.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+/* A record from another adapter, which is the multi-GPU edge case: the id may
+ * even be one this adapter minted, and it is still refused. */
+TEST(device_table_open, refuses_a_record_whose_adapter_is_not_this_one)
+{ Fixture fixture;
+  const av::SharedObjectRecord record = fixture.share(0u);
+  void *const device = fixture.create_device();
+  const av::SharedObjectRecord elsewhere(record.object_id(), record.kind(), record.adapter_id() ^ 0x40u,
+                                         0x1000u);
+  CHECK_STATUS(elsewhere.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::not_found);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+TEST(device_table_open, refuses_a_record_that_does_not_decode_at_all)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  void *const device = fixture.create_device();
+  fixture.creator_record(0u)[0] ^= 0xFFu;   /* the magic */
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+/* An allocation with no identity is opened as it always was, and its open
+ * carries no object to uncount. */
+TEST(device_table_open, an_allocation_with_no_identity_needs_no_record_at_all)
+{ Fixture fixture;
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok);
+  CHECK(fixture.shared().invariants_hold()); }

@@ -23,11 +23,11 @@ using av::Status;
 namespace {
 
 constexpr std::uint64_t page = SharedObjectRecord::page_size;
-constexpr std::uint64_t luid = 0x0000000100002b71u;
+constexpr std::uint64_t adapter = 0x0000000100002b71u;
 
 SharedObjectRecord valid()
 {
-    return SharedObjectRecord(0x0123456789ABCDEFu, SharedObjectKind(SharedObjectKind::memory), luid, 8u * page);
+    return SharedObjectRecord(0x0123456789ABCDEFu, SharedObjectKind(SharedObjectKind::memory), adapter, 8u * page);
 }
 
 void encode(const SharedObjectRecord &record, std::uint8_t *bytes)
@@ -59,7 +59,7 @@ TEST(shared_object_record_encode, lays_out_the_magic_version_and_every_field_wit
   CHECK(layout.at(8u, 8u) == 0x0123456789ABCDEFu);
   CHECK(layout.at(16u, 4u) == SharedObjectKind::memory);
   CHECK(layout.at(20u, 4u) == 0u);
-  CHECK(layout.at(24u, 8u) == luid);
+  CHECK(layout.at(24u, 8u) == adapter);
   CHECK(layout.at(32u, 8u) == 8u * page); }
 
 TEST(shared_object_record_encode, a_short_destination_is_too_large_and_untouched)
@@ -74,29 +74,30 @@ TEST(shared_object_record_decode, round_trips_every_field_of_a_record_a_creator_
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.object_id(), 0x0123456789ABCDEFu);
   CHECK_EQ(decoded.kind().value(), SharedObjectKind::memory);
-  CHECK_EQ(decoded.adapter_luid(), luid);
+  CHECK_EQ(decoded.adapter_id(), adapter);
   CHECK_EQ(decoded.size(), 8u * page);
   CHECK(decoded.assigned()); }
 
 TEST(shared_object_record_decode, an_id_of_zero_is_a_creator_asking_for_one_and_is_not_assigned)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
-  encode(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::native_fence), luid, page), bytes);
+  encode(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::native_fence), 0u, page), bytes);
   SharedObjectRecord decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.object_id(), 0u);
   CHECK(!decoded.assigned());
   CHECK_EQ(decoded.kind().value(), SharedObjectKind::native_fence); }
 
-TEST(shared_object_record, an_assigned_id_is_what_the_second_process_reads_back)
-{ SharedObjectRecord record(0u, SharedObjectKind(SharedObjectKind::memory), luid, page);
+TEST(shared_object_record, an_assigned_id_and_adapter_are_what_the_second_process_reads_back)
+{ SharedObjectRecord record(0u, SharedObjectKind(SharedObjectKind::memory), 0u, page);
   CHECK(!record.assigned());
-  record.assign(9u);
+  record.assign(9u, adapter);
   CHECK(record.assigned());
   std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
   encode(record, bytes);
   SharedObjectRecord read_back;
   CHECK_STATUS(read_back.decode(bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(read_back.object_id(), 9u); }
+  CHECK_EQ(read_back.object_id(), 9u);
+  CHECK_EQ(read_back.adapter_id(), adapter); }
 
 TEST(shared_object_record_decode, any_length_but_its_own_is_framing_and_leaves_the_record_alone)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size + 8u] = {};
@@ -123,7 +124,8 @@ TEST(shared_object_record_decode, a_field_no_record_can_have_is_an_invalid_param
       {16u, 4u, 0xFFFFFFFFu},
       {20u, 4u, 1u},                       /* reserved */
       {20u, 4u, 0x80000000u},
-      {24u, 8u, 0u},                       /* no adapter */
+      {24u, 8u, 0u},                       /* an id with no adapter */
+      {8u, 8u, 0u},                        /* an adapter with no id */
       {32u, 8u, 0u},                       /* no size */
       {32u, 8u, 1u},                       /* a size that is not whole pages */
       {32u, 8u, page - 1u},
@@ -149,7 +151,7 @@ TEST(shared_object_record_decode, the_widest_representable_record_round_trips)
   SharedObjectRecord decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.object_id(), 0xFFFFFFFFFFFFFFFFu);
-  CHECK_EQ(decoded.adapter_luid(), 0xFFFFFFFFFFFFFFFFu);
+  CHECK_EQ(decoded.adapter_id(), 0xFFFFFFFFFFFFFFFFu);
   CHECK_EQ(decoded.size(), size); }
 
 TEST(shared_object_record_decode, survives_the_hostile_sweep)

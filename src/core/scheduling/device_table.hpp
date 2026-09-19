@@ -18,16 +18,20 @@ namespace av {
 class StateWriter;
 
 class Adapter;
+class Allocation;
 class AllocationTable;
+class SharedObject;
 struct DeviceTableProbe;
 class DxgkrnlInterface;
+class SharedObjectTable;
 struct DxgkargCloseAllocationRecord;
 struct DxgkargCreateDeviceRecord;
 struct DxgkargOpenAllocationRecord;
 
 class DeviceTable {
 public:
-    DeviceTable(Platform &platform, AllocationTable &allocations, DxgkrnlInterface &dxgkrnl);
+    DeviceTable(Platform &platform, AllocationTable &allocations, SharedObjectTable &shared,
+                DxgkrnlInterface &dxgkrnl);
     DeviceTable(const DeviceTable &) = delete;
     DeviceTable &operator=(const DeviceTable &) = delete;
 
@@ -53,10 +57,17 @@ public:
 private:
     [[nodiscard]] Status resolve(DxgkargOpenAllocationRecord &request);
     [[nodiscard]] Status open_one(Device &device, struct DxgkOpenAllocationInfoRecord &info);
+    /* The shared object `info`'s private data names, for an allocation the
+     * adapter gave an identity to; null, with ok, for one it did not
+     * (feature 053). The record is the creating process's own bytes, which is
+     * what dxgkrnl hands the opening process. */
+    [[nodiscard]] Status claim(const Allocation &allocation, const struct DxgkOpenAllocationInfoRecord &info,
+                               SharedObject *&object);
     void                 close_opened(DxgkargOpenAllocationRecord &request, uint32_t count);
 
     Platform                    &platform_;
     AllocationTable             &allocations_;
+    SharedObjectTable           &shared_;
     DxgkrnlInterface            &dxgkrnl_;
     Mutex                        mutex_;
     ObjectPool<Device>           devices_;

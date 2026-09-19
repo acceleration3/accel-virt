@@ -1,5 +1,8 @@
 #include "core/memory/allocation_table.hpp"
 
+#include "core/memory/shared_object_table.hpp"
+#include "proto/resources/shared_object_record.hpp"
+
 #include "core/ddi/dxgk_allocation_info_record.hpp"
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
@@ -16,8 +19,9 @@
 namespace av {
 
 AllocationTable::AllocationTable(Platform &platform, const ApertureSegment &segment,
-                                 const MemorySegments &segments)
-    : platform_(platform), segment_(segment), segments_(segments), mutex_(platform, LockRank::allocation_table), allocations_(platform)
+                                 const MemorySegments &segments, SharedObjectTable &shared)
+    : platform_(platform), segment_(segment), segments_(segments), shared_(shared),
+      mutex_(platform, LockRank::allocation_table), allocations_(platform)
     {
         AV_SCOPE("AllocationTable::AllocationTable");
     }
@@ -27,24 +31,52 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
     AV_SCOPE("AllocationTable::create_one");
     info.hAllocation = nullptr;
     AllocationDescriptor descriptor;
-    if (info.pPrivateDriverData == nullptr || info.PrivateDriverDataSize != AllocationDescriptor::encoded_size)
+    const bool           shareable = info.PrivateDriverDataSize == shareable_private_size;
+    if (info.pPrivateDriverData == nullptr ||
+        (info.PrivateDriverDataSize != AllocationDescriptor::encoded_size && !shareable))
         return Status::invalid_parameter;
-    if (descriptor.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), info.PrivateDriverDataSize) !=
-        Status::ok)
+    auto *const bytes = static_cast<uint8_t *>(info.pPrivateDriverData);
+    if (descriptor.decode(bytes, AllocationDescriptor::encoded_size) != Status::ok)
         return Status::invalid_parameter;
     if (descriptor.size() > segment_.size()) return Status::invalid_parameter;
     const uint64_t size = (descriptor.size() + Allocation::page_bytes - 1u) & ~(Allocation::page_bytes - 1u);
     Allocation *allocation = nullptr;
     const Status status = allocations_.create(allocation, platform_, segments_, descriptor, size);
-    if (status == Status::ok) allocation->report_to(info);
-    return status;
+    if (status != Status::ok) return status;
+    const Status shared = shareable ? share(*allocation, bytes) : Status::ok;
+    if (shared != Status::ok) {
+        static_cast<void>(allocations_.destroy(allocation));
+        return shared;
+    }
+    allocation->report_to(info);
+    return Status::ok;
+}
+
+Status AllocationTable::share(Allocation &allocation, uint8_t *private_data)
+{
+    AV_SCOPE("AllocationTable::share");
+    SharedObjectRecord record;
+    uint8_t *const     at = private_data + AllocationDescriptor::encoded_size;
+    if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
+    const Status minted = shared_.mint(allocation, record);
+    if (minted != Status::ok) return minted;
+    /* Written back into the creator's own bytes, which is the only thing that
+     * reaches the opening process (docs/kb/04-memory.md). */
+    if (record.encode(at, SharedObjectRecord::encoded_size) != Status::ok) {
+        shared_.forget(allocation);
+        return Status::invalid_parameter;
+    }
+    allocation.shared_as(record.object_id());
+    return Status::ok;
 }
 
 void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count)
 {
     AV_SCOPE("AllocationTable::destroy_created");
     for (uint32_t index = 0u; index < count; index++) {
-        static_cast<void>(allocations_.destroy(static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation)));
+        auto *const allocation = static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation);
+        if (allocation->shared_id() != 0u) shared_.forget(*allocation);
+        static_cast<void>(allocations_.destroy(allocation));
         request.pAllocationInfo[index].hAllocation = nullptr;
     }
 }
@@ -83,8 +115,13 @@ Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
         for (uint32_t earlier = 0u; earlier < index; earlier++)
             if (request.pAllocationList[earlier] == request.pAllocationList[index]) return Status::invalid_parameter;
     }
-    for (uint32_t index = 0u; index < request.NumAllocations; index++)
-        static_cast<void>(allocations_.destroy(static_cast<Allocation *>(request.pAllocationList[index])));
+    for (uint32_t index = 0u; index < request.NumAllocations; index++) {
+        auto *const allocation = static_cast<Allocation *>(request.pAllocationList[index]);
+        /* The identity goes with what it named, so a process holding a stale
+         * record finds nothing rather than whatever took its place. */
+        if (allocation->shared_id() != 0u) shared_.forget(*allocation);
+        static_cast<void>(allocations_.destroy(allocation));
+    }
     return Status::ok;
 }
 
