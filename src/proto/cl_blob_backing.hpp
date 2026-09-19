@@ -25,6 +25,8 @@
 
 namespace av {
 
+struct ClBlobBackingProbe;
+
 class ClBlobBacking {
 public:
     /* The property's name. Khronos's own are small integers, and a vendor is
@@ -50,6 +52,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClBlobBackingProbe;
+
     /* A property list is key/value pairs and a zero key; this one's is the
      * only pair, so four words is every list this writes or reads. */
     static constexpr uint32_t max_words = 4u;

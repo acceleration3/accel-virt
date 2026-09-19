@@ -18,6 +18,8 @@
 
 namespace av::clicd {
 
+struct ClPendingReadProbe;
+
 class ClPendingRead {
 public:
     ClPendingRead();
@@ -42,6 +44,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClPendingReadProbe;
+
     void    *into_;
     uint64_t event_;
     uint64_t queue_;

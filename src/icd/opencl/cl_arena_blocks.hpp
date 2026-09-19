@@ -17,6 +17,8 @@
 
 namespace av::clicd {
 
+struct ClArenaBlocksProbe;
+
 class ClArenaBlocks {
 public:
     /* Buffers one context may have backed by its arena at once. */
@@ -49,6 +51,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClArenaBlocksProbe;
+
     /* `bytes` rounded up to alignment, or 0 if that would wrap. */
     uint64_t whole_pages(uint64_t bytes) const;
     /* Where a block of `want` fits, or `bytes_` when none does. Rows are kept

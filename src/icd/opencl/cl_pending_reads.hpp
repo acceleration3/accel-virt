@@ -18,6 +18,8 @@
 
 namespace av::clicd {
 
+struct ClPendingReadsProbe;
+
 class ClPendingReads {
 public:
     /* Reads one process may have outstanding at once. */
@@ -49,6 +51,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClPendingReadsProbe;
+
     ClPendingRead rows_[max_reads];
     uint32_t      held_;
     uint64_t      delivered_;

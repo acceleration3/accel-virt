@@ -11,7 +11,45 @@
 #include <cstdint>
 
 using av::clicd::ClPendingRead;
+using av::clicd::ClPendingReadProbe;
 using av::clicd::ClPendingReads;
+using av::clicd::ClPendingReadsProbe;
+
+namespace av::clicd {
+
+/* The states neither class ever builds. A row that is held but names no
+ * destination would deliver bytes to nowhere; a row that holds nothing while
+ * still naming one would deliver them to memory the application has taken
+ * back; and a count that disagrees with the rows is a slot leaked or handed
+ * out twice. */
+struct ClPendingReadProbe {
+    /* A held row with one of the five things a delivery needs missing. Each
+     * is checked on its own, because the first to fail hides the rest. */
+    static void forget_destination(ClPendingRead &row) { row.into_ = nullptr; }
+    static void forget_event(ClPendingRead &row) { row.event_ = 0u; }
+    static void forget_queue(ClPendingRead &row) { row.queue_ = 0u; }
+    static void forget_buffer(ClPendingRead &row) { row.buffer_ = 0u; }
+    static void forget_length(ClPendingRead &row) { row.bytes_ = 0u; }
+
+    /* And the mirror image: a row holding nothing that still names one of
+     * them, which is a slot that would be handed out while something else
+     * still believes it is live. */
+    static void abandon(ClPendingRead &row) { row.give_up(); }
+    static void stray_destination(ClPendingRead &row) { row.into_ = &row; }
+    static void stray_event(ClPendingRead &row) { row.event_ = 1u; }
+    static void stray_queue(ClPendingRead &row) { row.queue_ = 1u; }
+    static void stray_buffer(ClPendingRead &row) { row.buffer_ = 1u; }
+    static void stray_length(ClPendingRead &row) { row.bytes_ = 1u; }
+    static void stray_marker(ClPendingRead &row) { row.ours_ = true; }
+};
+
+struct ClPendingReadsProbe {
+    static void miscount(ClPendingReads &reads) { reads.held_ += 1u; }
+    static ClPendingRead &row(ClPendingReads &reads, std::uint32_t slot)
+    { return reads.rows_[slot]; }
+};
+
+}  // namespace av::clicd
 
 namespace {
 
@@ -104,6 +142,15 @@ TEST(cl_pending_reads, releasing_a_queue_forgets_its_reads_and_leaves_every_othe
   CHECK(reads.waiting_on(event + 1u) != nullptr);
   /* Forgotten, not delivered: nobody will ever wait for them. */
   CHECK_EQ(reads.delivered(), 0u);
+  /* A caller that wants no markers back still has its rows forgotten: the
+   * events leak on the host rather than the guest keeping rows for a queue
+   * that is gone. */
+  CHECK(reads.record(event + 3u, other, buffer, 0u, 4u, &destination, true));
+  CHECK_EQ(reads.forget_queue(other, nullptr), 0u);
+  CHECK_EQ(reads.outstanding(), 0u);
+  CHECK(reads.invariants_hold());
+  CHECK(reads.record(event, queue, buffer, 0u, 4u, &destination, false));
+
   /* A queue nothing was recorded on, and no queue at all, change nothing. */
   CHECK_EQ(reads.forget_queue(queue + 99u, markers), 0u);
   CHECK_EQ(reads.forget_queue(0u, markers), 0u);
@@ -117,3 +164,59 @@ TEST(cl_pending_reads, a_slot_past_the_table_answers_a_row_that_holds_nothing)
   CHECK(!reads.at(ClPendingReads::max_reads)->held());
   CHECK(!reads.at(0xFFFFFFFFu)->held());
   CHECK(reads.invariants_hold()); }
+
+/* A held row is one a delivery can act on: every one of the five things it
+ * needs is there. Missing any single one is a row that would read from
+ * nowhere, or write to nowhere, and the invariant says so. */
+TEST(cl_pending_reads, the_invariant_catches_a_held_row_that_could_not_deliver)
+{ int destination = 0;
+  const auto broken = [&destination](void (*corrupt)(ClPendingRead &)) {
+      ClPendingReads reads;
+      CHECK(reads.record(event, queue, buffer, 0u, 4u, &destination, false));
+      CHECK(reads.invariants_hold());
+      corrupt(ClPendingReadsProbe::row(reads, 0u));
+      return reads.invariants_hold();
+  };
+  CHECK(!broken(ClPendingReadProbe::forget_destination));
+  CHECK(!broken(ClPendingReadProbe::forget_event));
+  CHECK(!broken(ClPendingReadProbe::forget_queue));
+  CHECK(!broken(ClPendingReadProbe::forget_buffer));
+  CHECK(!broken(ClPendingReadProbe::forget_length)); }
+
+/* And the mirror: a row holding nothing must name nothing, or the slot gets
+ * handed out while something still believes it is live. */
+TEST(cl_pending_reads, the_invariant_catches_a_row_that_holds_nothing_but_still_names_something)
+{ int destination = 0;
+  const auto broken = [&destination](void (*corrupt)(ClPendingRead &)) {
+      ClPendingReads reads;
+      CHECK(reads.record(event, queue, buffer, 0u, 4u, &destination, false));
+      ClPendingRead &row = ClPendingReadsProbe::row(reads, 0u);
+      ClPendingReadProbe::abandon(row);
+      reads.count_delivery();
+      CHECK(reads.invariants_hold());
+      corrupt(row);
+      return reads.invariants_hold();
+  };
+  CHECK(!broken(ClPendingReadProbe::stray_destination));
+  CHECK(!broken(ClPendingReadProbe::stray_event));
+  CHECK(!broken(ClPendingReadProbe::stray_queue));
+  CHECK(!broken(ClPendingReadProbe::stray_buffer));
+  CHECK(!broken(ClPendingReadProbe::stray_length));
+  CHECK(!broken(ClPendingReadProbe::stray_marker)); }
+
+TEST(cl_pending_reads, the_invariant_catches_a_count_that_disagrees_with_the_rows)
+{ ClPendingReads reads;
+  int destination = 0;
+  CHECK(reads.record(event, queue, buffer, 0u, 4u, &destination, false));
+  CHECK(reads.invariants_hold());
+  /* One more counted than held is a slot that can never be handed out. */
+  ClPendingReadsProbe::miscount(reads);
+  CHECK(!reads.invariants_hold());
+
+  /* And a count past the table at all. */
+  ClPendingReads beyond;
+  for (std::uint32_t index = 0u; index < ClPendingReads::max_reads; ++index)
+      CHECK(beyond.record(event + index, queue, buffer, 0u, 4u, &destination, false));
+  CHECK(beyond.invariants_hold());
+  ClPendingReadsProbe::miscount(beyond);
+  CHECK(!beyond.invariants_hold()); }

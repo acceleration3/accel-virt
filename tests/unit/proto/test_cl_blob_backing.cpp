@@ -11,6 +11,18 @@
 #include <cstdint>
 
 using av::ClBlobBacking;
+using av::ClBlobBackingProbe;
+
+namespace av {
+
+struct ClBlobBackingProbe {
+    /* The state the class never builds: an offset remembered while nothing
+     * is held, which is a caller about to be told to look at the start of
+     * the arena for a buffer that was never backed there. */
+    static void orphan_offset(ClBlobBacking &backing) { backing.offset_ = 0x4000u; }
+};
+
+}  // namespace av
 
 TEST(cl_blob_backing, what_one_side_writes_the_other_reads)
 { ClBlobBacking written;
@@ -100,3 +112,10 @@ TEST(cl_blob_backing, a_backing_that_holds_nothing_writes_nothing)
   held.set(1u);
   CHECK(!held.write(nullptr));
   CHECK(held.invariants_hold()); }
+
+/* The invariant catches the state the class never builds. */
+TEST(cl_blob_backing, the_invariant_catches_an_offset_held_by_nothing)
+{ ClBlobBacking backing;
+  CHECK(backing.invariants_hold());
+  ClBlobBackingProbe::orphan_offset(backing);
+  CHECK(!backing.invariants_hold()); }
