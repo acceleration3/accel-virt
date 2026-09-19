@@ -7,6 +7,7 @@
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/cl_blob_backing.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -689,6 +690,76 @@ TEST(opencl_backend, a_map_the_host_refuses_answers_a_null_address_and_remembers
   CHECK(backend.svm_for(invented_address, 1u) == nullptr);
   CHECK(!backend.lost());
   command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+namespace {
+
+/* A clCreateBufferWithProperties frame: the property list, the flags, the
+ * size, no host_ptr, and an error wanted. `named` says whether the list
+ * carries this wire's blob-backing property, and `offset` where it points. */
+void buffer_with_properties_frame(ClCommand &command, bool named, std::uint64_t offset,
+                                  std::uint64_t size)
+{
+    command.frame().write_pod<std::uint64_t>(0u);        /* the context */
+    command.frame().write_pod<std::uint8_t>(named ? 1u : 0u);
+    if (named) {
+        command.frame().write_varint<std::uint64_t>(3u); /* key, value, terminator */
+        command.frame().write_pod<std::uint64_t>(av::ClBlobBacking::property);
+        command.frame().write_pod<std::uint64_t>(offset);
+        command.frame().write_pod<std::uint64_t>(0u);
+    }
+    command.frame().write_varint<std::uint64_t>(CL_MEM_READ_WRITE);
+    command.frame().write_varint(size);
+    command.frame().write_pod<std::uint8_t>(0u);         /* no host_ptr */
+    command.frame().write_pod<std::uint8_t>(1u);         /* the error is wanted */
+}
+
+}  // namespace
+
+/* A buffer made over the context's blob arena (feature 052, T033). The offset
+ * is a number the guest wrote, so it is judged against the adopted arena
+ * before it is ever a pointer: a buffer over memory that is not the arena's
+ * would let the guest choose what the host writes into. */
+TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
+{ OpenClBackend backend;
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK(backend.adopt(blob));
+
+  /* Past the end of the arena, and a length that runs past it from a base
+   * that is inside. Both are addresses the guest invented. */
+  ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
+  buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u);
+  CHECK(beyond.decodes(backend));
+  CHECK_EQ(beyond.address(), 0u);
+  beyond.is_refused_at_every_shorter_length(backend);
+
+  ClCommand overrunning(av::clproto::kCmd_clCreateBufferWithProperties);
+  buffer_with_properties_frame(overrunning, true, sizeof arena_region - 8u, 64u);
+  CHECK(overrunning.decodes(backend));
+  CHECK_EQ(overrunning.address(), 0u);
+
+  backend.abandon(blob);
+  /* And with no arena adopted at all, every offset is outside it. */
+  ClCommand unbacked(av::clproto::kCmd_clCreateBufferWithProperties);
+  buffer_with_properties_frame(unbacked, true, 0u, 16u);
+  CHECK(unbacked.decodes(backend));
+  CHECK_EQ(unbacked.address(), 0u);
+  CHECK(!backend.lost());
+  backend.shut_down(); }
+
+TEST(opencl_backend, a_buffer_naming_no_backing_is_the_ordinary_call)
+{ OpenClBackend backend;
+  /* No property list, and a list naming something else: neither is this
+   * wire's backing, so the host is asked for a plain buffer and answers for
+   * itself - which with no context is nothing. */
+  ClCommand plain(av::clproto::kCmd_clCreateBufferWithProperties);
+  buffer_with_properties_frame(plain, false, 0u, 16u);
+  CHECK(plain.decodes(backend));
+  CHECK_EQ(plain.address(), 0u);
+  CHECK_EQ(backend.ran(), 1u);
+  plain.is_refused_at_every_shorter_length(backend);
+  CHECK(!backend.lost());
   backend.shut_down(); }
 
 /* 5. clEnqueueSVMMap - an address with an extent. */

@@ -160,7 +160,21 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
    * not the argument that is missing: with no root there is no event either,
    * so the binding is what answers first. */
   CHECK_EQ(table.table().clSetEventCallback(nullptr, CL_COMPLETE, nullptr, nullptr),
-           CL_INVALID_EVENT); }
+           CL_INVALID_EVENT);
+
+  /* The same calls again with nowhere to report the error. An application
+   * that passes no errcode_ret is entitled to be ignored rather than to have
+   * a null written through, and every one of these entries has to check. */
+  CHECK(table.table().clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, nullptr) == nullptr);
+  CHECK(table.table().clCreateCommandQueueWithProperties(nullptr, nullptr, nullptr, nullptr) ==
+        nullptr);
+  CHECK(table.table().clCreateBuffer(nullptr, 0u, 0u, nullptr, nullptr) == nullptr);
+  CHECK(table.table().clCreateProgramWithSource(nullptr, 0u, nullptr, nullptr, nullptr) ==
+        nullptr);
+  CHECK(table.table().clCreateKernel(nullptr, nullptr, nullptr) == nullptr);
+  CHECK(table.table().clEnqueueMapBuffer(nullptr, nullptr, CL_TRUE, 0u, 0u, 0u, 0u, nullptr,
+                                         nullptr, nullptr) == nullptr);
+  CHECK(table.table().clCreateUserEvent(nullptr, nullptr) == nullptr); }
 
 /* The invariant catches the states the table never builds - every one of
  * which the loader would turn into a jump through a null pointer. */

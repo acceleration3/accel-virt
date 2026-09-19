@@ -19,6 +19,7 @@ using av::MockPlatform;
 using av::Status;
 using av::clicd::ClObject;
 using av::clicd::ClObjectProbe;
+using av::clicd::ClObjectTableProbe;
 
 namespace av::clicd {
 
@@ -27,6 +28,12 @@ namespace av::clicd {
  * names nothing; a parent of its own kind or higher makes the chain to a
  * context unbounded; and a platform on a context is a platform the loader
  * enumerated from somewhere this ICD never opened. */
+struct ClObjectTableProbe {
+    /* A count that disagrees with what the pool holds: a slot leaked, or one
+     * counted twice. */
+    static void miscount(ClObjectTable &table) { table.live_ += 1u; }
+};
+
 struct ClObjectProbe {
     static void forget_dispatch(ClObject &object) { object.dispatch_ = nullptr; }
     static void forget_wire(ClObject &object) { object.wire_ = 0u; }
@@ -34,6 +41,11 @@ struct ClObjectProbe {
     { parent.kind_ = object.kind_; object.parent_ = &parent; }
     static void a_platform_on_a_context(ClObject &object, GuestClContext *context)
     { object.kind_ = ClObject::Kind::platform; object.parent_ = nullptr; object.context_ = context; }
+    /* A count that has saturated, which is where retain must stop and
+     * release must refuse: an object whose count no longer says how many
+     * must never drop to zero on a guess. */
+    static void saturate(ClObject &object) { object.references_ = ~std::uint32_t{0}; }
+    static void exhaust(ClObject &object) { object.references_ = 0u; }
 };
 
 }  // namespace av::clicd
@@ -318,3 +330,51 @@ TEST(cl_object_table, an_objects_invariant_catches_what_the_table_never_builds)
   CHECK(platform != nullptr);
   ClObjectProbe::a_platform_on_a_context(*platform, context->context());
   CHECK(!platform->invariants_hold()); }
+
+/* The application's count is this ICD's, and it has two ends. An object
+ * retained more times than the count can hold no longer says how many, so it
+ * never drops to zero either - it lives until its context does. An object
+ * whose count already reached zero is one nothing holds, and releasing it
+ * again would destroy it twice. */
+TEST(cl_object_table, a_reference_count_that_cannot_say_how_many_never_reaches_zero)
+{ Table rig;
+  ClObject *const object = rig.make(ClObject::Kind::context, 0x900u);
+  CHECK(object != nullptr);
+  ClObjectProbe::saturate(*object);
+  CHECK_EQ(object->references(), ~std::uint32_t{0});
+  /* Retaining does not wrap. */
+  object->retain();
+  CHECK_EQ(object->references(), ~std::uint32_t{0});
+  /* And releasing never answers "that was the last one". */
+  CHECK(!object->release());
+  CHECK_EQ(object->references(), ~std::uint32_t{0});
+  CHECK(object->invariants_hold());
+
+  ClObject *const spent = rig.make(ClObject::Kind::context, 0x901u);
+  CHECK(spent != nullptr);
+  ClObjectProbe::exhaust(*spent);
+  /* Nothing holds it, so this release is not the last one either - it is a
+   * release of something already gone. */
+  CHECK(!spent->release());
+  CHECK_EQ(spent->references(), 0u);
+  CHECK(spent->invariants_hold()); }
+
+/* The table's own invariant: what it counts and what the pool holds are one
+ * number, and every object in it is sound. */
+TEST(cl_object_table, the_invariant_catches_a_count_that_disagrees_with_the_pool)
+{ Table rig;
+  CHECK(rig.make(ClObject::Kind::context, 0x900u) != nullptr);
+  CHECK(rig.objects().invariants_hold());
+  ClObjectTableProbe::miscount(rig.objects());
+  CHECK(!rig.objects().invariants_hold()); }
+
+TEST(cl_object_table, the_invariant_catches_an_object_of_its_own_that_is_unsound)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x901u);
+  CHECK(context != nullptr && queue != nullptr);
+  CHECK(rig.objects().invariants_hold());
+  /* One object it holds is broken, and the table says so through it rather
+   * than only checking its own count. */
+  ClObjectProbe::forget_wire(*queue);
+  CHECK(!rig.objects().invariants_hold()); }
