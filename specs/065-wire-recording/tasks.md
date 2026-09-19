@@ -95,7 +95,7 @@ reinterpreted.
 - [X] T028 `RecordingToolRequest` (object) in `src/device/recording/recording_tool_request.{hpp,cpp}`: what the tool was asked to do, refusing every argument it does not understand with a reason; then `main` in `src/device/shim/recording_tool.cpp`: parses `print`/`replay`, the filters and the flags of contracts/rvkrecord.md, maps the recording, builds the reader, the filter and the printer or the replay, writes the lines to standard output and answers 0, 1 or 2. The `rvkrecord` target in `CMakeLists.txt`, linking `av_core` and `${CMAKE_DL_LIBS}`
 - [X] T029 `tests/tools/test_rvkrecord.py`: the built tool over recordings written by the unit tests' fixtures - a clean recording prints and exits 0, a truncated one prints what it can, names the offset and exits 1, a usage error exits 2, and `replay` against `librvk_echo_executor.so` reports no difference. Registered as a `tools_test_rvkrecord` ctest
 - [X] T030 `run_guest_suite.py --record` (`tools/guest/run_guest_suite.py`): sets `record=<work>/recording.rvk` and `record-limit` on the `-device virtio-gpu-rvk-pci` argument, and the run's summary names the file beside `qemu.log`. Tests in `tests/tools/test_run_guest_suite.py`: the property is on the command line with `--record` and absent without it
-- [X] T031 SC-002: the no-op round trip of feature 044 measured with recording off and on, reported by the rvk scenario, so the cost of a recording is a number rather than a claim
+- [ ] T031 SC-002: the no-op round trip of feature 044 measured with recording off and on, reported by the rvk scenario, so the cost of a recording is a number rather than a claim
 - [X] T032 The documentation the change makes wrong: `README.md`'s layout gains `src/device/recording/` and the `rvkrecord` tool, `docs/testing.md` gains the recording's place in the layers, and `docs/trace.md` is left alone - a recording is not a trace
 - [X] T033 The full gate: `tools/gate.sh` - `design_rules`, `symbol_tests`, `scope_marks`, `self_contained`, `driver_image`, the tools modules, 100% branch coverage of `src/device/recording/` with the `AV_UNTESTABLE` ratchet unmoved, and the 60-second fuzz smoke
 
@@ -128,6 +128,11 @@ reinterpreted.
   than importing the `blob_bytes` snapshot (T024): placing a snapshot needs
   page-aligned host memory the replay would have to own, and the recording
   carries the bytes for a replay that can. `contracts/rvkrecord.md` says so.
-- SC-002 (T031) is measured by the existing no-op round trip with and without
-  `--record`, which `run_guest_suite.py --record` now makes possible; the
-  number is a guest run's, not a unit test's.
+- SC-002 (T031) is **not** measured here and is left unticked. The no-op round
+  trip it compares is `rvktest.exe`'s, and the comparison needs two guest runs -
+  one with `--record` and one without - which this environment cannot make
+  (`AV_GUEST_IMAGE` names no prepared image). What the feature owes SC-002 is
+  in place: `--record` on the runner, and a recording that costs one branch on
+  the submission path when it is off, which
+  `batch_executor_run.with_recording_off_it_asks_the_host_for_no_recording_at_all`
+  asserts.
