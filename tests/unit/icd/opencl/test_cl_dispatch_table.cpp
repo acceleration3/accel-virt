@@ -119,7 +119,48 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK_EQ(table.table().clGetPlatformIDs(0u, nullptr, &count), CL_PLATFORM_NOT_FOUND_KHR);
   CHECK_EQ(table.table().clGetPlatformInfo(nullptr, CL_PLATFORM_NAME, 0u, nullptr, nullptr),
            CL_INVALID_PLATFORM);
-  CHECK_EQ(table.table().clReleaseContext(nullptr), CL_INVALID_CONTEXT); }
+  CHECK_EQ(table.table().clReleaseContext(nullptr), CL_INVALID_CONTEXT);
+
+  /* Every entry that answers an object rather than a status: each has its own
+   * "nothing to reach" path, and each must write the API's own error into the
+   * out-parameter the application gave it - a driver that failed to start
+   * must not leave that word as the application had it, because the
+   * application reads it to find out why. */
+  cl_int error = 7;
+  CHECK(table.table().clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PLATFORM);
+  error = 7;
+  CHECK(table.table().clCreateCommandQueueWithProperties(nullptr, nullptr, nullptr, &error) ==
+        nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(table.table().clCreateBuffer(nullptr, 0u, 0u, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(table.table().clCreateProgramWithSource(nullptr, 0u, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(table.table().clCreateKernel(nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROGRAM);
+  error = 7;
+  CHECK(table.table().clEnqueueMapBuffer(nullptr, nullptr, CL_TRUE, 0u, 0u, 0u, 0u, nullptr,
+                                         nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_COMMAND_QUEUE);
+  error = 7;
+  CHECK(table.table().clCreateUserEvent(nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+
+  /* And the two that answer nothing at all: an address, and a free. Neither
+   * has anywhere to report a failure, so the only right answer is to do
+   * nothing and survive being called. */
+  CHECK(table.table().clSVMAlloc(nullptr, 0u, 0u, 0u) == nullptr);
+  table.table().clSVMFree(nullptr, nullptr);
+
+  /* A callback registration with no root is the event that cannot be found,
+   * not the argument that is missing: with no root there is no event either,
+   * so the binding is what answers first. */
+  CHECK_EQ(table.table().clSetEventCallback(nullptr, CL_COMPLETE, nullptr, nullptr),
+           CL_INVALID_EVENT); }
 
 /* The invariant catches the states the table never builds - every one of
  * which the loader would turn into a jump through a null pointer. */
