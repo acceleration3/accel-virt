@@ -60,6 +60,7 @@ TEST(recorded_command_decode, names_each_api_from_the_table_its_generator_wrote)
 
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_EQ(std::strcmp(command.api_name(), "opengl"), 0);
+  CHECK(command.name()[0] != '\0');
 
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_EQ(std::strcmp(command.api_name(), "transport"), 0);

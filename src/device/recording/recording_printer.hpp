@@ -23,6 +23,8 @@ class RecordingFilter;
 class RecordingReader;
 class TextBuffer;
 
+struct RecordingPrinterProbe;
+
 class RecordingPrinter {
 public:
     static constexpr size_t   line_bytes = 512u;
@@ -83,6 +85,8 @@ private:
     bool                   damage_printed_;
     ContextApi             contexts_[max_contexts];
     char                   line_[line_bytes];
+
+    friend struct RecordingPrinterProbe;
 };
 
 }  // namespace av

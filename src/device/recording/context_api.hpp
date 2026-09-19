@@ -9,6 +9,8 @@
 
 namespace av {
 
+struct ContextApiProbe;
+
 class ContextApi {
 public:
     /* No sub-API this protocol knows. */
@@ -28,6 +30,8 @@ private:
     uint32_t context_;
     uint16_t api_;
     bool     known_;
+
+    friend struct ContextApiProbe;
 };
 
 }  // namespace av

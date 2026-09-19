@@ -47,6 +47,15 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
 
 }  // namespace
 
+namespace av {
+
+struct RecordingHeaderProbe {
+    /* A major no reader accepts, which nothing but a probe can put there. */
+    static void set_major(RecordingHeader &header, std::uint16_t major) { header.major_ = major; }
+};
+
+}  // namespace av
+
 TEST(recording_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RecordingHeader::encoded_size] = {};
   CHECK_STATUS(a_header().encode(bytes, sizeof bytes), Status::ok);
@@ -174,3 +183,14 @@ TEST(recording_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 512u); }
+
+TEST(recording_header_invariants, catch_a_major_this_writer_never_wrote)
+{ RecordingHeader header = a_header();
+  CHECK(header.invariants_hold());
+  av::RecordingHeaderProbe::set_major(header, RecordingHeader::current_major + 1u);
+  CHECK(!header.invariants_hold());
+  GuardedBuffer buffer(RecordingHeader::encoded_size);
+  CHECK_STATUS(header.encode(buffer.data(), buffer.size()), Status::invalid_parameter);
+  CHECK(buffer.guards_intact());
+  av::RecordingHeaderProbe::set_major(header, RecordingHeader::current_major);
+  CHECK(header.invariants_hold()); }

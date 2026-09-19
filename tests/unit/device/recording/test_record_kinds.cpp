@@ -24,6 +24,15 @@ std::uint32_t kept(const RecordKinds &kinds)
 
 }  // namespace
 
+namespace av {
+
+struct RecordKindsProbe {
+    /* A mask no parse could make, for the invariant to catch. */
+    static void set(RecordKinds &kinds, std::uint32_t mask) { kinds.mask_ = mask; }
+};
+
+}  // namespace av
+
 TEST(record_kinds, keeps_every_kind_but_a_blobs_bytes_by_default)
 { const RecordKinds kinds;
   CHECK(kinds.invariants_hold());
@@ -93,4 +102,14 @@ TEST(record_kinds_parse, refuses_a_property_longer_than_any_list)
   RecordKinds kinds;
   CHECK_STATUS(kinds.parse(list), Status::invalid_parameter);
   CHECK_EQ(kinds.mask(), RecordKinds::by_default);
+  CHECK(kinds.invariants_hold()); }
+
+TEST(record_kinds_invariants, catch_a_mask_no_parse_could_make)
+{ RecordKinds kinds;
+  CHECK(kinds.invariants_hold());
+  av::RecordKindsProbe::set(kinds, 0u);
+  CHECK(!kinds.invariants_hold());
+  av::RecordKindsProbe::set(kinds, RecordKinds::every_kind | (1u << 7));
+  CHECK(!kinds.invariants_hold());
+  av::RecordKindsProbe::set(kinds, RecordKinds::every_kind);
   CHECK(kinds.invariants_hold()); }

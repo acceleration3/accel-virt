@@ -45,6 +45,19 @@ RecordHeader a_batch(std::uint32_t context, std::uint64_t fence)
 
 }  // namespace
 
+namespace av {
+
+struct RecordingToolRequestProbe {
+    /* A request that refused with no reason, and one that took an action with
+     * no recording behind it: neither survives parse. */
+    static void refuse_silently(RecordingToolRequest &request) { request.reason_ = ""; }
+    static void forget_the_recording(RecordingToolRequest &request) { request.recording_ = nullptr; }
+    static void refuse_after_the_fact(RecordingToolRequest &request) { request.reason_ = "later"; }
+    static void forget_the_library(RecordingToolRequest &request) { request.executor_ = nullptr; }
+};
+
+}  // namespace av
+
 TEST(recording_tool_request_parse, reads_a_print_of_a_recording)
 { RecordingFilter      filter;
   RecordingToolRequest request;
@@ -172,3 +185,74 @@ TEST(recording_tool_request_parse, refuses_a_command_fragment_longer_than_any_na
   CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
   CHECK(std::strstr(request.reason(), "--command") != nullptr);
   CHECK(request.invariants_hold()); }
+
+TEST(recording_tool_request_parse, refuses_arguments_it_was_handed_none_of)
+{ RecordingFilter      filter;
+  RecordingToolRequest request;
+  /* A count that promises arguments and a pointer that has none. */
+  CHECK_STATUS(request.parse(3, nullptr, filter), Status::invalid_parameter);
+  CHECK(std::strstr(request.reason(), "usage") != nullptr);
+  CHECK(request.invariants_hold()); }
+
+TEST(recording_tool_request_parse, refuses_a_number_larger_than_sixty_four_bits_hold)
+{ RecordingFilter      filter;
+  RecordingToolRequest request;
+  const Arguments      arguments =
+      Arguments().add("print").add("run.rvk").add("--bytes").add("99999999999999999999");
+  CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
+  CHECK(std::strstr(request.reason(), "--bytes") != nullptr);
+  CHECK_EQ(request.payload_bytes(), 0u); }
+
+TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anything_else)
+{ struct Case { const char *hex; bool taken; };
+  const Case cases[] = {{"00000000000000000000000000000000", true},
+                        {"ffffffffffffffffffffffffffffffff", true},
+                        {"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", true},
+                        {"////////////////////////////////", false},
+                        {":::::::::::::::::::::::::::::::: ", false},
+                        {"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", false},
+                        {"gggggggggggggggggggggggggggggggg", false},
+                        {"````````````````````````````````", false}};
+  for (const Case &c : cases) {
+      RecordingFilter      filter;
+      RecordingToolRequest request;
+      const Arguments      arguments =
+          Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so").add("--gpu").add(c.hex);
+      CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter),
+                   c.taken ? Status::ok : Status::invalid_parameter);
+      CHECK((request.gpu() != nullptr) == c.taken);
+      CHECK(request.invariants_hold());
+  } }
+
+TEST(recording_tool_request_invariants, catch_a_request_that_does_not_say_what_it_is)
+{ RecordingFilter      filter;
+  RecordingToolRequest refused;
+  /* A refusal that got as far as naming the recording, so both halves of
+   * "it refused, or it never started" are judged. */
+  const Arguments      bad = Arguments().add("print").add("run.rvk").add("--nonsense").add("1");
+  CHECK_STATUS(refused.parse(bad.count(), bad.values(), filter), Status::invalid_parameter);
+  CHECK(refused.invariants_hold());
+  av::RecordingToolRequestProbe::refuse_silently(refused);
+  CHECK(!refused.invariants_hold());
+  av::RecordingToolRequestProbe::forget_the_recording(refused);
+  CHECK(refused.invariants_hold());
+
+  RecordingToolRequest taken;
+  const Arguments      good = Arguments().add("print").add("run.rvk");
+  CHECK_STATUS(taken.parse(good.count(), good.values(), filter), Status::ok);
+  CHECK(taken.invariants_hold());
+  av::RecordingToolRequestProbe::forget_the_recording(taken);
+  CHECK(!taken.invariants_hold());
+
+  RecordingToolRequest again;
+  CHECK_STATUS(again.parse(good.count(), good.values(), filter), Status::ok);
+  av::RecordingToolRequestProbe::refuse_after_the_fact(again);
+  CHECK(!again.invariants_hold());
+
+  RecordingToolRequest replaying;
+  const Arguments      library =
+      Arguments().add("replay").add("run.rvk").add("--executor").add("lib.so");
+  CHECK_STATUS(replaying.parse(library.count(), library.values(), filter), Status::ok);
+  CHECK(replaying.invariants_hold());
+  av::RecordingToolRequestProbe::forget_the_library(replaying);
+  CHECK(!replaying.invariants_hold()); }

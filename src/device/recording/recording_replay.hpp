@@ -25,6 +25,8 @@ class RecordingFilter;
 class RecordingReader;
 class TextBuffer;
 
+struct RecordingReplayProbe;
+
 class RecordingReplay {
 public:
     static constexpr uint32_t max_contexts = 8u;
@@ -81,6 +83,8 @@ private:
     uint32_t               findings_;
     ReplayContext          slots_[max_contexts];
     char                   findings_text_[max_findings][finding_bytes];
+
+    friend struct RecordingReplayProbe;
 };
 
 }  // namespace av

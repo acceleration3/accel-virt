@@ -74,3 +74,13 @@ TEST(recording_limit_verdict, a_record_that_would_overflow_the_count_stops)
   CHECK(limit.verdict(~std::uint64_t{0}) == LimitVerdict::stop);
   CHECK(limit.verdict(1u) == LimitVerdict::stop);
   CHECK(limit.verdict(0u) == LimitVerdict::fits); }
+
+TEST(recording_limit_invariants, catch_a_count_that_passed_the_ceiling)
+{ RecordingLimit limit(1024u, AtCeiling::stop);
+  CHECK(limit.invariants_hold());
+  /* Nothing on the recording's own path does this - every write asks the
+   * verdict first - so this is what the invariant is for. */
+  limit.took(1025u);
+  CHECK(!limit.invariants_hold());
+  limit.wrapped();
+  CHECK(limit.invariants_hold()); }

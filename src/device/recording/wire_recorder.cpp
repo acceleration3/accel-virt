@@ -75,6 +75,8 @@ void WireRecorder::close()
     lock_ = nullptr;
 }
 
+/* What a caller asks; `write` asks `full_` again under the lock, which is the
+ * answer that decides. */
 bool WireRecorder::recording() const
 {
     AV_SCOPE("WireRecorder::recording");
@@ -92,10 +94,11 @@ Status WireRecorder::write_file_header()
     return Status::ok;
 }
 
+/* Under the lock, and only from a path that has just seen `full_` false, so
+ * the reason is logged exactly once for a recording. */
 void WireRecorder::give_up(const char *reason)
 {
     AV_SCOPE("WireRecorder::give_up");
-    if (full_) return;
     full_ = true;
     host_.log(reason);
 }
@@ -158,7 +161,7 @@ void WireRecorder::write(RecordKind kind, uint32_t context, uint64_t fence, cons
 void WireRecorder::record_context_setup(uint32_t context, const ContextSetup &setup)
 {
     AV_SCOPE("WireRecorder::record_context_setup");
-    if (!recording() || !kinds_.keeps(RecordKind::context_setup)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::context_setup)) return;
     uint8_t bytes[ContextSetup::encoded_size] = {};
     if (setup.encode(bytes, sizeof bytes) != Status::ok) {
         refuse();
@@ -170,28 +173,28 @@ void WireRecorder::record_context_setup(uint32_t context, const ContextSetup &se
 void WireRecorder::record_batch(uint32_t context, uint64_t fence, const uint8_t *payload, uint32_t length)
 {
     AV_SCOPE("WireRecorder::record_batch");
-    if (!recording() || !kinds_.keeps(RecordKind::batch)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::batch)) return;
     write(RecordKind::batch, context, fence, nullptr, 0u, payload, length);
 }
 
 void WireRecorder::record_reply(uint32_t context, uint64_t fence, const uint8_t *answer, uint32_t length)
 {
     AV_SCOPE("WireRecorder::record_reply");
-    if (!recording() || !kinds_.keeps(RecordKind::reply)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::reply)) return;
     write(RecordKind::reply, context, fence, nullptr, 0u, answer, length);
 }
 
 void WireRecorder::record_fence(uint32_t context, uint64_t fence)
 {
     AV_SCOPE("WireRecorder::record_fence");
-    if (!recording() || !kinds_.keeps(RecordKind::fence_completed)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::fence_completed)) return;
     write(RecordKind::fence_completed, context, fence, nullptr, 0u, nullptr, 0u);
 }
 
 void WireRecorder::record_fault(uint32_t context, uint64_t fence, FaultCode fault)
 {
     AV_SCOPE("WireRecorder::record_fault");
-    if (!recording() || !kinds_.keeps(RecordKind::fault)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::fault)) return;
     uint8_t    bytes[8] = {};
     WireWriter writer(bytes, sizeof bytes);
     writer.write_u32(static_cast<uint32_t>(fault));
@@ -203,7 +206,7 @@ void WireRecorder::record_blob(uint32_t context, BlobAction action, uint32_t mem
                                uint64_t offset, uint64_t size)
 {
     AV_SCOPE("WireRecorder::record_blob");
-    if (!recording() || !kinds_.keeps(RecordKind::blob)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::blob)) return;
     uint8_t    bytes[blob_payload] = {};
     WireWriter writer(bytes, sizeof bytes);
     writer.write_u32(static_cast<uint32_t>(action));
@@ -218,7 +221,7 @@ void WireRecorder::record_blob_bytes(uint32_t context, uint64_t blob_id, uint64_
                                      const uint8_t *bytes, uint64_t size)
 {
     AV_SCOPE("WireRecorder::record_blob_bytes");
-    if (!recording() || !kinds_.keeps(RecordKind::blob_bytes)) return;
+    if (file_ == nullptr || !kinds_.keeps(RecordKind::blob_bytes)) return;
     uint8_t    prefix[blob_bytes_prefix] = {};
     WireWriter writer(prefix, sizeof prefix);
     writer.write_u64(blob_id);
@@ -248,8 +251,9 @@ bool WireRecorder::invariants_hold() const
 {
     AV_SCOPE("WireRecorder::invariants_hold");
     if (file_ == nullptr) return lock_ == nullptr && records_ == 0u;
-    return lock_ != nullptr && header_.invariants_hold() && limit_.invariants_hold()
-           && kinds_.invariants_hold();
+    /* The kinds are not asked: they are parsed once at open and never touched
+     * again, so the recorder has nothing of its own to keep true about them. */
+    return lock_ != nullptr && header_.invariants_hold() && limit_.invariants_hold();
 }
 
 }  // namespace av

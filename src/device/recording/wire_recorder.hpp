@@ -31,6 +31,8 @@ class ProtocolVersion;
 /* What happened to a blob, as the blob record's action field. */
 enum class BlobAction : uint32_t { created = 0u, imported = 1u, released = 2u };
 
+struct WireRecorderProbe;
+
 class WireRecorder {
 public:
     /* The fixed payloads are all smaller than this, so one buffer carries a
@@ -97,6 +99,8 @@ private:
     uint64_t        refused_;
     bool            full_;
     uint8_t         frame_[frame_bytes];
+
+    friend struct WireRecorderProbe;
 };
 
 }  // namespace av

@@ -10,6 +10,8 @@
 
 namespace av {
 
+struct RecordKindsProbe;
+
 class RecordKinds {
 public:
     /* Kinds 1 to 7. */
@@ -36,6 +38,8 @@ private:
     uint32_t bit_of(const char *text, uint32_t length) const;
 
     uint32_t mask_;
+
+    friend struct RecordKindsProbe;
 };
 
 }  // namespace av

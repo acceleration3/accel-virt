@@ -13,6 +13,8 @@
 
 namespace av {
 
+struct RecordingHeaderProbe;
+
 class RecordingHeader {
 public:
     static constexpr size_t   encoded_size = 64u;
@@ -64,6 +66,8 @@ private:
     uint32_t vendor_id_;
     uint32_t device_id_;
     uint8_t  uuid_[uuid_bytes];
+
+    friend struct RecordingHeaderProbe;
 };
 
 }  // namespace av

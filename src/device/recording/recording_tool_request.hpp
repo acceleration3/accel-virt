@@ -16,6 +16,8 @@ namespace av {
 
 class RecordingFilter;
 
+struct RecordingToolRequestProbe;
+
 class RecordingToolRequest {
 public:
     enum class Action : uint8_t { none, print, replay };
@@ -56,6 +58,8 @@ private:
     bool           gpu_given_;
     uint8_t        gpu_[uuid_bytes];
     const char    *reason_;
+
+    friend struct RecordingToolRequestProbe;
 };
 
 }  // namespace av

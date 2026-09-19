@@ -21,6 +21,8 @@ namespace av {
 class ExecutorLibrary;
 class RecordedCommand;
 
+struct ReplayContextProbe;
+
 class ReplayContext {
 public:
     /* Answers longer than this are reported rather than compared. */
@@ -68,6 +70,8 @@ private:
     size_t       answer_length_;
     bool         gave_up_;
     uint8_t      answer_[answer_bytes];
+
+    friend struct ReplayContextProbe;
 };
 
 }  // namespace av

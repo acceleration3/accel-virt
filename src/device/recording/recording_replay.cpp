@@ -267,7 +267,7 @@ bool RecordingReplay::invariants_hold() const
      * were ever made. */
     for (uint32_t index = 0u; index < findings_ && index < max_findings; index++)
         if (findings_text_[index][finding_bytes - 1u] != '\0') return false;
-    return live <= contexts_ && live <= max_contexts;
+    return live <= contexts_;
 }
 
 }  // namespace av

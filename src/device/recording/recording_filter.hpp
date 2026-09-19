@@ -14,6 +14,8 @@ namespace av {
 class RecordedCommand;
 class RecordHeader;
 
+struct RecordingFilterProbe;
+
 class RecordingFilter {
 public:
     static constexpr uint32_t any_context = 0xFFFFFFFFu;
@@ -51,6 +53,8 @@ private:
     uint64_t first_fence_;
     uint64_t last_fence_;
     char     fragment_[longest_fragment];
+
+    friend struct RecordingFilterProbe;
 };
 
 }  // namespace av

@@ -1,6 +1,9 @@
 #include "core/support/status.hpp"
 #include "device/recording/context_api.hpp"
 #include "device/recording/recording_filter.hpp"
+#include "device/recording/record_header.hpp"
+#include "device/recording/record_kind.hpp"
+#include "device/recording/record_kinds.hpp"
 #include "device/recording/recording_header.hpp"
 #include "device/recording/recording_limit.hpp"
 #include "device/recording/recording_printer.hpp"
@@ -41,7 +44,7 @@ namespace {
 
 constexpr const char *path = "print.rvk";
 constexpr std::size_t widest = 8192u;
-constexpr std::size_t most_lines = 64u;
+constexpr std::size_t most_lines = 96u;
 
 /* A batch payload of framed commands. */
 class Batch {
@@ -157,7 +160,72 @@ private:
     Batch        transport_;
 };
 
+/* A recording built byte by byte, for the records a device never writes. */
+class Handmade {
+public:
+    Handmade() : length_(0u), bytes_{}
+    {
+        const av::RecordingHeader header(ProtocolVersion(1u, 1u), av::RecordKinds::every_kind, 0u, 0u, 0u,
+                                         0u, nullptr);
+        CHECK_STATUS(header.encode(bytes_, sizeof bytes_), Status::ok);
+        length_ = RecordingHeader::encoded_size;
+    }
+
+    Handmade &add(av::RecordKind kind, std::uint32_t context, std::uint64_t fence,
+                  const std::uint8_t *payload, std::uint32_t payload_length)
+    {
+        const av::RecordHeader record(kind, context, payload_length, 0u, fence);
+        CHECK_STATUS(record.encode(bytes_ + length_, sizeof bytes_ - length_), Status::ok);
+        length_ += av::RecordHeader::encoded_size;
+        for (std::uint32_t index = 0u; index < payload_length; index++)
+            bytes_[length_ + index] = payload[index];
+        length_ += payload_length;
+        return *this;
+    }
+
+    const std::uint8_t *bytes() const { return bytes_; }
+    std::size_t         length() const { return length_; }
+
+private:
+    std::size_t  length_;
+    std::uint8_t bytes_[widest];
+};
+
 }  // namespace
+
+namespace av {
+
+struct ContextApiProbe {
+    /* A slot that remembers a context without knowing one. */
+    static void half_learn(ContextApi &api, std::uint32_t context, std::uint16_t half)
+    {
+        api.context_ = context;
+        api.api_ = half;
+    }
+};
+
+struct RecordingFilterProbe {
+    static void invert(RecordingFilter &filter) { filter.first_fence_ = 9u; filter.last_fence_ = 8u; }
+};
+
+struct RecordingPrinterProbe {
+    static void show_too_much(RecordingPrinter &printer)
+    {
+        printer.payload_bytes_ = RecordingPrinter::most_payload_bytes + 1u;
+    }
+    static void lose_the_payload(RecordingPrinter &printer)
+    {
+        printer.stage_ = RecordingPrinter::Stage::commands;
+        printer.payload_ = nullptr;
+    }
+    static void walk_past_the_batch(RecordingPrinter &printer)
+    {
+        printer.stage_ = RecordingPrinter::Stage::records;
+        printer.command_offset_ = printer.record_.length() + 1u;
+    }
+};
+
+}  // namespace av
 
 TEST(recording_printer_next, prints_a_line_per_record_and_one_per_command)
 { const Written        written;
@@ -312,6 +380,16 @@ TEST(recording_printer_next, a_batch_whose_commands_are_framed_wrong_says_where_
   /* The batch's own line counted only the commands that framed. */
   CHECK(std::strstr(printed.line(0u), " 1 commands") != nullptr); }
 
+TEST(context_api_invariants, catch_a_slot_that_remembers_what_it_never_learned)
+{ ContextApi api;
+  CHECK(api.invariants_hold());
+  av::ContextApiProbe::half_learn(api, 3u, ContextApi::unknown_api);
+  CHECK(!api.invariants_hold());
+  av::ContextApiProbe::half_learn(api, 0u, 1u);
+  CHECK(!api.invariants_hold());
+  av::ContextApiProbe::half_learn(api, 0u, ContextApi::unknown_api);
+  CHECK(api.invariants_hold()); }
+
 TEST(context_api, remembers_one_context_and_answers_for_no_other)
 { ContextApi api;
   CHECK(!api.known());
@@ -328,3 +406,163 @@ TEST(context_api, remembers_one_context_and_answers_for_no_other)
   api.learn(7u, 3u);
   CHECK_EQ(api.api(), 3u);
   CHECK(api.invariants_hold()); }
+
+TEST(recording_printer_next, prints_the_time_a_record_was_taken_to_the_nanosecond)
+{ MockHost     host;
+  WireRecorder recorder(host);
+  const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0x31u};
+  host.advance_clock_per_read(1234u);
+  CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop,
+                             GpuIdentity(1u, 2u, GpuIdentity::discrete_gpu, uuid, 0u, 0u, "mock"),
+                             ProtocolVersion(1u, 1u)),
+               Status::ok);
+  for (std::uint64_t fence = 1u; fence <= 3u; fence++) recorder.record_fence(1u, fence);
+  recorder.close();
+  const RecordingFilter filter;
+  const Printed         printed(host.recording_bytes(path), host.recording_length(path), filter, 0u);
+  CHECK_EQ(printed.count(), 3u);
+  /* 1234, 2468 and 3702 nanoseconds after the recording opened. */
+  CHECK(std::strstr(printed.line(0u), "+1.234 ") != nullptr);
+  CHECK(std::strstr(printed.line(1u), "+2.468 ") != nullptr);
+  CHECK(std::strstr(printed.line(2u), "+3.702 ") != nullptr); }
+
+TEST(recording_printer_next, a_record_whose_payload_is_not_what_its_kind_says_prints_what_it_can)
+{ Handmade           made;
+  const std::uint8_t nothing[1] = {};
+  const std::uint8_t short_fault[2] = {};
+  std::uint8_t       far_fault[8] = {};
+  far_fault[0] = 99u;
+  std::uint8_t       odd_blob[32] = {};
+  odd_blob[0] = 9u;                      /* an action no device writes */
+  const std::uint8_t short_blob[8] = {};
+  const std::uint8_t short_bytes[4] = {};
+  std::uint8_t       whole_bytes[20] = {};
+  whole_bytes[0] = 5u;                   /* blob 5, offset 0, four bytes of it */
+  made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u)
+      .add(av::RecordKind::fault, 1u, 1u, short_fault, sizeof short_fault)
+      .add(av::RecordKind::fault, 1u, 2u, far_fault, sizeof far_fault)
+      .add(av::RecordKind::blob, 1u, 0u, odd_blob, sizeof odd_blob)
+      .add(av::RecordKind::blob, 1u, 0u, short_blob, sizeof short_blob)
+      .add(av::RecordKind::blob_bytes, 1u, 0u, short_bytes, sizeof short_bytes)
+      .add(av::RecordKind::blob_bytes, 1u, 0u, whole_bytes, sizeof whole_bytes);
+  const RecordingFilter filter;
+  const Printed         printed(made.bytes(), made.length(), filter, 0u);
+  CHECK(!printed.damaged());
+  CHECK_EQ(printed.count(), 7u);
+  CHECK(std::strstr(printed.line(0u), "setup, unreadable") != nullptr);
+  CHECK(std::strstr(printed.line(1u), "fault 0") != nullptr);
+  CHECK(std::strstr(printed.line(1u), "none") == nullptr);
+  CHECK(std::strstr(printed.line(2u), "fault 99") != nullptr);
+  CHECK(std::strstr(printed.line(2u), "undecodable") == nullptr);
+  CHECK(std::strstr(printed.line(3u), "blob unknown") != nullptr);
+  CHECK(std::strstr(printed.line(4u), "blob created") != nullptr);
+  CHECK(std::strstr(printed.line(4u), "id=") == nullptr);
+  CHECK(std::strstr(printed.line(5u), "blob bytes") != nullptr);
+  CHECK(std::strstr(printed.line(5u), "id=") == nullptr);
+  CHECK(std::strstr(printed.line(6u), "blob bytes id=5 offset=0 4 bytes") != nullptr); }
+
+TEST(recording_printer_next, prints_every_transport_command_it_can_read_and_says_nothing_it_cannot)
+{ Batch batch;
+  const std::uint8_t body[32] = {};
+  std::uint8_t       release[8] = {};
+  release[0] = 0x20u;
+  batch.add(CommandHeader::nop_id, nullptr, 0u)
+       .add(CommandHeader::import_blob_id, body, 4u)          /* too short to read */
+       .add(CommandHeader::release_blob_id, release, sizeof release)
+       .add(CommandHeader::release_blob_id, body, 4u);        /* too short to read */
+  Handmade made;
+  made.add(av::RecordKind::batch, 1u, 1u, batch.bytes(), batch.length());
+  const RecordingFilter filter;
+  const Printed         printed(made.bytes(), made.length(), filter, 0u);
+  CHECK_EQ(printed.count(), 5u);
+  CHECK(std::strstr(printed.line(1u), "nop 0 bytes") != nullptr);
+  CHECK(std::strstr(printed.line(2u), "import_blob 4 bytes") != nullptr);
+  CHECK(std::strstr(printed.line(2u), "resource=") == nullptr);
+  CHECK(std::strstr(printed.line(3u), "release_blob 8 bytes memory=0x0000000000000020") != nullptr);
+  CHECK(std::strstr(printed.line(4u), "release_blob 4 bytes") != nullptr);
+  CHECK(std::strstr(printed.line(4u), "memory=") == nullptr); }
+
+TEST(recording_printer_next, an_empty_batch_is_a_batch_of_no_commands)
+{ Handmade              made;
+  const std::uint8_t    nothing[1] = {};
+  made.add(av::RecordKind::batch, 1u, 1u, nothing, 0u);
+  const RecordingFilter filter;
+  const Printed         shown(made.bytes(), made.length(), filter, 0u);
+  CHECK_EQ(shown.count(), 1u);
+  CHECK(std::strstr(shown.line(0u), "batch 0 bytes, 0 commands") != nullptr);
+  /* Nothing in it can match a command filter, so a filter hides it. */
+  RecordingFilter named;
+  CHECK_STATUS(named.keep_command("vkCreate"), Status::ok);
+  CHECK_EQ(Printed(made.bytes(), made.length(), named, 0u).count(), 0u);
+  RecordingFilter api;
+  CHECK_STATUS(api.keep_api("vulkan"), Status::ok);
+  CHECK_EQ(Printed(made.bytes(), made.length(), api, 0u).count(), 0u); }
+
+TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_the_contexts_it_holds)
+{ Handmade made;
+  std::uint8_t setup[ContextSetup::base_size] = {};
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 16u, 41u, 1u, 42u)
+                   .encode(setup, sizeof setup),
+               Status::ok);
+  std::uint8_t opencl[ContextSetup::base_size] = {};
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opencl, 40u, 16u, 41u, 1u, 42u)
+                   .encode(opencl, sizeof opencl),
+               Status::ok);
+  const std::uint8_t nothing[1] = {};
+  /* Two contexts, one of them set up twice, and a fence of a context that was
+   * never set up at all. */
+  made.add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
+      .add(av::RecordKind::context_setup, 2u, 0u, opencl, sizeof opencl)
+      .add(av::RecordKind::context_setup, 1u, 0u, setup, sizeof setup)
+      .add(av::RecordKind::fence_completed, 1u, 7u, nothing, 0u)
+      .add(av::RecordKind::fence_completed, 2u, 8u, nothing, 0u)
+      .add(av::RecordKind::fence_completed, 9u, 9u, nothing, 0u);
+  RecordingFilter vulkan;
+  CHECK_STATUS(vulkan.keep_api("vulkan"), Status::ok);
+  const Printed kept(made.bytes(), made.length(), vulkan, 0u);
+  CHECK(kept.holds("setup api=vulkan"));
+  CHECK(kept.holds("ctx=1 fence=7"));
+  CHECK(!kept.holds("ctx=2 fence=8"));
+  CHECK(!kept.holds("ctx=9 fence=9"));
+  CHECK(!kept.holds("api=opencl")); }
+
+TEST(recording_printer_next, a_recording_of_more_contexts_than_it_remembers_keeps_reading)
+{ Handmade made;
+  std::uint8_t setup[ContextSetup::base_size] = {};
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 16u, 41u, 1u, 42u)
+                   .encode(setup, sizeof setup),
+               Status::ok);
+  for (std::uint32_t context = 1u; context <= RecordingPrinter::max_contexts + 2u; context++)
+      made.add(av::RecordKind::context_setup, context, 0u, setup, sizeof setup);
+  const RecordingFilter filter;
+  const Printed         printed(made.bytes(), made.length(), filter, 0u);
+  CHECK_EQ(printed.count(), RecordingPrinter::max_contexts + 2u);
+  CHECK(!printed.damaged()); }
+
+TEST(recording_printer_invariants, catch_a_printer_that_lost_the_batch_it_is_showing)
+{ const Written        written;
+  const RecordingFilter filter;
+  RecordingReader      reader(written.bytes(), written.length());
+  RecordingPrinter     printer(reader, filter, 0u);
+  CHECK(printer.invariants_hold());
+  av::RecordingPrinterProbe::show_too_much(printer);
+  CHECK(!printer.invariants_hold());
+
+  RecordingReader  second(written.bytes(), written.length());
+  RecordingPrinter lost(second, filter, 0u);
+  av::RecordingPrinterProbe::lose_the_payload(lost);
+  CHECK(!lost.invariants_hold());
+
+  RecordingReader  third(written.bytes(), written.length());
+  RecordingPrinter walked(third, filter, 0u);
+  av::RecordingPrinterProbe::walk_past_the_batch(walked);
+  CHECK(!walked.invariants_hold()); }
+
+TEST(recording_printer_invariants, catch_a_filter_that_stopped_making_sense)
+{ const Written    written;
+  RecordingFilter  filter;
+  RecordingReader  reader(written.bytes(), written.length());
+  RecordingPrinter printer(reader, filter, 0u);
+  CHECK(printer.invariants_hold());
+  av::RecordingFilterProbe::invert(filter);
+  CHECK(!printer.invariants_hold()); }

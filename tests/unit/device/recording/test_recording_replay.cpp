@@ -2,7 +2,11 @@
 #include "device/abi/rvk_executor.h"
 #include "device/execution/executor_library.hpp"
 #include "device/recording/recorded_command.hpp"
+#include "device/recording/record_header.hpp"
+#include "device/recording/record_kind.hpp"
+#include "device/recording/record_kinds.hpp"
 #include "device/recording/recording_filter.hpp"
+#include "device/recording/recording_header.hpp"
 #include "device/recording/recording_limit.hpp"
 #include "device/recording/recording_reader.hpp"
 #include "device/recording/recording_replay.hpp"
@@ -132,7 +136,80 @@ void one_batch(Written &written, std::uint8_t fill)
     written.close();
 }
 
+/* A recording built byte by byte, for the records a device never writes. */
+class Handmade {
+public:
+    Handmade() : length_(0u), bytes_{}
+    {
+        const av::RecordingHeader header(ProtocolVersion(1u, 1u), av::RecordKinds::every_kind, 0u, 0u, 0u,
+                                         0u, uuid);
+        CHECK_STATUS(header.encode(bytes_, sizeof bytes_), Status::ok);
+        length_ = av::RecordingHeader::encoded_size;
+    }
+
+    Handmade &add(av::RecordKind kind, std::uint32_t context, std::uint64_t fence,
+                  const std::uint8_t *payload, std::uint32_t payload_length)
+    {
+        const av::RecordHeader record(kind, context, payload_length, 0u, fence);
+        CHECK_STATUS(record.encode(bytes_ + length_, sizeof bytes_ - length_), Status::ok);
+        length_ += av::RecordHeader::encoded_size;
+        for (std::uint32_t index = 0u; index < payload_length; index++)
+            bytes_[length_ + index] = payload[index];
+        length_ += payload_length;
+        return *this;
+    }
+
+    Handmade &setup(std::uint32_t context, SubApi api)
+    {
+        std::uint8_t bytes[ContextSetup::base_size] = {};
+        CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), api, 40u, 16u, 41u, 1u, 42u)
+                         .encode(bytes, sizeof bytes),
+                     Status::ok);
+        return add(av::RecordKind::context_setup, context, 0u, bytes, sizeof bytes);
+    }
+
+    const std::uint8_t *bytes() const { return bytes_; }
+    std::size_t         length() const { return length_; }
+
+private:
+    std::size_t  length_;
+    std::uint8_t bytes_[widest];
+};
+
 }  // namespace
+
+namespace av {
+
+struct ReplayContextProbe {
+    /* An answer the library said was longer than the context can keep. */
+    static void answer_too_long(ReplayContext &context)
+    {
+        context.answered_ = true;
+        context.answer_length_ = ReplayContext::answer_bytes + 1u;
+    }
+    static void keep_a_length_with_no_answer(ReplayContext &context) { context.answer_length_ = 4u; }
+    static void answer_without_a_length(ReplayContext &context)
+    {
+        context.answered_ = false;
+        context.answer_length_ = 4u;
+    }
+    static void forget_the_context(ReplayContext &context) { context.context_ = 0u; }
+    static void answer_with_no_executor(ReplayContext &context) { context.answered_ = true; }
+};
+
+struct RecordingReplayProbe {
+    static void break_a_context(RecordingReplay &replay)
+    {
+        ReplayContextProbe::forget_the_context(replay.slots_[0]);
+    }
+    static void unterminate_a_finding(RecordingReplay &replay)
+    {
+        replay.findings_text_[0][RecordingReplay::finding_bytes - 1u] = 'x';
+    }
+    static void forget_a_context(RecordingReplay &replay) { replay.contexts_ = 0u; }
+};
+
+}  // namespace av
 
 TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
 { Written written;
@@ -482,3 +559,267 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
   av::RecordedCommand command;
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), 0u), Status::ok);
   CHECK_STATUS(none.execute(library, command), Status::invalid_state); }
+
+TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
+{ Written written;
+  one_batch(written, 0x33u);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(written.bytes(), written.length());
+  RecordingReplay replay(library);
+  const std::uint8_t other[GpuIdentity::uuid_bytes] = {0x99u};
+  replay.use_gpu(nullptr);                 /* no GPU named: the recording's own stands */
+  replay.use_gpu(other);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(ops.last_uuid_byte(), 0x99u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, a_setup_that_does_not_decode_and_a_context_set_up_twice)
+{ Handmade           made;
+  const std::uint8_t nothing[1] = {};
+  made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u)
+      .setup(2u, SubApi::vulkan)
+      .setup(2u, SubApi::vulkan);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(std::strstr(replay.finding(0u), "setup does not decode") != nullptr);
+  /* The second setup of one context replaces the executor the first made. */
+  CHECK_EQ(ops.created(), 2u);
+  CHECK_EQ(ops.live(), 1u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, a_batch_framed_wrong_and_a_transport_command_that_is_not_an_import)
+{ Handmade     made;
+  std::uint8_t batch[CommandHeader::encoded_size * 2u] = {};
+  CHECK_STATUS(CommandHeader(CommandHeader::nop_id, CommandHeader::encoded_size, 0u)
+                   .encode(batch, sizeof batch),
+               Status::ok);
+  /* A second header claiming more than the batch holds. */
+  CHECK_STATUS(CommandHeader(0x00010006u, 200u, 0u)
+                   .encode(batch + CommandHeader::encoded_size, CommandHeader::encoded_size),
+               Status::ok);
+  made.setup(1u, SubApi::vulkan).add(av::RecordKind::batch, 1u, 3u, batch, sizeof batch);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(std::strstr(replay.finding(0u), "framed wrong from byte 8") != nullptr);
+  /* The NOP was skipped rather than handed to the library. */
+  CHECK_EQ(ops.executed(), 0u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, another_apis_commands_and_a_filter_leave_the_library_alone)
+{ Handmade made;
+  Batch    batch;
+  batch.add(0x00020001u, 4u).add(0x00010007u, 4u).add(0x00010006u, 4u);
+  made.setup(1u, SubApi::vulkan).add(av::RecordKind::batch, 1u, 4u, batch.bytes(), batch.length());
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  RecordingFilter filter;
+  CHECK_STATUS(filter.keep_command("vkCreateInstance"), Status::ok);
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  /* The OpenCL command is not this context's API, and of the two that are the
+   * filter keeps one. */
+  CHECK_EQ(ops.executed(), 1u);
+  CHECK_EQ(ops.id_at(0u), 0x00010006u);
+  CHECK_EQ(replay.findings(), 0u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, a_blob_created_or_released_is_not_an_import_and_replays_nothing)
+{ Handmade     made;
+  std::uint8_t created[32] = {};
+  std::uint8_t released[32] = {};
+  released[0] = 2u;
+  const std::uint8_t nothing[1] = {};
+  made.setup(1u, SubApi::vulkan)
+      .add(av::RecordKind::blob, 1u, 0u, created, sizeof created)
+      .add(av::RecordKind::blob, 1u, 0u, released, sizeof released)
+      .add(av::RecordKind::blob, 1u, 0u, nothing, 0u)          /* too short to read */
+      .add(av::RecordKind::blob, 9u, 0u, created, sizeof created);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 0u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, a_blob_imported_into_a_context_it_never_set_up_is_no_finding)
+{ Handmade     made;
+  std::uint8_t imported[32] = {};
+  imported[0] = 1u;
+  made.add(av::RecordKind::blob, 9u, 0u, imported, sizeof imported);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 0u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, nothing_of_a_context_that_gave_up_is_replayed_or_compared)
+{ Handmade     made;
+  Batch        batch;
+  batch.add(CommandHeader::import_blob_id, 32u);
+  std::uint8_t imported[32] = {};
+  imported[0] = 1u;
+  const std::uint8_t answer[4] = {};
+  made.setup(1u, SubApi::vulkan)
+      .add(av::RecordKind::batch, 1u, 5u, batch.bytes(), batch.length())
+      .add(av::RecordKind::reply, 1u, 5u, answer, sizeof answer)
+      .add(av::RecordKind::blob, 1u, 0u, imported, sizeof imported)
+      .add(av::RecordKind::batch, 1u, 6u, batch.bytes(), batch.length());
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  /* One finding: the import. The reply, the blob and the second batch all
+   * belong to a context that has given up. */
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(replay.replies() == 0u);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, a_reply_with_no_answer_behind_it_says_what_it_replied)
+{ Handmade           made;
+  Batch              batch;
+  batch.add(0x00010006u, 4u);              /* asks for no answer */
+  const std::uint8_t answer[4] = {};
+  made.setup(1u, SubApi::vulkan)
+      .add(av::RecordKind::batch, 1u, 7u, batch.bytes(), batch.length())
+      .add(av::RecordKind::reply, 1u, 7u, answer, sizeof answer);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(std::strstr(replay.finding(0u), "replied 0 bytes, recorded 4") != nullptr);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_run, counts_more_findings_than_it_can_keep_and_answers_nothing_past_them)
+{ Handmade           made;
+  const std::uint8_t nothing[1] = {};
+  for (std::uint32_t index = 0u; index < RecordingReplay::max_findings + 4u; index++)
+      made.add(av::RecordKind::context_setup, index + 1u, 0u, nothing, 0u);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), RecordingReplay::max_findings + 4u);
+  CHECK(replay.finding(RecordingReplay::max_findings - 1u)[0] != '\0');
+  CHECK_EQ(std::strcmp(replay.finding(RecordingReplay::max_findings), ""), 0);
+  CHECK_EQ(std::strcmp(replay.finding(RecordingReplay::max_findings + 3u), ""), 0);
+  CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_invariants, catch_a_replay_whose_contexts_or_findings_do_not_agree)
+{ Written written;
+  one_batch(written, 0x44u);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  { RecordingReader reader(written.bytes(), written.length());
+    RecordingReplay replay(library);
+    const RecordingFilter filter;
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    CHECK(replay.invariants_hold());
+    av::RecordingReplayProbe::break_a_context(replay);
+    CHECK(!replay.invariants_hold()); }
+  { RecordingReader reader(written.bytes(), written.length());
+    RecordingReplay replay(library);
+    const RecordingFilter filter;
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    av::RecordingReplayProbe::forget_a_context(replay);
+    CHECK(!replay.invariants_hold()); }
+  { RecordingReader reader(written.bytes(), written.length());
+    RecordingReplay replay(library);
+    RecordingFilter filter;
+    filter.keep_context(99u);
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    av::RecordingReplayProbe::unterminate_a_finding(replay);
+    CHECK(replay.invariants_hold());   /* nothing was kept, so nothing to judge */
+  } }
+
+TEST(recording_replay_invariants, catch_a_finding_with_no_end)
+{ Handmade           made;
+  const std::uint8_t nothing[1] = {};
+  made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RecordingReader reader(made.bytes(), made.length());
+  RecordingReplay replay(library);
+  const RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.findings(), 1u);
+  CHECK(replay.invariants_hold());
+  av::RecordingReplayProbe::unterminate_a_finding(replay);
+  CHECK(!replay.invariants_hold()); }
+
+TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_compared)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  ReplayContext context;
+  CHECK_STATUS(context.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  av::ReplayContextProbe::answer_too_long(context);
+  const std::uint8_t recorded[4] = {};
+  CHECK(!context.answers_with(recorded, sizeof recorded));
+  /* Even a recorded reply of exactly that length is reported rather than
+   * compared: the bytes to compare it against were never kept. */
+  CHECK(!context.answers_with(recorded, ReplayContext::answer_bytes + 1u));
+  CHECK(context.answered());
+  CHECK(context.answer_length() > ReplayContext::answer_bytes);
+  context.destroy(library); }
+
+TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  ReplayContext context;
+  CHECK(context.invariants_hold());
+  av::ReplayContextProbe::answer_with_no_executor(context);
+  CHECK(!context.invariants_hold());
+
+  ReplayContext kept;
+  av::ReplayContextProbe::keep_a_length_with_no_answer(kept);
+  CHECK(!kept.invariants_hold());
+
+  ReplayContext second;
+  CHECK_STATUS(second.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  CHECK(second.invariants_hold());
+  av::ReplayContextProbe::forget_the_context(second);
+  CHECK(!second.invariants_hold());
+  second.destroy(library);
+
+  ReplayContext third;
+  CHECK_STATUS(third.create(library, 3u, SubApi::vulkan, uuid), Status::ok);
+  av::ReplayContextProbe::answer_without_a_length(third);
+  CHECK(!third.invariants_hold());
+  third.destroy(library); }

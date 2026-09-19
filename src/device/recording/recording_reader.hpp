@@ -17,6 +17,8 @@
 
 namespace av {
 
+struct RecordingReaderProbe;
+
 class RecordingReader {
 public:
     /* The bytes stay the caller's and must outlive the reader; a null pointer
@@ -59,6 +61,8 @@ private:
     const char    *damage_;
     uint64_t       records_;
     bool           opened_;
+
+    friend struct RecordingReaderProbe;
 };
 
 }  // namespace av

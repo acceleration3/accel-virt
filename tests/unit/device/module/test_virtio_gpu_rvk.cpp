@@ -536,7 +536,8 @@ TEST(virtio_gpu_rvk_realize, opens_the_recording_its_properties_asked_for)
   VirtioGpuRvk device(host);
   char bytes[160];
   TextBuffer message(bytes, sizeof bytes);
-  const RvkRecordingOptions on = {"run.rvk", 0u, "all", 0};
+  /* record-wrap on, so the recording wraps at its ceiling rather than stopping. */
+  const RvkRecordingOptions on = {"run.rvk", 1u << 20, "all", 1};
   CHECK_STATUS(device.realize("auto", false, &executor.table(), &on, message), Status::ok);
   device.status(DriverStatus::driver_ok);
 
@@ -545,6 +546,7 @@ TEST(virtio_gpu_rvk_realize, opens_the_recording_its_properties_asked_for)
   CHECK_EQ(header_only.header().vendor_id(), 0x10DEu);
   CHECK_EQ(header_only.header().uuid()[0], first[0]);
   CHECK_EQ(header_only.header().kinds(), av::RecordKinds::every_kind);
+  CHECK(header_only.header().limit() == (1u << 20));
   CHECK_EQ(header_only.header().wire_version().major_version(), 1u);
   CHECK_EQ(header_only.remaining(), 0u);
   device.reset();

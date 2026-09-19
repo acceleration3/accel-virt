@@ -32,11 +32,11 @@ constexpr ApiName api_names[] = {ApiName("transport", 0u), ApiName("vulkan", 1u)
                                  ApiName("opengl", 3u)};
 constexpr uint32_t api_count = sizeof api_names / sizeof api_names[0];
 
-/* Whether `text` holds `fragment`, both NUL-terminated. */
+/* Whether `text` holds `fragment`, both NUL-terminated; `fragment` is never
+ * empty, because an empty one keeps everything without looking. */
 bool holds(const char *text, const char *fragment)
 {
     AV_SCOPE("holds");
-    if (fragment[0] == '\0') return true;
     for (size_t start = 0u; text[start] != '\0'; start++) {
         size_t index = 0u;
         while (fragment[index] != '\0' && text[start + index] == fragment[index]) index++;

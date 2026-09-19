@@ -70,6 +70,25 @@ void *record_many(void *argument)
 
 }  // namespace
 
+namespace av {
+
+struct WireRecorderProbe {
+    /* A recorder holding a file with no lock, or counting records it never
+     * wrote: neither survives open() or close(). */
+    static void lose_the_lock(WireRecorder &recorder) { recorder.lock_ = nullptr; }
+    static void restore_the_lock(WireRecorder &recorder, void *lock) { recorder.lock_ = lock; }
+    static void *lock_of(WireRecorder &recorder) { return recorder.lock_; }
+    static void count_a_record(WireRecorder &recorder) { recorder.records_ = 1u; }
+    static void break_the_header(WireRecorder &recorder)
+    {
+        recorder.header_ = RecordingHeader(ProtocolVersion(1u, 1u), 0u, 0u,
+                                           RecordingHeader::encoded_size - 1u, 0u, 0u, nullptr);
+    }
+    static void break_the_limit(WireRecorder &recorder) { recorder.limit_.took(recorder.limit_.ceiling()); }
+};
+
+}  // namespace av
+
 TEST(wire_recorder, without_a_path_it_records_nothing_and_asks_the_host_for_nothing)
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(nullptr, 0u, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
@@ -436,3 +455,62 @@ TEST(wire_recorder, survives_every_recording_call_the_host_refuses_in_turn)
       CHECK_EQ(host.live_recordings(), 0u);
       CHECK_EQ(host.live_mutexes(), 0u);
   } }
+
+TEST(wire_recorder, keeps_no_batch_and_no_reply_when_it_was_not_asked_for_them)
+{ MockHost host; WireRecorder recorder(host);
+  CHECK_STATUS(recorder.open(path, 0u, "fence", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
+               Status::ok);
+  const std::uint8_t bytes[] = {1u, 2u};
+  recorder.record_batch(1u, 1u, bytes, sizeof bytes);
+  recorder.record_reply(1u, 1u, bytes, sizeof bytes);
+  CHECK(recorder.records() == 0u);
+  recorder.record_fence(1u, 1u);
+  CHECK(recorder.records() == 1u);
+  recorder.close(); }
+
+TEST(wire_recorder, a_record_taken_after_the_recording_stopped_writes_nothing)
+{ MockHost host; WireRecorder recorder(host);
+  const std::uint64_t ceiling = RecordingHeader::encoded_size + RecordHeader::encoded_size + 4u;
+  CHECK_STATUS(recorder.open(path, ceiling, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
+               Status::ok);
+  const std::uint8_t batch[] = {1u, 2u, 3u, 4u};
+  recorder.record_batch(1u, 1u, batch, sizeof batch);
+  recorder.record_batch(1u, 2u, batch, sizeof batch);   /* stops the recording */
+  CHECK(!recorder.recording());
+  const std::uint64_t written = host.recording_length(path);
+  /* The kind is still kept, so the call reaches write, which sees the
+   * recording stopped under the lock and leaves the file alone. */
+  recorder.record_batch(1u, 3u, batch, sizeof batch);
+  CHECK(recorder.records() == 1u);
+  CHECK_EQ(host.logged(), 1u);
+  CHECK(host.recording_length(path) == written);
+  recorder.close(); }
+
+TEST(wire_recorder_invariants, catch_a_recording_whose_parts_do_not_agree)
+{ MockHost host; WireRecorder recorder(host);
+  CHECK_STATUS(recorder.open(path, 1u << 20, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
+               Status::ok);
+  CHECK(recorder.invariants_hold());
+  void *const lock = av::WireRecorderProbe::lock_of(recorder);
+  av::WireRecorderProbe::lose_the_lock(recorder);
+  CHECK(!recorder.invariants_hold());
+  av::WireRecorderProbe::restore_the_lock(recorder, lock);
+  av::WireRecorderProbe::break_the_header(recorder);
+  CHECK(!recorder.invariants_hold());
+  recorder.close();
+
+  MockHost     other; WireRecorder second(other);
+  CHECK_STATUS(second.open(path, 1u << 20, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
+               Status::ok);
+  av::WireRecorderProbe::break_the_limit(second);
+  CHECK(!second.invariants_hold());
+  second.close(); }
+
+TEST(wire_recorder_invariants, catch_a_closed_recorder_that_kept_something)
+{ MockHost host; WireRecorder recorder(host);
+  CHECK(recorder.invariants_hold());
+  av::WireRecorderProbe::count_a_record(recorder);
+  CHECK(!recorder.invariants_hold());
+  av::WireRecorderProbe::restore_the_lock(recorder, &host);
+  CHECK(!recorder.invariants_hold());
+  av::WireRecorderProbe::restore_the_lock(recorder, nullptr); }

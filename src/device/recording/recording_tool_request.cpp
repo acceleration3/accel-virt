@@ -117,11 +117,9 @@ Status RecordingToolRequest::take_fences(const char *value, RecordingFilter &fil
     }
     uint64_t begin = 0u;
     if (!number(first, begin)) return refuse("--fence wants a fence or a range");
-    if (value[index] == '\0')
-        return filter.keep_fences(begin, begin) == Status::ok ? Status::ok
-                                                              : refuse("--fence wants a fence or a range");
-    uint64_t end = 0u;
-    if (!number(value + index + 1u, end)) return refuse("--fence wants a fence or a range");
+    uint64_t end = begin;
+    if (value[index] == ':' && !number(value + index + 1u, end))
+        return refuse("--fence wants a fence or a range");
     return filter.keep_fences(begin, end) == Status::ok ? Status::ok
                                                         : refuse("--fence ends before it starts");
 }

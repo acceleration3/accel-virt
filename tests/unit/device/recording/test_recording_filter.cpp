@@ -42,6 +42,19 @@ private:
 
 }  // namespace
 
+namespace av {
+
+struct RecordingFilterProbe {
+    /* A range no keep_fences would take, for the invariant to catch. */
+    static void invert(RecordingFilter &filter) { filter.first_fence_ = 9u; filter.last_fence_ = 8u; }
+    static void unterminate(RecordingFilter &filter)
+    {
+        filter.fragment_[RecordingFilter::longest_fragment - 1u] = 'x';
+    }
+};
+
+}  // namespace av
+
 TEST(recording_filter, keeps_everything_until_it_is_told_otherwise)
 { const RecordingFilter filter;
   CHECK(filter.invariants_hold());
@@ -148,3 +161,13 @@ TEST(recording_filter, narrows_on_every_axis_at_once)
   CHECK(filter.keeps(OneCommand(0x00010006u).command()));
   CHECK(!filter.keeps(OneCommand(0x00020001u).command()));   /* the right name, the wrong API */
   CHECK(filter.invariants_hold()); }
+
+TEST(recording_filter_invariants, catch_a_range_that_ends_before_it_starts_and_a_fragment_with_no_end)
+{ RecordingFilter filter;
+  CHECK(filter.invariants_hold());
+  av::RecordingFilterProbe::invert(filter);
+  CHECK(!filter.invariants_hold());
+  CHECK_STATUS(filter.keep_fences(1u, 2u), Status::ok);
+  CHECK(filter.invariants_hold());
+  av::RecordingFilterProbe::unterminate(filter);
+  CHECK(!filter.invariants_hold()); }

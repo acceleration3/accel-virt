@@ -113,6 +113,33 @@ std::uint32_t walked(const std::uint8_t *bytes, std::size_t length, bool &damage
 
 }  // namespace
 
+namespace av {
+
+struct RecordingReaderProbe {
+    static void walk_past_the_end(RecordingReader &reader) { reader.offset_ = reader.length_ + 1u; }
+    static void damage_past_the_end(RecordingReader &reader)
+    {
+        reader.damage_offset_ = reader.length_ + 1u;
+    }
+    /* An unopened reader that has already answered records, and an opened one
+     * standing before its own file header: neither can happen. */
+    static void answer_unopened(RecordingReader &reader)
+    {
+        reader.opened_ = false;
+        reader.offset_ = 0u;
+        reader.records_ = 1u;
+    }
+    static void stand_in_the_header(RecordingReader &reader) { reader.offset_ = 0u; }
+    /* A ceiling no recording could have been written with. */
+    static void break_the_header(RecordingReader &reader)
+    {
+        reader.header_ = RecordingHeader(ProtocolVersion(1u, 1u), 0u, 0u,
+                                         RecordingHeader::encoded_size - 1u, 0u, 0u, nullptr);
+    }
+};
+
+}  // namespace av
+
 TEST(recording_reader_open, reads_the_file_header_the_device_wrote)
 { const Written written;
   RecordingReader reader(written.bytes(), written.length());
@@ -269,3 +296,31 @@ TEST(recording_reader_next, survives_a_byte_flip_anywhere_in_a_recording)
   /* A flip in a payload byte changes nothing about the framing; a flip in a
    * magic, a kind, a length or the version is caught. */
   CHECK(damaged_cases > 32u); }
+
+TEST(recording_reader_invariants, catch_a_walk_or_a_damage_outside_the_bytes_it_was_given)
+{ const Written written;
+  RecordingReader reader(written.bytes(), written.length());
+  CHECK_STATUS(reader.open(), Status::ok);
+  CHECK(reader.invariants_hold());
+  av::RecordingReaderProbe::walk_past_the_end(reader);
+  CHECK(!reader.invariants_hold());
+
+  RecordingReader damaged(written.bytes(), written.length());
+  CHECK_STATUS(damaged.open(), Status::ok);
+  av::RecordingReaderProbe::damage_past_the_end(damaged);
+  CHECK(!damaged.invariants_hold());
+
+  RecordingReader unopened(written.bytes(), written.length());
+  CHECK_STATUS(unopened.open(), Status::ok);
+  av::RecordingReaderProbe::answer_unopened(unopened);
+  CHECK(!unopened.invariants_hold());
+
+  RecordingReader standing(written.bytes(), written.length());
+  CHECK_STATUS(standing.open(), Status::ok);
+  av::RecordingReaderProbe::stand_in_the_header(standing);
+  CHECK(!standing.invariants_hold());
+
+  RecordingReader broken(written.bytes(), written.length());
+  CHECK_STATUS(broken.open(), Status::ok);
+  av::RecordingReaderProbe::break_the_header(broken);
+  CHECK(!broken.invariants_hold()); }
