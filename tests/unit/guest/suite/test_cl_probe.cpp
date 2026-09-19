@@ -34,9 +34,38 @@ namespace {
  * for a step that failed without an error of its own.
  */
 
+/* The ICD's event thread, played by the clock the probe waits on: the probe
+ * spins reading the counter, and the `after`th read is where that thread gets
+ * round to the callback. Nothing else in this test is threaded, so this read
+ * is the only moment a delivery can be made to land inside the wait. */
+class LateThread final : public av::ClockReader {
+public:
+    LateThread(ScriptedCl &cl, std::uint32_t after) : cl_(cl), after_(after), reads_(0u) {}
+
+    void clock_read() override
+    {
+        if (++reads_ != after_) return;
+        delivered_ = cl_.deliver_deferred();
+    }
+
+    std::uint32_t reads() const { return reads_; }
+    bool          delivered() const { return delivered_; }
+
+private:
+    ScriptedCl   &cl_;
+    std::uint32_t after_;
+    std::uint32_t reads_ = 0u;
+    bool          delivered_ = false;
+};
+
 class ProbeRig {
 public:
-    ProbeRig() : report_("rvkclprobe") {}
+    /* A clock that moves an eighth of a second every time it is read, so a
+     * probe waiting five seconds for a callback that is not coming reaches
+     * its deadline in forty reads rather than in real time. */
+    static constexpr std::uint64_t clock_step = MockKmt::ticks_per_second / 8u;
+
+    ProbeRig() : report_("rvkclprobe") { kmt_.reads_clock(nullptr, clock_step); }
     ~ProbeRig()
     {
         /* Nothing was released twice, and nothing the run made up. */
@@ -45,6 +74,7 @@ public:
     }
 
     ScriptedCl  &cl() { return cl_; }
+    MockKmt     &kmt() { return kmt_; }
     GuestReport &report() { return report_; }
     void         run()
     {
@@ -265,6 +295,22 @@ TEST(cl_probe, the_callback_runs_once_on_the_event_the_run_completes)
   never.cl().forget_callbacks();
   never.run();
   CHECK(never.holds("FAIL opencl.callback status=4 0\n"));
+  /* And one it had not run when the wait on the event returned, which is what
+   * a real ICD's thread does whenever the waiting thread gets there first.
+   * The probe waits for it rather than judging the race: a run that read the
+   * count at the wait would report this as the callback that never came. */
+  ProbeRig late;
+  late.cl().defer_callbacks();
+  LateThread thread(late.cl(), 4u);
+  late.kmt().reads_clock(&thread, ProbeRig::clock_step);
+  late.run();
+  CHECK(thread.delivered());
+  /* Four reads: the one that starts the wait, two that found nothing, and the
+   * one the delivery rode in on - after which the probe saw the callback and
+   * stopped. A probe that judged at the wait would have read the clock never,
+   * and one that kept spinning would have read it forty times. */
+  CHECK_EQ(thread.reads(), 4u);
+  CHECK(late.holds("ok opencl.callback 1\n"));
   ProbeRig twice;
   twice.cl().run_callbacks_twice();
   twice.run();

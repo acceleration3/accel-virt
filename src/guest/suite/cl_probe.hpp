@@ -62,10 +62,22 @@ private:
     void                 svm_step();
     /* A callback that runs once, on a thread the ICD owns. */
     void                 callback_step();
+    /* How many callbacks have arrived, waiting up to callback_seconds for the
+     * first. The callback runs on a thread the ICD owns and nothing orders it
+     * against the wait on its event, so a count read the moment the wait
+     * returned would be measuring which of two threads got there first. A
+     * callback that never comes still ends this, with the zero that says so. */
+    uint32_t             callbacks_seen() const;
     void                 release_all();
+
+    /* Long enough that a callback the ICD's thread has in hand cannot miss
+     * it, short enough that a callback that is never coming does not hold the
+     * run: the delivery is one round trip behind the wait. */
+    static constexpr uint32_t callback_seconds = 5u;
 
     ScenarioSteps steps_;
     GuestReport  &report_;
+    Kmt          &kmt_;
     ClEntry      &cl_;
     void         *platform_;
     void         *device_;
@@ -80,9 +92,11 @@ private:
     float         sum_[elements];
     /* Written by the ICD's thread, which is why they are members rather than
      * locals of the step that registers the callback: a delivery that arrives
-     * after that frame has gone would write into a dead stack. */
-    uint32_t      callbacks_;
-    int32_t       callback_status_;
+     * after that frame has gone would write into a dead stack. Volatile
+     * because the thread that reads them is not the thread that writes them,
+     * and a loop waiting for one must read it each time round. */
+    volatile uint32_t callbacks_;
+    volatile int32_t  callback_status_;
 };
 
 }  // namespace av

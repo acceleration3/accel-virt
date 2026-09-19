@@ -33,7 +33,7 @@ MockKmt::MockKmt()
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
-      next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
+      next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), clock_step_(0u), clock_reader_(nullptr),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
@@ -833,7 +833,17 @@ std::uint32_t MockKmt::bound_allocation(std::uint32_t index) const
 std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
 {
     frequency = frequency_;
-    return ticks_;
+    /* Told before the answer moves, so that what a reader does is seen by the
+     * read that told it rather than by the one after. */
+    if (clock_reader_ != nullptr) clock_reader_->clock_read();
+    read_ticks_ += clock_step_;
+    return ticks_ + read_ticks_;
+}
+
+void MockKmt::reads_clock(ClockReader *reader, std::uint64_t step)
+{
+    clock_reader_ = reader;
+    clock_step_ = step;
 }
 
 void MockKmt::set_blank_period(std::uint64_t ticks) { blank_period_ = ticks; }

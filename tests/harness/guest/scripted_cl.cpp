@@ -36,7 +36,8 @@ ScriptedCl::ScriptedCl()
     : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
       device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
-      forgets_callbacks_(false), notifies_twice_(false), objects_{}, live_(0u), misuses_(0u),
+      forgets_callbacks_(false), notifies_twice_(false), defers_callbacks_(false), deferred_(nullptr),
+      objects_{}, live_(0u), misuses_(0u),
       shared_{}, shared_live_(false), shared_argument_(nullptr)
 {
     suffixes_[0] = "RVK";
@@ -94,6 +95,17 @@ void ScriptedCl::miscompute(std::uint32_t wrong) { wrong_ = wrong; }
 void ScriptedCl::stale_mappings(std::uint32_t wrong) { stale_ = wrong; }
 void ScriptedCl::forget_callbacks() { forgets_callbacks_ = true; }
 void ScriptedCl::run_callbacks_twice() { notifies_twice_ = true; }
+void ScriptedCl::defer_callbacks() { defers_callbacks_ = true; }
+
+bool ScriptedCl::deliver_deferred()
+{
+    Object *const waiting = deferred_;
+    if (waiting == nullptr) return false;
+    deferred_ = nullptr;
+    waiting->notify(waiting, waiting->status, waiting->user_data);
+    if (notifies_twice_) waiting->notify(waiting, waiting->status, waiting->user_data);
+    return true;
+}
 
 const char   *ScriptedCl::asked_devices_of() const { return asked_devices_of_; }
 std::uint32_t ScriptedCl::live_objects() const { return live_; }
@@ -542,6 +554,12 @@ std::int32_t ScriptedCl::set_user_event_status(void *event, std::int32_t status)
     if (failed != 0) return failed;
     set->status = status;
     if (!set->watching || forgets_callbacks_ || status > set->watched) return 0;
+    /* An ICD whose event thread has not run it yet: it is left for
+     * deliver_deferred, which is that thread catching up. */
+    if (defers_callbacks_) {
+        deferred_ = set;
+        return 0;
+    }
     set->notify(event, status, set->user_data);
     /* An ICD whose event thread ran the same callback twice. */
     if (notifies_twice_) set->notify(event, status, set->user_data);
