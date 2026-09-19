@@ -81,6 +81,10 @@ public:
     std::size_t read_request(void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) override;
     void     respond(void *request, const std::uint8_t *bytes, std::size_t size) override;
     bool     resource_exists(std::uint32_t id) override;
+    Status   create_recording(const char *path, void *&file) override;
+    Status   append_recording(void *file, const std::uint8_t *bytes, std::size_t size) override;
+    Status   truncate_recording(void *file) override;
+    void     close_recording(void *file) override;
 
     /* A discrete GPU named "mock gpu" with this UUID. */
     void add_gpu(const std::uint8_t *uuid);
@@ -120,6 +124,15 @@ public:
     /* The Nth guest mapping from now answers a pointer with nothing mapped, a
      * host that says yes and means no. */
     void empty_mapping_at(std::uint32_t nth);
+    /* The Nth recording call of its kind from now is refused. */
+    void fail_recording_create_at(std::uint32_t nth);
+    void fail_recording_append_at(std::uint32_t nth);
+    void fail_recording_truncate_at(std::uint32_t nth);
+    /* What the recording at `path` holds, closed or not: null when nothing
+     * was ever recorded there. */
+    const std::uint8_t *recording_bytes(const char *path);
+    std::size_t         recording_length(const char *path);
+
     /* The Nth range reservation, or alias of a guest run, from now is refused. */
     void fail_reserve_at(std::uint32_t nth);
     void fail_alias_at(std::uint32_t nth);
@@ -187,6 +200,7 @@ public:
     /* Ranges reserved and not released, and the runs aliased into them. */
     std::uint32_t live_ranges();
     std::uint32_t live_aliases();
+    std::uint32_t live_recordings();
 
 private:
     static constexpr std::uint32_t violation_kinds = static_cast<std::uint32_t>(HostViolation::count);
@@ -221,6 +235,11 @@ private:
     static constexpr std::uint32_t max_imports = 16u;
     static constexpr std::uint32_t max_resources = 64u;
     static constexpr std::uint32_t max_ranges = 128u;
+    static constexpr std::uint32_t max_recordings = 4u;
+    static constexpr std::size_t   max_path = 128u;
+    /* What one recording may hold in the mock: larger than any test writes,
+     * so a test that overruns it is a test that meant something else. */
+    static constexpr std::size_t   recording_capacity = 4u << 20;
     static constexpr std::uint64_t page = 4096u;
 
     /* Runs one dma-buf may cover. A chunk scattered page by page is bounded
@@ -258,6 +277,12 @@ private:
         std::uint64_t size;
         bool          live;
     };
+    struct RecordingFile {
+        char          path[max_path];
+        std::uint8_t *bytes;
+        std::size_t   length;
+        bool          live;
+    };
 
     void    record(HostViolation kind, const char *function);
     GuestRegion *region_of(std::uint64_t address);
@@ -272,6 +297,8 @@ private:
     /* The page `event` is connected to, or max_doorbells. */
     std::uint32_t doorbell_of(void *event);
     Mutex  *mutex_of(void *mutex);
+    RecordingFile *recording_of(void *file);
+    RecordingFile *recording_at(const char *path);
 
     pthread_t       main_loop_;
     pthread_mutex_t state_;
@@ -330,6 +357,10 @@ private:
     std::uint32_t   fail_dmabuf_;
     bool            no_dmabufs_;
     std::uint32_t   dmabufs_;
+    RecordingFile   recordings_[max_recordings];
+    std::uint32_t   fail_recording_create_;
+    std::uint32_t   fail_recording_append_;
+    std::uint32_t   fail_recording_truncate_;
 };
 
 }  // namespace av

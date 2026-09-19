@@ -124,6 +124,17 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         host_of(opaque).respond(request, bytes, size);
     };
     table_.resource_exists = [](void *opaque, std::uint32_t id) { return host_of(opaque).resource_exists(id) ? 1 : 0; };
+    table_.create_recording = [](void *opaque, const char *path) -> void * {
+        void *file = nullptr;
+        return host_of(opaque).create_recording(path, file) == Status::ok ? file : nullptr;
+    };
+    table_.append_recording = [](void *opaque, void *file, const std::uint8_t *bytes, std::size_t size) {
+        return host_of(opaque).append_recording(file, bytes, size) == Status::ok ? 0 : 1;
+    };
+    table_.truncate_recording = [](void *opaque, void *file) {
+        return host_of(opaque).truncate_recording(file) == Status::ok ? 0 : 1;
+    };
+    table_.close_recording = [](void *opaque, void *file) { host_of(opaque).close_recording(file); };
 }
 
 const RvkHostOps &MockHostOps::table() const

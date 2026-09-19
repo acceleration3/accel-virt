@@ -715,6 +715,53 @@ static int rvk_resource_exists(void *opaque, uint32_t id)
     return virtio_gpu_find_resource(VIRTIO_GPU(r), id) != NULL;
 }
 
+/* A wire recording (docs/protocol.md): an ordinary file, written and flushed
+ * from whichever thread took the record, so a QEMU that dies next leaves
+ * behind what led to it. The handle is the descriptor, biased so NULL is never
+ * a valid one. */
+static void *rvk_create_recording(void *opaque, const char *path)
+{
+    int fd;
+
+    (void)opaque;
+    if (path == NULL || path[0] == '\0') {
+        return NULL;
+    }
+    fd = qemu_open_old(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        return NULL;
+    }
+    return (void *)(intptr_t)(fd + 1);
+}
+
+static int rvk_append_recording(void *opaque, void *file, const uint8_t *bytes, size_t size)
+{
+    int fd = (int)(intptr_t)file - 1;
+
+    (void)opaque;
+    if (qemu_write_full(fd, bytes, size) != (ssize_t)size) {
+        return 1;
+    }
+    return fdatasync(fd) == 0 ? 0 : 1;
+}
+
+static int rvk_truncate_recording(void *opaque, void *file)
+{
+    int fd = (int)(intptr_t)file - 1;
+
+    (void)opaque;
+    if (ftruncate(fd, 0) != 0) {
+        return 1;
+    }
+    return lseek(fd, 0, SEEK_SET) == 0 ? 0 : 1;
+}
+
+static void rvk_close_recording(void *opaque, void *file)
+{
+    (void)opaque;
+    qemu_close((int)(intptr_t)file - 1);
+}
+
 /* No loader or no device leaves the catalog empty; the core names the failure. */
 static void rvk_read_gpus(VirtIOGPURvk *r)
 {
@@ -833,6 +880,10 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .read_request = rvk_read_request,
         .respond = rvk_respond,
         .resource_exists = rvk_resource_exists,
+        .create_recording = rvk_create_recording,
+        .append_recording = rvk_append_recording,
+        .truncate_recording = rvk_truncate_recording,
+        .close_recording = rvk_close_recording,
     };
     rvk_read_gpus(r);
 }

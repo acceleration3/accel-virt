@@ -333,4 +333,26 @@ TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
   CHECK_STATUS(before.dmabuf_over_guest(runs, sizes, 1u, none), Status::not_supported);
   before.close_dmabuf(7);
   CHECK_EQ(none, -1);
-  host.unmap_guest(run, length); }
+  host.unmap_guest(run, length); }\nTEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *file = nullptr;
+  CHECK_STATUS(host.create_recording("run.rvk", file), Status::ok);
+  CHECK(file != nullptr);
+  const std::uint8_t bytes[] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(mock.recording_length("run.rvk"), sizeof bytes);
+  CHECK_EQ(mock.recording_bytes("run.rvk")[2], 3u);
+  CHECK_STATUS(host.truncate_recording(file), Status::ok);
+  CHECK_EQ(mock.recording_length("run.rvk"), 0u);
+  mock.fail_recording_append_at(1u);
+  CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::no_space);
+  mock.fail_recording_truncate_at(1u);
+  CHECK_STATUS(host.truncate_recording(file), Status::no_space);
+  host.close_recording(file);
+  CHECK_EQ(mock.live_recordings(), 0u);
+  /* The bytes outlive the close, as a file does. */
+  CHECK(mock.recording_bytes("run.rvk") != nullptr);
+  mock.fail_recording_create_at(1u);
+  void *refused = &mock;
+  CHECK_STATUS(host.create_recording("again.rvk", refused), Status::no_memory);
+  CHECK(refused == nullptr); }
