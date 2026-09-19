@@ -343,3 +343,27 @@ TEST(cl_device_report, a_report_offering_a_grain_of_svm_this_feature_lacks_break
   CHECK(!report.invariants_hold());
   av::clicd::ClDeviceReportProbe::report_svm(report, CL_DEVICE_SVM_COARSE_GRAIN_BUFFER);
   CHECK(report.invariants_hold()); }
+
+/* The version a host answers is read only if it is shaped like one: a prefix,
+ * a digit, a dot, a digit. Anything else is a string this driver does not
+ * believe, and believing it would have the ICD report a version it cannot
+ * serve. */
+TEST(cl_device_report, a_version_whose_digits_are_not_digits_is_not_believed)
+{ const char *const wrong[] = {
+      "OpenCL x.0 host",     /* a letter where the major belongs */
+      "OpenCL 3:0 host",     /* the separator is not a dot */
+      "OpenCL 3.x host",     /* a letter where the minor belongs */
+      "OpenCL :.0 host",     /* just below a digit */
+      "OpenCL 3.: host",     /* just above one, which is what the upper half
+                              * of the range check is there for */
+  };
+  for (const char *const text : wrong) {
+      ClDeviceReport report(adapter_luid);
+      CHECK_STATUS(report.observe_version(text, std::strlen(text) + 1u), Status::malformed);
+      /* Unchanged: what this ICD implements is what it goes on reporting. */
+      cl_version numeric = 0u;
+      CHECK_EQ(report.info(CL_DEVICE_NUMERIC_VERSION, sizeof numeric, &numeric, nullptr),
+               CL_SUCCESS);
+      CHECK_EQ(CL_VERSION_MAJOR(numeric), 3u);
+      CHECK(report.invariants_hold());
+  } }

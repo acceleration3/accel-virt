@@ -162,6 +162,12 @@ TEST(cl_probe, a_device_with_no_luid_or_no_vendor_fails_the_luid_step)
   ProbeRig refused;
   refused.cl().fail_at(Call::device_number, 1u, ScriptedCl::refused);
   refused.run();
+  /* And the LUID query itself refused, which is the second number asked
+   * for: a device that will not name its adapter is not this adapter's. */
+  ProbeRig nameless;
+  nameless.cl().fail_at(Call::device_number, 2u, ScriptedCl::refused);
+  nameless.run();
+  CHECK(nameless.holds("FAIL opencl.luid status=3 0\n"));
   /* The vendor is what it refused; the LUID it did answer is what the line
    * measures, so a reader can see the device was reached at all. */
   CHECK(refused.holds("FAIL opencl.luid status=3 4660\n")); }
@@ -386,6 +392,20 @@ TEST(cl_probe, a_platform_whose_suffix_is_not_rvk_is_not_this_driver)
   CHECK(rig.holds("FAIL opencl.platform status=3 3\n"));
   CHECK_EQ(rig.cl().live_objects(), 0u);
 
+  /* More platforms than the probe's own walk reads. Its bound is what keeps
+   * it inside its array whatever the loader lists, so a machine with more
+   * than eight finds nothing rather than reading past. */
+  ProbeRig many;
+  many.cl().set_platform_suffix(0u, "RXY");
+  for (std::uint32_t index = 1u; index < 10u; ++index) many.cl().add_platform("RXY");
+  /* And it says it wrote all ten into room for eight. Nothing stops a real
+   * loader doing this; the probe's own bound is what keeps it inside its
+   * array when one does. */
+  many.cl().overstate_platforms();
+  many.run();
+  CHECK(many.holds("FAIL opencl.platform status=3 10\n"));
+  CHECK_EQ(many.cl().live_objects(), 0u);
+
   /* And the real one, found among them rather than first. */
   ProbeRig among;
   among.cl().set_platform_suffix(0u, "RXY");
@@ -417,7 +437,15 @@ TEST(cl_probe, the_first_buffer_refused_is_the_one_the_step_reports)
   rig.cl().fail_from(Call::create_buffer, 2u, -61 /* CL_INVALID_BUFFER_SIZE */);
   rig.run();
   CHECK(rig.holds("FAIL opencl.buffers status=7 4294967235\n"));
-  CHECK_EQ(rig.cl().live_objects(), 0u); }
+  CHECK_EQ(rig.cl().live_objects(), 0u);
+
+  /* A buffer refused with no reason given still fails the step: a zero
+   * would read as success, so the step makes a refusal of its own. */
+  ProbeRig silent;
+  silent.cl().fail_silently_at(Call::create_buffer, 1u);
+  silent.run();
+  CHECK(silent.holds("FAIL opencl.buffers status=7 4294967295\n"));
+  CHECK_EQ(silent.cl().live_objects(), 0u); }
 
 /* A device that will not say whether it has shared memory is not a device
  * without it: the query failing and the answer being none are different

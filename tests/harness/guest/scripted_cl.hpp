@@ -57,7 +57,9 @@ public:
         count
     };
 
-    static constexpr std::uint32_t max_platforms = 4u;
+    /* Room for more than the probe reads: its own walk stops at eight, and
+     * that bound is what keeps it inside its array whatever a loader lists. */
+    static constexpr std::uint32_t max_platforms = 12u;
     static constexpr std::uint32_t max_devices = 4u;
     static constexpr std::uint32_t max_objects = 16u;
     /* As many as ClProbe's vector add has. */
@@ -91,6 +93,10 @@ public:
      * other vendors' the search must walk past. */
     void          set_platform_suffix(std::uint32_t index, const char *suffix);
     void          add_platform(const char *suffix);
+    /* A loader that says it wrote more platforms than it was given room for.
+     * Nothing stops a real one doing this, and the probe's own bound is what
+     * keeps it inside its array when one does. */
+    void          overstate_platforms();
     void          set_device_count(std::uint32_t count);
     void          set_device_name(const char *name);
     void          set_luid(std::uint64_t luid);
@@ -214,6 +220,7 @@ private:
     std::uint32_t calls_[static_cast<std::uint32_t>(Call::count)];
     const char   *suffixes_[max_platforms];
     std::uint32_t platforms_;
+    bool          overstating_;
     std::uint32_t devices_;
     const char   *device_name_;
     const char   *build_log_;

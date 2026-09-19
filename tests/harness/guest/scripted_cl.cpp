@@ -33,7 +33,7 @@ constexpr std::uintptr_t object_base = 0x5300u;
 }  // namespace
 
 ScriptedCl::ScriptedCl()
-    : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), devices_(1u),
+    : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
       device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), objects_{}, live_(0u), misuses_(0u),
@@ -70,6 +70,8 @@ void ScriptedCl::set_platform_suffix(std::uint32_t index, const char *suffix)
 {
     if (index < platforms_) suffixes_[index] = suffix;
 }
+
+void ScriptedCl::overstate_platforms() { overstating_ = true; }
 
 void ScriptedCl::add_platform(const char *suffix)
 {
@@ -186,10 +188,12 @@ std::int32_t ScriptedCl::platforms(void **into, std::uint32_t room, std::uint32_
     const std::int32_t failed = failure(Call::platforms);
     if (failed != 0) return failed;
     if (into == nullptr) return refused;
-    written = platforms_ < room ? platforms_ : room;
-    for (std::uint32_t index = 0u; index < written; index++) {
+    const std::uint32_t fits = platforms_ < room ? platforms_ : room;
+    for (std::uint32_t index = 0u; index < fits; index++) {
         into[index] = reinterpret_cast<void *>(platform_base + index);
     }
+    /* A loader that overstates writes what it can and says it wrote more. */
+    written = overstating_ ? platforms_ : fits;
     return 0;
 }
 
