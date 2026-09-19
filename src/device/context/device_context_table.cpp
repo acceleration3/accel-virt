@@ -9,8 +9,9 @@
 namespace av {
 
 DeviceContextTable::DeviceContextTable(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
-                                       const ExecutorLibrary &library)
-    : host_(host), blobs_(blobs), interrupts_(interrupts), library_(library), shares_(host, library), slots_{}
+                                       const ExecutorLibrary &library, WireRecorder &recorder)
+    : host_(host), blobs_(blobs), interrupts_(interrupts), library_(library), recorder_(recorder),
+      shares_(host, library), slots_{}
     {
         AV_SCOPE("DeviceContextTable::DeviceContextTable");
     }
@@ -51,7 +52,8 @@ Status DeviceContextTable::create(uint32_t id)
     if (id == 0u) return Status::invalid_parameter;
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
-        if (slot.construct(host_, blobs_, interrupts_, library_, shares_, id) != Status::ok) continue;   /* occupied */
+        if (slot.construct(host_, blobs_, interrupts_, library_, shares_, recorder_, id) != Status::ok)
+            continue;   /* occupied */
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();
         return status;

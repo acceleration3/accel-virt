@@ -15,14 +15,15 @@ namespace av {
 constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), blobs_(host), interrupts_(host),
-      status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_)
+    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
+      blobs_(host), interrupts_(host), status_(host, interrupts_),
+      contexts_(host, blobs_, interrupts_, library_, recorder_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
       }
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
-                             TextBuffer &message)
+                             const RvkRecordingOptions *recording, TextBuffer &message)
 {
     AV_SCOPE("VirtioGpuRvk::realize");
     host_.require_main_loop("VirtioGpuRvk::realize");
@@ -66,7 +67,22 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     if (capset_.described() &&
         library_.import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
-    return status;
+    return start_recording(recording, message);
+}
+
+/* After the GPU is bound, so the recording's header names the GPU it recorded
+ * and the version its contexts will speak. */
+Status VirtioGpuRvk::start_recording(const RvkRecordingOptions *recording, TextBuffer &message)
+{
+    AV_SCOPE("VirtioGpuRvk::start_recording");
+    if (recording == nullptr) return Status::ok;
+    const AtCeiling at_ceiling = recording->wrap != 0 ? AtCeiling::wrap : AtCeiling::stop;
+    const Status    opened = recorder_.open(recording->path, recording->limit_bytes, recording->kinds,
+                                            at_ceiling, capset_.info().gpu(), capset_.info().version());
+    if (opened == Status::ok) return Status::ok;
+    message.append("virtio-gpu-rvk: record-kinds names no record kind, or record-limit is below 64 bytes");
+    host_.log(message.text());
+    return opened;
 }
 
 void VirtioGpuRvk::reset()
@@ -95,7 +111,7 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
     if (!binding_.bound()) return false;
     ControlRequest control(host_, request);
     return ContextCommands(host_, contexts_, capset_).answer(control, type) ||
-           BlobCommands(host_, blobs_).answer(control, type);
+           BlobCommands(host_, blobs_, recorder_).answer(control, type);
 }
 
 uint32_t VirtioGpuRvk::capsets() const

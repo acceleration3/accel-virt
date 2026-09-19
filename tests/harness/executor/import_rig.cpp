@@ -22,8 +22,9 @@ constexpr std::size_t   entry_size = 16u;
 
 /* A rig that cannot make its events, thread or lock has nothing to test with. */
 ImportRig::ImportRig(bool executor)
-    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-      imports_(host_, blobs_, executor_), start_(nullptr), done_(nullptr), thread_(nullptr), job_(nullptr),
+    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), recorder_(host_), library_(), shares_(host_, library_),
+      executor_(host_, library_, shares_, 1u), blobs_(host_),
+      imports_(host_, blobs_, executor_, recorder_, 1u), start_(nullptr), done_(nullptr), thread_(nullptr), job_(nullptr),
       job_context_(nullptr), stopping_(false)
 {
     host_.add_guest_ram(ram, ram_pages * page);
@@ -68,6 +69,7 @@ MockHost        &ImportRig::host() { return host_; }
 MockExecutorOps &ImportRig::ops() { return ops_; }
 BlobTable       &ImportRig::blobs() { return blobs_; }
 BlobImports     &ImportRig::imports() { return imports_; }
+WireRecorder    &ImportRig::recorder() { return recorder_; }
 ContextExecutor &ImportRig::executor() { return executor_; }
 
 std::uint8_t *ImportRig::guest_page(std::uint32_t index)

@@ -13,6 +13,7 @@
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/probe/host_feasibility.hpp"
+#include "device/recording/wire_recorder.hpp"
 
 #include <stdint.h>
 
@@ -36,7 +37,7 @@ public:
      * accepts; otherwise the binding's answer. Without an executor there is
      * no capset. */
     [[nodiscard]] Status realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
-                                 TextBuffer &message);
+                                 const RvkRecordingOptions *recording, TextBuffer &message);
     /* Main loop: a virtio reset destroys every context, releases the fence
      * interrupts, then every blob. */
     void                 reset();
@@ -60,11 +61,18 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* The recording the device's properties asked for, once the GPU is bound.
+     * invalid_parameter, named in `message`, for properties that name nothing;
+     * a host that cannot make the file leaves recording off and says so. */
+    [[nodiscard]] Status start_recording(const RvkRecordingOptions *recording, TextBuffer &message);
+
     Host              &host_;
     GpuBinding         binding_;
     ExecutorLibrary    library_;
     HostFeasibility    feasibility_;
     DeviceCapset       capset_;
+    /* Before the contexts and the blobs, which record through it. */
+    WireRecorder       recorder_;
     /* Before the contexts, which unpin blobs and stop raising interrupts as
      * they are destroyed. */
     BlobTable          blobs_;

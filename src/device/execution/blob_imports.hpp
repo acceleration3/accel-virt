@@ -25,6 +25,7 @@ class BlobWindow;
 class ContextExecutor;
 class GuestPageAlias;
 class Host;
+class WireRecorder;
 struct BlobImportsProbe;
 
 class BlobImports {
@@ -32,7 +33,8 @@ public:
     /* What the executor library keeps for one context (its ImportTable). */
     static constexpr uint32_t max_imports = 256u;
 
-    BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor);
+    BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor, WireRecorder &recorder,
+                uint32_t context);
     /* Main loop, after the worker destroyed the executor, which released every
      * import: the aliases they held are let go. */
     ~BlobImports();
@@ -85,6 +87,8 @@ private:
     Host            &host_;
     BlobTable       &blobs_;
     ContextExecutor &executor_;
+    WireRecorder    &recorder_;
+    uint32_t         context_;
     uint32_t         ring_resource_;
     /* Never reused while the context lives, as the executor ABI requires. */
     uint64_t         next_blob_id_;

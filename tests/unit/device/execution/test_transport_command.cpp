@@ -4,6 +4,7 @@
  * device does not know. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_imports.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
@@ -29,7 +30,10 @@ namespace {
 /* What a context's transport commands run over: no library, no blobs. */
 class Fixture {
 public:
-    Fixture() : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_), imports_(host_, blobs_, executor_) {}
+    Fixture()
+        : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
+          recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u)
+    {}
 
     av::MockHost &host() { return host_; }
     Status run(const CommandHeader &header, const std::uint8_t *body = nullptr)
@@ -47,6 +51,7 @@ private:
     av::ExecutorShares  shares_;
     av::ContextExecutor executor_;
     av::BlobTable       blobs_;
+    av::WireRecorder    recorder_;
     av::BlobImports     imports_;
     std::uint8_t        reply_[32] = {};
     std::size_t         produced_ = 0u;

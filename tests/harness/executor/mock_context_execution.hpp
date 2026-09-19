@@ -12,6 +12,7 @@
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 
 #include <cstdint>
@@ -29,9 +30,11 @@ public:
 
     MockExecutorOps &ops();
     BatchExecutor   &batches();
+    WireRecorder    &recorder();
 
 private:
     MockExecutorOps ops_;
+    WireRecorder    recorder_;
     ExecutorLibrary library_;
     ExecutorShares  shares_;
     ContextExecutor executor_;

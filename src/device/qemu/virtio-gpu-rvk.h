@@ -28,6 +28,12 @@ struct VirtIOGPURvk {
     /* The executor library's path (rvk_executor.h); none: no capset. */
     char *executor;
     GModule *executor_library;
+    /* The wire recording this device writes (docs/protocol.md, feature 065);
+     * no path is recording off. */
+    char *record;
+    uint64_t record_limit;
+    char *record_kinds;
+    bool record_wrap;
     RvkHostOps host;
     uint32_t gpu_count;
     RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];

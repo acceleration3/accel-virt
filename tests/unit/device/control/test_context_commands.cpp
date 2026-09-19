@@ -5,6 +5,7 @@
 #include "device/context/device_context.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/control/context_commands.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/control/control_request.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -104,8 +105,9 @@ class Fixture {
 public:
     /* A device offering `sub_apis`, over a library of `abi_version`. */
     explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = RVK_EXECUTOR_ABI_VERSION)
-        : blobs_(host_), interrupts_(host_), ops_(sub_apis), library_(),
-          contexts_(host_, blobs_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
+        : blobs_(host_), interrupts_(host_), ops_(sub_apis), library_(), recorder_(host_),
+          contexts_(host_, blobs_, interrupts_, library_, recorder_), capset_(host_),
+          commands_(host_, contexts_, capset_)
     {
         static_cast<void>(blobs_.initialize());
         static_cast<void>(contexts_.initialize());
@@ -152,6 +154,7 @@ private:
     av::FenceInterrupts interrupts_;
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
+    av::WireRecorder    recorder_;
     DeviceContextTable  contexts_;
     DeviceCapset       capset_;
     ContextCommands    commands_;
@@ -307,7 +310,8 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
   BlobTable blobs(host);
   av::FenceInterrupts interrupts(host);
   av::ExecutorLibrary library;
-  DeviceContextTable contexts(host, blobs, interrupts, library);
+  av::WireRecorder recorder(host);
+  DeviceContextTable contexts(host, blobs, interrupts, library, recorder);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u, 0u);

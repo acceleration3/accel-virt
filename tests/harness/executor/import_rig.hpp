@@ -13,6 +13,7 @@
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/host/mock_host.hpp"
 
@@ -37,6 +38,7 @@ public:
     MockExecutorOps &ops();
     BlobTable       &blobs();
     BlobImports     &imports();
+    WireRecorder    &recorder();
     ContextExecutor &executor();
     /* Guest page `index`, which the rig filled with the byte 0x10 + index. */
     std::uint8_t    *guest_page(std::uint32_t index);
@@ -55,6 +57,7 @@ private:
 
     MockHost        host_;
     MockExecutorOps ops_;
+    WireRecorder    recorder_;
     ExecutorLibrary library_;
     ExecutorShares  shares_;
     ContextExecutor executor_;

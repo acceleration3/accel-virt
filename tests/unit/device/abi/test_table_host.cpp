@@ -9,6 +9,7 @@
 #include "device/abi/table_host.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "harness/executor/mock_context_execution.hpp"
 #include "device/host/host.hpp"
@@ -36,7 +37,8 @@ using av::Worker;
 TEST(table_host, a_worker_runs_over_the_c_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   av::FenceInterrupts interrupts(host);
-  av::FenceReporter fences(host, interrupts);
+  av::WireRecorder recorder(host);
+  av::FenceReporter fences(host, interrupts, recorder, 1u);
   av::MockContextExecution execution(host, fences, 12u);
   av::RingConsumer ring(host, fences, execution.batches());
   Worker worker(host, ring);

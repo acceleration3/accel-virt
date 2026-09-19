@@ -165,7 +165,8 @@ void rvk_device_trace_start(RvkMainLoopScheduler schedule);
  * `base_blobs` is the base class's blob property. NULL on failure, with the
  * reason in `error`. `ops` and `executor` must outlive the device. Main loop. */
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, char *error, size_t error_size);
+                             int base_blobs, const RvkRecordingOptions *recording, char *error,
+                             size_t error_size);
 /* Nonzero when the core answered the control request (a
  * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);

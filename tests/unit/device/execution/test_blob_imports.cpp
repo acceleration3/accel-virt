@@ -7,7 +7,11 @@
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/blob_imports.hpp"
+#include "device/recording/wire_recorder.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "harness/executor/import_rig.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "proto/context/context_resources.hpp"
@@ -370,7 +374,7 @@ TEST(blob_imports, the_aliases_still_held_go_with_the_context)
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(9u), pages, 2u), Status::ok);
   const std::uint32_t allocations = rig.host().live_allocations();
   {
-      BlobImports context(rig.host(), rig.blobs(), rig.executor());
+      BlobImports context(rig.host(), rig.blobs(), rig.executor(), rig.recorder(), 1u);
       context.configure(ImportRig::ring);
       std::uint64_t first = 0u;
       std::uint64_t second = 0u;
@@ -390,7 +394,7 @@ TEST(blob_imports, the_aliases_still_held_go_with_the_context)
   CHECK_STATUS(rig.blobs().release(rig.chunk(8u)), Status::ok);
   CHECK_STATUS(rig.blobs().release(rig.chunk(9u)), Status::ok);
   const std::uint32_t without_blobs = rig.host().live_allocations();
-  { BlobImports unused(rig.host(), rig.blobs(), rig.executor()); }   /* never imported: nothing to let go */
+  { BlobImports unused(rig.host(), rig.blobs(), rig.executor(), rig.recorder(), 1u); }   /* never imported: nothing to let go */
   CHECK_EQ(rig.host().live_allocations(), without_blobs); }
 
 TEST(blob_imports, configures_on_the_main_loop_and_imports_on_the_worker)
@@ -425,3 +429,73 @@ TEST(blob_imports_invariants, each_rule_is_detected)
   CHECK(!rig.imports().invariants_hold());   /* an id not handed out yet */
   static_cast<void>(av::BlobImportsProbe::swap_blob_id(rig.imports(), kept_id));
   CHECK(rig.imports().invariants_hold()); }
+
+TEST(blob_imports_import, records_the_blob_it_handed_over_and_the_bytes_behind_it)
+{ ImportRig rig;
+  const std::uint32_t pages[] = {7u, 8u};
+  CHECK_STATUS(rig.create_guest_blob(rig.chunk(3u), pages, 2u), Status::ok);
+  CHECK_STATUS(rig.recorder().open("imports.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+                                   av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  std::uint64_t device_memory = 0u;
+  rig.on_worker([&] {
+      CHECK_STATUS(rig.imports().import(rig.chunk(3u), page, page, 5u, device_memory), Status::ok);
+  });
+  CHECK(rig.imports().invariants_hold());
+  av::RecordedFile    file(rig.host(), "imports.rvk");
+  av::RecordHeader    record;
+  const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
+  CHECK(payload != nullptr);
+  if (payload != nullptr) {
+      CHECK_EQ(payload[0], 1u);            /* imported */
+      CHECK_EQ(payload[4], 5u);            /* the memory type the guest asked for */
+      CHECK_EQ(payload[16], page & 0xFFu); /* the offset */
+      CHECK_EQ(payload[17], (page >> 8) & 0xFFu);
+  }
+  CHECK_EQ(record.context(), 1u);
+  payload = file.expect(av::RecordKind::blob_bytes, record);
+  CHECK(payload != nullptr);
+  CHECK_EQ(record.length(), 16u + page);
+  /* The second page of the blob is guest page 8, which the rig filled with
+   * 0x10 + 8; a replay recreates the import from exactly these bytes. */
+  if (payload != nullptr) CHECK_EQ(payload[16], 0x18u);
+  CHECK_EQ(file.remaining(), 0u);
+
+  rig.on_worker([&] { rig.imports().release(device_memory); });
+  av::RecordedFile after(rig.host(), "imports.rvk");
+  CHECK_EQ(after.remaining(), 3u);
+  rig.recorder().close(); }
+
+TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_only_its_lifetime)
+{ ImportRig rig;
+  const std::uint32_t pages[] = {7u};
+  CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.recorder().open("lifetimes.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+                                   av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  std::uint64_t device_memory = 0u;
+  rig.on_worker([&] {
+      CHECK_STATUS(rig.imports().import(rig.chunk(4u), 0u, page, 0u, device_memory), Status::ok);
+      rig.imports().release(device_memory);
+  });
+  av::RecordedFile file(rig.host(), "lifetimes.rvk");
+  av::RecordHeader record;
+  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
+  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
+  CHECK_EQ(file.remaining(), 0u);
+  rig.recorder().close(); }
+
+TEST(blob_imports_import, an_import_the_executor_refuses_records_nothing)
+{ ImportRig rig;
+  const std::uint32_t pages[] = {7u};
+  CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
+  CHECK_STATUS(rig.recorder().open("refused.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+                                   av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  rig.ops().refuse_import_at(1u);
+  std::uint64_t device_memory = 0u;
+  rig.on_worker([&] {
+      CHECK_STATUS(rig.imports().import(rig.chunk(5u), 0u, page, 0u, device_memory), Status::not_supported);
+  });
+  CHECK_EQ(av::RecordedFile(rig.host(), "refused.rvk").remaining(), 0u);
+  rig.recorder().close(); }

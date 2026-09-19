@@ -2,6 +2,9 @@
  * answer, every refusal, and what the base class is left to answer. */
 #include "core/support/status.hpp"
 #include "device/control/blob_commands.hpp"
+#include "device/recording/wire_recorder.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
@@ -9,6 +12,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
 
 #include <cstdint>
@@ -21,6 +25,7 @@ using av::GpuRequestBuilder;
 using av::MockHost;
 using av::MockRequest;
 using av::Status;
+using av::WireRecorder;
 
 namespace {
 
@@ -40,7 +45,7 @@ GpuRequestBuilder create_blob(std::uint32_t id, std::uint32_t memory, std::uint3
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), commands_(host_, blobs_)
+    Fixture() : blobs_(host_), recorder_(host_), commands_(host_, blobs_, recorder_)
     {
         static_cast<void>(blobs_.initialize());
         host_.add_guest_ram(ram, 0x10000u);
@@ -68,10 +73,12 @@ public:
     }
     MockHost  &host() { return host_; }
     BlobTable &blobs() { return blobs_; }
+    WireRecorder &recorder() { return recorder_; }
 
 private:
     MockHost     host_;
     BlobTable    blobs_;
+    WireRecorder recorder_;
     BlobCommands commands_;
 };
 
@@ -240,3 +247,56 @@ TEST(blob_commands_unref, a_blob_an_import_holds_is_refused_and_kept)
   fixture.blobs().release_alias(4u);
   CHECK_EQ(fixture.send(unref), ok_nodata);
   CHECK(!fixture.blobs().contains(4u)); }
+
+TEST(blob_commands_create, records_a_blob_created_and_a_blob_released)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.recorder().open("blobs.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+                                       av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  GpuRequestBuilder request = create_blob(1u, guest, 0u, 2u, 0u, 0x3000u);
+  request.u64(ram).u32(0x1000u).u32(0u).u64(ram + 0x4000u).u32(0x2000u).u32(0u);
+  CHECK_EQ(fixture.send(request), ok_nodata);
+  CHECK_EQ(fixture.send(create_blob(2u, host3d, mappable, 0u, 0u, 0x2000u)), ok_nodata);
+  GpuRequestBuilder unref(BlobCommands::resource_unref);
+  unref.u32(1u).u32(0u);
+  CHECK_EQ(fixture.send(unref), ok_nodata);
+
+  av::RecordedFile    file(fixture.host(), "blobs.rvk");
+  av::RecordHeader    record;
+  const std::uint8_t *payload = file.expect(av::RecordKind::blob, record);
+  CHECK(payload != nullptr);
+  if (payload != nullptr) {
+      CHECK_EQ(payload[0], 0u);       /* created */
+      CHECK_EQ(payload[8], 1u);       /* the guest blob's resource id */
+      CHECK_EQ(payload[24], 0u);      /* its size, 0x3000 */
+      CHECK_EQ(payload[25], 0x30u);
+  }
+  /* The blob record names no context: a blob belongs to the device. */
+  CHECK_EQ(record.context(), 0u);
+  payload = file.expect(av::RecordKind::blob, record);
+  CHECK(payload != nullptr);
+  if (payload != nullptr) {
+      CHECK_EQ(payload[0], 0u);
+      CHECK_EQ(payload[8], 2u);
+  }
+  payload = file.expect(av::RecordKind::blob, record);
+  CHECK(payload != nullptr);
+  if (payload != nullptr) {
+      CHECK_EQ(payload[0], 2u);       /* released */
+      CHECK_EQ(payload[8], 1u);
+  }
+  CHECK_EQ(file.remaining(), 0u);
+  fixture.recorder().close(); }
+
+TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.recorder().open("refused.rvk", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
+                                       av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  /* A host blob that is not mappable, and an unref of a resource nobody made. */
+  CHECK_EQ(fixture.send(create_blob(3u, host3d, 0u, 0u, 0u, 0x2000u)), err_invalid_parameter);
+  GpuRequestBuilder unref(BlobCommands::resource_unref);
+  unref.u32(99u).u32(0u);
+  static_cast<void>(fixture.send(unref));
+  CHECK_EQ(av::RecordedFile(fixture.host(), "refused.rvk").remaining(), 0u);
+  fixture.recorder().close(); }

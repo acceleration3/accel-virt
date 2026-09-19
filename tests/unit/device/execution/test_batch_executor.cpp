@@ -6,6 +6,9 @@
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/batch_executor.hpp"
+#include "device/recording/wire_recorder.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
@@ -22,6 +25,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -111,8 +115,9 @@ public:
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
           reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
           page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-          imports_(host_, blobs_, executor_), staging_(host_), interrupts_(host_), fences_(host_, interrupts_),
-          batches_(host_, executor_, imports_, staging_, fences_)
+          recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u), staging_(host_),
+          interrupts_(host_), fences_(host_, interrupts_, recorder_, 1u),
+          batches_(host_, executor_, imports_, staging_, fences_, recorder_, 1u)
     {
         std::memset(reply_, 0xEE, sizeof reply_);
         static_cast<void>(library_.accept(&ops_.table()));
@@ -132,6 +137,14 @@ public:
     }
     MockExecutorOps &ops() { return ops_; }
     BatchExecutor   &batches() { return batches_; }
+    av::WireRecorder &recorder() { return recorder_; }
+    /* Every record kind, so what this batch produced can be read in order. */
+    void record_to(const char *path)
+    {
+        CHECK_STATUS(recorder_.open(path, 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+                                    av::ProtocolVersion(1u, 1u)),
+                     Status::ok);
+    }
     GuestRing       &guest() { return guest_; }
     const std::uint8_t *reply() const { return reply_; }
     ReplyHeader      reply_header() const
@@ -170,6 +183,31 @@ public:
         host_.join_thread(thread);
     }
 
+    /* A batch left running on its worker, for a test that must look at the
+     * recording while a command is still inside the executor. */
+    struct Running {
+        Fixture      *fixture;
+        std::uint64_t head;
+        BatchHeader   batch;
+        Status        status;
+        void         *thread;
+    };
+
+    void begin(Running &running, std::uint64_t fence, const Commands &commands)
+    {
+        running = Running{this, guest_.tail(), BatchHeader(commands.size(), fence), Status::ok, nullptr};
+        guest_.write_batch(fence, commands.bytes(), commands.size());
+        CHECK_STATUS(host_.start_thread([](void *context) {
+            auto *const r = static_cast<Running *>(context);
+            RingWindow  ring(BlobWindow(&r->fixture->ring_pointer_, &r->fixture->ring_length_, 1u,
+                                        r->fixture->ring_length_), 12u);
+            if (!r->fixture->batches_.started()) static_cast<void>(r->fixture->batches_.start());
+            r->status = r->fixture->batches_.run(ring, r->head, r->batch);
+        }, &running, running.thread), Status::ok);
+    }
+
+    void finish(Running &running) { host_.join_thread(running.thread); }
+
     ~Fixture()
     {
         on_worker([](void *context) { static_cast<Fixture *>(context)->batches_.stop(); }, this);
@@ -192,6 +230,7 @@ private:
     av::ExecutorShares shares_;
     ContextExecutor executor_;
     av::BlobTable   blobs_;
+    av::WireRecorder recorder_;
     av::BlobImports imports_;
     BatchStaging    staging_;
     av::FenceInterrupts interrupts_;
@@ -522,3 +561,78 @@ TEST(batch_executor_run, a_blob_command_framed_with_the_wrong_body_faults_the_co
       CHECK(fixture.batches().fault() == FaultCode::command_framing);
       CHECK_EQ(fixture.reply()[0], 0xEEu);
   } }
+
+TEST(batch_executor_run, records_the_batch_before_a_command_runs_and_its_answer_after)
+{ Fixture fixture;
+  fixture.record_to("batches.rvk");
+  Commands commands;
+  commands.add(0x10001u, 4u, CommandHeader::generate_reply, 0x11u).add(0x10002u, 6u, 0u, 0x22u);
+  CHECK_STATUS(fixture.run(7u, commands), Status::ok);
+  av::RecordedFile   file(fixture.host(), "batches.rvk");
+  av::RecordHeader   record;
+  const std::uint8_t *payload = file.expect(av::RecordKind::batch, record);
+  CHECK(payload != nullptr);
+  CHECK(record.fence() == 7u);
+  CHECK_EQ(record.context(), 1u);
+  CHECK_EQ(record.length(), commands.size());
+  if (payload != nullptr) CHECK_EQ(std::memcmp(payload, commands.bytes(), commands.size()), 0);
+  payload = file.expect(av::RecordKind::reply, record);
+  CHECK(payload != nullptr);
+  CHECK(record.fence() == 7u);
+  CHECK_EQ(record.length(), 4u);
+  if (payload != nullptr) CHECK_EQ(payload[0], 0x11u);
+  CHECK_EQ(file.remaining(), 0u);
+  fixture.recorder().close(); }
+
+TEST(batch_executor_run, records_the_fault_of_a_batch_that_did_not_complete)
+{ Fixture fixture;
+  fixture.record_to("faults.rvk");
+  Commands commands;
+  commands.add(MockExecutorOps::undecodable_id, 4u);
+  CHECK_STATUS(fixture.run(3u, commands), Status::malformed);
+  CHECK(fixture.batches().fault() == FaultCode::undecodable);
+  av::RecordedFile   file(fixture.host(), "faults.rvk");
+  av::RecordHeader   record;
+  CHECK(file.expect(av::RecordKind::batch, record) != nullptr);
+  const std::uint8_t *payload = file.expect(av::RecordKind::fault, record);
+  CHECK(payload != nullptr);
+  CHECK(record.fence() == 3u);
+  if (payload != nullptr) CHECK_EQ(payload[0], static_cast<std::uint8_t>(FaultCode::undecodable));
+  CHECK_EQ(file.remaining(), 0u);
+  fixture.recorder().close(); }
+
+TEST(batch_executor_run, with_recording_off_it_asks_the_host_for_no_recording_at_all)
+{ Fixture fixture;
+  Commands commands;
+  commands.add(0x10001u, 4u, CommandHeader::generate_reply, 0x11u);
+  CHECK_STATUS(fixture.run(7u, commands), Status::ok);
+  CHECK(!fixture.recorder().recording());
+  CHECK(fixture.recorder().records() == 0u);
+  CHECK_EQ(fixture.host().recording_length("batches.rvk"), 0u); }
+
+/* US1 scenario 3: a host driver that takes the process down with it must leave
+ * the batch it was given behind. Held inside the executor's first command, the
+ * recording already holds the whole batch and nothing of its answer. */
+TEST(batch_executor_run, the_batch_is_on_the_recording_while_its_first_command_is_still_running)
+{ Fixture fixture;
+  fixture.record_to("crash.rvk");
+  Commands commands;
+  commands.add(0x10001u, 4u, CommandHeader::generate_reply, 0x11u);
+  fixture.ops().hold();
+  Fixture::Running running;
+  fixture.begin(running, 11u, commands);
+  while (fixture.ops().waiting() == 0u) { }
+  { av::RecordedFile   file(fixture.host(), "crash.rvk");
+    av::RecordHeader   record;
+    const std::uint8_t *payload = file.expect(av::RecordKind::batch, record);
+    CHECK(payload != nullptr);
+    if (payload != nullptr) {
+        CHECK(record.fence() == 11u);
+        CHECK_EQ(std::memcmp(payload, commands.bytes(), commands.size()), 0);
+    }
+    CHECK_EQ(file.remaining(), 0u); }
+  fixture.ops().release();
+  fixture.finish(running);
+  CHECK_STATUS(running.status, Status::ok);
+  CHECK(fixture.batches().invariants_hold());
+  fixture.recorder().close(); }

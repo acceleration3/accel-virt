@@ -25,12 +25,13 @@ class ContextExecutor;
 class FenceReporter;
 class Host;
 class RingWindow;
+class WireRecorder;
 struct BatchExecutorProbe;
 
 class BatchExecutor {
 public:
     BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
-                  FenceReporter &fences);
+                  FenceReporter &fences, WireRecorder &recorder, uint32_t context);
     BatchExecutor(const BatchExecutor &) = delete;
     BatchExecutor &operator=(const BatchExecutor &) = delete;
 
@@ -66,6 +67,9 @@ private:
 
     [[nodiscard]] Status run_command(const CommandHeader &header, const uint8_t *payload, bool &answered,
                                      size_t &answer);
+    /* Records the fault `fault_` now names against `fence` and answers
+     * `status`, so every way a batch can fail leaves one record. */
+    [[nodiscard]] Status failed(uint64_t fence, Status status);
     void                 write_reply(uint64_t fence_id, size_t answer);
 
     Host            &host_;
@@ -73,6 +77,8 @@ private:
     BlobImports     &imports_;
     BatchStaging    &staging_;
     FenceReporter   &fences_;
+    WireRecorder    &recorder_;
+    uint32_t         context_;
     FaultCode        fault_;
     BlobWindow       reply_;
     uint64_t         batches_;

@@ -7,6 +7,7 @@
 #include "device/execution/transport_command.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_window.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
@@ -15,8 +16,9 @@
 namespace av {
 
 BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
-                             FenceReporter &fences)
-    : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences), fault_(FaultCode::none), reply_(),
+                             FenceReporter &fences, WireRecorder &recorder, uint32_t context)
+    : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences),
+      recorder_(recorder), context_(context), fault_(FaultCode::none), reply_(),
       batches_(0u), commands_(0u), skipped_(0u)
       {
           AV_SCOPE("BatchExecutor::BatchExecutor");
@@ -63,14 +65,17 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     host_.require_worker("BatchExecutor::run");
     if (!executor_.created()) {
         fault_ = FaultCode::no_executor;
-        return Status::invalid_state;
+        return failed(batch.fence_id(), Status::invalid_state);
     }
     const size_t length = batch.length();
     if (length != 0u && ring.copy(head + BatchHeader::encoded_size, staging_.payload(), length) != Status::ok) {
         fault_ = FaultCode::command_framing;
-        return Status::malformed;
+        return failed(batch.fence_id(), Status::malformed);
     }
     batches_++;
+    /* Before the first command runs, and flushed: a host driver that takes
+     * QEMU down with it leaves behind the batch it was given. */
+    recorder_.record_batch(context_, batch.fence_id(), staging_.payload(), static_cast<uint32_t>(length));
     CommandStream       stream(staging_.payload(), length);
     CommandHeader       header;
     const uint8_t      *payload = nullptr;
@@ -79,14 +84,21 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     Status              status = Status::ok;
     while ((status = stream.next(header, payload)) == Status::ok) {
         status = run_command(header, payload, answered, answer);
-        if (status != Status::ok) return status;
+        if (status != Status::ok) return failed(batch.fence_id(), status);
     }
     if (status != Status::no_space) {
         fault_ = FaultCode::command_framing;
-        return status;
+        return failed(batch.fence_id(), status);
     }
     if (answered) write_reply(batch.fence_id(), answer);
     return Status::ok;
+}
+
+Status BatchExecutor::failed(uint64_t fence, Status status)
+{
+    AV_SCOPE("BatchExecutor::failed");
+    recorder_.record_fault(context_, fence, fault_);
+    return status;
 }
 
 /* Only a command that asks for an answer is given somewhere to write it, so
@@ -150,6 +162,7 @@ void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
     static_cast<void>(header.encode(bytes, sizeof bytes));
     static_cast<void>(reply_.write(0u, bytes, sizeof bytes));
     static_cast<void>(reply_.write(ReplyHeader::encoded_size, staging_.reply(), header.size()));
+    recorder_.record_reply(context_, fence_id, staging_.reply(), header.size());
 }
 
 uint64_t BatchExecutor::batches() const

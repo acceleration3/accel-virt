@@ -19,6 +19,7 @@ class ExecutorLibrary;
 class FenceInterrupts;
 class Host;
 class StateWriter;
+class WireRecorder;
 struct DeviceContextTableProbe;
 
 class DeviceContextTable {
@@ -26,7 +27,8 @@ public:
     /* One worker thread each, so a bound on threads as much as on contexts. */
     static constexpr uint32_t max_contexts = 64u;
 
-    DeviceContextTable(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library);
+    DeviceContextTable(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
+                       const ExecutorLibrary &library, WireRecorder &recorder);
     ~DeviceContextTable();
     DeviceContextTable(const DeviceContextTable &) = delete;
     DeviceContextTable &operator=(const DeviceContextTable &) = delete;
@@ -59,6 +61,7 @@ private:
     BlobTable                   &blobs_;
     FenceInterrupts             &interrupts_;
     const ExecutorLibrary       &library_;
+    WireRecorder                &recorder_;
     /* Before the contexts, whose executors are withdrawn from it as they go. */
     ExecutorShares               shares_;
     ObjectStorage<DeviceContext> slots_[max_contexts];
