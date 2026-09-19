@@ -15,6 +15,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
@@ -38,6 +39,8 @@ public:
     RecordingThreadLock &lock();
     RecordingThreadLock &send_lock();
     RecordingLog        &log();
+    /* The watcher's thread, which a test turns itself. */
+    ScriptedThread      &watcher();
     clicd::ClIcdRoot    &root();
     FakeClLoader        &loader();
 
@@ -49,6 +52,7 @@ private:
     RecordingThreadLock  lock_;
     RecordingThreadLock  send_lock_;
     RecordingLog         log_;
+    ScriptedThread       watcher_;
     /* The root binds itself to the process's one binding - the same one the
      * dispatch table's entries reach it through - so what a test drives is
      * what a loader would. One rig at a time, as one ICD per process. */

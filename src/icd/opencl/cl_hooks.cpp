@@ -338,6 +338,48 @@ cl_int CL_API_CALL release_event(cl_event event)
     return root.release(event, ClObject::Kind::event);
 }
 
+cl_event CL_API_CALL create_user_event(cl_context context, cl_int *error)
+{
+    AV_SCOPE("create_user_event");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return cl_icd_binding.root().create_user_event(context, error);
+}
+
+cl_int CL_API_CALL set_user_event_status(cl_event event, cl_int status)
+{
+    AV_SCOPE("set_user_event_status");
+    AV_CL_ROOT_OR(CL_INVALID_EVENT);
+    return root.set_user_event_status(event, status);
+}
+
+cl_int CL_API_CALL wait_for_events(cl_uint count, const cl_event *events)
+{
+    AV_SCOPE("wait_for_events");
+    AV_CL_ROOT_OR(CL_INVALID_EVENT);
+    return root.wait_for_events(count, events);
+}
+
+cl_int CL_API_CALL get_event_info(cl_event event, cl_event_info name, size_t value_bytes,
+                                  void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_event_info");
+    AV_CL_ROOT_OR(CL_INVALID_EVENT);
+    return root.event_info(event, name, value_bytes, value, size_ret);
+}
+
+cl_int CL_API_CALL set_event_callback(cl_event event, cl_int status,
+                                      void(CL_CALLBACK *notify)(cl_event, cl_int, void *),
+                                      void *user_data)
+{
+    AV_SCOPE("set_event_callback");
+    AV_CL_ROOT_OR(CL_INVALID_EVENT);
+    if (notify == nullptr) return CL_INVALID_VALUE;
+    return root.watch_event(event, status, notify, user_data);
+}
+
 #undef AV_CL_ROOT_OR
 
 }  // namespace
@@ -387,7 +429,12 @@ void ClDispatchTable::fill()
     table_.clEnqueueSVMMap = &enqueue_svm_map;
     table_.clEnqueueSVMUnmap = &enqueue_svm_unmap;
     table_.clSetKernelArgSVMPointer = &set_kernel_arg_svm_pointer;
-    claimed_ = 36u;
+    table_.clCreateUserEvent = &create_user_event;
+    table_.clSetUserEventStatus = &set_user_event_status;
+    table_.clWaitForEvents = &wait_for_events;
+    table_.clGetEventInfo = &get_event_info;
+    table_.clSetEventCallback = &set_event_callback;
+    claimed_ = 41u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;

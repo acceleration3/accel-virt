@@ -19,8 +19,8 @@ extern "C" BOOL WINAPI rvkcl_construct_once(PINIT_ONCE, PVOID library, PVOID *)
 }
 
 ClIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(L"rvkcl"), kmt(),
-      root(heap, kmt, lock, send_lock, log, clicd::cl_icd_binding), trace()
+    : heap(), lock(), send_lock(), log(L"rvkcl"), kmt(), watcher(),
+      root(heap, kmt, lock, send_lock, log, watcher, clicd::cl_icd_binding), trace()
 {
     AV_SCOPE("ClIcdLibrary::Seams::Seams");
     log.open();

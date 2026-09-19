@@ -170,6 +170,34 @@ TEST(device_context_bind, a_bound_context_serves_its_ring_when_its_doorbell_ring
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
   CHECK_EQ(fixture.host().live_doorbells(), 1u); }
 
+TEST(device_context_bind, a_host_that_finishes_on_its_own_thread_reaches_the_guest_through_the_fence)
+{ Fixture fixture;
+  /* A fresh ring header, which is what the ring this binds to needs. */
+  GuestRing guest = fixture.guest();
+  static_cast<void>(guest.tail());
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
+  /* The executor is made on the worker, when the ring attaches. */
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().created() == 0u; spins++)
+      sched_yield();
+  /* And the library was given somewhere to call: signals_through hands the
+   * context's landing pad to create(), and a version 5 library takes it. */
+  CHECK(fixture.ops().signal_bound());
+  CHECK_EQ(fixture.ops().signals_set(), 1u);
+
+  const std::uint32_t before = fixture.host().raised(3u);
+  const std::uint64_t completed = fixture.page().completed_fence();
+  /* The host's own thread, which is neither the worker nor the main loop, says
+   * a callback fired. */
+  CHECK(fixture.ops().fire_signal());
+  for (std::uint32_t spins = 0u;
+       spins < 50000000u && fixture.host().raised(3u) == before; spins++)
+      sched_yield();
+  /* The guest is interrupted and told to ask what completed. What it was
+   * already promised never moves backwards, and nothing was submitted, so the
+   * completed fence is exactly where it was. */
+  CHECK_EQ(fixture.host().raised(3u), before + 1u);
+  CHECK_EQ(fixture.page().completed_fence(), completed); }
+
 TEST(device_context_bind, a_context_with_a_reply_slot_answers_into_it)
 { Fixture fixture;
   GuestRing guest = fixture.guest();

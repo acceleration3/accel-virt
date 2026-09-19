@@ -94,11 +94,17 @@ public:
     /* The kernel writes the wrong answer into its first `wrong` elements: a
      * device that ran something other than the program it was given. */
     void          miscompute(std::uint32_t wrong);
+    /* The mapping shows `wrong` elements that are not what the device wrote:
+     * a map that handed back stale host bytes. */
+    void          stale_mappings(std::uint32_t wrong);
     /* A callback registered and then never run, and one run twice: the two
      * ways an ICD's event thread gets a callback wrong. */
     void          forget_callbacks();
     void          run_callbacks_twice();
 
+    /* The suffix of the platform the run asked for devices of: which of the
+     * ones a loader listed the search settled on. */
+    const char   *asked_devices_of() const;
     /* Objects made and not released. */
     std::uint32_t live_objects() const;
     /* Releases of a handle this never made, or already took back, and calls
@@ -197,10 +203,12 @@ private:
     std::uint32_t devices_;
     const char   *device_name_;
     const char   *build_log_;
+    const char   *asked_devices_of_;
     std::uint64_t luid_;
     std::uint64_t vendor_;
     std::uint64_t svm_capabilities_;
     std::uint32_t wrong_;
+    std::uint32_t stale_;
     bool          forgets_callbacks_;
     bool          notifies_twice_;
     Object        objects_[max_objects];

@@ -14,6 +14,7 @@
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
+#include "um/icd/windows_service_thread.hpp"
 #include "um/trace/process_trace.hpp"
 
 #include <stdint.h>
@@ -59,6 +60,9 @@ private:
         SrwLock          send_lock;
         FileLog          log;
         GdiKmt           kmt;
+        /* Declared before the root, so it is stopped after the root has let
+         * its watcher go. */
+        WindowsServiceThread watcher;
         clicd::ClIcdRoot root;
         ProcessTrace     trace;
     };

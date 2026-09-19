@@ -10,6 +10,7 @@ clCreateCommandQueueWithProperties
 clCreateContext
 clCreateKernel
 clCreateProgramWithSource
+clCreateUserEvent
 clEnqueueMapBuffer
 clEnqueueNDRangeKernel
 clEnqueueReadBuffer
@@ -31,6 +32,7 @@ clReleaseProgram
 clSetEventCallback
 clSetKernelArg
 clSetKernelArgSVMPointer
+clSetUserEventStatus
 clSVMAlloc
 clSVMFree
 clWaitForEvents

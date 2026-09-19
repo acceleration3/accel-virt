@@ -464,3 +464,315 @@ TEST(cl_icd_root, unmapping_a_buffer_pointer_no_mapping_answered_is_refused)
   int elsewhere = 0;
   CHECK_EQ(rig.root().unmap(queue, buffer, &elsewhere, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(rig.root().unmap(queue, buffer, nullptr, nullptr), CL_INVALID_VALUE); }
+
+/* ---- events (US3) ------------------------------------------------------- */
+
+namespace av::clicd {
+
+/* The object table is private, and how many events are live is what the
+ * retain a registration holds is visible as. */
+struct ClIcdRootProbe {
+    static std::uint32_t live_of(ClIcdRoot &root, ClObject::Kind kind)
+    { return root.objects_.live_of(kind); }
+    static ClObject *made(ClIcdRoot &root, const void *pointer, ClObject::Kind kind)
+    { return root.objects_.made(pointer, kind); }
+};
+
+}  // namespace av::clicd
+
+using av::clicd::ClIcdRootProbe;
+
+namespace {
+
+constexpr std::uint64_t host_event = 0x6900u;
+
+/* What a callback saw, so a test can say it ran once and with what. */
+struct Callback {
+    std::uint32_t times = 0u;
+    cl_int        status = CL_QUEUED;
+    cl_event      event = nullptr;
+    void         *user_data = nullptr;
+};
+
+Callback callback;
+
+void CL_CALLBACK note(cl_event event, cl_int status, void *user_data)
+{
+    ++callback.times;
+    callback.status = status;
+    callback.event = event;
+    callback.user_data = user_data;
+}
+
+cl_context opened_context(ClIcdRig &rig, cl_device_id &device)
+{
+    device = opened_device(rig);
+    if (device == nullptr) return nullptr;
+    rig.host().blob_import(0u, 0x77u);
+    rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+    rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+    rig.host().cl_handle(host_context, CL_SUCCESS);
+    cl_int error = CL_INVALID_VALUE;
+    return rig.loader().create_context(device, &error);
+}
+
+/* A user event of `context`, which is the one kind of event an application
+ * makes rather than gets back from an enqueue. */
+cl_event made_user_event(ClIcdRig &rig, cl_context context)
+{
+    rig.host().cl_handle(host_event, CL_SUCCESS);
+    cl_int error = CL_INVALID_VALUE;
+    cl_event event = rig.loader().create_user_event(context, &error);
+    return error == CL_SUCCESS ? event : nullptr;
+}
+
+}  // namespace
+
+TEST(cl_icd_root, a_user_event_is_an_object_of_its_context_and_carries_the_table)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+  CHECK(rig.loader().dispatch_of(event) == &rig.root().dispatch());
+  /* One more object, and it is an event rather than anything else. */
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_user_event_the_host_refuses_is_not_wrapped)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+
+  rig.host().cl_handle(0u, CL_OUT_OF_HOST_MEMORY);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_user_event_made_on_something_that_is_not_a_context_is_refused)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+
+  /* A device is an object of this ICD, and still not a context. */
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_user_event(reinterpret_cast<cl_context>(device), &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  /* And an error pointer is optional: the refusal must not require one. */
+  CHECK(rig.root().create_user_event(nullptr, nullptr) == nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, completing_a_user_event_is_sent_and_a_pointer_of_no_event_is_not)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_user_event_status(event, CL_COMPLETE), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+
+  /* The context is not an event, and nothing is sent for it. */
+  CHECK_EQ(rig.root().set_user_event_status(reinterpret_cast<cl_event>(context), CL_COMPLETE),
+           CL_INVALID_EVENT);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_wait_takes_one_command_for_all_of_its_events)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event first = made_user_event(rig, context);
+  cl_event second = made_user_event(rig, context);
+  CHECK(first != nullptr);
+  CHECK(second != nullptr);
+
+  const cl_event both[] = {first, second};
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().wait_for_events(2u, both), CL_SUCCESS);
+  /* One round trip, not one per event: the wait is what the host does. */
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_wait_of_nothing_or_of_something_that_is_not_an_event_asks_the_host_nothing)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.root().wait_for_events(0u, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().wait_for_events(1u, nullptr), CL_INVALID_VALUE);
+  /* A run of events with one impostor in it is refused whole, and the good
+   * ones before it are not waited on either. */
+  const cl_event mixed[] = {event, reinterpret_cast<cl_event>(context)};
+  CHECK_EQ(rig.root().wait_for_events(2u, mixed), CL_INVALID_EVENT);
+  /* More than a wait can hold on its stack is told, not truncated. */
+  cl_event many[av::clicd::ClIcdRoot::max_waited + 1u] = {};
+  for (cl_uint index = 0u; index < av::clicd::ClIcdRoot::max_waited + 1u; ++index)
+      many[index] = event;
+  CHECK_EQ(rig.root().wait_for_events(av::clicd::ClIcdRoot::max_waited + 1u, many),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, an_events_status_is_the_hosts_and_is_asked_for_over_its_own_context)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  cl_int      status = CL_QUEUED;
+  std::size_t answered = 0u;
+  CHECK_EQ(rig.loader().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status,
+                                   &status, &answered),
+           CL_SUCCESS);
+  CHECK_EQ(status, CL_COMPLETE);
+  CHECK_EQ(answered, sizeof status);
+  CHECK_EQ(rig.root().event_info(reinterpret_cast<cl_event>(context),
+                                 CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr, nullptr),
+           CL_INVALID_EVENT);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_callback_is_registered_with_the_host_and_watched_here)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  callback = Callback();
+  int user_data = 0;
+  CHECK(!rig.watcher().running());
+  /* The host is told first - it is what will push the completion - and only a
+   * host that took it leaves anything registered here. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, &user_data), CL_SUCCESS);
+  CHECK(rig.watcher().running());
+
+  /* Not yet: the host still says queued. */
+  const cl_int queued = CL_QUEUED;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&queued), sizeof queued);
+  CHECK(rig.watcher().step());
+  CHECK_EQ(callback.times, 0u);
+
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  CHECK(!rig.watcher().step());
+  CHECK_EQ(callback.times, 1u);
+  CHECK_EQ(callback.status, CL_COMPLETE);
+  CHECK(callback.event == event);
+  CHECK(callback.user_data == &user_data);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_callback_still_runs_on_an_event_the_application_released_first)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  callback = Callback();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, nullptr), CL_SUCCESS);
+  /* The application is done with it on the next line, which the API allows
+   * and which is why the registration holds a reference of its own. */
+  CHECK_EQ(rig.loader().release_event(event), CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 1u);
+
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  /* The host is told to release it when that last reference goes. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK(!rig.watcher().step());
+  CHECK_EQ(callback.times, 1u);
+  CHECK(callback.event == event);
+  /* And now it is gone, without the application releasing it twice. */
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_callback_of_nothing_or_on_something_that_is_not_an_event_is_refused)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.root().watch_event(reinterpret_cast<cl_event>(context), CL_COMPLETE, &note, nullptr),
+           CL_INVALID_EVENT);
+  /* A host that refuses the registration leaves nothing watched here. */
+  rig.host().cl_result(CL_INVALID_OPERATION);
+  CHECK_EQ(rig.root().watch_event(event, CL_COMPLETE, &note, nullptr), CL_INVALID_OPERATION);
+  CHECK(!rig.watcher().running());
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, releasing_a_context_forgets_the_callbacks_registered_on_it)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  callback = Callback();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, nullptr), CL_SUCCESS);
+
+  /* The context goes, and with it the transport the watcher would ask over.
+   * Nothing is run and nothing is asked. */
+  CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK(!rig.watcher().step());
+  CHECK_EQ(callback.times, 0u);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, the_root_is_what_a_watcher_gives_a_delivered_event_back_to)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+
+  /* Registering takes a reference, so the application's own release is not
+   * the last one. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.loader().release_event(event), CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 1u);
+
+  /* And the watcher gives it back through the interface it holds rather than
+   * by name - which is the root, and the last reference. */
+  av::clicd::ClEventOwner &owner = rig.root();
+  ClObject *const held = ClIcdRootProbe::made(rig.root(), event, ClObject::Kind::event);
+  CHECK(held != nullptr);
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  owner.release_watched(*held);
+  CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 0u);
+  /* The host is told once, when that last reference goes. */
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.root().invariants_hold()); }

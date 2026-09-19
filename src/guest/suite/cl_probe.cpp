@@ -33,33 +33,29 @@ enum : uint64_t { mem_read_only = 4u, mem_write_only = 2u, mem_read_write = 1u }
 enum : uint64_t { map_read = 1u, map_write = 2u };
 enum : int32_t { complete = 0 };
 
-/* What a callback records, reached through its user data. */
-struct Callback {
-    uint32_t times;
-    int32_t  status;
-};
+}  // namespace
 
+/* An ABI boundary C requires: clSetEventCallback takes a bare function and one
+ * argument, so the probe is the argument and this forwards straight into it. */
 void callback_ran(void *, int32_t status, void *user_data)
 {
     AV_SCOPE("callback_ran");
-    Callback *const seen = static_cast<Callback *>(user_data);
-    if (seen == nullptr) return;
-    ++seen->times;
-    seen->status = status;
+    static_cast<ClProbe *>(user_data)->callback_arrived(status);
 }
-
-}  // namespace
 
 ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
     : steps_(kmt, report, "opencl"), report_(report), cl_(cl), platform_(nullptr),
       device_(nullptr),
       context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr), buffers_{},
-      first_{}, second_{}, sum_{}
+      first_{}, second_{}, sum_{}, callbacks_(0u), callback_status_(0)
 {
     AV_SCOPE("ClProbe::ClProbe");
     for (uint32_t index = 0u; index < elements; ++index) {
         first_[index] = static_cast<float>(index);
-        second_[index] = static_cast<float>(elements - index);
+        /* Distinct per element and distinct from both inputs, so a kernel
+         * that wrote one constant everywhere, or transposed its work-item
+         * index, fails the sum rather than passing it. */
+        second_[index] = static_cast<float>(2u * index + 1u);
         sum_[index] = first_[index] + second_[index];
     }
 }
@@ -67,21 +63,28 @@ ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
 void ClProbe::run()
 {
     AV_SCOPE("ClProbe::run");
-    if (platform_step() != Status::ok) return;
-    if (device_step() != Status::ok) return;
+    static_cast<void>(scenarios());
+    /* However far the run got, everything it made goes back: what a run
+     * leaves behind is what a process leaks, and a run that stopped at the
+     * build made as much as one that reached the end. */
+    release_all();
+}
+
+Status ClProbe::scenarios()
+{
+    AV_SCOPE("ClProbe::scenarios");
+    if (platform_step() != Status::ok) return Status::not_found;
+    if (device_step() != Status::ok) return Status::not_found;
     luid_step();
-    if (context_step() != Status::ok) return;
-    if (queue_step() != Status::ok) return;
-    if (program_step() != Status::ok) return;
-    if (kernel_step() != Status::ok) return;
-    if (read_step() != Status::ok) {
-        release_all();
-        return;
-    }
+    if (context_step() != Status::ok) return Status::not_found;
+    if (queue_step() != Status::ok) return Status::not_found;
+    if (program_step() != Status::ok) return Status::not_found;
+    if (kernel_step() != Status::ok) return Status::not_found;
+    if (read_step() != Status::ok) return Status::not_found;
     map_step();
     svm_step();
     callback_step();
-    release_all();
+    return Status::ok;
 }
 
 Status ClProbe::platform_step()
@@ -146,7 +149,11 @@ void ClProbe::luid_step()
     /* Both are the rvkgpu adapter's rather than the host GPU's. A LUID of
      * zero is what a device on no adapter would answer. */
     const bool named = asked_vendor == 0 && asked_luid == 0 && luid != 0u && vendor != 0u;
-    steps_.check("luid", named ? Status::ok : Status::not_found);
+    /* Measured rather than checked: this step makes no D3DKMT call, so the
+     * code a plain check would print is always zero. The LUID's low half is
+     * what a reader can match against the adapter's. */
+    steps_.check_measured("luid", named ? Status::ok : Status::not_found,
+                          static_cast<uint32_t>(luid));
 }
 
 Status ClProbe::context_step()
@@ -165,12 +172,18 @@ Status ClProbe::queue_step()
     if (steps_.check_result("queue", queue_ != nullptr ? 0 : error) != Status::ok) {
         return Status::not_found;
     }
-    const size_t bytes = sizeof(float) * elements;
-    buffers_[0] = cl_.create_buffer(context_, mem_read_only, bytes, error);
-    buffers_[1] = cl_.create_buffer(context_, mem_read_only, bytes, error);
-    buffers_[2] = cl_.create_buffer(context_, mem_read_write, bytes, error);
-    const bool made = buffers_[0] != nullptr && buffers_[1] != nullptr && buffers_[2] != nullptr;
-    if (steps_.check_result("buffers", made ? 0 : error) != Status::ok) return Status::not_found;
+    const size_t   bytes = sizeof(float) * elements;
+    const uint64_t flags[3] = {mem_read_only, mem_read_only, mem_read_write};
+    /* The first failure is what is reported. A later buffer that succeeded
+     * overwrites `error` with CL_SUCCESS, which would otherwise turn a failed
+     * creation into an "ok" line and leave a null buffer to be written to. */
+    int32_t refused = 0;
+    for (uint32_t index = 0u; index < 3u; ++index) {
+        error = 0;
+        buffers_[index] = cl_.create_buffer(context_, flags[index], bytes, error);
+        if (buffers_[index] == nullptr && refused == 0) refused = error != 0 ? error : -1;
+    }
+    if (steps_.check_result("buffers", refused) != Status::ok) return Status::not_found;
     if (steps_.check_result("write", cl_.write_buffer(queue_, buffers_[0], bytes, first_)) !=
         Status::ok) {
         return Status::not_found;
@@ -277,6 +290,9 @@ void ClProbe::svm_step()
     /* A kernel argument that is an address rather than an object: what the
      * ICD translates, and the device bounds-checks. */
     steps_.check_result("svm", cl_.set_kernel_svm(kernel_, 2u, shared));
+    /* And the output buffer goes back into the slot this borrowed, so a step
+     * added after this one dispatches against what every other step set. */
+    static_cast<void>(cl_.set_kernel_buffer(kernel_, 2u, buffers_[2]));
     cl_.svm_free(context_, shared);
 }
 
@@ -289,8 +305,12 @@ void ClProbe::callback_step()
         steps_.check_result("callback", error != 0 ? error : -1);
         return;
     }
-    Callback seen = {0u, 0};
-    if (cl_.watch_event(event, complete, &callback_ran, &seen) != 0) {
+    /* A member, not a local: a real ICD delivers on its own thread, and a
+     * callback that arrives after this frame has gone would otherwise write
+     * into a dead stack. */
+    callbacks_ = 0u;
+    callback_status_ = 0;
+    if (cl_.watch_event(event, complete, &callback_ran, this) != 0) {
         steps_.check_result("callback", -1);
         cl_.release_event(event);
         return;
@@ -300,7 +320,8 @@ void ClProbe::callback_step()
      * must not need that thread to be anywhere in particular. */
     steps_.check_result("user_event", cl_.set_user_event_status(event, complete));
     steps_.check_result("wait", cl_.wait_for_event(event));
-    steps_.check_measured("callback", seen.times == 1u ? Status::ok : Status::conflict, seen.times);
+    steps_.check_measured("callback", callbacks_ == 1u ? Status::ok : Status::conflict,
+                          callbacks_);
     cl_.release_event(event);
 }
 
@@ -317,6 +338,13 @@ void ClProbe::release_all()
     if (queue_ != nullptr) cl_.release_queue(queue_);
     if (context_ != nullptr) cl_.release_context(context_);
     steps_.check("release", Status::ok);
+}
+
+void ClProbe::callback_arrived(int32_t status)
+{
+    AV_SCOPE("ClProbe::callback_arrived");
+    ++callbacks_;
+    callback_status_ = status;
 }
 
 }  // namespace av

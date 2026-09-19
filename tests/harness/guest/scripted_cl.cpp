@@ -34,8 +34,8 @@ constexpr std::uintptr_t object_base = 0x5300u;
 
 ScriptedCl::ScriptedCl()
     : fail_at_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), devices_(1u),
-      device_name_("scripted rvkgpu"), build_log_(""), luid_(default_luid),
-      vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u),
+      device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
+      vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), objects_{}, live_(0u), misuses_(0u),
       shared_{}, shared_live_(false), shared_argument_(nullptr)
 {
@@ -77,9 +77,11 @@ void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }
 void ScriptedCl::offer_no_svm() { svm_capabilities_ = 0u; }
 void ScriptedCl::set_build_log(const char *log) { build_log_ = log; }
 void ScriptedCl::miscompute(std::uint32_t wrong) { wrong_ = wrong; }
+void ScriptedCl::stale_mappings(std::uint32_t wrong) { stale_ = wrong; }
 void ScriptedCl::forget_callbacks() { forgets_callbacks_ = true; }
 void ScriptedCl::run_callbacks_twice() { notifies_twice_ = true; }
 
+const char   *ScriptedCl::asked_devices_of() const { return asked_devices_of_; }
 std::uint32_t ScriptedCl::live_objects() const { return live_; }
 std::uint32_t ScriptedCl::misuses() const { return misuses_; }
 
@@ -186,12 +188,14 @@ std::int32_t ScriptedCl::platform_text(void *platform, std::uint32_t name, char 
 std::int32_t ScriptedCl::devices(void *platform, void **into, std::uint32_t room,
                                  std::uint32_t &written)
 {
-    const std::int32_t failed = failure(Call::devices);
-    if (failed != 0) return failed;
-    if (platform_row(platform) == none) {
+    const std::int32_t   failed = failure(Call::devices);
+    const std::uint32_t  row = platform_row(platform);
+    if (row == none) {
         misuses_++;
         return refused;
     }
+    asked_devices_of_ = suffixes_[row];
+    if (failed != 0) return failed;
     if (into == nullptr) return refused;
     written = devices_ < room ? devices_ : room;
     for (std::uint32_t index = 0u; index < written; index++) {
@@ -413,6 +417,9 @@ void *ScriptedCl::map_buffer(void *queue, void *buffer, std::uint64_t flags, std
         return nullptr;
     }
     mapped->mapped = true;
+    for (std::uint32_t index = 0u; index < stale_ && index < max_elements; index++) {
+        mapped->values[index] += 1.0f;
+    }
     return mapped->values;
 }
 

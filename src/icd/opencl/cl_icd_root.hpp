@@ -24,6 +24,8 @@
 #include "icd/common/icd_connection.hpp"
 #include "icd/opencl/cl_device_report.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
+#include "icd/opencl/cl_event_owner.hpp"
+#include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_platform.hpp"
@@ -41,6 +43,7 @@ class StateWriter;
 
 namespace av::icd {
 class LogSink;
+class ServiceThread;
 class ThreadLock;
 }  // namespace av::icd
 
@@ -49,10 +52,15 @@ namespace av::clicd {
 class ClIcdBinding;
 struct ClIcdRootProbe;
 
-class ClIcdRoot final : public StateReporter {
+class ClIcdRoot final : public StateReporter, public ClEventOwner {
 public:
+    /* Events one clWaitForEvents may name. A wait allocates nothing, so the
+     * handles live on its stack and this is what bounds them; an application
+     * asking for more is told, which is a refusal it can see. */
+    static constexpr cl_uint max_waited = 64u;
+
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              icd::LogSink &log, ClIcdBinding &binding);
+              icd::LogSink &log, icd::ServiceThread &watcher_thread, ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
     ClIcdRoot &operator=(const ClIcdRoot &) = delete;
@@ -129,6 +137,26 @@ public:
      * before it is sent, and refused here when it is inside no allocation. */
     cl_int set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const void *pointer);
 
+    /* ---- events (US3) ---------------------------------------------------- */
+
+    /* An event the application can complete itself, which is what a
+     * dependency between its own work and the device's is expressed with. */
+    cl_event create_user_event(cl_context context, cl_int *error);
+    cl_int   set_user_event_status(cl_event event, cl_int status);
+    /* Sleeps on the transport until the host has reached them; it does not
+     * poll, because a synchronous command's reply is what the wait is. */
+    cl_int   wait_for_events(cl_uint count, const cl_event *events);
+    cl_int   event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
+                        size_t *size_ret);
+    /* Registers a callback on the watcher's thread. No guest function pointer
+     * crosses the wire: the device registers its own with the host, and its
+     * completion wakes this context's worker. */
+    cl_int   watch_event(cl_event event, cl_int status,
+                         ClWatchedEvent::Notify notify, void *user_data);
+    /* The watcher giving back what watch_event took. Reached only from the
+     * watcher's thread, after a callback has run. */
+    void     release_watched(ClObject &event) override;
+
     /* Retain and release for every kind the ICD carries: the application's
      * count is the ICD's, and the host is told once the last one goes. */
     cl_int retain(void *object, ClObject::Kind kind);
@@ -173,6 +201,7 @@ private:
     /* The one device this ICD shows, made on the first clGetDeviceIDs. */
     ClDeviceReport         device_;
     ClObject              *device_object_;
+    ClEventWatcher         watcher_;
 };
 
 }  // namespace av::clicd

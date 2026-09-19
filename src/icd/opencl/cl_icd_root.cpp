@@ -39,11 +39,12 @@ void report_error(cl_int *error, cl_int value)
 }  // namespace
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
-                     icd::ThreadLock &send_lock, icd::LogSink &log, ClIcdBinding &binding)
+                     icd::ThreadLock &send_lock, icd::LogSink &log,
+                     icd::ServiceThread &watcher_thread, ClIcdBinding &binding)
     : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, 0u), objects_(memory, dispatch_.table()), connection_(kmt),
       contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr)
+      device_object_(nullptr), watcher_(watcher_thread, log, *this)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -383,6 +384,10 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
     const bool held_still = !last;
     static_cast<void>(objects_.release(*held));
     if (!held_still && kind == ClObject::Kind::context && context != nullptr) {
+        /* Callbacks registered on this context's events are dropped first:
+         * their transport is about to go, and asking the host over a torn
+         * down one is what would happen otherwise. */
+        watcher_.forget_context(context->wire());
         /* The context's own objects went with it in the table; its transport
          * and everything the host held on it go now. */
         static_cast<void>(contexts_.destroy(context));
@@ -869,6 +874,107 @@ cl_int ClIcdRoot::set_kernel_svm_argument(cl_kernel kernel, cl_uint index, const
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     return av::clproto::rvk_clSetKernelArgSVMPointer(*wire, held->wire(), index, host);
+}
+
+
+cl_event ClIcdRoot::create_user_event(cl_context context, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_user_event");
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr) {
+        report_error(error, CL_INVALID_CONTEXT);
+        return nullptr;
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    cl_int         host_error = CL_SUCCESS;
+    const uint64_t event = av::clproto::rvk_clCreateUserEvent(*wire, held->wire(), &host_error);
+    if (event == 0u) {
+        report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    return static_cast<cl_event>(wrap(ClObject::Kind::event, event, held->context(), held, error));
+}
+
+cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
+{
+    AV_SCOPE("ClIcdRoot::set_user_event_status");
+    ClObject *const held = judged(event, ClObject::Kind::event);
+    if (held == nullptr) return CL_INVALID_EVENT;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clSetUserEventStatus(*wire, held->wire(), status);
+}
+
+cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
+{
+    AV_SCOPE("ClIcdRoot::wait_for_events");
+    if (count == 0u || events == nullptr) return CL_INVALID_VALUE;
+    /* Every event of one wait belongs to one context, because that is where a
+     * transport is; the API says as much (CL_INVALID_CONTEXT otherwise). */
+    uint64_t         handles[max_waited] = {};
+    GuestClContext  *context = nullptr;
+    const cl_uint    waited = count < max_waited ? count : max_waited;
+    for (cl_uint index = 0u; index < waited; ++index) {
+        ClObject *const held = judged(events[index], ClObject::Kind::event);
+        if (held == nullptr) return CL_INVALID_EVENT;
+        if (context == nullptr) context = held->context();
+        if (held->context() != context) return CL_INVALID_CONTEXT;
+        handles[index] = held->wire();
+    }
+    if (count > max_waited) return CL_OUT_OF_RESOURCES;
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* A synchronous command: the reply lands when the host has reached them,
+     * and the transport sleeps on the context's fence until it does. Nothing
+     * here polls. */
+    return av::clproto::rvk_clWaitForEvents(*wire, waited, handles);
+}
+
+cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
+                             size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::event_info");
+    ClObject *const held = judged(event, ClObject::Kind::event);
+    if (held == nullptr) return CL_INVALID_EVENT;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetEventInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Notify notify,
+                              void *user_data)
+{
+    AV_SCOPE("ClIcdRoot::watch_event");
+    ClObject *const held = judged(event, ClObject::Kind::event);
+    if (held == nullptr) return CL_INVALID_EVENT;
+    GuestClContext *const context = held->context();
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* The device registers its own callback with the host; no guest function
+     * pointer crosses. What comes back is a wake, and the watcher is what
+     * asks which events it was about. */
+    const cl_int told = av::clproto::rvk_clSetEventCallback(*wire, held->wire(), status);
+    if (told != CL_SUCCESS) return told;
+    /* The application may release this event on its next line and the
+     * callback still has to run and still has to be handed it, so the
+     * registration gets a reference of its own. */
+    lock_.acquire();
+    held->retain();
+    lock_.release();
+    const cl_int registered = watcher_.watch(held, held->wire(), wire, status, notify, user_data);
+    if (registered != CL_SUCCESS) static_cast<void>(release(held, ClObject::Kind::event));
+    return registered;
+}
+
+
+void ClIcdRoot::release_watched(ClObject &event)
+{
+    AV_SCOPE("ClIcdRoot::release_watched");
+    static_cast<void>(release(&event, ClObject::Kind::event));
 }
 
 }  // namespace av::clicd

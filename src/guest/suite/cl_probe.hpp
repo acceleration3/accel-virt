@@ -33,7 +33,16 @@ public:
 
     void run();
 
+    /* What the ICD's thread calls when the watched event completes. Public
+     * because the callback the OpenCL API takes is a bare function, which is
+     * handed this object and nothing else. */
+    void callback_arrived(int32_t status);
+
 private:
+    /* Every step of the run, so that whatever it returns, run() is the one
+     * place that gives back what the run made. */
+    [[nodiscard]] Status scenarios();
+
     /* The platform this driver's loader found, and that it is ours. */
     [[nodiscard]] Status platform_step();
     /* One device, and what it says it is. */
@@ -69,6 +78,11 @@ private:
     float         first_[elements];
     float         second_[elements];
     float         sum_[elements];
+    /* Written by the ICD's thread, which is why they are members rather than
+     * locals of the step that registers the callback: a delivery that arrives
+     * after that frame has gone would write into a dead stack. */
+    uint32_t      callbacks_;
+    int32_t       callback_status_;
 };
 
 }  // namespace av

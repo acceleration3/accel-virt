@@ -8,8 +8,8 @@
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log)
-    : thread_(thread), log_(log), registrations_(), held_(0u), delivered_(0u)
+ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log, ClEventOwner &owner)
+    : thread_(thread), log_(log), owner_(owner), registrations_(), held_(0u), delivered_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");
 }
@@ -83,6 +83,10 @@ bool ClEventWatcher::turn()
         /* No ICD lock is held here, and the callback may call back into the
          * ICD - which is the whole reason it is not run under one. */
         ran.run(status);
+        /* And the reference the registration held goes back, after the
+         * callback rather than before: the cl_event it was handed had to
+         * still be an object while it ran. */
+        owner_.release_watched(*ran.event());
     }
     return held_ != 0u;
 }

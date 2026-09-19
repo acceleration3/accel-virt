@@ -76,6 +76,17 @@ public:
     cl_program     create_program(cl_context context, const char *source, cl_int *error);
     cl_int         build_program(cl_program program, const char *options);
     cl_kernel      create_kernel(cl_program program, const char *name, cl_int *error);
+    /* Events, through the same table: a slot the ICD left null would be a
+     * null call here rather than a test that quietly passed. */
+    cl_event       create_user_event(cl_context context, cl_int *error);
+    cl_int         set_user_event_status(cl_event event, cl_int status);
+    cl_int         wait_for_events(cl_uint count, const cl_event *events);
+    cl_int         event_info(cl_event event, cl_event_info name, std::size_t bytes, void *value,
+                              std::size_t *size_ret);
+    cl_int         set_event_callback(cl_event event, cl_int status,
+                                      void(CL_CALLBACK *notify)(cl_event, cl_int, void *),
+                                      void *user_data);
+    cl_int         release_event(cl_event event);
 
 private:
     clicd::ClIcdRoot *root_;

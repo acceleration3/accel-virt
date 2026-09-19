@@ -187,4 +187,53 @@ cl_kernel FakeClLoader::create_kernel(cl_program program, const char *name, cl_i
     return table->clCreateKernel(program, name, error);
 }
 
+
+cl_event FakeClLoader::create_user_event(cl_context context, cl_int *error)
+{
+    const cl_icd_dispatch *const table = first_word(context);
+    if (table == nullptr) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return table->clCreateUserEvent(context, error);
+}
+
+cl_int FakeClLoader::set_user_event_status(cl_event event, cl_int status)
+{
+    const cl_icd_dispatch *const table = first_word(event);
+    return table != nullptr ? table->clSetUserEventStatus(event, status) : CL_INVALID_EVENT;
+}
+
+cl_int FakeClLoader::wait_for_events(cl_uint count, const cl_event *events)
+{
+    /* The real loader dispatches a wait through the first event's table, so a
+     * wait of none has nothing to dispatch through. */
+    if (count == 0u || events == nullptr) return CL_INVALID_VALUE;
+    const cl_icd_dispatch *const table = first_word(events[0]);
+    return table != nullptr ? table->clWaitForEvents(count, events) : CL_INVALID_EVENT;
+}
+
+cl_int FakeClLoader::event_info(cl_event event, cl_event_info name, std::size_t bytes, void *value,
+                                std::size_t *size_ret)
+{
+    const cl_icd_dispatch *const table = first_word(event);
+    return table != nullptr ? table->clGetEventInfo(event, name, bytes, value, size_ret)
+                            : CL_INVALID_EVENT;
+}
+
+cl_int FakeClLoader::set_event_callback(cl_event event, cl_int status,
+                                        void(CL_CALLBACK *notify)(cl_event, cl_int, void *),
+                                        void *user_data)
+{
+    const cl_icd_dispatch *const table = first_word(event);
+    return table != nullptr ? table->clSetEventCallback(event, status, notify, user_data)
+                            : CL_INVALID_EVENT;
+}
+
+cl_int FakeClLoader::release_event(cl_event event)
+{
+    const cl_icd_dispatch *const table = first_word(event);
+    return table != nullptr ? table->clReleaseEvent(event) : CL_INVALID_EVENT;
+}
+
 }  // namespace av

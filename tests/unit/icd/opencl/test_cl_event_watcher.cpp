@@ -18,6 +18,8 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_context_rig.hpp"
 #include "harness/icd/scripted_thread.hpp"
+#include "harness/icd/counting_event_owner.hpp"
+#include "harness/icd/counting_event_owner.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
@@ -25,6 +27,8 @@
 #include <cstdint>
 
 using av::ClContextRig;
+using av::CountingEventOwner;
+using av::CountingEventOwner;
 using av::ScriptedThread;
 using av::Status;
 using av::clicd::ClEventWatcher;
@@ -67,7 +71,7 @@ cl_icd_dispatch dispatch = {};
 class Watching {
 public:
     Watching()
-        : rig_(), thread_(), watcher_(thread_, rig_.log()),
+        : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), owner_),
           event_(dispatch, ClObject::Kind::event, 0x6900u, nullptr, nullptr)
     {
         rig_.host().blob_import(0u, 0x77u);
@@ -81,11 +85,13 @@ public:
     ScriptedThread   &thread() { return thread_; }
     ClContextRig     &rig() { return rig_; }
     ClObject         &event() { return event_; }
+    CountingEventOwner &owner() { return owner_; }
     av::ClientTransport *wire() { return context_.object().wire(); }
 
 private:
     ClContextRig                   rig_;
     ScriptedThread                 thread_;
+    CountingEventOwner             owner_;
     ClEventWatcher                 watcher_;
     ClObject                       event_;
     av::ObjectStorage<GuestClContext> context_;
@@ -241,3 +247,48 @@ TEST(cl_event_watcher, an_event_the_host_can_no_longer_be_asked_about_is_dropped
   CHECK_EQ(ran.times, 1u);
   CHECK_EQ(rig.watcher().registered(), 0u);
   CHECK(rig.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, a_delivered_registration_gives_its_event_back_once_and_after_the_callback)
+{ Watching watching;
+  forget();
+  CHECK_EQ(watching.watcher().watch(&watching.event(), 0x6900u, watching.wire(), CL_COMPLETE,
+                                    &note, &user_data),
+           CL_SUCCESS);
+  /* Nothing is given back while it is still registered. */
+  CHECK_EQ(watching.owner().releases(), 0u);
+
+  const cl_int queued = CL_QUEUED;
+  watching.rig().host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&queued), sizeof queued);
+  CHECK(watching.thread().step());
+  CHECK_EQ(watching.owner().releases(), 0u);
+
+  const cl_int complete = CL_COMPLETE;
+  watching.rig().host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete),
+                                sizeof complete);
+  CHECK(!watching.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  /* Once, and it is the event the callback was handed - which it could only
+   * have been handed because the reference was still held while it ran. */
+  CHECK_EQ(watching.owner().releases(), 1u);
+  CHECK(watching.owner().last() == &watching.event());
+  CHECK(ran.event == reinterpret_cast<cl_event>(&watching.event()));
+
+  /* And a further turn delivers nothing, so nothing is given back twice. */
+  CHECK(!watching.thread().step());
+  CHECK_EQ(watching.owner().releases(), 1u);
+  CHECK(watching.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, an_event_whose_context_is_forgotten_is_not_given_back)
+{ Watching watching;
+  forget();
+  CHECK_EQ(watching.watcher().watch(&watching.event(), 0x6900u, watching.wire(), CL_COMPLETE,
+                                    &note, &user_data),
+           CL_SUCCESS);
+  /* The context is going, and its objects with it: there is nothing left to
+   * give the reference back to, and giving it back would reach into a table
+   * that no longer holds the event. */
+  watching.watcher().forget_context(watching.wire());
+  CHECK_EQ(watching.watcher().registered(), 0u);
+  CHECK_EQ(watching.owner().releases(), 0u);
+  CHECK_EQ(ran.times, 0u);
+  CHECK(watching.watcher().invariants_hold()); }

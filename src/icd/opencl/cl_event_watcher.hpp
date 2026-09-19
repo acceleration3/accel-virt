@@ -19,6 +19,7 @@
 #define AV_CLICD_CL_EVENT_WATCHER_HPP
 
 #include "icd/common/service_thread.hpp"
+#include "icd/opencl/cl_event_owner.hpp"
 #include "icd/opencl/cl_watched_event.hpp"
 
 #include <CL/cl.h>
@@ -45,7 +46,7 @@ public:
      * is refused, which is a call the application can see fail. */
     static constexpr uint32_t max_registrations = 256u;
 
-    ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log);
+    ClEventWatcher(icd::ServiceThread &thread, icd::LogSink &log, ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
     ClEventWatcher &operator=(const ClEventWatcher &) = delete;
@@ -53,7 +54,10 @@ public:
     /* What clSetEventCallback registers. `event` is the object the
      * application holds, and `wire` the number the host knows it by; the
      * transport is the one its context sends on. CL_OUT_OF_RESOURCES when
-     * there is no room, CL_INVALID_VALUE for a callback of nothing. */
+     * there is no room, CL_INVALID_VALUE for a callback of nothing.
+     *
+     * The caller has already taken the reference this gives back through the
+     * owner; a refusal here leaves it to the caller to drop. */
     cl_int watch(ClObject *event, uint64_t wire, ClientTransport *wire_of_context,
                  cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data);
 
@@ -62,7 +66,9 @@ public:
     bool turn() override;
 
     /* Forgets everything registered on `context_wire`, without running any of
-     * it: what a context being released means for the callbacks on it. */
+     * it: what a context being released means for the callbacks on it. The
+     * references are not given back, because the context's objects go with
+     * the context and there would be nothing left to give them to. */
     void forget_context(const ClientTransport *wire_of_context);
 
     uint32_t registered() const;
@@ -81,6 +87,7 @@ private:
 
     icd::ServiceThread &thread_;
     icd::LogSink       &log_;
+    ClEventOwner       &owner_;
     ClWatchedEvent      registrations_[max_registrations];
     uint32_t            held_;
     uint64_t            delivered_;
