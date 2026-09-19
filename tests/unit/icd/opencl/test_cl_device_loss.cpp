@@ -252,6 +252,16 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   CHECK_EQ(rig.root().svm_unmap(queue, bytes, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, bytes), CL_INVALID_ARG_VALUE);
 
+  /* A kernel made on a program of a lost context, and a user event made on
+   * the context itself: both need the transport that is gone. */
+  CHECK(rig.loader().create_kernel(program, "k", &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(context, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  /* And registering a callback on an event of it. */
+  CHECK_EQ(rig.root().watch_event(user, CL_COMPLETE, nullptr, nullptr), CL_OUT_OF_RESOURCES);
+
   /* Not one of them reached the driver. */
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }

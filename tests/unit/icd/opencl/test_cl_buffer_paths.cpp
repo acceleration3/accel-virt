@@ -559,3 +559,83 @@ TEST(cl_buffer_paths, a_map_asked_for_an_event_hands_one_back_on_either_path)
     CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, &given_back), CL_SUCCESS);
     CHECK(given_back != nullptr);
     CHECK(rig.root().invariants_hold()); } }
+
+/* An unmap on a context that has died while the mapping was live. The
+ * mapping is still the application's, so the unmap is a call it may legally
+ * make - and the only honest answer is that there is nothing to unmap it
+ * over. */
+TEST(cl_buffer_paths, an_unmap_of_a_live_mapping_on_a_lost_context_refuses)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_WRITE, 0u,
+                                             buffer_bytes, nullptr, nullptr);
+  CHECK(mapped != nullptr);
+  if (mapped == nullptr) return;
+
+  /* The fault, then the unmap. */
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.root().flush(opened.queue()), CL_OUT_OF_RESOURCES);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A map that begins past the end of its backing takes the staged path: the
+ * offset is the application's here, and a pointer into the arena at an offset
+ * the backing does not cover would be a pointer into another buffer's. */
+TEST(cl_buffer_paths, a_map_beginning_past_its_backing_is_staged)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[8] = {};
+  /* The staged read asks for exactly what the map asked for. */
+  rig.host().cl_bytes(CL_SUCCESS, filled, sizeof filled);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_INVALID_VALUE;
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ,
+                                             buffer_bytes + 8u, sizeof filled, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(mapped != nullptr);
+  /* The staged path: the map, then the read that fills the block. */
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The staged path running out of mapping rows: the host has already mapped
+ * it by then, so the block is freed and the row given back rather than the
+ * context keeping a mapping the application was never handed. */
+TEST(cl_buffer_paths, a_staged_map_with_no_row_left_gives_its_block_back)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  const unsigned char filled[buffer_bytes] = {};
+  for (std::uint32_t index = 0u; index < 64u; ++index) {
+      rig.host().cl_handle(host_mapped + index, CL_SUCCESS);
+      rig.host().cl_bytes(CL_SUCCESS, filled, 1u);
+      CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
+                                  nullptr) != nullptr);
+  }
+  rig.host().cl_handle(host_mapped + 64u, CL_SUCCESS);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
+                              &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK(rig.root().invariants_hold()); }

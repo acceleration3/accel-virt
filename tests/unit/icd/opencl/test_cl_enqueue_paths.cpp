@@ -402,3 +402,80 @@ TEST(cl_enqueue_paths, a_wait_over_two_contexts_or_too_many_events_is_refused)
   CHECK_EQ(rig.root().wait_for_events(2u, both), CL_INVALID_CONTEXT);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
+
+/* More non-blocking reads outstanding than the ICD can remember.
+ *
+ * A read it cannot record is one it could never deliver, so that read is made
+ * blocking instead - slower, and never wrong. Dropping it would lose bytes an
+ * application was told it would get. */
+TEST(cl_enqueue_paths, a_read_the_icd_cannot_remember_is_made_blocking_instead)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  /* Fill the table. Each read is a marker the ICD keeps until it delivers. */
+  for (std::uint32_t index = 0u; index < 64u; ++index) {
+      rig.host().cl_enqueued(CL_SUCCESS, host_event + index);
+      CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
+                                       nullptr),
+               CL_SUCCESS);
+  }
+  /* The next one has nowhere to be recorded. The marker it made is given
+   * back and the read is sent blocking: enqueued, flushed, waited for. */
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 64u);   /* the marker */
+  rig.host().cl_result(CL_SUCCESS);                       /* it is released */
+  const unsigned char answered[8] = {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u};
+  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event + 65u);
+  rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);                       /* the read's event released */
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
+                                   nullptr),
+           CL_SUCCESS);
+  /* The bytes are here, which is what makes a blocking read right. */
+  for (const unsigned char byte : into) CHECK_EQ(byte, 7u);
+  CHECK(rig.kmt().commands() > sent);
+  CHECK_EQ(rig.log().holding("too many reads outstanding"), 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* clFinish says everything queued has run, so it is where every read still
+ * outstanding on that queue is delivered - and a delivery that fails is the
+ * finish's answer rather than something to swallow. */
+TEST(cl_enqueue_paths, a_finish_delivers_every_read_outstanding_on_its_queue)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char first[8] = {};
+  unsigned char second[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof first, first,
+                                   nullptr),
+           CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof second, second,
+                                   nullptr),
+           CL_SUCCESS);
+
+  /* The finish: its own marker, the flush, the wait, the marker released,
+   * then the two deliveries with their markers released behind them. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  const unsigned char ones[8] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
+  rig.host().cl_bytes(CL_SUCCESS, ones, sizeof ones);
+  rig.host().cl_result(CL_SUCCESS);
+  /* The second delivery is refused, which is what the finish answers. */
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_OUT_OF_RESOURCES);
+  /* The one that worked still delivered, and both rows went back. */
+  for (const unsigned char byte : first) CHECK_EQ(byte, 1u);
+  CHECK(rig.root().invariants_hold()); }
