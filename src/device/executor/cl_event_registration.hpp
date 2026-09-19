@@ -18,6 +18,8 @@ namespace av {
 
 class ClEventSignals;
 
+struct ClEventRegistrationProbe;
+
 class ClEventRegistration {
 public:
     ClEventRegistration();
@@ -37,6 +39,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClEventRegistrationProbe;
+
     ClEventSignals *owner_;
     /* Read by the host's thread, written by the worker. */
     uint64_t        generation_;

@@ -20,7 +20,37 @@
 #include <cstdint>
 
 using av::ClEventRegistration;
+using av::ClEventRegistrationProbe;
 using av::ClEventSignals;
+using av::ClEventSignalsProbe;
+
+namespace av {
+
+/* The states neither class is ever in. A registration is armed for exactly
+ * one session, and the epoch is what says which - so one armed for another
+ * session's, or one that holds an epoch while armed for nobody, is a callback
+ * that would be believed when it should be ignored. */
+struct ClEventRegistrationProbe {
+    static void an_epoch_with_no_owner(ClEventRegistration &slot)
+    { slot.owner_ = nullptr; slot.generation_ = 1u; }
+    static void armed_with_no_owner(ClEventRegistration &slot)
+    { slot.owner_ = nullptr; slot.armed_ = true; }
+    static void an_epoch_it_is_not_armed_for(ClEventRegistration &slot)
+    { slot.armed_ = false; slot.generation_ = 1u; }
+    static void another_sessions_epoch(ClEventRegistration &slot) { slot.generation_ += 1u; }
+    static void disarm(ClEventRegistration &slot) { slot.armed_ = false; }
+};
+
+struct ClEventSignalsProbe {
+    static ClEventRegistration &slot(ClEventSignals &signals, std::uint32_t index)
+    { return signals.slots_[index]; }
+    static void miscount(ClEventSignals &signals) { signals.taken_ += 1u; }
+    static void count_past_the_table(ClEventSignals &signals)
+    { signals.taken_ = ClEventSignals::max_registrations + 1u; }
+    static void an_epoch_of_nothing(ClEventSignals &signals) { signals.generation_ = 0u; }
+};
+
+}  // namespace av
 
 namespace {
 
@@ -232,3 +262,79 @@ TEST(cl_event_registration, arming_carries_the_generation_it_was_armed_at)
   CHECK(!registration.armed());
   CHECK_EQ(registration.generation(), 0u);
   CHECK(registration.invariants_hold()); }
+
+/* A callback naming an epoch of nothing is ignored like any other stale one:
+ * zero is what a registration that was never armed carries, and believing it
+ * would be believing a callback from no session at all. */
+TEST(cl_event_signals, a_callback_naming_no_epoch_at_all_does_nothing)
+{ forget_wakes();
+  ClEventSignals signals;
+  signals.bind(&wake, &device);
+  signals.signal_from_host(0u);
+  CHECK_EQ(signals.stale(), 1u);
+  CHECK_EQ(woken.count, 0u);
+  CHECK_EQ(signals.signalled(), 0u);
+  CHECK(signals.invariants_hold()); }
+
+/* The invariant catches the states the collection is never in. */
+TEST(cl_event_signals, the_invariant_catches_a_count_that_disagrees_with_what_is_armed)
+{ ClEventSignals signals;
+  signals.bind(&wake, &device);
+  ClEventRegistration *const taken = signals.take();
+  CHECK(taken != nullptr);
+  CHECK(signals.invariants_hold());
+  /* One more counted than armed: a slot that can never be handed out. */
+  ClEventSignalsProbe::miscount(signals);
+  CHECK(!signals.invariants_hold());
+  ClEventSignalsProbe::count_past_the_table(signals);
+  CHECK(!signals.invariants_hold());
+  signals.shut_down(); }
+
+TEST(cl_event_signals, the_invariant_catches_a_registration_armed_for_another_session)
+{ ClEventSignals signals;
+  signals.bind(&wake, &device);
+  ClEventRegistration *const taken = signals.take();
+  CHECK(taken != nullptr);
+  CHECK(signals.invariants_hold());
+  /* The epoch is what says which session a callback belongs to. One that
+   * names another would be believed, and that session is gone. */
+  ClEventRegistrationProbe::another_sessions_epoch(*taken);
+  CHECK(!signals.invariants_hold());
+  signals.shut_down(); }
+
+TEST(cl_event_signals, the_invariant_catches_a_slot_disarmed_with_its_epoch_left_behind)
+{ ClEventSignals signals;
+  signals.bind(&wake, &device);
+  ClEventRegistration *const taken = signals.take();
+  CHECK(taken != nullptr);
+  ClEventRegistrationProbe::disarm(*taken);
+  CHECK(!signals.invariants_hold());
+  signals.shut_down(); }
+
+/* A collection whose epoch is nothing has been shut down, so nothing it holds
+ * can be armed for it and no callback may be believed. */
+TEST(cl_event_signals, the_invariant_catches_an_epoch_of_nothing)
+{ ClEventSignals signals;
+  CHECK(signals.invariants_hold());
+  ClEventSignalsProbe::an_epoch_of_nothing(signals);
+  CHECK(!signals.invariants_hold()); }
+
+/* One registration's own invariant: an owner and an epoch that disagree. */
+TEST(cl_event_signals, a_registrations_invariant_catches_an_owner_and_an_epoch_disagreeing)
+{ ClEventRegistration idle;
+  CHECK(idle.invariants_hold());
+  /* An epoch with nobody to belong to. */
+  ClEventRegistrationProbe::an_epoch_with_no_owner(idle);
+  CHECK(!idle.invariants_hold());
+
+  ClEventRegistration armed;
+  /* Armed for nobody, which is a callback with nowhere to go. */
+  ClEventRegistrationProbe::armed_with_no_owner(armed);
+  CHECK(!armed.invariants_hold());
+
+  ClEventSignals             signals;
+  ClEventRegistration *const taken = signals.take();
+  CHECK(taken != nullptr);
+  ClEventRegistrationProbe::an_epoch_it_is_not_armed_for(*taken);
+  CHECK(!taken->invariants_hold());
+  signals.shut_down(); }

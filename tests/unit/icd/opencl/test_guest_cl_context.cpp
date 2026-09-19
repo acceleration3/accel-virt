@@ -160,3 +160,130 @@ TEST(guest_cl_context, tearing_down_gives_back_every_object_it_opened)
     CHECK(rig.kmt().open_objects() > 0u); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
+
+/* ---- mappings, and the invariant that keeps them apart ------------------- */
+
+namespace av::clicd {
+
+/* The states a context is never in. Two live mappings answering one pointer
+ * would leave an unmap choosing between them; a made context missing any of
+ * the four things a make holds is one whose teardown would not know what to
+ * give back; and a context that has made nothing holding any of them is a
+ * make that failed halfway and said it had not. */
+struct GuestClContextProbe {
+    static MappedRegion &mapping(GuestClContext &context, uint32_t slot)
+    { return context.mappings_[slot]; }
+    /* Answers the block it took away, so a test can put it back: the
+     * destructor is what frees it, and a context that has forgotten it leaks. */
+    static uint8_t      *forget_staging(GuestClContext &context)
+    { uint8_t *const held = context.staging_; context.staging_ = nullptr; return held; }
+    static void          remember_staging(GuestClContext &context, uint8_t *staging)
+    { context.staging_ = staging; }
+    static void          forget_link(GuestClContext &context)
+    { context.link_ = icd::IcdConnection::no_link; }
+    static void          say_it_was_made(GuestClContext &context)
+    { context.state_ = GuestClContext::State::made; }
+};
+
+}  // namespace av::clicd
+
+using av::clicd::GuestClContextProbe;
+using av::clicd::MappedRegion;
+
+TEST(guest_cl_context, a_mapping_of_nothing_is_not_taken_by_either_kind)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t at[16] = {};
+  /* No buffer, no host address, no length: each is a row that could never be
+   * unmapped, and neither kind of mapping takes one. */
+  CHECK(context.take_mapping(0u, 0x7000u, 0u, sizeof at, CL_MAP_READ) == nullptr);
+  CHECK(context.take_mapping(0x6600u, 0u, 0u, sizeof at, CL_MAP_READ) == nullptr);
+  CHECK(context.take_mapping(0x6600u, 0x7000u, 0u, 0u, CL_MAP_READ) == nullptr);
+  CHECK(context.take_shared_mapping(0u, 0x7000u, 0u, sizeof at, at) == nullptr);
+  CHECK(context.take_shared_mapping(0x6600u, 0u, 0u, sizeof at, at) == nullptr);
+  CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, 0u, at) == nullptr);
+  /* And a shared mapping with no memory behind it. */
+  CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, nullptr) == nullptr);
+  CHECK_EQ(context.mappings(), 0u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, the_mapping_table_fills_and_then_refuses_both_kinds)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t at[GuestClContext::max_mappings][16] = {};
+  for (std::uint32_t index = 0u; index < GuestClContext::max_mappings; ++index) {
+      CHECK(context.take_shared_mapping(0x6600u + index, 0x7000u + index, 0u, 16u, at[index]) !=
+            nullptr);
+  }
+  CHECK_EQ(context.mappings(), GuestClContext::max_mappings);
+  /* Full: the application is told the map failed rather than being handed a
+   * mapping the context cannot remember. */
+  std::uint8_t one_more[16] = {};
+  CHECK(context.take_shared_mapping(0x7700u, 0x8800u, 0u, 16u, one_more) == nullptr);
+  CHECK(context.take_mapping(0x7700u, 0x8800u, 0u, 16u, CL_MAP_READ) == nullptr);
+  CHECK_EQ(context.mappings(), GuestClContext::max_mappings);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, a_staged_mapping_with_no_memory_for_its_block_is_not_taken)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  /* The slot was free and the block was not: nothing is kept, so the slot is
+   * still free for the next map. */
+  /* The next allocation, whatever the make already did: the counter is
+   * reset when the refusal is armed. */
+  rig.platform().fail_allocation_at(1u);
+  CHECK(context.take_mapping(0x6600u, 0x7000u, 0u, 16u, CL_MAP_READ) == nullptr);
+  CHECK_EQ(context.mappings(), 0u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, the_invariant_catches_two_mappings_answering_one_pointer)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t at[16] = {};
+  std::uint8_t other[16] = {};
+  CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, at) != nullptr);
+  CHECK(context.take_shared_mapping(0x6601u, 0x7001u, 0u, sizeof other, other) != nullptr);
+  CHECK(context.invariants_hold());
+  /* Both answering one address: an unmap would have two to choose between,
+   * and choosing is what it must never do. */
+  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof at, 0u, at, false);
+  CHECK(!context.invariants_hold());
+  /* Put it back so teardown gives back what it really holds. */
+  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof other, 0u, other,
+                                                 false);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, the_invariant_catches_a_made_context_that_is_missing_what_a_make_holds)
+{ { ClContextRig   rig;
+    arena_answers(rig);
+    GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    CHECK(context.invariants_hold());
+    /* Made, but with no staging block: the transport has nowhere to put a
+     * reply, and teardown would give back nothing. */
+    std::uint8_t *const staging = GuestClContextProbe::forget_staging(context);
+    CHECK(!context.invariants_hold());
+    /* Put it back: the destructor is what frees it. */
+    GuestClContextProbe::remember_staging(context, staging);
+    CHECK(context.invariants_hold()); }
+  { ClContextRig   rig;
+    arena_answers(rig);
+    GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    /* Made, but holding no link: the adapter it opened is one nothing names. */
+    GuestClContextProbe::forget_link(context);
+    CHECK(!context.invariants_hold()); }
+  { ClContextRig   rig;
+    GuestClContext context = made_context(rig);
+    /* And the mirror: it says it was made and has none of it. */
+    CHECK(context.invariants_hold());
+    GuestClContextProbe::say_it_was_made(context);
+    CHECK(!context.invariants_hold()); } }
