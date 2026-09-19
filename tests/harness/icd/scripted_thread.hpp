@@ -22,6 +22,11 @@ public:
     void   stop() override;
     bool   running() const override;
 
+    /* The next start refuses, as an OS out of threads does. What the ICD
+     * does with that is a path of its own: a callback registered on a
+     * watcher with no thread would never run. */
+    void   refuse_start();
+
     /* Runs the loop once, as the thread would, and answers what it said.
      * False with nothing running. */
     bool step();
@@ -39,6 +44,7 @@ private:
     std::uint32_t     starts_;
     std::uint32_t     stops_;
     bool              stopping_;
+    bool              refusing_;
 };
 
 }  // namespace av

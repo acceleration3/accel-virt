@@ -359,3 +359,85 @@ TEST(cl_event_watcher, a_registrations_invariant_catches_a_callback_that_could_n
   ClWatchedEventProbe::stray_notify(empty, nullptr);
   ClWatchedEventProbe::stray_wire(empty);
   CHECK(!empty.invariants_hold()); }
+
+/* A watcher with no thread to run callbacks on.
+ *
+ * The thread starts on the first registration and not before, so a process
+ * that never asks for a callback never has one. When the OS refuses it, the
+ * registration has to go back: a callback registered on a watcher that will
+ * never turn is one the application waits for forever. */
+TEST(cl_event_watcher, a_registration_with_no_thread_to_run_it_on_is_given_back)
+{ Watching rig;
+  rig.thread().refuse_start();
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.watcher().registered(), 0u);
+  CHECK_EQ(rig.rig().log().holding("no thread to watch events on"), 1u);
+  CHECK(rig.watcher().invariants_hold());
+
+  /* And the next registration still works, because nothing was kept. */
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+           CL_SUCCESS);
+  CHECK_EQ(rig.watcher().registered(), 1u);
+  CHECK(rig.watcher().invariants_hold()); }
+
+/* Forgetting a context drops that context's registrations and nobody else's:
+ * they share a watcher, and a callback on another context's event must still
+ * run after this one dies. */
+TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_registrations)
+{ Watching rig;
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data),
+           CL_SUCCESS);
+  /* A second context, sharing the watcher: its registration must survive the
+   * first context dying. */
+  rig.rig().host().blob_import(0u, 0x78u);
+  av::ObjectStorage<GuestClContext> second;
+  CHECK_STATUS(second.construct(rig.rig().connection(), rig.rig().platform(),
+                                rig.rig().send_lock(), rig.rig().log()),
+               Status::ok);
+  CHECK_STATUS(second.object().make(), Status::ok);
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, second.object().wire(), CL_COMPLETE, &note,
+                               &user_data),
+           CL_SUCCESS);
+  CHECK_EQ(rig.watcher().registered(), 2u);
+  rig.watcher().forget_context(rig.wire());
+  /* One went, one stayed. */
+  CHECK_EQ(rig.watcher().registered(), 1u);
+  CHECK(rig.watcher().invariants_hold());
+  rig.watcher().forget_context(second.object().wire());
+  second.destroy(); }
+
+namespace av::clicd {
+
+struct ClEventWatcherProbe {
+    static void miscount(ClEventWatcher &watcher) { watcher.held_ += 1u; }
+    static void count_past_the_table(ClEventWatcher &watcher)
+    { watcher.held_ = ClEventWatcher::max_registrations + 1u; }
+    static ClWatchedEvent &registration(ClEventWatcher &watcher, std::uint32_t slot)
+    { return watcher.registrations_[slot]; }
+};
+
+}  // namespace av::clicd
+
+using av::clicd::ClEventWatcherProbe;
+
+/* The watcher's own invariant: what it counts and what it holds are one
+ * number, and every registration in it is sound. */
+TEST(cl_event_watcher, the_invariant_catches_a_count_or_a_registration_that_is_wrong)
+{ { Watching rig;
+    CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note,
+                                 &user_data),
+             CL_SUCCESS);
+    CHECK(rig.watcher().invariants_hold());
+    ClEventWatcherProbe::miscount(rig.watcher());
+    CHECK(!rig.watcher().invariants_hold());
+    ClEventWatcherProbe::count_past_the_table(rig.watcher());
+    CHECK(!rig.watcher().invariants_hold()); }
+  { Watching rig;
+    CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note,
+                                 &user_data),
+             CL_SUCCESS);
+    /* One registration broken: the watcher says so through it rather than
+     * only checking its own count. */
+    ClWatchedEventProbe::forget_notify(ClEventWatcherProbe::registration(rig.watcher(), 0u));
+    CHECK(!rig.watcher().invariants_hold()); } }

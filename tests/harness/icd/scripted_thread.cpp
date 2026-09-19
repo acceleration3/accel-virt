@@ -2,10 +2,14 @@
 
 namespace av {
 
-ScriptedThread::ScriptedThread() : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), stopping_(false) {}
+ScriptedThread::ScriptedThread() : loop_(nullptr), turns_(0u), starts_(0u), stops_(0u), stopping_(false), refusing_(false) {}
 
 Status ScriptedThread::start(icd::ServiceLoop &loop)
 {
+    if (refusing_) {
+        refusing_ = false;
+        return Status::no_memory;
+    }
     if (loop_ != nullptr) return Status::invalid_state;
     loop_ = &loop;
     stopping_ = false;
@@ -42,5 +46,7 @@ std::uint32_t ScriptedThread::run_until_done(std::uint32_t limit)
 std::uint32_t ScriptedThread::turns() const { return turns_; }
 std::uint32_t ScriptedThread::starts() const { return starts_; }
 std::uint32_t ScriptedThread::stops() const { return stops_; }
+
+void ScriptedThread::refuse_start() { refusing_ = true; }
 
 }  // namespace av

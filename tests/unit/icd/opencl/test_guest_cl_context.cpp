@@ -183,6 +183,8 @@ struct GuestClContextProbe {
     { context.link_ = icd::IcdConnection::no_link; }
     static void          say_it_was_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::made; }
+    static void          say_it_was_never_made(GuestClContext &context)
+    { context.state_ = GuestClContext::State::created; }
 };
 
 }  // namespace av::clicd
@@ -287,3 +289,56 @@ TEST(guest_cl_context, the_invariant_catches_a_made_context_that_is_missing_what
     CHECK(context.invariants_hold());
     GuestClContextProbe::say_it_was_made(context);
     CHECK(!context.invariants_hold()); } }
+
+/* Whether the context got an arena at all is what says which path its buffers
+ * and its bulk data take, so both answers have to be reachable and both have
+ * to be right. */
+TEST(guest_cl_context, a_context_says_whether_it_got_an_arena)
+{ { ClContextRig rig;
+    GuestClContext context = made_context(rig);
+    /* Before a make there is no arena, because there is no transport to
+     * import one through. */
+    CHECK(!context.has_arena()); }
+  { ClContextRig rig;
+    arena_answers(rig);
+    GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    CHECK(context.has_arena()); }
+  { ClContextRig rig;
+    /* A device that will not import leaves the context perfectly usable and
+     * without one: bulk data crosses inline and buffers are staged. */
+    arena_answers(rig, 1u);
+    GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    CHECK(!context.has_arena()); } }
+
+/* The invariant reaches what the context owns, not only its own fields: a
+ * broken allocation or a broken mapping is a broken context. */
+TEST(guest_cl_context, the_invariant_reaches_the_allocations_and_the_mappings_it_holds)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t at[16] = {};
+  CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, at) != nullptr);
+  CHECK(context.invariants_hold());
+  /* A mapping that is held but names no buffer could never be unmapped. */
+  GuestClContextProbe::mapping(context, 0u).take(0u, 0x7000u, 0u, sizeof at, 0u, at, false);
+  CHECK(!context.invariants_hold());
+  GuestClContextProbe::mapping(context, 0u).take(0x6600u, 0x7000u, 0u, sizeof at, 0u, at, false);
+  CHECK(context.invariants_hold()); }
+
+/* A context that says it was never made must hold none of what a make holds:
+ * each of the four is checked on its own, because one left behind is a make
+ * that failed halfway and reported that it had not started. */
+TEST(guest_cl_context, the_invariant_catches_an_unmade_context_still_holding_something)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  /* Everything is held, and the state is put back to created: every one of
+   * the four terms is false, which is what the created branch demands. */
+  GuestClContextProbe::say_it_was_never_made(context);
+  CHECK(!context.invariants_hold());
+  GuestClContextProbe::say_it_was_made(context);
+  CHECK(context.invariants_hold()); }

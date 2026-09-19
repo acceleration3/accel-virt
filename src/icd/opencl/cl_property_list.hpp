@@ -23,6 +23,8 @@
 
 namespace av::clicd {
 
+struct ClPropertyListProbe;
+
 class ClPropertyList {
 public:
     /* Pairs one list may carry. The API names a handful of properties; a list
@@ -50,6 +52,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClPropertyListProbe;
+
     uint64_t names_[max_pairs];
     uint64_t values_[max_pairs];
     uint32_t pairs_;
