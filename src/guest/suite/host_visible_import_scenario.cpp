@@ -92,12 +92,12 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     AV_SCOPE("HostVisibleImportScenario::make_buffer");
     const SideSteps                &names = side_steps[side];
     KmtTransport                   &transport = link_.transport();
-    VkExternalMemoryBufferCreateInfo external = {};
-    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
-    external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    /* No VkExternalMemoryBufferCreateInfo of its own: which host handle the
+     * guest's pages reach the GPU through - a host pointer or a dma-buf - is
+     * the host's to decide, and the device names it on every buffer made on a
+     * device that imports. A guest naming one would name the wrong one. */
     VkBufferCreateInfo buffer_info = {};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_info.pNext = &external;
     buffer_info.size = copy_bytes;
     buffer_info.usage = names.usage;
     buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;

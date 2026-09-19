@@ -42,7 +42,7 @@ MockHost::MockHost()
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
       host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
-      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), dmabufs_(0u)
+      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -776,7 +776,7 @@ Status MockHost::dmabuf_over_guest(void *const *runs, const std::uint64_t *sizes
                                    std::uint32_t count, int &fd)
 {
     StateLock lock(state_);
-    if (fail_now(fail_dmabuf_)) return Status::not_supported;
+    if (no_dmabufs_ || fail_now(fail_dmabuf_)) return Status::not_supported;
     if (runs == nullptr || sizes == nullptr || count == 0u ||
         count > MockHost::max_dmabuf_runs)
         return Status::not_supported;
@@ -842,6 +842,8 @@ void MockHost::fail_reserve_at(std::uint32_t nth) { StateLock lock(state_); fail
 void MockHost::fail_alias_at(std::uint32_t nth) { StateLock lock(state_); fail_alias_ = nth; }
 
 void MockHost::fail_dmabuf_at(std::uint32_t nth) { StateLock lock(state_); fail_dmabuf_ = nth; }
+
+void MockHost::refuse_dmabufs() { StateLock lock(state_); no_dmabufs_ = true; }
 
 std::uint32_t MockHost::live_dmabufs() const { return dmabufs_; }
 
@@ -976,9 +978,13 @@ void MockHost::add_guest_ram(std::uint64_t base, std::size_t size)
 {
     StateLock lock(state_);
     const std::uint64_t mapped = (size + page - 1u) / page * page;
-    const int           fd = memfd_create("mock guest ram", MFD_CLOEXEC);
+    /* Sealable, and sealed against shrinking, because udmabuf takes no other
+     * kind of memfd: a buffer over pages the file could drop would outlive
+     * them. QEMU's guest RAM is sealed the same way. */
+    const int           fd = memfd_create("mock guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     void *const reserved = mmap(nullptr, mapped + page, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (fd < 0 || ftruncate(fd, static_cast<off_t>(mapped)) != 0 || reserved == MAP_FAILED ||
+    if (fd < 0 || ftruncate(fd, static_cast<off_t>(mapped)) != 0 ||
+        fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK) != 0 || reserved == MAP_FAILED ||
         mmap(reserved, mapped, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED)
         std::abort();
     regions_[region_count_++] = GuestRegion{base, size, static_cast<std::uint8_t *>(reserved), fd, mapped};

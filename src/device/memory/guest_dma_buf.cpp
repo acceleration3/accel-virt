@@ -45,7 +45,7 @@ Status GuestDmaBuf::make(const BlobWindow &pages, uint64_t offset, uint64_t size
         taken += wanted;
         at = end;
     }
-    if (taken != size || count == 0u) return Status::too_large;
+    if (taken != size) return Status::too_large;
     int          made = -1;
     const Status opened = host_.dmabuf_over_guest(runs, sizes, count, made);
     if (opened != Status::ok) return opened;
@@ -63,6 +63,16 @@ void GuestDmaBuf::release()
     handle_ = -1;
     length_ = 0u;
     items_ = 0u;
+}
+
+int GuestDmaBuf::take()
+{
+    AV_SCOPE("GuestDmaBuf::take");
+    const int given = handle_;
+    handle_ = -1;
+    length_ = 0u;
+    items_ = 0u;
+    return given;
 }
 
 bool     GuestDmaBuf::made() const { AV_SCOPE("GuestDmaBuf::made"); return handle_ >= 0; }

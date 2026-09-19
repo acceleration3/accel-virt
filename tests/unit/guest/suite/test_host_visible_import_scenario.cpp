@@ -287,9 +287,10 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
           CHECK_EQ(buffer.size, HostVisibleImportScenario::copy_bytes);
           CHECK_EQ(buffer.usage, static_cast<VkBufferUsageFlags>(buffers == 0u ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT
                                                                                : VK_BUFFER_USAGE_TRANSFER_DST_BIT));
-          const auto *const external = static_cast<const VkExternalMemoryBufferCreateInfo *>(buffer.pNext);
-          CHECK(external != nullptr && external->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO &&
-                external->handleTypes == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT);
+          /* Nothing of the guest's own about external memory: which host
+           * handle its pages reach the GPU through is the device's to name,
+           * and it names it on the way past. */
+          CHECK(buffer.pNext == nullptr);
           buffers++;
       }
       if (id == kCmd_vkCmdCopyBuffer) {

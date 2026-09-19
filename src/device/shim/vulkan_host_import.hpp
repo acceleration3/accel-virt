@@ -30,6 +30,11 @@ public:
      * it, since the mask is a device's answer and an application asks for its
      * memory types before it has one. 0 when no such device can be made. */
     uint32_t           probe_types(VkPhysicalDevice physical);
+    /* The same question for a dma-buf: the memory types a descriptor of this
+     * process's own making may be imported into on `physical`, asked of a
+     * device made for the question. 0 where no such device can be made, where
+     * the host has no udmabuf, or where the driver imports no dma-buf. */
+    uint32_t           probe_dmabuf_types(VkPhysicalDevice physical);
     /* Whether `device` was made with VK_EXT_external_memory_host. */
     bool               imports(VkDevice device);
     /* `size` bytes at `pointer` as memory of `device` in `memory_type`, or
@@ -37,13 +42,26 @@ public:
     [[nodiscard]] bool import(VkDevice device, void *pointer, uint64_t size, uint32_t memory_type,
                               uint64_t &memory);
     void               release(VkDevice device, uint64_t memory);
-    /* HOST_ALLOCATION when the driver says a buffer or an image made as
-     * `create` asks may be bound to memory imported from a host pointer, else
-     * 0: Intel's answer is no for an optimal colour image and for a sparse
-     * buffer, NVIDIA's yes for both (measured 2026-09-15). 0 with no physical
-     * device. */
-    VkExternalMemoryHandleTypeFlags buffer_host_types(VkPhysicalDevice physical, const VkBufferCreateInfo &create);
-    VkExternalMemoryHandleTypeFlags image_host_types(VkPhysicalDevice physical, const VkImageCreateInfo &create);
+    /* The memory types dma-buf `fd` may be imported into on `device`, or 0
+     * where the device was made without the dma-buf extension. */
+    uint32_t           dmabuf_types(VkDevice device, int fd);
+    /* `size` bytes of dma-buf `fd` imported on `device`. Vulkan takes the
+     * descriptor on success and this side must not close it; on failure it
+     * stays the caller's. False where the import is refused.
+     *
+     * The dma-buf path exists because a host GPU refuses to pin a userptr
+     * whose pages are file-backed, and guest RAM always is. */
+    [[nodiscard]] bool import_dmabuf(VkDevice device, int fd, uint64_t size, uint32_t memory_type,
+                                     uint64_t &memory);
+    /* `type` when the driver says a buffer or an image made as `create` asks
+     * may be bound to memory imported from a handle of that type, else 0:
+     * Intel's answer for a host allocation is no for an optimal colour image
+     * and for a sparse buffer, NVIDIA's yes for both (measured 2026-09-15). 0
+     * with no physical device. */
+    VkExternalMemoryHandleTypeFlags buffer_host_types(VkPhysicalDevice physical, const VkBufferCreateInfo &create,
+                                                      VkExternalMemoryHandleTypeFlagBits type);
+    VkExternalMemoryHandleTypeFlags image_host_types(VkPhysicalDevice physical, const VkImageCreateInfo &create,
+                                                     VkExternalMemoryHandleTypeFlagBits type);
 
     /* Imports that succeeded and have not been released, which is what a test
      * or a teardown can ask about without a driver. */

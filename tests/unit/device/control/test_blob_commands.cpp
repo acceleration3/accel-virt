@@ -4,6 +4,7 @@
 #include "device/control/blob_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/blob_window.hpp"
 #include "device/memory/guest_page_alias.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -230,7 +231,8 @@ TEST(blob_commands_unref, a_blob_an_import_holds_is_refused_and_kept)
   request.u64(ram).u32(0x1000u).u32(0u);
   CHECK_EQ(fixture.send(request), ok_nodata);
   const av::GuestPageAlias *alias = nullptr;
-  CHECK_STATUS(fixture.blobs().hold_alias(4u, alias), Status::ok);
+  av::BlobWindow            pages;
+  CHECK_STATUS(fixture.blobs().hold_alias(4u, alias, pages), Status::ok);
   GpuRequestBuilder unref(BlobCommands::resource_unref);
   unref.u32(4u).u32(0u);
   CHECK_EQ(fixture.send(unref), err_invalid_parameter);

@@ -98,11 +98,19 @@ uint32_t LoaderHostApis::kinds_of(void *device)
     if (vkEnumerateDeviceExtensionProperties(physical, nullptr, &available, extensions_) < 0)
         return 0u;
     if (available > max_extensions) available = max_extensions;
+    uint32_t kinds = 0u;
     for (uint32_t n = 0u; n < available; n++) {
         if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
-            return RVK_BLOB_HOST_POINTER;
+            kinds |= RVK_BLOB_HOST_POINTER;
+        /* Both are offered where both are there, because which one works is
+         * not a property of the extension list: a driver may advertise the
+         * host-pointer import and still refuse every userptr whose pages are
+         * file-backed, which guest RAM always is. The device tries the
+         * dma-buf first and falls back (docs/testing.md). */
+        if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0)
+            kinds |= RVK_BLOB_DMA_BUF;
     }
-    return 0u;
+    return kinds;
 }
 
 void LoaderHostApis::close()

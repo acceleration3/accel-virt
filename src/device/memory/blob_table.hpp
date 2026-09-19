@@ -60,7 +60,7 @@ public:
     /* Any thread. Guest blob `id`'s pages as one host range, valid until the
      * hold is let go: not_found for no blob `id`, and the blob's answer
      * otherwise. */
-    [[nodiscard]] Status hold_alias(uint32_t id, const GuestPageAlias *&alias);
+    [[nodiscard]] Status hold_alias(uint32_t id, const GuestPageAlias *&alias, BlobWindow &pages);
     /* Any thread. A hold taken by hold_alias; an unknown id is ignored, as
      * reset releases aliased blobs. */
     void                 release_alias(uint32_t id);

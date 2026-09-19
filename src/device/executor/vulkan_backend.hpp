@@ -122,9 +122,10 @@ public:
     VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
 
-    /* Imports a host pointer into the guest's device as the memory type the
-     * blob asks for - refused for a type the driver will not import that
-     * pointer into - and makes the memory a handle the guest may name. */
+    /* Imports the guest's pages into the guest's device as the memory type
+     * the blob asks for - refused for a kind this device does not import, and
+     * for a type the driver will not import that handle into - and makes the
+     * memory a handle the guest may name. */
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
@@ -201,9 +202,22 @@ private:
     /* Whether the driver imports the blob's pointer into the type it asks
      * for on the guest's device. */
     bool importable(const ImportedBlob &blob);
+    /* The blob as device memory of the guest's device, with `memory` what it
+     * became: refused for a type the driver will not import that handle into,
+     * and for a handle it will not take. */
+    [[nodiscard]] bool adopt_dmabuf(const ImportedBlob &blob, uint64_t &memory);
+    [[nodiscard]] bool adopt_pointer(const ImportedBlob &blob, uint64_t &memory);
     /* Narrows `properties` of `physical` to what imports, learning the mask
      * the first time `physical` is asked about. */
     void restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties);
+    /* Measures what `physical` imports, once: the kind and the memory types
+     * it takes that kind into are decided together, because a guest shown the
+     * types of one kind and handed memory of the other would bind neither.
+     * Nothing where it is already known. */
+    void             decide_import(VkPhysicalDevice physical);
+    /* The handle type the decided kind is imported from, which is what a
+     * buffer or an image must be made with to be bound to it. */
+    VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
 

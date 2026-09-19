@@ -76,10 +76,11 @@ extern "C" {
  * property and an offset here would buy a capability flag per API for nothing. */
 typedef struct RvkBlobHandle {
     uint32_t kind;     /* exactly one RVK_BLOB_* value */
-    /* RVK_BLOB_HOST_POINTER: the memory type the guest asked the import to be
-     * made as (IMPORT_BLOB, feature 045) - an index into the memory properties
-     * of the device the executor's guest made. 0 for RVK_BLOB_DMA_BUF. The name
-     * stays so version 2 libraries keep compiling. */
+    /* The memory type the guest asked the import to be made as (IMPORT_BLOB,
+     * feature 045) - an index into the memory properties of the device the
+     * executor's guest made - whichever kind carries it: a dma-buf is imported
+     * into a type the same way a host pointer is. The name stays so version 2
+     * libraries keep compiling. */
     uint32_t reserved;
     void *pointer;     /* RVK_BLOB_HOST_POINTER; NULL otherwise */
     int fd;            /* RVK_BLOB_DMA_BUF; -1 otherwise */

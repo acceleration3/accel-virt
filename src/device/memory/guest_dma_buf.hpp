@@ -48,6 +48,10 @@ public:
     [[nodiscard]] Status make(const BlobWindow &pages, uint64_t offset, uint64_t size);
     /* Any thread. Safe on one that holds nothing. */
     void                 release();
+    /* The descriptor, and this no longer holds it. A Vulkan fd import takes
+     * ownership on success, so what was imported must not be closed here as
+     * well; -1 when there is nothing to give. */
+    int                  take();
 
     bool     made() const;
     /* The descriptor, or -1 until made. It stays this object's: a backend

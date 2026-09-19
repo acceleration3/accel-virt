@@ -182,14 +182,18 @@ TEST(blob_resource_hold_alias, maps_its_guest_pages_for_the_first_holder_and_unm
   host.guest_ram(ram + 0x2010u)[0] = 0x9Du;
   CHECK(!blob.aliased());
   const av::GuestPageAlias *first = nullptr;
-  CHECK_STATUS(blob.hold_alias(first), Status::ok);
+  av::BlobWindow            pages;
+  CHECK_STATUS(blob.hold_alias(first, pages), Status::ok);
   CHECK(blob.aliased());
   CHECK(first != nullptr);
+  /* The extents the hold keeps valid, which is what a dma-buf is made over. */
+  CHECK_EQ(pages.extents(), 2u);
+  CHECK_EQ(pages.length(), 0x2000u);
   CHECK_EQ(first->runs(), 2u);
   CHECK_EQ(first->length(), 0x2000u);
   CHECK_EQ(static_cast<std::uint8_t *>(first->base())[0x1010u], 0x9Du);
   const av::GuestPageAlias *second = nullptr;
-  CHECK_STATUS(blob.hold_alias(second), Status::ok);
+  CHECK_STATUS(blob.hold_alias(second, pages), Status::ok);
   CHECK(second == first);
   CHECK_EQ(host.live_ranges(), 1u);   /* made once, however many hold it */
   blob.release_alias();
@@ -201,7 +205,7 @@ TEST(blob_resource_hold_alias, maps_its_guest_pages_for_the_first_holder_and_unm
   blob.release_alias();   /* no holder: nothing */
   CHECK(!blob.aliased());
   CHECK_EQ(host.unclaimed_violations(), 0u);
-  CHECK_STATUS(blob.hold_alias(first), Status::ok);   /* and made again for the next */
+  CHECK_STATUS(blob.hold_alias(first, pages), Status::ok);   /* and made again for the next */
   CHECK_EQ(host.live_ranges(), 1u); }
 
 TEST(blob_resource_hold_alias, a_host_block_has_no_guest_pages_and_pages_the_host_cannot_alias_hold_nothing)
@@ -212,7 +216,8 @@ TEST(blob_resource_hold_alias, a_host_block_has_no_guest_pages_and_pages_the_hos
   CHECK_STATUS(block.back_with_host(0x1000u), Status::ok);
   const av::GuestPageAlias stale(host);
   const av::GuestPageAlias *alias = &stale;
-  CHECK_STATUS(block.hold_alias(alias), Status::invalid_parameter);
+  av::BlobWindow            pages;
+  CHECK_STATUS(block.hold_alias(alias, pages), Status::invalid_parameter);
   CHECK(alias == nullptr);
   CHECK(!block.aliased());
   const GpuRequestBuilder bytes = entries(1u);
@@ -221,9 +226,9 @@ TEST(blob_resource_hold_alias, a_host_block_has_no_guest_pages_and_pages_the_hos
   BlobResource guest(host, 2u);
   CHECK_STATUS(guest.back_with_guest(request, entries_at, 1u, 0x1000u), Status::ok);
   host.fail_reserve_at(1u);
-  CHECK_STATUS(guest.hold_alias(alias), Status::no_memory);
+  CHECK_STATUS(guest.hold_alias(alias, pages), Status::no_memory);
   CHECK(!guest.aliased());
   BlobResource unbacked(host, 3u);
-  CHECK_STATUS(unbacked.hold_alias(alias), Status::malformed);
+  CHECK_STATUS(unbacked.hold_alias(alias, pages), Status::malformed);
   CHECK(!unbacked.aliased());
   CHECK_EQ(host.live_ranges(), 0u); }

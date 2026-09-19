@@ -104,29 +104,27 @@ TEST(imported_blob, a_kind_carrying_the_other_kind_s_field_is_refused)
   CHECK_STATUS(blob.take(1u, dma_buf(-1, ImportedBlob::page_bytes)), Status::invalid_parameter);
   CHECK(!blob.live()); }
 
-/* A host pointer's reserved field is the Vulkan memory type the guest asked
- * for (feature 045), carried to the backend untouched: whether the type exists
- * is the device's to answer, not the ABI's. Every value, the largest included. */
-TEST(imported_blob, a_host_pointer_carries_the_memory_type_it_was_asked_into)
+/* The reserved field is the Vulkan memory type the guest asked for (feature
+ * 045), carried to the backend untouched: whether the type exists is the
+ * device's to answer, not the ABI's. Every value, the largest included, and
+ * either kind - a dma-buf is imported into a type the same way a pointer is. */
+TEST(imported_blob, a_handle_carries_the_memory_type_it_was_asked_into)
 { constexpr std::uint32_t types[] = {0u, 4u, 31u, 32u, 0xFFFFFFFFu};
   for (const std::uint32_t type : types) {
-      ImportedBlob blob;
+      ImportedBlob pointer;
       RvkBlobHandle handle = host_pointer(ImportedBlob::page_bytes);
       handle.reserved = type;
-      CHECK_STATUS(blob.take(1u, handle), Status::ok);
-      CHECK_EQ(blob.memory_type(), type);
-      CHECK(blob.invariants_hold());
-  } }
+      CHECK_STATUS(pointer.take(1u, handle), Status::ok);
+      CHECK_EQ(pointer.memory_type(), type);
+      CHECK(pointer.invariants_hold());
 
-/* A dma-buf has no memory type to ask for, so anything in the field is a
- * handle nobody can say the meaning of. */
-TEST(imported_blob, a_dma_buf_with_a_reserved_field_that_is_not_zero_is_refused)
-{ ImportedBlob blob;
-  RvkBlobHandle handle = dma_buf(11, ImportedBlob::page_bytes);
-  handle.reserved = 1u;
-  CHECK_STATUS(blob.take(1u, handle), Status::invalid_parameter);
-  CHECK(!blob.live());
-  CHECK_EQ(blob.memory_type(), 0u); }
+      ImportedBlob shared;
+      RvkBlobHandle descriptor = dma_buf(11, ImportedBlob::page_bytes);
+      descriptor.reserved = type;
+      CHECK_STATUS(shared.take(1u, descriptor), Status::ok);
+      CHECK_EQ(shared.memory_type(), type);
+      CHECK(shared.invariants_hold());
+  } }
 
 TEST(imported_blob, a_slot_already_holding_one_is_not_overwritten)
 { ImportedBlob blob;
@@ -218,13 +216,6 @@ TEST(imported_blob_invariants, a_wire_handle_with_no_object_breaks_them)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
   blob.record(0u, 0x1000u);
-  CHECK(!blob.invariants_hold()); }
-
-/* A memory type on a dma-buf is one take would have refused. */
-TEST(imported_blob_invariants, a_dma_buf_blob_with_a_memory_type_breaks_them)
-{ ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, dma_buf(11, ImportedBlob::page_bytes)), Status::ok);
-  ImportedBlobProbe(blob).set_memory_type(1u);
   CHECK(!blob.invariants_hold()); }
 
 /* A live blob of no size, or of part of a page, is one no host API can map;

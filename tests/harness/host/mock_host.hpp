@@ -125,6 +125,10 @@ public:
     void fail_alias_at(std::uint32_t nth);
     /* The nth dma-buf is refused, as a host with no udmabuf refuses them all. */
     void fail_dmabuf_at(std::uint32_t nth);
+    /* Every dma-buf refused from here on, as a kernel with no udmabuf refuses
+     * them: the caller then imports a host pointer, which is the path that has
+     * to keep working on such a host. */
+    void refuse_dmabufs();
     /* Dma-bufs made and not yet closed, so a test can say none leaked. */
     std::uint32_t live_dmabufs() const;
 
@@ -324,6 +328,7 @@ private:
     std::uint32_t   fail_reserve_;
     std::uint32_t   fail_alias_;
     std::uint32_t   fail_dmabuf_;
+    bool            no_dmabufs_;
     std::uint32_t   dmabufs_;
 };
 

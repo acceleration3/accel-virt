@@ -25,6 +25,17 @@ using av::GuestDmaBuf;
 using av::MockHost;
 using av::Status;
 
+namespace av {
+
+/* States a dma-buf never builds for itself: a descriptor with no length, a
+ * length with no descriptor, more items than one may carry. */
+struct GuestDmaBufProbe {
+    static void set(GuestDmaBuf &target, int handle, std::uint64_t length, std::uint32_t items)
+    { target.handle_ = handle; target.length_ = length; target.items_ = items; }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint64_t page = GuestDmaBuf::page_size;
@@ -128,7 +139,7 @@ TEST(guest_dma_buf, the_destructor_closes_what_the_caller_did_not)
 { Fixture rig;
   if (!udmabuf_here(rig)) return;
   { Extents pages(1u);
-    pages.add(rig.guest_page(0u), page);
+    pages.add(rig.guest_page(0u), 6u * page);
     GuestDmaBuf buffer(rig.host());
     CHECK_STATUS(buffer.make(pages.window(), 0u, 6u * page), Status::ok);
     CHECK_EQ(rig.host().live_dmabufs(), 1u); }
@@ -156,6 +167,37 @@ TEST(guest_dma_buf, a_window_that_is_not_whole_pages_is_refused_before_the_host)
   CHECK(empty.invariants_hold());
   CHECK(ragged.invariants_hold());
   CHECK(sizeless.invariants_hold()); }
+
+/* An extent the blob table would never hand out: the walk judges each one it
+ * reaches rather than trusting the window, because what it builds is an ioctl
+ * the kernel reads. Each is the first extent of a range whose total is whole
+ * pages, so the walk reaches it. */
+TEST(guest_dma_buf, an_extent_that_is_no_run_of_pages_is_refused_on_the_walk)
+{ Fixture rig;
+  struct Case { void *base; std::uint64_t bytes; };
+  const Case bad[] = {{nullptr, page}, {nullptr, 0u}, {nullptr, page + 8u}};
+  for (std::uint32_t index = 0u; index < 3u; index++) {
+      Extents pages(2u);
+      pages.add(index == 0u ? nullptr : rig.guest_page(0u), bad[index].bytes)
+           .add(rig.guest_page(2u), 2u * page - (index == 2u ? 8u : 0u));
+      GuestDmaBuf buffer(rig.host());
+      CHECK_STATUS(buffer.make(pages.window(), 0u, 2u * page), Status::malformed);
+      CHECK(!buffer.made());
+      CHECK_EQ(rig.host().live_dmabufs(), 0u);
+  } }
+
+/* More runs than one dma-buf may carry: a blob scattered further than the
+ * kernel's list can hold is answered, not truncated. */
+TEST(guest_dma_buf, more_extents_than_items_is_no_memory)
+{ Fixture rig;
+  Extents pages(GuestDmaBuf::max_items + 1u);
+  for (std::uint32_t index = 0u; index <= GuestDmaBuf::max_items; index++)
+      pages.add(rig.guest_page(index % ram_pages), page);
+  GuestDmaBuf buffer(rig.host());
+  CHECK_STATUS(buffer.make(pages.window(), 0u, (GuestDmaBuf::max_items + 1u) * page), Status::no_memory);
+  CHECK(!buffer.made());
+  CHECK_EQ(rig.host().live_dmabufs(), 0u);
+  CHECK(buffer.invariants_hold()); }
 
 TEST(guest_dma_buf, a_host_that_cannot_make_one_is_answered_rather_than_worked_around)
 { Fixture rig;
@@ -230,3 +272,22 @@ TEST(guest_dma_buf, a_range_past_the_blob_is_refused_before_the_host)
   CHECK(past.invariants_hold());
   CHECK(beyond.invariants_hold());
   CHECK(ragged.invariants_hold()); }
+
+TEST(guest_dma_buf_invariants, each_rule_is_detected)
+{ Fixture rig;
+  struct Case { int handle; std::uint64_t length; std::uint32_t items; };
+  const Case broken[] = {
+      {-1, page, 0u},                                  /* nothing held, but a length */
+      {-1, 0u, 1u},                                    /* nothing held, but an item */
+      {7, 0u, 1u},                                     /* held, with no length */
+      {7, page, 0u},                                   /* held, with no item */
+      {7, page, GuestDmaBuf::max_items + 1u},          /* more items than one may carry */
+      {7, page + 8u, 1u},                              /* a length that is not whole pages */
+  };
+  for (const Case &c : broken) {
+      GuestDmaBuf buffer(rig.host());
+      av::GuestDmaBufProbe::set(buffer, c.handle, c.length, c.items);
+      CHECK(!buffer.invariants_hold());
+      av::GuestDmaBufProbe::set(buffer, -1, 0u, 0u);   /* nothing to close on the way out */
+      CHECK(buffer.invariants_hold());
+  } }

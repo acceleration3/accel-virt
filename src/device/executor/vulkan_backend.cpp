@@ -162,6 +162,11 @@ void VulkanBackend::enable_host_import(VkDeviceCreateInfo &create)
      * core from 1.1 and still valid to enable there. */
     extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
     extensions_.add(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+    /* And the dma-buf pair beside it: the guest's pages reach a GPU that
+     * refuses a file-backed userptr only as a dma-buf, and which of the two
+     * imports works is not known until one is tried. */
+    extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
 }
@@ -290,11 +295,28 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     return result;
 }
 
+void VulkanBackend::decide_import(VkPhysicalDevice physical)
+{
+    AV_SCOPE("VulkanBackend::decide_import");
+    if (importable_.known_for(reinterpret_cast<uint64_t>(physical))) return;
+    /* Both asked, because which one this device takes is the answer and the
+     * masks are not the same: a dma-buf lands in types a userptr does not. */
+    importable_.learn(reinterpret_cast<uint64_t>(physical), import_.probe_dmabuf_types(physical),
+                      import_.probe_types(physical));
+}
+
+VkExternalMemoryHandleTypeFlagBits VulkanBackend::external_type(VkPhysicalDevice physical)
+{
+    AV_SCOPE("VulkanBackend::external_type");
+    decide_import(physical);
+    return importable_.kind() == RVK_BLOB_DMA_BUF ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
+                                                  : VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+}
+
 void VulkanBackend::restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties)
 {
     AV_SCOPE("VulkanBackend::restrict_to_importable");
-    const auto key = reinterpret_cast<uint64_t>(physical);
-    if (!importable_.known_for(key)) importable_.learn(key, import_.probe_types(physical));
+    decide_import(physical);
     importable_.restrict(properties);
 }
 
@@ -342,7 +364,7 @@ VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateI
     VkExternalMemoryBufferCreateInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
     external.pNext = create.pNext;
-    external.handleTypes = import_.buffer_host_types(physical_, create);
+    external.handleTypes = import_.buffer_host_types(physical_, create, external_type(physical_));
     if (backs_with_host(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
     return RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
 }
@@ -355,7 +377,7 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     VkExternalMemoryImageCreateInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
     external.pNext = create.pNext;
-    external.handleTypes = import_.image_host_types(physical_, create);
+    external.handleTypes = import_.image_host_types(physical_, create, external_type(physical_));
     if (backs_with_host(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
     return RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
 }
@@ -458,17 +480,35 @@ bool VulkanBackend::importable(const ImportedBlob &blob)
     return (import_.importable_types(device_, blob.pointer()) & (1u << blob.memory_type())) != 0u;
 }
 
+/* The guest's own pages as a descriptor. Vulkan takes it on success, so the
+ * device module must not close it afterwards. */
+bool VulkanBackend::adopt_dmabuf(const ImportedBlob &blob, uint64_t &memory)
+{
+    AV_SCOPE("VulkanBackend::adopt_dmabuf");
+    if ((import_.dmabuf_types(device_, blob.descriptor()) & (1u << blob.memory_type())) == 0u) return false;
+    return import_.import_dmabuf(device_, blob.descriptor(), blob.size(), blob.memory_type(), memory);
+}
+
+bool VulkanBackend::adopt_pointer(const ImportedBlob &blob, uint64_t &memory)
+{
+    AV_SCOPE("VulkanBackend::adopt_pointer");
+    if (!importable(blob)) return false;
+    return import_.import(device_, blob.pointer(), blob.size(), blob.memory_type(), memory);
+}
+
 bool VulkanBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("VulkanBackend::adopt");
-    /* Only a host pointer, because that is the only kind this backend offers
-     * through import_kinds, and a dma-buf imported here would land in memory
-     * the host cannot map on one of the two GPUs measured. And only onto a
-     * device the guest has made, because device memory belongs to one. */
-    if (blob.kind() != RVK_BLOB_HOST_POINTER || device_ == VK_NULL_HANDLE) return false;
-    if (!importable(blob)) return false;
+    /* Only onto a device the guest has made, because device memory belongs to
+     * one, and only of the kind this device decided on: the guest's buffers
+     * were made for that one handle type and memory of the other would not
+     * bind to them. */
+    if (device_ == VK_NULL_HANDLE) return false;
+    decide_import(physical_);
+    if (blob.kind() != importable_.kind()) return false;
     uint64_t memory = 0u;
-    if (!import_.import(device_, blob.pointer(), blob.size(), blob.memory_type(), memory)) return false;
+    if (!(blob.kind() == RVK_BLOB_DMA_BUF ? adopt_dmabuf(blob, memory) : adopt_pointer(blob, memory)))
+        return false;
     /* A non-dispatchable handle on the wire is the driver's own number, so the
      * memory is what the guest names it by. */
     blob.record(memory, memory);
@@ -517,7 +557,9 @@ void VulkanBackend::shut_down()
     }
     handles_.forget_all();
     adopted_.clear();
-    importable_.learn(0u, 0u);
+    /* The mask belongs to a physical device of the instance that just died,
+     * and the kind was decided with it. */
+    importable_.learn(0u, 0u, 0u);
     gpu_ = nullptr;
     ran_ = 0u;
     lost_ = false;
