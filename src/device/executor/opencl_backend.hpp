@@ -9,6 +9,7 @@
 
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/cl_handle_registry.hpp"
+#include "device/executor/guest_region.hpp"
 #include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/session_backend.hpp"
 #include "proto/generated/opencl/cl_real_dispatch.h"
@@ -69,6 +70,20 @@ public:
                         cl_uint alignment) override;
     void  on_clSVMFree(cl_context context, void *svm_pointer) override;
 
+    /* `bytes` at `offset` of the adopted arena, or null for an offset or a
+     * length that does not lie inside it. Every offset here is a number the
+     * guest wrote, so this is a bounds check and never a dereference. */
+    uint8_t *guest_bytes(uint64_t offset, uint64_t bytes) const;
+
+    /* A buffer whose memory is already the host's: the guest names an offset
+     * of the context's arena through ClBlobBacking, and the host's cl_mem is
+     * made over that memory with CL_MEM_USE_HOST_PTR, so a map costs no copy.
+     * An offset that does not lie inside the arena is CL_INVALID_VALUE, and a
+     * list without the property is the ordinary call. */
+    cl_mem on_clCreateBufferWithProperties(cl_context context, const cl_mem_properties *properties,
+                                           cl_mem_flags flags, size_t size, void *host_ptr,
+                                           cl_int *errcode_ret) override;
+
     /* A map answers a host address, and the unmap that ends it names that
      * address back - so the decoder has to be able to judge it, exactly as it
      * judges an SVM address. Kept apart from the allocations on purpose: they
@@ -111,6 +126,8 @@ private:
     ClHandleRegistry handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;
+    /* The one import a context has: its blob arena. */
+    GuestRegion      arena_;
     ClEventSignals   events_;
     uint64_t       ran_;
     bool           lost_;

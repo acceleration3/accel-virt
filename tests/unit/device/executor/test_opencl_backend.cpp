@@ -45,6 +45,21 @@ namespace {
 
 constexpr std::size_t block_bytes = 65536u;
 
+/* The context's blob arena, as the device sees it: whole pages, because the
+ * ABI's host-pointer handle is measured in them. */
+alignas(4096) std::uint8_t arena_region[2u * 4096u];
+alignas(4096) std::uint8_t second_arena_region[4096];
+
+RvkBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+{
+    RvkBlobHandle handle = {};
+    handle.kind = RVK_BLOB_HOST_POINTER;
+    handle.pointer = base;
+    handle.fd = -1;
+    handle.size = bytes;
+    return handle;
+}
+
 /* Stands in for the device's wake. Nothing here completes on another thread,
  * so it is never called; what it proves is that binding one is what lets a
  * registration be attempted at all. */
@@ -118,10 +133,53 @@ TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
 /* Importing means clCreateBufferWithProperties with a dma-buf, and whether
  * that works is a per-device question answered where it is used. Until then a
  * blob is copied at the boundary, which is what import_kinds already says. */
-TEST(opencl_backend, takes_no_blob_yet_and_says_so)
+/* The context's blob arena, adopted so a buffer can be made over it.
+ *
+ * CL_MEM_USE_HOST_PTR is core OpenCL rather than an extension, so every
+ * device takes one - which is what makes this the cheap half of feature 041's
+ * promise. A dma-buf is still not adopted: that would be
+ * clCreateBufferWithProperties with an fd, which is a per-platform question
+ * this host answers differently on each of its OpenCL platforms. */
+TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_over)
+{ OpenClBackend backend;
+  /* Nothing adopted: no offset names anything. */
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK(backend.adopt(blob));
+  CHECK(blob.wire_handle() != 0u);
+  CHECK(backend.guest_bytes(0u, sizeof arena_region) == arena_region);
+  CHECK(backend.guest_bytes(4096u, 64u) == arena_region + 4096u);
+  /* The bounds are the point: these are guest numbers. */
+  CHECK(backend.guest_bytes(0u, sizeof arena_region + 1u) == nullptr);
+  CHECK(backend.guest_bytes(sizeof arena_region, 1u) == nullptr);
+  CHECK(backend.guest_bytes(~std::uint64_t{0}, 1u) == nullptr);
+
+  /* One at a time: a second would leave the first unreachable and its
+   * buffers pointing into memory nothing owns. */
+  av::ImportedBlob second;
+  CHECK_STATUS(second.take(2u, host_pointer(second_arena_region, sizeof second_arena_region)),
+               av::Status::ok);
+  CHECK(!backend.adopt(second));
+
+  backend.abandon(blob);
+  CHECK_EQ(blob.object(), 0u);
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  /* And the slot is free again. */
+  CHECK(backend.adopt(second));
+  backend.abandon(second);
+  backend.shut_down(); }
+
+TEST(opencl_backend, a_dma_buf_is_not_memory_a_buffer_can_be_made_over)
 { OpenClBackend backend;
   av::ImportedBlob blob;
+  RvkBlobHandle    handle = {};
+  handle.kind = RVK_BLOB_DMA_BUF;
+  handle.fd = 7;
+  handle.size = 4096u;
+  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
   CHECK(!backend.adopt(blob));
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
   backend.abandon(blob);
   CHECK_EQ(blob.object(), 0u); }
 

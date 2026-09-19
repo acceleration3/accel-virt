@@ -4,6 +4,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/cl_event_registration.hpp"
 #include "device/executor/imported_blob.hpp"
+#include "proto/cl_blob_backing.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "proto/generated/opencl/cl_command_names.h"
 #include "proto/generated/opencl/cl_dispatch_server.h"
@@ -72,20 +73,66 @@ bool OpenClBackend::lost() const
     return lost_;
 }
 
-bool OpenClBackend::adopt(ImportedBlob &)
+bool OpenClBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    /* Nothing yet. Importing here means clCreateBufferWithProperties with a
-     * dma-buf, and whether that works is a per-device question this host
-     * answers differently on each of its three OpenCL platforms - so it is
-     * asked where the answer is used, not guessed here. Until then a blob is
-     * copied at the boundary, which is what import_kinds already says. */
-    return false;
+    /* A host pointer, and one at a time: this is the context's blob arena,
+     * and a second would leave the first unreachable with its buffers
+     * pointing into memory nothing owns.
+     *
+     * A dma-buf is still not adopted. That would be
+     * clCreateBufferWithProperties with an fd, which is a per-platform
+     * question this host answers differently on each of its OpenCL platforms.
+     * CL_MEM_USE_HOST_PTR needs no extension at all, which is why this half
+     * is the one that works everywhere. */
+    if (blob.kind() != RVK_BLOB_HOST_POINTER || arena_.length() != 0u) return false;
+    arena_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
+    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
+    blob.record(address, address);
+    return true;
 }
 
-void OpenClBackend::abandon(ImportedBlob &)
+void OpenClBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::abandon");
+    if (blob.object() == 0u) return;
+    arena_.give_back();
+    blob.record(0u, 0u);
+}
+
+uint8_t *OpenClBackend::guest_bytes(uint64_t offset, uint64_t bytes) const
+{
+    AV_SCOPE("OpenClBackend::guest_bytes");
+    return arena_.at(offset, bytes);
+}
+
+cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
+                                                      const cl_mem_properties *properties,
+                                                      cl_mem_flags flags, size_t size,
+                                                      void *host_ptr, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateBufferWithProperties");
+    ClBlobBacking backing;
+    if (!backing.read(reinterpret_cast<const uint64_t *>(properties))) {
+        return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
+                                              errcode_ret);
+    }
+    /* The offset is the guest's, so the arena judges it before it is a
+     * pointer. A buffer made over memory that is not the arena's would let
+     * the guest choose what the host writes into. */
+    uint8_t *const at = arena_.at(backing.offset(), static_cast<uint64_t>(size));
+    if (at == nullptr) {
+        if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
+        return nullptr;
+    }
+    /* The property is this wire's and not OpenCL's, so it is not passed on;
+     * what the host is asked for is the plain call over the guest's memory.
+     * CL_MEM_COPY_HOST_PTR alongside would name host_ptr as well, which this
+     * call has none of. */
+    const cl_mem_flags over_arena =
+        (flags & ~static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR)) |
+        static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR);
+    return ::clCreateBuffer(context, over_arena, size, at, errcode_ret);
 }
 
 void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
@@ -174,6 +221,7 @@ void OpenClBackend::shut_down()
      * afterwards may resolve one. */
     svm_.forget_all();
     mapped_.forget_all();
+    arena_.give_back();
     /* Every event callback still to come goes stale here. The host cannot be
      * told to stop calling them, so being called and doing nothing is what
      * they do from now on. */

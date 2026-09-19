@@ -68,7 +68,16 @@ void LoaderHostApis::enumerate()
         sub_apis_[i] = RVK_EXECUTOR_SUB_API_VULKAN;
         vulkan_kinds_[i] = kinds_of(devices[i]);
         opencl_kinds_[i] = 0u;
-        if (opencl_devices_[i].find(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+        if (opencl_devices_[i].find(uuids_[i])) {
+            sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+            /* A host pointer, on every device that runs OpenCL at all:
+             * CL_MEM_USE_HOST_PTR is core rather than an extension, so a
+             * buffer can always be made over the context's blob arena
+             * (feature 052, T033). A dma-buf is still not offered - that
+             * would be clCreateBufferWithProperties with an fd, which each
+             * platform answers differently. */
+            opencl_kinds_[i] = RVK_BLOB_HOST_POINTER;
+        }
         if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENGL;
     }
     count_ = found;
