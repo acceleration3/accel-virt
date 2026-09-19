@@ -371,3 +371,88 @@ TEST(cl_probe, what_the_icds_thread_calls_counts_deliveries_rather_than_the_last
   /* The run zeroes the count before registering, so the two above are not
    * counted - and the one real delivery is. */
   CHECK(std::strstr(report.text(), "ok opencl.callback 1\n") != nullptr); }
+
+/* The platform this driver owns is found by its ICD suffix, and a machine may
+ * have others: the loader lists them all, and a suffix that merely starts the
+ * same way is not this one. */
+TEST(cl_probe, a_platform_whose_suffix_is_not_rvk_is_not_this_driver)
+{ ProbeRig rig;
+  /* One that shares the first letter, one that shares two, and one that is
+   * RVK with more after it - none of them is this driver's. */
+  rig.cl().set_platform_suffix(0u, "RXY");
+  rig.cl().add_platform("RVX");
+  rig.cl().add_platform("RVKX");
+  rig.run();
+  CHECK(rig.holds("FAIL opencl.platform status=3 3\n"));
+  CHECK_EQ(rig.cl().live_objects(), 0u);
+
+  /* And the real one, found among them rather than first. */
+  ProbeRig among;
+  among.cl().set_platform_suffix(0u, "RXY");
+  among.cl().add_platform("RVX");
+  among.cl().add_platform("RVK");
+  among.run();
+  CHECK(among.holds("ok opencl.platform 3\n"));
+  CHECK_EQ(among.cl().live_objects(), 0u); }
+
+/* A platform the loader will not describe is skipped rather than believed:
+ * the probe cannot tell whose it is, so it is not this driver's. */
+TEST(cl_probe, a_platform_that_will_not_say_what_it_is_is_skipped)
+{ ProbeRig rig;
+  rig.cl().set_platform_suffix(0u, "RXY");
+  rig.cl().add_platform("RVK");
+  /* The first platform's suffix query is refused; the second answers. */
+  rig.cl().fail_at(Call::platform_text, 1u, ScriptedCl::refused);
+  rig.run();
+  CHECK(rig.holds("ok opencl.platform 2\n"));
+  CHECK_EQ(rig.cl().live_objects(), 0u); }
+
+/* Every buffer the run needs is asked for, and the first refusal is the one
+ * reported - a later one must not overwrite it, because the first is where
+ * the run actually stopped being possible. */
+TEST(cl_probe, the_first_buffer_refused_is_the_one_the_step_reports)
+{ ProbeRig rig;
+  /* From the second onward: the third fails too, and the first refusal is
+   * still the one reported. */
+  rig.cl().fail_from(Call::create_buffer, 2u, -61 /* CL_INVALID_BUFFER_SIZE */);
+  rig.run();
+  CHECK(rig.holds("FAIL opencl.buffers status=7 4294967235\n"));
+  CHECK_EQ(rig.cl().live_objects(), 0u); }
+
+/* A device that will not say whether it has shared memory is not a device
+ * without it: the query failing and the answer being none are different
+ * things, and only one of them is the device saying so. */
+TEST(cl_probe, a_device_that_will_not_answer_about_shared_memory_notes_it_too)
+{ ProbeRig rig;
+  /* The SVM capability query is the third number the run asks for. */
+  rig.cl().fail_at(Call::device_number, 3u, ScriptedCl::refused);
+  rig.run();
+  CHECK(rig.holds("note opencl.svm not offered\n"));
+  CHECK_EQ(rig.cl().live_objects(), 0u); }
+
+/* The map and the callback, refused at the call that makes them. Each
+ * reports what it was told, or a refusal of its own when it was told
+ * nothing - a step that answered zero would read as success. */
+TEST(cl_probe, a_map_or_a_user_event_that_is_refused_says_so)
+{ { ProbeRig rig;
+    rig.cl().fail_at(Call::map_buffer, 1u, -12 /* CL_MAP_FAILURE */);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.map status=7 4294967284\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    /* Refused with no reason given: the step still has to fail, so it makes
+     * one rather than reporting a zero that reads as success. */
+    rig.cl().fail_silently_at(Call::map_buffer, 1u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.map status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_user_event, 1u, -6 /* CL_OUT_OF_HOST_MEMORY */);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.callback status=7 4294967290\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_silently_at(Call::create_user_event, 1u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.callback status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }

@@ -75,6 +75,15 @@ public:
     /* The Nth use (1-based) of `call` answers `error`, which stands in for the
      * null a creating call returns; zero means this object's own refusal. */
     void          fail_at(Call call, std::uint32_t nth, std::int32_t error);
+    /* The same, but from the nth call onward rather than at it alone: what a
+     * host that has run out of something looks like, where the next ask
+     * fails too. */
+    void          fail_from(Call call, std::uint32_t nth, std::int32_t error);
+    /* A call that answers nothing and says nothing: the entry gives back no
+     * object and leaves the error where it was. A caller that read that word
+     * would read success out of a failure, which is what the probe's steps
+     * guard against. Only the entries that answer an object have this. */
+    void          fail_silently_at(Call call, std::uint32_t nth);
     std::uint32_t calls(Call call) const;
 
     /* The platforms a loader lists, in the order it lists them: the first is
@@ -185,6 +194,9 @@ private:
 
     /* Zero on success, the error the test asked for on the failing use. */
     std::int32_t failure(Call call);
+    /* Whether this call answers nothing, setting `error` to what it says -
+     * which may be nothing at all. */
+    bool         answers_nothing(Call call, std::int32_t &error);
     void        *make(Kind kind);
     /* The object behind a handle this made, or null and a misuse. */
     Object      *required(void *handle, Kind kind);
@@ -196,6 +208,8 @@ private:
                               std::size_t &bytes) const;
 
     std::uint32_t fail_at_[static_cast<std::uint32_t>(Call::count)];
+    std::uint32_t silent_at_[static_cast<std::uint32_t>(Call::count)];
+    bool          from_[static_cast<std::uint32_t>(Call::count)];
     std::int32_t  errors_[static_cast<std::uint32_t>(Call::count)];
     std::uint32_t calls_[static_cast<std::uint32_t>(Call::count)];
     const char   *suffixes_[max_platforms];

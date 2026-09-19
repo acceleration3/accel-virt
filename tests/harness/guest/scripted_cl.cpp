@@ -33,7 +33,7 @@ constexpr std::uintptr_t object_base = 0x5300u;
 }  // namespace
 
 ScriptedCl::ScriptedCl()
-    : fail_at_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), devices_(1u),
+    : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), devices_(1u),
       device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), objects_{}, live_(0u), misuses_(0u),
@@ -46,7 +46,19 @@ void ScriptedCl::fail_at(Call call, std::uint32_t nth, std::int32_t error)
 {
     const auto index = static_cast<std::uint32_t>(call);
     fail_at_[index] = nth;
+    from_[index] = false;
     errors_[index] = error != 0 ? error : refused;
+}
+
+void ScriptedCl::fail_from(Call call, std::uint32_t nth, std::int32_t error)
+{
+    fail_at(call, nth, error);
+    from_[static_cast<std::uint32_t>(call)] = true;
+}
+
+void ScriptedCl::fail_silently_at(Call call, std::uint32_t nth)
+{
+    silent_at_[static_cast<std::uint32_t>(call)] = nth;
 }
 
 std::uint32_t ScriptedCl::calls(Call call) const
@@ -89,8 +101,19 @@ std::int32_t ScriptedCl::failure(Call call)
 {
     const auto index = static_cast<std::uint32_t>(call);
     calls_[index]++;
-    if (fail_at_[index] == never || calls_[index] != fail_at_[index]) return 0;
+    if (fail_at_[index] == never) return 0;
+    if (from_[index] ? calls_[index] < fail_at_[index] : calls_[index] != fail_at_[index]) return 0;
     return errors_[index];
+}
+
+bool ScriptedCl::answers_nothing(Call call, std::int32_t &error)
+{
+    /* failure() counts the call, so the silent check reads the count it
+     * left behind rather than counting again. */
+    error = failure(call);
+    if (error != 0) return true;
+    const auto index = static_cast<std::uint32_t>(call);
+    return silent_at_[index] != never && calls_[index] == silent_at_[index];
 }
 
 void *ScriptedCl::make(Kind kind)
@@ -262,8 +285,7 @@ void *ScriptedCl::create_queue(void *context, void *device, std::int32_t &error)
 void *ScriptedCl::create_buffer(void *context, std::uint64_t flags, std::size_t bytes,
                                 std::int32_t &error)
 {
-    error = failure(Call::create_buffer);
-    if (error != 0) return nullptr;
+    if (answers_nothing(Call::create_buffer, error)) return nullptr;
     if (required(context, Kind::context) == nullptr) {
         error = refused;
         return nullptr;
@@ -399,7 +421,7 @@ std::int32_t ScriptedCl::finish(void *queue)
 void *ScriptedCl::map_buffer(void *queue, void *buffer, std::uint64_t flags, std::size_t bytes,
                              std::int32_t &error)
 {
-    error = failure(Call::map_buffer);
+    const bool refuses = answers_nothing(Call::map_buffer, error);
     Object *const mapped = required(buffer, Kind::buffer);
     if (required(queue, Kind::queue) == nullptr || mapped == nullptr) {
         error = refused;
@@ -410,7 +432,7 @@ void *ScriptedCl::map_buffer(void *queue, void *buffer, std::uint64_t flags, std
         error = refused;
         return nullptr;
     }
-    if (error != 0) return nullptr;
+    if (refuses) return nullptr;
     if (mapped->mapped) {
         misuses_++;
         error = refused;
@@ -476,8 +498,7 @@ std::int32_t ScriptedCl::set_kernel_svm(void *kernel, std::uint32_t index, void 
 
 void *ScriptedCl::create_user_event(void *context, std::int32_t &error)
 {
-    error = failure(Call::create_user_event);
-    if (error != 0) return nullptr;
+    if (answers_nothing(Call::create_user_event, error)) return nullptr;
     if (required(context, Kind::context) == nullptr) {
         error = refused;
         return nullptr;
