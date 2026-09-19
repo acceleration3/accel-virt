@@ -288,3 +288,49 @@ TEST(table_host, forwards_ranges_and_aliases_and_reads_their_refusals)
   CHECK_STATUS(host.reserve_range(0x1000u, refused), Status::no_memory);
   CHECK(refused == nullptr);
   host.unmap_guest(run, length); }
+
+/* The dma-buf over guest pages, and what a table from before it answers.
+ *
+ * A host that cannot make one - no udmabuf, or RAM with no file behind it -
+ * is not a failure of the blob: the caller imports a host pointer instead,
+ * which is what every host did before this op existed. So an older table,
+ * with nothing in the slot, has to answer the same refusal rather than call
+ * through a null pointer. */
+TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_guest_ram(0x1000u, 0x1000u);
+  std::uint64_t length = 0x1000u;
+  bool          direct = false;
+  void *const   run = host.map_guest(0x1000u, length, direct);
+  void *const   runs[] = {run};
+  const std::uint64_t sizes[] = {0x1000u};
+
+  int fd = -1;
+  const Status made = host.dmabuf_over_guest(runs, sizes, 1u, fd);
+  /* A kernel with no udmabuf refuses, which is a legal answer here. */
+  CHECK(made == Status::ok || made == Status::not_supported);
+  if (made == Status::ok) {
+      CHECK(fd >= 0);
+      CHECK_EQ(mock.live_dmabufs(), 1u);
+      host.close_dmabuf(fd);
+      CHECK_EQ(mock.live_dmabufs(), 0u);
+  }
+  /* Closing what was never made is not a close of anything. */
+  host.close_dmabuf(-1);
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+
+  mock.fail_dmabuf_at(1u);
+  int refused = -1;
+  CHECK_STATUS(host.dmabuf_over_guest(runs, sizes, 1u, refused), Status::not_supported);
+  CHECK_EQ(refused, -1);
+
+  /* A table with the slot empty, as one built before the op has it. */
+  RvkHostOps older = ops.table();
+  older.dmabuf_over_guest = nullptr;
+  older.close_dmabuf = nullptr;
+  TableHost before(older);
+  int        none = -1;
+  CHECK_STATUS(before.dmabuf_over_guest(runs, sizes, 1u, none), Status::not_supported);
+  before.close_dmabuf(7);
+  CHECK_EQ(none, -1);
+  host.unmap_guest(run, length); }

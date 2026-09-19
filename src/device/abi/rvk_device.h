@@ -114,6 +114,17 @@ typedef struct RvkHostOps {
     void (*respond)(void *opaque, void *request, const uint8_t *bytes, size_t size);
     /* Nonzero when the base virtio-gpu device holds a 2D resource `id`. */
     int (*resource_exists)(void *opaque, uint32_t id);
+    /* Any thread. One dma-buf over `count` runs of guest RAM, in order, so a
+     * host GPU can import the guest's own pages without pinning them as a
+     * userptr: *fd on success, nonzero on failure. A host whose guest RAM has
+     * no file behind it, or that cannot make one, answers nonzero and the
+     * caller imports a host pointer instead.
+     *
+     * Needed because amdgpu refuses a userptr whose pages are file-backed,
+     * and guest RAM is a memfd (docs/testing.md). */
+    int (*dmabuf_over_guest)(void *opaque, void *const *runs, const uint64_t *sizes, uint32_t count,
+                             int *fd);
+    void (*close_dmabuf)(void *opaque, int fd);
 } RvkHostOps;
 
 /* Runs routine(context) later on QEMU's main loop, under the big lock; any

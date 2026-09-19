@@ -16,6 +16,9 @@
 #include "qemu/aio.h"
 #include "qemu/iov.h"
 #include "qemu/memfd.h"
+#include <linux/udmabuf.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include "qemu/rcu.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
@@ -237,6 +240,65 @@ static int rvk_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
     }
     return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd,
                 (off_t)(qemu_ram_get_fd_offset(block) + offset)) == MAP_FAILED;
+}
+
+/* One dma-buf over the guest's own pages, through udmabuf. A host GPU that
+ * refuses a userptr whose pages are file-backed - and guest RAM is a memfd -
+ * takes this instead. Nonzero where the kernel has no udmabuf or the RAM has
+ * no fd, and the caller imports a host pointer as before. */
+static int rvk_dmabuf_over_guest(void *opaque, void *const *runs, const uint64_t *sizes,
+                                 uint32_t count, int *fd)
+{
+    g_autofree struct udmabuf_create_item *items = NULL;
+    g_autofree uint8_t *request = NULL;
+    struct udmabuf_create_list list;
+    int device, made;
+    uint32_t index;
+
+    if (!runs || !sizes || count == 0) {
+        return 1;
+    }
+    items = g_new0(struct udmabuf_create_item, count);
+    RCU_READ_LOCK_GUARD();
+    for (index = 0; index < count; index++) {
+        ram_addr_t offset;
+        RAMBlock *block;
+        int ram_fd;
+
+        block = qemu_ram_block_from_host(runs[index], false, &offset);
+        if (!block || (ram_fd = qemu_ram_get_fd(block)) < 0 ||
+            offset + sizes[index] > qemu_ram_get_used_length(block)) {
+            return 1;
+        }
+        items[index].memfd = (uint32_t)ram_fd;
+        items[index].offset = qemu_ram_get_fd_offset(block) + offset;
+        items[index].size = sizes[index];
+    }
+    device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+    if (device < 0) {
+        return 1;
+    }
+    memset(&list, 0, sizeof(list));
+    list.flags = UDMABUF_FLAGS_CLOEXEC;
+    list.count = count;
+    /* The items follow the header, which is what the ioctl reads. */
+    request = g_malloc0(sizeof(list) + sizeof(items[0]) * count);
+    memcpy(request, &list, sizeof(list));
+    memcpy(request + sizeof(list), items, sizeof(items[0]) * count);
+    made = ioctl(device, UDMABUF_CREATE_LIST, request);
+    close(device);
+    if (made < 0) {
+        return 1;
+    }
+    *fd = made;
+    return 0;
+}
+
+static void rvk_close_dmabuf(void *opaque, int fd)
+{
+    if (fd >= 0) {
+        close(fd);
+    }
 }
 
 static void rvk_release_range(void *opaque, void *base, uint64_t size)
@@ -748,6 +810,8 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .reserve_range = rvk_reserve_range,
         .alias_guest_run = rvk_alias_guest_run,
         .release_range = rvk_release_range,
+        .dmabuf_over_guest = rvk_dmabuf_over_guest,
+        .close_dmabuf = rvk_close_dmabuf,
         .create_host_memory = rvk_create_host_memory,
         .destroy_host_memory = rvk_destroy_host_memory,
         .hostmem_size = rvk_hostmem_size,

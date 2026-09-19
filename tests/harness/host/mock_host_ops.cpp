@@ -68,6 +68,11 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).alias_guest_run(run, size, at) == Status::ok ? 0 : 1;
     };
     table_.release_range = [](void *opaque, void *base, std::uint64_t size) { host_of(opaque).release_range(base, size); };
+    table_.dmabuf_over_guest = [](void *opaque, void *const *runs, const std::uint64_t *sizes,
+                                  std::uint32_t count, int *fd) {
+        return host_of(opaque).dmabuf_over_guest(runs, sizes, count, *fd) == Status::ok ? 0 : 1;
+    };
+    table_.close_dmabuf = [](void *opaque, int fd) { host_of(opaque).close_dmabuf(fd); };
     table_.create_host_memory = [](void *opaque, std::uint64_t size, void **pointer) {
         void *view = nullptr;
         void *const memory = host_of(opaque).create_host_memory(size, view);

@@ -8,6 +8,9 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <fcntl.h>
+#include <linux/udmabuf.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -39,7 +42,7 @@ MockHost::MockHost()
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
       host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
-      fail_reserve_(0u), fail_alias_(0u)
+      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), dmabufs_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -765,6 +768,56 @@ Status MockHost::alias_guest_run(void *run, std::uint64_t bytes, void *at)
     return Status::ok;
 }
 
+/* One dma-buf over the guest's own pages, through udmabuf: the runs are
+ * offsets of the guest RAM memfd, and a udmabuf list is exactly that shape.
+ * Refused where the kernel has no udmabuf, which leaves the caller importing
+ * a host pointer as it did before. */
+Status MockHost::dmabuf_over_guest(void *const *runs, const std::uint64_t *sizes,
+                                   std::uint32_t count, int &fd)
+{
+    StateLock lock(state_);
+    if (fail_now(fail_dmabuf_)) return Status::not_supported;
+    if (runs == nullptr || sizes == nullptr || count == 0u ||
+        count > MockHost::max_dmabuf_runs)
+        return Status::not_supported;
+    udmabuf_create_item items[MockHost::max_dmabuf_runs] = {};
+    for (std::uint32_t index = 0u; index < count; index++) {
+        GuestRegion *const region = region_holding(runs[index], sizes[index]);
+        if (region == nullptr || region->fd < 0 || sizes[index] == 0u ||
+            sizes[index] % page != 0u)
+            return Status::not_supported;
+        const auto offset = static_cast<std::uint64_t>(
+            static_cast<std::uint8_t *>(runs[index]) - region->bytes);
+        if (offset % page != 0u) return Status::not_supported;
+        items[index].memfd = static_cast<std::uint32_t>(region->fd);
+        items[index].offset = offset;
+        items[index].size = sizes[index];
+    }
+    const int device = ::open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+    if (device < 0) return Status::not_supported;
+    udmabuf_create_list list = {};
+    list.flags = UDMABUF_FLAGS_CLOEXEC;
+    list.count = count;
+    /* The list's items follow the header, which is what the ioctl reads. */
+    std::uint8_t request[sizeof list + sizeof items] = {};
+    std::memcpy(request, &list, sizeof list);
+    std::memcpy(request + sizeof list, items, sizeof(udmabuf_create_item) * count);
+    const int made = ioctl(device, UDMABUF_CREATE_LIST, request);
+    ::close(device);
+    if (made < 0) return Status::not_supported;
+    fd = made;
+    dmabufs_++;
+    return Status::ok;
+}
+
+void MockHost::close_dmabuf(int fd)
+{
+    StateLock lock(state_);
+    if (fd < 0) return;
+    ::close(fd);
+    dmabufs_--;
+}
+
 void MockHost::release_range(void *base, std::uint64_t bytes)
 {
     {
@@ -787,6 +840,10 @@ bool MockHost::holds_range(void *at, std::uint64_t bytes)
 
 void MockHost::fail_reserve_at(std::uint32_t nth) { StateLock lock(state_); fail_reserve_ = nth; }
 void MockHost::fail_alias_at(std::uint32_t nth) { StateLock lock(state_); fail_alias_ = nth; }
+
+void MockHost::fail_dmabuf_at(std::uint32_t nth) { StateLock lock(state_); fail_dmabuf_ = nth; }
+
+std::uint32_t MockHost::live_dmabufs() const { return dmabufs_; }
 
 std::uint32_t MockHost::live_ranges()
 {

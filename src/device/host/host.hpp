@@ -77,6 +77,19 @@ public:
     /* Any thread. The reserved range and every alias inside it. */
     virtual void                 release_range(void *base, uint64_t bytes) = 0;
 
+    /* Any thread. One dma-buf over `count` runs of guest RAM, in order: the
+     * guest's own pages, shared with a host GPU without pinning them as a
+     * userptr. not_supported where the host cannot make one - guest RAM with
+     * no file behind it, or no udmabuf - and the caller imports a host
+     * pointer instead.
+     *
+     * The GPU that matters here refuses a userptr whose pages are file-backed,
+     * and guest RAM is a memfd, so this is the only way its pages reach it
+     * (docs/testing.md). */
+    [[nodiscard]] virtual Status dmabuf_over_guest(void *const *runs, const uint64_t *sizes,
+                                                   uint32_t count, int &fd) = 0;
+    virtual void                 close_dmabuf(int fd) = 0;
+
     /* Main loop. A zeroed host-visible block of `size` bytes, a page multiple:
      * its handle, or null. `pointer` is the device's own view of it. */
     virtual void *create_host_memory(uint64_t size, void *&pointer) = 0;
