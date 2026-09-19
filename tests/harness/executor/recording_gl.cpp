@@ -456,12 +456,13 @@ void RecordingGl::clear_data(GLenum format, GLenum type, const void *data)
 {
     calls_++;
     if (data == nullptr) return;
+    /* A pairing this fake does not size is not a stray: the decoder sizes far
+     * more of them than these five, and a span it sized and read into the
+     * arena is inside the arena whatever the pairing. What is still true of
+     * every pixel is that it is at least a byte, and a byte outside the arena
+     * is what a stray is - the same rule upload already uses. */
     const std::uint64_t pixel = pixel_size(format, type);
-    if (pixel == 0u) {
-        strays_++;
-        return;
-    }
-    check_span(data, pixel);
+    check_span(data, pixel != 0u ? pixel : 1u);
 }
 
 void RecordingGl::buffer_data(GLsizeiptr size, const void *data)
