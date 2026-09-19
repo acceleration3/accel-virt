@@ -45,11 +45,22 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 ### Classes this feature introduces
 
-<!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->
-
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `RecordingHeader` | object | magic and version, the wire version recorded, the kinds kept, the ceiling, the wrap count, the start clock, the host GPU's identity | The first bytes of a recording |
+| `RecordHeader` | object | kind, context, fence, payload length, timestamp | The framing of one record |
+| `RecordKinds` | object | the mask of record kinds kept | Which kinds a recording keeps |
+| `RecordingLimit` | object | the ceiling, the bytes written, whether it wraps | What happens when the next record would pass the ceiling |
+| `WireRecorder` | system | `Host&`, the open file, the header, the limit, the kinds, a mutex, what it refused | Writes what crosses the wire to the recording |
+| `RecordingReader` | system | the bytes and their length, the file header, the read offset, where the damage is | Walks a recording's records, stopping at the first damage |
+| `RecordingFilter` | object | a context, a sub-API, a fence range, a command-name fragment | Whether a record is shown |
+| `RecordedCommand` | object | one command's header and payload inside a batch record | One command of a recorded batch |
+| `RecordingPrinter` | system | the reader, the filter, the line buffer, the byte budget | Prints a recording as lines a person reads |
+| `ReplayContext` | object | a recorded context id, its executor, its sub-API, its last answer | One recorded context, replayed on a library |
+| `RecordingReplay` | system | `ExecutorLibrary&`, the replay contexts, the GPU asked for, the findings | Replays a recording into an executor library |
+| `PosixRecordingFile` | object | a file descriptor | A recording file on this host |
+| `MappedFile` | object | the mapping and its length | A file's bytes, mapped read-only |
+| `PosixExecutorModule` | object | the opened library and its table | An executor library loaded by path |
 
 ### Test requirements
 
