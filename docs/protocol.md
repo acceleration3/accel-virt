@@ -827,3 +827,73 @@ writes the same value again when a context is set up. Feature 044 found this
 live: each packet after a context's first completed only when an unrelated DPC
 served it, 2-3 s later, past TdrDelay under load; qtest has no irqfd and could
 not show it.
+
+## Wire recordings (device -> a file on the host)
+
+A device started with `record=<path>` writes down what crossed the wire
+(feature 065): a versioned file header, then length-prefixed typed records, in
+the order the device took them, flushed as each is written so a QEMU that dies
+inside a host driver leaves the batch it was running. Recording is off by
+default and nothing else on the submission path changes when it is.
+
+This is not part of the guest-visible protocol - no guest ever reads one - but
+it is the wire written down, so it is specified here beside what it records.
+Every convention above holds: little-endian, fixed-size structures, a 32-bit
+ASCII magic, reserved fields zero and rejected when not, and a reader that
+trusts nothing it did not write.
+
+### File header, 64 bytes, at offset 0
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKR` = `0x524B5652` |
+| 4 | u16 | major | 1; a reader refuses another |
+| 6 | u16 | minor | 0; a higher one is read as far as the reader knows |
+| 8 | u16 | wire_major | the protocol version the recorded device spoke |
+| 10 | u16 | wire_minor | |
+| 12 | u32 | kinds | bit `kind - 1` for every kind this recording keeps |
+| 16 | u64 | started | the host's monotonic nanoseconds when the file was opened |
+| 24 | u64 | limit | the ceiling in bytes, 0 for none, otherwise >= 64 |
+| 32 | u32 | wraps | times the recording wrapped back to this header |
+| 36 | u32 | vendor_id | the bound host GPU's `VkPhysicalDeviceProperties::vendorID` |
+| 40 | u32 | device_id | `::deviceID` |
+| 44 | u32 | reserved | 0 |
+| 48 | u8[16] | gpu_uuid | `VkPhysicalDeviceIDProperties::deviceUUID`, zeroes when unbound |
+
+At the ceiling the recording either stops (the default) or wraps: the file is
+truncated back to this header, `wraps` is raised, and writing continues, so the
+newest records survive and the file never passes the ceiling. Either way the
+device log says so once.
+
+### Record header, 32 bytes, in front of every record
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKD` = `0x444B5652` |
+| 4 | u16 | kind | 1..7 below; a reader stops at any other |
+| 6 | u16 | reserved | 0 |
+| 8 | u32 | context | the device's context id, 0 when the record names none |
+| 12 | u32 | length | payload bytes that follow, at most 16 MiB |
+| 16 | u64 | timestamp | nanoseconds since the file header's `started` |
+| 24 | u64 | fence | the batch this record belongs to, 0 when it belongs to none |
+
+A record occupies `32 + length` bytes and is not padded.
+
+### Record kinds
+
+| Kind | Name | Payload | Written when |
+|--:|---|---|---|
+| 1 | context setup | the context setup above, 32 or 48 bytes | a context binds |
+| 2 | batch | the batch's command bytes, exactly as staged for the executor | before the batch's first command runs |
+| 3 | reply | the answer bytes, 0 or more | the answer is written to the reply slot |
+| 4 | fence completed | empty | the fence page records the batch complete |
+| 5 | fault | 8 bytes: u32 fault code, u32 reserved | a batch fails |
+| 6 | blob | 32 bytes: u32 action (0 created, 1 imported, 2 released), u32 memory_type, u64 blob_id, u64 offset, u64 size | a blob is created, imported into a context, or released |
+| 7 | blob bytes | 16 bytes: u64 blob_id, u64 offset; then the snapshot | an import is recorded and this kind was asked for |
+
+A batch's payload is the same sequence of framed commands *Execution* above
+describes, so a reader walks it with the same header. A recording holds what the
+executor library received, which is the guest's bytes after the device
+validated the framing around them and nothing more: the bytes inside a command
+are still the guest's, and every tool that reads a recording treats them as
+hostile.
