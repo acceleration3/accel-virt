@@ -215,3 +215,217 @@ TEST(cl_buffer_paths, a_buffer_that_did_not_ask_for_host_memory_is_not_given_the
   CHECK_EQ(rig.kmt().command_id(sent),
            static_cast<std::uint32_t>(av::clproto::kCmd_clCreateBuffer));
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- what a map and an unmap answer when they cannot ---------------------- */
+
+namespace {
+
+/* A buffer on an opened context, by whichever path its flags ask for. */
+cl_mem buffer_on(ClIcdRig &rig, const Opened &opened, cl_mem_flags flags,
+                 std::uint64_t handle = host_buffer)
+{
+    rig.host().cl_handle(handle, CL_SUCCESS);
+    return rig.loader().create_buffer(opened.context(), flags, buffer_bytes, nullptr);
+}
+
+}  // namespace
+
+TEST(cl_buffer_paths, a_map_of_something_that_is_not_a_queue_or_a_buffer_is_refused)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_SUCCESS;
+  /* The context is not a queue, and the queue is not a buffer. Each is told
+   * which object it should have been. */
+  CHECK(rig.root().map_buffer(reinterpret_cast<cl_command_queue>(opened.context()), buffer, CL_TRUE,
+                              CL_MAP_READ, 0u, buffer_bytes, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_COMMAND_QUEUE);
+  error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), reinterpret_cast<cl_mem>(opened.queue()), CL_TRUE,
+                              CL_MAP_READ, 0u, buffer_bytes, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_MEM_OBJECT);
+  /* A map of nothing is not a map. */
+  error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 0u, nullptr,
+                              &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+  /* None of them reached the host. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_host_that_will_not_map_gives_its_error_back_and_stages_nothing)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  rig.host().cl_handle(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+
+  /* And a host that answers success with no address: it contradicted itself,
+   * which the API has no word for, so the map simply failed. */
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MAP_FAILURE);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_staged_map_whose_fill_fails_keeps_no_mapping)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  /* The host maps, then refuses the read that fills the staged block. The
+   * application is handed nothing, so the block it would have held has to go
+   * back - otherwise the context keeps a mapping nobody can unmap. */
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, buffer_bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK(rig.root().invariants_hold());
+
+  /* The slot came back, so the next map can have it. */
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  error = CL_INVALID_VALUE;
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u,
+                                             buffer_bytes, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(mapped != nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_write_invalidate_map_reads_nothing_because_it_promises_nothing)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  /* CL_MAP_WRITE_INVALIDATE_REGION says the application will not read what
+   * was there, so filling the block would be a copy nobody asked for. */
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_INVALID_VALUE;
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE,
+                                             CL_MAP_WRITE_INVALIDATE_REGION, 0u, buffer_bytes,
+                                             nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(mapped != nullptr);
+  /* One command, the host's own map, and no read behind it. */
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, an_unmap_names_the_pointer_the_map_answered_and_the_buffer_it_was_of)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem first = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  /* A different host handle, because the unmap tells them apart by it. */
+  cl_mem second = buffer_on(rig, opened, CL_MEM_READ_WRITE, host_buffer + 1u);
+  CHECK(first != nullptr && second != nullptr);
+  if (first == nullptr || second == nullptr) return;
+
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  void *const mapped = rig.root().map_buffer(opened.queue(), first, CL_TRUE, CL_MAP_READ, 0u,
+                                             buffer_bytes, nullptr, nullptr);
+  CHECK(mapped != nullptr);
+  if (mapped == nullptr) return;
+
+  const std::uint32_t sent = rig.kmt().commands();
+  /* Not a queue, not a buffer, the wrong buffer, and an address inside the
+   * mapping rather than the one it answered: each refused before anything
+   * is sent, because an unmap that guessed would unmap something else. */
+  CHECK_EQ(rig.root().unmap(reinterpret_cast<cl_command_queue>(opened.context()), first, mapped,
+                            nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().unmap(opened.queue(), reinterpret_cast<cl_mem>(opened.queue()), mapped,
+                            nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().unmap(opened.queue(), second, mapped, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().unmap(opened.queue(), first, static_cast<std::uint8_t *>(mapped) + 1u,
+                            nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  /* The mapping survived being asked about wrongly. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().unmap(opened.queue(), first, mapped, nullptr), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, an_unmap_the_host_refuses_writes_nothing_back)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_WRITE, 0u,
+                                             buffer_bytes, nullptr, nullptr);
+  CHECK(mapped != nullptr);
+  if (mapped == nullptr) return;
+
+  /* The host refuses the unmap. The write-back must not follow it: the
+   * mapping is still the host's, and writing over the buffer now would be
+   * writing under a mapping that is still live. */
+  rig.host().cl_result(CL_OUT_OF_RESOURCES);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, a_write_back_the_host_refuses_is_what_the_unmap_answers)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_mem buffer = buffer_on(rig, opened, CL_MEM_READ_WRITE);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+
+  rig.host().cl_handle(host_mapped, CL_SUCCESS);
+  const unsigned char filled[buffer_bytes] = {};
+  rig.host().cl_bytes(CL_SUCCESS, filled, buffer_bytes);
+  void *const mapped = rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_WRITE, 0u,
+                                             buffer_bytes, nullptr, nullptr);
+  CHECK(mapped != nullptr);
+  if (mapped == nullptr) return;
+
+  /* The unmap succeeds and the write-back behind it does not. The
+   * application wrote through that mapping, so a failure to put the bytes
+   * where it asked is the unmap's failure and not something to swallow. */
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_OUT_OF_RESOURCES);
+  /* The mapping is gone either way: it is the host's that was ended. */
+  CHECK(rig.root().invariants_hold()); }

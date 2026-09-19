@@ -173,3 +173,85 @@ TEST(cl_device_loss, the_device_and_the_platform_answer_after_a_fault_because_ne
            CL_SUCCESS);
   CHECK_EQ(luid, ClIcdRig::adapter_luid);
   CHECK(rig.root().invariants_hold()); }
+
+/* Every entry that needs a transport, on a context that has none.
+ *
+ * The spec has no "lost context", so there is no status an application can
+ * ask for and no sticky error to find. What it gets instead is the same
+ * refusal from every call, immediately, with nothing sent - which is the only
+ * honest answer once the transport is gone, and the only one that cannot hang.
+ *
+ * Every one of these is a distinct path in the ICD: each entry reaches for its
+ * context's transport separately, and an entry that forgot to would send into
+ * a torn-down ring. */
+TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_nothing)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  cl_context context = made_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+
+  /* Real objects, made while the context still worked: the application is
+   * still holding them after the fault, and every one of them is asked. */
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  cl_mem buffer = rig.loader().create_buffer(context, CL_MEM_READ_WRITE, 256u, nullptr);
+  rig.host().cl_handle(0x6700u, CL_SUCCESS);
+  cl_program program = rig.loader().create_program(context, "__kernel void k(void) {}", nullptr);
+  CHECK(queue != nullptr && buffer != nullptr && program != nullptr);
+  if (queue == nullptr || buffer == nullptr || program == nullptr) return;
+  rig.host().cl_handle(0x6800u, CL_SUCCESS);
+  cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
+  rig.host().cl_handle(0x6901u, CL_SUCCESS);
+  cl_event user = rig.loader().create_user_event(context, nullptr);
+  CHECK(kernel != nullptr && user != nullptr);
+  if (kernel == nullptr || user == nullptr) return;
+
+  /* The fault. From here the transport is gone. */
+  fault_next(rig);
+  CHECK_EQ(rig.loader().finish(queue), CL_OUT_OF_RESOURCES);
+
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int              error = CL_SUCCESS;
+  unsigned char       bytes[8] = {};
+  const std::size_t   global = 1u;
+
+  CHECK_EQ(rig.loader().finish(queue), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().flush(queue), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_TRUE, 0u, sizeof bytes, bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof bytes, bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_write(queue, buffer, CL_TRUE, 0u, sizeof bytes, bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_kernel(queue, kernel, 1u, nullptr, &global, nullptr, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().set_kernel_argument(kernel, 0u, sizeof buffer, &buffer),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().build_program(program, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().wait_for_events(1u, &user), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().event_info(user, CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().set_user_event_status(user, CL_COMPLETE), CL_OUT_OF_RESOURCES);
+
+  /* The map answers null with the same refusal, and the unmap of a pointer
+   * no live mapping answered is still the caller's own mistake. */
+  error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(queue, buffer, CL_TRUE, CL_MAP_READ, 0u, sizeof bytes, nullptr,
+                              &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().unmap(queue, buffer, bytes, nullptr), CL_INVALID_VALUE);
+
+  /* The shared-memory entries too: an allocation cannot be made and an
+   * address inside none is refused before anything is sent. */
+  CHECK(rig.root().svm_alloc(context, CL_MEM_READ_WRITE, 256u, 0u) == nullptr);
+  CHECK_EQ(rig.root().svm_map(queue, CL_TRUE, CL_MAP_READ, bytes, sizeof bytes, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().svm_unmap(queue, bytes, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, bytes), CL_INVALID_ARG_VALUE);
+
+  /* Not one of them reached the driver. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
