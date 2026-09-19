@@ -209,7 +209,11 @@ private:
     /* Makes one object of a host answer, releasing the host's if this cannot
      * hold it - a number the application could never use is worse than an
      * error it can see. */
-    void            *wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *context,
+    /* `transport` is the one the caller has just used, because an object the
+     * guest cannot keep has to be given back over it - and every caller has
+     * one in hand by the time it gets here. */
+    void            *wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t wire,
+                          GuestClContext *context,
                           ClObject *parent, cl_int *error);
     /* What an entry answers when the pointer it was given is not an object of
      * that kind: the API's own error for each. */

@@ -353,9 +353,9 @@ TEST(cl_device_report, a_version_whose_digits_are_not_digits_is_not_believed)
       "OpenCL x.0 host",     /* a letter where the major belongs */
       "OpenCL 3:0 host",     /* the separator is not a dot */
       "OpenCL 3.x host",     /* a letter where the minor belongs */
-      "OpenCL :.0 host",     /* just below a digit */
-      "OpenCL 3.: host",     /* just above one, which is what the upper half
-                              * of the range check is there for */
+      "OpenCL -.0 host",     /* one below '0', which is the lower half of the
+                              * range check */
+      "OpenCL 3.: host",     /* one above '9', which is the upper half */
   };
   for (const char *const text : wrong) {
       ClDeviceReport report(adapter_luid);

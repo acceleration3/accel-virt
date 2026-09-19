@@ -139,7 +139,9 @@ Status ClIcdRoot::open_device()
     if (wire == nullptr) {
         log_.write("rvkcl: the ICD's own context could not be made");
         static_cast<void>(contexts_.destroy(context));
-        return opened != Status::ok ? opened : Status::not_supported;
+        /* Only a make that failed gets here, since one that did not leaves a
+         * transport behind it. */
+        return opened;
     }
     /* What the host has, asked once. The device it answers is the one this
      * ICD shows, because the executor bound one GPU to this context. */
@@ -290,8 +292,8 @@ void ClIcdRoot::give_back_to_host(ClientTransport &wire, ClObject::Kind kind, ui
     }
 }
 
-void *ClIcdRoot::wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *context, ClObject *parent,
-                      cl_int *error)
+void *ClIcdRoot::wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t wire,
+                      GuestClContext *context, ClObject *parent, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::wrap");
     ClObject *object = nullptr;
@@ -300,11 +302,7 @@ void *ClIcdRoot::wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *contex
          * name it again. Giving it back here is the only chance: the
          * application is about to be told the call failed, and an object it
          * was never handed is one it can never release. */
-        /* Every object is made on a context, so there is one to ask; its
-         * transport is gone only when the context is lost, and then the
-         * host has already let everything of it go. */
-        ClientTransport *const transport = context->wire();
-        if (transport != nullptr) give_back_to_host(*transport, kind, wire);
+        give_back_to_host(transport, kind, wire);
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
@@ -391,7 +389,7 @@ cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_DEVICE_NOT_AVAILABLE);
         return nullptr;
     }
-    void *const wrapped = wrap(ClObject::Kind::context, host_context, context, nullptr, error);
+    void *const wrapped = wrap(*wire, ClObject::Kind::context, host_context, context, nullptr, error);
     if (wrapped == nullptr) static_cast<void>(contexts_.destroy(context));
     lock_.release();
     return static_cast<cl_context>(wrapped);
@@ -545,7 +543,7 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         return nullptr;
     }
     return static_cast<cl_command_queue>(
-        wrap(ClObject::Kind::command_queue, queue, held->context(), held, error));
+        wrap(*wire, ClObject::Kind::command_queue, queue, held->context(), held, error));
 }
 
 cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
@@ -620,7 +618,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    void *const made = wrap(ClObject::Kind::mem, buffer, held->context(), held, error);
+    void *const made = wrap(*wire, ClObject::Kind::mem, buffer, held->context(), held, error);
     if (made == nullptr) {
         /* wrap gave the host's buffer back, so only the block is left. */
         if (backed) on->blocks().give_back(block);
@@ -655,7 +653,7 @@ cl_program ClIcdRoot::create_program(cl_context context, cl_uint count, const ch
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_program>(wrap(ClObject::Kind::program, program, held->context(), held, error));
+    return static_cast<cl_program>(wrap(*wire, ClObject::Kind::program, program, held->context(), held, error));
 }
 
 cl_int ClIcdRoot::build_program(cl_program program, const char *options)
@@ -693,7 +691,7 @@ cl_kernel ClIcdRoot::create_kernel(cl_program program, const char *name, cl_int 
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_INVALID_KERNEL_NAME);
         return nullptr;
     }
-    return static_cast<cl_kernel>(wrap(ClObject::Kind::kernel, kernel, held->context(), held, error));
+    return static_cast<cl_kernel>(wrap(*wire, ClObject::Kind::kernel, kernel, held->context(), held, error));
 }
 
 cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t bytes,
@@ -741,7 +739,7 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
         event != nullptr ? &produced : nullptr);
     if (ran == CL_SUCCESS && event != nullptr) {
         *event = static_cast<cl_event>(
-            wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
     }
     return ran;
 }
@@ -780,7 +778,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
                           event == nullptr)) {
             if (event != nullptr) {
                 *event = static_cast<cl_event>(
-                    wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+                    wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
             }
             return CL_SUCCESS;
         }
@@ -796,7 +794,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
-            wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
     } else {
         /* An application that wanted no event still made one here, and this
          * is the only place that can give it back. */
@@ -827,7 +825,7 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (blocking == CL_TRUE) waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
-            wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
     } else {
         /* An application that wanted no event still made one here, and this
          * is the only place that can give it back. */
@@ -932,7 +930,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
             }
             if (event != nullptr) {
                 *event = static_cast<cl_event>(
-                    wrap(ClObject::Kind::event, settled, context, held, nullptr));
+                    wrap(*wire, ClObject::Kind::event, settled, context, held, nullptr));
             }
             report_error(error, CL_SUCCESS);
             return at;
@@ -970,7 +968,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     }
     if (event != nullptr) {
         *event = static_cast<cl_event>(
-            wrap(ClObject::Kind::event, mapped_event, context, held, nullptr));
+            wrap(*wire, ClObject::Kind::event, mapped_event, context, held, nullptr));
     }
     report_error(error, CL_SUCCESS);
     return at;
@@ -1009,7 +1007,7 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
     if (unmapped != CL_SUCCESS) return unmapped;
     if (written != CL_SUCCESS) return written;
     if (event != nullptr) {
-        *event = static_cast<cl_event>(wrap(ClObject::Kind::event, produced, context, held, nullptr));
+        *event = static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
     }
     return CL_SUCCESS;
 }
@@ -1085,7 +1083,7 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
     }
     allocation->mapped();
     if (event != nullptr) {
-        *event = static_cast<cl_event>(wrap(ClObject::Kind::event, produced, context, held, nullptr));
+        *event = static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
     }
     return CL_SUCCESS;
 }
@@ -1113,7 +1111,7 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
         static_cast<void>(allocation->unmapped());
         if (event != nullptr) {
             *event = static_cast<cl_event>(
-                wrap(ClObject::Kind::event, produced, context, held, nullptr));
+                wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
         }
     }
     return unmapped;
@@ -1156,7 +1154,7 @@ cl_event ClIcdRoot::create_user_event(cl_context context, cl_int *error)
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    return static_cast<cl_event>(wrap(ClObject::Kind::event, event, held->context(), held, error));
+    return static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, event, held->context(), held, error));
 }
 
 cl_int ClIcdRoot::set_user_event_status(cl_event event, cl_int status)
