@@ -86,6 +86,10 @@ private:
     cl_kernel        kernel_;
 };
 
+/* A callback that is never run: what is being tested is the registration, not
+ * what it does. */
+void nothing_happened(cl_event, cl_int, void *) {}
+
 }  // namespace
 
 TEST(cl_enqueue_paths, a_kernel_of_no_name_or_of_something_that_is_not_a_program_is_refused)
@@ -478,4 +482,95 @@ TEST(cl_enqueue_paths, a_finish_delivers_every_read_outstanding_on_its_queue)
   CHECK_EQ(rig.loader().finish(run.queue()), CL_OUT_OF_RESOURCES);
   /* The one that worked still delivered, and both rows went back. */
   for (const unsigned char byte : first) CHECK_EQ(byte, 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A user event the host will not make, and a callback it will not register. */
+TEST(cl_enqueue_paths, a_user_event_and_a_callback_the_host_refuses_are_answered)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+
+  rig.host().cl_handle(0u, CL_OUT_OF_HOST_MEMORY);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(run.context(), &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  /* And the contradiction: success with no event. */
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_user_event(run.context(), &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+
+  /* A real one, and a callback the host refuses to register on it. */
+  rig.host().cl_handle(0x6902u, CL_SUCCESS);
+  cl_event user = rig.loader().create_user_event(run.context(), nullptr);
+  CHECK(user != nullptr);
+  if (user == nullptr) return;
+  rig.host().cl_result(CL_INVALID_EVENT);
+  CHECK_EQ(rig.root().watch_event(user, CL_COMPLETE, &nothing_happened, nullptr),
+           CL_INVALID_EVENT);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A finish whose wait fails answers that rather than going on to deliver:
+ * the queue has not reached the marker, so nothing on it is finished and
+ * delivering would hand the application bytes that are not there yet. */
+TEST(cl_enqueue_paths, a_finish_whose_wait_fails_delivers_nothing)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
+                                   nullptr),
+           CL_SUCCESS);
+
+  /* The marker is made, the flush works, and the host will not say how the
+   * marker is doing. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_info(CL_INVALID_EVENT, nullptr, 0u);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_INVALID_EVENT);
+  /* Nothing was delivered: the buffer is as the application left it. */
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
+  CHECK(rig.root().invariants_hold());
+
+  /* And a finish whose marker the host will not even make. */
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_OUT_OF_RESOURCES);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A local-memory argument of exactly the size of a cl_mem: the size is what
+ * makes it look like one, and the missing value is what says it is not. */
+TEST(cl_enqueue_paths, a_local_argument_the_size_of_a_buffer_is_still_local)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof(cl_mem), nullptr), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A blocking read that was asked for an event: the application gets both the
+ * bytes and something to release. */
+TEST(cl_enqueue_paths, a_blocking_read_asked_for_an_event_hands_one_back_with_the_bytes)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+  const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
+
+  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event);
+  rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
+                                   &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
   CHECK(rig.root().invariants_hold()); }
