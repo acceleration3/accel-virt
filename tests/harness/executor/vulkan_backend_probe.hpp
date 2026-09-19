@@ -39,6 +39,11 @@ struct VulkanBackendProbe {
      * leaves the backend deciding: the kernel this runs on may make dma-bufs,
      * and the pointer path has to be testable on one that does. */
     void                  import_as_pointer(VkPhysicalDevice physical);
+    /* And the dma-buf instead, whether or not this kernel makes one: which
+     * kind a GPU decides is the host's business, and both halves of what the
+     * backend does with that decision have to be reachable from a test
+     * (feature 053). */
+    void                  import_as_dmabuf(VkPhysicalDevice physical);
     /* Whether the backend still holds `fd` as one it exported: what says
      * whether an import took it (feature 047, US3). */
     bool                  holds_fd(int fd) const;

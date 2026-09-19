@@ -80,17 +80,11 @@ bool ExecutorLibrary::export_object(RvkExecutor *executor, uint32_t kind, uint64
     AV_SCOPE("ExecutorLibrary::export_object");
     handle_kind = 0u;
     fd = -1;
-    if (ops_->export_object(ops_->opaque, executor, kind, wire_handle, &handle_kind, &fd) != RVK_EXECUTED)
-        return false;
-    /* A library that answers success with nothing behind it is a library the
-     * device must not believe: the descriptor would be closed by whoever took
-     * it and the object would name a file this process never opened. */
-    if (fd < 0 || (handle_kind != RVK_SHARED_HANDLE_OPAQUE_FD && handle_kind != RVK_SHARED_HANDLE_DMA_BUF)) {
-        handle_kind = 0u;
-        fd = -1;
-        return false;
-    }
-    return true;
+    /* What the library answers is judged where the descriptor is taken:
+     * HostSharedObject refuses a kind that is not one and a descriptor below
+     * zero, and closes what it refused. Judging it twice would mean two places
+     * that have to agree about what a lying library looks like. */
+    return ops_->export_object(ops_->opaque, executor, kind, wire_handle, &handle_kind, &fd) == RVK_EXECUTED;
 }
 
 bool ExecutorLibrary::import_object(RvkExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,

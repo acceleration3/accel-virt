@@ -649,3 +649,23 @@ TEST(vulkan_backend, a_template_it_never_made_sizes_no_blob)
   WireWriter   reply(reply_bytes, sizeof reply_bytes);
   CHECK(!backend.run(static_cast<std::uint32_t>(av::vkproto::kCmd_vkUpdateDescriptorSetWithTemplate), reader, reply,
                      arena)); }
+
+/* Feature 053: a backend with no device of its own shares nothing. Every
+ * shared-object command reaches a backend whether or not its guest ever made a
+ * device, so the answer has to be a refusal and not a call into a null. */
+TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothing)
+{ VulkanBackend backend;
+  std::uint32_t handle_kind = 9u;
+  int           fd = 9;
+  CHECK(!backend.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK_EQ(handle_kind, 0u);
+  CHECK_EQ(fd, -1);
+  CHECK(!backend.export_object(RVK_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
+
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made));
+  CHECK_EQ(made, 0u);
+  CHECK(!backend.import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, 3, 0u, made));
+  /* And a release does nothing at all, with or without a handle. */
+  backend.release_object(RVK_SHARED_MEMORY, 0x40u);
+  backend.release_object(RVK_SHARED_MONITORED_FENCE, 0u); }

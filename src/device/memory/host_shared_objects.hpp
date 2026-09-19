@@ -80,7 +80,6 @@ public:
 private:
     /* The slot holding `object_id`, or null. The caller holds the lock. */
     HostSharedObject *slot_of(uint64_t object_id);
-    const HostSharedObject *slot_of(uint64_t object_id) const;
 
     Host            &host_;
     void            *lock_;

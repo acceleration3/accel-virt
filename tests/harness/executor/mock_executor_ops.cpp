@@ -29,6 +29,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
       refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr), last_options_{},
       last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u),
       descriptors_(nullptr), export_handle_kind_(RVK_SHARED_HANDLE_DMA_BUF), refuse_export_(0u),
+      lie_on_export_(0u),
       refuse_object_import_(0u), withhold_object_handle_(0u), exported_objects_(0u), imported_objects_(0u),
       released_objects_(0u), next_object_(0u), objects_{}
 {
@@ -97,6 +98,17 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
             return RVK_UNKNOWN;
         if (mock.refuse_export_ != 0u && --mock.refuse_export_ == 0u) return RVK_UNKNOWN;
         if (mock.descriptors_ == nullptr) return RVK_UNKNOWN;
+        if (mock.lie_on_export_ != 0u && --mock.lie_on_export_ == 0u) {
+            /* A real descriptor with a kind that is not one: the half of a
+             * lying library the caller cannot tell from a good answer without
+             * looking at what came back. */
+            const int lied = mock.descriptors_->open_descriptor();
+            if (lied < 0) return RVK_UNKNOWN;
+            *handle_kind = 0u;
+            *fd = lied;
+            mock.exported_objects_++;
+            return RVK_EXECUTED;
+        }
         const int made = mock.descriptors_->open_descriptor();
         if (made < 0) return RVK_UNKNOWN;
         *handle_kind = mock.export_handle_kind_;
@@ -364,6 +376,12 @@ void MockExecutorOps::export_handle_kind(std::uint32_t kind)
 {
     Lock lock(lock_);
     export_handle_kind_ = kind;
+}
+
+void MockExecutorOps::lie_on_export_at(std::uint32_t nth)
+{
+    Lock lock(lock_);
+    lie_on_export_ = nth;
 }
 
 void MockExecutorOps::refuse_export_at(std::uint32_t nth)

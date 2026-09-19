@@ -81,8 +81,7 @@ public:
 
 private:
     /* The slot holding `object_id`, or null. */
-    ContextSharedObjectSlot       *slot_of(uint64_t object_id);
-    const ContextSharedObjectSlot *slot_of(uint64_t object_id) const;
+    ContextSharedObjectSlot *slot_of(uint64_t object_id);
     /* A free slot, or null when every one is taken. */
     ContextSharedObjectSlot       *free_slot();
     void                           give_back(ContextSharedObjectSlot &slot);

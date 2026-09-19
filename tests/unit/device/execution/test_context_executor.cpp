@@ -399,3 +399,74 @@ TEST(context_executor, accepts_options_only_from_a_library_that_makes_them)
   CHECK(executor.accepts(GlContextOptions()));
   CHECK(!executor.accepts(core_46));
   CHECK(!executor.accepts(GlContextOptions().sharing(2u))); }
+
+/* Feature 053: the three calls that move one host object between executors.
+ * A context with no executor and a library from before the version that has
+ * them are each a refusal, never a call into a table that has no entry. */
+TEST(context_executor_export_object, refuses_without_an_executor_and_on_a_library_that_shares_nothing)
+{ Fixture fixture;
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([](ContextExecutor &executor) {
+      std::uint32_t handle_kind = 9u;
+      int           fd = 9;
+      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::invalid_state);
+      CHECK_EQ(handle_kind, 0u);
+      CHECK_EQ(fd, -1);
+      std::uint64_t made = 9u;
+      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
+                   Status::invalid_state);
+      CHECK_EQ(made, 0u);
+      /* And a release without one does nothing at all. */
+      executor.release_object(RVK_SHARED_MEMORY, 0x40u);
+  });
+  CHECK_EQ(fixture.ops().released_objects(), 0u); }
+
+TEST(context_executor_export_object, refuses_on_a_library_from_before_the_sharing_version)
+{ Fixture fixture;
+  fixture.ops().set_abi_version(RVK_EXECUTOR_ABI_VERSION_EVENTS);
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([](ContextExecutor &executor) {
+      CHECK_STATUS(executor.create(), Status::ok);
+      std::uint32_t handle_kind = 9u;
+      int           fd = 9;
+      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
+      CHECK_EQ(fd, -1);
+      std::uint64_t made = 9u;
+      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u, made),
+                   Status::not_supported);
+      CHECK_EQ(made, 0u);
+      executor.release_object(RVK_SHARED_MEMORY, 0x40u);
+      executor.destroy();
+  });
+  CHECK_EQ(fixture.ops().exported_objects(), 0u);
+  CHECK_EQ(fixture.ops().released_objects(), 0u); }
+
+/* And on a library that has them, all three reach it. */
+TEST(context_executor_export_object, exports_imports_and_releases_through_a_library_that_shares)
+{ Fixture fixture;
+  fixture.ops().descriptors_from(fixture.host());
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([&fixture](ContextExecutor &executor) {
+      CHECK_STATUS(executor.create(), Status::ok);
+      std::uint32_t handle_kind = 0u;
+      int           fd = -1;
+      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::ok);
+      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+      CHECK(fd >= 0);
+      std::uint64_t made = 0u;
+      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, handle_kind, fd, 4096u, made), Status::ok);
+      CHECK(made != 0u);
+      executor.release_object(RVK_SHARED_MEMORY, made);
+      /* An executor that refuses is a refusal, not a fault. */
+      fixture.ops().refuse_export_at(1u);
+      CHECK_STATUS(executor.export_object(RVK_SHARED_MEMORY, 0x40u, handle_kind, fd), Status::not_supported);
+      fixture.ops().refuse_object_import_at(1u);
+      CHECK_STATUS(executor.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made),
+                   Status::not_supported);
+      CHECK_EQ(made, 0u);
+      executor.destroy();
+      fixture.host().close_dmabuf(fd);
+  });
+  CHECK_EQ(fixture.ops().exported_objects(), 1u);
+  CHECK_EQ(fixture.ops().imported_objects(), 1u);
+  CHECK_EQ(fixture.ops().released_objects(), 1u); }

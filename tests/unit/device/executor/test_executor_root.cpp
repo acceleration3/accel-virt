@@ -15,6 +15,7 @@
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
 #include <cstdint>
+#include <unistd.h>
 
 using av::ContextSession;
 using av::ExecutorRoot;
@@ -415,3 +416,57 @@ TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothi
   opened.root().set_signal(&stranger, nullptr, nullptr);
   CHECK_EQ(opened.root().live(), 0u);
   CHECK(opened.root().invariants_hold()); }
+
+/* Feature 053: the three shared-object calls reach only a session this root
+ * handed out. The device's pointer is all the ABI gives to tell them apart, so
+ * a stranger's session and a null are the two a root must answer nothing to. */
+TEST(executor_root, the_shared_object_calls_reach_only_a_session_this_root_opened)
+{ Opened opened;
+  ContextSession *const session = &ExecutorRootProbe(opened.root()).session_at(0u);
+  static std::uint8_t   block[4096];
+  MockSessionBackend    backend;
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+
+  /* A session this root owns whose backend shares nothing is a refusal the
+   * root passes on rather than one it makes itself. */
+  backend.set_shares(false);
+  std::uint32_t handle_kind = 9u;
+  int           fd = 9;
+  CHECK(!opened.root().export_object(session, RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK_EQ(fd, -1);
+  std::uint64_t refused = 9u;
+  CHECK(!opened.root().import_object(session, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 3, 4096u,
+                                     refused));
+  CHECK_EQ(refused, 0u);
+  backend.set_shares(true);
+
+  CHECK(opened.root().export_object(session, RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK(fd >= 0);
+  std::uint64_t made = 0u;
+  CHECK(opened.root().import_object(session, RVK_SHARED_MEMORY, handle_kind, fd, 4096u, made));
+  CHECK(made != 0u);
+  opened.root().release_object(session, RVK_SHARED_MEMORY, made);
+  CHECK_EQ(backend.released_objects(), 1u);
+
+  static std::uint8_t stranger_block[4096];
+  MockSessionBackend  stranger_backend;
+  ContextSession      stranger;
+  CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
+  std::uint32_t theirs_kind = 9u;
+  int           theirs_fd = 9;
+  CHECK(!opened.root().export_object(&stranger, RVK_SHARED_MEMORY, 0x40u, theirs_kind, theirs_fd));
+  CHECK_EQ(theirs_fd, -1);
+  CHECK(!opened.root().export_object(nullptr, RVK_SHARED_MEMORY, 0x40u, theirs_kind, theirs_fd));
+  std::uint64_t theirs = 9u;
+  CHECK(!opened.root().import_object(&stranger, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, fd, 4096u,
+                                     theirs));
+  CHECK_EQ(theirs, 0u);
+  CHECK(!opened.root().import_object(nullptr, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, fd, 4096u,
+                                     theirs));
+  opened.root().release_object(&stranger, RVK_SHARED_MEMORY, made);
+  opened.root().release_object(nullptr, RVK_SHARED_MEMORY, made);
+  CHECK_EQ(stranger_backend.released_objects(), 0u);
+  CHECK_EQ(backend.released_objects(), 1u);
+  stranger.release();
+  ::close(fd);
+  session->release(); }

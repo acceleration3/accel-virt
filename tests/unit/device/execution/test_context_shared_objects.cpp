@@ -353,3 +353,46 @@ TEST(context_shared_objects_invariants, refuses_a_row_with_no_handle_no_kind_or_
   av::ContextSharedObjectsProbe::place(table, 0u, av::ContextSharedObjectSlot{});
   av::ContextSharedObjectsProbe::place(table, 1u, av::ContextSharedObjectSlot{});
   CHECK(table.invariants_hold()); }
+
+/* A context that opened an id cannot then publish it: it holds the object as
+ * an importer, and a publish would claim it made what it only borrowed. */
+TEST(context_shared_objects_publish, refuses_an_id_this_context_opened_rather_than_published)
+{ SharedObjectRig rig;
+  CHECK_STATUS(publish(rig, 7u), Status::ok);
+  std::uint64_t opened = 0u;
+  CHECK_STATUS(open_second(rig, 7u, opened), Status::ok);
+  Status answered = Status::ok;
+  rig.second().on_worker([&] {
+      answered = rig.second().objects().publish(7u, RVK_SHARED_MEMORY, made_by_guest, size);
+  });
+  CHECK_STATUS(answered, Status::conflict);
+  check(rig);
+  CHECK_EQ(rig.second().objects().held(), 1u);
+  CHECK_EQ(rig.ops().exported_objects(), 1u); }
+
+/* A context that holds all it can cannot open one more either, and the
+ * refusal must not have imported anything first. */
+TEST(context_shared_objects_open, has_no_space_once_the_context_holds_all_it_can)
+{ SharedObjectRig rig;
+  for (std::uint64_t id = 1u; id <= ContextSharedObjects::max_objects; id++)
+      CHECK_STATUS(publish(rig, id), Status::ok);
+  check(rig);
+  /* The opener fills its own table with one of its own and the rest opened. */
+  Status answered = Status::invalid_state;
+  rig.second().on_worker([&] {
+      answered = rig.second().objects().publish(0xF00Du, RVK_SHARED_MEMORY, made_by_guest, size);
+  });
+  CHECK_STATUS(answered, Status::ok);
+  for (std::uint64_t id = 1u; id < ContextSharedObjects::max_objects; id++) {
+      std::uint64_t opened = 0u;
+      CHECK_STATUS(open_second(rig, id, opened), Status::ok);
+  }
+  check(rig);
+  CHECK_EQ(rig.second().objects().held(), ContextSharedObjects::max_objects);
+  const std::uint32_t imported = rig.ops().imported_objects();
+  std::uint64_t       refused = 9u;
+  CHECK_STATUS(open_second(rig, ContextSharedObjects::max_objects, refused), Status::no_space);
+  check(rig);
+  CHECK_EQ(refused, 0u);
+  /* Nothing was imported and nothing held on the device's table for it. */
+  CHECK_EQ(rig.ops().imported_objects(), imported); }

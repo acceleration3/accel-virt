@@ -108,6 +108,10 @@ public:
     void          set_abi_version(std::uint32_t version);
     /* The RVK_BLOB_* kind an export says its descriptor is. */
     void          export_handle_kind(std::uint32_t kind);
+    /* The Nth export from now answers success with nothing behind it - no
+     * descriptor and no kind - which is a library the device must not
+     * believe. */
+    void          lie_on_export_at(std::uint32_t nth);
     /* The Nth export, or import, of an object from now is refused. */
     void          refuse_export_at(std::uint32_t nth);
     void          refuse_object_import_at(std::uint32_t nth);
@@ -183,6 +187,7 @@ private:
     MockHost                  *descriptors_;
     std::uint32_t              export_handle_kind_;
     std::uint32_t              refuse_export_;
+    std::uint32_t              lie_on_export_;
     std::uint32_t              refuse_object_import_;
     std::uint32_t              withhold_object_handle_;
     std::uint32_t              exported_objects_;

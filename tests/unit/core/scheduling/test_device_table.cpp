@@ -538,3 +538,47 @@ TEST(device_table_open, an_allocation_with_no_identity_needs_no_record_at_all)
   CHECK(fixture.devices().invariants_hold());
   CHECK_STATUS(fixture.close(device, 1u), Status::ok);
   CHECK(fixture.shared().invariants_hold()); }
+
+/* An open that claims the object and then cannot record it must give the
+ * reference straight back: a count that only ever went up would make the
+ * host descriptor immortal. */
+TEST(device_table_open, gives_the_shared_reference_back_when_the_open_itself_cannot_be_recorded)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  fixture.platform().fail_allocation_at(1u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::no_memory);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
+  CHECK(fixture.shared().invariants_hold());
+  /* Nothing is held, so the next open still works. */
+  DxgkargOpenAllocationRecord again = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok);
+  CHECK(fixture.shared().invariants_hold()); }
+
+/* A list is all-or-nothing, so an earlier shared open is unwound when a later
+ * one in the same call fails. */
+TEST(device_table_open, unwinds_an_earlier_shared_open_when_a_later_one_fails)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(2u);
+  fixture.hand_over_creator_data(0u);
+  /* The second names an allocation with no identity, and its private data is
+   * the one thing this open cannot resolve. */
+  fixture.open_info(1u).hAllocation = 0u;
+  CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK(fixture.shared().invariants_hold());
+  /* And the object is still openable, which it would not be if the unwind had
+   * dropped a reference it never took. */
+  DxgkargOpenAllocationRecord again = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok); }

@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -62,6 +63,14 @@ H as_handle(std::uint64_t raw)
 { H handle = VK_NULL_HANDLE;
   std::memcpy(&handle, &raw, sizeof handle);
   return handle; }
+
+/* The number a handle is on the wire, which is what the backend remembers it
+ * by and what a guest names it with (feature 053). */
+template <typename H>
+std::uint64_t as_wire(H handle)
+{ std::uint64_t raw = 0u;
+  std::memcpy(&raw, &handle, sizeof handle);
+  return raw; }
 
 /* A guest's own sequence, sent through run() as frames rather than called
  * directly, because run() is what sets the backend deciding - and every handle
@@ -1381,5 +1390,238 @@ TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_
       CHECK(made.instance() != 0u);
       CHECK(made.physical() != 0u);
       CHECK_EQ(made.device(), 0u);
+  }
+}
+
+
+/* Feature 053: one host object shared with every other context of the device.
+ *
+ * Vulkan is the only backend that exports anything, and memory is shared as a
+ * dma-buf and nothing else: an opaque fd carries no memory type, and an import
+ * has to name the one the allocation was made with. A GPU that imports the
+ * host pointer therefore shares no memory at all, which is a refusal the guest
+ * is given rather than an object it could not bind. */
+TEST(vulkan_backend_device, shares_memory_as_a_dma_buf_and_refuses_it_on_a_host_pointer_device)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+      GuestDevice made(host, i, 2u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkExportMemoryAllocateInfo exportable = {};
+      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exportable;
+      allocate.allocationSize = page;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory shared = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      const std::uint64_t handle = as_wire(shared);
+
+      /* A handle this backend never made, and a kind that is not one, are
+       * refused before the driver is asked anything. */
+      std::uint32_t handle_kind = 9u;
+      int           fd = 9;
+      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, handle + 0x1000u, handle_kind, fd));
+      CHECK_EQ(handle_kind, 0u);
+      CHECK_EQ(fd, -1);
+      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, 0u, handle_kind, fd));
+      CHECK(!made.backend().export_object(RVK_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, fd));
+
+      /* A device that decided on the host pointer shares no memory. */
+      made.probe().import_as_pointer(as_handle<VkPhysicalDevice>(made.physical()));
+      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, handle, handle_kind, fd));
+      CHECK_EQ(handle_kind, 0u);
+      CHECK_EQ(fd, -1);
+
+      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
+      if (!made.backend().export_object(RVK_SHARED_MEMORY, handle, handle_kind, fd)) continue;
+      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+      CHECK(fd >= 0);
+
+      /* An fd that names nothing, a kind or a size no import can have, and an
+       * opaque fd where memory needs a dma-buf, are each refused with nothing
+       * made. */
+      std::uint64_t imported = 9u;
+      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, -1, page, imported));
+      CHECK_EQ(imported, 0u);
+      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_OPAQUE_FD, fd, page,
+                                          imported));
+      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, fd, 0u, imported));
+      CHECK(!made.backend().import_object(RVK_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, imported));
+
+      CHECK(made.backend().import_object(RVK_SHARED_MEMORY, handle_kind, fd, page, imported));
+      CHECK(imported != 0u);
+      CHECK(imported != handle);
+      /* What an import made is a handle the guest may name, and releasing it
+       * takes it back - which is also what frees the memory. */
+      CHECK(made.probe().handles().knows(imported));
+      made.backend().release_object(RVK_SHARED_MEMORY, imported);
+      CHECK(!made.probe().handles().knows(imported));
+      /* The descriptor stays the device's: the import duplicated it. */
+      CHECK(::fcntl(fd, F_GETFD) != -1);
+      /* A handle this backend never made releases nothing. */
+      made.backend().release_object(RVK_SHARED_MEMORY, handle + 0x1000u);
+      made.backend().release_object(RVK_SHARED_MEMORY, 0u);
+      ::close(fd);
+  }
+}
+
+/* A descriptor the driver will not take, and memory it will not export, are
+ * the two refusals that come from the driver rather than from the backend. */
+TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_answered_not_invented)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+      GuestDevice made(host, i, 2u, extensions);
+      if (made.device() == 0u) continue;
+      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.allocationSize = page;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory plain = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &plain), VK_SUCCESS);
+
+      /* A descriptor that is not memory at all - a pipe - is a mask of no
+       * memory types, which is an import with nothing to be made into. */
+      int ends[2] = {-1, -1};
+      CHECK_EQ(::pipe(ends), 0);
+      ::close(ends[1]);
+      std::uint64_t imported = 9u;
+      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, ends[0], page,
+                                          imported));
+      CHECK_EQ(imported, 0u);
+      ::close(ends[0]);
+
+      /* And memory the guest still holds is freed through a release naming it,
+       * which is the path an importer's own memory takes. */
+      CHECK(made.probe().handles().knows(as_wire(plain)));
+      made.backend().release_object(RVK_SHARED_MEMORY, as_wire(plain));
+      CHECK(!made.probe().handles().knows(as_wire(plain)));
+  }
+}
+
+/* A fence is one host timeline semaphore either way, and only an opaque fd
+ * carries one: a dma-buf is memory. */
+TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      const char *const extensions[] = {"VK_KHR_external_semaphore_fd"};
+      GuestDevice made(host, i, 1u, extensions);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      /* A semaphore the guest made and nobody shared: releasing it as a fence
+       * destroys it, which is the other half of what a release decides on its
+       * kind. */
+      VkSemaphoreCreateInfo plain_create = {};
+      plain_create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      VkSemaphore plain = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &plain_create, nullptr, &plain), VK_SUCCESS);
+      made.backend().release_object(RVK_SHARED_MONITORED_FENCE, as_wire(plain));
+      CHECK(!made.probe().handles().knows(as_wire(plain)));
+
+      std::uint32_t handle_kind = 9u;
+      int           fd = 9;
+      VkExportSemaphoreCreateInfo exportable = {};
+      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
+      exportable.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      VkSemaphoreTypeCreateInfo timeline = {};
+      timeline.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+      timeline.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+      timeline.pNext = &exportable;
+      VkSemaphoreCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      create.pNext = &timeline;
+      VkSemaphore semaphore = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+
+      /* Both fence kinds export the same way: to the host they are one
+       * timeline semaphore, and only the guest tells them apart. */
+      if (!made.backend().export_object(RVK_SHARED_NATIVE_FENCE, as_wire(semaphore), handle_kind, fd))
+          continue;
+      CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_OPAQUE_FD);
+      CHECK(fd >= 0);
+
+      /* A dma-buf is memory: a fence import naming one is refused before the
+       * driver sees it. */
+      std::uint64_t imported = 9u;
+      CHECK(!made.backend().import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_DMA_BUF, fd, 0u,
+                                          imported));
+      CHECK_EQ(imported, 0u);
+      /* And a descriptor that is not a semaphore is the driver's refusal. */
+      int ends[2] = {-1, -1};
+      CHECK_EQ(::pipe(ends), 0);
+      ::close(ends[1]);
+      CHECK(!made.backend().import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, ends[0],
+                                          0u, imported));
+      CHECK_EQ(imported, 0u);
+      ::close(ends[0]);
+
+      CHECK(made.backend().import_object(RVK_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, imported));
+      CHECK(imported != 0u);
+      CHECK(made.probe().handles().knows(imported));
+      made.backend().release_object(RVK_SHARED_NATIVE_FENCE, imported);
+      CHECK(!made.probe().handles().knows(imported));
+      CHECK(::fcntl(fd, F_GETFD) != -1);
+      ::close(fd);
+  }
+}
+
+/* A device made without the fd extensions has no entry point to export or
+ * import through. It is the deterministic half of what a driver refuses: a
+ * host GPU that hands out a descriptor anyway is still a host GPU, and the
+ * backend's own path has to be provable on every one of them. */
+TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_either_way)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      made.probe().import_as_dmabuf(as_handle<VkPhysicalDevice>(made.physical()));
+      BackendTransport wire(made.backend());
+      const VkDevice   device = as_handle<VkDevice>(made.device());
+
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.allocationSize = page;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory memory = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
+      VkSemaphoreCreateInfo create = {};
+      create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+      VkSemaphore semaphore = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::rvk_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+
+      std::uint32_t handle_kind = 9u;
+      int           fd = 9;
+      CHECK(!made.backend().export_object(RVK_SHARED_MEMORY, as_wire(memory), handle_kind, fd));
+      CHECK_EQ(handle_kind, 0u);
+      CHECK_EQ(fd, -1);
+      CHECK(!made.backend().export_object(RVK_SHARED_MONITORED_FENCE, as_wire(semaphore), handle_kind, fd));
+      CHECK_EQ(fd, -1);
+
+      /* An import has nothing to import through either, whatever descriptor it
+       * is handed. */
+      int ends[2] = {-1, -1};
+      CHECK_EQ(::pipe(ends), 0);
+      ::close(ends[1]);
+      std::uint64_t imported = 9u;
+      CHECK(!made.backend().import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, ends[0],
+                                          0u, imported));
+      CHECK_EQ(imported, 0u);
+      ::close(ends[0]);
   }
 }

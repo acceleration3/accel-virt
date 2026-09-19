@@ -87,6 +87,12 @@ TEST(shared_object_record_decode, an_id_of_zero_is_a_creator_asking_for_one_and_
   CHECK(!decoded.assigned());
   CHECK_EQ(decoded.kind().value(), SharedObjectKind::native_fence); }
 
+TEST(shared_object_record_assigned, needs_both_halves_because_an_id_without_an_adapter_names_nobody)
+{ CHECK(!SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, page).assigned());
+  CHECK(!SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), adapter, page).assigned());
+  CHECK(!SharedObjectRecord(7u, SharedObjectKind(SharedObjectKind::memory), 0u, page).assigned());
+  CHECK(SharedObjectRecord(7u, SharedObjectKind(SharedObjectKind::memory), adapter, page).assigned()); }
+
 TEST(shared_object_record, an_assigned_id_and_adapter_are_what_the_second_process_reads_back)
 { SharedObjectRecord record(0u, SharedObjectKind(SharedObjectKind::memory), 0u, page);
   CHECK(!record.assigned());

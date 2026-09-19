@@ -5,6 +5,8 @@
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/module/driver_status.hpp"
+#include "device/memory/host_shared_object.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
 #include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -59,6 +61,18 @@ struct FenceInterruptsProbe {
     static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
 };
 
+/* A slot that says it holds nothing while it still remembers everything: what
+ * no give_back leaves behind, and what the table's own invariant refuses. */
+struct HostSharedObjectProbe {
+    static std::uint64_t forget_id(HostSharedObject &object)
+    { const std::uint64_t kept = object.id_; object.id_ = 0u; return kept; }
+    static void          restore_id(HostSharedObject &object, std::uint64_t id) { object.id_ = id; }
+};
+
+struct HostSharedObjectsProbe {
+    static HostSharedObject &first(HostSharedObjects &table) { return table.objects_[0]; }
+};
+
 struct VirtioGpuRvkProbe {
     /* Interrupts connected with no lock to hold them apart. */
     static void break_interrupts(VirtioGpuRvk &device) { FenceInterruptsProbe::connect_without_lock(device.interrupts_); }
@@ -68,6 +82,15 @@ struct VirtioGpuRvkProbe {
      * driver that asked for it. */
     static Status connect_behind_the_status(VirtioGpuRvk &device) { return device.interrupts_.connect(); }
     static void   disconnect_behind_the_status(VirtioGpuRvk &device) { device.interrupts_.disconnect(); }
+    /* An object publish never made: a slot that says it holds nothing while
+     * it still remembers everything, which is how the device's invariant is
+     * shown to fold in its shared table's (feature 053). */
+    static std::uint64_t break_shared(VirtioGpuRvk &device)
+    { return HostSharedObjectProbe::forget_id(HostSharedObjectsProbe::first(device.shared_)); }
+    static void repair_shared(VirtioGpuRvk &device, std::uint64_t id)
+    { HostSharedObjectProbe::restore_id(HostSharedObjectsProbe::first(device.shared_), id); }
+    static Status publish_shared(VirtioGpuRvk &device, int descriptor)
+    { return device.shared_.publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, descriptor); }
     /* The ring header a guest writes before its setup. */
     static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
     {

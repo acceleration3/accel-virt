@@ -38,14 +38,6 @@ ContextSharedObjectSlot *ContextSharedObjects::slot_of(uint64_t object_id)
     return nullptr;
 }
 
-const ContextSharedObjectSlot *ContextSharedObjects::slot_of(uint64_t object_id) const
-{
-    AV_SCOPE("ContextSharedObjects::slot_of");
-    for (const ContextSharedObjectSlot &slot : slots_)
-        if (slot.object_id_ == object_id) return &slot;
-    return nullptr;
-}
-
 ContextSharedObjectSlot *ContextSharedObjects::free_slot()
 {
     AV_SCOPE("ContextSharedObjects::free_slot");

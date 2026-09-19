@@ -64,7 +64,9 @@ public:
     bool                 shares_objects() const;
     /* Only on a library that shares objects. A descriptor for what
      * `wire_handle` names, which stays the caller's afterwards; false for a
-     * handle this executor did not make or a kind it cannot export. */
+     * handle this executor did not make or a kind it cannot export. What a
+     * library that answers true with nothing behind it said is judged by
+     * HostSharedObject, which is where the descriptor is taken. */
     [[nodiscard]] bool   export_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
                                        uint32_t &handle_kind, int &fd) const;
     /* That descriptor made into an object of `executor`'s, with the handle the

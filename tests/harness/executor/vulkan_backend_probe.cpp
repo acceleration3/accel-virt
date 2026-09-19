@@ -47,4 +47,11 @@ void VulkanBackendProbe::import_as_pointer(VkPhysicalDevice physical)
     backend.importable_.learn(reinterpret_cast<uint64_t>(physical), 0u, backend.import_.probe_types(physical));
 }
 
+void VulkanBackendProbe::import_as_dmabuf(VkPhysicalDevice physical)
+{
+    /* A mask of one type, which is enough: what the backend does with the kind
+     * is what this makes reachable, not which types that kind lands in. */
+    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), 1u, 0u);
+}
+
 }  // namespace av

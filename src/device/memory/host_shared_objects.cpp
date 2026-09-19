@@ -35,14 +35,6 @@ HostSharedObject *HostSharedObjects::slot_of(uint64_t object_id)
     return nullptr;
 }
 
-const HostSharedObject *HostSharedObjects::slot_of(uint64_t object_id) const
-{
-    AV_SCOPE("HostSharedObjects::slot_of");
-    for (const HostSharedObject &object : objects_)
-        if (object.holds(object_id)) return &object;
-    return nullptr;
-}
-
 Status HostSharedObjects::publish(uint64_t object_id, uint32_t kind, uint32_t handle_kind, uint64_t size,
                                   int descriptor)
 {

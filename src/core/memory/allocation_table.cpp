@@ -61,11 +61,10 @@ Status AllocationTable::share(Allocation &allocation, uint8_t *private_data)
     const Status minted = shared_.mint(allocation, record);
     if (minted != Status::ok) return minted;
     /* Written back into the creator's own bytes, which is the only thing that
-     * reaches the opening process (docs/kb/04-memory.md). */
-    if (record.encode(at, SharedObjectRecord::encoded_size) != Status::ok) {
-        shared_.forget(allocation);
-        return Status::invalid_parameter;
-    }
+     * reaches the opening process (docs/kb/04-memory.md). The bytes are the
+     * ones it just decoded from, so the encode has exactly the room it
+     * needs. */
+    static_cast<void>(record.encode(at, SharedObjectRecord::encoded_size));
     allocation.shared_as(record.object_id());
     return Status::ok;
 }

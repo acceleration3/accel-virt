@@ -15,6 +15,21 @@ using av::HostSharedObject;
 using av::MockHost;
 using av::Status;
 
+namespace av {
+
+/* States a take() never leaves behind, so the invariant has something to
+ * refuse. */
+struct HostSharedObjectProbe {
+    static void set_kind(HostSharedObject &object, std::uint32_t kind) { object.kind_ = kind; }
+    static void set_handle_kind(HostSharedObject &object, std::uint32_t kind) { object.handle_kind_ = kind; }
+    static void set_size(HostSharedObject &object, std::uint64_t size) { object.size_ = size; }
+    static void set_descriptor(HostSharedObject &object, int fd) { object.descriptor_ = fd; }
+    static void set_holders(HostSharedObject &object, std::uint32_t holders) { object.holders_ = holders; }
+    static void set_id(HostSharedObject &object, std::uint64_t id) { object.id_ = id; }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint64_t size = 8u * 4096u;
@@ -185,3 +200,59 @@ TEST(host_shared_object, every_kind_and_every_handle_kind_the_abi_has_is_taken)
           CHECK_EQ(object.handle_kind(), blob);
           object.give_back(rig.host());
       } }
+
+TEST(host_shared_object_invariants, refuse_every_state_a_take_never_leaves_behind)
+{ Fixture          rig;
+  const int        fd = rig.descriptor();
+  HostSharedObject object;
+  CHECK_STATUS(object.take(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, fd), Status::ok);
+  CHECK(object.invariants_hold());
+
+  using Probe = av::HostSharedObjectProbe;
+  Probe::set_kind(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_kind(object, RVK_SHARED_NATIVE_FENCE + 1u);
+  CHECK(!object.invariants_hold());
+  Probe::set_kind(object, RVK_SHARED_MEMORY);
+  CHECK(object.invariants_hold());
+
+  Probe::set_handle_kind(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_handle_kind(object, 3u);
+  CHECK(!object.invariants_hold());
+  Probe::set_handle_kind(object, RVK_SHARED_HANDLE_OPAQUE_FD);
+  CHECK(object.invariants_hold());
+
+  /* Memory with no length, and a fence with one. */
+  Probe::set_size(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_size(object, size);
+  Probe::set_kind(object, RVK_SHARED_MONITORED_FENCE);
+  CHECK(!object.invariants_hold());
+  Probe::set_kind(object, RVK_SHARED_MEMORY);
+  CHECK(object.invariants_hold());
+
+  Probe::set_descriptor(object, -1);
+  CHECK(!object.invariants_hold());
+  Probe::set_descriptor(object, fd);
+  Probe::set_holders(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_holders(object, 1u);
+  CHECK(object.invariants_hold());
+
+  /* And an empty slot that still remembers something - each field in turn,
+   * because every one of them is a way a give_back could leave half a slot
+   * behind. */
+  Probe::set_id(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_kind(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_handle_kind(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_size(object, 0u);
+  CHECK(!object.invariants_hold());
+  Probe::set_descriptor(object, -1);
+  CHECK(!object.invariants_hold());
+  Probe::set_holders(object, 0u);
+  CHECK(object.invariants_hold());
+  rig.host().close_dmabuf(fd); }

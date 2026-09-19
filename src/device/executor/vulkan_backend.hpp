@@ -233,9 +233,6 @@ private:
     /* The handle type the decided kind is imported from, which is what a
      * buffer or an image must be made with to be bound to it. */
     VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
-    /* The handle type a shared descriptor of `handle_kind` is imported from,
-     * or 0 for a kind this build has no Vulkan spelling for. */
-    VkExternalMemoryHandleTypeFlagBits shared_type(uint32_t handle_kind) const;
     /* The lowest memory type in `mask` this device has, or max_memory_types
      * when the mask is empty: a shared descriptor carries no type of its own,
      * unlike a blob, whose guest asked for one. */

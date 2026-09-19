@@ -11,6 +11,7 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/memory/host_shared_object.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -25,9 +26,18 @@ using av::Status;
 
 namespace av {
 
-/* The lock a worker would be holding while the main loop dumps state. */
+/* The lock a worker would be holding while the main loop dumps state, and the
+ * slots themselves, so a table can be put in a state it never reaches for
+ * itself. */
 struct HostSharedObjectsProbe {
     static void *lock(HostSharedObjects &table) { return table.lock_; }
+    static HostSharedObject &slot(HostSharedObjects &table, std::uint32_t index)
+    { return table.objects_[index]; }
+};
+
+/* The one field a duplicate needs. */
+struct HostSharedObjectProbe {
+    static void set_id(HostSharedObject &object, std::uint64_t id) { object.id_ = id; }
 };
 
 }  // namespace av
@@ -375,3 +385,28 @@ TEST(host_shared_objects_report, names_every_object_and_says_busy_when_a_worker_
   rig.host().hold_mutex_elsewhere(av::HostSharedObjectsProbe::lock(rig.objects()), false);
   rig.objects().release_all();
   rig.check(); }
+
+TEST(host_shared_objects_invariants, refuse_a_broken_object_and_two_slots_naming_one_id)
+{ Fixture rig;
+  CHECK_STATUS(rig.objects().publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+               Status::ok);
+  CHECK_STATUS(rig.objects().publish(8u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, size, rig.descriptor()),
+               Status::ok);
+  CHECK(rig.objects().invariants_hold());
+
+  /* One object whose own invariant is broken breaks the table's. */
+  av::HostSharedObject &first = av::HostSharedObjectsProbe::slot(rig.objects(), 0u);
+  av::HostSharedObject &second = av::HostSharedObjectsProbe::slot(rig.objects(), 1u);
+  const std::uint64_t   kept = second.id();
+  av::HostSharedObjectProbe::set_id(second, 0u);
+  CHECK(!rig.objects().invariants_hold());
+  av::HostSharedObjectProbe::set_id(second, kept);
+  CHECK(rig.objects().invariants_hold());
+
+  /* Two live slots naming one id is the other way a table goes wrong: an open
+   * would reach whichever it found first and a close the other. */
+  av::HostSharedObjectProbe::set_id(second, first.id());
+  CHECK(!rig.objects().invariants_hold());
+  av::HostSharedObjectProbe::set_id(second, kept);
+  CHECK(rig.objects().invariants_hold());
+  rig.objects().release_all(); }
