@@ -129,6 +129,8 @@ struct RecordingReaderProbe {
         reader.offset_ = 0u;
         reader.records_ = 1u;
     }
+    /* An unopened reader already standing past its file header. */
+    static void walk_unopened(RecordingReader &reader) { reader.opened_ = false; }
     static void stand_in_the_header(RecordingReader &reader) { reader.offset_ = 0u; }
     /* A ceiling no recording could have been written with. */
     static void break_the_header(RecordingReader &reader)
@@ -314,6 +316,11 @@ TEST(recording_reader_invariants, catch_a_walk_or_a_damage_outside_the_bytes_it_
   CHECK_STATUS(unopened.open(), Status::ok);
   av::RecordingReaderProbe::answer_unopened(unopened);
   CHECK(!unopened.invariants_hold());
+
+  RecordingReader walking(written.bytes(), written.length());
+  CHECK_STATUS(walking.open(), Status::ok);
+  av::RecordingReaderProbe::walk_unopened(walking);
+  CHECK(!walking.invariants_hold());
 
   RecordingReader standing(written.bytes(), written.length());
   CHECK_STATUS(standing.open(), Status::ok);
