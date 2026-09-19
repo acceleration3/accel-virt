@@ -1,0 +1,86 @@
+#include "device/execution/shared_object_command.hpp"
+
+#include "core/trace/function_scope.hpp"
+#include "device/execution/context_shared_objects.hpp"
+#include "proto/submission/shared_object_answer.hpp"
+#include "proto/submission/shared_object_request.hpp"
+
+namespace av {
+
+SharedObjectCommand::SharedObjectCommand(ContextSharedObjects &objects, const CommandHeader &header,
+                                         const uint8_t *body)
+    : objects_(objects), header_(header), body_(body)
+    {
+        AV_SCOPE("SharedObjectCommand::SharedObjectCommand");
+    }
+
+size_t SharedObjectCommand::body_size() const
+{
+    AV_SCOPE("SharedObjectCommand::body_size");
+    return header_.size() - CommandHeader::encoded_size;
+}
+
+bool SharedObjectCommand::handle_allowed() const
+{
+    AV_SCOPE("SharedObjectCommand::handle_allowed");
+    return header_.id() == CommandHeader::share_object_id;
+}
+
+uint32_t SharedObjectCommand::refusal_of(Status answered) const
+{
+    AV_SCOPE("SharedObjectCommand::refusal_of");
+    switch (answered) {
+    case Status::ok: return SharedObjectAnswer::done;
+    case Status::not_found: return SharedObjectAnswer::unknown_object;
+    case Status::invalid_parameter: return SharedObjectAnswer::mismatched_object;
+    case Status::conflict: return SharedObjectAnswer::conflict;
+    case Status::no_space: return SharedObjectAnswer::no_room;
+    default: return SharedObjectAnswer::executor_refused;
+    }
+}
+
+Status SharedObjectCommand::answer(uint32_t status, uint64_t wire_handle, uint8_t *reply, size_t capacity,
+                                   size_t &produced)
+{
+    AV_SCOPE("SharedObjectCommand::answer");
+    produced = SharedObjectAnswer::encoded_size;
+    /* A slot too small for the answer is written nothing, as the executor ABI
+     * leaves it, and the reply header says how much was needed. */
+    static_cast<void>(SharedObjectAnswer(status, wire_handle).encode(reply, capacity));
+    return Status::ok;
+}
+
+Status SharedObjectCommand::run(uint8_t *reply, size_t capacity, size_t &produced)
+{
+    AV_SCOPE("SharedObjectCommand::run");
+    produced = 0u;
+    if (header_.id() != CommandHeader::share_object_id &&
+        header_.id() != CommandHeader::open_shared_object_id &&
+        header_.id() != CommandHeader::release_shared_object_id)
+        return Status::not_found;
+    if (body_size() != SharedObjectRequest::encoded_size) return Status::malformed;
+
+    SharedObjectRequest request;
+    if (request.decode(body_, body_size()) != Status::ok)
+        return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
+    if (request.wire_handle() != 0u && !handle_allowed())
+        return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
+
+    if (header_.id() == CommandHeader::release_shared_object_id) {
+        objects_.release(request.object_id());
+        return answer(SharedObjectAnswer::done, 0u, reply, capacity, produced);
+    }
+    if (header_.id() == CommandHeader::share_object_id) {
+        if (request.wire_handle() == 0u)
+            return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
+        const Status published = objects_.publish(request.object_id(), request.kind().value(),
+                                                  request.wire_handle(), request.size());
+        return answer(refusal_of(published), 0u, reply, capacity, produced);
+    }
+    uint64_t     wire_handle = 0u;
+    const Status opened =
+        objects_.open(request.object_id(), request.kind().value(), request.size(), wire_handle);
+    return answer(refusal_of(opened), wire_handle, reply, capacity, produced);
+}
+
+}  // namespace av

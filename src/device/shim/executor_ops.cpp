@@ -183,6 +183,30 @@ void set_signal(void *, RvkExecutor *executor, void (*signal)(void *context), vo
     library.root().set_signal(session_of(executor), signal, context);
 }
 
+uint32_t export_object(void *, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
+                       uint32_t *handle_kind, int *fd)
+{
+    AV_SCOPE("export_object");
+    return library.root().export_object(session_of(executor), kind, wire_handle, *handle_kind, *fd)
+               ? RVK_EXECUTED
+               : RVK_UNKNOWN;
+}
+
+uint32_t import_object(void *, RvkExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
+                       uint64_t size, uint64_t *wire_handle)
+{
+    AV_SCOPE("import_object");
+    return library.root().import_object(session_of(executor), kind, handle_kind, fd, size, *wire_handle)
+               ? RVK_EXECUTED
+               : RVK_UNKNOWN;
+}
+
+void release_object(void *, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle)
+{
+    AV_SCOPE("release_object");
+    library.root().release_object(session_of(executor), kind, wire_handle);
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -194,7 +218,10 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               release_blob,
                               imported_handle,
                               create_with_options,
-                              set_signal};
+                              set_signal,
+                              export_object,
+                              import_object,
+                              release_object};
 
 }  // namespace
 

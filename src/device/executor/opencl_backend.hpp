@@ -37,6 +37,16 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
+    /* This API exports no descriptor and imports none (feature 053,
+     * contracts/wire_additions.md): only Vulkan does, so a guest sharing
+     * through this API is refused by the device with a status rather than
+     * handed an object nothing made. */
+    [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
+                                     int &fd) override;
+    [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                     uint64_t &wire_handle) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+
     /* What the generated decoder asks before it hands the host's OpenCL a
      * handle, and tells it after: the object a guest's number names, and what
      * a call made, retained or released. */

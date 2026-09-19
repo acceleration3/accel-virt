@@ -28,6 +28,8 @@ public:
     static constexpr std::uint32_t lose_id = 0x10005u;
     /* An adopted blob's wire handle is its id plus this. */
     static constexpr std::uint64_t wire_offset = 0x2000u;
+    /* An imported object's wire handle, which no adopted blob can be. */
+    static constexpr std::uint64_t object_handle = 0x9000u;
 
     MockSessionBackend();
 
@@ -46,6 +48,18 @@ public:
     bool lost() const override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
+    [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
+                                     std::uint32_t &handle_kind, int &fd) override;
+    [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
+                                     std::uint64_t size, std::uint64_t &wire_handle) override;
+    void               release_object(std::uint32_t kind, std::uint64_t wire_handle) override;
+
+    /* Whether this backend shares objects at all, so a test can be both an API
+     * that does and one that does not. */
+    void          set_shares(bool shares);
+    std::uint32_t exported_objects() const;
+    std::uint32_t imported_objects() const;
+    std::uint32_t released_objects() const;
 
 private:
     std::size_t   answer_bytes_;
@@ -54,6 +68,11 @@ private:
     std::uint32_t abandoned_;
     bool          lost_;
     bool          adopts_;
+    bool          shares_;
+    std::uint32_t exported_objects_;
+    std::uint32_t imported_objects_;
+    std::uint32_t released_objects_;
+    int           descriptor_;
 };
 
 }  // namespace av

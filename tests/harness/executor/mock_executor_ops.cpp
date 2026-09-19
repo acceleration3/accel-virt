@@ -1,5 +1,7 @@
 #include "harness/executor/mock_executor_ops.hpp"
 
+#include "harness/host/mock_host.hpp"
+
 #include <cstring>
 
 namespace av {
@@ -25,7 +27,10 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
       executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u), imports_{},
       refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr), last_options_{},
-      last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u)
+      last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u),
+      descriptors_(nullptr), export_handle_kind_(RVK_SHARED_HANDLE_DMA_BUF), refuse_export_(0u),
+      refuse_object_import_(0u), withhold_object_handle_(0u), exported_objects_(0u), imported_objects_(0u),
+      released_objects_(0u), next_object_(0u), objects_{}
 {
     pthread_mutex_init(&lock_, nullptr);
     pthread_cond_init(&released_, nullptr);
@@ -77,6 +82,59 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.signal_ = signal;
         mock.signal_context_ = context;
     };
+    /* Version 6: one host object moved between two executors (feature 053).
+     * The descriptor is a real one of the host's, because the device closes it
+     * when the last holder lets go and "closed exactly once" is the claim
+     * these tests are for. */
+    table_.export_object = [](void *opaque, RvkExecutor *handle, std::uint32_t kind,
+                              std::uint64_t wire_handle, std::uint32_t *handle_kind,
+                              int *fd) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr || handle_kind == nullptr || fd == nullptr)
+            return RVK_UNKNOWN;
+        Lock lock(mock.lock_);
+        if (wire_handle == 0u || kind < RVK_SHARED_MEMORY || kind > RVK_SHARED_NATIVE_FENCE)
+            return RVK_UNKNOWN;
+        if (mock.refuse_export_ != 0u && --mock.refuse_export_ == 0u) return RVK_UNKNOWN;
+        if (mock.descriptors_ == nullptr) return RVK_UNKNOWN;
+        const int made = mock.descriptors_->open_descriptor();
+        if (made < 0) return RVK_UNKNOWN;
+        *handle_kind = mock.export_handle_kind_;
+        *fd = made;
+        mock.exported_objects_++;
+        return RVK_EXECUTED;
+    };
+    table_.import_object = [](void *opaque, RvkExecutor *handle, std::uint32_t kind,
+                              std::uint32_t handle_kind, int fd, std::uint64_t size,
+                              std::uint64_t *wire_handle) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr || wire_handle == nullptr) return RVK_UNKNOWN;
+        Lock lock(mock.lock_);
+        if (fd < 0 || size == 0u || kind < RVK_SHARED_MEMORY || kind > RVK_SHARED_NATIVE_FENCE)
+            return RVK_UNKNOWN;
+        if (mock.refuse_object_import_ != 0u && --mock.refuse_object_import_ == 0u) return RVK_UNKNOWN;
+        mock.imported_objects_++;
+        if (mock.withhold_object_handle_ != 0u && --mock.withhold_object_handle_ == 0u) {
+            *wire_handle = 0u;
+            return RVK_EXECUTED;
+        }
+        const std::uint64_t made = object_bit | ++mock.next_object_;
+        for (SharedObject &object : mock.objects_) {
+            if (object.live) continue;
+            object = SharedObject{made, kind, handle_kind, size, fd, true};
+            *wire_handle = made;
+            return RVK_EXECUTED;
+        }
+        return RVK_UNKNOWN;
+    };
+    table_.release_object = [](void *opaque, RvkExecutor *handle, std::uint32_t, std::uint64_t wire_handle) {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr) return;
+        Lock lock(mock.lock_);
+        mock.released_objects_++;
+        for (SharedObject &object : mock.objects_)
+            if (object.live && object.wire_handle == wire_handle) object.live = false;
+    };
     table_.create_with_options = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
                                     const RvkContextOptions *options, RvkExecutor *share) -> RvkExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
@@ -120,6 +178,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.destroyed_++;
         /* Destroy releases whatever the device never did (rvk_executor.h). */
         for (Import &import : mock.imports_) import.live = false;
+        for (SharedObject &object : mock.objects_) object.live = false;
     };
     table_.execute = [](void *opaque, RvkExecutor *handle, std::uint32_t id, const std::uint8_t *payload,
                         std::size_t size, std::uint8_t *reply, std::size_t capacity,
@@ -287,6 +346,84 @@ bool MockExecutorOps::fire_signal()
      * reaches takes no lock of this library's. */
     signal(context);
     return true;
+}
+
+
+void MockExecutorOps::descriptors_from(MockHost &host)
+{
+    Lock lock(lock_);
+    descriptors_ = &host;
+}
+
+void MockExecutorOps::set_abi_version(std::uint32_t version)
+{
+    table_.abi_version = version == 0u ? RVK_EXECUTOR_ABI_VERSION : version;
+}
+
+void MockExecutorOps::export_handle_kind(std::uint32_t kind)
+{
+    Lock lock(lock_);
+    export_handle_kind_ = kind;
+}
+
+void MockExecutorOps::refuse_export_at(std::uint32_t nth)
+{
+    Lock lock(lock_);
+    refuse_export_ = nth;
+}
+
+void MockExecutorOps::refuse_object_import_at(std::uint32_t nth)
+{
+    Lock lock(lock_);
+    refuse_object_import_ = nth;
+}
+
+void MockExecutorOps::withhold_object_handle_at(std::uint32_t nth)
+{
+    Lock lock(lock_);
+    withhold_object_handle_ = nth;
+}
+
+std::uint32_t MockExecutorOps::exported_objects()
+{
+    Lock lock(lock_);
+    return exported_objects_;
+}
+
+std::uint32_t MockExecutorOps::imported_objects()
+{
+    Lock lock(lock_);
+    return imported_objects_;
+}
+
+std::uint32_t MockExecutorOps::released_objects()
+{
+    Lock lock(lock_);
+    return released_objects_;
+}
+
+std::uint32_t MockExecutorOps::live_objects()
+{
+    Lock          lock(lock_);
+    std::uint32_t count = 0u;
+    for (const SharedObject &object : objects_)
+        if (object.live) count++;
+    return count;
+}
+
+bool MockExecutorOps::object_of(std::uint64_t wire_handle, std::uint32_t &kind, std::uint32_t &handle_kind,
+                                std::uint64_t &size, int &fd)
+{
+    Lock lock(lock_);
+    for (const SharedObject &object : objects_) {
+        if (!object.live || object.wire_handle != wire_handle) continue;
+        kind = object.kind;
+        handle_kind = object.handle_kind;
+        size = object.size;
+        fd = object.fd;
+        return true;
+    }
+    return false;
 }
 
 }  // namespace av

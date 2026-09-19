@@ -63,6 +63,30 @@ public:
     VkExternalMemoryHandleTypeFlags image_host_types(VkPhysicalDevice physical, const VkImageCreateInfo &create,
                                                      VkExternalMemoryHandleTypeFlagBits type);
 
+    /* A descriptor for `memory` of `device`, as `type` (feature 053): false
+     * where the device has no such entry point or the driver refuses. The
+     * descriptor is the caller's. */
+    [[nodiscard]] bool export_memory(VkDevice device, uint64_t memory, VkExternalMemoryHandleTypeFlagBits type,
+                                     int &fd);
+    /* The same for a semaphore, always as an opaque fd: a dma-buf is memory
+     * and a sync fd is a binary signal, and what a WDDM fence maps onto is a
+     * timeline semaphore. */
+    [[nodiscard]] bool export_semaphore(VkDevice device, uint64_t semaphore, int &fd);
+    /* `size` bytes of `fd` imported on `device` as `type`, which must be one
+     * the driver takes. A duplicate of `fd` is what is handed to Vulkan, so
+     * the caller's stays the caller's whatever happens - a shared object's
+     * descriptor outlives every import of it. */
+    [[nodiscard]] bool import_shared_memory(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type,
+                                            uint64_t size, uint32_t memory_type, uint64_t &memory);
+    /* A new timeline semaphore of `device` with `fd`'s payload imported into
+     * it, answered in `semaphore`. A duplicate of `fd` is imported, for the
+     * same reason. Nothing is left behind unless it answers true. */
+    [[nodiscard]] bool import_shared_semaphore(VkDevice device, int fd, uint64_t &semaphore);
+    void               destroy_semaphore(VkDevice device, uint64_t semaphore);
+    /* The memory types `fd` may be imported into on `device` as `type`, or 0
+     * where the device cannot be asked. */
+    uint32_t           shared_memory_types(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type);
+
     /* Imports that succeeded and have not been released, which is what a test
      * or a teardown can ask about without a driver. */
     uint32_t held() const;

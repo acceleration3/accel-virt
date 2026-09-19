@@ -847,6 +847,26 @@ void MockHost::refuse_dmabufs() { StateLock lock(state_); no_dmabufs_ = true; }
 
 std::uint32_t MockHost::live_dmabufs() const { return dmabufs_; }
 
+/* A descriptor the test's subject may own and close. A pipe's read end costs
+ * nothing and is a real file descriptor, which is what makes "closed exactly
+ * once" a thing the kernel answers rather than a counter. */
+int MockHost::open_descriptor()
+{
+    int ends[2] = {-1, -1};
+    if (::pipe(ends) != 0) return -1;
+    ::close(ends[1]);
+    {
+        StateLock lock(state_);
+        dmabufs_++;
+    }
+    return ends[0];
+}
+
+bool MockHost::descriptor_open(int fd) const
+{
+    return fd >= 0 && ::fcntl(fd, F_GETFD) != -1;
+}
+
 std::uint32_t MockHost::live_ranges()
 {
     StateLock lock(state_);

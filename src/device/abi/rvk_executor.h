@@ -37,12 +37,16 @@ extern "C" {
  * 050). Version 5 adds set_signal, the first thing in this table that runs the
  * other way: the device hands the library something to call when a host API
  * finishes work on a thread of its own, so an OpenCL event's completion
- * reaches the guest without anyone polling for it (feature 052). The device
- * accepts all five: a version 1 library imports nothing, a version 2 library
+ * reaches the guest without anyone polling for it (feature 052). Version 6
+ * adds the three calls that move one host object between two executors, which
+ * is what gives an object an identity the whole device agrees on rather than
+ * one context (feature 053). The device
+ * accepts all six: a version 1 library imports nothing, a version 2 library
  * imports nothing a guest can name, a version 3 library makes only default
- * contexts, and a version 4 library signals nothing - a guest on one waits for
- * its events at a synchronising call instead. */
-#define RVK_EXECUTOR_ABI_VERSION 5u
+ * contexts, a version 4 library signals nothing - a guest on one waits for
+ * its events at a synchronising call instead - and a version 5 library shares
+ * nothing, which the device answers as a refusal rather than a fault. */
+#define RVK_EXECUTOR_ABI_VERSION 6u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -50,6 +54,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_HANDLES 3u
 #define RVK_EXECUTOR_ABI_VERSION_OPTIONS 4u
 #define RVK_EXECUTOR_ABI_VERSION_EVENTS 5u
+#define RVK_EXECUTOR_ABI_VERSION_SHARING 6u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -70,6 +75,21 @@ extern "C" {
  * both and the device picks from what import_kinds offers. */
 #define RVK_BLOB_HOST_POINTER 1u /* `pointer`, page-aligned, stays mapped */
 #define RVK_BLOB_DMA_BUF 2u      /* `fd`, owned by the callee once imported */
+
+/* What kind of thing a shared object is, for the version 6 calls below. The
+ * two fence kinds are one host semaphore either way; they differ to the guest,
+ * which has two WDDM primitives, and not to the host (feature 053). */
+#define RVK_SHARED_MEMORY 1u
+#define RVK_SHARED_MONITORED_FENCE 2u
+#define RVK_SHARED_NATIVE_FENCE 3u
+
+/* What kind of descriptor a shared object's is. Its own vocabulary and not
+ * RVK_BLOB_*, because a semaphore's descriptor is neither a pointer nor a
+ * dma-buf: it is an opaque fd, which only the API that made it understands.
+ * Memory may be either, and which one matters - OpenGL and OpenCL import only
+ * a dma-buf, while Vulkan takes both. */
+#define RVK_SHARED_HANDLE_OPAQUE_FD 1u
+#define RVK_SHARED_HANDLE_DMA_BUF 2u
 
 /* There is deliberately no offset: the device hands over a handle naming
  * exactly the range the guest asked for, because OpenCL's import has no offset
@@ -182,6 +202,33 @@ typedef struct RvkExecutorOps {
      * worker. */
     void (*set_signal)(void *opaque, RvkExecutor *executor,
                        void (*signal)(void *context), void *context);
+
+    /* Version 6 onwards. A version 5 table ends above. */
+
+    /* A descriptor for the object `wire_handle` names in this executor's
+     * commands, so the device can hand it to another executor: RVK_EXECUTED
+     * with *fd owned by the caller and *handle_kind saying which RVK_BLOB_* kind
+     * it is, or RVK_UNKNOWN for a handle this executor did not make, a kind it
+     * cannot export, or a host API that exports nothing (only Vulkan does).
+     * Runs on the context's worker. */
+    uint32_t (*export_object)(void *opaque, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
+                              uint32_t *handle_kind, int *fd);
+    /* That descriptor made into an object of this executor's, answered as the
+     * handle the guest names it by from then on: RVK_EXECUTED with
+     * *wire_handle non-zero, or RVK_UNKNOWN.
+     *
+     * `fd` stays the caller's whatever the answer - unlike import_blob's,
+     * which is made for one import and owned by the callee. A shared object's
+     * descriptor is the device's for as long as the object lives, so an
+     * importer that keeps one duplicates it. Runs on the context's worker. */
+    uint32_t (*import_object)(void *opaque, RvkExecutor *executor, uint32_t kind, uint32_t handle_kind,
+                              int fd, uint64_t size, uint64_t *wire_handle);
+    /* What import_object made under `kind`, destroyed. The kind travels with
+     * it because a host API frees memory and a semaphore by different calls
+     * and the handle alone does not say which it is. A no-op for a handle this
+     * executor never made that way; destroy releases whatever is left. Runs on
+     * the context's worker. */
+    void (*release_object)(void *opaque, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

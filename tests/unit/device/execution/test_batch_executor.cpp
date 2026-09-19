@@ -15,7 +15,9 @@
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
+#include "device/execution/context_shared_objects.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -111,8 +113,9 @@ public:
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
           reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
           page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-          imports_(host_, blobs_, executor_), staging_(host_), interrupts_(host_), fences_(host_, interrupts_),
-          batches_(host_, executor_, imports_, staging_, fences_)
+          objects_(host_), imports_(host_, blobs_, executor_), shared_(objects_, executor_),
+          staging_(host_), interrupts_(host_), fences_(host_, interrupts_),
+          batches_(host_, executor_, imports_, shared_, staging_, fences_)
     {
         std::memset(reply_, 0xEE, sizeof reply_);
         static_cast<void>(library_.accept(&ops_.table()));
@@ -192,7 +195,9 @@ private:
     av::ExecutorShares shares_;
     ContextExecutor executor_;
     av::BlobTable   blobs_;
+    av::HostSharedObjects objects_;
     av::BlobImports imports_;
+    av::ContextSharedObjects shared_;
     BatchStaging    staging_;
     av::FenceInterrupts interrupts_;
     av::FenceReporter   fences_;
@@ -204,7 +209,7 @@ private:
 TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_rest)
 { Fixture fixture;
   Commands commands;
-  commands.add(0x10001u, 3u).add(0x00004u, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
+  commands.add(0x10001u, 3u).add(0x00007u, 0u).add(0x20001u, 5u).add(MockExecutorOps::unknown_id, 1u)
           .add(0x10009u, 40u);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().created(), 1u);
@@ -312,7 +317,7 @@ TEST(batch_executor_run, another_transport_id_is_skipped_like_one_the_executor_d
 { Fixture fixture;
   Commands commands;
   commands.add(0x00000000u, 0u, CommandHeader::generate_reply)
-          .add(0x00000004u, 0u, CommandHeader::generate_reply)
+          .add(0x00000007u, 0u, CommandHeader::generate_reply)
           .add(0x0000FFFFu, 12u, CommandHeader::generate_reply);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().executed(), 0u);

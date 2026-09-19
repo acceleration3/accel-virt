@@ -12,6 +12,7 @@
 #include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "device/probe/host_feasibility.hpp"
 
 #include <stdint.h>
@@ -65,9 +66,10 @@ private:
     ExecutorLibrary    library_;
     HostFeasibility    feasibility_;
     DeviceCapset       capset_;
-    /* Before the contexts, which unpin blobs and stop raising interrupts as
-     * they are destroyed. */
+    /* Before the contexts, which unpin blobs, let go of shared objects and
+     * stop raising interrupts as they are destroyed. */
     BlobTable          blobs_;
+    HostSharedObjects  shared_;
     FenceInterrupts    interrupts_;
     DriverStatus       status_;
     DeviceContextTable contexts_;

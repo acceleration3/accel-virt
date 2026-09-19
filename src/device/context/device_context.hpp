@@ -11,6 +11,7 @@
 #include "device/context/context_signal.hpp"
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/blob_imports.hpp"
+#include "device/execution/context_shared_objects.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -26,6 +27,7 @@ class CapsetInfo;
 class ExecutorLibrary;
 class ExecutorShares;
 class FenceInterrupts;
+class HostSharedObjects;
 class ContextSetup;
 class Host;
 class StateWriter;
@@ -34,8 +36,8 @@ struct DeviceContextProbe;
 
 class DeviceContext {
 public:
-    DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library,
-                  ExecutorShares &shares, uint32_t id);
+    DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
+                  const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id);
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
@@ -61,8 +63,10 @@ private:
     ContextBinding binding_;
     FenceReporter   fences_;
     /* Before the executor: an import points into an alias until the executor
-     * that holds it is gone. */
-    BlobImports     imports_;
+     * that holds it is gone, and a shared object is the executor's to destroy
+     * until it is. */
+    BlobImports          imports_;
+    ContextSharedObjects shared_;
     ContextExecutor executor_;
     BatchStaging    staging_;
     BatchExecutor   batches_;

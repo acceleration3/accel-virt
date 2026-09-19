@@ -129,6 +129,18 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
+    /* One host object shared with every other context of this device (feature
+     * 053). Vulkan is the only API here that exports anything, so this is the
+     * only backend that overrides these: memory as the handle type this GPU
+     * imports, a fence as an opaque-fd timeline semaphore. A wire handle the
+     * guest names that this backend never made is refused, since the guest
+     * would otherwise name any number and have the driver read it. */
+    [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
+                                     int &fd) override;
+    [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                     uint64_t &wire_handle) override;
+    void               release_object(uint32_t kind, uint64_t wire_handle) override;
+
     /* Destroys whatever the guest still owned - the instance it made, and the
      * device with it - and forgets every handle. A context's host objects are
      * the context's, and a guest that never destroys them must not be able to
@@ -221,6 +233,13 @@ private:
     /* The handle type the decided kind is imported from, which is what a
      * buffer or an image must be made with to be bound to it. */
     VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
+    /* The handle type a shared descriptor of `handle_kind` is imported from,
+     * or 0 for a kind this build has no Vulkan spelling for. */
+    VkExternalMemoryHandleTypeFlagBits shared_type(uint32_t handle_kind) const;
+    /* The lowest memory type in `mask` this device has, or max_memory_types
+     * when the mask is empty: a shared descriptor carries no type of its own,
+     * unlike a blob, whose guest asked for one. */
+    uint32_t                           first_memory_type(uint32_t mask) const;
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
 
@@ -232,6 +251,10 @@ private:
      * by API before calling, so anything else is the device disagreeing with
      * itself rather than a guest doing something. */
     static constexpr uint32_t vulkan_api = 1u;
+
+    /* VkPhysicalDeviceMemoryProperties::memoryTypeCount's ceiling, which is
+     * also how many bits a memory-type mask can have. */
+    static constexpr uint32_t max_memory_types = 32u;
 
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this

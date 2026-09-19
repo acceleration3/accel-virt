@@ -1,7 +1,9 @@
 /* One command of API 0, the transport's own (docs/protocol.md, "Execution"),
  * which the device answers itself rather than handing to the executor
  * library: a NOP runs and its answer is empty, whichever library is loaded,
- * and the blob pair imports a context's guest memory into its executor. */
+ * the blob pair imports a context's guest memory into its executor, and the
+ * shared-object trio gives one host object an identity the whole device
+ * agrees on (feature 053). */
 #ifndef AV_TRANSPORT_COMMAND_HPP
 #define AV_TRANSPORT_COMMAND_HPP
 
@@ -14,11 +16,13 @@
 namespace av {
 
 class BlobImports;
+class ContextSharedObjects;
 
 class TransportCommand {
 public:
     /* `body` is what follows the header, as the stream framed it. */
-    TransportCommand(BlobImports &imports, const CommandHeader &header, const uint8_t *body);
+    TransportCommand(BlobImports &imports, ContextSharedObjects &shared, const CommandHeader &header,
+                     const uint8_t *body);
 
     /* Worker. ok for a NOP, whose answer is empty; malformed for a NOP of any
      * size but its header, since no producer frames a body on it; the blob
@@ -28,7 +32,8 @@ public:
     [[nodiscard]] Status run(uint8_t *reply, size_t capacity, size_t &produced);
 
 private:
-    BlobImports   &imports_;
+    BlobImports          &imports_;
+    ContextSharedObjects &shared_;
     CommandHeader  header_;
     const uint8_t *body_;
 };

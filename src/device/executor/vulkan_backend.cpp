@@ -537,6 +537,83 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
     return true;
 }
 
+VkExternalMemoryHandleTypeFlagBits VulkanBackend::shared_type(uint32_t handle_kind) const
+{
+    AV_SCOPE("VulkanBackend::shared_type");
+    if (handle_kind == RVK_SHARED_HANDLE_DMA_BUF) return VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    if (handle_kind == RVK_SHARED_HANDLE_OPAQUE_FD) return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+    return static_cast<VkExternalMemoryHandleTypeFlagBits>(0);
+}
+
+uint32_t VulkanBackend::first_memory_type(uint32_t mask) const
+{
+    AV_SCOPE("VulkanBackend::first_memory_type");
+    for (uint32_t type = 0u; type < max_memory_types; type++)
+        if ((mask & (1u << type)) != 0u) return type;
+    return max_memory_types;
+}
+
+bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+{
+    AV_SCOPE("VulkanBackend::export_object");
+    handle_kind = 0u;
+    fd = -1;
+    if (device_ == VK_NULL_HANDLE || wire_handle == 0u) return false;
+    if (!handles_.knows(wire_handle)) return false;
+    if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
+        if (!import_.export_semaphore(device_, wire_handle, fd)) return false;
+        handle_kind = RVK_SHARED_HANDLE_OPAQUE_FD;
+        return true;
+    }
+    if (kind != RVK_SHARED_MEMORY) return false;
+    /* The kind this GPU was measured to import is the kind to export as: a
+     * descriptor of the other kind is one no importer on this host can take. */
+    const VkExternalMemoryHandleTypeFlagBits type = external_type(physical_);
+    const uint32_t                           exported =
+        type == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT ? RVK_SHARED_HANDLE_DMA_BUF
+                                                               : RVK_SHARED_HANDLE_OPAQUE_FD;
+    const VkExternalMemoryHandleTypeFlagBits asked =
+        exported == RVK_SHARED_HANDLE_DMA_BUF ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT
+                                              : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+    if (!import_.export_memory(device_, wire_handle, asked, fd)) return false;
+    handle_kind = exported;
+    return true;
+}
+
+bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  uint64_t &wire_handle)
+{
+    AV_SCOPE("VulkanBackend::import_object");
+    wire_handle = 0u;
+    if (device_ == VK_NULL_HANDLE || fd < 0) return false;
+    if (kind == RVK_SHARED_MONITORED_FENCE || kind == RVK_SHARED_NATIVE_FENCE) {
+        if (handle_kind != RVK_SHARED_HANDLE_OPAQUE_FD) return false;
+        if (!import_.import_shared_semaphore(device_, fd, wire_handle)) return false;
+        made(wire_handle);
+        return true;
+    }
+    if (kind != RVK_SHARED_MEMORY || size == 0u) return false;
+    const VkExternalMemoryHandleTypeFlagBits type = shared_type(handle_kind);
+    if (type == 0) return false;
+    const uint32_t memory_type = first_memory_type(import_.shared_memory_types(device_, fd, type));
+    if (memory_type == max_memory_types) return false;
+    if (!import_.import_shared_memory(device_, fd, type, size, memory_type, wire_handle)) return false;
+    made(wire_handle);
+    return true;
+}
+
+void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle)
+{
+    AV_SCOPE("VulkanBackend::release_object");
+    if (wire_handle == 0u || device_ == VK_NULL_HANDLE || !handles_.knows(wire_handle)) return;
+    handles_.forget(wire_handle);
+    if (kind == RVK_SHARED_MEMORY) {
+        import_.release(device_, wire_handle);
+        return;
+    }
+    import_.destroy_semaphore(device_, wire_handle);
+}
+
 void VulkanBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("VulkanBackend::abandon");

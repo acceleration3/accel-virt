@@ -15,10 +15,11 @@
 
 namespace av {
 
-DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
+DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
     : id_(id), binding_(host, blobs), fences_(host, interrupts), imports_(host, blobs, executor_),
-      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
+      shared_(shared, executor_),
+      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, shared_, staging_, fences_), ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
       {
           AV_SCOPE("DeviceContext::DeviceContext");
       }

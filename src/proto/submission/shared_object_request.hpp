@@ -19,25 +19,36 @@ namespace av {
 
 class SharedObjectRequest {
 public:
-    static constexpr size_t encoded_size = 24u;
+    static constexpr size_t   encoded_size = 32u;
+    /* Memory is shared in whole pages, as every other length here is. */
+    static constexpr uint64_t page_size = 4096u;
 
     SharedObjectRequest();
-    SharedObjectRequest(uint64_t object_id, const SharedObjectKind &kind, uint64_t wire_handle);
+    SharedObjectRequest(uint64_t object_id, const SharedObjectKind &kind, uint64_t wire_handle,
+                        uint64_t size);
 
     uint64_t                object_id() const;
     const SharedObjectKind &kind() const;
     uint64_t                wire_handle() const;
+    /* The bytes the object is, which a memory import needs and a fence has
+     * none of: whole pages and non-zero for memory, 0 for either fence. */
+    uint64_t                size() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* malformed for any length but encoded_size - framing, which no producer
      * writes; invalid_parameter for an object id of 0, a kind this protocol
-     * does not have, or a non-zero reserved field. Unchanged unless ok. */
+     * does not have, a non-zero reserved field, or a size that is not what its
+     * kind has - a fence carries none, and memory carries whole pages.
+     * Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
+    bool size_valid() const;
+
     uint64_t         object_id_;
     SharedObjectKind kind_;
     uint64_t         wire_handle_;
+    uint64_t         size_;
 };
 
 }  // namespace av

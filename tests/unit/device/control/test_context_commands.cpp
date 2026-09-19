@@ -14,6 +14,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/ring_blob_writer.hpp"
@@ -104,10 +105,11 @@ class Fixture {
 public:
     /* A device offering `sub_apis`, over a library of `abi_version`. */
     explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = RVK_EXECUTOR_ABI_VERSION)
-        : blobs_(host_), interrupts_(host_), ops_(sub_apis), library_(),
-          contexts_(host_, blobs_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
+        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(sub_apis), library_(),
+          contexts_(host_, blobs_, shared_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
     {
         static_cast<void>(blobs_.initialize());
+        static_cast<void>(shared_.initialize());
         static_cast<void>(contexts_.initialize());
         ops_.editable().abi_version = abi_version;
         static_cast<void>(library_.accept(&ops_.table()));
@@ -149,6 +151,7 @@ public:
 private:
     MockHost            host_;
     BlobTable           blobs_;
+    av::HostSharedObjects shared_;
     av::FenceInterrupts interrupts_;
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
@@ -305,9 +308,10 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
 { MockHost host;
   host.add_gpu(uuid);
   BlobTable blobs(host);
+  av::HostSharedObjects shared(host);
   av::FenceInterrupts interrupts(host);
   av::ExecutorLibrary library;
-  DeviceContextTable contexts(host, blobs, interrupts, library);
+  DeviceContextTable contexts(host, blobs, shared, interrupts, library);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u, 0u);

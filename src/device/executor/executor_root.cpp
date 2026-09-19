@@ -150,6 +150,29 @@ uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id
     return owns(session) ? session->imported_handle(blob_id) : 0u;
 }
 
+bool ExecutorRoot::export_object(ContextSession *session, uint32_t kind, uint64_t wire_handle,
+                                 uint32_t &handle_kind, int &fd)
+{
+    AV_SCOPE("ExecutorRoot::export_object");
+    handle_kind = 0u;
+    fd = -1;
+    return owns(session) && session->export_object(kind, wire_handle, handle_kind, fd);
+}
+
+bool ExecutorRoot::import_object(ContextSession *session, uint32_t kind, uint32_t handle_kind, int fd,
+                                 uint64_t size, uint64_t &wire_handle)
+{
+    AV_SCOPE("ExecutorRoot::import_object");
+    wire_handle = 0u;
+    return owns(session) && session->import_object(kind, handle_kind, fd, size, wire_handle);
+}
+
+void ExecutorRoot::release_object(ContextSession *session, uint32_t kind, uint64_t wire_handle)
+{
+    AV_SCOPE("ExecutorRoot::release_object");
+    if (owns(session)) session->release_object(kind, wire_handle);
+}
+
 void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *context), void *context)
 {
     AV_SCOPE("ExecutorRoot::set_signal");

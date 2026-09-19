@@ -46,6 +46,28 @@ public:
      * session ends, so a guest that never releases leaks nothing. */
     virtual void abandon(ImportedBlob &blob) = 0;
 
+    /* A descriptor for the object `wire_handle` names in this API's commands,
+     * so the device can publish it for every context to open (feature 053):
+     * false for a handle this backend did not make or a kind it cannot
+     * export. The descriptor is the caller's on true, and `handle_kind` says
+     * which RVK_SHARED_HANDLE_* kind it is, because OpenGL and OpenCL import
+     * only a dma-buf while Vulkan takes either.
+     *
+     * Every backend answers all three for itself, because an API that shares
+     * nothing has to say so rather than inherit a silence: OpenGL and OpenCL
+     * export no descriptor at all, and a guest's export through them fails
+     * with that API's own error rather than with a host object nobody made. */
+    [[nodiscard]] virtual bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
+                                             int &fd) = 0;
+    /* That descriptor made into an object of this API's, with `wire_handle`
+     * what the guest names it by. `fd` stays the caller's whatever the answer:
+     * it is the device's, and a backend that keeps one duplicates it. */
+    [[nodiscard]] virtual bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                             uint64_t &wire_handle) = 0;
+    /* What import_object made, destroyed. Nothing for a handle this backend
+     * did not make that way. */
+    virtual void               release_object(uint32_t kind, uint64_t wire_handle) = 0;
+
 protected:
     SessionBackend() = default;
     ~SessionBackend() = default;

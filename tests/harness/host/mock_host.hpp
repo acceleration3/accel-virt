@@ -131,6 +131,15 @@ public:
     void refuse_dmabufs();
     /* Dma-bufs made and not yet closed, so a test can say none leaked. */
     std::uint32_t live_dmabufs() const;
+    /* A real descriptor of this process's, counted as a dma-buf, for a test
+     * whose subject owns a descriptor it did not make itself - a shared
+     * object's, which is exported by an executor on one context and closed by
+     * the device when the last context lets it go (feature 053). -1 where the
+     * kernel gives none. */
+    int           open_descriptor();
+    /* Whether `fd` is still open in this process, which is how a test says
+     * that a descriptor was closed exactly once rather than counted down. */
+    bool          descriptor_open(int fd) const;
 
     /* Guest memory another harness owns (the guest's MockPlatform in the
      * loopback suite): `translate` answers the host pointer of `length` bytes

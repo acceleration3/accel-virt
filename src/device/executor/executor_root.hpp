@@ -77,6 +77,14 @@ public:
      * session of another API: neither Vulkan nor OpenGL completes anything
      * except on the thread that asked. */
     void            set_signal(ContextSession *session, void (*signal)(void *context), void *context);
+    /* The version 6 calls, on a session this root handed out: false, and
+     * nothing made, for one it did not - the device's pointer is all the ABI
+     * gives to tell them apart. */
+    [[nodiscard]] bool export_object(ContextSession *session, uint32_t kind, uint64_t wire_handle,
+                                     uint32_t &handle_kind, int &fd);
+    [[nodiscard]] bool import_object(ContextSession *session, uint32_t kind, uint32_t handle_kind, int fd,
+                                     uint64_t size, uint64_t &wire_handle);
+    void               release_object(ContextSession *session, uint32_t kind, uint64_t wire_handle);
     uint32_t        live() const;
     /* The library's state dump (docs/trace.md): the GPUs asked about and each
      * live session's API and GPU. Takes no lock: everything it reads is a

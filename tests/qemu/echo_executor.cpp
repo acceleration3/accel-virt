@@ -301,6 +301,20 @@ std::uint64_t imported_handle(void *, RvkExecutor *handle, std::uint64_t blob_id
  * what the device must be able to cope with. */
 void set_signal(void *, RvkExecutor *, void (*)(void *), void *) {}
 
+/* Version 6: an echo library has no host API behind it, so it makes no host
+ * object and exports no descriptor of one. The device answers every
+ * shared-object command with "the executor refused", which is a status and not
+ * a fault, and that refusal is what the qemu suites see. */
+uint32_t export_object(void *, RvkExecutor *, uint32_t, uint64_t, uint32_t *, int *)
+{
+    return RVK_UNKNOWN;
+}
+uint32_t import_object(void *, RvkExecutor *, uint32_t, uint32_t, int, uint64_t, uint64_t *)
+{
+    return RVK_UNKNOWN;
+}
+void release_object(void *, RvkExecutor *, uint32_t, uint64_t) {}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -312,7 +326,10 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               release_blob,
                               imported_handle,
                               create_with_options,
-                              set_signal};
+                              set_signal,
+                              export_object,
+                              import_object,
+                              release_object};
 
 /* Version 3: default contexts only (feature 050). */
 const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
@@ -326,6 +343,9 @@ const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
                                         release_blob,
                                         imported_handle,
                                         nullptr,
+                                        nullptr,
+                                        nullptr,
+                                        nullptr,
                                         nullptr};
 
 /* Version 1, carrying none of the memory operations: the device must keep
@@ -337,6 +357,9 @@ const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
                                         create,
                                         destroy,
                                         execute,
+                                        nullptr,
+                                        nullptr,
+                                        nullptr,
                                         nullptr,
                                         nullptr,
                                         nullptr,

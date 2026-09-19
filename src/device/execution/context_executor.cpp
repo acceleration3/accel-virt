@@ -136,6 +136,38 @@ void ContextExecutor::release(uint64_t blob_id)
     if (executor_ != nullptr) library_.release_blob(executor_, blob_id);
 }
 
+Status ContextExecutor::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+{
+    AV_SCOPE("ContextExecutor::export_object");
+    host_.require_worker("ContextExecutor::export_object");
+    handle_kind = 0u;
+    fd = -1;
+    if (executor_ == nullptr) return Status::invalid_state;
+    if (!library_.shares_objects()) return Status::not_supported;
+    return library_.export_object(executor_, kind, wire_handle, handle_kind, fd) ? Status::ok
+                                                                              : Status::not_supported;
+}
+
+Status ContextExecutor::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                      uint64_t &wire_handle)
+{
+    AV_SCOPE("ContextExecutor::import_object");
+    host_.require_worker("ContextExecutor::import_object");
+    wire_handle = 0u;
+    if (executor_ == nullptr) return Status::invalid_state;
+    if (!library_.shares_objects()) return Status::not_supported;
+    return library_.import_object(executor_, kind, handle_kind, fd, size, wire_handle) ? Status::ok
+                                                                                     : Status::not_supported;
+}
+
+void ContextExecutor::release_object(uint32_t kind, uint64_t wire_handle)
+{
+    AV_SCOPE("ContextExecutor::release_object");
+    host_.require_worker("ContextExecutor::release_object");
+    if (executor_ != nullptr && library_.shares_objects())
+        library_.release_object(executor_, kind, wire_handle);
+}
+
 uint16_t ContextExecutor::command_api() const
 {
     AV_SCOPE("ContextExecutor::command_api");

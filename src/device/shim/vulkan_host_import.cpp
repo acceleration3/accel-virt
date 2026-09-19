@@ -4,6 +4,7 @@
 #include "device/shim/probe_dma_buf.hpp"
 
 #include <sys/mman.h>
+#include <unistd.h>
 
 namespace av {
 
@@ -196,6 +197,124 @@ VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDev
     return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u
                ? static_cast<VkExternalMemoryHandleTypeFlags>(type)
                : 0u;
+}
+
+bool VulkanHostImport::export_memory(VkDevice device, uint64_t memory, VkExternalMemoryHandleTypeFlagBits type,
+                                     int &fd)
+{
+    AV_SCOPE("VulkanHostImport::export_memory");
+    fd = -1;
+    auto *const get = reinterpret_cast<PFN_vkGetMemoryFdKHR>(::vkGetDeviceProcAddr(device, "vkGetMemoryFdKHR"));
+    if (get == nullptr) return false;
+    VkMemoryGetFdInfoKHR ask = {};
+    ask.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
+    ask.memory = reinterpret_cast<VkDeviceMemory>(memory);
+    ask.handleType = type;
+    int made = -1;
+    if (get(device, &ask, &made) != VK_SUCCESS || made < 0) return false;
+    fd = made;
+    return true;
+}
+
+bool VulkanHostImport::export_semaphore(VkDevice device, uint64_t semaphore, int &fd)
+{
+    AV_SCOPE("VulkanHostImport::export_semaphore");
+    fd = -1;
+    auto *const get =
+        reinterpret_cast<PFN_vkGetSemaphoreFdKHR>(::vkGetDeviceProcAddr(device, "vkGetSemaphoreFdKHR"));
+    if (get == nullptr) return false;
+    VkSemaphoreGetFdInfoKHR ask = {};
+    ask.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+    ask.semaphore = reinterpret_cast<VkSemaphore>(semaphore);
+    ask.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+    int made = -1;
+    if (get(device, &ask, &made) != VK_SUCCESS || made < 0) return false;
+    fd = made;
+    return true;
+}
+
+uint32_t VulkanHostImport::shared_memory_types(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type)
+{
+    AV_SCOPE("VulkanHostImport::shared_memory_types");
+    auto *const properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        ::vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
+    if (properties == nullptr || fd < 0) return 0u;
+    VkMemoryFdPropertiesKHR answered = {};
+    answered.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+    if (properties(device, type, fd, &answered) != VK_SUCCESS) return 0u;
+    return answered.memoryTypeBits;
+}
+
+bool VulkanHostImport::import_shared_memory(VkDevice device, int fd, VkExternalMemoryHandleTypeFlagBits type,
+                                            uint64_t size, uint32_t memory_type, uint64_t &memory)
+{
+    AV_SCOPE("VulkanHostImport::import_shared_memory");
+    if (fd < 0) return false;
+    const int copy = ::dup(fd);
+    if (copy < 0) return false;
+    VkImportMemoryFdInfoKHR imported = {};
+    imported.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+    imported.handleType = type;
+    imported.fd = copy;
+
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &imported;
+    allocate.allocationSize = size;
+    allocate.memoryTypeIndex = memory_type;
+
+    VkDeviceMemory made = VK_NULL_HANDLE;
+    if (::vkAllocateMemory(device, &allocate, nullptr, &made) != VK_SUCCESS) {
+        ::close(copy);
+        return false;
+    }
+    memory = reinterpret_cast<uint64_t>(made);
+    held_++;
+    return true;
+}
+
+bool VulkanHostImport::import_shared_semaphore(VkDevice device, int fd, uint64_t &semaphore)
+{
+    AV_SCOPE("VulkanHostImport::import_shared_semaphore");
+    semaphore = 0u;
+    auto *const import =
+        reinterpret_cast<PFN_vkImportSemaphoreFdKHR>(::vkGetDeviceProcAddr(device, "vkImportSemaphoreFdKHR"));
+    if (import == nullptr || fd < 0) return false;
+    const int copy = ::dup(fd);
+    if (copy < 0) return false;
+
+    VkSemaphoreTypeCreateInfo timeline = {};
+    timeline.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+    timeline.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    VkSemaphoreCreateInfo create = {};
+    create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    create.pNext = &timeline;
+    VkSemaphore made = VK_NULL_HANDLE;
+    if (::vkCreateSemaphore(device, &create, nullptr, &made) != VK_SUCCESS) {
+        ::close(copy);
+        return false;
+    }
+    VkImportSemaphoreFdInfoKHR imported = {};
+    imported.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+    imported.semaphore = made;
+    imported.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+    imported.fd = copy;
+    if (import(device, &imported) != VK_SUCCESS) {
+        ::vkDestroySemaphore(device, made, nullptr);
+        ::close(copy);
+        return false;
+    }
+    semaphore = reinterpret_cast<uint64_t>(made);
+    held_++;
+    return true;
+}
+
+void VulkanHostImport::destroy_semaphore(VkDevice device, uint64_t semaphore)
+{
+    AV_SCOPE("VulkanHostImport::destroy_semaphore");
+    if (semaphore == 0u) return;
+    ::vkDestroySemaphore(device, reinterpret_cast<VkSemaphore>(semaphore), nullptr);
+    held_--;
 }
 
 uint32_t VulkanHostImport::held() const

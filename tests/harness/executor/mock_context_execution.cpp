@@ -14,7 +14,8 @@ constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
 MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order)
     : ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host, library_), executor_(host, library_, shares_, 1u), blobs_(host),
-      imports_(host, blobs_, executor_), staging_(host), batches_(host, executor_, imports_, staging_, fences)
+      shared_objects_(host), imports_(host, blobs_, executor_), shared_(shared_objects_, executor_),
+      staging_(host), batches_(host, executor_, imports_, shared_, staging_, fences)
 {
     static_cast<void>(library_.accept(&ops_.table()));
     executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());

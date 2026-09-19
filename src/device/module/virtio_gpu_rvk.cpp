@@ -15,8 +15,8 @@ namespace av {
 constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), blobs_(host), interrupts_(host),
-      status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_)
+    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), blobs_(host), shared_(host), interrupts_(host),
+      status_(host, interrupts_), contexts_(host, blobs_, shared_, interrupts_, library_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
       }
@@ -48,6 +48,11 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         host_.log(message.text());
         return Status::no_memory;
     }
+    if (shared_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex for the shared objects");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
     if (contexts_.initialize() == Status::no_memory) {
         message.append("virtio-gpu-rvk: the host has no mutex for the contexts' shared executors");
         host_.log(message.text());
@@ -75,6 +80,9 @@ void VirtioGpuRvk::reset()
     host_.require_main_loop("VirtioGpuRvk::reset");
     contexts_.destroy_all();
     status_.reset();
+    /* After the contexts, which drop their references as they go: a reset
+     * leaves no context to hold one, so whatever is left goes too. */
+    shared_.release_all();
     blobs_.release_all();
 }
 
@@ -156,6 +164,7 @@ void VirtioGpuRvk::report(StateWriter &writer)
         writer.number("contexts", contexts());
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
+    shared_.report(writer);
     contexts_.report(writer);
 }
 
@@ -163,7 +172,8 @@ void VirtioGpuRvk::report(StateWriter &writer)
 bool VirtioGpuRvk::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuRvk::invariants_hold");
-    return contexts_.invariants_hold() && blobs_.invariants_hold() && interrupts_.invariants_hold() &&
+    return contexts_.invariants_hold() && blobs_.invariants_hold() && shared_.invariants_hold() &&
+           interrupts_.invariants_hold() &&
            status_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
 }
 

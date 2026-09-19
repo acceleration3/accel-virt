@@ -14,6 +14,7 @@
 #include "device/threading/work_item.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 
 #include <atomic>
@@ -38,7 +39,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, table.shares_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_, table.library_, table.shares_, id));
                 if (started) static_cast<void>(slot.object().start());
                 return;
             }
@@ -48,7 +49,7 @@ struct DeviceContextTableProbe {
 }  // namespace av
 
 TEST(device_context_table_create, each_context_gets_its_own_running_worker)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   CHECK_STATUS(table.create(1u), Status::ok);
   CHECK_STATUS(table.create(7u), Status::ok);
   CHECK(table.invariants_hold());
@@ -71,7 +72,7 @@ TEST(device_context_table_create, each_context_gets_its_own_running_worker)
  * unbound context says only that it is unbound, its ring's progress and
  * whether it has an executor. */
 TEST(device_context_table_report, writes_each_context_and_its_worker)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   char bytes[512];
   av::StateWriter empty(bytes, sizeof bytes);
   empty.open("device", 0u);
@@ -92,7 +93,7 @@ TEST(device_context_table_report, writes_each_context_and_its_worker)
   table.destroy_all(); }
 
 TEST(device_context_table_create, refuses_id_zero_a_live_id_and_a_full_table)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   CHECK_STATUS(table.create(0u), Status::invalid_parameter);
   CHECK_STATUS(table.create(3u), Status::ok);
   CHECK_STATUS(table.create(3u), Status::conflict);
@@ -105,7 +106,7 @@ TEST(device_context_table_create, refuses_id_zero_a_live_id_and_a_full_table)
   CHECK_EQ(host.live_threads(), 0u); }
 
 TEST(device_context_table_create, a_worker_that_cannot_start_leaves_no_context)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   host.fail_thread_start_at(1u);
   CHECK_STATUS(table.create(5u), Status::no_memory);
   CHECK_EQ(table.live(), 0u);
@@ -113,7 +114,7 @@ TEST(device_context_table_create, a_worker_that_cannot_start_leaves_no_context)
   CHECK_STATUS(table.create(5u), Status::ok); }
 
 TEST(device_context_table_destroy, stops_the_worker_once)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   CHECK_STATUS(table.create(4u), Status::ok);
   CHECK_STATUS(table.destroy(4u), Status::ok);
   CHECK(table.invariants_hold());
@@ -121,7 +122,7 @@ TEST(device_context_table_destroy, stops_the_worker_once)
   CHECK_STATUS(table.destroy(4u), Status::not_found); }
 
 TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbell)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   host.set_hostmem_size(0x10000u);
   CHECK_STATUS(blobs.initialize(), Status::ok);
   CHECK_STATUS(blobs.create_host(1u, 0x2000u), Status::ok);
@@ -141,7 +142,7 @@ TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbel
   CHECK(!table.holds_doorbell(5u)); }
 
 TEST(device_context_table, is_main_loop_only)
-{ MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, shared, interrupts, library);
   void *thread = nullptr;
   CHECK_STATUS(host.start_thread(
                    [](void *context) {
@@ -159,16 +160,17 @@ TEST(device_context_table, is_main_loop_only)
 TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_worker_is_detected)
 { MockHost host;
   BlobTable blobs(host);
+  av::HostSharedObjects shared(host);
   FenceInterrupts interrupts(host);
   ExecutorLibrary library;
-  DeviceContextTable duplicate(host, blobs, interrupts, library);
+  DeviceContextTable duplicate(host, blobs, shared, interrupts, library);
   CHECK_STATUS(duplicate.create(6u), Status::ok);
   CHECK_STATUS(duplicate.create(8u), Status::ok);
   av::DeviceContextTableProbe::place(duplicate, 6u, true);
   CHECK(!duplicate.invariants_hold());
-  DeviceContextTable zero(host, blobs, interrupts, library);
+  DeviceContextTable zero(host, blobs, shared, interrupts, library);
   av::DeviceContextTableProbe::place(zero, 0u, true);
   CHECK(!zero.invariants_hold());
-  DeviceContextTable stopped(host, blobs, interrupts, library);
+  DeviceContextTable stopped(host, blobs, shared, interrupts, library);
   av::DeviceContextTableProbe::place(stopped, 9u, false);
   CHECK(!stopped.invariants_hold()); }

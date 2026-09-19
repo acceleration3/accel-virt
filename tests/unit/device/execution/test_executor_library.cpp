@@ -5,6 +5,7 @@
 #include "device/execution/executor_library.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/host/mock_host.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <cstdint>
@@ -122,10 +123,11 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 5u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 6u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EVENTS, 5u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_SHARING, 6u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
@@ -296,3 +298,89 @@ TEST(executor_library_signal, an_executor_that_is_not_there_is_given_nothing)
 TEST(executor_library_signal, a_library_that_accepted_nothing_names_no_events)
 { ExecutorLibrary library;
   CHECK(!library.names_events()); }
+
+TEST(executor_library_accept, version_six_missing_any_of_the_sharing_three_is_refused)
+{ const char *const names[] = {"export", "import", "release"};
+  for (std::uint32_t missing = 0u; missing < 3u; missing++) {
+      MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+      if (missing == 0u) ops.editable().export_object = nullptr;
+      if (missing == 1u) ops.editable().import_object = nullptr;
+      if (missing == 2u) ops.editable().release_object = nullptr;
+      ExecutorLibrary library;
+      CHECK_STATUS(library.accept(&ops.table()), Status::invalid_parameter);
+      CHECK(!library.available());
+      CHECK(!library.shares_objects());
+      static_cast<void>(names[missing]);
+  } }
+
+TEST(executor_library_shares_objects, is_true_only_from_the_version_that_has_the_three_calls)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_EVENTS);
+  ops.editable().export_object = nullptr;
+  ops.editable().import_object = nullptr;
+  ops.editable().release_object = nullptr;
+  ExecutorLibrary older;
+  CHECK_STATUS(older.accept(&ops.table()), Status::ok);
+  CHECK(older.available());
+  CHECK(!older.shares_objects());
+
+  MockExecutorOps newest(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&newest.table()), Status::ok);
+  CHECK(library.shares_objects());
+
+  ExecutorLibrary none;
+  CHECK_STATUS(none.accept(nullptr), Status::ok);
+  CHECK(!none.shares_objects()); }
+
+TEST(executor_library_export_object, refuses_a_library_that_answers_success_with_no_descriptor)
+{ av::MockHost    host;
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  const std::uint8_t uuid[16] = {};
+  RvkExecutor *const executor = library.create(av::SubApi::vulkan, uuid);
+  CHECK(executor != nullptr);
+  std::uint32_t handle_kind = 9u;
+  int           fd = 9;
+  /* No host to take a descriptor from: the mock answers RVK_UNKNOWN. */
+  CHECK(!library.export_object(executor, RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK_EQ(handle_kind, 0u);
+  CHECK_EQ(fd, -1);
+  ops.descriptors_from(host);
+  CHECK(library.export_object(executor, RVK_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  CHECK_EQ(handle_kind, RVK_SHARED_HANDLE_DMA_BUF);
+  CHECK(fd >= 0);
+  host.close_dmabuf(fd);
+  /* A handle the executor never made, and a kind that is not one. */
+  CHECK(!library.export_object(executor, RVK_SHARED_MEMORY, 0u, handle_kind, fd));
+  CHECK(!library.export_object(executor, 0u, 0x40u, handle_kind, fd));
+  library.destroy(executor); }
+
+TEST(executor_library_import_object, gives_nothing_back_for_a_library_that_names_nothing)
+{ av::MockHost    host;
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.descriptors_from(host);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  const std::uint8_t uuid[16] = {};
+  RvkExecutor *const executor = library.create(av::SubApi::vulkan, uuid);
+  const int          fd = host.open_descriptor();
+  std::uint64_t      wire_handle = 9u;
+  ops.withhold_object_handle_at(1u);
+  CHECK(!library.import_object(executor, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, fd, 4096u,
+                               wire_handle));
+  CHECK_EQ(wire_handle, 0u);
+  CHECK_EQ(ops.live_objects(), 0u);
+  CHECK(library.import_object(executor, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, fd, 4096u,
+                              wire_handle));
+  CHECK(wire_handle != 0u);
+  CHECK_EQ(ops.live_objects(), 1u);
+  /* The descriptor is still the caller's, which is what makes one object
+   * openable by every context. */
+  CHECK(host.descriptor_open(fd));
+  library.release_object(executor, RVK_SHARED_MEMORY, wire_handle);
+  CHECK_EQ(ops.released_objects(), 1u);
+  CHECK_EQ(ops.live_objects(), 0u);
+  host.close_dmabuf(fd);
+  library.destroy(executor); }

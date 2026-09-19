@@ -14,6 +14,7 @@
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/guest_ring.hpp"
@@ -86,10 +87,11 @@ ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
 class Fixture {
 public:
     Fixture()
-        : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
-          shares_(host_, library_), context_(host_, blobs_, interrupts_, library_, shares_, 5u)
+        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
+          shares_(host_, library_), context_(host_, blobs_, shared_, interrupts_, library_, shares_, 5u)
     {
         static_cast<void>(blobs_.initialize());
+        static_cast<void>(shared_.initialize());
         static_cast<void>(shares_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
         host_.add_guest_ram(ram, 0x2000u);
@@ -141,6 +143,7 @@ private:
     /* Declared before the context, which unpins its blobs as it goes. */
     MockHost            host_;
     BlobTable           blobs_;
+    av::HostSharedObjects shared_;
     av::FenceInterrupts interrupts_;
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
@@ -362,6 +365,7 @@ TEST(device_context_bind, an_opengl_setups_options_reach_the_executor_it_makes)
 TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
 { MockHost               host;
   av::BlobTable          blobs(host);
+  av::HostSharedObjects  shared(host);
   av::FenceInterrupts    interrupts(host);
   av::MockExecutorOps    ops(RVK_EXECUTOR_SUB_API_OPENGL);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
@@ -369,7 +373,7 @@ TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
   av::ExecutorLibrary    old;
   CHECK_STATUS(old.accept(&ops.table()), Status::ok);
   av::ExecutorShares     shares(host, old);
-  DeviceContext          context(host, blobs, interrupts, old, shares, 9u);
+  DeviceContext          context(host, blobs, shared, interrupts, old, shares, 9u);
   const ContextSetup with_options(ProtocolVersion(1u, 1u), SubApi::opengl, ring, 12u, fence, 3u, 0u,
                                   av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u));
   CHECK_STATUS(context.bind(with_options, capset()), Status::invalid_parameter);

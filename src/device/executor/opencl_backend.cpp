@@ -329,4 +329,24 @@ void OpenClBackend::bind_signal(void (*signal)(void *context), void *context)
     events_.bind(signal, context);
 }
 
+bool OpenClBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int &fd)
+{
+    AV_SCOPE("OpenClBackend::export_object");
+    handle_kind = 0u;
+    fd = -1;
+    return false;
+}
+
+bool OpenClBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle)
+{
+    AV_SCOPE("OpenClBackend::import_object");
+    wire_handle = 0u;
+    return false;
+}
+
+void OpenClBackend::release_object(uint32_t, uint64_t)
+{
+    AV_SCOPE("OpenClBackend::release_object");
+}
+
 }  // namespace av

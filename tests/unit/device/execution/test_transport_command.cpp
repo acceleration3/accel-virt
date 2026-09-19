@@ -1,14 +1,16 @@
 /* The transport's own commands (docs/protocol.md, "Execution"): a NOP is
  * answered with nothing, a NOP carrying a body is framing no producer writes,
- * the blob pair goes to the blob command, and any other transport id is one the
- * device does not know. */
+ * the blob pair goes to the blob command, the shared-object trio to theirs,
+ * and any other transport id is one the device does not know. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "device/execution/context_shared_objects.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/execution/transport_command.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/host_shared_objects.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
@@ -29,14 +31,16 @@ namespace {
 /* What a context's transport commands run over: no library, no blobs. */
 class Fixture {
 public:
-    Fixture() : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_), imports_(host_, blobs_, executor_) {}
+    Fixture()
+        : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
+          objects_(host_), imports_(host_, blobs_, executor_), shared_(objects_, executor_) {}
 
     av::MockHost &host() { return host_; }
     Status run(const CommandHeader &header, const std::uint8_t *body = nullptr)
     {
         reply_[0] = 0xEEu;
         produced_ = 99u;
-        return TransportCommand(imports_, header, body).run(reply_, sizeof reply_, produced_);
+        return TransportCommand(imports_, shared_, header, body).run(reply_, sizeof reply_, produced_);
     }
     std::size_t         produced() const { return produced_; }
     const std::uint8_t *reply() const { return reply_; }
@@ -47,7 +51,9 @@ private:
     av::ExecutorShares  shares_;
     av::ContextExecutor executor_;
     av::BlobTable       blobs_;
+    av::HostSharedObjects objects_;
     av::BlobImports     imports_;
+    av::ContextSharedObjects shared_;
     std::uint8_t        reply_[32] = {};
     std::size_t         produced_ = 0u;
 };
@@ -77,7 +83,7 @@ TEST(transport_command_run, a_nop_of_any_size_but_its_header_is_malformed)
 
 TEST(transport_command_run, a_transport_id_the_device_does_not_answer_is_not_known_whatever_its_size)
 { Fixture fixture;
-  const std::uint32_t ids[] = {0x00000000u, 0x00000004u, 0x00000101u, 0x00008001u, 0x0000FFFFu};
+  const std::uint32_t ids[] = {0x00000000u, 0x00000007u, 0x00000101u, 0x00008001u, 0x0000FFFFu};
   for (const std::uint32_t id : ids) {
       CHECK_STATUS(fixture.run(CommandHeader(id, 8u, 0u)), Status::not_found);
       CHECK_STATUS(fixture.run(CommandHeader(id, 9u, CommandHeader::generate_reply)), Status::not_found);
@@ -129,8 +135,14 @@ TEST(transport_command_run, every_bit_flip_of_a_nop_is_refused_skipped_or_still_
           CHECK(header.api() != CommandHeader::transport_api);   /* another API's command: never a transport one */
           continue;
       }
+      /* Flipping a low bit of the NOP's id makes one of the other transport
+       * ids as often as it makes an unknown one, and each of those reads its
+       * own body: with none framed, that is this command's framing fault. */
+      const bool known = header.id() >= CommandHeader::nop_id &&
+                         header.id() <= CommandHeader::release_shared_object_id;
       const Status expected = bit == 1u || (bit >= 32u && bit != 56u) ? Status::malformed
-                              : bit < 16u                               ? Status::not_found
-                                                                        : Status::ok;
+                              : bit < 16u                             ? (known ? Status::malformed
+                                                                               : Status::not_found)
+                                                                      : Status::ok;
       CHECK_STATUS(fixture.run(header), expected);
   } }

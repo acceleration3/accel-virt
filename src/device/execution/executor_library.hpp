@@ -58,11 +58,27 @@ public:
     void                 release_blob(RvkExecutor *executor, uint64_t blob_id) const;
     uint64_t             imported_handle(RvkExecutor *executor, uint64_t blob_id) const;
 
+    /* Whether the library moves one host object between two executors
+     * (version 6), without which a shared object has no host resource behind
+     * it and every shared-object command is refused rather than faulted. */
+    bool                 shares_objects() const;
+    /* Only on a library that shares objects. A descriptor for what
+     * `wire_handle` names, which stays the caller's afterwards; false for a
+     * handle this executor did not make or a kind it cannot export. */
+    [[nodiscard]] bool   export_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle,
+                                       uint32_t &handle_kind, int &fd) const;
+    /* That descriptor made into an object of `executor`'s, with the handle the
+     * guest names it by; false when the library will not. `fd` stays the
+     * caller's whatever the answer. */
+    [[nodiscard]] bool   import_object(RvkExecutor *executor, uint32_t kind, uint32_t handle_kind, int fd,
+                                       uint64_t size, uint64_t &wire_handle) const;
+    void                 release_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle) const;
+
 private:
     static constexpr uint32_t known_sub_apis = 7u;
     /* RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF: a kind this device does not
      * know is a kind it cannot build a handle for, so it is not offered. */
-    static constexpr uint32_t known_blob_kinds = 3u;
+    static constexpr uint32_t known_handle_kinds = 3u;
 
     const RvkExecutorOps *ops_;
 };

@@ -6,13 +6,14 @@
 
 namespace av {
 
-SharedObjectRequest::SharedObjectRequest() : object_id_(0u), kind_(), wire_handle_(0u)
+SharedObjectRequest::SharedObjectRequest() : object_id_(0u), kind_(), wire_handle_(0u), size_(0u)
 {
     AV_SCOPE("SharedObjectRequest::SharedObjectRequest");
 }
 
-SharedObjectRequest::SharedObjectRequest(uint64_t object_id, const SharedObjectKind &kind, uint64_t wire_handle)
-    : object_id_(object_id), kind_(kind), wire_handle_(wire_handle)
+SharedObjectRequest::SharedObjectRequest(uint64_t object_id, const SharedObjectKind &kind,
+                                         uint64_t wire_handle, uint64_t size)
+    : object_id_(object_id), kind_(kind), wire_handle_(wire_handle), size_(size)
     {
         AV_SCOPE("SharedObjectRequest::SharedObjectRequest");
     }
@@ -35,6 +36,19 @@ uint64_t SharedObjectRequest::wire_handle() const
     return wire_handle_;
 }
 
+uint64_t SharedObjectRequest::size() const
+{
+    AV_SCOPE("SharedObjectRequest::size");
+    return size_;
+}
+
+bool SharedObjectRequest::size_valid() const
+{
+    AV_SCOPE("SharedObjectRequest::size_valid");
+    if (kind_.is_fence()) return size_ == 0u;
+    return size_ != 0u && size_ % page_size == 0u;
+}
+
 Status SharedObjectRequest::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("SharedObjectRequest::encode");
@@ -44,6 +58,7 @@ Status SharedObjectRequest::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(kind_.value());
     writer.write_zeros(4u);
     writer.write_u64(wire_handle_);
+    writer.write_u64(size_);
     return writer.status();
 }
 
@@ -57,7 +72,10 @@ Status SharedObjectRequest::decode(const uint8_t *bytes, size_t length)
     candidate.kind_ = SharedObjectKind(reader.read_u32());
     const uint32_t reserved = reader.read_u32();
     candidate.wire_handle_ = reader.read_u64();
-    if (candidate.object_id_ == 0u || !candidate.kind_.known() || reserved != 0u) return Status::invalid_parameter;
+    candidate.size_ = reader.read_u64();
+    if (candidate.object_id_ == 0u || !candidate.kind_.known() || reserved != 0u ||
+        !candidate.size_valid())
+        return Status::invalid_parameter;
     *this = candidate;
     return Status::ok;
 }

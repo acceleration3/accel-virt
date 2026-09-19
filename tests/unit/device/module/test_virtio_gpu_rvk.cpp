@@ -38,7 +38,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, table.shares_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_, table.library_, table.shares_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -179,7 +179,7 @@ TEST(virtio_gpu_rvk_report, an_unrealized_device_says_so_and_has_no_contexts)
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 0u);
   device.report(writer);
-  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/contexts/0 live=0") == 0); }
+  CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/shared/0 busy=false\ndevice/0/contexts/0 live=0") == 0); }
 
 TEST(virtio_gpu_rvk_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
 { MockHost host;
@@ -273,10 +273,12 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   writer.open("device", 3u);
   device.report(writer);
   CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                                    "device/3/shared/0 live=0\n"
                                     "device/3/contexts/0 live=1\n"
                                     "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
                      std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                                 "device/3/shared/0 live=0\n"
                                  "device/3/contexts/0 live=1\n"
                                  "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                  "ring_order=12 fence=2 doorbell=0 reply=0 attached=")) == 0);
@@ -361,7 +363,7 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_shared_executors_refuses_t
   VirtioGpuRvk device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(3u);
+  host.fail_mutex_at(4u);
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the contexts' shared executors") != nullptr);
   CHECK(!device.realized());
@@ -378,7 +380,7 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_rea
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(4u);   /* the fence interrupts, the blob table and the shared executors take the first three */
+  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the shared objects and the shared executors take the first four */
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -404,10 +406,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   /* realize, its fence interrupts, its blob table, its context table and its
-   * binding, reset, both tables, the status and the interrupts under it,
+   * binding, reset, every table, the status and the interrupts under it,
    * create, destroy and its table, and control, which an unrealized device
    * answers no further */
-  for (int violation = 0; violation < 14; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  for (int violation = 0; violation < 15; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -496,3 +498,20 @@ TEST(virtio_gpu_rvk_realize, the_import_bit_needs_the_library_to_import_as_well)
 
   CHECK((features_of(with_import) & guest_memory_import) != 0u);
   CHECK_EQ(features_of(without_import) & guest_memory_import, 0u); }
+
+/* Feature 053: the device's shared objects need a lock of their own, between
+ * the blob table's and the contexts' shared executors'. */
+TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_shared_objects_refuses_the_realize)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[128];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(3u);
+  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "no mutex for the shared objects") != nullptr);
+  CHECK(!device.realized());
+  TextBuffer again(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK(device.realized());
+  device.reset(); }

@@ -63,6 +63,23 @@ public:
     [[nodiscard]] Status import(uint64_t blob_id, const RvkBlobHandle &handle, uint64_t &device_memory);
     /* Worker. Nothing without an executor: destroying it released every import. */
     void                 release(uint64_t blob_id);
+
+    /* Worker. A descriptor for the object `wire_handle` names in this
+     * context's commands, for the device to publish (feature 053).
+     * invalid_state without an executor; not_supported for a library older
+     * than the ABI version that shares objects, a handle it did not make, or a
+     * kind it cannot export - only Vulkan exports anything. The descriptor is
+     * the caller's on ok and nothing is held here. */
+    [[nodiscard]] Status export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd);
+    /* Worker. `fd` made into an object of this context's, with `wire_handle`
+     * what the guest names it by. The descriptor stays the caller's whatever
+     * the answer: it is the device's, and an importer that keeps one
+     * duplicates it. Same refusals as export_object. */
+    [[nodiscard]] Status import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                       uint64_t &wire_handle);
+    /* Worker. Nothing without an executor: destroying it released every
+     * object it made. */
+    void                 release_object(uint32_t kind, uint64_t wire_handle);
     /* The API half (id >> 16) of the commands this context runs. */
     uint16_t             command_api() const;
     bool                 created() const;

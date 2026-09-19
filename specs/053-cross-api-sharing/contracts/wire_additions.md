@@ -60,20 +60,22 @@ it back, so the value the runtime keeps is the one the opening process gets.
  * *fd owned by the caller, or RVK_UNKNOWN when this API exports nothing of
  * that kind. Runs on the context's worker. */
 uint32_t (*export_object)(void *opaque, RvkExecutor *executor, uint32_t kind,
-                          uint64_t wire_handle, uint32_t *blob_kind, int *fd);
+                          uint64_t wire_handle, uint32_t *handle_kind, int *fd);
 /* That descriptor made into an object of this executor's, answered as the
  * handle the guest names it by. RVK_EXECUTED with *wire_handle non-zero, or
- * RVK_UNKNOWN. The callee owns `fd` on success; the caller still owns it on
- * failure. Runs on the context's worker. */
+ * RVK_UNKNOWN. `fd` stays the caller's, whatever the answer - unlike
+ * import_blob's, which is made for one import and owned by the callee: a
+ * shared object's descriptor is the device's for as long as the object lives,
+ * and every importer duplicates it. Runs on the context's worker. */
 uint32_t (*import_object)(void *opaque, RvkExecutor *executor, uint32_t kind,
-                          uint32_t blob_kind, int fd, uint64_t size,
+                          uint32_t handle_kind, int fd, uint64_t size,
                           uint64_t *wire_handle);
 /* That object destroyed. A no-op for a handle this executor never made.
  * Runs on the context's worker. */
-void (*release_object)(void *opaque, RvkExecutor *executor, uint64_t wire_handle);
+void (*release_object)(void *opaque, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle);
 ```
 
-`blob_kind` is `RVK_BLOB_DMA_BUF` or `RVK_BLOB_HOST_POINTER` and says what the
+`handle_kind` is `RVK_SHARED_HANDLE_DMA_BUF` or `RVK_SHARED_HANDLE_OPAQUE_FD` and says what the
 descriptor is, because a GL or CL import takes only a dma-buf while Vulkan
 takes either (research.md §7). An importer that cannot take the kind the
 publisher exported answers `RVK_UNKNOWN`, which is status 4.

@@ -93,7 +93,7 @@ share an id, and the count matches the pool's.
 |---|---|
 | `id_` | non-zero |
 | `kind_` | a `SharedObjectKind` |
-| `blob_kind_` | `RVK_BLOB_DMA_BUF` or `RVK_BLOB_HOST_POINTER`: what the descriptor is |
+| `handle_kind_` | `RVK_SHARED_HANDLE_DMA_BUF` or `RVK_SHARED_HANDLE_OPAQUE_FD`: what the descriptor is |
 | `size_` | non-zero |
 | `descriptor_` | an fd this table owns; -1 when empty |
 | `holders_` | contexts holding it, including the publisher |

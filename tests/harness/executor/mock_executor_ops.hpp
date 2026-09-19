@@ -15,6 +15,8 @@
 
 namespace av {
 
+class MockHost;
+
 class MockExecutorOps {
 public:
     static constexpr std::uint32_t unknown_id = 0x1FFF0u;
@@ -96,6 +98,32 @@ public:
      * a test scripted another. */
     static constexpr std::uint64_t handle_bit = 0x4000000000000000u;
 
+    /* Version 6's shared objects (feature 053). A descriptor this table
+     * exports is a real one, taken from `host` so the device that closes it is
+     * the one counting it; without a host, every export is refused, which is
+     * what a library that exports nothing looks like. */
+    void          descriptors_from(MockHost &host);
+    /* The abi_version the table reports, so a test can present a library from
+     * before a version it needs. Back to RVK_EXECUTOR_ABI_VERSION with 0. */
+    void          set_abi_version(std::uint32_t version);
+    /* The RVK_BLOB_* kind an export says its descriptor is. */
+    void          export_handle_kind(std::uint32_t kind);
+    /* The Nth export, or import, of an object from now is refused. */
+    void          refuse_export_at(std::uint32_t nth);
+    void          refuse_object_import_at(std::uint32_t nth);
+    /* The Nth object import from now answers RVK_EXECUTED naming nothing, a
+     * library that imported and cannot say what it made. */
+    void          withhold_object_handle_at(std::uint32_t nth);
+    std::uint32_t exported_objects();
+    std::uint32_t imported_objects();
+    std::uint32_t released_objects();
+    std::uint32_t live_objects();
+    /* What a live imported object was made of: false when there is none. */
+    bool          object_of(std::uint64_t wire_handle, std::uint32_t &kind, std::uint32_t &handle_kind,
+                            std::uint64_t &size, int &fd);
+    /* The handle an object import answers, above every blob handle. */
+    static constexpr std::uint64_t object_bit = 0x2000000000000000u;
+
 private:
     struct Executor {
         pthread_t thread;
@@ -106,7 +134,16 @@ private:
         RvkBlobHandle handle;
         bool          live;
     };
+    struct SharedObject {
+        std::uint64_t wire_handle;
+        std::uint32_t kind;
+        std::uint32_t handle_kind;
+        std::uint64_t size;
+        int           fd;
+        bool          live;
+    };
     static constexpr std::uint32_t max_imports = 512u;
+    static constexpr std::uint32_t max_objects = 64u;
 
     Executor *executor_of(RvkExecutor *executor);
     bool      alive(RvkExecutor *executor);
@@ -143,6 +180,16 @@ private:
     bool                       last_share_live_;
     bool                       creates_held_;
     std::uint32_t              creates_waiting_;
+    MockHost                  *descriptors_;
+    std::uint32_t              export_handle_kind_;
+    std::uint32_t              refuse_export_;
+    std::uint32_t              refuse_object_import_;
+    std::uint32_t              withhold_object_handle_;
+    std::uint32_t              exported_objects_;
+    std::uint32_t              imported_objects_;
+    std::uint32_t              released_objects_;
+    std::uint64_t              next_object_;
+    SharedObject               objects_[max_objects];
 };
 
 }  // namespace av
