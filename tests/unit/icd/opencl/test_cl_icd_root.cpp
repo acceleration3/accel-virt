@@ -492,6 +492,14 @@ struct ClIcdRootProbe {
     static ClObject *made(ClIcdRoot &root, const void *pointer, ClObject::Kind kind)
     { return root.objects_.made(pointer, kind); }
     static std::uint32_t outstanding_reads(ClIcdRoot &root) { return root.reads_.outstanding(); }
+    /* An object with no context behind it. Nothing the ICD does makes one -
+     * every object it hands out is made on a context, and the device's is the
+     * one it opened for itself - but every entry that reaches for a
+     * transport guards against it, and this is what drives those guards. */
+    static ClObject *without_a_context(ClIcdRoot &root, ClObject::Kind kind, std::uint64_t wire)
+    { ClObject *made = nullptr;
+      return root.objects_.make(kind, wire, nullptr, nullptr, made) == Status::ok ? made
+                                                                                  : nullptr; }
 };
 
 }  // namespace av::clicd
@@ -1190,3 +1198,88 @@ TEST(cl_icd_root, the_invariant_is_every_part_of_it)
   { ClIcdRig rig;
     av::clicd::ClEventWatcherProbe::miscount(av::clicd::ClIcdRootProbe::watcher(rig.root()));
     CHECK(!rig.root().invariants_hold()); } }
+
+/* ---- an object with no context behind it -------------------------------- */
+
+/* Every entry that reaches the host does it through its object's context, and
+ * every one of them guards against there not being one. Nothing the ICD does
+ * makes such an object - each is made on a context, and the device's is the
+ * one the ICD opened for itself - so the state is built here directly.
+ *
+ * What matters is that each entry refuses in the API's own words and sends
+ * nothing: a guard that dereferenced instead would be a null read inside the
+ * loader's own call. */
+TEST(cl_icd_root, every_entry_refuses_an_object_whose_context_is_gone)
+{ ClIcdRig rig;
+  ClObject *const queue =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::command_queue, 0x6500u);
+  ClObject *const buffer =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::mem, 0x6600u);
+  ClObject *const kernel =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::kernel, 0x6800u);
+  ClObject *const context =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::context, 0x6400u);
+  ClObject *const event =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::event, 0x6900u);
+  ClObject *const device =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::device, 0x6300u);
+  CHECK(queue != nullptr && buffer != nullptr && kernel != nullptr);
+  CHECK(context != nullptr && event != nullptr && device != nullptr);
+  if (queue == nullptr || buffer == nullptr || kernel == nullptr) return;
+  if (context == nullptr || event == nullptr || device == nullptr) return;
+
+  auto *const as_queue = reinterpret_cast<cl_command_queue>(queue);
+  auto *const as_buffer = reinterpret_cast<cl_mem>(buffer);
+  auto *const as_kernel = reinterpret_cast<cl_kernel>(kernel);
+  auto *const as_context = reinterpret_cast<cl_context>(context);
+  auto *const as_event = reinterpret_cast<cl_event>(event);
+  auto *const as_device = reinterpret_cast<cl_device_id>(device);
+
+  const std::uint32_t sent = rig.kmt().commands();
+  std::uint8_t        bytes[8] = {};
+
+  /* The maps and the unmap. */
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().map_buffer(as_queue, as_buffer, CL_TRUE, CL_MAP_READ, 0u, sizeof bytes,
+                              nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().unmap(as_queue, as_buffer, bytes, nullptr), CL_INVALID_CONTEXT);
+
+  /* The shared-memory entries. */
+  CHECK(rig.root().svm_alloc(as_context, CL_MEM_READ_WRITE, sizeof bytes, 0u) == nullptr);
+  rig.root().svm_free(as_context, bytes);
+  CHECK_EQ(rig.root().svm_map(as_queue, CL_TRUE, CL_MAP_READ, bytes, sizeof bytes, nullptr),
+           CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.root().svm_unmap(as_queue, bytes, nullptr), CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(as_kernel, 0u, bytes), CL_INVALID_CONTEXT);
+
+  /* The events. */
+  CHECK_EQ(rig.root().wait_for_events(1u, &as_event), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().event_info(as_event, CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr,
+                                 nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().watch_event(as_event, CL_COMPLETE, nullptr, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().set_user_event_status(as_event, CL_COMPLETE), CL_OUT_OF_RESOURCES);
+
+  /* And a device query the host would own. */
+  char        name[8] = {};
+  std::size_t answered = 0u;
+  CHECK_EQ(rig.root().device_info(as_device, CL_DEVICE_NAME, sizeof name, name, &answered),
+           CL_INVALID_DEVICE);
+
+  /* Not one of them reached the driver. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The watcher hands an event back to the root when its callback has run, and
+ * an event with no context is one there is nothing to deliver over. */
+TEST(cl_icd_root, a_watched_event_with_no_context_delivers_nothing)
+{ ClIcdRig rig;
+  ClObject *const event =
+      ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::event, 0x6900u);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.root().deliver_watched(*event);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
