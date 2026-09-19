@@ -141,8 +141,8 @@ description: "Tasks: OpenCL - the ICD on rvkgpu"
 - [X] T060 [P] `docs/protocol.md` records the ten commands, the executor ABI's version 5 and its callback, and the out-of-band raise — `progress` moves, `completed_fence` does not — in the same commit as the regenerated sources and `opencl_ids.toml`
 - [X] T061 [P] `docs/kb/07-usermode.md` gains "How the Khronos loader finds an ICD on a WDDM adapter" from research.md §1: the three discovery paths, why the value is `REG_SZ`, the one export, and the two platform queries an ICD cannot decline
 - [X] T062 [P] `README.md`'s layout gains `src/icd/opencl/` and `src/um/opencl/`, and the guest configuration row gains `--opencl`
-- [ ] T063 `cmake --build build-coverage -j32 && ctest --test-dir build-coverage -j32` is green: 100% branches over everything this feature added to `src/core`, `src/device` and `src/proto`, with every `AV_UNTESTABLE` justified at its site and the ratchet not risen
-- [ ] T064 `ctest --test-dir build-fuzz -j32 -L fuzz` is green: each target in `tests/fuzz/` this feature added survives its 60-second smoke run from its corpus under `tests/corpus/`
+- [X] T063 `cmake --build build-coverage -j32 && ctest --test-dir build-coverage -j32` is green: 100% branches over everything this feature added to `src/core`, `src/device` and `src/proto`, with every `AV_UNTESTABLE` justified at its site and the ratchet not risen
+- [X] T064 `ctest --test-dir build-fuzz -j32 -L fuzz` is green: each target in `tests/fuzz/` this feature added survives its 60-second smoke run from its corpus under `tests/corpus/`
 - [ ] T065 `tools/gate.sh` with `AV_GUEST_IMAGE` set passes: the package installs under Driver Verifier, the adapter starts, and the `--opencl` boot reports `rvkclprobe: N passed, 0 failed` with `CL_DEVICE_NAME` naming the host GPU
 
 **Checkpoint** — every task `[X]`, the full gate green, ready to fast-forward into `master`.
