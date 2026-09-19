@@ -1089,3 +1089,36 @@ Two things this rules out, both of which looked likely first:
 A kernel that has this behaviour is reported by `uname -r`; the one before it
 did not, which is why a checkout that was green before a reboot can fail
 after one with nothing changed in it.
+
+### What the device does about it
+
+It hands the same pages over as a **dma-buf** instead, which such a driver
+takes. `GuestDmaBuf` turns a blob's extents into one descriptor through
+udmabuf (`/dev/udmabuf`, `UDMABUF_CREATE_LIST`), so the host GPU sees one
+contiguous range and no byte is copied — the same thing `GuestPageAlias` does
+for a pointer, one layer down. The guest RAM memfd must be sealed against
+shrinking; udmabuf takes no other kind, and `MockHost::add_guest_ram` seals
+its own for the same reason.
+
+Which of the two a device uses is **one decision per device, not one per
+blob**: a buffer or an image is made for a single external handle type, and
+the memory types the two kinds land in are not the same either - on this host
+a userptr reaches 0x20 and a dma-buf 0x20, on another they differ. So
+`VulkanBackend` measures both when the guest first asks anything about
+importing, `ImportableTypes` holds the kind that won along with that kind's
+mask, and everything downstream reads it: the memory types the guest is shown,
+the handle type named on every buffer and image, and the kind `adopt` will
+take. A guest that names no `VkExternalMemoryBufferCreateInfo` of its own gets
+the right one; a guest that names one is not second-guessed.
+
+The device still offers both kinds through `import_kinds` and tries the
+dma-buf first, because a library that takes no descriptor - OpenCL's, whose
+import is `CL_MEM_USE_HOST_PTR` - and a host with no udmabuf both have to keep
+working. Both attempts are one import and carry one blob id: the refused one
+left the library holding nothing.
+
+A host where this matters can be told apart in one line:
+
+```
+ls /dev/udmabuf && vulkaninfo 2>/dev/null | grep -c VK_EXT_external_memory_dma_buf
+```
