@@ -422,3 +422,443 @@ TEST(opencl_backend, bind_signal_is_what_makes_an_event_callback_possible_at_all
   /* And unbinding puts it back. */
   backend.bind_signal(nullptr, nullptr);
   CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION); }
+
+/* ---- the ten commands of contracts/wire_additions.md --------------------
+ *
+ * Two shapes the wire had never carried before feature 052: a command that
+ * returns an address rather than a handle or a result, and a parameter that
+ * is an address inside memory this session allocated. Both are judged here
+ * as the device judges them - before the host's OpenCL is handed anything -
+ * so the cases below need no GPU except where they say so.
+ */
+
+namespace {
+
+constexpr std::size_t frame_bytes = 256u;
+constexpr std::size_t answer_bytes = 128u;
+
+/* One command as a guest sends it: the frame, how much of it the decoder
+ * read, and what it wrote back. */
+class ClCommand {
+public:
+    explicit ClCommand(std::uint32_t id)
+        : id_(id), bytes_{}, frame_(bytes_, sizeof bytes_), answer_{}, answered_(0u), consumed_(0u)
+    {}
+
+    ClCommand(const ClCommand &) = delete;
+    ClCommand &operator=(const ClCommand &) = delete;
+
+    WireWriter &frame() { return frame_; }
+
+    bool decodes(OpenClBackend &backend)
+    {
+        std::uint8_t block[block_bytes];
+        WireArena    arena(block, sizeof block);
+        WireReader   payload(bytes_, frame_.offset());
+        WireWriter   answer(answer_, sizeof answer_);
+        const bool   ran = backend.run(id_, payload, answer, arena);
+        consumed_ = frame_.offset() - payload.remaining();
+        answered_ = answer.offset();
+        return ran;
+    }
+
+    WireReader answer() const { return WireReader(answer_, answered_); }
+
+    /* The cl_int a result-returning command wrote. */
+    cl_int result() const
+    { WireReader reply = answer();
+      std::uint64_t value = 0u;
+      CHECK(reply.read_varint(value));
+      return static_cast<cl_int>(value); }
+
+    /* The address an address-returning command wrote. */
+    std::uint64_t address() const
+    { WireReader reply = answer();
+      std::uint64_t value = 0u;
+      CHECK(reply.read_pod(value));
+      return value; }
+
+    /* Every prefix of what the decoder read is refused, and none of them
+     * runs: a host that cut a frame short must not have half of it acted on. */
+    void is_refused_at_every_shorter_length(OpenClBackend &backend) const
+    { CHECK(consumed_ > 0u);
+      const std::uint64_t before = backend.ran();
+      for (std::size_t length = 0u; length < consumed_; length++) {
+          std::uint8_t block[block_bytes];
+          WireArena    arena(block, sizeof block);
+          std::uint8_t reply[answer_bytes] = {};
+          WireReader   payload(bytes_, length);
+          WireWriter   answer(reply, sizeof reply);
+          CHECK(!backend.run(id_, payload, answer, arena));
+      }
+      CHECK_EQ(backend.ran(), before); }
+
+private:
+    std::uint32_t id_;
+    std::uint8_t  bytes_[frame_bytes];
+    WireWriter    frame_;
+    std::uint8_t  answer_[answer_bytes];
+    std::size_t   answered_;
+    std::size_t   consumed_;
+};
+
+/* An address no clSVMAlloc ever answered. Page-aligned and plausible, which
+ * is the point: nothing about it looks wrong, and it is still refused. */
+constexpr std::uint64_t invented_address = 0x7F0000004000ull;
+
+void svm_alloc_frame(ClCommand &command, std::uint64_t context, std::uint64_t size)
+{
+    command.frame().write_pod<std::uint64_t>(context);
+    command.frame().write_varint<std::uint64_t>(CL_MEM_READ_WRITE);
+    command.frame().write_varint(size);
+    command.frame().write_varint<std::uint64_t>(0u);
+}
+
+void svm_map_frame(ClCommand &command, std::uint64_t address, std::uint64_t size)
+{
+    command.frame().write_pod<std::uint64_t>(0u);       /* the queue */
+    command.frame().write_varint<std::uint64_t>(CL_TRUE);
+    command.frame().write_varint<std::uint64_t>(CL_MAP_READ);
+    command.frame().write_pod<std::uint64_t>(address);
+    command.frame().write_varint(size);
+    command.frame().write_varint<std::uint64_t>(0u);    /* no events waited on */
+    command.frame().write_pod<std::uint8_t>(0u);
+    command.frame().write_pod<std::uint8_t>(0u);        /* no event wanted */
+}
+
+void svm_memcpy_frame(ClCommand &command, std::uint64_t destination, std::uint64_t source,
+                      std::uint64_t size)
+{
+    command.frame().write_pod<std::uint64_t>(0u);
+    command.frame().write_varint<std::uint64_t>(CL_FALSE);
+    command.frame().write_pod<std::uint64_t>(destination);
+    command.frame().write_pod<std::uint64_t>(source);
+    command.frame().write_varint(size);
+    command.frame().write_varint<std::uint64_t>(0u);
+    command.frame().write_pod<std::uint8_t>(0u);
+    command.frame().write_pod<std::uint8_t>(0u);
+}
+
+void kernel_arg_svm_frame(ClCommand &command, std::uint64_t address)
+{
+    command.frame().write_pod<std::uint64_t>(0u);       /* the kernel */
+    command.frame().write_varint<std::uint64_t>(0u);    /* argument 0 */
+    command.frame().write_pod<std::uint64_t>(address);
+}
+
+}  // namespace
+
+/* 3. clSVMAlloc - the first of the two address returns. A failed allocation
+ * is a null address; before feature 052's third classification the emitter
+ * wrote CL_OUT_OF_RESOURCES out of a void *-returning command and the guest
+ * read a failure as an address. */
+TEST(opencl_backend, clSVMAlloc_the_host_refuses_answers_a_null_address_and_remembers_nothing)
+{ OpenClBackend backend;
+  ClCommand command(av::clproto::kCmd_clSVMAlloc);
+  /* No context: the guest named none, so the host's allocator is asked with
+   * none and answers nothing. */
+  svm_alloc_frame(command, 0u, 256u);
+  CHECK(command.decodes(backend));
+  CHECK_EQ(backend.ran(), 1u);
+  CHECK_EQ(command.address(), 0u);
+  /* Nothing was remembered, so no address this context could name resolves. */
+  CHECK(backend.svm_for(invented_address, 1u) == nullptr);
+  CHECK(!backend.lost());
+  command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 4. clSVMFree - an address. */
+TEST(opencl_backend, clSVMFree_of_an_address_no_allocation_answered_is_refused_before_the_host)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clSVMFree);
+  invented.frame().write_pod<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint64_t>(invented_address);
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+
+  /* A null address is the API's own error rather than a refusal: the guest
+   * asked to free nothing, which is a call the host answers. */
+  ClCommand none(av::clproto::kCmd_clSVMFree);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint64_t>(0u);
+  CHECK(none.decodes(backend));
+  CHECK_EQ(backend.ran(), 1u);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 5. clEnqueueSVMMap - an address with an extent. */
+TEST(opencl_backend, clEnqueueSVMMap_of_an_address_outside_every_range_is_refused)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clEnqueueSVMMap);
+  svm_map_frame(invented, invented_address, 64u);
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+
+  ClCommand none(av::clproto::kCmd_clEnqueueSVMMap);
+  svm_map_frame(none, 0u, 64u);
+  CHECK(none.decodes(backend));
+  /* Reached the host, which refuses the queue the guest did not name. */
+  CHECK_EQ(none.result(), CL_INVALID_COMMAND_QUEUE);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 6. clEnqueueSVMUnmap - an address with no extent. */
+TEST(opencl_backend, clEnqueueSVMUnmap_of_an_address_outside_every_range_is_refused)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clEnqueueSVMUnmap);
+  invented.frame().write_pod<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint64_t>(invented_address);
+  invented.frame().write_varint<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint8_t>(0u);
+  invented.frame().write_pod<std::uint8_t>(0u);
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+
+  ClCommand none(av::clproto::kCmd_clEnqueueSVMUnmap);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_varint<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint8_t>(0u);
+  none.frame().write_pod<std::uint8_t>(0u);
+  CHECK(none.decodes(backend));
+  CHECK_EQ(none.result(), CL_INVALID_COMMAND_QUEUE);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 7. clEnqueueSVMMemcpy - two addresses judged against the one extent. Each
+ * is judged: a copy whose destination is real and whose source is invented
+ * would read host memory the guest never allocated. */
+TEST(opencl_backend, clEnqueueSVMMemcpy_judges_both_of_its_addresses)
+{ OpenClBackend backend;
+  ClCommand invented_source(av::clproto::kCmd_clEnqueueSVMMemcpy);
+  svm_memcpy_frame(invented_source, 0u, invented_address, 16u);
+  CHECK(!invented_source.decodes(backend));
+  invented_source.is_refused_at_every_shorter_length(backend);
+
+  ClCommand invented_destination(av::clproto::kCmd_clEnqueueSVMMemcpy);
+  svm_memcpy_frame(invented_destination, invented_address, 0u, 16u);
+  CHECK(!invented_destination.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+
+  ClCommand none(av::clproto::kCmd_clEnqueueSVMMemcpy);
+  svm_memcpy_frame(none, 0u, 0u, 16u);
+  CHECK(none.decodes(backend));
+  CHECK_EQ(none.result(), CL_INVALID_COMMAND_QUEUE);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 8. clEnqueueSVMMemFill - an address with an extent, and a pattern that
+ * crossed as bytes. A pattern_size larger than the bytes that arrived would
+ * have the host read past what the guest sent. */
+TEST(opencl_backend, clEnqueueSVMMemFill_refuses_a_pattern_shorter_than_the_size_it_claims)
+{ OpenClBackend backend;
+  ClCommand claimed(av::clproto::kCmd_clEnqueueSVMMemFill);
+  claimed.frame().write_pod<std::uint64_t>(0u);
+  claimed.frame().write_pod<std::uint64_t>(0u);
+  claimed.frame().write_pod<std::uint8_t>(1u);           /* a pattern is present */
+  claimed.frame().write_varint<std::uint64_t>(4u);       /* of four bytes */
+  for (std::uint8_t byte = 0u; byte < 4u; byte++) claimed.frame().write_pod<std::uint8_t>(byte);
+  claimed.frame().write_varint<std::uint64_t>(8u);       /* claiming eight */
+  claimed.frame().write_varint<std::uint64_t>(64u);
+  claimed.frame().write_varint<std::uint64_t>(0u);
+  claimed.frame().write_pod<std::uint8_t>(0u);
+  claimed.frame().write_pod<std::uint8_t>(0u);
+  CHECK(!claimed.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  claimed.is_refused_at_every_shorter_length(backend);
+
+  ClCommand honest(av::clproto::kCmd_clEnqueueSVMMemFill);
+  honest.frame().write_pod<std::uint64_t>(0u);
+  honest.frame().write_pod<std::uint64_t>(0u);
+  honest.frame().write_pod<std::uint8_t>(1u);
+  honest.frame().write_varint<std::uint64_t>(4u);
+  for (std::uint8_t byte = 0u; byte < 4u; byte++) honest.frame().write_pod<std::uint8_t>(byte);
+  honest.frame().write_varint<std::uint64_t>(4u);
+  honest.frame().write_varint<std::uint64_t>(64u);
+  honest.frame().write_varint<std::uint64_t>(0u);
+  honest.frame().write_pod<std::uint8_t>(0u);
+  honest.frame().write_pod<std::uint8_t>(0u);
+  CHECK(honest.decodes(backend));
+  CHECK_EQ(honest.result(), CL_INVALID_COMMAND_QUEUE);
+  honest.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 9. clSetKernelArgSVMPointer - an address with no extent at all, which is
+ * the one the guest is most likely to have invented: nothing else in the
+ * command says how big it is. */
+TEST(opencl_backend, clSetKernelArgSVMPointer_refuses_an_address_this_context_never_allocated)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clSetKernelArgSVMPointer);
+  kernel_arg_svm_frame(invented, invented_address);
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+
+  /* Null is the API's own "no argument", and the host answers it. */
+  ClCommand none(av::clproto::kCmd_clSetKernelArgSVMPointer);
+  kernel_arg_svm_frame(none, 0u);
+  CHECK(none.decodes(backend));
+  CHECK_EQ(none.result(), CL_INVALID_KERNEL);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 1. clEnqueueMapBuffer - the other address return, and the only command
+ * whose event depends on it. A map that failed answers no address, and the
+ * generated reply must then answer no event either: an event handle written
+ * for a failed map is one the guest would release and the host never made. */
+TEST(opencl_backend, clEnqueueMapBuffer_that_failed_answers_no_address_and_no_event)
+{ OpenClBackend backend;
+  ClCommand command(av::clproto::kCmd_clEnqueueMapBuffer);
+  command.frame().write_pod<std::uint64_t>(0u);          /* the queue */
+  command.frame().write_pod<std::uint64_t>(0u);          /* the buffer */
+  command.frame().write_varint<std::uint64_t>(CL_TRUE);
+  command.frame().write_varint<std::uint64_t>(CL_MAP_READ);
+  command.frame().write_varint<std::uint64_t>(0u);       /* offset */
+  command.frame().write_varint<std::uint64_t>(64u);      /* size */
+  command.frame().write_varint<std::uint64_t>(0u);
+  command.frame().write_pod<std::uint8_t>(0u);
+  command.frame().write_pod<std::uint8_t>(1u);           /* an event is wanted */
+  command.frame().write_pod<std::uint8_t>(1u);           /* and so is the error */
+  CHECK(command.decodes(backend));
+  WireReader    reply = command.answer();
+  std::uint64_t mapped = 1u;
+  std::uint64_t event = 1u;
+  std::uint64_t error = 0u;
+  CHECK(reply.read_pod(mapped));
+  CHECK(reply.read_pod(event));
+  CHECK(reply.read_varint(error));
+  CHECK_EQ(mapped, 0u);
+  CHECK_EQ(event, 0u);
+  CHECK_EQ(static_cast<cl_int>(error), CL_INVALID_COMMAND_QUEUE);
+  /* And no event was put in the registry for the guest to release. */
+  CHECK(backend.handle_for(av::clproto::HandleKind::event, 1u) == nullptr);
+  command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 2. clEnqueueUnmapMemObject - the address clEnqueueMapBuffer answered,
+ * handed back. It is judged the same way an SVM address is, because it is
+ * one: the guest may not name host memory it was never given. */
+TEST(opencl_backend, clEnqueueUnmapMemObject_refuses_a_mapped_address_it_never_answered)
+{ OpenClBackend backend;
+  ClCommand invented(av::clproto::kCmd_clEnqueueUnmapMemObject);
+  invented.frame().write_pod<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint64_t>(invented_address);
+  invented.frame().write_varint<std::uint64_t>(0u);
+  invented.frame().write_pod<std::uint8_t>(0u);
+  invented.frame().write_pod<std::uint8_t>(0u);
+  CHECK(!invented.decodes(backend));
+  CHECK_EQ(backend.ran(), 0u);
+  invented.is_refused_at_every_shorter_length(backend);
+
+  ClCommand none(av::clproto::kCmd_clEnqueueUnmapMemObject);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint64_t>(0u);
+  none.frame().write_varint<std::uint64_t>(0u);
+  none.frame().write_pod<std::uint8_t>(0u);
+  none.frame().write_pod<std::uint8_t>(0u);
+  CHECK(none.decodes(backend));
+  CHECK_EQ(none.result(), CL_INVALID_COMMAND_QUEUE);
+  none.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* 10. clSetEventCallback - the command whose callback the lowering drops.
+ * The generated server reaches this backend's own hook rather than calling
+ * the host with a null pfn_notify, which the API refuses outright; which of
+ * the two refusals comes back is how a test can tell the difference. */
+TEST(opencl_backend, clSetEventCallback_over_the_wire_reaches_the_backends_own_registration)
+{ OpenClBackend backend;
+  ClCommand unheard(av::clproto::kCmd_clSetEventCallback);
+  unheard.frame().write_pod<std::uint64_t>(0u);
+  unheard.frame().write_varint<std::uint64_t>(static_cast<std::uint64_t>(CL_COMPLETE));
+  CHECK(unheard.decodes(backend));
+  /* No device callback bound: the backend refuses rather than register one
+   * whose completion could never reach the guest. */
+  CHECK_EQ(unheard.result(), CL_INVALID_OPERATION);
+  unheard.is_refused_at_every_shorter_length(backend);
+
+  backend.bind_signal(&nothing_to_wake, nullptr);
+  ClCommand bound(av::clproto::kCmd_clSetEventCallback);
+  bound.frame().write_pod<std::uint64_t>(0u);
+  bound.frame().write_varint<std::uint64_t>(static_cast<std::uint64_t>(CL_COMPLETE));
+  CHECK(bound.decodes(backend));
+  /* Now it is the host that refuses the event the guest did not name, which
+   * is what proves the registration was attempted at all. */
+  CHECK_EQ(bound.result(), CL_INVALID_EVENT);
+  bound.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
+
+/* What the ten are for, on a host that has shared virtual memory: an address
+ * the device answered is the only one it will take back, for exactly the
+ * bytes it allocated, until it is freed. */
+TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accept)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  cl_int      error = CL_SUCCESS;
+  cl_device_id device = static_cast<cl_device_id>(host.device()->device());
+  const cl_context context = ::clCreateContext(nullptr, 1u, &device, nullptr, nullptr, &error);
+  if (context == nullptr) return;
+
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device()));
+  /* One reference for this test to hold past the shutdown, one for the ICD. */
+  CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
+  backend.made(av::clproto::HandleKind::context, context);
+
+  constexpr std::uint64_t allocated = 256u;
+  ClCommand allocation(av::clproto::kCmd_clSVMAlloc);
+  svm_alloc_frame(allocation, wire_of(context), allocated);
+  CHECK(allocation.decodes(backend));
+  const std::uint64_t base = allocation.address();
+  if (base == 0u) {
+      /* A device with no shared virtual memory; the refusals above are what
+       * this backend owes such a host, and they are asserted there. */
+      backend.shut_down();
+      CHECK_EQ(::clReleaseContext(context), CL_SUCCESS);
+      return;
+  }
+
+  /* Exactly what was allocated, and not a byte more. */
+  CHECK(backend.svm_for(base, allocated) == reinterpret_cast<void *>(base));
+  CHECK(backend.svm_for(base, allocated + 1u) == nullptr);
+  CHECK(backend.svm_for(base + allocated, 0u) == nullptr);
+  CHECK(backend.svm_for(base - 1u, 1u) == nullptr);
+
+  /* A map whose extent leaves the allocation is refused; the same map inside
+   * it reaches the host. */
+  ClCommand past_the_end(av::clproto::kCmd_clEnqueueSVMMap);
+  svm_map_frame(past_the_end, base, allocated + 1u);
+  CHECK(!past_the_end.decodes(backend));
+  ClCommand inside(av::clproto::kCmd_clEnqueueSVMMap);
+  svm_map_frame(inside, base, allocated);
+  CHECK(inside.decodes(backend));
+  CHECK_EQ(inside.result(), CL_INVALID_COMMAND_QUEUE);
+
+  /* A kernel argument points into the middle of an allocation, which is the
+   * one place an address that is not a base is legitimate. */
+  ClCommand middle(av::clproto::kCmd_clSetKernelArgSVMPointer);
+  kernel_arg_svm_frame(middle, base + 64u);
+  CHECK(middle.decodes(backend));
+  CHECK_EQ(middle.result(), CL_INVALID_KERNEL);
+
+  /* A copy out of the allocation into somewhere it never was. */
+  ClCommand stray(av::clproto::kCmd_clEnqueueSVMMemcpy);
+  svm_memcpy_frame(stray, invented_address, base, allocated);
+  CHECK(!stray.decodes(backend));
+
+  /* Freeing takes the base the host's allocator answered, and afterwards no
+   * address of that allocation resolves. */
+  ClCommand freeing(av::clproto::kCmd_clSVMFree);
+  freeing.frame().write_pod<std::uint64_t>(wire_of(context));
+  freeing.frame().write_pod<std::uint64_t>(base);
+  CHECK(freeing.decodes(backend));
+  CHECK(backend.svm_for(base, 1u) == nullptr);
+  CHECK(backend.svm_for(base + 64u, 1u) == nullptr);
+
+  CHECK(!backend.lost());
+  backend.shut_down();
+  CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }

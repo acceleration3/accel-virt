@@ -117,12 +117,14 @@ ClientTransport *GuestClContext::wire()
     AV_SCOPE("GuestClContext::wire");
     if (state_ != State::made) return nullptr;
     /* The one place loss is noticed, because it is the one place every call
-     * goes through. The device is lost with it: a context whose transport
-     * faulted has taken its whole device down (icd::IcdConnection). */
-    if (transport_.object().faulted()) {
+     * goes through. A faulted transport takes its whole device down, so every
+     * other context on the link finds out here too, at its own next call -
+     * which is what makes a sibling stop sending rather than send into a
+     * device that is gone (icd::IcdConnection). */
+    if (transport_.object().faulted()) connection_.lose(link_);
+    if (connection_.lost(link_)) {
         state_ = State::lost;
-        connection_.lose(link_);
-        log_.write("rvkcl: the context faulted; it is lost");
+        log_.write("rvkcl: the context's device faulted; the context is lost");
         return nullptr;
     }
     return &locked_.object();

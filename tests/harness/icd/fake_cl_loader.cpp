@@ -236,4 +236,22 @@ cl_int FakeClLoader::release_event(cl_event event)
     return table != nullptr ? table->clReleaseEvent(event) : CL_INVALID_EVENT;
 }
 
+cl_int FakeClLoader::finish(cl_command_queue queue)
+{
+    const cl_icd_dispatch *const table = first_word(queue);
+    return table != nullptr ? table->clFinish(queue) : CL_INVALID_COMMAND_QUEUE;
+}
+
+cl_int FakeClLoader::release_queue(cl_command_queue queue)
+{
+    const cl_icd_dispatch *const table = first_word(queue);
+    return table != nullptr ? table->clReleaseCommandQueue(queue) : CL_INVALID_COMMAND_QUEUE;
+}
+
+cl_int FakeClLoader::release_mem(cl_mem buffer)
+{
+    const cl_icd_dispatch *const table = first_word(buffer);
+    return table != nullptr ? table->clReleaseMemObject(buffer) : CL_INVALID_MEM_OBJECT;
+}
+
 }  // namespace av

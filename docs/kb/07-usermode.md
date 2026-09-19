@@ -220,6 +220,87 @@ format presents on `glFlush`, as it does on Windows; and a read of `GL_FRONT`
 is answered from the frame the swap already put on the window, with no round
 trip.
 
+## How the Khronos loader finds an ICD on a WDDM adapter
+
+Read from the Khronos OpenCL ICD loader source pinned by
+`tools/opencl_loader_pins.txt` (tag `v2024.10.24`, fetched into
+`third_party/opencl-loader/` by `tools/fetch_opencl_loader.py`) for feature
+052; it is the record `src/km/rvkgpu.inf` and `rvkcl.dll` are written against.
+Line numbers are that source's. Unlike Vulkan and OpenGL there is no loader to
+pin as a binary - Khronos publishes none - so the guest's `OpenCL.dll` is this
+source cross-compiled with the toolchain that builds `rvkgpu.sys`
+(research.md §2).
+
+**Discovery runs once per process** - `khrIcdOsVendorsEnumerateOnce` wraps it
+in `InitOnceExecuteOnce` (`icd_windows.c:409`) - and
+`khrIcdOsVendorsEnumerate` (`:186`) walks `OCL_ICD_FILENAMES` from the
+environment first (`icd.c:369`), then three discovery paths in order, then the
+global vendors key. Each path's failure is traced and the next runs anyway.
+
+1. **`khrIcdOsVendorsEnumerateDXGK`** (`icd_windows_dxgk.c:32`). `gdi32.dll` is
+   loaded and `D3DKMTSubmitPresentBltToHwQueue`'s presence is the OS check
+   (`:42`); `D3DKMTEnumAdapters2` lists every adapter (`:49`) and each is asked
+   `D3DKMTQueryAdapterInfo` (`:55`) with a registry query -
+   `LOADER_QUERY_REGISTRY_ADAPTER_KEY`, `translate_path = TRUE`, **`value_type
+   = REG_SZ`**, `value_name` from `getOpenCLRegKeyName` (`:97-99`). The value
+   read is handed to `khrIcdVendorAdd` with the adapter's LUID.
+2. **`khrIcdOsVendorsEnumerateHKR`** (`icd_windows_hkr.c:206`): SetupAPI over
+   the display device class and then the software-component class (`:225`,
+   `:356`), `CM_Open_DevNode_Key(..., CM_REGISTRY_SOFTWARE)` (`:83`), and
+   `RegQueryValueExA` of the same value name.
+3. **`khrIcdOsVendorsEnumerateAppPackage`** (`icd_windows_apppackage.c:36`),
+   for an ICD shipped inside an MSIX package, and then
+   `HKLM\SOFTWARE\Khronos\OpenCL\Vendors` (`icd_windows.c:194`). This driver
+   uses neither.
+
+**Why the value is `REG_SZ`.** The INF writes `HKR,, OpenCLDriverName,
+0x00000000, "%13%\rvkcl.dll"` - a plain string, not the `REG_MULTI_SZ` that
+`VulkanDriverName` and `OpenGLDriverName` beside it use. Path 1 asks for
+`REG_SZ` and only retries the query as `REG_MULTI_SZ` when the call itself
+returns a failure `NTSTATUS` (`icd_windows_dxgk.c:118-121`, "Accepting
+multi-string registry key type"); path 2 accepts `REG_SZ` and, after the read,
+tolerates `REG_MULTI_SZ` (`icd_windows_hkr.c:132`). `REG_SZ` is the one type
+both take on their first attempt, and it is what makes the two paths agree
+about an adapter they both see. `translate_path` is the flag that has the
+`%13%` driver-store path resolved.
+
+The value name is chosen at runtime by `getOpenCLRegKeyName`
+(`icd_windows_hkr.c:55`): a 64-bit loader always reads `OpenCLDriverName`,
+and a 32-bit one reads `OpenCLDriverNameWow` when `IsWow64Process` says so.
+Feature 061 writes that second value, as it does for the other two ICDs.
+
+**One export.** `khrIcdVendorAdd` (`icd.c:70`) resolves exactly one symbol by
+name from the DLL: **`clGetExtensionFunctionAddress`** (`:92`). Nothing else is
+looked up as an export - `clIcdGetPlatformIDsKHR` is obtained *through* it
+(`:100`) and the ICD is refused if that answers null. So `rvkcl.dll` exports
+that function and `clIcdGetPlatformIDsKHR`, which older loaders looked up
+directly and which costs a line, and nothing else: the rest of the API is
+reached through the dispatch table, and an export the loader never looks up
+would only invite direct linking that bypasses it.
+
+**What the loader does with the platforms.** `clIcdGetPlatformIDs(0, NULL,
+&count)` then the fill call (`:108`, `:121`); a null `cl_platform_id` in the
+array is skipped (`:136`), but a **non-null platform's `dispatch` is
+dereferenced without a check** (`:140`), so every object this ICD hands out is
+a struct whose first member is a `cl_icd_dispatch *` the ICD has already
+filled in - a null there is a crash inside the loader, not a rejection.
+
+**The two queries an ICD cannot decline** are
+`clGetPlatformInfo(CL_PLATFORM_ICD_SUFFIX_KHR, ...)`, asked twice: once for the
+size (`:140`) and once for the bytes (`:155`). Either one answering anything
+but `CL_SUCCESS` drops that platform silently, and a platform with no suffix is
+a platform the loader will not name. Both are answered from the platform alone,
+before any device exists and without opening an adapter, because the loader
+asks them while enumerating - an ICD that opened a device here would open one
+in every process that ever calls `clGetPlatformIDs`. `rvkcl.dll` answers `RVK`.
+
+**Load and unload.** The DLL is loaded for the probe, loaded a second time per
+platform accepted (`:178`), and the probe's own reference is freed at the end
+of `khrIcdVendorAdd` whatever happened - so an ICD that offers no platform is
+loaded and freed with nothing kept, and `DllMain` runs under the OS loader
+lock. This ICD's entry point therefore returns `TRUE` and does nothing
+(research.md §3): the first real call is where its state is built.
+
 ## Presenting from Vulkan
 
 `VK_KHR_win32_surface` + `VK_KHR_swapchain` on Windows are implemented by the

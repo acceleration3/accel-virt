@@ -587,7 +587,7 @@ TEST(cl_icd_root, completing_a_user_event_is_sent_and_a_pointer_of_no_event_is_n
   CHECK_EQ(rig.kmt().commands(), before + 1u);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_icd_root, a_wait_takes_one_command_for_all_of_its_events)
+TEST(cl_icd_root, a_wait_asks_what_completed_and_never_asks_the_host_to_block)
 { ClIcdRig rig;
   cl_device_id device = nullptr;
   cl_context context = opened_context(rig, device);
@@ -597,12 +597,41 @@ TEST(cl_icd_root, a_wait_takes_one_command_for_all_of_its_events)
   CHECK(first != nullptr);
   CHECK(second != nullptr);
 
+  /* Both already complete: one status query each, and the wait is over.
+   * Nothing the device runs for this holds its worker. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   const cl_event both[] = {first, second};
   const std::uint32_t before = rig.kmt().commands();
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().wait_for_events(2u, both), CL_SUCCESS);
-  /* One round trip, not one per event: the wait is what the host does. */
+  CHECK_EQ(rig.kmt().commands(), before + 2u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_wait_ends_on_the_first_event_that_failed_and_asks_no_further)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event first = made_user_event(rig, context);
+  cl_event second = made_user_event(rig, context);
+  CHECK(first != nullptr);
+  CHECK(second != nullptr);
+
+  /* A negative status is the command's own failure. The API names one error
+   * for it, and the second event is never asked about. */
+  const cl_int failed = CL_INVALID_VALUE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&failed), sizeof failed);
+  const cl_event both[] = {first, second};
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.loader().wait_for_events(2u, both),
+           CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
   CHECK_EQ(rig.kmt().commands(), before + 1u);
+
+  /* And a host that will not answer the query ends the wait with its own
+   * error rather than asking round after round. */
+  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  CHECK_EQ(rig.loader().wait_for_events(1u, both), CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_icd_root, a_wait_of_nothing_or_of_something_that_is_not_an_event_asks_the_host_nothing)

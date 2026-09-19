@@ -210,6 +210,20 @@ and never moves an existing one. `tools/check_protocol_ids.py` is the ctest gate
 that the ids in those files stay inside the range this table gives their API.
 Vulkan owns `0x1____`, OpenCL `0x2____`, OpenGL `0x3____`.
 
+Feature 052 appended ten to OpenCL's range, `0x2006A` to `0x20073` in this
+order: `clEnqueueMapBuffer`, `clEnqueueUnmapMemObject`, `clSVMAlloc`,
+`clSVMFree`, `clEnqueueSVMMap`, `clEnqueueSVMUnmap`, `clEnqueueSVMMemcpy`,
+`clEnqueueSVMMemFill`, `clSetKernelArgSVMPointer`, `clSetEventCallback`. Two of
+them are shapes the wire did not have before. An SVM address crosses as a
+`uint64_t` and the device resolves it against the allocations that context's
+own `clSVMAlloc` made; an address, or an address and extent, that does not lie
+inside one live allocation does not decode, and the context faults with code 6
+rather than the host following a pointer a guest chose. And
+`clSetEventCallback` carries no function pointer: a guest address is not
+something the host can call, so the command says only which event and which
+status, the device registers a callback of its own with the host, and the guest
+is told through the fence page's out-of-band raise and asks what completed.
+
 The device copies the payload once, then walks it: a command of the
 context's sub-API runs through the context's executor; a transport command the
 table below defines runs in the device itself; another API's command, any other
@@ -296,7 +310,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, now version 4, is what runs a context's commands on
+`src/device/abi/rvk_executor.h`, now version 5, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -340,6 +354,21 @@ claiming version 4 without `create_with_options` fails realize. On OpenGL,
 `import_kinds` answers `RVK_BLOB_HOST_POINTER` and `import_blob` takes the
 pointer as the context's bulk-data region - one at a time, its handle the
 pointer's address - rather than as a GL object.
+
+**Version 5 adds `set_signal(executor, signal, context)`** (feature 052), the
+first entry in the table that runs the other way: the device hands the library
+a function and an opaque, and the library calls `signal(context)` when the host
+API finishes something on a thread the device never gave it - the host's OpenCL
+driver calling back an event callback. Nothing about what completed crosses
+here; the call must do almost nothing and must not call back into the table,
+and the guest asks. The device gives it on the context's worker as soon as
+there is an executor to give it to, and never takes it back; a table claiming
+version 5 without `set_signal` fails realize, and a version 4 library signals
+nothing, so a guest on one waits for its events at a synchronising call
+instead. Because OpenCL cannot unregister a callback, a signal may arrive after
+the executor it names is destroyed: the `context` the device hands over lives
+as long as the device does, and a signal for a context that is gone is
+tolerated rather than a fault.
 
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a
@@ -701,6 +730,17 @@ fence, the progress so far and the fault code. Nothing is written after a
 fault. Every write is the whole page from the device's own counters; the
 device never reads the page back, so a page the guest overwrites is rewritten
 by the next write.
+
+**The out-of-band raise** (feature 052). A host API that finishes work on a
+thread the device never gave it - OpenCL's event callbacks - reaches the guest
+through this page too, and the shape it is allowed is exactly what the guest's
+history check already accepts: **`progress` moves, `completed_fence` does not,
+and the interrupt is raised.** Nothing completed, because no batch did. The
+foreign thread only sets a flag and wakes the context's worker, the way the
+doorbell's ioeventfd does; the worker writes the page. Raises coalesce, so a
+burst of host completions is one move of `progress` and one interrupt, and the
+page never says which event finished - there is no room for one and no need,
+since the guest asks over the wire. A faulted context raises nothing.
 
 | Fault code | Reason |
 |--:|---|

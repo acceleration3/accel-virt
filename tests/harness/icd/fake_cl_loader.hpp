@@ -76,6 +76,9 @@ public:
     cl_program     create_program(cl_context context, const char *source, cl_int *error);
     cl_int         build_program(cl_program program, const char *options);
     cl_kernel      create_kernel(cl_program program, const char *name, cl_int *error);
+    cl_int         finish(cl_command_queue queue);
+    cl_int         release_queue(cl_command_queue queue);
+    cl_int         release_mem(cl_mem buffer);
     /* Events, through the same table: a slot the ICD left null would be a
      * null call here rather than a test that quietly passed. */
     cl_event       create_user_event(cl_context context, cl_int *error);

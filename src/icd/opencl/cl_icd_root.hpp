@@ -22,6 +22,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/cl_device_report.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
 #include "icd/opencl/cl_event_owner.hpp"
@@ -202,6 +203,7 @@ private:
     ClDeviceReport         device_;
     ClObject              *device_object_;
     ClEventWatcher         watcher_;
+    ClBlockingWait         waits_;
 };
 
 }  // namespace av::clicd

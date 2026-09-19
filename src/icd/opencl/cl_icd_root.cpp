@@ -1,5 +1,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "icd/common/sliced_wait.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
@@ -44,7 +46,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, 0u), objects_(memory, dispatch_.table()), connection_(kmt),
       contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, *this)
+      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -606,15 +608,25 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     if (into == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* Enqueued without blocking whatever the application asked for, and with
+     * an event whether or not it wanted one: the blocking half is this side's
+     * wait on that event, so the host is never asked to hold its worker. */
     uint64_t     produced = 0u;
     const cl_int ran = av::clproto::rvk_clEnqueueReadBuffer(
-        *wire, held->wire(), named->wire(), blocking, offset, bytes, into, 0u, nullptr,
-        event != nullptr ? &produced : nullptr);
-    if (ran == CL_SUCCESS && event != nullptr) {
+        *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, into, 0u, nullptr, &produced);
+    if (ran != CL_SUCCESS) return ran;
+    cl_int waited = CL_SUCCESS;
+    if (blocking == CL_TRUE)
+        waited = waits_.until_complete(*wire, &produced, 1u, icd::SlicedWait::forever);
+    if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+    } else {
+        /* An application that wanted no event still made one here, and this
+         * is the only place that can give it back. */
+        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
     }
-    return ran;
+    return waited;
 }
 
 cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -628,15 +640,25 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (from == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* Enqueued without blocking whatever the application asked for, and with
+     * an event whether or not it wanted one: the blocking half is this side's
+     * wait on that event, so the host is never asked to hold its worker. */
     uint64_t     produced = 0u;
     const cl_int ran = av::clproto::rvk_clEnqueueWriteBuffer(
-        *wire, held->wire(), named->wire(), blocking, offset, bytes, from, 0u, nullptr,
-        event != nullptr ? &produced : nullptr);
-    if (ran == CL_SUCCESS && event != nullptr) {
+        *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, from, 0u, nullptr, &produced);
+    if (ran != CL_SUCCESS) return ran;
+    cl_int waited = CL_SUCCESS;
+    if (blocking == CL_TRUE)
+        waited = waits_.until_complete(*wire, &produced, 1u, icd::SlicedWait::forever);
+    if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+    } else {
+        /* An application that wanted no event still made one here, and this
+         * is the only place that can give it back. */
+        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
     }
-    return ran;
+    return waited;
 }
 
 cl_int ClIcdRoot::finish(cl_command_queue queue)
@@ -646,10 +668,17 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* A synchronous command: the reply lands when the host has finished, and
-     * the transport sleeps on the context's fence until it does. Nothing
-     * polls. */
-    return av::clproto::rvk_clFinish(*wire, held->wire());
+    /* Not the host's own clFinish: that blocks the device's worker for as
+     * long as the queue takes, and a guest waiting on the fence past TdrDelay
+     * has dxgkrnl reset the adapter. A marker is what the end of the queue
+     * looks like as an event, and waiting for it holds nothing. */
+    uint64_t     marker = 0u;
+    const cl_int enqueued = av::clproto::rvk_clEnqueueMarkerWithWaitList(
+        *wire, held->wire(), 0u, nullptr, &marker);
+    if (enqueued != CL_SUCCESS) return enqueued;
+    const cl_int waited = waits_.until_complete(*wire, &marker, 1u, icd::SlicedWait::forever);
+    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, marker));
+    return waited;
 }
 
 cl_int ClIcdRoot::flush(cl_command_queue queue)
@@ -928,10 +957,10 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     if (count > max_waited) return CL_OUT_OF_RESOURCES;
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* A synchronous command: the reply lands when the host has reached them,
-     * and the transport sleeps on the context's fence until it does. Nothing
-     * here polls. */
-    return av::clproto::rvk_clWaitForEvents(*wire, waited, handles);
+    /* clWaitForEvents has no timeout, so the wait is unbounded - but every
+     * host call it makes answers at once, which is the whole difference
+     * between an unbounded wait and a held worker. */
+    return waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever);
 }
 
 cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
