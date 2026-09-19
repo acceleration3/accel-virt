@@ -128,6 +128,11 @@ reinterpreted.
   than importing the `blob_bytes` snapshot (T024): placing a snapshot needs
   page-aligned host memory the replay would have to own, and the recording
   carries the bytes for a replay that can. `contracts/rvkrecord.md` says so.
+- A second fuzz target was added after the tests were audited against
+  principle IV: `tests/fuzz/fuzz_recording_printer.cpp`. The reader frames
+  records, but a batch record's payload is the guest's own framed commands, and
+  the printer is what walks those - bytes it did not write, which IV.3 asks for
+  a target of. Its corpus is the reader's.
 - SC-002 (T031) is left unticked because the number is a guest run's. The
   no-op round trip it compares is `rvktest.exe`'s, and the comparison needs two
   boots - one with `--record` and one without - which this environment cannot

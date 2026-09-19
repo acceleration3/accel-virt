@@ -494,8 +494,12 @@ The device can write down what crossed the wire (`docs/protocol.md`, feature
   produced - a round trip with the wire in the middle.
 
 A recording read back is bytes this side did not write, so `RecordingReader`
-has a hostile-input table and `fuzz_recording_reader` at L3; the printer and
-the replay are built on it and never on the bytes directly.
+has a hostile-input table and `fuzz_recording_reader` at L3. The printer and
+the replay are built on the reader and never frame a record themselves, but a
+batch record's payload is the guest's own framed commands, which the reader
+does not walk: `fuzz_recording_printer` drives the printer over arbitrary bytes
+for that, with and without the payload hex and under a filter that reads every
+command's name.
 
 ### The full-stack rig: L2 and L4 joined
 

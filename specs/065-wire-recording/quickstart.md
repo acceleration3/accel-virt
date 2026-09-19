@@ -39,8 +39,11 @@ ctest --test-dir build -R 'recording|wire_recorder|replay' --output-on-failure
 ```bash
 cmake -S . -B build-fuzz -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DAV_FUZZ=ON
 cmake --build build-fuzz -j32
-ctest --test-dir build-fuzz -R fuzz_recording_reader_smoke --output-on-failure
+ctest --test-dir build-fuzz -R 'fuzz_recording_(reader|printer)_smoke' --output-on-failure
 ```
+
+`fuzz_recording_reader` frames the records; `fuzz_recording_printer` walks the
+guest's own commands inside a batch record, which the reader never does.
 
 ## Making a recording by hand
 
