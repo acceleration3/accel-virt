@@ -346,8 +346,14 @@ foreach(src ${AV_UNIT_TESTS})
   target_link_libraries(${name} PRIVATE av_harness)
   target_compile_options(${name} PRIVATE ${AV_TEST_FLAGS})
   add_test(NAME ${name} COMMAND ${name})
+  # MESA_SHADER_CACHE_DISABLE: a warm Mesa shader cache has the driver spawn a
+  # thread that allocates out of anonymous memory, which LeakSanitizer reports
+  # as `<unknown module>` and no `leak:` suppression can name. Whether it
+  # happens depends on what the machine compiled before, so the same test
+  # passes or fails on one box depending on its cache - and the cache buys
+  # these tests nothing, since none of them measures compile time.
   set_tests_properties(${name} PROPERTIES
-    ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw")
+    ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw;MESA_SHADER_CACHE_DISABLE=true")
   # Two tests name the generated clients' headers by the names the generator
   # includes them by; the clients themselves are in av_core.
   # The full-stack rig's rvk run links the executor library's own entry point:
