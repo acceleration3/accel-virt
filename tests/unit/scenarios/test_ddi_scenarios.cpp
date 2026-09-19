@@ -62,6 +62,8 @@
 #include "harness/vidsch/fake_vidsch.hpp"
 #include "proto/commands/present_command.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -905,6 +907,222 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
            0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+namespace {
+
+/* The runtime side of dxgkrnl for a *shared* allocation (feature 053): one
+ * creating process's device and one opening process's, both on this adapter,
+ * with the private driver data dxgkrnl carries from the first to the second
+ * untouched. Separate from Runtime, which is the display path's primary and
+ * has one device; what this exercises is two. */
+class SharedRuntime {
+public:
+    /* Four pages, which is what the record has to agree with: an allocation is
+     * rounded up to whole pages and a record that names any other size is not
+     * this allocation's. */
+    static constexpr std::uint64_t bytes = 4u * 4096u;
+
+    SharedRuntime(const DdiTable &table, void *adapter)
+        : table_(table), adapter_(adapter), info_{}, opens_{}, devices_{}, private_{}, kernel_handle_(0u) {}
+
+    template <typename Routine>
+    Routine routine(DdiSlot slot) const { return reinterpret_cast<Routine>(table_.routine(slot)); }
+
+    /* A create that asks for an identity: 48 bytes of descriptor and 40 of an
+     * unassigned record. `size` other than the allocation's is what a creator
+     * lying about what it is sharing looks like. */
+    std::int32_t create(std::uint64_t record_size, std::uint32_t kind = av::SharedObjectKind::memory)
+    {
+        const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
+                                                  av::SurfaceLayout(64u, 64u, 21u, 256u), bytes,
+                                                  av::ScanoutTarget());
+        CHECK_STATUS(descriptor.encode(private_, av::AllocationDescriptor::encoded_size), av::Status::ok);
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(kind), 0u, record_size);
+        CHECK_STATUS(asking.encode(private_ + av::AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     av::Status::ok);
+        info_.pPrivateDriverData = private_;
+        info_.PrivateDriverDataSize = sizeof private_;
+        info_.Flags2 = 0xFFFFFFFFu;
+        av::DxgkargCreateAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationInfo = &info_;
+        const std::int32_t status =
+            routine<std::int32_t (*)(void *, av::DxgkargCreateAllocationRecord *)>(DdiSlot::DxgkDdiCreateAllocation)(
+                adapter_, &request);
+        if (status >= 0) kernel_handle_ = handles_.insert(info_.hAllocation);
+        return status;
+    }
+
+    /* The id the miniport minted into the creator's own bytes, which is the
+     * value the runtime keeps and hands the opening process. */
+    av::SharedObjectRecord minted() const
+    {
+        av::SharedObjectRecord record;
+        CHECK_STATUS(record.decode(private_ + av::AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     av::Status::ok);
+        return record;
+    }
+
+    std::int32_t create_device(std::uint32_t which)
+    {
+        av::DxgkargCreateDeviceRecord create = {};
+        const std::int32_t status =
+            routine<std::int32_t (*)(void *, av::DxgkargCreateDeviceRecord *)>(DdiSlot::DxgkDdiCreateDevice)(
+                adapter_, &create);
+        devices_[which] = create.hDevice;
+        return status;
+    }
+
+    /* An open with `carried` as the private data the opening process was
+     * handed - the creator's own bytes by default, which is what dxgkrnl does. */
+    std::int32_t open(std::uint32_t which, const std::uint8_t *carried = nullptr,
+                      std::uint32_t carried_size = 0u)
+    {
+        opens_[which] = av::DxgkOpenAllocationInfoRecord{};
+        opens_[which].hAllocation = kernel_handle_;
+        opens_[which].pPrivateDriverData =
+            const_cast<std::uint8_t *>(carried != nullptr ? carried : private_);
+        opens_[which].PrivateDriverDataSize = carried != nullptr ? carried_size : sizeof private_;
+        av::DxgkargOpenAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pOpenAllocation = &opens_[which];
+        return routine<std::int32_t (*)(void *, av::DxgkargOpenAllocationRecord *)>(DdiSlot::DxgkDdiOpenAllocation)(
+            devices_[which], &request);
+    }
+
+    std::int32_t close(std::uint32_t which)
+    {
+        void *handle = opens_[which].hDeviceSpecificAllocation;
+        av::DxgkargCloseAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pOpenHandleList = &handle;
+        return routine<std::int32_t (*)(void *, const av::DxgkargCloseAllocationRecord *)>(
+            DdiSlot::DxgkDdiCloseAllocation)(devices_[which], &request);
+    }
+
+    std::int32_t destroy()
+    {
+        void *handle = info_.hAllocation;
+        av::DxgkargDestroyAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationList = &handle;
+        return routine<std::int32_t (*)(void *, const av::DxgkargDestroyAllocationRecord *)>(
+            DdiSlot::DxgkDdiDestroyAllocation)(adapter_, &request);
+    }
+
+    std::int32_t destroy_device(std::uint32_t which)
+    { return routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyDevice)(devices_[which]); }
+
+private:
+    const DdiTable                  &table_;
+    void                            *adapter_;
+    av::DxgkAllocationInfoRecord     info_;
+    av::DxgkOpenAllocationInfoRecord opens_[2];
+    void                            *devices_[2];
+    std::uint8_t                     private_[av::AllocationDescriptor::encoded_size +
+                                              av::SharedObjectRecord::encoded_size];
+    av::FakeHandleTable              handles_;
+    std::uint32_t                    kernel_handle_;
+};
+
+}  // namespace
+
+/* Feature 053, US1 at L2: an allocation created shareable is opened by a second
+ * device with the creator's own private driver data, closed in either order and
+ * destroyed - every call through the table dxgkrnl registered. */
+TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_in_either_order)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    /* The id reached the creator's bytes, which is the only channel that
+     * crosses a process boundary. */
+    const av::SharedObjectRecord record = runtime.minted();
+    CHECK(record.assigned());
+    CHECK(record.object_id() != 0u);
+    CHECK(record.adapter_id() != 0u);
+    CHECK_EQ(record.size(), SharedRuntime::bytes);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.create_device(1u), 0);
+    CHECK_EQ(runtime.open(0u), 0);
+    CHECK_EQ(runtime.open(1u), 0);
+    /* Neither open may destroy what the other still holds. */
+    CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
+    CHECK_EQ(runtime.close(1u), 0);
+    CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
+    CHECK_EQ(runtime.close(0u), 0);
+    CHECK_EQ(runtime.destroy(), 0);
+    CHECK_EQ(runtime.destroy_device(1u), 0);
+    CHECK_EQ(runtime.destroy_device(0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* The other order, and the close of the creating device last: what a process
+ * that exits holding a shared allocation leaves behind is nothing. */
+TEST(ddi_scenario, a_device_destroyed_holding_a_shared_allocation_lets_go_of_it)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.create_device(1u), 0);
+    CHECK_EQ(runtime.open(0u), 0);
+    CHECK_EQ(runtime.open(1u), 0);
+    /* The opening process exits without closing. */
+    CHECK_EQ(runtime.destroy_device(1u), 0);
+    CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
+    CHECK_EQ(runtime.destroy_device(0u), 0);
+    CHECK_EQ(runtime.destroy(), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
+
+/* A record no miniport of this adapter wrote opens nothing, and the allocation
+ * it named is not opened either: a forger gets a refusal, not a handle. */
+TEST(ddi_scenario, an_open_carrying_a_forged_record_is_refused_and_opens_nothing)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    const av::SharedObjectRecord real = runtime.minted();
+    std::uint8_t forged[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+    const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
+                                              av::SurfaceLayout(64u, 64u, 21u, 256u), SharedRuntime::bytes,
+                                              av::ScanoutTarget());
+    CHECK_STATUS(descriptor.encode(forged, av::AllocationDescriptor::encoded_size), av::Status::ok);
+    struct { std::uint64_t id; std::uint64_t adapter; std::uint64_t size; std::uint32_t kind; } lies[] = {
+        {real.object_id() + 1u, real.adapter_id(), SharedRuntime::bytes, av::SharedObjectKind::memory},
+        {real.object_id(), real.adapter_id() ^ 2u, SharedRuntime::bytes, av::SharedObjectKind::memory},
+        {real.object_id(), real.adapter_id(), SharedRuntime::bytes, av::SharedObjectKind::native_fence},
+        {real.object_id(), real.adapter_id(), SharedRuntime::bytes * 2u, av::SharedObjectKind::memory},
+    };
+    for (const auto &lie : lies) {
+        av::SharedObjectRecord record(0u, av::SharedObjectKind(lie.kind), 0u, lie.size);
+        record.assign(lie.id, lie.adapter);
+        CHECK_STATUS(record.encode(forged + av::AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     av::Status::ok);
+        CHECK(runtime.open(0u, forged, sizeof forged) < 0);
+    }
+    /* A length that is not the shared one at all, which is a record that is
+     * not there. */
+    CHECK(runtime.open(0u, forged, av::AllocationDescriptor::encoded_size) < 0);
+    /* And the real one still opens: nothing above spent the allocation. */
+    CHECK_EQ(runtime.open(0u), 0);
+    CHECK_EQ(runtime.close(0u), 0);
+    CHECK_EQ(runtime.destroy(), 0);
+    CHECK_EQ(runtime.destroy_device(0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
 { LoadedDriver driver;
