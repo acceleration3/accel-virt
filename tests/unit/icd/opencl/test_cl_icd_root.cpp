@@ -1412,3 +1412,22 @@ TEST(cl_icd_root, a_callback_registration_with_no_callback_is_an_invalid_value)
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
+
+/* The deprecated 1.2 queue call, with a root behind it: an application built
+ * against the older header reaches this slot and nothing else, so it has to
+ * make the same queue the properties call does. */
+TEST(cl_icd_root, the_deprecated_queue_call_makes_the_same_queue)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_int error = CL_INVALID_VALUE;
+  cl_command_queue queue =
+      rig.root().dispatch().clCreateCommandQueue(context, device, 0u, &error);
+  CHECK(queue != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  /* It is a queue of this ICD, carrying its dispatch table like any other. */
+  CHECK(rig.loader().dispatch_of(queue) == &rig.root().dispatch());
+  CHECK(rig.root().invariants_hold()); }

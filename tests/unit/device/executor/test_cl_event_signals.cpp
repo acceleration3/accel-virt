@@ -48,6 +48,7 @@ struct ClEventSignalsProbe {
     static void count_past_the_table(ClEventSignals &signals)
     { signals.taken_ = ClEventSignals::max_registrations + 1u; }
     static void an_epoch_of_nothing(ClEventSignals &signals) { signals.generation_ = 0u; }
+    static std::uint64_t epoch_of(const ClEventSignals &signals) { return signals.generation_; }
 };
 
 }  // namespace av
@@ -337,4 +338,28 @@ TEST(cl_event_signals, a_registrations_invariant_catches_an_owner_and_an_epoch_d
   CHECK(taken != nullptr);
   ClEventRegistrationProbe::an_epoch_it_is_not_armed_for(*taken);
   CHECK(!taken->invariants_hold());
+  signals.shut_down(); }
+
+/* A callback naming an epoch that is not this session's does nothing.
+ *
+ * OpenCL cannot unregister a callback, so one may fire after the session it
+ * belonged to is gone and the slot has been handed to another. The epoch is
+ * the only thing that tells them apart, and believing a stale one would wake
+ * a device on behalf of a session that no longer exists. */
+TEST(cl_event_signals, a_callback_naming_another_sessions_epoch_wakes_nobody)
+{ forget_wakes();
+  ClEventSignals signals;
+  signals.bind(&wake, &device);
+  ClEventRegistration *const taken = signals.take();
+  CHECK(taken != nullptr);
+  /* An epoch that is not nothing and is not this one: the two cases the
+   * guard separates, so the second has to be reached on its own. */
+  signals.signal_from_host(ClEventSignalsProbe::epoch_of(signals) + 1u);
+  CHECK_EQ(woken.count, 0u);
+  CHECK_EQ(signals.stale(), 1u);
+  /* The one that is this session's still wakes. */
+  signals.signal_from_host(ClEventSignalsProbe::epoch_of(signals));
+  CHECK_EQ(woken.count, 1u);
+  CHECK_EQ(signals.stale(), 1u);
+  CHECK(signals.invariants_hold());
   signals.shut_down(); }

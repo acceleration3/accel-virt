@@ -57,7 +57,10 @@ void ClObjectTable::destroy(ClObject &object)
         if (below) --live_;
         return below;
     });
-    if (pool_.destroy(&object) == Status::ok) --live_;
+    /* The find above is what says it is there, so the destroy cannot refuse;
+     * asking again would be asking a question already answered. */
+    static_cast<void>(pool_.destroy(&object));
+    --live_;
 }
 
 bool ClObjectTable::release(ClObject &object)

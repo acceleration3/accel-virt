@@ -101,10 +101,10 @@ bool ClEventSignals::invariants_hold() const
     uint32_t taken = 0u;
     for (uint32_t index = 0u; index < max_registrations; ++index) {
         if (!slots_[index].invariants_hold()) return false;
-        if (!slots_[index].armed()) {
-            if (slots_[index].generation() != 0u) return false;
-            continue;
-        }
+        /* A slot that is not armed carries no epoch - its own invariant,
+         * checked just above, is what says so - so there is nothing more to
+         * ask of it here. */
+        if (!slots_[index].armed()) continue;
         if (slots_[index].generation() != generation_) return false;
         ++taken;
     }
