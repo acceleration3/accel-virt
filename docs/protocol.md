@@ -246,6 +246,9 @@ whichever library is loaded, so they behave the same under every executor.
 | `0x00000001` | NOP | none | empty: with *generate reply*, a reply of size 0 for the batch's fence |
 | `0x00000002` | IMPORT_BLOB | 32 bytes: u32 resource_id, u32 reserved, u64 offset, u64 size, u32 memory_type, u32 reserved | 16 bytes: u32 status, u32 reserved, u64 device_memory |
 | `0x00000003` | RELEASE_BLOB | 8 bytes: u64 device_memory | empty |
+| `0x00000004` | SHARE_OBJECT | 32 bytes: u64 object_id, u32 kind, u32 reserved, u64 wire_handle, u64 size | 16 bytes: u32 status, u32 reserved, u64 zero |
+| `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
+| `0x00000006` | RELEASE_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 zero |
 
 A NOP does nothing but complete, which makes it the round trip a guest times to
 measure the transport alone rather than a backend (feature 044). It moves the
@@ -287,6 +290,65 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 
 A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
 never imported, or already released, answers empty and does nothing.
+
+#### Shared objects (feature 053)
+
+The three shared-object commands give one host resource an identity the whole
+device agrees on, so two contexts - of two guest devices, in two guest
+processes - naming one id hold one host object with two references. The id is
+not the guest's to invent: the miniport mints it into the allocation private
+driver data of a shareable allocation, and that data is what dxgkrnl carries
+from the creating process to the opening one (docs/kb/04-memory.md). `kind` is
+1 memory, 2 a monitored fence, 3 a native fence; `size` is whole non-zero pages
+for memory and 0 for either fence.
+
+**SHARE_OBJECT** publishes an object this context's guest already made. The
+device asks the context's executor for a descriptor of `wire_handle`, records
+it under `object_id` for the whole device, and counts this context as its first
+holder. The same context publishing the same handle under the same id again
+answers ok and changes nothing.
+
+**OPEN_SHARED_OBJECT** hands the context's executor that descriptor and answers
+the handle its executor made of it - a `VkDeviceMemory`, a GL memory object
+name - which the guest names in that API's own commands from then on. A context
+opening an id it already holds is refused: a second handle for one object in
+one context is one the guest could free twice.
+
+**RELEASE_SHARED_OBJECT** destroys what this context made of the object and
+drops its reference. An id this context never held answers ok and does nothing,
+as RELEASE_BLOB does. A context destroyed releases everything it still holds,
+and the device's last holder dropping closes the descriptor - so an object
+outlives the context that published it, which is the whole point.
+
+Only Vulkan exports a descriptor; OpenGL imports one and exports none, and
+OpenCL does neither yet. A guest asking an executor for what its API cannot do
+is answered status 4.
+
+| status | a shared-object command refused because |
+|--:|---|
+| 0 | not refused: an OPEN answers a non-zero `wire_handle`, the other two answer 0 |
+| 1 | `object_id` is 0, `kind` is not one of the three, a reserved field is not 0, `size` is not what its kind has, or a `wire_handle` travelled with a command that allows none |
+| 2 | SHARE: a wire handle this context's executor never made. OPEN and RELEASE: an object this device does not hold |
+| 3 | the kind or the size disagrees with the object the device holds |
+| 4 | the context has no executor, its library is older than ABI version 6, or the library refused the export or the import |
+| 5 | the device holds 256 objects, or this context holds 64, or the host has no memory for one more |
+| 6 | SHARE: this id is already published with a different descriptor. OPEN: this context already holds it |
+
+A refused command answers `wire_handle` 0, and a guest that sees one on a
+refusal must not believe it: the answer's own decode refuses that shape.
+
+#### Allocation private driver data
+
+Private data of exactly 48 bytes is an allocation that is not shared, which is
+every allocation before feature 053. Private data of 88 bytes is an
+`AllocationDescriptor` followed by a 40-byte `SharedObjectRecord`, which is an
+allocation asking for an identity: `DxgkDdiCreateAllocation` mints the id and
+the adapter's own number into the record it was handed and writes both back, so
+the value the runtime keeps is the one the opening process is given. Any other
+length is refused. At `DxgkDdiOpenAllocation` the miniport believes nothing it
+did not write: an id it never minted, an id another adapter minted, a record
+that does not decode, and a kind or a size that disagrees with the object are
+each refused with nothing opened.
 
 ### Reply slot (device -> guest)
 

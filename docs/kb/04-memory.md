@@ -209,6 +209,20 @@ construction, because the DMA buffer format is yours.
 - `DxgkDdiDescribeAllocation` must work for any allocation VidMm might move,
   including standard allocations you did not author.
 
+**What feature 053 built for the second trap.** The per-open handle really is
+useless as an identity, so the identity is minted where nothing can forge it
+and travels on the one channel that crosses a process boundary: the creating
+process's *allocation* private driver data, which dxgkrnl hands the opening
+process and reads none of. Private data of 88 bytes is a descriptor followed by
+a `SharedObjectRecord`; `DxgkDdiCreateAllocation` mints a 64-bit id and the
+adapter's own number into it and writes both back into the creator's own bytes.
+`SharedObjectTable` is one per adapter, and at open it believes nothing it did
+not write - an id it never minted, an id another adapter minted, a record that
+does not decode, a kind or a size that disagrees. `HostSharedObjects` is the
+other half, on the device: one host descriptor per id for the whole device,
+refcounted by the contexts holding it, so the object outlives the context that
+published it and the descriptor is closed exactly once.
+
 ## What the host GPUs here can actually do (feature 039)
 
 Measured, not assumed: `tools/host/probe_host_memory.py --qemu build-qemu/qemu`

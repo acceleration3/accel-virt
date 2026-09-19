@@ -479,7 +479,12 @@ has a spec. A milestone is done when its features are.
    load, not a slowdown.
 6. **Shared allocations.** DWM composites surfaces other processes rendered;
    device object identity must be global, not per-open. GPU-PV's
-   `DXGKVMB_COMMAND_SHAREOBJECTWITHHOST` is the warning.
+   `DXGKVMB_COMMAND_SHAREOBJECTWITHHOST` is the warning. **Answered by feature
+   053**, with a table at each end: `SharedObjectTable`, one per adapter, mints
+   the id into the allocation private driver data dxgkrnl carries between
+   processes and refuses every record it did not write; `HostSharedObjects`,
+   one per device on the host, holds one descriptor per id however many
+   contexts name it and closes it when the last lets go. Neither is per-open.
 7. **QEMU rebase cost.** Keep the patch to new files so each update is a
    rebuild, not a merge.
 8. **In-process decoding.** Accepted trade-off; mitigated by bounds-checked,

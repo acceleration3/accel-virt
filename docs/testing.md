@@ -382,6 +382,16 @@ twice, remove without stop, an interrupt before start, a failed start, reset at
 bugcheck, two adapters, and the adapter ceiling - all through the registered
 table, with no core class called directly.
 
+Since feature 053 it also runs the shared allocation: a create whose private
+driver data asks for an identity, two devices, an open on each with the
+*creating* device's own bytes - which is all dxgkrnl carries between two
+processes - the close in either order, a device destroyed still holding it, and
+a table of forged records (another adapter's number, an id this adapter never
+minted, a kind or a size that disagrees, a private data with no record at all)
+each refused with nothing opened, followed by the real record still opening.
+That last line is what makes the refusals mean something rather than proving
+only that an open can fail.
+
 This runs natively on Linux because the table is core's `DdiTable`, a mirror of
 `DRIVER_INITIALIZATION_DATA` built from fixed-width types. The driver build
 proves, per slot, that its layout is byte-for-byte the WDK's
