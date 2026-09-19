@@ -102,6 +102,31 @@ void run_alone(FullStackRig &rig, GuestReport &report)
 
 /* The Vulkan object chain made on the host GPU and destroyed: every call the
  * guest encoded was decoded and run by the host's Vulkan. */
+/* Feature 053, T020. What the device loads is this table, and a table whose
+ * version says it shares objects but whose entries are null would be called
+ * and crash the device. This is the only binary that links the library's own
+ * entry point, so it is the only place the published table can be judged. */
+TEST(fullstack_rvk, the_published_table_shares_objects_and_fills_every_entry_it_claims)
+{ const RvkExecutorOps *const ops = rvk_executor_ops();
+  CHECK(ops != nullptr);
+  CHECK_EQ(ops->abi_version, std::uint32_t{RVK_EXECUTOR_ABI_VERSION});
+  CHECK(ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_SHARING);
+  CHECK(ops->export_object != nullptr);
+  CHECK(ops->import_object != nullptr);
+  CHECK(ops->release_object != nullptr);
+  /* Every entry of every earlier version is still there: a device that took
+   * the version at its word and found a null would call it. */
+  CHECK(ops->sub_apis != nullptr);
+  CHECK(ops->create != nullptr);
+  CHECK(ops->destroy != nullptr);
+  CHECK(ops->execute != nullptr);
+  CHECK(ops->import_kinds != nullptr);
+  CHECK(ops->import_blob != nullptr);
+  CHECK(ops->release_blob != nullptr);
+  CHECK(ops->imported_handle != nullptr);
+  CHECK(ops->create_with_options != nullptr);
+  CHECK(ops->set_signal != nullptr); }
+
 TEST(fullstack_rvk, the_vulkan_chain_runs_on_the_host_gpu)
 { const WidestHostGpu gpu;
   if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;

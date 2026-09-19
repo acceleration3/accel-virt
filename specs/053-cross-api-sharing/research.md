@@ -206,7 +206,17 @@ function:
 | the ICDs report the extensions only where the host has the fd ones | L1 | yes |
 | two host devices really see the same pixels | L4 on a host GPU | only where the host imports (docs/testing.md) |
 | two guest *processes* see the same pixels | L5 | no: no prepared guest image here |
+| OpenGL imports a descriptor another API exported | L1 on a host GPU | yes: this host's GL lists both fd extensions |
+| OpenCL imports a descriptor another API exported | L1 on a host GPU | no: this host's OpenCL is rusticl, which has no `cl_khr_external_memory_dma_buf` |
 
 SC-001 and SC-003 are L5 claims and are not demonstrated by this change; the
 gate reports the guest as skipped, and the spec's US1 in-guest half stays open
 until an image is available.
+
+The OpenCL row is the one entry that changed a task rather than a report. The
+device's `import_object` for OpenCL is left unbuilt, not built and untested:
+every branch past "does this device list the extension" would be unreachable by
+any test on this machine, and the coverage gate is the floor, not the goal. A
+host whose OpenCL carries `cl_khr_external_memory_dma_buf` is what T019 waits
+for; until then a guest opening a shared object on an OpenCL context is
+answered status 4, which is the same answer it gets for an export.
