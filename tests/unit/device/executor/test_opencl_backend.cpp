@@ -698,7 +698,7 @@ namespace {
  * size, no host_ptr, and an error wanted. `named` says whether the list
  * carries this wire's blob-backing property, and `offset` where it points. */
 void buffer_with_properties_frame(ClCommand &command, bool named, std::uint64_t offset,
-                                  std::uint64_t size)
+                                  std::uint64_t size, bool error_wanted = true)
 {
     command.frame().write_pod<std::uint64_t>(0u);        /* the context */
     command.frame().write_pod<std::uint8_t>(named ? 1u : 0u);
@@ -711,7 +711,7 @@ void buffer_with_properties_frame(ClCommand &command, bool named, std::uint64_t 
     command.frame().write_varint<std::uint64_t>(CL_MEM_READ_WRITE);
     command.frame().write_varint(size);
     command.frame().write_pod<std::uint8_t>(0u);         /* no host_ptr */
-    command.frame().write_pod<std::uint8_t>(1u);         /* the error is wanted */
+    command.frame().write_pod<std::uint8_t>(error_wanted ? 1u : 0u);
 }
 
 }  // namespace
@@ -1037,3 +1037,55 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
   CHECK(!backend.lost());
   backend.shut_down();
   CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }
+
+/* A guest that asked for no error still gets no buffer: there is nowhere to
+ * say why, and writing through a pointer it did not pass would be worse than
+ * saying nothing. */
+TEST(opencl_backend, a_buffer_over_a_bad_offset_with_nowhere_to_report_it_is_still_refused)
+{ OpenClBackend backend;
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(arena_region, sizeof arena_region)), av::Status::ok);
+  CHECK(backend.adopt(blob));
+  ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
+  buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u, false);
+  CHECK(beyond.decodes(backend));
+  CHECK_EQ(beyond.address(), 0u);
+  beyond.is_refused_at_every_shorter_length(backend);
+  backend.abandon(blob);
+  backend.shut_down(); }
+
+/* A registration the host refuses gives its slot straight back.
+ *
+ * The slot is taken before the host is asked, because the host is handed a
+ * pointer to it - so a refusal that kept the slot would lose one per failed
+ * registration, and a guest that asked often enough would run the session
+ * out of them without ever registering anything. */
+TEST(opencl_backend, a_callback_the_host_refuses_gives_its_registration_back)
+{ OpenClBackend backend;
+  int            device = 0;
+  backend.bind_signal(&nothing_to_wake, &device);
+
+  /* More asks than there are slots, every one of them refused by the host
+   * because the event is nothing. If a refusal leaked a slot, the last of
+   * these would answer CL_OUT_OF_RESOURCES instead. */
+  for (std::uint32_t index = 0u; index < 200u; ++index) {
+      ClCommand command(av::clproto::kCmd_clSetEventCallback);
+      command.frame().write_pod<std::uint64_t>(0u);        /* the event */
+      command.frame().write_varint<std::uint64_t>(0u);     /* CL_COMPLETE */
+      CHECK(command.decodes(backend));
+      CHECK(command.result() != CL_OUT_OF_RESOURCES);
+  }
+  backend.shut_down(); }
+
+/* A device that gave this library nothing to signal with cannot wake the
+ * guest, and a callback nobody hears is worse than a refusal - the guest
+ * would wait on it forever - so the registration is refused outright. */
+TEST(opencl_backend, a_callback_on_a_session_with_no_device_to_wake_is_refused)
+{ OpenClBackend backend;
+  ClCommand command(av::clproto::kCmd_clSetEventCallback);
+  command.frame().write_pod<std::uint64_t>(0u);
+  command.frame().write_varint<std::uint64_t>(0u);
+  CHECK(command.decodes(backend));
+  CHECK_EQ(command.result(), CL_INVALID_OPERATION);
+  command.is_refused_at_every_shorter_length(backend);
+  backend.shut_down(); }
