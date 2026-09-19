@@ -143,10 +143,31 @@ TEST(recording_filter_keep_command, an_empty_fragment_keeps_everything_and_a_lon
   CHECK_STATUS(filter.keep_command(longest), Status::invalid_parameter);
   CHECK_STATUS(filter.keep_command(nullptr), Status::invalid_parameter);
   CHECK(!filter.names_a_command());
-  /* One shorter than the limit is kept. */
+  /* The boundary the fragment's own room decides: a fragment of exactly
+   * longest_fragment characters needs a terminator the filter has nowhere to
+   * put, so it is refused, and one character shorter is kept whole. */
+  longest[RecordingFilter::longest_fragment] = '\0';
+  CHECK_STATUS(filter.keep_command(longest), Status::invalid_parameter);
+  CHECK(!filter.names_a_command());
   longest[RecordingFilter::longest_fragment - 1u] = '\0';
   CHECK_STATUS(filter.keep_command(longest), Status::ok);
   CHECK(filter.names_a_command());
+  CHECK(filter.invariants_hold()); }
+
+/* A refused fragment leaves the one the filter was already keeping: a tool
+ * that printed everything after a typo would be answering a question nobody
+ * asked. */
+TEST(recording_filter_keep_command, a_refused_fragment_leaves_the_one_it_was_keeping)
+{ RecordingFilter filter;
+  CHECK_STATUS(filter.keep_command("Create"), Status::ok);
+  char longest[RecordingFilter::longest_fragment + 1u];
+  for (std::size_t index = 0u; index + 1u < sizeof longest; index++) longest[index] = 'a';
+  longest[sizeof longest - 1u] = '\0';
+  CHECK_STATUS(filter.keep_command(longest), Status::invalid_parameter);
+  CHECK_STATUS(filter.keep_command(nullptr), Status::invalid_parameter);
+  CHECK(filter.names_a_command());
+  CHECK(filter.keeps(OneCommand(0x00010006u).command()));
+  CHECK(!filter.keeps(OneCommand(CommandHeader::nop_id).command()));
   CHECK(filter.invariants_hold()); }
 
 TEST(recording_filter, narrows_on_every_axis_at_once)

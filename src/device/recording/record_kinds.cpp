@@ -15,7 +15,9 @@ public:
     {
         uint32_t index = 0u;
         for (; index < length; index++) {
-            if (text_[index] == '\0' || text_[index] != text[index]) return 0u;
+            /* `length` is a token, so `text[index]` is never the terminator:
+             * a name that ends first differs here. */
+            if (text_[index] != text[index]) return 0u;
         }
         return text_[index] == '\0' ? bit_ : 0u;
     }

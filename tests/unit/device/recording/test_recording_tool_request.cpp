@@ -135,16 +135,48 @@ TEST(recording_tool_request_parse, a_single_fence_is_a_range_of_one)
   CHECK(!filter.keeps(a_batch(1u, 13u))); }
 
 TEST(recording_tool_request_parse, refuses_a_fence_that_is_no_range)
-{ const char *const refused[] = {"", ":", "3:", ":9", "9:3", "x", "3:x", "1234567890123456789012345",
-                                 "99999999999999999999999999"};
-  for (const char *const value : refused) {
+{ struct Case { const char *value; const char *reason; };
+  const Case refused[] = {{"", "wants a fence or a range"},
+                          {":", "wants a fence or a range"},
+                          {"3:", "wants a fence or a range"},
+                          {":9", "wants a fence or a range"},
+                          {"x", "wants a fence or a range"},
+                          {"3:x", "wants a fence or a range"},
+                          {"1234567890123456789012345", "wants a fence or a range"},
+                          {"99999999999999999999999999", "wants a fence or a range"},
+                          /* A range the reader could walk, backwards. */
+                          {"9:3", "ends before it starts"}};
+  for (const Case &c : refused) {
       RecordingFilter      filter;
       RecordingToolRequest request;
-      const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--fence").add(value);
+      const Arguments      arguments = Arguments().add("print").add("run.rvk").add("--fence").add(c.value);
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
       CHECK(std::strstr(request.reason(), "--fence") != nullptr);
+      CHECK(std::strstr(request.reason(), c.reason) != nullptr);
+      /* Nothing was narrowed: the filter still keeps every fence. */
+      CHECK(filter.keeps(a_batch(1u, 1u)));
+      CHECK(filter.keeps(a_batch(1u, ~std::uint64_t{0})));
       CHECK(request.invariants_hold());
   } }
+
+/* The largest fence a recording can carry is a fence, and the first number
+ * past sixty-four bits is not: the guard is what stands between them. */
+TEST(recording_tool_request_parse, takes_the_largest_fence_and_refuses_the_first_one_past_it)
+{ RecordingFilter      filter;
+  RecordingToolRequest request;
+  const Arguments      largest =
+      Arguments().add("print").add("run.rvk").add("--fence").add("18446744073709551615");
+  CHECK_STATUS(request.parse(largest.count(), largest.values(), filter), Status::ok);
+  CHECK(filter.keeps(a_batch(1u, ~std::uint64_t{0})));
+  CHECK(!filter.keeps(a_batch(1u, ~std::uint64_t{0} - 1u)));
+
+  RecordingFilter      wider;
+  RecordingToolRequest past;
+  const Arguments      one_more =
+      Arguments().add("print").add("run.rvk").add("--fence").add("18446744073709551616");
+  CHECK_STATUS(past.parse(one_more.count(), one_more.values(), wider), Status::invalid_parameter);
+  CHECK(std::strstr(past.reason(), "--fence") != nullptr);
+  CHECK(wider.keeps(a_batch(1u, 1u))); }
 
 TEST(recording_tool_request_parse, refuses_what_it_does_not_understand)
 { struct Case { Arguments arguments; const char *reason; };
@@ -204,15 +236,15 @@ TEST(recording_tool_request_parse, refuses_a_number_larger_than_sixty_four_bits_
   CHECK_EQ(request.payload_bytes(), 0u); }
 
 TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anything_else)
-{ struct Case { const char *hex; bool taken; };
-  const Case cases[] = {{"00000000000000000000000000000000", true},
-                        {"ffffffffffffffffffffffffffffffff", true},
-                        {"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", true},
-                        {"////////////////////////////////", false},
-                        {":::::::::::::::::::::::::::::::: ", false},
-                        {"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", false},
-                        {"gggggggggggggggggggggggggggggggg", false},
-                        {"````````````````````````````````", false}};
+{ struct Case { const char *hex; bool taken; std::uint8_t byte; };
+  const Case cases[] = {{"00000000000000000000000000000000", true, 0x00u},
+                        {"ffffffffffffffffffffffffffffffff", true, 0xFFu},
+                        {"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", true, 0xFFu},
+                        {"////////////////////////////////", false, 0u},
+                        {":::::::::::::::::::::::::::::::: ", false, 0u},
+                        {"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", false, 0u},
+                        {"gggggggggggggggggggggggggggggggg", false, 0u},
+                        {"````````````````````````````````", false, 0u}};
   for (const Case &c : cases) {
       RecordingFilter      filter;
       RecordingToolRequest request;
@@ -221,6 +253,13 @@ TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anythi
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter),
                    c.taken ? Status::ok : Status::invalid_parameter);
       CHECK((request.gpu() != nullptr) == c.taken);
+      if (c.taken) {
+          /* Both nibbles of the first and the last byte, so a table that read
+           * a digit's value wrong or packed the nibbles the other way round
+           * would not answer these. */
+          CHECK_EQ(request.gpu()[0], c.byte);
+          CHECK_EQ(request.gpu()[15], c.byte);
+      }
       CHECK(request.invariants_hold());
   } }
 

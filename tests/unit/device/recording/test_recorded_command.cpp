@@ -56,11 +56,11 @@ TEST(recorded_command_decode, names_each_api_from_the_table_its_generator_wrote)
 
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_EQ(std::strcmp(command.api_name(), "opencl"), 0);
-  CHECK(command.name()[0] != '\0');
+  CHECK_EQ(std::strcmp(command.name(), "clGetPlatformInfo"), 0);
 
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_EQ(std::strcmp(command.api_name(), "opengl"), 0);
-  CHECK(command.name()[0] != '\0');
+  CHECK_EQ(std::strcmp(command.name(), "glGetStringi"), 0);
 
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_EQ(std::strcmp(command.api_name(), "transport"), 0);
@@ -83,13 +83,18 @@ TEST(recorded_command_decode, names_the_transport_commands_this_repository_owns)
 
 TEST(recorded_command_decode, an_id_no_table_knows_is_unknown_and_never_null)
 { Batch batch;
-  batch.add(0x0001FFFEu, 0u).add(0x00090001u, 0u);
+  batch.add(0x0001FFFEu, 0u).add(0x0002FFFEu, 0u).add(0x0003FFFEu, 0u).add(0x00090001u, 0u);
   RecordedCommand command;
-  CHECK_STATUS(command.decode(batch.bytes(), batch.length(), 0u), Status::ok);
-  CHECK_EQ(std::strcmp(command.name(), "unknown"), 0);
-  CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
-  CHECK_EQ(std::strcmp(command.name(), "unknown"), 0);
-  CHECK_EQ(std::strcmp(command.api_name(), "api"), 0); }
+  std::uint32_t   offset = 0u;
+  /* Each table's own unknown, then an API no table belongs to. */
+  const char *const apis[] = {"vulkan", "opencl", "opengl", "api"};
+  for (const char *api : apis) {
+      CHECK_STATUS(command.decode(batch.bytes(), batch.length(), offset), Status::ok);
+      CHECK_EQ(std::strcmp(command.name(), "unknown"), 0);
+      CHECK_EQ(std::strcmp(command.api_name(), api), 0);
+      offset = command.next_offset();
+  }
+  CHECK_EQ(offset, batch.length()); }
 
 TEST(recorded_command_decode, refuses_a_command_the_batch_cannot_hold)
 { Batch batch;
@@ -103,6 +108,38 @@ TEST(recorded_command_decode, refuses_a_command_the_batch_cannot_hold)
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), batch.length() + 1u), Status::malformed);
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), batch.length()), Status::malformed);
   CHECK_STATUS(command.decode(batch.bytes(), batch.length() - 1u, 0u), Status::malformed); }
+
+/* The bound is what is left from the offset, not the whole batch: the printer
+ * and the replay walk a batch command by command, and a second command that
+ * claims more than the rest of the record would be read past its end. */
+TEST(recorded_command_decode, refuses_a_later_command_that_claims_more_than_is_left)
+{ Batch batch;
+  batch.add(0x00010006u, 4u).add(0x00010007u, 4u);
+  RecordedCommand     command;
+  const std::uint32_t second = CommandHeader::encoded_size + 4u;
+  const std::uint32_t left = batch.length() - second;
+  CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::ok);
+  CHECK_EQ(command.next_offset(), batch.length());
+  /* One byte more than the rest of the batch holds, and less than the batch. */
+  CHECK_STATUS(CommandHeader(0x00010007u, left + 1u, 0u).encode(batch.bytes() + second, left), Status::ok);
+  CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::malformed);
+  /* And a size the whole batch could hold is still past what is left here. */
+  CHECK_STATUS(CommandHeader(0x00010007u, batch.length(), 0u).encode(batch.bytes() + second, left), Status::ok);
+  CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::malformed); }
+
+/* Every accepted command's payload lies inside the bytes it was given. */
+TEST(recorded_command_decode, an_accepted_command_never_names_a_byte_past_the_batch)
+{ Batch batch;
+  batch.add(0x00010006u, 16u).add(0x00020001u, 0u).add(CommandHeader::nop_id, 7u);
+  RecordedCommand command;
+  std::uint32_t   offset = 0u;
+  while (offset != batch.length()) {
+      CHECK_STATUS(command.decode(batch.bytes(), batch.length(), offset), Status::ok);
+      CHECK(command.payload() >= batch.bytes() + offset + CommandHeader::encoded_size);
+      CHECK(command.payload() + command.payload_length() <= batch.bytes() + batch.length());
+      CHECK_EQ(command.next_offset(), offset + CommandHeader::encoded_size + command.payload_length());
+      offset = command.next_offset();
+  } }
 
 TEST(recorded_command_decode, leaves_what_it_had_when_it_refuses)
 { Batch batch;

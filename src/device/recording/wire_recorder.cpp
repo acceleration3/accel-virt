@@ -250,7 +250,9 @@ uint32_t WireRecorder::wraps() const
 bool WireRecorder::invariants_hold() const
 {
     AV_SCOPE("WireRecorder::invariants_hold");
-    if (file_ == nullptr) return lock_ == nullptr && records_ == 0u;
+    /* The counts outlive the file: a run reads them after close, so a closed
+     * recorder that kept something is the ordinary end of a recording. */
+    if (file_ == nullptr) return lock_ == nullptr;
     /* The kinds are not asked: they are parsed once at open and never touched
      * again, so the recorder has nothing of its own to keep true about them. */
     return lock_ != nullptr && header_.invariants_hold() && limit_.invariants_hold();

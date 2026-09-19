@@ -70,7 +70,9 @@ public:
                            uint64_t size);
 
     uint64_t records() const;
-    /* Records the ceiling, the host or their own size turned away. */
+    /* Records turned away while the recording still ran: the ceiling reached,
+     * or a record larger than one may be. A write the host refuses ends the
+     * recording instead, which the device log says once. */
     uint64_t refused() const;
     uint32_t wraps() const;
 

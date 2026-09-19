@@ -231,22 +231,31 @@ TEST(recording_reader_open, a_recording_from_a_later_version_says_so_rather_than
   CHECK(std::strstr(reader.damage(), "later version") != nullptr); }
 
 /* US2 scenario 3: cut anywhere, every whole record before the cut is answered
- * and the damage is reported with its offset. */
+ * and the damage is reported with its offset. The count expected of each cut
+ * comes from the format - a record is its 32-byte header and its payload, and
+ * nothing is padded (docs/protocol.md) - not from what the reader answers. */
 TEST(recording_reader_next, a_recording_cut_at_any_offset_answers_what_was_whole)
-{ const Written written;
-  std::uint32_t best = 0u;
+{ const Written       written;
+  const std::uint32_t payloads[] = {5u, 2u, 0u, 8u, WireRecorder::blob_payload};
+  std::size_t         ends[5] = {};
+  std::size_t         at = RecordingHeader::encoded_size;
+  for (std::size_t which = 0u; which < 5u; which++) {
+      at += RecordHeader::encoded_size + payloads[which];
+      ends[which] = at;
+  }
+  CHECK_EQ(at, written.length());
   for (std::size_t length = RecordingHeader::encoded_size; length <= written.length(); length++) {
+      std::uint32_t whole = 0u;
+      bool          clean = length == RecordingHeader::encoded_size;
+      for (const std::size_t end : ends) {
+          whole += end <= length ? 1u : 0u;
+          clean = clean || end == length;
+      }
       bool                damaged = false;
       const std::uint32_t records = walked(written.bytes(), length, damaged);
-      /* A longer file never answers fewer records than a shorter one. */
-      CHECK(records >= best);
-      best = records;
-  }
-  CHECK_EQ(best, 5u);
-  bool                damaged = false;
-  const std::uint32_t whole = walked(written.bytes(), written.length(), damaged);
-  CHECK_EQ(whole, 5u);
-  CHECK(!damaged); }
+      CHECK_EQ(records, whole);
+      CHECK_EQ(damaged, !clean);
+  } }
 
 TEST(recording_reader_next, a_record_length_past_the_end_is_damage_where_that_record_starts)
 { Written      written;
@@ -282,22 +291,55 @@ TEST(recording_reader_next, a_kind_no_device_wrote_is_damage_where_that_record_s
   CHECK(std::strstr(reader.damage(), "no device wrote") != nullptr);
   CHECK_EQ(reader.records(), 1u); }
 
+/* Every bit of a valid recording flipped in turn. What each flip must produce
+ * is decided from the format: a flip in the file's magic or in a field the
+ * format says is zero is damage before any record; a flip in a record's own
+ * magic is damage exactly where that record starts, so every whole record
+ * before it is still answered; a flip in a payload byte is no damage at all,
+ * because a payload is the guest's bytes and the reader frames around them. */
 TEST(recording_reader_next, survives_a_byte_flip_anywhere_in_a_recording)
-{ const Written written;
-  std::uint32_t damaged_cases = 0u;
+{ const Written       written;
+  const std::uint32_t payloads[] = {5u, 2u, 0u, 8u, WireRecorder::blob_payload};
+  std::size_t         starts[5] = {};
+  std::size_t         at = RecordingHeader::encoded_size;
+  for (std::size_t which = 0u; which < 5u; which++) {
+      starts[which] = at;
+      at += RecordHeader::encoded_size + payloads[which];
+  }
+  CHECK_EQ(at, written.length());
   for (std::size_t index = 0u; index < written.length(); index++) {
       for (std::uint8_t bit = 0u; bit < 8u; bit++) {
           std::uint8_t bytes[widest] = {};
           std::memcpy(bytes, written.bytes(), written.length());
           bytes[index] = static_cast<std::uint8_t>(bytes[index] ^ (1u << bit));
-          bool damaged = false;
-          static_cast<void>(walked(bytes, written.length(), damaged));
-          damaged_cases += damaged ? 1u : 0u;
+          bool                damaged = false;
+          const std::uint32_t records = walked(bytes, written.length(), damaged);
+          /* A flip in a length can make one record swallow the next and still
+           * land on a boundary, so a clean walk may answer fewer than five -
+           * never more, and never past the bytes it was given (`walked`). */
+          CHECK(records <= 5u);
+          /* The file's magic, and the u32 the format reserves at offset 44. */
+          if (index < 4u || (index >= 44u && index < 48u)) {
+              CHECK(damaged);
+              CHECK_EQ(records, 0u);
+              continue;
+          }
+          for (std::size_t which = 0u; which < 5u; which++) {
+              const bool magic = index >= starts[which] && index < starts[which] + 4u;
+              /* The u16 the record header reserves, at offset 6 of it. */
+              const bool reserved = index == starts[which] + 6u || index == starts[which] + 7u;
+              if (!magic && !reserved) continue;
+              CHECK(damaged);
+              CHECK_EQ(records, static_cast<std::uint32_t>(which));
+          }
+          for (std::size_t which = 0u; which < 5u; which++) {
+              const std::size_t payload = starts[which] + RecordHeader::encoded_size;
+              if (index < payload || index >= payload + payloads[which]) continue;
+              CHECK(!damaged);
+              CHECK_EQ(records, 5u);
+          }
       }
-  }
-  /* A flip in a payload byte changes nothing about the framing; a flip in a
-   * magic, a kind, a length or the version is caught. */
-  CHECK(damaged_cases > 32u); }
+  } }
 
 TEST(recording_reader_invariants, catch_a_walk_or_a_damage_outside_the_bytes_it_was_given)
 { const Written written;
