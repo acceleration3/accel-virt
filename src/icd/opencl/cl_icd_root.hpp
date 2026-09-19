@@ -201,6 +201,11 @@ private:
     cl_int           deliver_queued(ClientTransport &wire, uint64_t queue);
     /* Opens the device this ICD shows, once, on the first ask. */
     [[nodiscard]] Status open_device();
+    /* Gives one host object back, by the kind that says which call does it.
+     * The one place that knows the mapping, so a guest object that cannot be
+     * made and one the application released take the same path. A context is
+     * not here: its own teardown takes everything on it. */
+    void             give_back_to_host(ClientTransport &wire, ClObject::Kind kind, uint64_t handle);
     /* Makes one object of a host answer, releasing the host's if this cannot
      * hold it - a number the application could never use is worse than an
      * error it can see. */

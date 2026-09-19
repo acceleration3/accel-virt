@@ -263,12 +263,46 @@ cl_int ClIcdRoot::refusal_for(ClObject::Kind kind) const
     return wrong_kind(kind);
 }
 
+void ClIcdRoot::give_back_to_host(ClientTransport &wire, ClObject::Kind kind, uint64_t handle)
+{
+    AV_SCOPE("ClIcdRoot::give_back_to_host");
+    /* Zero is what a host answers when it made nothing, so there is nothing
+     * to give back and the command would name no object. */
+    if (handle == 0u) return;
+    switch (kind) {
+    case ClObject::Kind::command_queue:
+        static_cast<void>(av::clproto::rvk_clReleaseCommandQueue(wire, handle));
+        break;
+    case ClObject::Kind::mem:
+        static_cast<void>(av::clproto::rvk_clReleaseMemObject(wire, handle));
+        break;
+    case ClObject::Kind::program:
+        static_cast<void>(av::clproto::rvk_clReleaseProgram(wire, handle));
+        break;
+    case ClObject::Kind::kernel:
+        static_cast<void>(av::clproto::rvk_clReleaseKernel(wire, handle));
+        break;
+    case ClObject::Kind::event:
+        static_cast<void>(av::clproto::rvk_clReleaseEvent(wire, handle));
+        break;
+    /* A context is torn down rather than released through here, and a
+     * platform, a device and a sampler are never the host's to give back. */
+    default: break;
+    }
+}
+
 void *ClIcdRoot::wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *context, ClObject *parent,
                       cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::wrap");
     ClObject *object = nullptr;
     if (objects_.make(kind, wire, context, parent, object) != Status::ok) {
+        /* The host made it and the guest cannot keep it, so nobody will ever
+         * name it again. Giving it back here is the only chance: the
+         * application is about to be told the call failed, and an object it
+         * was never handed is one it can never release. */
+        ClientTransport *const transport = context != nullptr ? context->wire() : nullptr;
+        if (transport != nullptr) give_back_to_host(*transport, kind, wire);
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
@@ -410,27 +444,20 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                 const uint32_t forgotten = reads_.forget_queue(wire_handle, markers);
                 for (uint32_t index = 0u; index < forgotten; ++index)
                     static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, markers[index]));
-                static_cast<void>(av::clproto::rvk_clReleaseCommandQueue(*wire, wire_handle));
+                give_back_to_host(*wire, kind, wire_handle);
                 break;
             }
             case ClObject::Kind::mem:
-                static_cast<void>(av::clproto::rvk_clReleaseMemObject(*wire, wire_handle));
+                give_back_to_host(*wire, kind, wire_handle);
                 /* A buffer made over the arena gives its block back with it,
                  * so the next buffer can have that memory. After the host
                  * has let go, not before: the device's cl_mem is still over
                  * those bytes until it does. */
                 if (held->backed()) context->blocks().give_back(held->backing_offset());
                 break;
-            case ClObject::Kind::program:
-                static_cast<void>(av::clproto::rvk_clReleaseProgram(*wire, wire_handle));
+            default:
+                give_back_to_host(*wire, kind, wire_handle);
                 break;
-            case ClObject::Kind::kernel:
-                static_cast<void>(av::clproto::rvk_clReleaseKernel(*wire, wire_handle));
-                break;
-            case ClObject::Kind::event:
-                static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, wire_handle));
-                break;
-            default: break;
             }
         }
     }
@@ -592,8 +619,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
     }
     void *const made = wrap(ClObject::Kind::mem, buffer, held->context(), held, error);
     if (made == nullptr) {
-        /* The buffer exists on the host but the guest has nowhere to keep
-         * it; wrap has released it, and the block goes back with it. */
+        /* wrap gave the host's buffer back, so only the block is left. */
         if (backed) on->blocks().give_back(block);
         return nullptr;
     }
