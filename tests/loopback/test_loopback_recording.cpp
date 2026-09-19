@@ -10,6 +10,10 @@
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/loopback/loopback_rig.hpp"
+#include "device/execution/executor_library.hpp"
+#include "device/recording/recording_filter.hpp"
+#include "device/recording/recording_reader.hpp"
+#include "device/recording/recording_replay.hpp"
 #include "harness/recording/recorded_file.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/context_setup.hpp"
@@ -149,4 +153,39 @@ TEST(loopback_recording, a_batch_the_executor_could_not_decode_leaves_a_fault_re
   if (fault != nullptr) CHECK_EQ(fault[0], static_cast<std::uint8_t>(av::FaultCode::undecodable));
   /* A faulted context completes nothing, so no fence record follows. */
   CHECK_EQ(file.remaining(), 0u);
+  CHECK(rig.retire(0u)); }
+
+/* US3 scenario 1, over the real wire: what the guest core sent and the device
+ * core recorded replays into an executor library, context by context and
+ * command by command, and every recorded reply is the answer the replay
+ * produced. */
+TEST(loopback_recording, a_recorded_run_replays_into_a_library_with_the_same_replies)
+{ LoopbackRig rig(av::LoopbackDevice::default_gpu, path);
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  GuestRing       ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  const EchoBatch batches[] = {EchoBatch("replay-1"), EchoBatch("replay-2")};
+  std::uint64_t   begin = 0u;
+  for (std::uint64_t fence = 1u; fence <= 2u; fence++) {
+      ring.write_batch(fence, batches[fence - 1u].bytes(), batches[fence - 1u].length());
+      CHECK_STATUS(rig.submit(0u, fence, begin, ring.tail()), Status::ok);
+      begin = ring.tail();
+  }
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 2u));
+
+  av::MockExecutorOps  ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  av::ExecutorLibrary  library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  av::RecordingReader  reader(rig.device().host().recording_bytes(path),
+                              rig.device().host().recording_length(path));
+  av::RecordingReplay  replay(library);
+  const av::RecordingFilter filter;
+  CHECK_STATUS(replay.run(reader, filter), Status::ok);
+  CHECK_EQ(replay.contexts(), 1u);
+  CHECK(replay.commands() == 2u);
+  CHECK(replay.replies() == 2u);
+  for (std::uint32_t index = 0u; index < replay.findings(); index++)
+      av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "%s", replay.finding(index));
+  CHECK_EQ(replay.findings(), 0u);
+  CHECK(replay.invariants_hold());
   CHECK(rig.retire(0u)); }
