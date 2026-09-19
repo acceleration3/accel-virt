@@ -959,4 +959,27 @@ DoorbellFabric &DdiKmt::fabric()
     return fabric_;
 }
 
+/* Feature 053: an NT handle is a kernel object, and this rig has no kernel to
+ * make one in - what it drives is the miniport, not dxgkrnl's handle table. A
+ * guest asking for one is told so rather than handed a number that names
+ * nothing. */
+Status DdiKmt::share_object(std::uint32_t, std::uint32_t, std::uint64_t &handle)
+{
+    handle = 0u;
+    return Status::not_supported;
+}
+
+Status DdiKmt::open_shared_object(std::uint32_t, std::uint64_t, std::uint32_t &allocation, std::uint8_t *,
+                                 std::uint32_t, std::uint32_t &written)
+{
+    allocation = 0u;
+    written = 0u;
+    return Status::not_supported;
+}
+
+Status DdiKmt::close_shared_object(std::uint64_t)
+{
+    return Status::not_supported;
+}
+
 }  // namespace av

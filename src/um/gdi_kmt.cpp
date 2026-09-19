@@ -41,6 +41,32 @@ namespace av {
 
 namespace {
 
+/* OBJECT_ATTRIBUTES, which D3DKMTShareObjects takes a pointer to and which
+ * d3dkmthk.h only forward declares. The header that defines it for user mode
+ * is winternl.h, and the pinned kit's um closure does not carry it; ntdef.h,
+ * which does, redefines two dozen types windows.h already has. So the six
+ * fields are written out here and their offsets proven below, exactly as this
+ * file proves the offsets dxgkrnl writes its answers at (feature 053).
+ *
+ * Nothing but Length is ever set: an object with no name is one no other
+ * process can open by name, which is what a shared object wants. */
+struct ShareAttributes {
+    unsigned long length;
+    unsigned long length_padding;
+    void         *root_directory;
+    void         *object_name;
+    unsigned long attributes;
+    unsigned long attributes_padding;
+    void         *security_descriptor;
+    void         *security_quality_of_service;
+};
+static_assert(sizeof(ShareAttributes) == 48u);
+static_assert(__builtin_offsetof(ShareAttributes, root_directory) == 0x08u);
+static_assert(__builtin_offsetof(ShareAttributes, object_name) == 0x10u);
+static_assert(__builtin_offsetof(ShareAttributes, attributes) == 0x18u);
+static_assert(__builtin_offsetof(ShareAttributes, security_descriptor) == 0x20u);
+static_assert(__builtin_offsetof(ShareAttributes, security_quality_of_service) == 0x28u);
+
 constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_descriptor_bytes = 256u;
 /* STATUS_IO_TIMEOUT: a failure, where STATUS_TIMEOUT would read as success. */
@@ -215,6 +241,83 @@ Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
     request.phAllocationList = &handle;
     request.AllocationCount = 1u;
     return answer(D3DKMTDestroyAllocation2(&request));
+}
+
+Status GdiKmt::share_object(uint32_t device, uint32_t allocation, uint64_t &handle)
+{
+    AV_SCOPE("GdiKmt::share_object");
+    handle = 0u;
+    if (allocation == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    /* No name and no security descriptor: a handle nothing can open by name is
+     * a handle only a process this one duplicated it into can open, which is
+     * what a shared object is for (feature 053, spec Edge Cases). */
+    ShareAttributes     attributes = {};
+    attributes.length = sizeof attributes;
+    const D3DKMT_HANDLE shared = allocation;
+    HANDLE              made = nullptr;
+    const Status        status = answer(D3DKMTShareObjects(
+        1u, &shared, reinterpret_cast<POBJECT_ATTRIBUTES>(&attributes), STANDARD_RIGHTS_ALL | GENERIC_ALL,
+        &made));
+    if (status != Status::ok) return status;
+    handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(made));
+    /* The device is not named by D3DKMTShareObjects: what is shared is the
+     * allocation, which the kernel already knows the device of. */
+    static_cast<void>(device);
+    return Status::ok;
+}
+
+Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+                                  uint8_t *private_data, uint32_t capacity, uint32_t &written)
+{
+    AV_SCOPE("GdiKmt::open_shared_object");
+    allocation = 0u;
+    written = 0u;
+    if (handle == 0u || private_data == nullptr)
+        return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    HANDLE const nt = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(handle));
+    /* Two calls, because the opener cannot know how much private data the
+     * creator wrote until it asks: the first sizes the buffers, the second
+     * fills them. */
+    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE sizes = {};
+    sizes.hDevice = device;
+    sizes.hNtHandle = nt;
+    const Status asked = answer(D3DKMTQueryResourceInfoFromNtHandle(&sizes));
+    if (asked != Status::ok) return asked;
+    if (sizes.NumAllocations != 1u || sizes.TotalPrivateDriverDataSize > capacity)
+        return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    D3DDDI_OPENALLOCATIONINFO2           info = {};
+    uint8_t                              runtime_data[max_descriptor_bytes] = {};
+    uint8_t                              resource_data[max_descriptor_bytes] = {};
+    if (sizes.PrivateRuntimeDataSize > sizeof runtime_data ||
+        sizes.ResourcePrivateDriverDataSize > sizeof resource_data)
+        return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    D3DKMT_OPENRESOURCEFROMNTHANDLE open = {};
+    open.hDevice = device;
+    open.hNtHandle = nt;
+    open.NumAllocations = 1u;
+    open.pOpenAllocationInfo2 = &info;
+    open.pPrivateRuntimeData = runtime_data;
+    open.PrivateRuntimeDataSize = sizes.PrivateRuntimeDataSize;
+    open.pResourcePrivateDriverData = resource_data;
+    open.ResourcePrivateDriverDataSize = sizes.ResourcePrivateDriverDataSize;
+    open.pTotalPrivateDriverDataBuffer = private_data;
+    open.TotalPrivateDriverDataBufferSize = capacity;
+    const Status opened = answer(D3DKMTOpenResourceFromNtHandle(&open));
+    if (opened != Status::ok) return opened;
+    allocation = info.hAllocation;
+    written = open.TotalPrivateDriverDataBufferSize;
+    return Status::ok;
+}
+
+Status GdiKmt::close_shared_object(uint64_t handle)
+{
+    AV_SCOPE("GdiKmt::close_shared_object");
+    if (handle == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    /* kernel32, not gdi32: what D3DKMTShareObjects made is an ordinary NT
+     * handle, and nothing in D3DKMT closes one. */
+    if (CloseHandle(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(handle))) == 0)
+        return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    return answer(0);
 }
 
 /* D3DDDICB_LOCK2FLAGS is one 32-bit Reserved field in WDDM 3.2: a user-mode

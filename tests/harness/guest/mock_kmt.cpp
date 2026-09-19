@@ -5,6 +5,7 @@
 #include "core/support/nt_status.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -32,7 +33,8 @@ MockKmt::MockKmt()
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
-      private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
+      private_size_(0u), submission_{}, submission_size_(0u), shared_{},
+      next_shared_handle_(first_shared_handle), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
@@ -267,7 +269,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false, false};
+        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false, false, {}, 0u};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -397,12 +399,96 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     if (!begin(Call::create_allocation)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
     AllocationDescriptor decoded;
-    if (size != AllocationDescriptor::encoded_size || decoded.decode(descriptor, size) != Status::ok)
+    /* Two lengths, as the miniport takes two: a descriptor alone is an
+     * allocation that is not shared, and a descriptor followed by a record is
+     * one asking for an identity (feature 053). */
+    const std::uint32_t shareable =
+        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
+    if ((size != AllocationDescriptor::encoded_size && size != shareable) ||
+        decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
         return refuse(invalid_parameter);
     if (!zeroed(Call::create_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
     Object *const created = find(Kind::allocation, allocation);
-    if (created != nullptr) created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
+    if (created != nullptr) {
+        created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
+        /* Kept as the runtime keeps it: these are the bytes dxgkrnl hands the
+         * opening process, and nothing else crosses with the allocation. */
+        created->created_size = size;
+        for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
+    }
+    return succeed();
+}
+
+MockKmt::SharedHandle *MockKmt::shared_row(std::uint64_t handle)
+{
+    if (handle == 0u) return nullptr;
+    for (SharedHandle &row : shared_)
+        if (row.handle == handle) return &row;
+    return nullptr;
+}
+
+Status MockKmt::share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle)
+{
+    handle = 0u;
+    if (!begin(Call::share_object)) return refuse(last_code_);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (object == nullptr || object->owner != device) return misuse();
+    /* An allocation created without asking for an identity carries no record,
+     * and the kernel has nothing to share it by. */
+    if (object->created_size !=
+        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size))
+        return refuse(not_supported);
+    for (SharedHandle &row : shared_) {
+        if (row.handle != 0u) continue;
+        row.handle = next_shared_handle_;
+        next_shared_handle_ += 4u;
+        row.allocation = allocation;
+        row.carried_size = object->created_size;
+        for (std::uint32_t index = 0u; index < row.carried_size; index++)
+            row.carried[index] = object->created_with[index];
+        handle = row.handle;
+        return succeed();
+    }
+    return refuse(invalid_parameter);
+}
+
+Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                   std::uint8_t *private_data, std::uint32_t capacity, std::uint32_t &written)
+{
+    allocation = 0u;
+    written = 0u;
+    if (!begin(Call::open_shared_object)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    /* A handle this mock never minted is a handle from nowhere, which is the
+     * case the whole table exists for. */
+    const SharedHandle *const row = shared_row(handle);
+    if (row == nullptr) return refuse(not_found);
+    if (private_data == nullptr || row->carried_size > capacity) return refuse(invalid_parameter);
+    const Object *const created = find(Kind::allocation, row->allocation);
+    if (created == nullptr) return refuse(not_found);
+    const std::uint16_t kind = created->allocation_kind;
+    const std::uint64_t pages = created->pages;
+    const std::uint32_t opened = open(Kind::allocation, device, 0u, pages);
+    if (opened == 0u) return refuse(invalid_parameter);
+    Object *const made = find(Kind::allocation, opened);
+    made->allocation_kind = kind;
+    made->created_size = row->carried_size;
+    for (std::uint32_t index = 0u; index < row->carried_size; index++) {
+        made->created_with[index] = row->carried[index];
+        private_data[index] = row->carried[index];
+    }
+    written = row->carried_size;
+    allocation = opened;
+    return succeed();
+}
+
+Status MockKmt::close_shared_object(std::uint64_t handle)
+{
+    if (!begin(Call::close_shared_object)) return refuse(last_code_);
+    SharedHandle *const row = shared_row(handle);
+    if (row == nullptr) return refuse(not_found);
+    *row = SharedHandle{};
     return succeed();
 }
 

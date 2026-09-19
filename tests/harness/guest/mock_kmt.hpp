@@ -45,6 +45,9 @@ public:
         destroy_device,
         create_allocation,
         destroy_allocation,
+        share_object,
+        open_shared_object,
+        close_shared_object,
         lock,
         unlock,
         create_paging_queue,
@@ -86,6 +89,16 @@ public:
     /* The largest context or escape private data this records for a test to
      * read back. */
     static constexpr std::uint32_t max_private = 64u;
+    /* The largest allocation private driver data this keeps, which is a
+     * descriptor and a shared object's record with room over (feature 053). */
+    static constexpr std::uint32_t max_allocation_private = 128u;
+    /* NT handles this hands out at once: one more than icd::SharedHandles
+     * holds, so a test can reach the ICD table's own refusal and not only the
+     * kernel's (feature 053). */
+    static constexpr std::uint32_t max_shared = 65u;
+    /* The first NT handle it mints, which is nothing a D3DKMT_HANDLE could be
+     * so a test that confuses the two fails rather than passing by luck. */
+    static constexpr std::uint64_t first_shared_handle = 0x8000000000000004ull;
     /* The largest answer a test scripts for a transport's context: room for a
      * Vulkan device's memory properties and their framing. */
     static constexpr std::uint32_t max_answer = 1024u;
@@ -95,6 +108,8 @@ public:
     static constexpr std::uint32_t max_bindings = 8u;
     static constexpr std::uint32_t first_chunk_resource = 0x00100003u;
     static constexpr std::uint32_t not_supported = 0xC00000BBu;
+    /* STATUS_NOT_FOUND: what a handle this mock never minted answers. */
+    static constexpr std::uint32_t not_found = 0xC0000225u;
     /* The LUID the Nth adapter added answers until a test sets another:
      * first_luid + N. */
     static constexpr std::uint64_t first_luid = 0x0000000100000000ull;
@@ -123,6 +138,11 @@ public:
     Status        create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
                                     std::uint32_t &allocation) override;
     Status        destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
+    Status        share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle) override;
+    Status        open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                     std::uint8_t *private_data, std::uint32_t capacity,
+                                     std::uint32_t &written) override;
+    Status        close_shared_object(std::uint64_t handle) override;
     Status        lock(std::uint32_t device, std::uint32_t allocation, void *&view) override;
     Status        unlock(std::uint32_t device, std::uint32_t allocation) override;
     Status        create_paging_queue(std::uint32_t device, std::uint32_t &queue, std::uint32_t &fence_object) override;
@@ -330,6 +350,19 @@ private:
         /* A context created as one a hardware queue may run on: dxgkrnl
          * refuses D3DKMTSubmitCommand for it outright (feature 049). */
         bool          hardware_scheduled;
+        /* An allocation keeps the private driver data it was created with, as
+         * the runtime does: it is what dxgkrnl hands the opening process, and
+         * so the only thing a shared object's name travels on (feature 053). */
+        std::uint8_t  created_with[max_allocation_private];
+        std::uint32_t created_size;
+    };
+    /* One NT handle this mock minted: what it names, and the creator's bytes
+     * as they were when it was minted. */
+    struct SharedHandle {
+        std::uint64_t handle;
+        std::uint32_t allocation;
+        std::uint8_t  carried[max_allocation_private];
+        std::uint32_t carried_size;
     };
     static constexpr std::uint32_t max_adapters = 8u;
     /* More than a transport holds: one per context it runs. */
@@ -358,6 +391,7 @@ private:
     bool          played();
     Status        bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32_t size);
     Status        close(Kind kind, std::uint32_t handle);
+    SharedHandle *shared_row(std::uint64_t handle);
     Status        misuse();
 
     PciIdentity   identities_[max_adapters];
@@ -396,6 +430,8 @@ private:
     std::uint32_t private_size_;
     std::uint8_t  submission_[max_private];
     std::uint32_t submission_size_;
+    SharedHandle  shared_[max_shared];
+    std::uint64_t next_shared_handle_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

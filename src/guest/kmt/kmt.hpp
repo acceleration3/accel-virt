@@ -37,6 +37,32 @@ public:
     virtual Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                        uint32_t &allocation) = 0;
     virtual Status   destroy_allocation(uint32_t device, uint32_t allocation) = 0;
+    /* D3DKMTShareObjects over one allocation of `device`: an NT handle this
+     * process may duplicate into another, which opens it with
+     * open_shared_object. The handle is this process's and must be closed with
+     * close_shared_object. 0 unless ok. invalid_parameter for an allocation of
+     * 0; not_supported where the OS will not share what this names - an
+     * allocation created without asking for an identity is one (feature 053). */
+    virtual Status   share_object(uint32_t device, uint32_t allocation, uint64_t &handle) = 0;
+    /* D3DKMTOpenResourceFromNtHandle: what `handle` names, opened on `device`
+     * as an allocation of this process, with the *creating* process's
+     * allocation private driver data written into `private_data` and its
+     * length in `written`.
+     *
+     * The private data is what the call is for. dxgkrnl carries the creator's
+     * bytes to the opener and reads none of them (docs/kb/04-memory.md), which
+     * is the only channel a shared object's name crosses a process boundary
+     * on: the opening ICD reads the id out of them and names it on the wire.
+     * invalid_parameter for a handle of 0 or a buffer the private data does
+     * not fit in; not_found for a handle this process may not open. Nothing is
+     * opened unless ok. */
+    virtual Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+                                        uint8_t *private_data, uint32_t capacity, uint32_t &written) = 0;
+    /* CloseHandle on what share_object or open_shared_object was given. The
+     * allocation an open made is destroyed with destroy_allocation, as any
+     * other is: the handle and what it named have separate lifetimes.
+     * invalid_parameter for a handle of 0. */
+    virtual Status   close_shared_object(uint64_t handle) = 0;
     /* The process's CPU view of an allocation, in `view`: for one in a
      * CPU-visible segment, the host's own memory through the hostmem BAR. It
      * stays addressable until unlock. */

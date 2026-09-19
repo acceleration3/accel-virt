@@ -36,6 +36,10 @@ public:
     Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                uint32_t &allocation) override;
     Status   destroy_allocation(uint32_t device, uint32_t allocation) override;
+    Status   share_object(uint32_t device, uint32_t allocation, uint64_t &handle) override;
+    Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+                                uint8_t *private_data, uint32_t capacity, uint32_t &written) override;
+    Status   close_shared_object(uint64_t handle) override;
     Status   lock(uint32_t device, uint32_t allocation, void *&view) override;
     Status   unlock(uint32_t device, uint32_t allocation) override;
     Status   create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &fence_object) override;
