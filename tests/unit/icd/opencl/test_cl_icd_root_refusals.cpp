@@ -913,3 +913,67 @@ TEST(cl_icd_root_refusals, a_root_with_no_memory_for_its_first_context_makes_non
   /* Nothing was asked of the host: there was never a transport to ask over. */
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
+
+/* A queue asked for on a context this root never opened a device for.
+ *
+ * The host's context was made on the host's own device, and that is the
+ * device a queue is made on - so a root that has never opened one has
+ * nothing to make the queue against, whatever device the application named.
+ * A device the table holds but no open produced is what gets there. */
+TEST(cl_icd_root_refusals, a_queue_on_a_root_that_opened_no_device_is_refused)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  ClObject *const device =
+      av::clicd::ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::device, 0x6300u);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  auto *const as_device = reinterpret_cast<cl_device_id>(device);
+
+  /* The context is made: its own transport, and the host's context on the
+   * host's own device. */
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6400u, CL_SUCCESS);
+  cl_int     error = CL_INVALID_VALUE;
+  cl_context context = rig.root().create_context(nullptr, &as_device, 1u, &error);
+  CHECK(context != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  if (context == nullptr) return;
+
+  /* And the queue has no device of this root's to be made on. */
+  const std::uint32_t sent = rig.kmt().commands();
+  error = CL_SUCCESS;
+  CHECK(rig.root().create_queue(context, as_device, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_DEVICE);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A plain buffer the guest cannot keep: there is no block to give back, only
+ * the host's buffer, and the same path has to serve both. */
+TEST(cl_icd_root_refusals, a_plain_buffer_the_guest_cannot_keep_has_no_block_to_give_back)
+{ std::uint32_t until = 0u;
+  { ClIcdRig rig;
+    Opened   opened(rig);
+    CHECK(opened.made());
+    if (!opened.made()) return;
+    until = buffers_until_the_table_grows(rig, opened);
+    CHECK(until != 0u); }
+  if (until == 0u) return;
+
+  ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  for (std::uint32_t made = 0u; made < until; ++made) {
+      rig.host().cl_handle(0x7000u + made, CL_SUCCESS);
+      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, nullptr) !=
+            nullptr);
+  }
+  rig.host().cl_handle(0x6600u, CL_SUCCESS);   /* the plain create */
+  rig.host().cl_result(CL_SUCCESS);            /* given back again */
+  rig.platform().fail_allocation_at(1u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK(rig.root().invariants_hold()); }

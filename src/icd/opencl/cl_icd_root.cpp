@@ -132,16 +132,14 @@ Status ClIcdRoot::open_device()
         log_.write("rvkcl: no room for the ICD's own context");
         return made;
     }
-    const Status opened = context->make();
-    if (opened != Status::ok) {
+    /* A context that was made has a transport - that is what being made
+     * means - so the two are one question and one failure path. */
+    const Status           opened = context->make();
+    ClientTransport *const wire = opened == Status::ok ? context->wire() : nullptr;
+    if (wire == nullptr) {
         log_.write("rvkcl: the ICD's own context could not be made");
         static_cast<void>(contexts_.destroy(context));
-        return opened;
-    }
-    ClientTransport *const wire = context->wire();
-    if (wire == nullptr) {
-        static_cast<void>(contexts_.destroy(context));
-        return Status::not_supported;
+        return opened != Status::ok ? opened : Status::not_supported;
     }
     /* What the host has, asked once. The device it answers is the one this
      * ICD shows, because the executor bound one GPU to this context. */
@@ -302,7 +300,10 @@ void *ClIcdRoot::wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *contex
          * name it again. Giving it back here is the only chance: the
          * application is about to be told the call failed, and an object it
          * was never handed is one it can never release. */
-        ClientTransport *const transport = context != nullptr ? context->wire() : nullptr;
+        /* Every object is made on a context, so there is one to ask; its
+         * transport is gone only when the context is lost, and then the
+         * host has already let everything of it go. */
+        ClientTransport *const transport = context->wire();
         if (transport != nullptr) give_back_to_host(*transport, kind, wire);
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
@@ -377,8 +378,8 @@ cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device
     cl_uint               found = 0u;
     cl_int                host_error = CL_SUCCESS;
     uint64_t              host_context = 0u;
-    if (wire != nullptr &&
-        av::clproto::rvk_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) == CL_SUCCESS &&
+    /* The make above is what says the transport is there. */
+    if (av::clproto::rvk_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) == CL_SUCCESS &&
         av::clproto::rvk_clGetDeviceIDs(*wire, host_platform, CL_DEVICE_TYPE_GPU, 1u, &host_device,
                                         &found) == CL_SUCCESS) {
         host_context = av::clproto::rvk_clCreateContext(*wire, nullptr, 1u, &host_device,
@@ -589,7 +590,8 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         (flags & static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR)) == 0u;
     uint64_t block = 0u;
     bool     backed = false;
-    if (wants_host_memory && on != nullptr && on->blocks().ready())
+    /* wire_of answered, so the context behind it is there. */
+    if (wants_host_memory && on->blocks().ready())
         backed = on->blocks().take(bytes, block);
 
     cl_int   host_error = CL_SUCCESS;
@@ -904,9 +906,11 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
      * offset in the row is this ICD's, but the length is the application's. */
     if (named->backed() && offset <= named->backing_bytes() &&
         bytes <= named->backing_bytes() - offset) {
+        /* The row names the block this buffer was given, so the arena
+         * answers it: the two are written and forgotten together. */
         uint8_t *const shared =
             context->blocks().at(named->backing_offset(), named->backing_bytes());
-        if (shared != nullptr) {
+        {
             uint64_t       settled = 0u;
             cl_int         settle_error = CL_SUCCESS;
             const uint64_t host_mapped = av::clproto::rvk_clEnqueueMapBuffer(
@@ -957,8 +961,9 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
         const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
             *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, at, 0u, nullptr, nullptr);
         if (read != CL_SUCCESS) {
+            /* take_mapping answered `at`, so this is the row it took. */
             MappedRegion *const region = context->mapping_at(at);
-            if (region != nullptr) context->give_back_mapping(*region);
+            context->give_back_mapping(*region);
             report_error(error, read);
             return nullptr;
         }
@@ -1055,9 +1060,11 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
     if (context == nullptr) return CL_INVALID_CONTEXT;
     SvmAllocation *const allocation = context->svm().covering(pointer);
     if (allocation == nullptr || bytes == 0u) return CL_INVALID_VALUE;
-    const uint64_t host = context->svm().host_address_of(pointer);
+    /* covering() found the allocation, and an allocation stands for a host
+     * address that is never nothing - its own invariant says so. */
+    const uint64_t         host = context->svm().host_address_of(pointer);
     ClientTransport *const wire = context->wire();
-    if (wire == nullptr || host == 0u) return CL_OUT_OF_RESOURCES;
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     uint64_t     produced = 0u;
     const cl_int mapped = av::clproto::rvk_clEnqueueSVMMap(
         *wire, held->wire(), blocking, flags, host, bytes, 0u, nullptr,
@@ -1092,9 +1099,11 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
     if (context == nullptr) return CL_INVALID_CONTEXT;
     SvmAllocation *const allocation = context->svm().covering(pointer);
     if (allocation == nullptr) return CL_INVALID_VALUE;
-    const uint64_t host = context->svm().host_address_of(pointer);
+    /* covering() found the allocation, and an allocation stands for a host
+     * address that is never nothing - its own invariant says so. */
+    const uint64_t         host = context->svm().host_address_of(pointer);
     ClientTransport *const wire = context->wire();
-    if (wire == nullptr || host == 0u) return CL_OUT_OF_RESOURCES;
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     /* Where what the application wrote would go back; see svm_map for why it
      * does not yet. */
     uint64_t     produced = 0u;
