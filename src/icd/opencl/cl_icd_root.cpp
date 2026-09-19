@@ -788,19 +788,31 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
         log_.write("rvkcl: too many reads outstanding; this one blocks");
         produced = 0u;
     }
+    /* A blocking read is answered inside this one call, so the bytes have to
+     * be the host's before it writes the reply: a read the host has only
+     * queued has written nothing, and the reply would carry whatever the
+     * device's decode arena last held. Asking the host to block on a queue
+     * that still has work in it would hold its worker for as long as the
+     * queue takes, which is what TdrDelay measures, so the queue is drained
+     * the way finish() drains it - a marker this side waits for - and only
+     * then is the read sent blocking, with nothing left for the host to wait
+     * on. That is the same order a deferred read is delivered in. */
+    uint64_t     settled = 0u;
+    const cl_int marked =
+        av::clproto::rvk_clEnqueueMarkerWithWaitList(*wire, held->wire(), 0u, nullptr, &settled);
+    if (marked != CL_SUCCESS) return marked;
+    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), settled);
+    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, settled));
+    if (waited != CL_SUCCESS) return waited;
     const cl_int ran = av::clproto::rvk_clEnqueueReadBuffer(
-        *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, into, 0u, nullptr, &produced);
+        *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, into, 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
     if (ran != CL_SUCCESS) return ran;
-    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
-    } else {
-        /* An application that wanted no event still made one here, and this
-         * is the only place that can give it back. */
-        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
     }
-    return waited;
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,

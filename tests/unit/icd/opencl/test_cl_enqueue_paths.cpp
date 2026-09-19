@@ -12,10 +12,13 @@
  * else is bytes. Getting that backwards would send a guest address to a host
  * that would use it. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <CL/cl_ext.h>
 #include <cstdint>
@@ -33,6 +36,24 @@ constexpr std::uint64_t host_buffer = 0x6600u;
 constexpr std::uint64_t host_program = 0x6700u;
 constexpr std::uint64_t host_kernel = 0x6800u;
 constexpr std::uint64_t host_event = 0x6900u;
+
+/* Whether the clEnqueueReadBuffer at `index` of the journal asked the host to
+ * block. Its payload is the queue and the buffer as handles and then the flag,
+ * which is the one field of it this ICD decides rather than passes on. */
+bool read_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
+{
+    const std::uint8_t *const frame = kmt.command_bytes(index);
+    if (frame == nullptr || kmt.command_id(index) != av::clproto::kCmd_clEnqueueReadBuffer)
+        return false;
+    av::WireReader payload(frame + av::CommandHeader::encoded_size,
+                           av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+    std::uint64_t  queue = 0u;
+    std::uint64_t  buffer = 0u;
+    std::uint64_t  blocking = 0u;
+    if (!payload.read_pod(queue) || !payload.read_pod(buffer) || !payload.read_varint(blocking))
+        return false;
+    return blocking != 0u;
+}
 
 /* A context, a queue, a buffer, a program and a kernel: everything an enqueue
  * needs, so each test below is about the enqueue and not the setup. */
@@ -428,16 +449,18 @@ TEST(cl_enqueue_paths, a_read_the_icd_cannot_remember_is_made_blocking_instead)
                CL_SUCCESS);
   }
   /* The next one has nowhere to be recorded. The marker it made is given
-   * back and the read is sent blocking: enqueued, flushed, waited for. */
+   * back and the read is taken as a blocking one: the queue is drained by a
+   * marker of its own and the read is sent last, blocking. */
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_enqueued(CL_SUCCESS, host_event + 64u);   /* the marker */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 64u);   /* the marker it recorded against */
   rig.host().cl_result(CL_SUCCESS);                       /* it is released */
-  const unsigned char answered[8] = {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u};
-  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event + 65u);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 65u);   /* the marker that drains the queue */
   rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  rig.host().cl_result(CL_SUCCESS);                       /* the read's event released */
+  rig.host().cl_result(CL_SUCCESS);                       /* the drain marker released */
+  const unsigned char answered[8] = {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
                                    nullptr),
            CL_SUCCESS);
@@ -555,8 +578,16 @@ TEST(cl_enqueue_paths, a_local_argument_the_size_of_a_buffer_is_still_local)
   CHECK(rig.root().invariants_hold()); }
 
 /* A blocking read that was asked for an event: the application gets both the
- * bytes and something to release. */
-TEST(cl_enqueue_paths, a_blocking_read_asked_for_an_event_hands_one_back_with_the_bytes)
+ * bytes and something to release.
+ *
+ * And the order the four commands go out in is the whole of what makes a
+ * blocking read right. The bytes come back inside the read's own reply, which
+ * the device writes as soon as the host's call returns - so a read the host
+ * was not asked to block on answers with whatever the device's decode arena
+ * last held. The queue is therefore drained first, by a marker this side
+ * waits out, and the read is sent last and blocking, with nothing left for
+ * the host to wait on. */
+TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
 { ClIcdRig rig;
   Running  run(rig);
   CHECK(run.made());
@@ -564,16 +595,24 @@ TEST(cl_enqueue_paths, a_blocking_read_asked_for_an_event_hands_one_back_with_th
   unsigned char into[8] = {};
   const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
 
-  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event);
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);         /* the marker that drains the queue */
   rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);                       /* the drain marker released */
+  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event + 1u);
   cl_event event = nullptr;
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    &event),
            CL_SUCCESS);
   CHECK(event != nullptr);
   for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
+
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBuffer);
+  CHECK(read_asks_the_host_to_block(rig.kmt(), sent + 4u));
   CHECK(rig.root().invariants_hold()); }
 
 /* A finish delivers the reads of its own queue and leaves every other
