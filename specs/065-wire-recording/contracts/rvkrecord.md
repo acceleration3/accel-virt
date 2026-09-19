@@ -15,7 +15,7 @@ error.
 | Flag | Keeps |
 |---|---|
 | `--context N` | records of device context N |
-| `--api vulkan\|opengl\|opencl\|transport` | records of contexts of that sub-API |
+| `--api vulkan\|opengl\|opencl\|transport` | the batches whose commands are that API's, and the records of contexts set up for that sub-API |
 | `--fence A[:B]` | records whose fence is A, or within A..B |
 | `--command TEXT` | batches holding a command whose generated name contains TEXT |
 
@@ -41,8 +41,11 @@ indented line per command of a batch:
   `release_blob memory=...`.
 - `--bytes N` appends up to N bytes of each command's payload as hex; 0, the
   default, appends none.
+- A batch whose commands stop framing prints what framed and then
+  `the bytes from N are framed wrong`; that is the guest's framing, not the
+  recording's, so it is not damage.
 - Damage prints as the last line and sets exit status 1:
-  `damaged at 000002c0: a record length passes the end of the file`. Every
+  `damaged at 000002C0: a record length passes the end of the recording`. Every
   whole record before it has already been printed.
 
 ## `replay`
@@ -55,8 +58,13 @@ names (the recording's own, when it is not given).
 - A `reply` record is compared with the answer the replayed batch produced;
   a difference prints as
   `ctx=3 fence=12 command 2 vkCreateDevice: replied 8 bytes, recorded 16`.
-- A `blob` import replays against the `blob_bytes` snapshot when the recording
-  holds one, and prints `unreplayable` for that context when it does not.
+- A transport command is not replayed: the device answers those itself,
+  whichever library is loaded.
+- A blob imported into a context, or an `IMPORT_BLOB` in one of its batches, is
+  guest memory the replay cannot recreate: that context prints `unreplayable`
+  and runs no further, because a wrong answer reported quietly is worse than no
+  answer. The `blob_bytes` snapshot is in the recording for a replay that can
+  place it; this one does not.
 - The last line is `replay: N contexts, M commands, K differences`.
 
 ## The device's properties

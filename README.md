@@ -92,6 +92,22 @@ tools/gate.sh                   # the full verdict, four configurations
 | guest | `build-guest/` | `run_guest_suite.py` in a real Windows guest when `AV_GUEST_IMAGE` names a prepared image: the package installed under Driver Verifier, the adapter started on `rvkgpu`, and `rvktest.exe`'s 23 scenarios on the echo executor; then one more boot, `build-guest-real/`, on the real executor for `--rvk --opengl`, with `--vulkan` and `--opencl` added when their pinned runtime and loader have been fetched. Required before a merge (feature 037) |
 | qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), `qemu_smoke` (the PCI function a guest sees, the realize failures) and `qemu_virtio_gpu` (the virtio-gpu suites, stock and rvk side by side) |
 
+### Reading what crossed the wire
+
+```bash
+... -device virtio-gpu-rvk-pci,...,record=/tmp/run.rvk   # off unless asked for
+python3 -B tools/guest/run_guest_suite.py --record ...   # into the run's work directory
+build/rvkrecord print /tmp/run.rvk                       # command names, decoded arguments
+build/rvkrecord replay /tmp/run.rvk --executor build/librvk_executor.so
+```
+
+A recording is what the executor library received (`docs/protocol.md`, feature
+065): every context's setup, every batch, reply, fence, fault and blob, flushed
+as it is taken, so a QEMU that dies inside a host driver leaves the batch it was
+running. `rvkrecord replay` drives it back into a library through the same
+`rvk_executor.h` the device drives, on this machine's GPU or another one, and
+names every answer that differs.
+
 ### Running the device
 
 ```bash
@@ -166,6 +182,7 @@ src/device/                       QEMU device core — freestanding C++23, librv
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
   capset/  memory/  ring/  control/ the capset; blobs and their windows; ring consumption; control answers
   fence/  execution/                fence pages and interrupts; executors, command streams, replies
+  recording/                        wire recordings: the format, the recorder, the reader, the printer, the replay
   module/                           the device object and the module holding every device
   qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides

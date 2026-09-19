@@ -59,18 +59,32 @@ guest-core-to-device-core run and replays it; a fuzz target on the reader.
 | `WireRecorder` | system | `Host&`, the open file, the header, the limit, the kinds, a mutex, what it refused | Writes what crosses the wire to the recording |
 | `RecordingReader` | system | the bytes and their length, the file header, the read offset, where the damage is | Walks a recording's records, stopping at the first damage |
 | `RecordingFilter` | object | a context, a sub-API, a fence range, a command-name fragment | Whether a record is shown |
-| `RecordedCommand` | object | one command's header and payload inside a batch record | One command of a recorded batch |
 | `RecordingPrinter` | system | the reader, the filter, the line buffer, the byte budget | Prints a recording as lines a person reads |
 | `ReplayContext` | object | a recorded context id, its executor, its sub-API, its last answer | One recorded context, replayed on a library |
 | `RecordingReplay` | system | `ExecutorLibrary&`, the replay contexts, the GPU asked for, the findings | Replays a recording into an executor library |
-| `PosixRecordingFile` | object | a file descriptor | A recording file on this host |
+| `RecordedCommand` | object | one command's header and payload inside a batch record | One command of a recorded batch |
+| `ContextApi` | object | one recorded context and the API half of the ids it sends | Which API's commands a recorded context speaks |
+| `RecordingToolRequest` | object | the action, the recording, the library, the GPU and the byte budget | What `rvkrecord` was asked to do |
 | `MappedFile` | object | the mapping and its length | A file's bytes, mapped read-only |
 | `PosixExecutorModule` | object | the opened library and its table | An executor library loaded by path |
 
-`RecordingSettings` is deliberately **not** a class: the device's four recording
-properties are three strings and a number that `VirtioGpuRvk::realize` hands
-straight to `WireRecorder::open`, `RecordKinds::parse` and `RecordingLimit`. A
-row with nothing of its own to remember does not become a class.
+Two rows changed as the code was written, and both are recorded here rather
+than quietly:
+
+- `PosixRecordingFile` is **not** built. With the QEMU glue doing the four file
+  calls in C - `open`, `qemu_write_full`, `fdatasync`, `ftruncate` - there is
+  nothing left for it to own, and a class with no state is a mistake being
+  written down.
+- `ContextApi` and `RecordingToolRequest` were not foreseen. The first is what
+  lets `--api` keep a context's replies and fences, since only a batch's
+  commands carry an API in their ids; the second is what the tool was asked to
+  do, which is a decision and therefore belongs in core rather than in `main`.
+
+`RecordingSettings` is deliberately **not** a class either: the device's four
+recording properties are three strings and a number that `VirtioGpuRvk::realize`
+hands straight to `WireRecorder::open`, `RecordKinds::parse` and
+`RecordingLimit`. A row with nothing of its own to remember does not become a
+class.
 
 ## Phasing
 

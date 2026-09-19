@@ -103,6 +103,10 @@ endif()
 # that name (feature 042).
 set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/executor_ops.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
+# rvkrecord's own entry point, for the same reason: a main() in a library is a
+# second main wherever that library is linked (feature 065).
+set(AV_RECORD_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/recording_tool.cpp)
+list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RECORD_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
@@ -157,6 +161,7 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
 list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
+list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
 list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
@@ -197,6 +202,14 @@ set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
 # object has exactly one thing to say: the symbol QEMU looks up. Anything else
 # reaching the dynamic table is surface nobody asked for.
 target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
+
+# ---- rvkrecord: a recording printed, and replayed into a library (065) -----
+# Built in every configuration, before AV_QEMU's return: it reads what a device
+# wrote and drives the same rvk_executor.h a device drives, so it belongs
+# wherever either of those is built.
+add_executable(rvkrecord ${AV_RECORD_ENTRY})
+target_link_libraries(rvkrecord PRIVATE av_core ${CMAKE_DL_LIBS})
+target_include_directories(rvkrecord PRIVATE src)
 
 # ---- two libraries that exist to be held to the ABI ------------------------
 # Built in every configuration, before AV_QEMU's return: the qemu smoke and

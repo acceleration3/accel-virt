@@ -69,6 +69,7 @@ A record occupies `32 + length` bytes; records are not padded.
 | `RecordingReader` | system | the bytes and their length, the file header, the read offset, where the damage is | Walks a recording's records, stopping at the first damage |
 | `RecordingFilter` | object | a context, a sub-API, a fence range, a command-name fragment | Whether a record is shown |
 | `RecordedCommand` | object | the command header and its payload within a batch record | One command inside a recorded batch |
+| `ContextApi` | object | one recorded context and the API half of the ids it sends | Which API's commands a recorded context speaks |
 | `RecordingPrinter` | system | the reader, the filter, the line buffer, the byte budget | Prints a recording as lines a person reads |
 
 ### Replay - `src/device/recording/`
@@ -82,7 +83,7 @@ A record occupies `32 + length` bytes; records are not padded.
 
 | Class | Kind | State it owns | Responsibility |
 |---|---|---|---|
-| `PosixRecordingFile` | object | a file descriptor | A recording file on this host, for the glue's host ops |
+| `RecordingToolRequest` | object | the action, the recording, the library, the GPU and the byte budget | What `rvkrecord` was asked to do |
 | `MappedFile` | object | the mapping and its length | A file's bytes, mapped read-only for the tool |
 | `PosixExecutorModule` | object | the opened library and its table | An executor library the tool loaded by path |
 

@@ -2047,6 +2047,27 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("pmemsave", "\n".join(self.journal_lines()))
         self.assert_clean()
 
+    def test_record_writes_a_wire_recording_beside_the_qemu_log(self):
+        """Feature 065, FR-001: the device is told where to write down what
+        crosses the wire, and the run says where it went."""
+        self.script()
+        result = self.run_suite("--record", "--record-limit", "1048576")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        device = self.journal_lines()[0]
+        self.assertIn(f"record={self.work / 'recording.rvk'}", device)
+        self.assertIn("record-limit=1048576", device)
+        self.assertIn(f"guest: recording what crosses the wire into {self.work / 'recording.rvk'}",
+                      result.stdout)
+        self.assert_clean()
+
+    def test_a_run_without_record_asks_the_device_for_no_recording(self):
+        self.script()
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("record=", self.journal_lines()[0])
+        self.assertNotIn("recording what crosses the wire", result.stdout)
+        self.assert_clean()
+
     def test_a_driver_that_opened_no_region_fails_the_segments_step(self):
         """The device has a region and the driver reported none: the capset's
         host-visible bit is clear, or opening it failed - either way the feature

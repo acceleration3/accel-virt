@@ -54,11 +54,12 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `WireRecorder` | system | `Host&`, the open file, the header, the limit, the kinds, a mutex, what it refused | Writes what crosses the wire to the recording |
 | `RecordingReader` | system | the bytes and their length, the file header, the read offset, where the damage is | Walks a recording's records, stopping at the first damage |
 | `RecordingFilter` | object | a context, a sub-API, a fence range, a command-name fragment | Whether a record is shown |
-| `RecordedCommand` | object | one command's header and payload inside a batch record | One command of a recorded batch |
 | `RecordingPrinter` | system | the reader, the filter, the line buffer, the byte budget | Prints a recording as lines a person reads |
 | `ReplayContext` | object | a recorded context id, its executor, its sub-API, its last answer | One recorded context, replayed on a library |
 | `RecordingReplay` | system | `ExecutorLibrary&`, the replay contexts, the GPU asked for, the findings | Replays a recording into an executor library |
-| `PosixRecordingFile` | object | a file descriptor | A recording file on this host |
+| `RecordedCommand` | object | one command's header and payload inside a batch record | One command of a recorded batch |
+| `ContextApi` | object | one recorded context and the API half of the ids it sends | Which API's commands a recorded context speaks |
+| `RecordingToolRequest` | object | the action, the recording, the library, the GPU and the byte budget | What `rvkrecord` was asked to do |
 | `MappedFile` | object | the mapping and its length | A file's bytes, mapped read-only |
 | `PosixExecutorModule` | object | the opened library and its table | An executor library loaded by path |
 

@@ -253,6 +253,11 @@ def arguments():
     parser.add_argument("--require-host-visible", action="store_true",
                         help="fail the run when the host cannot find the guest's pattern in the BAR; off until "
                              "something asks for host memory (feature 043)")
+    parser.add_argument("--record", action="store_true",
+                        help="write a wire recording to recording.rvk in the work directory, which "
+                             "build/rvkrecord prints and replays (feature 065)")
+    parser.add_argument("--record-limit", type=int, default=256 * 1024 * 1024, metavar="BYTES",
+                        help="the recording's ceiling; it stops there rather than growing past it")
     parser.add_argument("--hostmem", type=int, default=256, metavar="MIB",
                         help="the device's host-visible region, in MiB; 0 gives it none, where the driver "
                              "reports one segment and the same allocation goes to guest memory "
@@ -382,6 +387,11 @@ def qemu_command(args, work, disk, rescue):
     # it is a run against an adapter that must fall back (feature 041, FR-001).
     if args.hostmem:
         properties.append(f"hostmem={args.hostmem}M")
+    # What crossed the wire, written beside qemu.log so a run that rendered
+    # wrong can be printed and replayed afterwards (feature 065, FR-001).
+    if args.record and not rescue:
+        properties.append(f"record={work / RECORDING}")
+        properties.append(f"record-limit={args.record_limit}")
     device = [] if rescue else ["-device", ",".join(properties)]
     command = [
         args.qemu, "-machine", f"q35,accel={args.accel},memory-backend=ram",
@@ -473,6 +483,8 @@ DISPLAY_SIZE = (1280, 800)
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
 DISPLAY_DEVICE = "gpu"
+RECORDING = "recording.rvk"
+"""What --record writes in the work directory, beside qemu.log (feature 065)."""
 # The device's three sources and eight messages its contexts' fence queues
 # share, matching rvkgpu.inf's MessageNumberLimit (feature 043).
 FENCE_VECTORS = 11
@@ -820,6 +832,9 @@ class GuestRun:
         prefix = "rescue." if rescue else ""
         self.qemu_log = self.work / ("qemu-rescue.log" if rescue else "qemu.log")
         self.qmp_lost = False
+        if self.args.record and not rescue:
+            self.say(f"recording what crosses the wire into {self.work / RECORDING}; "
+                     f"build/rvkrecord print it")
         output = open(self.qemu_log, "wb")
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
         # What the test executor is told to do to the host's work: a stall
