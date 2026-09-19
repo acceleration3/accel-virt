@@ -14,6 +14,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
+#include "icd/opencl/cl_property_list.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -23,6 +24,7 @@ using av::ClIcdRig;
 using av::FakeClLoader;
 using av::MockKmt;
 using av::clicd::ClObject;
+using av::clicd::ClPropertyList;
 
 namespace {
 
@@ -173,10 +175,10 @@ TEST(cl_icd_root, a_context_made_from_something_that_is_not_a_device_is_refused)
   /* And with no device at all. */
   const cl_device_id none = nullptr;
   error = CL_SUCCESS;
-  CHECK(rig.root().create_context(&none, 1u, &error) == nullptr);
+  CHECK(rig.root().create_context(nullptr, &none, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_DEVICE);
   error = CL_SUCCESS;
-  CHECK(rig.root().create_context(nullptr, 0u, &error) == nullptr);
+  CHECK(rig.root().create_context(nullptr, nullptr, 0u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE); }
 
 TEST(cl_icd_root, retaining_a_context_keeps_it_until_as_many_releases)
@@ -272,7 +274,8 @@ TEST(cl_icd_root, a_queue_made_on_something_that_is_not_a_context_is_refused)
   cl_device_id device = opened_device(rig);
   int          elsewhere = 0;
   cl_int       error = CL_SUCCESS;
-  CHECK(rig.root().create_queue(reinterpret_cast<cl_context>(&elsewhere), device, &error) ==
+  CHECK(rig.root().create_queue(reinterpret_cast<cl_context>(&elsewhere), device, nullptr,
+                                &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT); }
 
@@ -804,4 +807,91 @@ TEST(cl_icd_root, the_root_is_what_a_watcher_gives_a_delivered_event_back_to)
   CHECK_EQ(ClIcdRootProbe::live_of(rig.root(), ClObject::Kind::event), 0u);
   /* The host is told once, when that last reference goes. */
   CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* ---- property lists ------------------------------------------------------ */
+
+TEST(cl_icd_root, a_context_property_this_driver_does_not_implement_is_refused)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+
+  /* Nothing is sent: the list is judged before a transport is even made. */
+  const std::uint32_t before = rig.kmt().commands();
+  const std::uint64_t unknown[] = {0x4242u, 1u, 0u};
+  cl_int              error = CL_SUCCESS;
+  CHECK(rig.root().create_context(unknown, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+
+  /* A property named twice, which the API calls an error rather than a
+   * last-one-wins. */
+  const std::uint64_t twice[] = {static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 0u,
+                                 static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 1u, 0u};
+  CHECK(rig.root().create_context(twice, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+
+  /* And a list with no terminator inside the bound, which is the one this
+   * must refuse rather than read. */
+  std::uint64_t unterminated[ClPropertyList::max_pairs * 2u + 3u] = {};
+  for (std::uint32_t pair = 0u; pair <= ClPropertyList::max_pairs; ++pair)
+      unterminated[pair * 2u] = static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC) + pair;
+  CHECK(rig.root().create_context(unterminated, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_context_named_on_another_platform_is_refused_and_on_this_one_is_made)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+
+  cl_int              error = CL_SUCCESS;
+  int                 elsewhere = 0;
+  const std::uint64_t other[] = {
+      static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
+      static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&elsewhere)), 0u};
+  CHECK(rig.root().create_context(other, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PLATFORM);
+
+  /* This platform, named explicitly, with the sync flag beside it: both are
+   * properties the driver implements, so the context is made. */
+  cl_platform_id      ours = nullptr;
+  cl_uint             platforms = 0u;
+  CHECK_EQ(rig.root().platform_ids(1u, &ours, &platforms), CL_SUCCESS);
+  const std::uint64_t named[] = {
+      static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
+      static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(ours)),
+      static_cast<std::uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC), 0u, 0u};
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  CHECK(rig.root().create_context(named, &device, 1u, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_queue_takes_the_two_properties_the_api_names_and_a_buffer_takes_none)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+
+  const std::uint64_t known[] = {static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES),
+                                 CL_QUEUE_PROFILING_ENABLE,
+                                 static_cast<std::uint64_t>(CL_QUEUE_SIZE), 16u, 0u};
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_queue(context, device, known, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+
+  const std::uint32_t before = rig.kmt().commands();
+  const std::uint64_t unknown[] = {0x4242u, 1u, 0u};
+  CHECK(rig.root().create_queue(context, device, unknown, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+  /* OpenCL 3.0 defines no buffer property at all, so any list names
+   * something this driver does not implement. */
+  const std::uint64_t any[] = {1u, 1u, 0u};
+  CHECK(rig.root().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr, any, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+  CHECK_EQ(rig.kmt().commands(), before);
   CHECK(rig.root().invariants_hold()); }

@@ -274,9 +274,45 @@ void *ClIcdRoot::wrap(ClObject::Kind kind, uint64_t wire, GuestClContext *contex
     return object;
 }
 
-cl_context ClIcdRoot::create_context(const cl_device_id *devices, cl_uint num_devices, cl_int *error)
+cl_int ClIcdRoot::judge(const uint64_t *properties, const uint64_t *allowed, uint32_t allowed_count,
+                        ClPropertyList &read) const
+{
+    AV_SCOPE("ClIcdRoot::judge");
+    /* A list with no terminator inside the bound is not a list this can read,
+     * and reading past it is the one thing that must not happen. */
+    if (!read.read(properties)) return CL_INVALID_PROPERTY;
+    if (read.repeated()) return CL_INVALID_PROPERTY;
+    for (uint32_t index = 0u; index < read.pairs(); ++index) {
+        const uint64_t name = read.name_at(index);
+        bool           known = false;
+        for (uint32_t row = 0u; row < allowed_count && !known; ++row) known = allowed[row] == name;
+        if (!known) return CL_INVALID_PROPERTY;
+    }
+    return CL_SUCCESS;
+}
+
+cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device_id *devices,
+                                     cl_uint num_devices, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_context");
+    /* CL_CONTEXT_PLATFORM must be this platform if it is named at all; the
+     * interop-sync flag is accepted and has no effect, because there is no
+     * GL sharing here for it to synchronise with. */
+    static constexpr uint64_t allowed[] = {
+        static_cast<uint64_t>(CL_CONTEXT_PLATFORM),
+        static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC)};
+    ClPropertyList            list;
+    const cl_int              judged_list = judge(properties, allowed, 2u, list);
+    if (judged_list != CL_SUCCESS) {
+        report_error(error, judged_list);
+        return nullptr;
+    }
+    uint64_t named = 0u;
+    if (list.names(static_cast<uint64_t>(CL_CONTEXT_PLATFORM), named) && named != 0u &&
+        !platform_.names_this(reinterpret_cast<cl_platform_id>(named))) {
+        report_error(error, CL_INVALID_PLATFORM);
+        return nullptr;
+    }
     if (devices == nullptr || num_devices == 0u) {
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
@@ -418,9 +454,21 @@ bool ClIcdRoot::invariants_hold() const
     return platform_.dispatchable();
 }
 
-cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device, cl_int *error)
+cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device,
+                                         const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_queue");
+    /* The two the API names for a queue. The bits CL_QUEUE_PROPERTIES may
+     * carry are judged by the host, which is the only thing that knows which
+     * of them its device supports. */
+    static constexpr uint64_t allowed[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES),
+                                           static_cast<uint64_t>(CL_QUEUE_SIZE)};
+    ClPropertyList            list;
+    const cl_int              judged_list = judge(properties, allowed, 2u, list);
+    if (judged_list != CL_SUCCESS) {
+        report_error(error, judged_list);
+        return nullptr;
+    }
     ClObject *const held = judged(context, ClObject::Kind::context);
     if (held == nullptr) {
         report_error(error, CL_INVALID_CONTEXT);
@@ -454,9 +502,18 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
 }
 
 cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
-                                void *host_pointer, cl_int *error)
+                                void *host_pointer, const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_buffer");
+    /* OpenCL 3.0 defines no buffer property, so a list with anything in it
+     * names something this driver does not implement - which is the answer
+     * the API asks for rather than one to ignore. */
+    ClPropertyList list;
+    const cl_int   judged_list = judge(properties, nullptr, 0u, list);
+    if (judged_list != CL_SUCCESS) {
+        report_error(error, judged_list);
+        return nullptr;
+    }
     ClObject *const held = judged(context, ClObject::Kind::context);
     if (held == nullptr) {
         report_error(error, CL_INVALID_CONTEXT);

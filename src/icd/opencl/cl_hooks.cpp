@@ -69,7 +69,7 @@ cl_int CL_API_CALL get_device_info(cl_device_id device, cl_device_info name, siz
     return root.device_info(device, name, value_bytes, value, size_ret);
 }
 
-cl_context CL_API_CALL create_context(const cl_context_properties *, cl_uint num_devices,
+cl_context CL_API_CALL create_context(const cl_context_properties *properties, cl_uint num_devices,
                                       const cl_device_id *devices,
                                       void(CL_CALLBACK *)(const char *, const void *, size_t, void *),
                                       void *, cl_int *error)
@@ -79,7 +79,8 @@ cl_context CL_API_CALL create_context(const cl_context_properties *, cl_uint num
         if (error != nullptr) *error = CL_INVALID_PLATFORM;
         return nullptr;
     }
-    return cl_icd_binding.root().create_context(devices, num_devices, error);
+    return cl_icd_binding.root().create_context(
+        reinterpret_cast<const uint64_t *>(properties), devices, num_devices, error);
 }
 
 cl_int CL_API_CALL retain_context(cl_context context)
@@ -97,14 +98,17 @@ cl_int CL_API_CALL release_context(cl_context context)
 }
 
 cl_command_queue CL_API_CALL create_queue_with_properties(cl_context context, cl_device_id device,
-                                                          const cl_queue_properties *, cl_int *error)
+                                                          const cl_queue_properties *properties,
+                                                          cl_int *error)
 {
     AV_SCOPE("create_queue_with_properties");
     if (!cl_icd_binding.bound()) {
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_queue(context, device, error);
+    return cl_icd_binding.root().create_queue(context, device,
+                                              reinterpret_cast<const uint64_t *>(properties),
+                                              error);
 }
 
 cl_command_queue CL_API_CALL create_queue(cl_context context, cl_device_id device,
@@ -115,7 +119,9 @@ cl_command_queue CL_API_CALL create_queue(cl_context context, cl_device_id devic
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_queue(context, device, error);
+    /* The deprecated 1.2 call carries a bitfield rather than a list, and the
+     * host is what judges its bits. */
+    return cl_icd_binding.root().create_queue(context, device, nullptr, error);
 }
 
 cl_int CL_API_CALL retain_queue(cl_command_queue queue)
@@ -140,7 +146,9 @@ cl_mem CL_API_CALL create_buffer(cl_context context, cl_mem_flags flags, size_t 
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, error);
+    /* clCreateBuffer carries no list; clCreateBufferWithProperties is not a
+     * slot this ICD claims, so the only list a buffer could have is none. */
+    return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, nullptr, error);
 }
 
 cl_int CL_API_CALL retain_mem(cl_mem buffer)

@@ -30,6 +30,7 @@
 #include "icd/opencl/cl_extension_policy.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_platform.hpp"
+#include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 
 #include <CL/cl.h>
@@ -90,15 +91,21 @@ public:
 
     /* ---- contexts ------------------------------------------------------- */
 
-    cl_context create_context(const cl_device_id *devices, cl_uint num_devices, cl_int *error);
+    /* `properties` is the application's zero-terminated list, which the API
+     * requires this to judge rather than ignore: an unknown property is
+     * CL_INVALID_PROPERTY, and a driver that quietly dropped one would be
+     * doing something other than what it was asked. */
+    cl_context create_context(const uint64_t *properties, const cl_device_id *devices,
+                              cl_uint num_devices, cl_int *error);
     cl_int     retain_context(cl_context context);
     cl_int     release_context(cl_context context);
 
     /* ---- everything an object of a context is ---------------------------- */
 
-    cl_command_queue create_queue(cl_context context, cl_device_id device, cl_int *error);
+    cl_command_queue create_queue(cl_context context, cl_device_id device,
+                                  const uint64_t *properties, cl_int *error);
     cl_mem           create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
-                                   void *host_pointer, cl_int *error);
+                                   void *host_pointer, const uint64_t *properties, cl_int *error);
     cl_program       create_program(cl_context context, cl_uint count, const char **sources,
                                     const size_t *lengths, cl_int *error);
     cl_kernel        create_kernel(cl_program program, const char *name, cl_int *error);
@@ -177,6 +184,10 @@ private:
     ClientTransport *wire_of(ClObject &object);
     /* Judges an application's pointer and answers the object, or null. */
     ClObject        *judged(const void *pointer, ClObject::Kind kind);
+    /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
+     * no property named twice, and every name one of `allowed`. */
+    cl_int           judge(const uint64_t *properties, const uint64_t *allowed,
+                           uint32_t allowed_count, ClPropertyList &read) const;
     /* Opens the device this ICD shows, once, on the first ask. */
     [[nodiscard]] Status open_device();
     /* Makes one object of a host answer, releasing the host's if this cannot
