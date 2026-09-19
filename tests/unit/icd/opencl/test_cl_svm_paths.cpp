@@ -260,3 +260,68 @@ TEST(cl_svm_paths, a_kernel_argument_that_is_an_address_is_translated_or_refused
            CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK(rig.root().invariants_hold()); }
+
+/* Shared memory on a context whose transport is gone.
+ *
+ * These entries reach the wire only once they have translated an address, so
+ * a lost context alone does not get them there - the allocation has to exist
+ * first and the context to die after it. That is the order a real application
+ * meets: it allocates, the device faults, and it carries on calling. */
+TEST(cl_svm_paths, every_shared_memory_entry_on_a_lost_context_refuses_at_once)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  rig.host().cl_handle(host_shared, CL_SUCCESS);
+  void *const mirror = rig.root().svm_alloc(opened.context(), CL_MEM_READ_WRITE, shared_bytes, 0u);
+  CHECK(mirror != nullptr);
+  if (mirror == nullptr) return;
+  rig.host().cl_handle(0x6700u, CL_SUCCESS);
+  cl_program program = rig.loader().create_program(opened.context(), "__kernel void k(void){}",
+                                                   nullptr);
+  CHECK(program != nullptr);
+  if (program == nullptr) return;
+  rig.host().cl_handle(0x6800u, CL_SUCCESS);
+  cl_kernel kernel = rig.loader().create_kernel(program, "k", nullptr);
+  CHECK(kernel != nullptr);
+  if (kernel == nullptr) return;
+
+  /* The fault. */
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.root().svm_map(opened.queue(), CL_TRUE, CL_MAP_READ, mirror, shared_bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().svm_map(opened.queue(), CL_TRUE, CL_MAP_READ, mirror, shared_bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().svm_unmap(opened.queue(), mirror, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().set_kernel_svm_argument(kernel, 0u, mirror), CL_OUT_OF_RESOURCES);
+  /* Freeing sends nothing either, and the allocation is still forgotten:
+   * the device frees it with the context. */
+  rig.root().svm_free(opened.context(), mirror);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  /* And nothing more can be allocated on it. */
+  CHECK(rig.root().svm_alloc(opened.context(), CL_MEM_READ_WRITE, shared_bytes, 0u) == nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_svm_paths, a_map_and_an_unmap_asked_for_an_event_hand_one_back)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  rig.host().cl_handle(host_shared, CL_SUCCESS);
+  void *const mirror = rig.root().svm_alloc(opened.context(), CL_MEM_READ_WRITE, shared_bytes, 0u);
+  CHECK(mirror != nullptr);
+  if (mirror == nullptr) return;
+
+  /* Both of these enqueue, so both can be asked for the event they made. */
+  rig.host().cl_enqueued(CL_SUCCESS, 0x6900u);
+  cl_event mapped = nullptr;
+  CHECK_EQ(rig.root().svm_map(opened.queue(), CL_TRUE, CL_MAP_READ, mirror, shared_bytes, &mapped),
+           CL_SUCCESS);
+  CHECK(mapped != nullptr);
+  rig.host().cl_enqueued(CL_SUCCESS, 0x6901u);
+  cl_event unmapped = nullptr;
+  CHECK_EQ(rig.root().svm_unmap(opened.queue(), mirror, &unmapped), CL_SUCCESS);
+  CHECK(unmapped != nullptr);
+  CHECK(rig.root().invariants_hold()); }

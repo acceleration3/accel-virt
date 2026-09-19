@@ -275,3 +275,130 @@ TEST(cl_enqueue_paths, a_blocking_read_the_host_refuses_answers_its_error)
                                    nullptr),
            CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- events, and the delivery a status query triggers -------------------- */
+
+/* A read the application polls for rather than waits on: asking the event's
+ * status is where it learns the read is done, so it is where the bytes have
+ * to be there. Every other query, and every other answer, leaves the read
+ * where it was - delivering on a status of 'running' would write into the
+ * application's memory while it is still entitled to use it. */
+TEST(cl_enqueue_paths, only_a_completed_execution_status_delivers_a_deferred_read)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
+                                   &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+
+  /* Another query entirely: the read is not delivered. */
+  cl_command_queue named = nullptr;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&named), sizeof named);
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_QUEUE, sizeof named, &named, nullptr),
+           CL_SUCCESS);
+
+  /* The right query, asked only for its size: there is nothing to read the
+   * status out of, so nothing is delivered. */
+  std::size_t bytes = 0u;
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr, &bytes),
+           CL_SUCCESS);
+
+  /* The right query with too little room: refused by the host rather than
+   * read past. */
+  cl_int status = 0;
+  rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, 1u, &status, nullptr),
+           CL_INVALID_VALUE);
+
+  /* The right query, answered 'still running': the application may still be
+   * using that memory, so nothing is written into it. */
+  const cl_int running = CL_RUNNING;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
+                                 nullptr),
+           CL_SUCCESS);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
+
+  /* And completed, which is the one that delivers. */
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  const unsigned char answered[8] = {5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
+                                 nullptr),
+           CL_SUCCESS);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 5u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A delivery the host refuses is the answer the caller gets, and the row goes
+ * back either way: a read that can never be delivered must not be kept
+ * forever, and the application is told rather than left waiting. */
+TEST(cl_enqueue_paths, a_delivery_the_host_refuses_is_answered_and_the_row_is_still_given_back)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
+                                   &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+
+  /* The wait says it is done and the fetch behind it fails. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  CHECK_EQ(rig.root().wait_for_events(1u, &event), CL_OUT_OF_RESOURCES);
+  /* Asked again, there is nothing left to deliver: the row went back. */
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  CHECK_EQ(rig.root().wait_for_events(1u, &event), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* Waits name events, and events belong to contexts. A wait over two contexts
+ * is a wait this ICD cannot make, because it has one transport to ask over
+ * per context and no way to wait on both at once. */
+TEST(cl_enqueue_paths, a_wait_over_two_contexts_or_too_many_events_is_refused)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+
+  rig.host().cl_handle(0x6902u, CL_SUCCESS);
+  cl_event mine = rig.loader().create_user_event(run.context(), nullptr);
+  CHECK(mine != nullptr);
+  if (mine == nullptr) return;
+
+  /* A second context, and an event of its own. */
+  rig.host().blob_import(0u, 0x79u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6405u, CL_SUCCESS);
+  cl_context second = rig.loader().create_context(nullptr, nullptr);
+  if (second == nullptr) {
+      /* The rig's loader makes a context on the device it found; if it
+       * cannot, there is nothing to cross contexts with. */
+      CHECK(rig.root().invariants_hold());
+      return;
+  }
+  rig.host().cl_handle(0x6903u, CL_SUCCESS);
+  cl_event theirs = rig.loader().create_user_event(second, nullptr);
+  CHECK(theirs != nullptr);
+  if (theirs == nullptr) return;
+
+  const cl_event both[] = {mine, theirs};
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().wait_for_events(2u, both), CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
