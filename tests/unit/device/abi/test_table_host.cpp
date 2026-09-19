@@ -335,7 +335,9 @@ TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
   CHECK_STATUS(before.dmabuf_over_guest(runs, sizes, 1u, none), Status::not_supported);
   before.close_dmabuf(7);
   CHECK_EQ(none, -1);
-  host.unmap_guest(run, length); }\nTEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
+  host.unmap_guest(run, length); }
+
+TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *file = nullptr;
   CHECK_STATUS(host.create_recording("run.rvk", file), Status::ok);

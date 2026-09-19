@@ -487,6 +487,9 @@ TEST(blob_imports_import, a_recording_that_does_not_keep_a_blobs_bytes_records_o
 
 TEST(blob_imports_import, an_import_the_executor_refuses_records_nothing)
 { ImportRig rig;
+  /* One attempt per import, so a refusal is the whole answer rather than the
+   * dma-buf half of one. */
+  rig.host().refuse_dmabufs();
   const std::uint32_t pages[] = {7u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(5u), pages, 1u), Status::ok);
   CHECK_STATUS(rig.recorder().open("refused.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
