@@ -64,17 +64,22 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 # feature has built yet - a transport (043), an ICD connection (045), a backend
 # registry (042). They are generated and committed all the same, because the
 # gate compares the whole tree; each joins a build when its feature arrives.
-set(AV_GENERATED_SOURCES
+# The three command-name tables are strings the registries gave their ids and
+# nothing else - no API header, no registry type - so they compile wherever the
+# rest of the tree does and the recording tools can name a command on a
+# checkout with no registries fetched (feature 065).
+set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp)
+set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_descriptor_template_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
   # The OpenGL host decode path, which compiles now that the sync hooks are
   # fields on RealGl rather than free functions with nowhere to keep state
   # (feature 042).
@@ -101,6 +106,7 @@ list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
+list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
 # The guest's encoders join the core too, and nothing of the device's: the rvk
 # scenarios in src/guest send real Vulkan and OpenCL streams (044), and the
 # device core for QEMU below never encodes one.
@@ -153,6 +159,7 @@ list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
+list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
 if(AV_GENERATED)
   list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_SOURCES})
 endif()
