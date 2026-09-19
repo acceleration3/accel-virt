@@ -373,6 +373,57 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("guest: rvk failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
 
+    def rvk_run(self, *extra, median="ok transport.warm_median 640\n"):
+        """An rvk run whose transport scenario timed its warm rounds."""
+        report = "ok transport.nop\nok transport.latency 812\n" + median + "rvktest: 12 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": report, "collect": COLLECTED})
+        return self.run_suite("--rvk", *extra)
+
+    def test_two_rvk_runs_make_the_cost_of_a_recording_a_number(self):
+        """SC-002: the first boot can only keep its own round trip, and the one
+        that completes the pair is the one that says what a recording cost."""
+        first = self.rvk_run()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("guest: recording cost: a no-op round trip took 640 us with recording off; the same run "
+                      f"with --record completes SC-002's pair in {self.work / 'recording-cost.txt'}", first.stdout)
+        second = self.rvk_run("--record", median="ok transport.warm_median 712\n")
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn("guest: recording cost ok: a no-op round trip took 640 us with recording off and 712 us "
+                      "with it on; a recording costs 72 us", second.stdout)
+        self.assertIn("off 640\non 712\n", (self.work / "recording-cost.txt").read_text())
+        self.assertIn("recording cost ok", (self.work / "verdict.txt").read_text())
+        self.assert_clean()
+
+    def test_a_recording_no_slower_than_no_recording_is_not_called_a_cost(self):
+        """The two boots are minutes apart on a machine doing other things, so
+        the run with the recording on comes out faster often enough that
+        printing a negative cost would be printing noise as a measurement."""
+        self.assertEqual(self.rvk_run("--record", median="ok transport.warm_median 640\n").returncode, 0)
+        result = self.rvk_run(median="ok transport.warm_median 700\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: recording cost ok: a no-op round trip took 700 us with recording off and 640 us "
+                      "with it on; a recording costs nothing this pair could measure", result.stdout)
+
+    def test_an_rvk_run_that_timed_no_warm_round_trip_measures_no_cost(self):
+        """A run whose warm rounds failed reported a latency and nothing to
+        compare; it must not keep the cold round trip as if it were one."""
+        result = self.rvk_run(median="")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: recording cost skipped: the rvk run timed no warm round trip", result.stdout)
+        self.assertFalse((self.work / "recording-cost.txt").exists())
+
+    def test_a_cost_record_that_is_not_two_round_trips_fails_the_run(self):
+        """A hand-edited record is evidence of something; a run that silently
+        overwrote it would take the comparison with it."""
+        self.work.mkdir(parents=True, exist_ok=True)
+        (self.work / "recording-cost.txt").write_text("off 640\noff 700\n")
+        result = self.rvk_run()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: recording.cost failed", result.stdout)
+        self.assertIn("a second `off`; the record holds one of each", result.stdout)
+        self.assertEqual((self.work / "recording-cost.txt").read_text(), "off 640\noff 700\n")
+
     def test_an_rvk_run_with_a_failed_step_fails(self):
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
                              "rvktest": "FAIL opencl.sum status=4 63\nrvktest: 11 passed, 1 failed\n",

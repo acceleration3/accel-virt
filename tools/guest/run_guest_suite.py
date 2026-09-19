@@ -39,6 +39,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cts_results import CtsRatchet, QpaResults, SuiteComparison  # noqa: E402
+from recording_cost import RecordingCost  # noqa: E402
 from submit_ratchet import SubmitRatchet  # noqa: E402
 from cts_shards import CtsShards  # noqa: E402
 from cts_subset import CtsSubset  # noqa: E402
@@ -63,6 +64,11 @@ RVK_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
 # transport that has stopped being interrupt-driven, and one near dxgkrnl's 2 s
 # TdrDelay is a reset waiting to happen.
 RVK_LATENCY_LIMIT_US = 50000
+# SC-002's own measurement (feature 065): the same no-op, 31 warm rounds after
+# the first, whose median is what a recording's cost is taken from. The first
+# round trip is cold and swings by milliseconds on this host, which is orders
+# of magnitude more than the one write a record costs.
+RVK_WARM_MEDIAN = re.compile(rb"^ok transport\.warm_median (\d+)", re.MULTILINE)
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
@@ -485,6 +491,9 @@ PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 DISPLAY_DEVICE = "gpu"
 RECORDING = "recording.rvk"
 """What --record writes in the work directory, beside qemu.log (feature 065)."""
+RECORDING_COST = "recording-cost.txt"
+"""Where the rvk scenario keeps each side of SC-002's comparison. It outlives a
+run, because the two sides are two boots: one with --record and one without."""
 # The device's three sources and eight messages its contexts' fence queues
 # share, matching rvkgpu.inf's MessageNumberLimit (feature 043).
 FENCE_VECTORS = 11
@@ -1485,6 +1494,36 @@ class GuestRun:
         self.say(f"rvk latency: a transport no-op round trip took {microseconds} us")
         if microseconds > RVK_LATENCY_LIMIT_US:
             raise StepFailed("rvk", f"a no-op took {microseconds} us, past the {RVK_LATENCY_LIMIT_US} us threshold")
+        self.recording_cost(out)
+
+    def recording_cost(self, report):
+        """SC-002: what a wire recording costs a no-op round trip. No boot can
+        say it alone - one runs with --record and one without - so each keeps
+        its warm median beside qemu.log and whichever completes the pair
+        subtracts. Said, never judged: the threshold a run would be failed
+        against is a number this comparison exists to produce."""
+        median = RVK_WARM_MEDIAN.search(report)
+        if median is None:
+            self.say("recording cost skipped: the rvk run timed no warm round trip")
+            return
+        measured = int(median.group(1))
+        side = "on" if self.args.record else "off"
+        record = RecordingCost(self.work / RECORDING_COST)
+        try:
+            record.keep(side, measured)
+        except ValueError as refused:
+            raise StepFailed("recording.cost", str(refused)) from refused
+        cost = record.cost()
+        if cost is None:
+            missing = "without" if self.args.record else "with"
+            self.say(f"recording cost: a no-op round trip took {measured} us with recording {side}; the same "
+                     f"run {missing} --record completes SC-002's pair in {self.work / RECORDING_COST}")
+            return
+        held = record.measured
+        self.say(f"recording cost ok: a no-op round trip took {held['off']} us with recording off and "
+                 f"{held['on']} us with it on; " +
+                 (f"a recording costs {cost} us" if cost > 0 else
+                  "a recording costs nothing this pair could measure"))
 
     def vulkan(self):
         """Feature 045: the Khronos loader finds rvkvk.dll through the adapter's

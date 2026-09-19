@@ -59,6 +59,24 @@ python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" \
     --work build-guest --record        # writes build-guest/recording.rvk
 ```
 
+## What the recording cost (SC-002)
+
+Two boots, one each way, into the same work directory; each keeps its warm
+no-op round trip in `build-guest-real/recording-cost.txt` and the second says
+the difference.
+
+```bash
+python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" \
+    --work build-guest-real --executor build-qemu/librvk_executor.so --rvk
+python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" \
+    --work build-guest-real --executor build-qemu/librvk_executor.so --rvk --record
+```
+
+The second run prints `recording cost ok: a no-op round trip took N us with
+recording off and M us with it on`. The number kept is the median of the 31
+warm round trips, not the first cold one, which swings by milliseconds on a
+busy host.
+
 ## Reading it
 
 ```bash

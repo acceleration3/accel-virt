@@ -78,3 +78,8 @@ names (the recording's own, when it is not given).
 
 `run_guest_suite.py --record` sets `record=` to `recording.rvk` in the run's
 work directory, beside `qemu.log`.
+
+Its rvk scenario also keeps the warm no-op round trip the run measured in
+`recording-cost.txt` there, under `off` or `on` by whether `--record` was
+given, and the run that completes the pair says what a recording cost
+(SC-002). The record outlives a run because the two sides are two boots.

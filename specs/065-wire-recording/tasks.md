@@ -128,11 +128,17 @@ reinterpreted.
   than importing the `blob_bytes` snapshot (T024): placing a snapshot needs
   page-aligned host memory the replay would have to own, and the recording
   carries the bytes for a replay that can. `contracts/rvkrecord.md` says so.
-- SC-002 (T031) is **not** measured here and is left unticked. The no-op round
-  trip it compares is `rvktest.exe`'s, and the comparison needs two guest runs -
-  one with `--record` and one without - which this environment cannot make
-  (`AV_GUEST_IMAGE` names no prepared image). What the feature owes SC-002 is
-  in place: `--record` on the runner, and a recording that costs one branch on
-  the submission path when it is off, which
-  `batch_executor_run.with_recording_off_it_asks_the_host_for_no_recording_at_all`
-  asserts.
+- SC-002 (T031) is left unticked because the number is a guest run's. The
+  no-op round trip it compares is `rvktest.exe`'s, and the comparison needs two
+  boots - one with `--record` and one without - which this environment cannot
+  make (`AV_GUEST_IMAGE` names no prepared image). Everything up to the boots is
+  built: the rvk scenario reads the transport scenario's warm median, keeps it
+  in `recording-cost.txt` in the work directory under the side the run was, and
+  the run that completes the pair says what a recording cost
+  (`tools/recording_cost.py`, `RecordingCost`; `tests/tools/test_recording_cost.py`
+  and the four `recording cost` cases of `tests/tools/test_run_guest_suite.py`).
+  The median is what is kept rather than the first round trip, which is cold and
+  swings by milliseconds - orders of magnitude past one `write` a batch. The two
+  commands that produce the number are in quickstart.md. That a recording costs
+  one branch when it is off is asserted by
+  `batch_executor_run.with_recording_off_it_asks_the_host_for_no_recording_at_all`.
