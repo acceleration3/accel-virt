@@ -624,3 +624,153 @@ TEST(cl_icd_root_refusals, a_buffer_the_device_will_not_back_falls_back_to_the_o
                                    256u, &error) == nullptr);
   CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
   CHECK(rig.root().invariants_hold()); }
+
+/* The host listing a platform but counting no devices on it: a platform with
+ * nothing behind it is not a device, and the ICD shows none rather than
+ * making one out of a handle it was never given. */
+TEST(cl_icd_root_refusals, a_host_that_counts_no_devices_on_its_platform_opens_none)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  cl_platform_id platform = this_platform(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, nullptr, 0u, 0u);
+  cl_uint count = 0xEEu;
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 0u, nullptr, &count),
+           CL_DEVICE_NOT_FOUND);
+  CHECK_EQ(count, 0u);
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* Opening the device needs guest memory twice - for the ICD's own context and
+ * for the object the application is handed - and either can fail. Whichever
+ * does, the ICD shows no device and holds nothing, and the next ask is free
+ * to try again. */
+TEST(cl_icd_root_refusals, a_guest_with_no_memory_for_the_open_shows_no_device)
+{ bool proved_context = false;
+  bool proved_object = false;
+  for (std::uint32_t refused = 1u; refused <= 24u; ++refused) {
+      ClIcdRig rig;
+      if (rig.loader().load() != FakeClLoader::Load::kept) continue;
+      cl_platform_id platform = this_platform(rig);
+      rig.host().blob_import(0u, 0x77u);
+      rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+      rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+      rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
+      rig.host().cl_info(CL_SUCCESS, "OpenCL C 1.2", 13u);
+      rig.host().cl_info(CL_SUCCESS, "", 1u);
+      rig.platform().fail_allocation_at(refused);
+      cl_device_id device = nullptr;
+      cl_uint      count = 0xEEu;
+      const cl_int answered = rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 1u, &device,
+                                                    &count);
+      if (answered == CL_SUCCESS) continue;
+      /* Whatever ran out, the answer is the same and nothing is shown. */
+      CHECK_EQ(answered, CL_DEVICE_NOT_FOUND);
+      CHECK_EQ(count, 0u);
+      CHECK(device == nullptr);
+      CHECK(rig.root().invariants_hold());
+      /* Before the host was asked anything is the context's own memory;
+       * after is the object the application would have been handed. */
+      if (rig.kmt().commands() == 0u) proved_context = true;
+      else proved_object = true;
+  }
+  /* Both have to be reachable, or this test is asserting less than it says. */
+  CHECK(proved_context);
+  CHECK(proved_object); }
+
+/* An object of the wrong kind, at each entry that names two of them. A queue
+ * is made on a context and a device, a buffer and a program on a context, and
+ * a kernel on a program: each is told which one was wrong. */
+TEST(cl_icd_root_refusals, each_entry_names_the_object_that_was_wrong)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  void *const not_an_object = opened.context();
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_SUCCESS;
+
+  /* A queue on something that is not a context, and on something that is not
+   * a device - the context being right the second time. */
+  CHECK(rig.root().create_queue(reinterpret_cast<cl_context>(opened.device()), opened.device(),
+                                nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = CL_SUCCESS;
+  CHECK(rig.root().create_queue(opened.context(), reinterpret_cast<cl_device_id>(not_an_object),
+                                nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_DEVICE);
+
+  /* A buffer and a program on something that is not a context. */
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer(reinterpret_cast<cl_context>(opened.device()),
+                                   CL_MEM_READ_WRITE, 256u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_program(reinterpret_cast<cl_context>(opened.device()), "k", &error) ==
+        nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+
+  /* Nothing crossed for any of them. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The queries this ICD does not decide for itself go to the host, so they
+ * need a transport; a device whose context is gone has none. */
+TEST(cl_icd_root_refusals, a_device_query_the_host_owns_needs_a_transport_to_ask_over)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  /* The device belongs to the context the ICD opened for itself, not to the
+   * application's - so it is that one a host query has to be asked over, and
+   * that one whose fault leaves nothing to ask over at all.
+   *
+   * The first query faults it, which is the host refusing; the second finds
+   * no transport, which is the different answer this is about. */
+  char        name[64] = {};
+  std::size_t bytes = 0u;
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.loader().device_info(opened.device(), CL_DEVICE_NAME, sizeof name, name, &bytes),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.loader().device_info(opened.device(), CL_DEVICE_NAME, sizeof name, name, &bytes),
+           CL_INVALID_DEVICE);
+  /* And the four it decides still answer, because none of them asks the
+   * host anything. */
+  cl_uint luid_valid = 0u;
+  CHECK_EQ(rig.loader().device_info(opened.device(), CL_DEVICE_LUID_VALID_KHR, sizeof luid_valid,
+                                    &luid_valid, nullptr),
+           CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A context made on a platform property of nothing is a context with no
+ * preference, which is the list most applications build. */
+TEST(cl_icd_root_refusals, a_platform_property_of_nothing_is_no_preference_at_all)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t none[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM), 0u, 0u};
+  cl_device_id        device = opened.device();
+  rig.host().blob_import(0u, 0x7Fu);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6404u, CL_SUCCESS);
+  cl_int error = CL_INVALID_VALUE;
+  CHECK(rig.root().create_context(none, &device, 1u, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* An enumeration that found nothing and was asked only for an array: the
+ * count it was not given must not be written through. */
+TEST(cl_icd_root_refusals, an_open_that_fails_writes_no_count_it_was_not_given)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  cl_platform_id platform = this_platform(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
+  cl_device_id devices[1] = {reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA})};
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 1u, devices, nullptr),
+           CL_DEVICE_NOT_FOUND);
+  CHECK(devices[0] == reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA}));
+  CHECK(rig.root().invariants_hold()); }
