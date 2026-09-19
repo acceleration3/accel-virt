@@ -36,6 +36,8 @@ public:
     Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                uint32_t &allocation) override;
     Status   destroy_allocation(uint32_t device, uint32_t allocation) override;
+    Status   create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
+                                      uint32_t &allocation) override;
     Status   share_object(uint32_t device, uint32_t allocation, uint64_t &handle) override;
     Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
                                 uint8_t *private_data, uint32_t capacity, uint32_t &written) override;

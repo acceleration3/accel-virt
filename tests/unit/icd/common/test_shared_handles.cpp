@@ -61,20 +61,27 @@ public:
     av::RecordingThreadLock &lock() { return lock_; }
     std::uint32_t         device() const { return device_; }
 
-    std::uint32_t create(std::uint64_t object_id)
+    /* A create that asks for an identity, with the id the kernel minted read
+     * back out of the caller's own bytes - which is where an export gets it. */
+    std::uint32_t create(std::uint64_t &object_id)
     {
         const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
                                                   av::SurfaceLayout(64u, 64u, 21u, 256u), object_bytes,
                                                   av::ScanoutTarget());
         CHECK_STATUS(descriptor.encode(bytes_, av::AllocationDescriptor::encoded_size), Status::ok);
-        av::SharedObjectRecord record(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
-                                      object_bytes);
-        record.assign(object_id, 0x77u);
-        CHECK_STATUS(record.encode(bytes_ + av::AllocationDescriptor::encoded_size,
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
+                                            object_bytes);
+        CHECK_STATUS(asking.encode(bytes_ + av::AllocationDescriptor::encoded_size,
                                    av::SharedObjectRecord::encoded_size),
                      Status::ok);
         std::uint32_t allocation = 0u;
-        CHECK_STATUS(kmt_.create_allocation(device_, bytes_, sizeof bytes_, allocation), Status::ok);
+        CHECK_STATUS(kmt_.create_shared_allocation(device_, bytes_, sizeof bytes_, allocation), Status::ok);
+        av::SharedObjectRecord minted;
+        CHECK_STATUS(minted.decode(bytes_ + av::AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        CHECK(minted.assigned());
+        object_id = minted.object_id();
         return allocation;
     }
 
@@ -102,19 +109,21 @@ TEST(shared_handles, a_new_table_resolves_nothing)
 TEST(shared_handles_mint, a_minted_handle_resolves_to_the_id_it_was_minted_for)
 { Kernel              kernel;
   SharedHandles       handles(kernel.kmt(), kernel.lock());
-  const std::uint32_t allocation = kernel.create(0x2222u);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = kernel.create(minted);
+  CHECK(minted != 0u);
   std::uint64_t       handle = 0u;
-  CHECK_STATUS(handles.mint(kernel.device(), allocation, 0x2222u, handle), Status::ok);
+  CHECK_STATUS(handles.mint(kernel.device(), allocation, minted, handle), Status::ok);
   CHECK(handle != 0u);
   std::uint64_t id = 0u;
   CHECK(handles.resolve(handle, id));
-  CHECK_EQ(id, 0x2222u);
+  CHECK_EQ(id, minted);
   CHECK_EQ(handles.live(), 1u);
   CHECK(handles.invariants_hold());
   /* The same object minted again is the same handle: one object, one handle,
    * as Windows answers for a handle to one object. */
   std::uint64_t again = 0u;
-  CHECK_STATUS(handles.mint(kernel.device(), allocation, 0x2222u, again), Status::ok);
+  CHECK_STATUS(handles.mint(kernel.device(), allocation, minted, again), Status::ok);
   CHECK_EQ(again, handle);
   CHECK_EQ(handles.live(), 1u);
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::share_object), 1u); }
@@ -122,13 +131,14 @@ TEST(shared_handles_mint, a_minted_handle_resolves_to_the_id_it_was_minted_for)
 TEST(shared_handles_mint, refuses_an_id_of_zero_and_what_the_kernel_will_not_share)
 { Kernel              kernel;
   SharedHandles       handles(kernel.kmt(), kernel.lock());
-  const std::uint32_t allocation = kernel.create(0x30u);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = kernel.create(minted);
   std::uint64_t       handle = 9u;
   CHECK_STATUS(handles.mint(kernel.device(), allocation, 0u, handle), Status::invalid_parameter);
   CHECK_EQ(handle, 0u);
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::share_object), 0u);
   /* An allocation the kernel does not know. */
-  CHECK(handles.mint(kernel.device(), allocation + 0x1000u, 0x30u, handle) != Status::ok);
+  CHECK(handles.mint(kernel.device(), allocation + 0x1000u, minted, handle) != Status::ok);
   CHECK_EQ(handle, 0u);
   CHECK_EQ(handles.live(), 0u);
   CHECK(handles.invariants_hold()); }
@@ -136,9 +146,10 @@ TEST(shared_handles_mint, refuses_an_id_of_zero_and_what_the_kernel_will_not_sha
 TEST(shared_handles_adopt, a_handle_another_process_sent_is_opened_and_its_id_read_back)
 { Kernel              kernel;
   SharedHandles       exporter(kernel.kmt(), kernel.lock());
-  const std::uint32_t allocation = kernel.create(0x4444u);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = kernel.create(minted);
   std::uint64_t       handle = 0u;
-  CHECK_STATUS(exporter.mint(kernel.device(), allocation, 0x4444u, handle), Status::ok);
+  CHECK_STATUS(exporter.mint(kernel.device(), allocation, minted, handle), Status::ok);
 
   /* A second table is a second process: it minted nothing and knows no ids. */
   av::LockTrace           trace;
@@ -147,15 +158,15 @@ TEST(shared_handles_adopt, a_handle_another_process_sent_is_opened_and_its_id_re
   std::uint64_t           id = 0u;
   CHECK(!importer.resolve(handle, id));
   CHECK_STATUS(importer.adopt(kernel.device(), handle, id), Status::ok);
-  CHECK_EQ(id, 0x4444u);
+  CHECK_EQ(id, minted);
   CHECK(importer.resolve(handle, id));
-  CHECK_EQ(id, 0x4444u);
+  CHECK_EQ(id, minted);
   CHECK_EQ(importer.live(), 1u);
   CHECK(importer.invariants_hold());
   /* Adopting it twice opens nothing again. */
   std::uint64_t once_more = 0u;
   CHECK_STATUS(importer.adopt(kernel.device(), handle, once_more), Status::ok);
-  CHECK_EQ(once_more, 0x4444u);
+  CHECK_EQ(once_more, minted);
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::open_shared_object), 1u); }
 
 /* The refusal the whole table exists for. */
@@ -176,12 +187,13 @@ TEST(shared_handles_adopt, a_handle_from_nowhere_is_refused_and_resolves_to_noth
 TEST(shared_handles_adopt, a_handle_whose_bytes_carry_no_identity_is_refused_and_given_back)
 { Kernel              kernel;
   SharedHandles       handles(kernel.kmt(), kernel.lock());
-  const std::uint32_t allocation = kernel.create(0x5555u);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = kernel.create(minted);
   std::uint64_t       handle = 0u;
   CHECK_STATUS(kernel.kmt().share_object(kernel.device(), allocation, handle), Status::ok);
   std::uint64_t id = 0u;
   CHECK_STATUS(handles.adopt(kernel.device(), handle, id), Status::ok);
-  CHECK_EQ(id, 0x5555u);
+  CHECK_EQ(id, minted);
   handles.forget(handle);
   CHECK(!handles.resolve(handle, id));
   CHECK_EQ(handles.live(), 0u);
@@ -196,8 +208,14 @@ TEST(shared_handles_forget_device, a_device_destroyed_takes_every_handle_it_hold
   SharedHandles handles(kernel.kmt(), kernel.lock());
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
-  CHECK_STATUS(handles.mint(kernel.device(), kernel.create(1u), 1u, first), Status::ok);
-  CHECK_STATUS(handles.mint(kernel.device(), kernel.create(2u), 2u, second), Status::ok);
+  std::uint64_t one = 0u;
+  std::uint64_t two = 0u;
+  const std::uint32_t first_allocation = kernel.create(one);
+  const std::uint32_t second_allocation = kernel.create(two);
+  CHECK(one != two);
+  CHECK_STATUS(handles.mint(kernel.device(), first_allocation, one, first), Status::ok);
+  CHECK_STATUS(handles.mint(kernel.device(), second_allocation, two, second), Status::ok);
+  CHECK(first != second);
   CHECK_EQ(handles.live(), 2u);
   handles.forget_device(kernel.device() + 0x1000u);
   CHECK_EQ(handles.live(), 2u);
@@ -214,7 +232,8 @@ TEST(shared_handles, fills_up_and_then_neither_mints_nor_adopts)
   SharedHandles handles(kernel.kmt(), kernel.lock());
   /* One allocation shared under many ids: what fills the table is rows, and
    * the mock keeps far fewer allocations than this holds rows. */
-  const std::uint32_t allocation = kernel.create(1u);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = kernel.create(minted);
   std::uint64_t       handle = 0u;
   for (std::uint32_t i = 1u; i <= SharedHandles::max_handles; i++)
       CHECK_STATUS(handles.mint(kernel.device(), allocation, i, handle), Status::ok);
@@ -238,8 +257,12 @@ TEST(shared_handles_invariants, refuse_a_row_with_no_handle_no_id_or_either_held
   SharedHandles handles(kernel.kmt(), kernel.lock());
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
-  CHECK_STATUS(handles.mint(kernel.device(), kernel.create(1u), 1u, first), Status::ok);
-  CHECK_STATUS(handles.mint(kernel.device(), kernel.create(2u), 2u, second), Status::ok);
+  std::uint64_t one = 0u;
+  std::uint64_t two = 0u;
+  const std::uint32_t first_allocation = kernel.create(one);
+  const std::uint32_t second_allocation = kernel.create(two);
+  CHECK_STATUS(handles.mint(kernel.device(), first_allocation, one, first), Status::ok);
+  CHECK_STATUS(handles.mint(kernel.device(), second_allocation, two, second), Status::ok);
   CHECK(handles.invariants_hold());
   SharedHandlesProbe::slot(handles, 1u).handle_ = 0u;
   CHECK(!handles.invariants_hold());

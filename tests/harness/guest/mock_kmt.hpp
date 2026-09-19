@@ -44,6 +44,7 @@ public:
         create_device,
         destroy_device,
         create_allocation,
+        create_shared_allocation,
         destroy_allocation,
         share_object,
         open_shared_object,
@@ -99,6 +100,11 @@ public:
     /* The first NT handle it mints, which is nothing a D3DKMT_HANDLE could be
      * so a test that confuses the two fails rather than passing by luck. */
     static constexpr std::uint64_t first_shared_handle = 0x8000000000000004ull;
+    /* The adapter number this mock stamps into every record it mints, standing
+     * for the one SharedObjectTable makes from the performance counter, and
+     * the first object id - both non-zero, which is what "minted" means. */
+    static constexpr std::uint64_t shared_adapter = 0x5A5A0001u;
+    static constexpr std::uint64_t first_object_id = 1u;
     /* The largest answer a test scripts for a transport's context: room for a
      * Vulkan device's memory properties and their framing. */
     static constexpr std::uint32_t max_answer = 1024u;
@@ -138,6 +144,8 @@ public:
     Status        create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
                                     std::uint32_t &allocation) override;
     Status        destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
+    Status        create_shared_allocation(std::uint32_t device, std::uint8_t *private_data,
+                                            std::uint32_t size, std::uint32_t &allocation) override;
     Status        share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle) override;
     Status        open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
                                      std::uint8_t *private_data, std::uint32_t capacity,
@@ -432,6 +440,7 @@ private:
     std::uint32_t submission_size_;
     SharedHandle  shared_[max_shared];
     std::uint64_t next_shared_handle_;
+    std::uint64_t next_object_id_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

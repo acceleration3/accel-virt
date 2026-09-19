@@ -959,10 +959,26 @@ DoorbellFabric &DdiKmt::fabric()
     return fabric_;
 }
 
-/* Feature 053: an NT handle is a kernel object, and this rig has no kernel to
- * make one in - what it drives is the miniport, not dxgkrnl's handle table. A
- * guest asking for one is told so rather than handed a number that names
- * nothing. */
+/* Feature 053: the miniport really does mint here - this rig drives the real
+ * DxgkDdiCreateAllocation - so the identity that comes back is the driver's
+ * own, and a test above can read it out of the bytes it passed in. What this
+ * rig has no kernel for is the NT handle, which is dxgkrnl's and not the
+ * miniport's; the three calls below say so. */
+Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
+                                        std::uint32_t &allocation)
+{
+    allocation = 0u;
+    if (private_data == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
+    const Status created = create_allocation(device, private_data, size, allocation);
+    if (created != Status::ok) return created;
+    /* The driver wrote the minted id into the slot's copy; the caller keeps
+     * the bytes an opening process would be given. */
+    const Allocation *const slot = find_allocation(allocation);
+    if (slot == nullptr) return refuse(Status::invalid_state);
+    std::memcpy(private_data, slot->private_data, size);
+    return Status::ok;
+}
+
 Status DdiKmt::share_object(std::uint32_t, std::uint32_t, std::uint64_t &handle)
 {
     handle = 0u;

@@ -969,28 +969,34 @@ TEST(mock_kmt, a_large_allocation_is_viewed_whole)
 
 namespace {
 
-/* A create the miniport would take as one asking for an identity: a descriptor
- * and an unassigned record behind it (feature 053). The record is assigned as
- * the miniport assigns it, because what the mock carries is the creator's
- * bytes *after* the driver wrote into them. */
-std::uint32_t shareable_allocation(MockKmt &kmt, std::uint32_t device, std::uint64_t object_id,
+/* A create asking for an identity: a descriptor and an *unassigned* record
+ * behind it, which the mock mints into as the miniport does (feature 053).
+ * `object_id` is what it minted, read back out of the caller's own bytes. */
+std::uint32_t shareable_allocation(MockKmt &kmt, std::uint32_t device, std::uint64_t &object_id,
                                    std::uint8_t *bytes)
 {
     const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
                                               av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
                                               av::ScanoutTarget());
     CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
-    av::SharedObjectRecord record(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
-    record.assign(object_id, 0x99u);
-    CHECK_STATUS(record.encode(bytes + av::AllocationDescriptor::encoded_size,
+    const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
+                                        4u * 4096u);
+    CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
                                av::SharedObjectRecord::encoded_size),
                  Status::ok);
     std::uint32_t allocation = 0u;
-    CHECK_STATUS(kmt.create_allocation(device, bytes,
-                                       av::AllocationDescriptor::encoded_size +
-                                           static_cast<std::uint32_t>(av::SharedObjectRecord::encoded_size),
-                                       allocation),
+    CHECK_STATUS(kmt.create_shared_allocation(device, bytes,
+                                              av::AllocationDescriptor::encoded_size +
+                                                  static_cast<std::uint32_t>(
+                                                      av::SharedObjectRecord::encoded_size),
+                                              allocation),
                  Status::ok);
+    av::SharedObjectRecord minted;
+    CHECK_STATUS(minted.decode(bytes + av::AllocationDescriptor::encoded_size,
+                               av::SharedObjectRecord::encoded_size),
+                 Status::ok);
+    CHECK(minted.assigned());
+    object_id = minted.object_id();
     return allocation;
 }
 
@@ -1007,7 +1013,9 @@ TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the
   CHECK_STATUS(kmt.create_device(adapter, creator), Status::ok);
   CHECK_STATUS(kmt.create_device(adapter, opener), Status::ok);
   std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
-  const std::uint32_t allocation = shareable_allocation(kmt, creator, 0x1234u, bytes);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = shareable_allocation(kmt, creator, minted, bytes);
+  CHECK(minted != 0u);
   CHECK(allocation != 0u);
 
   std::uint64_t handle = 0u;
@@ -1028,7 +1036,7 @@ TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the
   CHECK_STATUS(read.decode(carried + av::AllocationDescriptor::encoded_size,
                            av::SharedObjectRecord::encoded_size),
                Status::ok);
-  CHECK_EQ(read.object_id(), 0x1234u);
+  CHECK_EQ(read.object_id(), minted);
 
   /* One handle opens twice: a second process, or the same one again. */
   std::uint32_t again = 0u;
@@ -1088,7 +1096,8 @@ TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
   CHECK_EQ(handle, 0u);
 
   std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
-  const std::uint32_t allocation = shareable_allocation(kmt, device, 7u, bytes);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = shareable_allocation(kmt, device, minted, bytes);
   /* A handle it never gave, and an allocation of another device. */
   CHECK_STATUS(kmt.share_object(device, allocation + 0x1000u, handle), Status::invalid_parameter);
   CHECK_STATUS(kmt.share_object(other, allocation, handle), Status::invalid_parameter);
@@ -1128,7 +1137,8 @@ TEST(mock_kmt_share_object, hands_out_as_many_handles_as_it_has_and_no_more)
   std::uint32_t device = 0u;
   CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
   std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
-  const std::uint32_t allocation = shareable_allocation(kmt, device, 5u, bytes);
+  std::uint64_t       minted = 0u;
+  const std::uint32_t allocation = shareable_allocation(kmt, device, minted, bytes);
   std::uint64_t handles[MockKmt::max_shared] = {};
   for (std::uint32_t i = 0u; i < MockKmt::max_shared; i++) {
       CHECK_STATUS(kmt.share_object(device, allocation, handles[i]), Status::ok);
@@ -1140,3 +1150,112 @@ TEST(mock_kmt_share_object, hands_out_as_many_handles_as_it_has_and_no_more)
   CHECK_STATUS(kmt.close_shared_object(handles[3]), Status::ok);
   CHECK_STATUS(kmt.share_object(device, allocation, past), Status::ok);
   CHECK(past != 0u); }
+
+TEST(mock_kmt_create_shared_allocation, mints_an_id_into_the_creators_bytes_and_a_fresh_one_each_time)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
+  std::uint8_t  first_bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  std::uint8_t  second_bytes[sizeof first_bytes] = {};
+  std::uint64_t first = 0u;
+  std::uint64_t second = 0u;
+  CHECK(shareable_allocation(kmt, device, first, first_bytes) != 0u);
+  CHECK(shareable_allocation(kmt, device, second, second_bytes) != 0u);
+  CHECK(first != 0u);
+  CHECK(second != first);
+  /* The adapter number is the same for both and is never 0: it is what tells
+   * one adapter's records from another's. */
+  av::SharedObjectRecord one;
+  av::SharedObjectRecord two;
+  CHECK_STATUS(one.decode(first_bytes + av::AllocationDescriptor::encoded_size,
+                          av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  CHECK_STATUS(two.decode(second_bytes + av::AllocationDescriptor::encoded_size,
+                          av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  CHECK_EQ(one.adapter_id(), two.adapter_id());
+  CHECK(one.adapter_id() != 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
+  const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
+                                            av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
+                                            av::ScanoutTarget());
+  std::uint8_t  bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  std::uint32_t allocation = 9u;
+  /* The unshared length, a buffer that is not there, and a device it never
+   * gave. */
+  CHECK_STATUS(kmt.create_shared_allocation(device, bytes, av::AllocationDescriptor::encoded_size, allocation),
+               Status::invalid_parameter);
+  CHECK_EQ(allocation, 0u);
+  CHECK_STATUS(kmt.create_shared_allocation(device, nullptr, sizeof bytes, allocation),
+               Status::invalid_parameter);
+  CHECK_STATUS(kmt.create_shared_allocation(device + 0x1000u, bytes, sizeof bytes, allocation),
+               Status::invalid_parameter);
+  CHECK_EQ(kmt.misuses(), 1u);
+
+  /* A record that already names an object: a creator can know neither number,
+   * so one that claims to is refused rather than believed. */
+  std::uint8_t           assigned[sizeof bytes] = {};
+  std::memcpy(assigned, bytes, sizeof bytes);
+  av::SharedObjectRecord forged(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
+  forged.assign(7u, 9u);
+  CHECK_STATUS(forged.encode(assigned + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  CHECK_STATUS(kmt.create_shared_allocation(device, assigned, sizeof assigned, allocation),
+               Status::invalid_parameter);
+  CHECK_EQ(allocation, 0u);
+
+  /* A record whose size is not the allocation's names something else. */
+  std::uint8_t           mismatched[sizeof bytes] = {};
+  std::memcpy(mismatched, bytes, sizeof bytes);
+  const av::SharedObjectRecord wrong_size(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
+                                          8u * 4096u);
+  CHECK_STATUS(wrong_size.encode(mismatched + av::AllocationDescriptor::encoded_size,
+                                 av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  CHECK_STATUS(kmt.create_shared_allocation(device, mismatched, sizeof mismatched, allocation),
+               Status::invalid_parameter);
+
+  /* And it is scriptable, as every other call is. */
+  kmt.fail_at(MockKmt::Call::create_shared_allocation, 1u, refused_code);
+  CHECK(kmt.create_shared_allocation(device, bytes, sizeof bytes, allocation) != Status::ok);
+  CHECK_EQ(allocation, 0u);
+  CHECK_STATUS(kmt.create_shared_allocation(device, bytes, sizeof bytes, allocation), Status::ok);
+  CHECK(allocation != 0u); }
+
+/* The plain create takes the unshared length only: a create asking for an
+ * identity has a two-way buffer and goes through its own call. */
+TEST(mock_kmt_create_allocation, refuses_the_shareable_length)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
+  const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
+                                            av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
+                                            av::ScanoutTarget());
+  std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
+  std::uint32_t allocation = 9u;
+  CHECK_STATUS(kmt.create_allocation(device, bytes, sizeof bytes, allocation), Status::invalid_parameter);
+  CHECK_EQ(allocation, 0u); }

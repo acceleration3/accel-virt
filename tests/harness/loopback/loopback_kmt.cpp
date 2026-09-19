@@ -303,6 +303,13 @@ Status LoopbackKmt::notify_work_submission(std::uint32_t)
  * make one in - what it drives is the miniport, not dxgkrnl's handle table. A
  * guest asking for one is told so rather than handed a number that names
  * nothing. */
+Status LoopbackKmt::create_shared_allocation(std::uint32_t, std::uint8_t *, std::uint32_t,
+                                             std::uint32_t &allocation)
+{
+    allocation = 0u;
+    return Status::not_supported;
+}
+
 Status LoopbackKmt::share_object(std::uint32_t, std::uint32_t, std::uint64_t &handle)
 {
     handle = 0u;

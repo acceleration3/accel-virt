@@ -37,6 +37,20 @@ public:
     virtual Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                        uint32_t &allocation) = 0;
     virtual Status   destroy_allocation(uint32_t device, uint32_t allocation) = 0;
+    /* An allocation created asking the miniport for a shared object's identity
+     * (feature 053). `private_data` goes in as an AllocationDescriptor
+     * followed by an unassigned SharedObjectRecord, and comes back with the id
+     * and the adapter number the miniport minted into it - which is the only
+     * thing an opening process is ever given, so the caller keeps exactly
+     * these bytes and shares the allocation by them.
+     *
+     * Separate from create_allocation because the buffer is two-way. Every
+     * other create hands the driver bytes and reads none back, and widening
+     * that one to a mutable buffer would put an in/out parameter on the path
+     * every allocation in the guest takes. invalid_parameter for a length that
+     * is not a descriptor and a record; nothing is created unless ok. */
+    virtual Status   create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
+                                              uint32_t &allocation) = 0;
     /* D3DKMTShareObjects over one allocation of `device`: an NT handle this
      * process may duplicate into another, which opens it with
      * open_shared_object. The handle is this process's and must be closed with

@@ -243,6 +243,33 @@ Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
     return answer(D3DKMTDestroyAllocation2(&request));
 }
 
+Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
+                                        uint32_t &allocation)
+{
+    AV_SCOPE("GdiKmt::create_shared_allocation");
+    allocation = 0u;
+    if (private_data == nullptr || size > max_descriptor_bytes)
+        return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    /* The runtime keeps the buffer it was handed, and the driver writes the
+     * minted id into it during the call; so unlike create_allocation this one
+     * hands D3DKMT the caller's own bytes rather than a copy, and what comes
+     * back is what the opening process will be given. */
+    D3DDDI_ALLOCATIONINFO2  info = {};
+    info.pPrivateDriverData = private_data;
+    info.PrivateDriverDataSize = size;
+    D3DKMT_CREATEALLOCATION request = {};
+    request.hDevice = device;
+    request.NumAllocations = 1u;
+    request.pAllocationInfo2 = &info;
+    /* A refusal is left legible by last_code(): this file is translation only,
+     * and the ICD writes the line naming which call refused and with what
+     * (feature 053). */
+    const Status status = answer(D3DKMTCreateAllocation2(&request));
+    if (status != Status::ok) return status;
+    allocation = info.hAllocation;
+    return Status::ok;
+}
+
 Status GdiKmt::share_object(uint32_t device, uint32_t allocation, uint64_t &handle)
 {
     AV_SCOPE("GdiKmt::share_object");

@@ -34,7 +34,8 @@ MockKmt::MockKmt()
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
-      next_shared_handle_(first_shared_handle), next_handle_(first_handle),
+      next_shared_handle_(first_shared_handle),
+      next_object_id_(first_object_id), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
@@ -399,13 +400,11 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     if (!begin(Call::create_allocation)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
     AllocationDescriptor decoded;
-    /* Two lengths, as the miniport takes two: a descriptor alone is an
-     * allocation that is not shared, and a descriptor followed by a record is
-     * one asking for an identity (feature 053). */
-    const std::uint32_t shareable =
-        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
-    if ((size != AllocationDescriptor::encoded_size && size != shareable) ||
-        decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
+    /* Only the unshared length. A create asking for an identity goes through
+     * create_shared_allocation, whose buffer is two-way: taken here it would
+     * answer an allocation whose record was never minted, which is a thing no
+     * real kernel produces (feature 053). */
+    if (size != AllocationDescriptor::encoded_size || decoded.decode(descriptor, size) != Status::ok)
         return refuse(invalid_parameter);
     if (!zeroed(Call::create_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
@@ -417,6 +416,42 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
         created->created_size = size;
         for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
     }
+    return succeed();
+}
+
+/* The miniport's half, as MockKmt plays it: a create that carries an unassigned
+ * record has an id and an adapter number minted into the caller's own bytes,
+ * which is what the opening process is later handed (feature 053). */
+Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
+                                         std::uint32_t &allocation)
+{
+    allocation = 0u;
+    if (!begin(Call::create_shared_allocation)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    const std::uint32_t shareable =
+        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
+    if (private_data == nullptr || size != shareable) return refuse(invalid_parameter);
+    AllocationDescriptor decoded;
+    SharedObjectRecord   record;
+    if (decoded.decode(private_data, AllocationDescriptor::encoded_size) != Status::ok ||
+        record.decode(private_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
+            Status::ok)
+        return refuse(invalid_parameter);
+    /* A record that already names an object is one the miniport would refuse:
+     * a creator can know neither number. */
+    if (record.assigned() || record.size() != decoded.size()) return refuse(invalid_parameter);
+    if (!zeroed(Call::create_shared_allocation))
+        allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
+    Object *const created = find(Kind::allocation, allocation);
+    if (created == nullptr) return succeed();
+    record.assign(next_object_id_, shared_adapter);
+    next_object_id_++;
+    if (record.encode(private_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
+        Status::ok)
+        return refuse(invalid_parameter);
+    created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
+    created->created_size = size;
+    for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = private_data[index];
     return succeed();
 }
 
