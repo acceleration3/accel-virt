@@ -774,3 +774,98 @@ TEST(cl_icd_root_refusals, an_open_that_fails_writes_no_count_it_was_not_given)
            CL_DEVICE_NOT_FOUND);
   CHECK(devices[0] == reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA}));
   CHECK(rig.root().invariants_hold()); }
+
+/* The guest's object table grows in chunks, so only the make that needs a new
+ * one allocates. These two find that make by watching for the allocation, and
+ * then refuse exactly it - which is the only way to reach 'the host made it
+ * and the guest cannot keep it'. */
+namespace {
+
+/* How many buffers must exist before the next one needs a new chunk. */
+std::uint32_t buffers_until_the_table_grows(ClIcdRig &rig, const Opened &opened)
+{
+    for (std::uint32_t made = 0u; made < 200u; ++made) {
+        const std::uint32_t before = rig.platform().live_allocations();
+        rig.host().cl_handle(0x7000u + made, CL_SUCCESS);
+        if (rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, nullptr) ==
+            nullptr)
+            return 0u;
+        if (rig.platform().live_allocations() != before) return made;
+    }
+    return 0u;
+}
+
+}  // namespace
+
+/* A buffer made over the arena that the guest cannot keep: the host's buffer
+ * is given back and so is the block, or the next buffer could never have that
+ * memory. */
+TEST(cl_icd_root_refusals, an_arena_backed_buffer_the_guest_cannot_keep_gives_its_block_back)
+{ std::uint32_t until = 0u;
+  { ClIcdRig rig;
+    Opened   opened(rig);
+    CHECK(opened.made());
+    if (!opened.made()) return;
+    until = buffers_until_the_table_grows(rig, opened);
+    CHECK(until != 0u); }
+  if (until == 0u) return;
+
+  ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  for (std::uint32_t made = 0u; made < until; ++made) {
+      rig.host().cl_handle(0x7000u + made, CL_SUCCESS);
+      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, nullptr) !=
+            nullptr);
+  }
+  /* The next one needs a chunk, and there is none to be had. */
+  rig.host().cl_handle(0x6600u, CL_SUCCESS);   /* the backed create */
+  rig.host().cl_result(CL_SUCCESS);            /* given back again */
+  rig.platform().fail_allocation_at(1u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+                                   256u, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK(rig.root().invariants_hold());
+
+  /* The block came back, so the next buffer can have it. */
+  rig.host().cl_handle(0x6601u, CL_SUCCESS);
+  CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+                                   256u, nullptr) != nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+/* And a cl_context the guest cannot keep: the host's context goes with it,
+ * because a context nobody holds is an adapter held open for nothing. */
+TEST(cl_icd_root_refusals, a_context_the_guest_cannot_keep_gives_the_hosts_back)
+{ std::uint32_t until = 0u;
+  { ClIcdRig rig;
+    Opened   opened(rig);
+    CHECK(opened.made());
+    if (!opened.made()) return;
+    until = buffers_until_the_table_grows(rig, opened);
+    CHECK(until != 0u); }
+  if (until == 0u) return;
+
+  ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  for (std::uint32_t made = 0u; made < until; ++made) {
+      rig.host().cl_handle(0x7000u + made, CL_SUCCESS);
+      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, nullptr) !=
+            nullptr);
+  }
+  cl_device_id device = opened.device();
+  rig.host().blob_import(0u, 0x80u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6410u, CL_SUCCESS);   /* the host's context */
+  rig.host().cl_result(CL_SUCCESS);            /* released again */
+  rig.platform().fail_allocation_at(1u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  /* Either the guest's own context could not be made, or it was and the
+   * object could not be kept; both leave nothing behind. */
+  CHECK(error == CL_OUT_OF_HOST_MEMORY || error == CL_DEVICE_NOT_AVAILABLE);
+  CHECK(rig.root().invariants_hold()); }

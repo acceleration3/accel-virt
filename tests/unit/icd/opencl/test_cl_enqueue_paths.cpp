@@ -574,3 +574,83 @@ TEST(cl_enqueue_paths, a_blocking_read_asked_for_an_event_hands_one_back_with_th
   CHECK(event != nullptr);
   for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
   CHECK(rig.root().invariants_hold()); }
+
+/* A finish delivers the reads of its own queue and leaves every other
+ * queue's, because only its own queue has reached the marker. */
+TEST(cl_enqueue_paths, a_finish_leaves_the_reads_of_every_other_queue_alone)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  rig.host().cl_handle(host_queue + 1u, CL_SUCCESS);
+  cl_command_queue second = rig.root().create_queue(run.context(), nullptr, nullptr, nullptr);
+  if (second == nullptr) {
+      /* The queue needs the device this rig opened; without it there is no
+       * second queue to tell apart. */
+      CHECK(rig.root().invariants_hold());
+      return;
+  }
+  unsigned char mine[8] = {};
+  unsigned char theirs[8] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof mine, mine,
+                                   nullptr),
+           CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  CHECK_EQ(rig.root().enqueue_read(second, run.buffer(), CL_FALSE, 0u, sizeof theirs, theirs,
+                                   nullptr),
+           CL_SUCCESS);
+
+  /* The first queue finishes: its own read delivers and the other's does not. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  const unsigned char ones[8] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
+  rig.host().cl_bytes(CL_SUCCESS, ones, sizeof ones);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_SUCCESS);
+  for (const unsigned char byte : mine) CHECK_EQ(byte, 1u);
+  for (const unsigned char byte : theirs) CHECK_EQ(byte, 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* Two deliveries that both fail: the first error is the one answered, and a
+ * later one must not overwrite it - the first is where the application's
+ * memory stopped being filled. */
+TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char first[8] = {};
+  unsigned char second[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof first, first,
+                                   nullptr),
+           CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof second, second,
+                                   nullptr),
+           CL_SUCCESS);
+
+  /* The finish reaches both, and both fetches are refused. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_bytes(CL_MEM_OBJECT_ALLOCATION_FAILURE, nullptr, 0u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  /* Both rows went back even so: a read that can never deliver must not be
+   * kept forever. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 3u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
