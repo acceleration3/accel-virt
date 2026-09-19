@@ -13,11 +13,11 @@ coverage/
 tests/corpus/*/crash-*
 tests/corpus/*/leak-*
 __pycache__/
-third_party/windows-kit/
-third_party/khronos/
-third_party/.cache/
+third_party/windows-kit
+third_party/khronos
+third_party/.cache
 /re/
-third_party/qemu/
-third_party/vulkan-runtime/
-third_party/opencl-loader/
+third_party/qemu
+third_party/vulkan-runtime
+third_party/opencl-loader
 .claude/worktrees/
