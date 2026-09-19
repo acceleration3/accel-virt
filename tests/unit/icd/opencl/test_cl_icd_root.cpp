@@ -475,6 +475,18 @@ namespace av::clicd {
 /* The object table is private, and how many events are live is what the
  * retain a registration holds is visible as. */
 struct ClIcdRootProbe {
+    /* The root's invariant is the conjunction of everything it owns, so each
+     * part is reached through here and broken with its own probe: a root that
+     * believed itself sound while one of them was not would be a driver
+     * answering calls over a table it cannot trust. */
+    static ClPlatform        &platform(ClIcdRoot &root) { return root.platform_; }
+    static ClExtensionPolicy &extensions(ClIcdRoot &root) { return root.extensions_; }
+    static ClObjectTable     &objects_of(ClIcdRoot &root) { return root.objects_; }
+    static icd::IcdConnection &connection(ClIcdRoot &root) { return root.connection_; }
+    static ClDeviceReport    &device(ClIcdRoot &root) { return root.device_; }
+    static ClPendingReads    &reads_of(ClIcdRoot &root) { return root.reads_; }
+    static ClEventWatcher    &watcher(ClIcdRoot &root) { return root.watcher_; }
+
     static std::uint32_t live_of(ClIcdRoot &root, ClObject::Kind kind)
     { return root.objects_.live_of(kind); }
     static ClObject *made(ClIcdRoot &root, const void *pointer, ClObject::Kind kind)
@@ -1105,3 +1117,76 @@ TEST(cl_icd_root, a_callback_on_a_non_blocking_read_sees_the_bytes)
   for (std::size_t index = 0u; index < sizeof into; ++index)
       CHECK_EQ(into[index], answered[index]);
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- the root's own invariant ------------------------------------------- */
+
+namespace av::clicd {
+
+/* One corruption per thing the root owns. Each is defined here rather than
+ * shared, because a probe is declared a friend by name and nothing outside
+ * the tests uses one. */
+struct ClPlatformProbe {
+    static void an_empty_version(ClPlatform &platform) { platform.version_[0] = '\0'; }
+};
+
+struct ClExtensionPolicyProbe {
+    static void count_past_the_table(ClExtensionPolicy &policy)
+    { policy.count_ = ClExtensionPolicy::max_rows + 1u; }
+};
+
+struct ClObjectTableProbe {
+    static void miscount(ClObjectTable &table) { table.live_ += 1u; }
+};
+
+struct ClDeviceReportProbe {
+    static void a_version_that_runs_off_its_room(ClDeviceReport &device)
+    { for (char &byte : device.version_) byte = 'x'; }
+};
+
+struct ClPendingReadsProbe {
+    static void miscount(ClPendingReads &reads) { reads.held_ += 1u; }
+};
+
+struct ClEventWatcherProbe {
+    static void miscount(ClEventWatcher &watcher) { watcher.held_ += 1u; }
+};
+
+}  // namespace av::clicd
+
+namespace av::icd {
+
+struct IcdConnectionProbe {
+    static void set_users(IcdConnection &connection, std::uint32_t users)
+    { connection.users_[0] = users; }
+};
+
+}  // namespace av::icd
+
+/* The root is sound only if everything it owns is. Each part is broken in
+ * turn, on its own rig, because the first to fail hides the rest. */
+TEST(cl_icd_root, the_invariant_is_every_part_of_it)
+{ { ClIcdRig rig;
+    CHECK(rig.root().invariants_hold());
+    av::clicd::ClPlatformProbe::an_empty_version(av::clicd::ClIcdRootProbe::platform(rig.root()));
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    av::clicd::ClExtensionPolicyProbe::count_past_the_table(
+        av::clicd::ClIcdRootProbe::extensions(rig.root()));
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    av::clicd::ClObjectTableProbe::miscount(av::clicd::ClIcdRootProbe::objects_of(rig.root()));
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    /* A link with users but no adapter behind it. */
+    av::icd::IcdConnectionProbe::set_users(av::clicd::ClIcdRootProbe::connection(rig.root()), 1u);
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    av::clicd::ClDeviceReportProbe::a_version_that_runs_off_its_room(
+        av::clicd::ClIcdRootProbe::device(rig.root()));
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    av::clicd::ClPendingReadsProbe::miscount(av::clicd::ClIcdRootProbe::reads_of(rig.root()));
+    CHECK(!rig.root().invariants_hold()); }
+  { ClIcdRig rig;
+    av::clicd::ClEventWatcherProbe::miscount(av::clicd::ClIcdRootProbe::watcher(rig.root()));
+    CHECK(!rig.root().invariants_hold()); } }

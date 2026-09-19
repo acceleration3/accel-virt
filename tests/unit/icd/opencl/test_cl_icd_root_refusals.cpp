@@ -435,3 +435,111 @@ TEST(cl_icd_root_refusals, every_kind_names_its_own_refusal)
   CHECK_EQ(rig.root().release(context, ClObject::Kind::event), CL_INVALID_EVENT);
   /* And the context itself still releases, so none of the above consumed it. */
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- a context that cannot be made ------------------------------------- */
+
+TEST(cl_icd_root_refusals, a_context_on_another_vendors_platform_is_refused)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  /* CL_CONTEXT_PLATFORM naming a platform this driver does not own. The
+   * loader may hand any ICD a list built for another, and answering it would
+   * be answering for a driver that is not this one. */
+  const std::uint64_t stranger[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM), 0x1234u, 0u};
+  cl_device_id        device = opened.device();
+  cl_int              error = CL_SUCCESS;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK(rig.root().create_context(stranger, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PLATFORM);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  /* A list naming this driver's own platform is accepted, and so is one
+   * naming a platform of nothing - which is the list an application builds
+   * when it has no preference. */
+  cl_platform_id      mine = this_platform(rig);
+  const std::uint64_t ours[] = {static_cast<std::uint64_t>(CL_CONTEXT_PLATFORM),
+                                static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mine)),
+                                0u};
+  rig.host().blob_import(0u, 0x79u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6402u, CL_SUCCESS);
+  error = CL_INVALID_VALUE;
+  CHECK(rig.root().create_context(ours, &device, 1u, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_refusals, a_context_whose_own_transport_cannot_be_made_is_not_available)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_device_id device = opened.device();
+  cl_int       error = CL_SUCCESS;
+  /* The context's own blob arena import faults the transport, so the make
+   * fails. The application is told the device is not available rather than
+   * being handed a context whose every call is already lost. */
+  rig.kmt().withhold_answer_at(1u);
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_refusals, a_host_that_will_not_make_the_context_takes_the_guests_with_it)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_device_id device = opened.device();
+
+  /* The guest's half is made and the host refuses its own. The guest context
+   * has to go with it: a transport nobody can reach is an adapter held open
+   * for nothing. */
+  rig.host().blob_import(0u, 0x7Au);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0u, CL_OUT_OF_HOST_MEMORY);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+
+  /* And the same when the host answers success with no context at all. */
+  rig.host().blob_import(0u, 0x7Bu);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  error = CL_SUCCESS;
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
+
+  /* Nothing was kept: the next context still works. */
+  rig.host().blob_import(0u, 0x7Cu);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(0x6403u, CL_SUCCESS);
+  CHECK(rig.root().create_context(nullptr, &device, 1u, nullptr) != nullptr);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_refusals, a_host_that_will_not_list_its_own_platform_makes_no_context)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  cl_device_id device = opened.device();
+
+  /* The context's transport is made and the host will not say what it has,
+   * so there is no device to make a context on. */
+  rig.host().blob_import(0u, 0x7Du);
+  rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
+
+  /* And the same one step later, at the device list. */
+  rig.host().blob_import(0u, 0x7Eu);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
+  error = CL_SUCCESS;
+  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
+  CHECK(rig.root().invariants_hold()); }
