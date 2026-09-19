@@ -205,8 +205,9 @@ cl_int ClIcdRoot::device_ids(cl_platform_id platform, cl_device_type type, cl_ui
     /* This adapter's device is a GPU, so a type that does not include one
      * finds nothing - the API's own answer, and not an error. */
     if (type == 0u) return CL_INVALID_DEVICE_TYPE;
-    const bool wants_gpu = (type & (CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_DEFAULT)) != 0u ||
-                           type == CL_DEVICE_TYPE_ALL;
+    /* CL_DEVICE_TYPE_ALL is every bit, so it carries the GPU bit too and
+     * needs no case of its own; a test for it here could never be reached. */
+    const bool wants_gpu = (type & (CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_DEFAULT)) != 0u;
     if (!wants_gpu) {
         if (num_devices != nullptr) *num_devices = 0u;
         return CL_DEVICE_NOT_FOUND;

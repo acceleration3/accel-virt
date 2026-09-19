@@ -97,6 +97,9 @@ TEST(cl_icd_root_refusals, every_type_that_includes_this_gpu_finds_it)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
+  /* CL_DEVICE_TYPE_ALL is every bit, so it finds this GPU through the GPU
+   * bit rather than through a case of its own. */
+  CHECK((CL_DEVICE_TYPE_ALL & CL_DEVICE_TYPE_GPU) != 0u);
   const cl_device_type accepted[] = {CL_DEVICE_TYPE_GPU, CL_DEVICE_TYPE_DEFAULT,
                                      CL_DEVICE_TYPE_ALL,
                                      CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_CPU};
@@ -542,4 +545,82 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_list_its_own_platform_makes_no_c
   error = CL_SUCCESS;
   CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The two-call shape, in each of the three ways an application uses it: ask
+ * only how many, ask only for the array, and ask for both. Each writes what
+ * it was given and nothing it was not. */
+TEST(cl_icd_root_refusals, the_two_call_shape_writes_only_what_it_was_asked_for)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  cl_platform_id platform = this_platform(rig);
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
+  rig.host().cl_info(CL_SUCCESS, "OpenCL C 1.2", 13u);
+  rig.host().cl_info(CL_SUCCESS, "", 1u);
+
+  /* The count alone: the first call an application makes. */
+  cl_uint count = 0xEEu;
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 0u, nullptr, &count), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+
+  /* The array alone, with no count: nothing is written past the one entry
+   * and the application's own word is untouched. */
+  cl_device_id devices[2] = {nullptr, reinterpret_cast<cl_device_id>(std::uintptr_t{0xEE})};
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 2u, devices, nullptr), CL_SUCCESS);
+  CHECK(devices[0] != nullptr);
+  CHECK(devices[1] == reinterpret_cast<cl_device_id>(std::uintptr_t{0xEE}));
+
+  /* And both together. */
+  count = 0xEEu;
+  devices[0] = nullptr;
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 1u, devices, &count), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK(devices[0] != nullptr);
+
+  /* A type that finds nothing, asked for the array alone: the count it did
+   * not ask for is not written, and the array is left as it was. */
+  devices[0] = reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA});
+  CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_CPU, 1u, devices, nullptr),
+           CL_DEVICE_NOT_FOUND);
+  CHECK(devices[0] == reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA}));
+  CHECK(rig.root().invariants_hold()); }
+
+/* A buffer that asked for host memory and could not have the arena's is
+ * staged instead: slower, and never wrong. Both reasons are reachable - the
+ * device refusing to make it over that memory, and there being no room. */
+TEST(cl_icd_root_refusals, a_buffer_the_device_will_not_back_falls_back_to_the_ordinary_one)
+{ ClIcdRig rig;
+  Opened   opened(rig);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+
+  /* The backed create is refused, and the plain one behind it succeeds. The
+   * application gets a buffer either way and never learns the difference. */
+  rig.host().cl_handle(0u, CL_INVALID_VALUE);
+  rig.host().cl_handle(0x6600u, CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int error = CL_INVALID_VALUE;
+  cl_mem buffer = rig.loader().create_buffer(opened.context(),
+                                             CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, 256u,
+                                             &error);
+  CHECK(buffer != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  /* Two creates: the one over the arena, then the ordinary one. */
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clCreateBufferWithProperties));
+  CHECK_EQ(rig.kmt().command_id(sent + 1u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clCreateBuffer));
+  CHECK(rig.root().invariants_hold());
+
+  /* And when both refuse, the application is told the host's own error. */
+  rig.host().cl_handle(0u, CL_INVALID_VALUE);
+  rig.host().cl_handle(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+                                   256u, &error) == nullptr);
+  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
   CHECK(rig.root().invariants_hold()); }
