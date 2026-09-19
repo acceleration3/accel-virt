@@ -400,3 +400,18 @@ TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
   if (previous != nullptr) root.close(previous);
   CHECK_EQ(root.live(), 0u);
   host.close(); }
+
+/* A session this root never handed out is one it binds nothing to.
+ *
+ * The signal is routed by finding the session in the root's own array, so a
+ * stranger's - another root's, or one on the stack - must fall off the end
+ * rather than be matched to whatever sits at the same index. */
+TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothing)
+{ Opened opened;
+  CHECK_STATUS(opened.status(), Status::ok);
+  ContextSession stranger;
+  /* It simply returns: there is nothing to bind and nothing to report, and
+   * the root is untouched. */
+  opened.root().set_signal(&stranger, nullptr, nullptr);
+  CHECK_EQ(opened.root().live(), 0u);
+  CHECK(opened.root().invariants_hold()); }

@@ -289,3 +289,10 @@ TEST(executor_library_signal, an_executor_that_is_not_there_is_given_nothing)
   library.set_signal(nullptr, [](void *) {}, nullptr);
   CHECK_EQ(ops.signals_set(), 0u);
   CHECK_EQ(ops.misuses(), 0u); }
+
+/* A library that accepted nothing names no version at all, so it names no
+ * events either: asking a table that is not there what it carries would be
+ * reading through a null pointer. */
+TEST(executor_library_signal, a_library_that_accepted_nothing_names_no_events)
+{ ExecutorLibrary library;
+  CHECK(!library.names_events()); }

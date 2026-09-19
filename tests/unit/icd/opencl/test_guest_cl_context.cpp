@@ -410,3 +410,22 @@ TEST(guest_cl_context, the_invariant_reaches_the_shared_allocations_it_holds)
   CHECK(context.invariants_hold());
   av::clicd::SvmTableProbe::miscount(GuestClContextProbe::svm_of(context));
   CHECK(!context.invariants_hold()); }
+
+/* A driver that will not make the context's own transport.
+ *
+ * The transport is what every call of that cl_context goes over, so a context
+ * without one is a context whose every call would fail - and the application
+ * is told the make failed rather than handed it. Whatever was taken before
+ * the refusal goes back, which the rig's object count is what proves. */
+TEST(guest_cl_context, a_driver_that_refuses_the_contexts_transport_makes_no_context)
+{ ClContextRig rig;
+  GuestClContext context = made_context(rig);
+  /* The driver refuses to make the context the transport needs. */
+  rig.kmt().fail_at(av::MockKmt::Call::create_context_virtual, 1u, 0xC0000001u);
+  CHECK(context.make() != Status::ok);
+  CHECK(context.state() == GuestClContext::State::created);
+  CHECK(context.wire() == nullptr);
+  CHECK_EQ(rig.log().holding("the driver refused the context"), 1u);
+  /* Nothing is held: the adapter and the device it opened are given back. */
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK(context.invariants_hold()); }
