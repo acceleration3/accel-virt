@@ -17,15 +17,21 @@ class CountingEventOwner final : public clicd::ClEventOwner {
 public:
     CountingEventOwner();
 
+    void deliver_watched(clicd::ClObject &event) override;
     void release_watched(clicd::ClObject &event) override;
 
     std::uint32_t releases() const;
+    /* Deliveries, and that each one came before its release. */
+    std::uint32_t deliveries() const;
+    bool          delivered_before_release() const;
     /* The last event given back, so a test can say which one it was. */
     const clicd::ClObject *last() const;
 
 private:
     const clicd::ClObject *last_;
     std::uint32_t          releases_;
+    std::uint32_t          deliveries_;
+    bool                   out_of_order_;
 };
 
 }  // namespace av

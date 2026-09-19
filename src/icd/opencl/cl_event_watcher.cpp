@@ -80,6 +80,10 @@ bool ClEventWatcher::turn()
         registrations_[slot].give_up();
         --held_;
         ++delivered_;
+        /* Whatever the event owes the application arrives before the
+         * callback does: a callback on a non-blocking read that could not
+         * see the bytes would be a callback about nothing. */
+        owner_.deliver_watched(*ran.event());
         /* No ICD lock is held here, and the callback may call back into the
          * ICD - which is the whole reason it is not run under one. */
         ran.run(status);

@@ -51,6 +51,19 @@ public:
     cl_int until_complete(ClientTransport &wire, const uint64_t *events, uint32_t count,
                           uint64_t timeout);
 
+    /* Waits for one event this side has just enqueued on `queue`, having
+     * first told the host to start it.
+     *
+     * The flush is the whole difference from until_complete. OpenCL does not
+     * promise a queued command begins before its queue is flushed, and the
+     * ICD turns every blocking transfer and clFinish into an enqueue and a
+     * wait - so the application asked for a blocking call and never saw a
+     * queue to flush. On a host driver that starts work only at a flush, the
+     * wait without one never ends. A flush the host refuses is returned
+     * rather than waited past, because work that may never start is work no
+     * wait can outlive. */
+    cl_int until_queued_completes(ClientTransport &wire, uint64_t queue, uint64_t event);
+
     /* Rounds made since the ICD started, which is what a state dump and a test
      * read to say a wait polled once rather than not at all. */
     uint64_t rounds() const;

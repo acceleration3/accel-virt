@@ -265,6 +265,34 @@ void ScriptedHost::cl_ids(std::int32_t result, const std::uint64_t *ids, std::ui
     queue(writer);
 }
 
+void ScriptedHost::cl_bytes(std::int32_t result, const void *values, std::uint32_t count)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(count);
+    writer.write(values, count);
+    queue(writer);
+}
+
+void ScriptedHost::cl_bytes_for(std::int32_t result, const void *values, std::uint32_t count,
+                                std::uint64_t event)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(count);
+    writer.write(values, count);
+    writer.write_pod(event);
+    queue(writer);
+}
+
+void ScriptedHost::cl_enqueued(std::int32_t result, std::uint64_t event)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_pod(event);
+    queue(writer);
+}
+
 void ScriptedHost::cl_read(std::int32_t result, const float *values, std::uint32_t count)
 {
     WireWriter writer(answer_, sizeof answer_);

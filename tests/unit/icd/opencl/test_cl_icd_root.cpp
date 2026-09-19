@@ -479,6 +479,7 @@ struct ClIcdRootProbe {
     { return root.objects_.live_of(kind); }
     static ClObject *made(ClIcdRoot &root, const void *pointer, ClObject::Kind kind)
     { return root.objects_.made(pointer, kind); }
+    static std::uint32_t outstanding_reads(ClIcdRoot &root) { return root.reads_.outstanding(); }
 };
 
 }  // namespace av::clicd
@@ -894,4 +895,213 @@ TEST(cl_icd_root, a_queue_takes_the_two_properties_the_api_names_and_a_buffer_ta
   CHECK(rig.root().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr, any, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
   CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+/* ---- non-blocking reads (US3) -------------------------------------------- */
+
+namespace {
+
+/* A context with a queue and a buffer on it, which is what a read needs. */
+cl_command_queue queue_on(ClIcdRig &rig, cl_context context, cl_device_id device)
+{
+    rig.host().cl_handle(host_queue, CL_SUCCESS);
+    return rig.loader().create_queue(context, device, nullptr);
+}
+
+cl_mem buffer_on(ClIcdRig &rig, cl_context context)
+{
+    rig.host().cl_handle(host_buffer, CL_SUCCESS);
+    return rig.loader().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr);
+}
+
+}  // namespace
+
+TEST(cl_icd_root, a_non_blocking_read_returns_before_the_bytes_and_leaves_the_destination_alone)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  /* The read is queued and this returns. Only a marker crosses - the bytes
+   * do not exist yet, and a reply carrying them would carry nothing. */
+  unsigned char into[16];
+  for (unsigned char &byte : into) byte = 0xA5u;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),
+           CL_SUCCESS);
+  CHECK(event != nullptr);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  /* Untouched, which is what the API says it is until the event completes. */
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0xA5u);
+
+  /* The wait is where the bytes arrive: the status query, then the fetch. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  const unsigned char answered[16] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
+                                      9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  CHECK_EQ(rig.loader().wait_for_events(1u, &event), CL_SUCCESS);
+  for (std::size_t index = 0u; index < sizeof into; ++index)
+      CHECK_EQ(into[index], answered[index]);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_blocking_read_is_not_deferred_and_has_its_bytes_when_it_returns)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  unsigned char into[8] = {};
+  const unsigned char answered[8] = {9u, 8u, 7u, 6u, 5u, 4u, 3u, 2u};
+  /* Enqueued with an event of its own, then waited for here - the host is
+   * never asked to block. */
+  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event);
+  /* The queue is flushed before it is asked about: the application handed the
+   * ICD a blocking call and never saw a queue, so this side owes the flush. */
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  /* The event it made is given back: the application asked for none. */
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_TRUE, 0u, sizeof into, into, nullptr),
+           CL_SUCCESS);
+  for (std::size_t index = 0u; index < sizeof into; ++index)
+      CHECK_EQ(into[index], answered[index]);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_read_the_application_wanted_no_event_for_keeps_the_marker_until_it_delivers)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  /* No event asked for, so the marker is the ICD's own: releasing it now
+   * would let the host hand the number to something else while a row still
+   * names it. */
+  unsigned char into[8] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::outstanding_reads(rig.root()), 1u);
+
+  /* clFinish is the only way the application can learn this one is done, and
+   * it is where the bytes arrive and the marker goes back. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);   /* the finish's own marker */
+  rig.host().cl_result(CL_SUCCESS);                      /* the queue flushed */
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);                      /* that marker released */
+  const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  rig.host().cl_result(CL_SUCCESS);                      /* the read's marker released */
+  CHECK_EQ(rig.loader().finish(queue), CL_SUCCESS);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
+  CHECK_EQ(ClIcdRootProbe::outstanding_reads(rig.root()), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, releasing_a_queue_forgets_the_reads_nobody_will_wait_for)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  unsigned char into[8] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::outstanding_reads(rig.root()), 1u);
+
+  /* The queue goes, and the read's destination is memory the application is
+   * about to reuse: nothing is ever fetched into it. The marker the ICD made
+   * for it goes back to the host in the same breath. */
+  rig.host().cl_result(CL_SUCCESS);   /* the marker */
+  rig.host().cl_result(CL_SUCCESS);   /* the queue */
+  CHECK_EQ(rig.loader().release_queue(queue), CL_SUCCESS);
+  CHECK_EQ(ClIcdRootProbe::outstanding_reads(rig.root()), 0u);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, an_application_that_polls_the_status_gets_the_bytes_there)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  unsigned char into[4] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),
+           CL_SUCCESS);
+
+  /* Still running: the status is answered and nothing is fetched. */
+  const cl_int running = CL_RUNNING;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
+  cl_int      status = CL_QUEUED;
+  std::size_t answered_bytes = 0u;
+  CHECK_EQ(rig.loader().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status,
+                                   &status, &answered_bytes),
+           CL_SUCCESS);
+  CHECK_EQ(status, CL_RUNNING);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
+
+  /* Complete: the poll is where the application learns it, so it is where
+   * the bytes have to be. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  const unsigned char answered[4] = {7u, 7u, 7u, 7u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  CHECK_EQ(rig.loader().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status,
+                                   &status, &answered_bytes),
+           CL_SUCCESS);
+  CHECK_EQ(status, CL_COMPLETE);
+  for (const unsigned char byte : into) CHECK_EQ(byte, 7u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_callback_on_a_non_blocking_read_sees_the_bytes)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_command_queue queue = queue_on(rig, context, device);
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(queue != nullptr && buffer != nullptr);
+
+  static unsigned char into[4] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_FALSE, 0u, sizeof into, into, &event),
+           CL_SUCCESS);
+
+  /* A callback is what an application uses instead of waiting, so a callback
+   * that could not see the bytes would be a callback about nothing:
+   * ClIcdRoot::deliver_watched is what the watcher calls before it runs one. */
+  callback = Callback();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, nullptr), CL_SUCCESS);
+
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  const unsigned char answered[4] = {4u, 5u, 6u, 7u};
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
+  CHECK(!rig.watcher().step());
+  CHECK_EQ(callback.times, 1u);
+  for (std::size_t index = 0u; index < sizeof into; ++index)
+      CHECK_EQ(into[index], answered[index]);
   CHECK(rig.root().invariants_hold()); }

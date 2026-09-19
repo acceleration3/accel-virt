@@ -16,6 +16,7 @@
 #include "icd/common/sliced_wait.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
+#include "proto/generated/opencl/cl_protocol_ids.h"
 
 #include <cstdint>
 
@@ -30,6 +31,7 @@ namespace {
 
 constexpr std::uint64_t host_event = 0x6900u;
 constexpr std::uint64_t other_event = 0x6901u;
+constexpr std::uint64_t host_queue = 0x6500u;
 
 class Waiting {
 public:
@@ -139,4 +141,48 @@ TEST(cl_waits, a_wait_for_nothing_is_the_callers_mistake_and_asks_the_host_nothi
   CHECK_EQ(waiting.waits().until_complete(*waiting.wire(), &host_event, 0u, SlicedWait::forever),
            CL_INVALID_VALUE);
   CHECK_EQ(waiting.rig().kmt().commands(), commands);
+  CHECK_EQ(waiting.waits().rounds(), 0u); }
+
+/* A wait this side invented, rather than one the application asked for.
+ *
+ * Every blocking transfer and clFinish is turned into an enqueue and a wait on
+ * the event it produced. OpenCL never promises a queued command starts before
+ * the queue is flushed, and the application handed the ICD a blocking call and
+ * never saw a queue to flush - so the flush is this side's to send, and a wait
+ * without it sits for ever on a host driver that starts work only at one. */
+
+TEST(cl_waits, a_wait_on_its_own_enqueue_flushes_the_queue_before_it_asks)
+{ Waiting waiting;
+  waiting.rig().host().cl_result(CL_SUCCESS); /* the flush */
+  waiting.answers(CL_COMPLETE);
+  const std::uint32_t first = waiting.rig().kmt().commands();
+  CHECK_EQ(waiting.waits().until_queued_completes(*waiting.wire(), host_queue, host_event),
+           CL_SUCCESS);
+  /* The flush goes first. Asking the host how an event is doing before the
+   * queue has been told to start is what never comes back. */
+  CHECK_EQ(waiting.rig().kmt().commands(), first + 2u);
+  CHECK_EQ(waiting.rig().kmt().command_id(first), av::clproto::kCmd_clFlush);
+  CHECK_EQ(waiting.rig().kmt().command_id(first + 1u), av::clproto::kCmd_clGetEventInfo); }
+
+TEST(cl_waits, a_flush_the_host_refuses_ends_the_wait_instead_of_asking_for_ever)
+{ Waiting waiting;
+  /* A queue that will not flush is one whose work may never start, so the
+   * wait that would follow could not end. The caller is told instead. */
+  waiting.rig().host().cl_result(CL_INVALID_COMMAND_QUEUE);
+  const std::uint32_t first = waiting.rig().kmt().commands();
+  const std::uint64_t rounds = waiting.waits().rounds();
+  CHECK_EQ(waiting.waits().until_queued_completes(*waiting.wire(), host_queue, host_event),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(waiting.rig().kmt().commands(), first + 1u);
+  CHECK_EQ(waiting.waits().rounds(), rounds); }
+
+TEST(cl_waits, a_wait_on_no_queue_or_no_event_is_the_callers_mistake_and_sends_nothing)
+{ Waiting waiting;
+  const std::uint32_t first = waiting.rig().kmt().commands();
+  CHECK_EQ(waiting.waits().until_queued_completes(*waiting.wire(), 0u, host_event),
+           CL_INVALID_VALUE);
+  CHECK_EQ(waiting.waits().until_queued_completes(*waiting.wire(), host_queue, 0u),
+           CL_INVALID_VALUE);
+  /* Not even the flush: neither names a queue this could flush. */
+  CHECK_EQ(waiting.rig().kmt().commands(), first);
   CHECK_EQ(waiting.waits().rounds(), 0u); }

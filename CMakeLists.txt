@@ -376,6 +376,17 @@ foreach(src ${AV_UNIT_TESTS})
     # The probe's renders, as bitmaps a person can open (docs/testing.md).
     target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
   endif()
+  # The OpenCL ICD through the same stack (feature 052, T031): the ICD's hooks
+  # and the executor's cannot share a binary, so the executor is the library
+  # file QEMU loads, its symbols its own. The event watcher's callbacks are
+  # delivered on a thread the test steps, so no thread library is needed
+  # beyond the one the deadlock scenarios' single setter thread uses.
+  if(name STREQUAL "test_fullstack_opencl_icd")
+    find_package(Threads REQUIRED)
+    target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+  endif()
   # The descriptor template proof through the same stack (feature 047): the
   # guest sizes a blob from the template it remembers and the device refuses a
   # length its own template does not account for, which only both halves

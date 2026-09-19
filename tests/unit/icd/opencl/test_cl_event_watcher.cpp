@@ -271,6 +271,11 @@ TEST(cl_event_watcher, a_delivered_registration_gives_its_event_back_once_and_af
    * have been handed because the reference was still held while it ran. */
   CHECK_EQ(watching.owner().releases(), 1u);
   CHECK(watching.owner().last() == &watching.event());
+  /* And whatever the event owed the application arrived first: the watcher
+   * asks the owner to deliver before it runs the callback, because a
+   * callback on a non-blocking read has to see the bytes. */
+  CHECK_EQ(watching.owner().deliveries(), 1u);
+  CHECK(watching.owner().delivered_before_release());
   CHECK(ran.event == reinterpret_cast<cl_event>(&watching.event()));
 
   /* And a further turn delivers nothing, so nothing is given back twice. */

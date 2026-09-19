@@ -23,6 +23,10 @@ public:
     ClEventOwner(const ClEventOwner &) = delete;
     ClEventOwner &operator=(const ClEventOwner &) = delete;
 
+    /* Before the callback: anything the application is owed on this event
+     * that has not been handed over yet - the bytes of a non-blocking read,
+     * which a callback on that read must see. */
+    virtual void deliver_watched(ClObject &event) = 0;
     /* Drops the reference taken when the callback was registered. It may be
      * the last one, in which case the event goes here. */
     virtual void release_watched(ClObject &event) = 0;

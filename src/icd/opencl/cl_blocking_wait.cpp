@@ -60,6 +60,16 @@ cl_int ClBlockingWait::until_complete(ClientTransport &wire, const uint64_t *eve
     return CL_SUCCESS;
 }
 
+cl_int ClBlockingWait::until_queued_completes(ClientTransport &wire, uint64_t queue,
+                                              uint64_t event)
+{
+    AV_SCOPE("ClBlockingWait::until_queued_completes");
+    if (queue == 0u || event == 0u) return CL_INVALID_VALUE;
+    const cl_int flushed = av::clproto::rvk_clFlush(wire, queue);
+    if (flushed != CL_SUCCESS) return flushed;
+    return until_complete(wire, &event, 1u, icd::SlicedWait::forever);
+}
+
 uint64_t ClBlockingWait::rounds() const
 {
     AV_SCOPE("ClBlockingWait::rounds");

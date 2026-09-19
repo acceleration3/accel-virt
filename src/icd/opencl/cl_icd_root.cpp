@@ -46,7 +46,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, 0u), objects_(memory, dispatch_.table()), connection_(kmt),
       contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt)
+      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_()
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -400,9 +400,17 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
         ClientTransport *const wire = context->wire();
         if (wire != nullptr) {
             switch (kind) {
-            case ClObject::Kind::command_queue:
+            case ClObject::Kind::command_queue: {
+                /* Reads queued on it will never be waited for now, and their
+                 * destinations are memory the application is about to reuse.
+                 * The markers the ICD made for them go back with them. */
+                uint64_t       markers[ClPendingReads::max_reads] = {};
+                const uint32_t forgotten = reads_.forget_queue(wire_handle, markers);
+                for (uint32_t index = 0u; index < forgotten; ++index)
+                    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, markers[index]));
                 static_cast<void>(av::clproto::rvk_clReleaseCommandQueue(*wire, wire_handle));
                 break;
+            }
             case ClObject::Kind::mem:
                 static_cast<void>(av::clproto::rvk_clReleaseMemObject(*wire, wire_handle));
                 break;
@@ -440,6 +448,8 @@ void ClIcdRoot::report(StateWriter &writer)
     writer.open("clicd", 0u);
     writer.flag("device", device_object_ != nullptr);
     objects_.report(writer);
+    writer.number("reads_outstanding", reads_.outstanding());
+    writer.number("reads_delivered", reads_.delivered());
     connection_.report(writer);
     writer.close();
 }
@@ -450,6 +460,7 @@ bool ClIcdRoot::invariants_hold() const
     if (!platform_.invariants_hold() || !extensions_.invariants_hold()) return false;
     if (!objects_.invariants_hold() || !connection_.invariants_hold()) return false;
     if (!device_.invariants_hold()) return false;
+    if (!reads_.invariants_hold() || !watcher_.invariants_hold()) return false;
     /* A platform the loader would drop is one this ICD must never hand out. */
     return platform_.dispatchable();
 }
@@ -665,16 +676,43 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     if (into == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* Enqueued without blocking whatever the application asked for, and with
-     * an event whether or not it wanted one: the blocking half is this side's
-     * wait on that event, so the host is never asked to hold its worker. */
+    /* A non-blocking read may not fetch here: the API says the application's
+     * memory is undefined until the event completes, and the bytes do not
+     * exist yet - the reply to a read the host has only queued carries
+     * nothing. So what is sent is a marker, which is the read's place in the
+     * queue as an event, and the fetch is recorded against it.
+     *
+     * The cost is that the bytes are the buffer's at delivery rather than at
+     * enqueue. An application that writes to the buffer between the two sees
+     * the later contents; the API lets it modify the buffer, so this is a
+     * deviation, and it is the one the wire allows without the device
+     * staging a copy of its own. */
     uint64_t     produced = 0u;
+    if (blocking != CL_TRUE) {
+        const cl_int marked = av::clproto::rvk_clEnqueueMarkerWithWaitList(
+            *wire, held->wire(), 0u, nullptr, &produced);
+        if (marked != CL_SUCCESS) return marked;
+        /* An event the application did not ask for is one the ICD keeps
+         * until the read delivers: it is the row's name, and releasing it
+         * now would let the host hand the number to something else. */
+        if (reads_.record(produced, held->wire(), named->wire(), offset, bytes, into,
+                          event == nullptr)) {
+            if (event != nullptr) {
+                *event = static_cast<cl_event>(
+                    wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
+            }
+            return CL_SUCCESS;
+        }
+        /* No room to remember it. The read still has to deliver, so it is
+         * made blocking instead: slower, and never wrong. */
+        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
+        log_.write("rvkcl: too many reads outstanding; this one blocks");
+        produced = 0u;
+    }
     const cl_int ran = av::clproto::rvk_clEnqueueReadBuffer(
         *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, into, 0u, nullptr, &produced);
     if (ran != CL_SUCCESS) return ran;
-    cl_int waited = CL_SUCCESS;
-    if (blocking == CL_TRUE)
-        waited = waits_.until_complete(*wire, &produced, 1u, icd::SlicedWait::forever);
+    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
@@ -705,8 +743,7 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
         *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, from, 0u, nullptr, &produced);
     if (ran != CL_SUCCESS) return ran;
     cl_int waited = CL_SUCCESS;
-    if (blocking == CL_TRUE)
-        waited = waits_.until_complete(*wire, &produced, 1u, icd::SlicedWait::forever);
+    if (blocking == CL_TRUE) waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(ClObject::Kind::event, produced, held->context(), held, nullptr));
@@ -733,9 +770,12 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     const cl_int enqueued = av::clproto::rvk_clEnqueueMarkerWithWaitList(
         *wire, held->wire(), 0u, nullptr, &marker);
     if (enqueued != CL_SUCCESS) return enqueued;
-    const cl_int waited = waits_.until_complete(*wire, &marker, 1u, icd::SlicedWait::forever);
+    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), marker);
     static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, marker));
-    return waited;
+    if (waited != CL_SUCCESS) return waited;
+    /* Everything queued before the marker has run, so every read outstanding
+     * on this queue is one the application may now read. */
+    return deliver_queued(*wire, held->wire());
 }
 
 cl_int ClIcdRoot::flush(cl_command_queue queue)
@@ -1017,7 +1057,11 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     /* clWaitForEvents has no timeout, so the wait is unbounded - but every
      * host call it makes answers at once, which is the whole difference
      * between an unbounded wait and a held worker. */
-    return waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever);
+    const cl_int reached = waits_.until_complete(*wire, handles, waited, icd::SlicedWait::forever);
+    /* And a wait is where an application learns a non-blocking read is done,
+     * so it is where the bytes have to be there. */
+    const cl_int delivered = deliver_reads(*wire, handles, waited);
+    return reached != CL_SUCCESS ? reached : delivered;
 }
 
 cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
@@ -1028,7 +1072,16 @@ cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_by
     if (held == nullptr) return CL_INVALID_EVENT;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::rvk_clGetEventInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+    const cl_int asked =
+        av::clproto::rvk_clGetEventInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+    /* An application that polls rather than waits learns of the completion
+     * here, so this is where the bytes have to be there too. */
+    if (asked == CL_SUCCESS && name == CL_EVENT_COMMAND_EXECUTION_STATUS && value != nullptr &&
+        value_bytes >= sizeof(cl_int) && *static_cast<const cl_int *>(value) == CL_COMPLETE) {
+        const uint64_t handle = held->wire();
+        static_cast<void>(deliver_reads(*wire, &handle, 1u));
+    }
+    return asked;
 }
 
 cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Notify notify,
@@ -1056,6 +1109,57 @@ cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Not
     return registered;
 }
 
+
+cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, const uint64_t *events, uint32_t count)
+{
+    AV_SCOPE("ClIcdRoot::deliver_reads");
+    cl_int answer = CL_SUCCESS;
+    for (uint32_t index = 0u; index < count; ++index) {
+        ClPendingRead *const waiting = reads_.waiting_on(events[index]);
+        if (waiting == nullptr) continue;
+        /* The fetch the enqueue deferred. The host has reached the marker, so
+         * everything queued before the read has run and this answers at once;
+         * it is sent blocking because there is nothing left to wait for. */
+        const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
+            wire, waiting->queue(), waiting->buffer(), CL_TRUE, waiting->offset(),
+            waiting->bytes(), waiting->into(), 0u, nullptr, nullptr);
+        if (waiting->ours())
+            static_cast<void>(av::clproto::rvk_clReleaseEvent(wire, waiting->event()));
+        waiting->give_up();
+        reads_.count_delivery();
+        if (read != CL_SUCCESS && answer == CL_SUCCESS) answer = read;
+    }
+    return answer;
+}
+
+cl_int ClIcdRoot::deliver_queued(ClientTransport &wire, uint64_t queue)
+{
+    AV_SCOPE("ClIcdRoot::deliver_queued");
+    cl_int answer = CL_SUCCESS;
+    /* One pass per read rather than one over the table: delivering gives a
+     * row up, so the table is walked again each time rather than while it
+     * changes underneath. */
+    for (uint32_t taken = 0u; taken < ClPendingReads::max_reads; ++taken) {
+        uint64_t             event = 0u;
+        for (uint32_t slot = 0u; slot < ClPendingReads::max_reads && event == 0u; ++slot) {
+            const ClPendingRead *const row = reads_.at(slot);
+            if (row->held() && row->queue() == queue) event = row->event();
+        }
+        if (event == 0u) break;
+        const cl_int one = deliver_reads(wire, &event, 1u);
+        if (one != CL_SUCCESS && answer == CL_SUCCESS) answer = one;
+    }
+    return answer;
+}
+
+void ClIcdRoot::deliver_watched(ClObject &event)
+{
+    AV_SCOPE("ClIcdRoot::deliver_watched");
+    ClientTransport *const wire = wire_of(event);
+    if (wire == nullptr) return;
+    const uint64_t handle = event.wire();
+    static_cast<void>(deliver_reads(*wire, &handle, 1u));
+}
 
 void ClIcdRoot::release_watched(ClObject &event)
 {

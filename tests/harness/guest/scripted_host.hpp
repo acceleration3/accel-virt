@@ -101,6 +101,16 @@ public:
     void cl_ids(std::int32_t result, const std::uint64_t *ids, std::uint32_t sent, std::uint32_t total);
     /* A blocking read's answer: the result and `count` floats. */
     void cl_read(std::int32_t result, const float *values, std::uint32_t count);
+    /* A read of bytes rather than floats, which is what a deferred read
+     * fetches: the same reply shape, without pretending the buffer holds
+     * anything in particular. */
+    void cl_bytes(std::int32_t result, const void *values, std::uint32_t count);
+    /* The same with the event the enqueue asked for after it. */
+    void cl_bytes_for(std::int32_t result, const void *values, std::uint32_t count,
+                      std::uint64_t event);
+    /* An enqueue that answers only a result and the event it made: a marker,
+     * a kernel, a write. */
+    void cl_enqueued(std::int32_t result, std::uint64_t event);
     /* An info query's answer: the result, `size` bytes of `value`, and the
      * size again as the size it reports. */
     void cl_info(std::int32_t result, const char *value, std::uint32_t size);

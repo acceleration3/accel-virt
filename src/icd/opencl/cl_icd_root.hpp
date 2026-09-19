@@ -29,6 +29,7 @@
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
 #include "icd/opencl/cl_object_table.hpp"
+#include "icd/opencl/cl_pending_reads.hpp"
 #include "icd/opencl/cl_platform.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
@@ -161,6 +162,9 @@ public:
      * completion wakes this context's worker. */
     cl_int   watch_event(cl_event event, cl_int status,
                          ClWatchedEvent::Notify notify, void *user_data);
+    /* The watcher, before it runs a callback: a callback on a non-blocking
+     * read has to see the bytes. Reached only from the watcher's thread. */
+    void     deliver_watched(ClObject &event) override;
     /* The watcher giving back what watch_event took. Reached only from the
      * watcher's thread, after a callback has run. */
     void     release_watched(ClObject &event) override;
@@ -188,6 +192,13 @@ private:
      * no property named twice, and every name one of `allowed`. */
     cl_int           judge(const uint64_t *properties, const uint64_t *allowed,
                            uint32_t allowed_count, ClPropertyList &read) const;
+    /* Fetches the bytes of every non-blocking read waiting on one of these
+     * events, now that the host has reached them. The first failure, or
+     * CL_SUCCESS - including for events nothing was waiting on. */
+    cl_int           deliver_reads(ClientTransport &wire, const uint64_t *events, uint32_t count);
+    /* Every read outstanding on one queue, for a finish - which says
+     * everything queued on it has run. */
+    cl_int           deliver_queued(ClientTransport &wire, uint64_t queue);
     /* Opens the device this ICD shows, once, on the first ask. */
     [[nodiscard]] Status open_device();
     /* Makes one object of a host answer, releasing the host's if this cannot
@@ -215,6 +226,7 @@ private:
     ClObject              *device_object_;
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
+    ClPendingReads         reads_;
 };
 
 }  // namespace av::clicd
