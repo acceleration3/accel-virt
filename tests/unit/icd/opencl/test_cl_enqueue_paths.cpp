@@ -70,6 +70,7 @@ public:
     }
 
     bool             made() const { return kernel_ != nullptr && buffer_ != nullptr; }
+    cl_device_id     device() const { return device_; }
     cl_context       context() const { return context_; }
     cl_command_queue queue() const { return queue_; }
     cl_mem           buffer() const { return buffer_; }
@@ -583,13 +584,9 @@ TEST(cl_enqueue_paths, a_finish_leaves_the_reads_of_every_other_queue_alone)
   CHECK(run.made());
   if (!run.made()) return;
   rig.host().cl_handle(host_queue + 1u, CL_SUCCESS);
-  cl_command_queue second = rig.root().create_queue(run.context(), nullptr, nullptr, nullptr);
-  if (second == nullptr) {
-      /* The queue needs the device this rig opened; without it there is no
-       * second queue to tell apart. */
-      CHECK(rig.root().invariants_hold());
-      return;
-  }
+  cl_command_queue second = rig.root().create_queue(run.context(), run.device(), nullptr, nullptr);
+  CHECK(second != nullptr);
+  if (second == nullptr) return;
   unsigned char mine[8] = {};
   unsigned char theirs[8] = {};
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -653,4 +650,72 @@ TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().finish(run.queue()), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A wait naming two events whose reads both fail to deliver: the first error
+ * is what the wait answers, because it is where the application's memory
+ * stopped being filled. */
+TEST(cl_enqueue_paths, a_wait_over_two_failed_deliveries_answers_the_first)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char first[8] = {};
+  unsigned char second[8] = {};
+
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event one = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof first, first,
+                                   &one),
+           CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  cl_event two = nullptr;
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof second, second,
+                                   &two),
+           CL_SUCCESS);
+  CHECK(one != nullptr && two != nullptr);
+  if (one == nullptr || two == nullptr) return;
+
+  /* Both complete, and both fetches are refused in the same wait. */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_bytes(CL_MEM_OBJECT_ALLOCATION_FAILURE, nullptr, 0u);
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  const cl_event both[] = {one, two};
+  CHECK_EQ(rig.root().wait_for_events(2u, both), CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A finish with every row the ICD can hold outstanding on its queue: the
+ * walk that delivers them runs to its own bound, which is what stops it
+ * looping forever on a table it is changing as it goes. */
+TEST(cl_enqueue_paths, a_finish_delivers_every_row_the_icd_can_hold)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[64][8] = {};
+
+  for (std::uint32_t index = 0u; index < 64u; ++index) {
+      rig.host().cl_enqueued(CL_SUCCESS, host_event + index);
+      CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into[index],
+                                       into[index], nullptr),
+               CL_SUCCESS);
+  }
+
+  /* The finish: its marker, the flush, the wait, the marker released, then
+   * sixty-four fetches each with its marker released behind it. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 100u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  const unsigned char ones[8] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
+  for (std::uint32_t index = 0u; index < 64u; ++index) {
+      rig.host().cl_bytes(CL_SUCCESS, ones, sizeof ones);
+      rig.host().cl_result(CL_SUCCESS);
+  }
+  CHECK_EQ(rig.loader().finish(run.queue()), CL_SUCCESS);
+  for (const auto &row : into)
+      for (const unsigned char byte : row) CHECK_EQ(byte, 1u);
   CHECK(rig.root().invariants_hold()); }
