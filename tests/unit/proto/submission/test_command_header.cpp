@@ -77,3 +77,19 @@ TEST(command_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 64u); }
+
+TEST(command_header, the_shared_object_trio_are_transport_ids_and_are_all_different)
+{ const std::uint32_t ids[] = {CommandHeader::share_object_id, CommandHeader::open_shared_object_id,
+                               CommandHeader::release_shared_object_id};
+  for (const std::uint32_t id : ids) {
+      std::uint8_t bytes[CommandHeader::encoded_size] = {};
+      CHECK_STATUS(CommandHeader(id, CommandHeader::encoded_size + 24u, 0u).encode(bytes, sizeof bytes),
+                   Status::ok);
+      CommandHeader decoded;
+      CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
+      CHECK_EQ(decoded.api(), CommandHeader::transport_api);
+      CHECK_EQ(decoded.id(), id);
+      CHECK_EQ(decoded.size(), CommandHeader::encoded_size + 24u);
+  }
+  CHECK(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2]);
+  CHECK(ids[0] > CommandHeader::release_blob_id); }

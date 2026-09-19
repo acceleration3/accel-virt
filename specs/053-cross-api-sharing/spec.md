@@ -37,11 +37,38 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 ### Classes this feature introduces
 
-<!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->
+Wire, `src/proto/`:
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `SharedObjectRecord` | object | the magic, version, object id, kind, adapter LUID and size of one shared object | Carry a shared object's identity in an allocation's private driver data |
+| `SharedObjectRequest` | object | the object id, kind and wire handle one transport command names | Frame the body the three shared-object transport commands share |
+| `SharedObjectAnswer` | object | the status and the wire handle a shared-object command answers | Frame what a shared-object command answers |
+
+Guest kernel, `src/core/memory/`:
+
+| Class | Kind | State it owns | Responsibility (no "and") |
+|---|---|---|---|
+| `SharedObject` | object | its id, kind, size, the allocation behind it, and how many devices hold it | Be one shared object the adapter knows |
+| `SharedObjectTable` | system | the adapter's shared objects and the id it mints next | Give an allocation an identity the whole adapter agrees on |
+
+QEMU device, `src/device/`:
+
+| Class | Kind | State it owns | Responsibility (no "and") |
+|---|---|---|---|
+| `HostSharedObject` | object | its id, kind, size, the host descriptor behind it, and how many contexts hold it | Be one host resource several contexts name |
+| `HostSharedObjects` | system | the device's shared objects, under the lock its workers reach it through | Keep one host resource per object id for the whole device |
+| `ContextSharedObjects` | object | what one context published or opened, and the wire handle each became | Hold one context's share of the device's shared objects |
+| `SharedObjectCommand` | object | the header, the body and the tables the command reaches | Answer one SHARE / OPEN / RELEASE transport command |
+
+Guest user mode, `src/icd/`:
+
+| Class | Kind | State it owns | Responsibility (no "and") |
+|---|---|---|---|
+| `icd::SharedHandles` | system | the NT handles this process holds, each with the object id behind it | Turn a Win32 handle into the object id the device knows |
+| `glicd::GlExternalObjects` | system | the GL memory objects and semaphores this context imported | Hold one GL context's imported external objects |
+| `clicd::ClExternalMemory` | system | the `cl_mem` objects this context imported from Win32 handles | Hold one OpenCL context's imported external memory |
+| `clicd::ClGlSharing` | system | the GL objects a context has acquired, and the depth of each | Track which GL objects an OpenCL context currently owns |
 
 ### Test requirements
 

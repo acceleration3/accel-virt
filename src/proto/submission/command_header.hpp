@@ -25,6 +25,11 @@ public:
     static constexpr uint32_t nop_id          = 0x00000001u;
     static constexpr uint32_t import_blob_id  = 0x00000002u;
     static constexpr uint32_t release_blob_id = 0x00000003u;
+    /* The shared-object trio, which gives one host resource an identity the
+     * whole device agrees on rather than one context (feature 053). */
+    static constexpr uint32_t share_object_id          = 0x00000004u;
+    static constexpr uint32_t open_shared_object_id    = 0x00000005u;
+    static constexpr uint32_t release_shared_object_id = 0x00000006u;
 
     CommandHeader();
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);
