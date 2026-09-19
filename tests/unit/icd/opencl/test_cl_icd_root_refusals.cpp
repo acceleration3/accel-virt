@@ -23,6 +23,19 @@ using av::ClIcdRig;
 using av::FakeClLoader;
 using av::clicd::ClObject;
 
+namespace av::clicd {
+
+/* An object with no context behind it, which is how a device the root never
+ * opened is put in front of it. */
+struct ClIcdRootProbe {
+    static ClObject *without_a_context(ClIcdRoot &root, ClObject::Kind kind, std::uint64_t wire)
+    { ClObject *made = nullptr;
+      return root.objects_.make(kind, wire, nullptr, nullptr, made) == av::Status::ok ? made
+                                                                                      : nullptr; }
+};
+
+}  // namespace av::clicd
+
 namespace {
 
 constexpr std::uint64_t host_platform = 0x6200u;
@@ -857,15 +870,46 @@ TEST(cl_icd_root_refusals, a_context_the_guest_cannot_keep_gives_the_hosts_back)
             nullptr);
   }
   cl_device_id device = opened.device();
-  rig.host().blob_import(0u, 0x80u);
-  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
-  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
-  rig.host().cl_handle(0x6410u, CL_SUCCESS);   /* the host's context */
-  rig.host().cl_result(CL_SUCCESS);            /* released again */
+  /* Which allocation of the create is the table's depends on what the make
+   * before it did, so the refusal is swept until it lands after the host has
+   * made its context - which is the case this is about. */
+  bool proved = false;
+  for (std::uint32_t refused = 1u; refused <= 8u && !proved; ++refused) {
+      rig.host().blob_import(0u, 0x80u + refused);
+      rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+      rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+      rig.host().cl_handle(0x6410u + refused, CL_SUCCESS);   /* the host's context */
+      rig.host().cl_result(CL_SUCCESS);                      /* released again */
+      const std::uint32_t before = rig.kmt().commands();
+      rig.platform().fail_allocation_at(refused);
+      cl_int error = CL_SUCCESS;
+      if (rig.root().create_context(nullptr, &device, 1u, &error) != nullptr) continue;
+      CHECK(error == CL_OUT_OF_HOST_MEMORY || error == CL_DEVICE_NOT_AVAILABLE);
+      /* The host made its context and the guest could not keep it: the
+       * release behind it is what says the host's went back too. */
+      if (error == CL_OUT_OF_HOST_MEMORY && rig.kmt().commands() > before + 3u) proved = true;
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(proved); }
+
+/* The very first context a root makes, with no memory for it.
+ *
+ * A device the table holds but that no open produced is what gets there: the
+ * root has never made a context of its own, so the pool it keeps them in has
+ * no room yet and asking for one is what allocates. */
+TEST(cl_icd_root_refusals, a_root_with_no_memory_for_its_first_context_makes_none)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  ClObject *const device =
+      av::clicd::ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::device, 0x6300u);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  auto *const as_device = reinterpret_cast<cl_device_id>(device);
+  const std::uint32_t sent = rig.kmt().commands();
   rig.platform().fail_allocation_at(1u);
   cl_int error = CL_SUCCESS;
-  CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
-  /* Either the guest's own context could not be made, or it was and the
-   * object could not be kept; both leave nothing behind. */
-  CHECK(error == CL_OUT_OF_HOST_MEMORY || error == CL_DEVICE_NOT_AVAILABLE);
+  CHECK(rig.root().create_context(nullptr, &as_device, 1u, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  /* Nothing was asked of the host: there was never a transport to ask over. */
+  CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
