@@ -223,7 +223,7 @@ the union, and the driver fills it. For D3D12 the same table arrives as
 
 Which arm of the union is live is chosen by the DDI interface version the
 runtime asked for. At WDDM 3.2 that is `DXGI1_6_1_DDI_BASE_FUNCTIONS`
-(`dxgiddi.h:798`), 21 slots:
+(`dxgiddi.h:798`), 22 slots:
 
 `pfnPresent`, `pfnGetGammaCaps`, `pfnSetDisplayMode`, `pfnSetResourcePriority`,
 `pfnQueryResourceResidency`, `pfnRotateResourceIdentities`, `pfnBlt`,
@@ -242,7 +242,7 @@ can change the address of the callback function whenever there is no thread
 inside the user-mode display driver." So the device holds
 `DXGI_DDI_BASE_CALLBACKS *`, never a copied `pfnPresentCb`.
 
-**055's share.** Every one of the 21 slots is non-null and every one is tested
+**055's share.** Every one of the 22 slots is non-null and every one is tested
 (FR-003). The ones that need no resource - `pfnGetGammaCaps`,
 `pfnSetResourcePriority`, `pfnQueryResourceResidency`,
 `pfnGetMultiplaneOverlayCaps`, `pfnGetMultiplaneOverlayGroupCaps`,

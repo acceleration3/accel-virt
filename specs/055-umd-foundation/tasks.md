@@ -96,7 +96,7 @@ description: "Tasks: rvkumd.dll - the user-mode driver and DXGI"
 
 ## Phase 5: US3 - the DXGI seam (Priority: P1)
 
-**Goal**: every one of the 21 slots is filled, and every one is tested.
+**Goal**: every one of the 22 slots is filled, and every one is tested.
 
 - [ ] T027 Write `tests/unit/icd/d3d/test_dxgi_base_table.cpp` first: the revision follows `Interface`; a null callbacks pointer and a null functions union are each `E_INVALIDARG` before anything is written; an `Interface` naming a revision this driver does not serve is `E_NOINTERFACE`; a filled table has no null slot; the callbacks *pointer* is what is kept, and moving the runtime's table is seen by the next call
 - [ ] T028 `DxgiBaseTable` in `src/icd/d3d/dxgi_base_table.{hpp,cpp}` and the 21 thunks in `umd_entry_points.cpp`, each one line

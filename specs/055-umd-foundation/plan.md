@@ -28,9 +28,10 @@ Research moved four things out (research.md §11): the 32-bit arm to 061, D3D9
 to 064, rendering and feature levels to 056/057, and FR-006's per-resource
 private data to 056/057 - 055 builds the envelope every later record nests in,
 so the KMD's refusal path is proven before the first field exists. Two things
-it cannot finish are written as tasks and left unstarted: the recorded
-D3D12Core call sequence (FR-002, needs a Ghidra workspace this environment has
-no install for) and the one-link-per-process join (FR-007, needs feature 053's
+it cannot finish are written as tasks and left unstarted: the rest of the
+recorded runtime call sequences (FR-002 - research.md §12 has D3D12Core's
+open and its first caps query, the D3D11 runtime's own order is still
+unread) and the one-link-per-process join (FR-007, needs feature 053's
 device-global object identity).
 
 ## Technical Context
@@ -140,7 +141,7 @@ headers), `tools/header_scan.py` (the record directories), `CMakeLists.txt`
 specs/055-umd-foundation/
 ├── plan.md, research.md, data-model.md, quickstart.md
 ├── contracts/umd_interface.md      # INF values, exports, the adapter tables, what 056 inherits
-├── contracts/dxgi_seam.md          # DXGI revision selection, the 21 slots, callbacks, what 056/058 fill
+├── contracts/dxgi_seam.md          # DXGI revision selection, the 22 slots, callbacks, what 056/058 fill
 ├── contracts/private_data.md       # the RVKU envelope the KMD validates
 └── tasks.md
 ```
@@ -180,7 +181,7 @@ contracts are written for it:
   create fills). It also states the object model 056 must not re-invent: the
   runtime owns the device's memory, `DeviceCookie` is what lives there, and
   `DeviceTable::device_of` is the only way back to a `UmdDevice`.
-- **`contracts/dxgi_seam.md`** names all 21 slots of
+- **`contracts/dxgi_seam.md`** names all 22 slots of
   `DXGI1_6_1_DDI_BASE_FUNCTIONS`, which 055 answers and with what, and which
   are left answering `E_NOTIMPL` for 056 (`pfnPresent`, `pfnPresent1`,
   `pfnBlt`, `pfnBlt1`, `pfnRotateResourceIdentities`, `pfnSetDisplayMode`,

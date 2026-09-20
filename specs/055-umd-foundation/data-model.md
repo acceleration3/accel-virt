@@ -100,7 +100,7 @@ unit (`src/um/d3d/rvkumd_exports.cpp`).
   gave a table to fill at all.
 - Rule: the revision follows the DDI interface version the runtime asked for,
   not a guess; an arm of `DXGI_DDI_BASE_ARGS` narrower than the version implies
-  is a refusal, because filling 21 slots into a 7-slot struct writes past the
+  is a refusal, because filling 22 slots into a 7-slot struct writes past the
   runtime's memory.
 - Every slot is non-null. Which answer each gives is
   `contracts/dxgi_seam.md`.

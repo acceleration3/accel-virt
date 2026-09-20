@@ -6,7 +6,7 @@ Source of truth: `dxgiddi.h`
 
 **Read this if you are feature 056 or 058.** 055 owns the seam - which
 revision, which callbacks, which device, and a non-null tested slot for every
-entry. 056 and 058 own the bodies of the nine slots marked below and nothing
+entry. 056 and 058 own the bodies of the slots marked below and nothing
 else in this file.
 
 ## There is no DXGI export and no DXGI entry point
@@ -38,7 +38,7 @@ typedef struct DXGI_DDI_BASE_ARGS {
 asked for in `D3D10DDIARG_CREATEDEVICE::Interface`**, never from a guess and
 never from the widest struct the header declares. At
 `D3DWDDM3_2_DDI_INTERFACE_VERSION` (`0x000B002D`) that is
-`DXGI1_6_1_DDI_BASE_FUNCTIONS`, 21 slots.
+`DXGI1_6_1_DDI_BASE_FUNCTIONS`, 22 slots.
 
 Refusals, each with a test:
 
@@ -48,7 +48,7 @@ Refusals, each with a test:
 | the functions union is null | `E_INVALIDARG`; the device is not created |
 | `Interface` names a revision this driver does not serve | `E_NOINTERFACE`, before anything is written |
 
-Writing 21 slots into the struct a narrower revision names would write past the
+Writing 22 slots into the struct a narrower revision names would write past the
 runtime's memory, which is why the revision is decided before the first store
 and why the decision is one object's, not a branch in the create.
 
@@ -60,7 +60,7 @@ function whenever there is no thread inside the user-mode display driver."
 `pfnPresentMultiplaneOverlayCb`, `pfnPresentMultiplaneOverlay1Cb`,
 `pfnSubmitPresentBltToHwQueueCb` and `pfnSubmitPresentToHwQueueCb`.
 
-## The 21 slots of `DXGI1_6_1_DDI_BASE_FUNCTIONS`
+## The 22 slots of `DXGI1_6_1_DDI_BASE_FUNCTIONS`
 
 Every slot is non-null and every slot has a test. "Refusal" means the result a
 driver that does not support the operation is documented to return, not a
@@ -89,6 +89,7 @@ crash and not a silent success.
 | 19 | `pfnTrimResidencySet` | `S_OK`, nothing trimmed: residency is the KMD's here | 055 |
 | 20 | `pfnCheckMultiplaneOverlayColorSpaceSupport` | `S_OK` with support 0 | 055 |
 | 21 | `pfnPresentMultiplaneOverlay1` | `E_NOTIMPL` | **058** |
+| 22 | `pfnReclaimResources1` | `E_NOTIMPL`, as `pfnReclaimResources` | **056** |
 
 A slot that answers `S_OK` with an all-zero answer is not a shortcut: each one
 is a capability this adapter genuinely does not have, and each has a test that
