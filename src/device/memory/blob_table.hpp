@@ -57,6 +57,8 @@ public:
     /* Pinned or not: a reset. */
     void                 release_all();
     bool                 contains(uint32_t id);
+    /* not_found for an unknown id; the blob's size otherwise. */
+    [[nodiscard]] Status size(uint32_t id, uint64_t &size);
     /* Any thread. Guest blob `id`'s pages as one host range, valid until the
      * hold is let go: not_found for no blob `id`, and the blob's answer
      * otherwise. */

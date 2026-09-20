@@ -10,7 +10,7 @@
 
 namespace av {
 
-DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false)
+DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false), display_resolved_(false)
 {
     AV_SCOPE("DeviceCapset::DeviceCapset");
 }
@@ -37,6 +37,21 @@ void DeviceCapset::withdraw_guest_import()
     AV_SCOPE("DeviceCapset::withdraw_guest_import");
     if (!described_) return;
     info_.withdraw(CapsetInfo::feature_guest_memory_import);
+}
+
+void DeviceCapset::resolve_display(bool takes_dmabuf)
+{
+    AV_SCOPE("DeviceCapset::resolve_display");
+    host_.require_main_loop("DeviceCapset::resolve_display");
+    if (display_resolved_) return;
+    display_resolved_ = true;
+    if (described_ && takes_dmabuf) info_.announce(CapsetInfo::feature_dmabuf_scanout);
+}
+
+bool DeviceCapset::display_resolved() const
+{
+    AV_SCOPE("DeviceCapset::display_resolved");
+    return display_resolved_;
 }
 
 bool DeviceCapset::described() const

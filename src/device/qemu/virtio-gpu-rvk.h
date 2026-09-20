@@ -58,6 +58,9 @@ struct VirtIOGPURvk {
     MemoryRegion doorbells;
     /* Queue FIRST + n carries doorbell n's fence interrupts on its vector. */
     VirtQueue *fence_queues[RVK_DEVICE_DOORBELLS];
+    /* The dma-buf each head is showing, which QEMU's display holds an import
+     * of until it is told otherwise; NULL for a head showing nothing. */
+    QemuDmaBuf *scanouts[VIRTIO_GPU_MAX_SCANOUTS];
 };
 
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and

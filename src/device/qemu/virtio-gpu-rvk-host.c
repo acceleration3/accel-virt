@@ -26,6 +26,7 @@
 #include "system/memory.h"
 #include "system/address-spaces.h"
 #include "system/ramblock.h"
+#include "ui/console.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
@@ -760,6 +761,92 @@ static void rvk_close_recording(void *opaque, void *file)
 {
     (void)opaque;
     qemu_close((int)(intptr_t)file - 1);
+/* The console of head `head`, or NULL past the heads this device has. */
+static QemuConsole *rvk_head_console(VirtIOGPURvk *r, uint32_t head)
+{
+    VirtIOGPUBase *b = VIRTIO_GPU_BASE(r);
+
+    if (head >= (uint32_t)b->conf.max_outputs || head >= VIRTIO_GPU_MAX_SCANOUTS) {
+        return NULL;
+    }
+    return b->scanout[head].con;
+}
+
+/* Whether a display backend gave this head's console a GL context. It is the
+ * backend that does so (ui/egl-headless.c, ui/gtk.c, ui/sdl2.c, ui/dbus.c,
+ * ui/spice-display.c), and it does so after every device has realized, which
+ * is why the core asks this when the guest reads the capset and not before. */
+static int rvk_display_takes_dmabuf(void *opaque, uint32_t head)
+{
+    QemuConsole *con = rvk_head_console(opaque, head);
+
+    return con != NULL && qemu_console_has_gl(con);
+}
+
+static void rvk_release_scanout(VirtIOGPURvk *r, uint32_t head, QemuConsole *con)
+{
+    if (!r->scanouts[head]) {
+        return;
+    }
+    qemu_console_gl_release_dmabuf(con, r->scanouts[head]);
+    qemu_dmabuf_close(r->scanouts[head]);
+    g_clear_pointer(&r->scanouts[head], qemu_dmabuf_free);
+}
+
+/* The descriptor is duplicated because qemu_dmabuf_close() closes what it was
+ * given, and the core goes on owning its own. The console is resized before
+ * the scanout because a GL listener blits into the console's DisplaySurface
+ * and does nothing when there is none (ui/egl-headless.c, egl_scanout_flush),
+ * and the old buffer is released only after the new one is set, because the
+ * listener holds an import of it until it is told otherwise - both the order
+ * virtio_gpu_update_dmabuf() uses. */
+static int rvk_show_scanout(void *opaque, uint32_t head, int fd, const RvkScanoutFrame *frame)
+{
+    VirtIOGPURvk *r = opaque;
+    QemuConsole *con = rvk_head_console(r, head);
+    QemuDmaBuf *shown = r->scanouts[head];
+    int32_t duplicate;
+
+    if (!con || !frame) {
+        return 1;
+    }
+    duplicate = dup(fd);
+    if (duplicate < 0) {
+        return 1;
+    }
+    r->scanouts[head] = qemu_dmabuf_new(frame->width, frame->height, &frame->offset, &frame->stride,
+                                        frame->x, frame->y, frame->backing_width, frame->backing_height,
+                                        frame->fourcc, frame->modifier, &duplicate, 1, false, false);
+    VIRTIO_GPU_BASE(r)->enable = 1;
+    qemu_console_resize(con, frame->width, frame->height);
+    qemu_console_gl_scanout_dmabuf(con, r->scanouts[head]);
+    if (shown) {
+        qemu_console_gl_release_dmabuf(con, shown);
+        qemu_dmabuf_close(shown);
+        qemu_dmabuf_free(shown);
+    }
+    return 0;
+}
+
+static void rvk_update_scanout(void *opaque, uint32_t head, uint32_t x, uint32_t y, uint32_t width,
+                               uint32_t height)
+{
+    QemuConsole *con = rvk_head_console(opaque, head);
+
+    if (con) {
+        qemu_console_gl_update(con, x, y, width, height);
+    }
+}
+
+static void rvk_hide_scanout(void *opaque, uint32_t head)
+{
+    VirtIOGPURvk *r = opaque;
+    QemuConsole *con = rvk_head_console(r, head);
+
+    if (con) {
+        qemu_console_gl_scanout_disable(con);
+        rvk_release_scanout(r, head, con);
+    }
 }
 
 /* No loader or no device leaves the catalog empty; the core names the failure. */
@@ -884,6 +971,10 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .append_recording = rvk_append_recording,
         .truncate_recording = rvk_truncate_recording,
         .close_recording = rvk_close_recording,
+        .display_takes_dmabuf = rvk_display_takes_dmabuf,
+        .show_scanout = rvk_show_scanout,
+        .update_scanout = rvk_update_scanout,
+        .hide_scanout = rvk_hide_scanout,
     };
     rvk_read_gpus(r);
 }

@@ -35,6 +35,23 @@ typedef struct RvkGpuProperties {
     char name[256];         /* ::deviceName */
 } RvkGpuProperties;
 
+/* One plane of one display head, as QEMU's qemu_dmabuf_new takes it. Every
+ * field has already been checked against the blob the descriptor covers, and
+ * the fourcc chosen, so the glue decides nothing. */
+typedef struct RvkScanoutFrame {
+    uint32_t width;          /* the picture, in pixels */
+    uint32_t height;
+    uint32_t x;              /* its origin inside the backing */
+    uint32_t y;
+    uint32_t backing_width;  /* the framebuffer the picture is cut from */
+    uint32_t backing_height;
+    uint32_t stride;         /* bytes per row, at most INT32_MAX */
+    uint32_t offset;         /* bytes from the start of the descriptor */
+    uint32_t fourcc;         /* a DRM fourcc */
+    uint32_t reserved;       /* 0 */
+    uint64_t modifier;       /* a DRM format modifier; linear today */
+} RvkScanoutFrame;
+
 /* Every member is required. `opaque` comes back as each call's first argument. */
 typedef struct RvkHostOps {
     void *opaque;
@@ -134,6 +151,26 @@ typedef struct RvkHostOps {
     /* The recording back to empty; nonzero when the host could not. */
     int (*truncate_recording)(void *opaque, void *file);
     void (*close_recording)(void *opaque, void *file);
+
+    /* Main loop. Nonzero when display head `head` exists and its console can
+     * show a dma-buf.
+     *
+     * Asked once per device, when the guest first reads the capset, never at
+     * realize: QEMU registers its display backends in qemu_init_displays()
+     * after qmp_x_exit_preconfig() has realized every device, and it is the
+     * backend that gives a console its GL context, so at realize the answer is
+     * no on every host. */
+    int (*display_takes_dmabuf)(void *opaque, uint32_t head);
+    /* Main loop. Head `head` shows `frame` out of `fd`. The glue duplicates
+     * the descriptor, so the caller goes on owning its own. Nonzero when the
+     * host would not take it, having changed nothing. */
+    int (*show_scanout)(void *opaque, uint32_t head, int fd, const RvkScanoutFrame *frame);
+    /* Main loop. The rectangle of head `head` that changed. */
+    void (*update_scanout)(void *opaque, uint32_t head, uint32_t x, uint32_t y, uint32_t width,
+                           uint32_t height);
+    /* Main loop. Head `head` shows nothing, and the duplicate show_scanout
+     * took is closed. Safe on a head showing nothing. */
+    void (*hide_scanout)(void *opaque, uint32_t head);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from

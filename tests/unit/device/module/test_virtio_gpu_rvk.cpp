@@ -299,12 +299,12 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 3u);
   device.report(writer);
-  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
                                     "device/3/shared/0 live=0\n"
                                     "device/3/contexts/0 live=1\n"
                                     "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
-                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
                                  "device/3/shared/0 live=0\n"
                                  "device/3/contexts/0 live=1\n"
                                  "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "

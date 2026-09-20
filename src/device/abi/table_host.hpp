@@ -64,6 +64,10 @@ public:
     Status   append_recording(void *file, const uint8_t *bytes, size_t size) override;
     Status   truncate_recording(void *file) override;
     void     close_recording(void *file) override;
+    bool     display_takes_dmabuf(uint32_t head) override;
+    Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
+    void     hide_scanout(uint32_t head) override;
 
 private:
     void violated(const char *rule, const char *function);

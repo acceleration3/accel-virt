@@ -2,9 +2,19 @@
 
 #include "core/platform/lock_marks.hpp"
 #include "core/trace/function_scope.hpp"
+#include "device/display/scanout_framebuffer.hpp"
 #include "proto/context/gpu_identity.hpp"
 
 namespace av {
+
+namespace {
+
+/* DRM_FORMAT_MOD_LINEAR: a scanout of guest pages is always linear, and the
+ * tiled case arrives with the executor's image export (feature 058,
+ * contracts/executor_scanout_export.md). */
+constexpr uint64_t drm_format_mod_linear = 0u;
+
+}  // namespace
 
 TableHost::TableHost(const RvkHostOps &ops) : ops_(ops)
 {
@@ -351,6 +361,43 @@ void TableHost::close_recording(void *file)
 {
     AV_SCOPE("TableHost::close_recording");
     ops_.close_recording(ops_.opaque, file);
+/* A table from before these four shows nothing, which is the same answer a
+ * host with no GL display gives, and the guest then keeps the 2D path. */
+bool TableHost::display_takes_dmabuf(uint32_t head)
+{
+    AV_SCOPE("TableHost::display_takes_dmabuf");
+    if (ops_.display_takes_dmabuf == nullptr) return false;
+    return ops_.display_takes_dmabuf(ops_.opaque, head) != 0;
+}
+
+Status TableHost::show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame)
+{
+    AV_SCOPE("TableHost::show_scanout");
+    if (ops_.show_scanout == nullptr) return Status::not_supported;
+    const RvkScanoutFrame plane = {frame.rect().width(),
+                                   frame.rect().height(),
+                                   frame.rect().x(),
+                                   frame.rect().y(),
+                                   frame.width(),
+                                   frame.height(),
+                                   frame.stride(),
+                                   frame.offset(),
+                                   frame.fourcc(),
+                                   0u,
+                                   drm_format_mod_linear};
+    return ops_.show_scanout(ops_.opaque, head, fd, &plane) == 0 ? Status::ok : Status::not_supported;
+}
+
+void TableHost::update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    AV_SCOPE("TableHost::update_scanout");
+    if (ops_.update_scanout != nullptr) ops_.update_scanout(ops_.opaque, head, x, y, width, height);
+}
+
+void TableHost::hide_scanout(uint32_t head)
+{
+    AV_SCOPE("TableHost::hide_scanout");
+    if (ops_.hide_scanout != nullptr) ops_.hide_scanout(ops_.opaque, head);
 }
 
 }  // namespace av

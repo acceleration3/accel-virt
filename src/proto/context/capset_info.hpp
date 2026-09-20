@@ -25,6 +25,11 @@ public:
      * region, and guest pages the host GPU addresses directly. */
     static constexpr uint64_t feature_gpu_exported_memory = 2u;
     static constexpr uint64_t feature_guest_memory_import = 4u;
+    /* The host's display can show a dma-buf, so the guest may scan a blob out
+     * instead of transferring it (feature 058). Decided when the guest first
+     * reads the capset, not at realize: QEMU registers its display backends
+     * after every device is realized. */
+    static constexpr uint64_t feature_dmabuf_scanout = 8u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,
@@ -40,6 +45,9 @@ public:
      * a bit already set from the host's own probe would otherwise promise what
      * the library cannot do (feature 042). */
     void                   withdraw(uint64_t feature);
+    /* Adds a feature that could not be decided when the capset was described,
+     * which is what feature_dmabuf_scanout is. */
+    void                   announce(uint64_t feature);
     bool                   accepts_ring_order(uint8_t order) const;
     /* Unknown bits are kept, so a newer device's capabilities round-trip. */
     bool                   has_feature(uint64_t feature) const;

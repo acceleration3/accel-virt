@@ -1,8 +1,8 @@
 /* The virtio-gpu control commands the device core answers instead of the base
- * class: blob creation, mapping and unmapping, blob scanout (refused until
- * presentation), and UNREF and CREATE_2D when they name a blob, whose ids share
- * the base class's resource space. Every field is checked before memory is
- * mapped or allocated; each answer is one response. Main loop. */
+ * class: blob creation, mapping and unmapping, and UNREF and CREATE_2D when
+ * they name a blob, whose ids share the base class's resource space. What a
+ * display head shows is ScanoutCommands'. Every field is checked before memory
+ * is mapped or allocated; each answer is one response. Main loop. */
 #ifndef AV_BLOB_COMMANDS_HPP
 #define AV_BLOB_COMMANDS_HPP
 
@@ -24,7 +24,6 @@ public:
         resource_create_2d = 0x0101u,
         resource_unref = 0x0102u,
         resource_create_blob = 0x010Cu,
-        set_scanout_blob = 0x010Du,
         resource_map_blob = 0x0208u,
         resource_unmap_blob = 0x0209u,
     };

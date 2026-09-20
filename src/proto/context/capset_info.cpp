@@ -51,6 +51,12 @@ void CapsetInfo::withdraw(uint64_t feature)
     features_ &= ~feature;
 }
 
+void CapsetInfo::announce(uint64_t feature)
+{
+    AV_SCOPE("CapsetInfo::announce");
+    features_ |= feature;
+}
+
 bool CapsetInfo::accepts_ring_order(uint8_t order) const
 {
     AV_SCOPE("CapsetInfo::accepts_ring_order");

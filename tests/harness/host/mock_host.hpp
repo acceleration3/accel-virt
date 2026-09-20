@@ -26,6 +26,8 @@ public:
     static constexpr std::uint32_t max_gpus = 8u;
     static constexpr std::uint32_t max_main_loop_work = 1024u;
     static constexpr std::uint32_t max_doorbells = 64u;
+    /* VIRTIO_GPU_MAX_SCANOUTS. */
+    static constexpr std::uint32_t max_scanout_heads = 16u;
 
     MockHost();
     ~MockHost();
@@ -85,6 +87,38 @@ public:
     Status   append_recording(void *file, const std::uint8_t *bytes, std::size_t size) override;
     Status   truncate_recording(void *file) override;
     void     close_recording(void *file) override;
+    bool     display_takes_dmabuf(std::uint32_t head) override;
+    Status   show_scanout(std::uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    void     update_scanout(std::uint32_t head, std::uint32_t x, std::uint32_t y, std::uint32_t width,
+                            std::uint32_t height) override;
+    void     hide_scanout(std::uint32_t head) override;
+
+    /* The plane a head was told to show, field for field as it crossed the
+     * boundary, so a test asserts the picture rather than that something was
+     * shown. */
+    struct Plane {
+        std::uint32_t width;
+        std::uint32_t height;
+        std::uint32_t x;
+        std::uint32_t y;
+        std::uint32_t backing_width;
+        std::uint32_t backing_height;
+        std::uint32_t stride;
+        std::uint32_t offset;
+        std::uint32_t fourcc;
+    };
+    struct Scanout {
+        bool          shown;
+        int           descriptor;
+        Plane         plane;
+        std::uint32_t shows;     /* times this head was pointed at something */
+        std::uint32_t updates;
+        std::uint32_t hides;
+    };
+
+    /* What the C table's show_scanout lands on, so the RvkScanoutFrame the ABI
+     * carries is asserted as it arrived rather than rebuilt. */
+    [[nodiscard]] Status show_scanout_plane(std::uint32_t head, int fd, const Plane &plane);
 
     /* A discrete GPU named "mock gpu" with this UUID. */
     void add_gpu(const std::uint8_t *uuid);
@@ -153,6 +187,20 @@ public:
     /* Whether `fd` is still open in this process, which is how a test says
      * that a descriptor was closed exactly once rather than counted down. */
     bool          descriptor_open(int fd) const;
+
+    /* Display heads whose console can show a dma-buf. Zero - the default - is
+     * a host with no GL display, which is what `-display none` gives and what
+     * the fallback has to keep working on. */
+    void          add_display_heads(std::uint32_t heads);
+    /* The nth show from now is refused, as a display that cannot import the
+     * descriptor refuses it. */
+    void          refuse_scanout_at(std::uint32_t nth);
+    Scanout       head(std::uint32_t head) const;
+    /* Heads showing something, so a test can say none was left behind. */
+    std::uint32_t live_scanouts() const;
+    /* The rectangle of the last update of `head`. */
+    void          last_update(std::uint32_t head, std::uint32_t &x, std::uint32_t &y, std::uint32_t &width,
+                              std::uint32_t &height) const;
 
     /* Guest memory another harness owns (the guest's MockPlatform in the
      * loopback suite): `translate` answers the host pointer of `length` bytes
@@ -370,6 +418,10 @@ private:
     std::uint32_t   fail_recording_create_;
     std::uint32_t   fail_recording_append_;
     std::uint32_t   fail_recording_truncate_;
+    std::uint32_t   display_heads_;
+    std::uint32_t   refuse_scanout_;
+    Scanout         scanouts_[max_scanout_heads];
+    std::uint32_t   update_rects_[max_scanout_heads][4];
 };
 
 }  // namespace av

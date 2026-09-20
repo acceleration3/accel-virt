@@ -17,6 +17,7 @@
 namespace av {
 
 class GpuIdentity;
+class ScanoutFramebuffer;
 
 using HostRoutine = void (*)(void *context);
 
@@ -159,6 +160,20 @@ public:
     /* Any thread. The recording back to empty, for a recording that wraps. */
     [[nodiscard]] virtual Status truncate_recording(void *file) = 0;
     virtual void                 close_recording(void *file) = 0;
+    /* Main loop. Whether display head `head` exists and its console can show a
+     * dma-buf. Asked once per device, when the guest first reads the capset,
+     * never at realize: QEMU registers its display backends after every device
+     * is realized, and it is the backend that gives a console its GL context,
+     * so a realize-time answer is no on every host. */
+    virtual bool   display_takes_dmabuf(uint32_t head) = 0;
+    /* Main loop. Head `head` shows `frame` out of `fd`. The host duplicates
+     * the descriptor; this side goes on owning its own. not_supported when the
+     * host would not take it, having changed nothing. */
+    [[nodiscard]] virtual Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) = 0;
+    /* Main loop. The rectangle of head `head` that changed. */
+    virtual void   update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) = 0;
+    /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
+    virtual void   hide_scanout(uint32_t head) = 0;
 
 protected:
     Host() = default;

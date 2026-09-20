@@ -28,7 +28,6 @@ bool BlobCommands::answer(ControlRequest &request, uint32_t type)
     case resource_create_blob: response.set(create(request)); break;
     case resource_map_blob: map(request, response); break;
     case resource_unmap_blob: response.set(unmap(request)); break;
-    case set_scanout_blob: response.set(GpuResponse::err_invalid_parameter); break;
     case resource_unref:
         if (!unref(request, response)) return false;
         break;

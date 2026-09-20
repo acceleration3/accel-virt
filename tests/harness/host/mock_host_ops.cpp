@@ -135,6 +135,23 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).truncate_recording(file) == Status::ok ? 0 : 1;
     };
     table_.close_recording = [](void *opaque, void *file) { host_of(opaque).close_recording(file); };
+    table_.display_takes_dmabuf = [](void *opaque, std::uint32_t head) {
+        return host_of(opaque).display_takes_dmabuf(head) ? 1 : 0;
+    };
+    table_.show_scanout = [](void *opaque, std::uint32_t head, int fd, const RvkScanoutFrame *frame) {
+        /* The modifier and the reserved word are the table's promise, not the
+         * mock's business; a plane that broke either is a caught ABI change. */
+        if (frame == nullptr || frame->reserved != 0u || frame->modifier != 0u) return 1;
+        const MockHost::Plane plane = {frame->width,          frame->height,  frame->x,      frame->y,
+                                       frame->backing_width,  frame->backing_height,
+                                       frame->stride,         frame->offset,  frame->fourcc};
+        return host_of(opaque).show_scanout_plane(head, fd, plane) == Status::ok ? 0 : 1;
+    };
+    table_.update_scanout = [](void *opaque, std::uint32_t head, std::uint32_t x, std::uint32_t y,
+                               std::uint32_t width, std::uint32_t height) {
+        host_of(opaque).update_scanout(head, x, y, width, height);
+    };
+    table_.hide_scanout = [](void *opaque, std::uint32_t head) { host_of(opaque).hide_scanout(head); };
 }
 
 const RvkHostOps &MockHostOps::table() const

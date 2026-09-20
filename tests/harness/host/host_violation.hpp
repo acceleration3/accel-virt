@@ -15,6 +15,8 @@ enum class HostViolation : unsigned {
                            * while disconnected or on a line past the fence queues */
     doorbell_misuse,      /* a doorbell connected twice, to a taken page or unknown event, disconnected by
                            * another event, or an event destroyed while connected */
+    scanout_misuse,       /* a display head shown, updated or hidden past the heads the host has, a head
+                           * updated while it shows nothing, or a head shown a descriptor that is not open */
     count
 };
 
