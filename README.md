@@ -156,9 +156,10 @@ src/icd/                          guest user-mode ICDs' decisions — portable, 
   common/                           what both ICDs share: extension policy, locks, the locked transport, sliced waits, the log seam
   vulkan/                           rvkvk.dll: loader entry points, connections, command batches, memory types
   opengl/                           rvkgl.dll: the Drv* interface, pixel formats, contexts, presentation
+  d3d/                              rvkumd.dll: the D3D UMD DDI - adapters, devices, the DXGI seam; ddi/ mirrors the runtimes' structures
 src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, the ICDs and their probes
   icd/                              the seams both ICDs are built over: the process heap, SRW locks, the file log
-  vulkan/  opengl/                  rvkvk.dll's and rvkgl.dll's exports and roots
+  vulkan/  opengl/  d3d/           rvkvk.dll's, rvkgl.dll's and rvkumd.dll's exports and roots
   probe/  imports/                  the probes' entries; import-library .def files
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points

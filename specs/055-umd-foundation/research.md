@@ -147,8 +147,8 @@ driver's **GetSupportedVersions** function". The word for one version is
 `(interface << 32) | (build << 16)`; at WDDM 3.2 the D3D11 interface is
 `D3DWDDM3_2_DDI_MINOR_VERSION = 45` with `D3DWDDM3_2_DDI_BUILD_VERSION = 1`
 (`d3d10umddi.h:7969-7974`), so
-`D3DWDDM3_2_DDI_INTERFACE_VERSION = (11 << 16) | 45 = 0x0011002D` and
-`D3DWDDM3_2_DDI_SUPPORTED = 0x0011002D00010000`.
+`D3DWDDM3_2_DDI_INTERFACE_VERSION = (11 << 16) | 45 = 0x000B002D` and
+`D3DWDDM3_2_DDI_SUPPORTED = 0x000B002D00010000`.
 
 `pfnCalcPrivateDeviceSize` then answers how many bytes of the **runtime's**
 memory the driver wants for its device, and `pfnCreateDevice` is handed that
@@ -451,7 +451,7 @@ and it is stricter than the header suggests:
 6. If the check fails and `pfnCloseAdapter` is non-null and `hAdapter` is
    non-zero, it calls `pfnCloseAdapter` to give the driver its adapter back -
    then journals `"OpenAdapter12"` and answers `0x887A0004`
-   (`DXGI_ERROR_INVALID_CALL`).
+   (`DXGI_ERROR_UNSUPPORTED`).
 7. On success `hAdapter` is kept at `this+0x150`, and every later table call
    passes it.
 
@@ -474,7 +474,8 @@ first thing it asks the driver is the 3D pipeline level:
   journaled as `"Get3DPipelineLevel"`;
 - the answer must be 1, 2, or 10 through 14
   (`D3D12DDI_3DPIPELINELEVEL_1_0_GENERIC = 1` upward). Anything else is
-  journaled as `"Driver returned invalid pipeline caps"` with `0x887A0020` and
+  journaled as `"Driver returned invalid pipeline caps"` with `0x887A0020`
+  (`DXGI_ERROR_DRIVER_INTERNAL_ERROR`) and
   forced to 1.
 
 **Consequence for 055 and 057.** `pfnGetCaps` answering `E_INVALIDARG` to both

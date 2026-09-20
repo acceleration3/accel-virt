@@ -24,7 +24,7 @@ unit (`src/um/d3d/rvkumd_exports.cpp`).
 - Fields: the `uint64_t` version words, and how many. A word is
   `(interface << 32) | (build << 16)` as `d3d10umddi.h` composes it.
 - Today: the D3D11 list is `{ D3DWDDM3_2_DDI_SUPPORTED }` =
-  `{ 0x0011002D00010000 }`; the D3D12 list is the newest build on interface
+  `{ 0x000B002D00010000 }`; the D3D12 list is the newest build on interface
   `R8`. Both are one entry, because a version this driver has not tested is a
   version it does not name (constitution VI).
 - `answer(uint32_t *entries, uint64_t *words)`: the count-then-fill protocol

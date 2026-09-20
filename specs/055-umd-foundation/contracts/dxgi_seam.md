@@ -37,7 +37,7 @@ typedef struct DXGI_DDI_BASE_ARGS {
 `DxgiBaseTable` takes the revision from the **DDI interface version the runtime
 asked for in `D3D10DDIARG_CREATEDEVICE::Interface`**, never from a guess and
 never from the widest struct the header declares. At
-`D3DWDDM3_2_DDI_INTERFACE_VERSION` (`0x0011002D`) that is
+`D3DWDDM3_2_DDI_INTERFACE_VERSION` (`0x000B002D`) that is
 `DXGI1_6_1_DDI_BASE_FUNCTIONS`, 21 slots.
 
 Refusals, each with a test:

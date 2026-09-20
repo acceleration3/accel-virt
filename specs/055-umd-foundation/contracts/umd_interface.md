@@ -78,7 +78,7 @@ typedef struct D3D10DDIARG_OPENADAPTER {
 
 | Slot | 055 answers | Whose |
 |---|---|---|
-| `pfnGetSupportedVersions` | the count-then-fill protocol over `DdiVersionList`: a null array answers the count; an array shorter than the count is `E_OUTOFMEMORY` with the count written back; an exact array is filled and `S_OK`. Today the list is one word, `D3DWDDM3_2_DDI_SUPPORTED` = `0x0011002D00010000` | 055; **056** adds a word only when it has implemented and tested that revision |
+| `pfnGetSupportedVersions` | the count-then-fill protocol over `DdiVersionList`: a null array answers the count; an array shorter than the count is `E_OUTOFMEMORY` with the count written back; an exact array is filled and `S_OK`. Today the list is one word, `D3DWDDM3_2_DDI_SUPPORTED` = `0x000B002D00010000` | 055; **056** adds a word only when it has implemented and tested that revision |
 | `pfnGetCaps` | the caps whose data 055 owns (adapter identity and memory, below); `E_INVALIDARG` for every other `D3D10_2DDICAPS_TYPE`, with a test naming each type refused | 055 for identity; **056** for `D3D11DDICAPS_THREADING`, `_SHADER`, `_3DPIPELINESUPPORT`, the `D3D11_OPTIONS*` family and the format caps |
 | `pfnCalcPrivateDeviceSize` | `sizeof(DeviceCookie)`, independent of `Interface`, `Version` and `Flags` | 055, and it does not change: the cookie is a magic and a pointer whatever the device becomes |
 | `pfnCreateDevice` | builds the `UmdDevice`, records the callbacks, fills the DXGI seam, then answers `E_NOTIMPL` because no device-functions table is filled | **056** fills `pWDDM2_6DeviceFuncs` and answers `S_OK`; everything before that line is 055's and must not be re-done |
@@ -108,13 +108,28 @@ No `Interface` and no `Version`: D3D12 carries the version per table instead.
 | `pfnGetOptionalDDITables` | zero tables: `*puEntries = 0`, `S_OK` | **057** names the optional tables it fills |
 | `pfnFillDDITable` | `E_NOTIMPL` for every `D3D12DDI_TABLE_TYPE`, with a test naming each of the four a device needs (`DEVICE_CORE`, `COMMAND_LIST_3D`, `COMMAND_QUEUE_3D`, `DXGI`) | **057** |
 
-**Open question 057 must close before it fills anything:** which calls
-D3D12Core actually makes at device creation, and in which order. FR-002
-requires that read out of `d3d12core.dll` in `re/ghidra-proj`, not guessed.
-055's task for it is written and unstarted (no Ghidra install in this
-environment); `FakeD3dRuntime` today plays the sequence the header and the
-documentation imply, which is enough to build the adapter half against and not
-enough to claim FR-002.
+**What D3D12Core actually does, read from the binary** (research.md §12, and
+057 should read that section before filling anything):
+
+- it zeroes all eight table slots before the call, so a slot the driver does
+  not write reads back as null;
+- after a successful `OpenAdapter12` it checks that the out `hAdapter` is
+  non-zero **and** that slots 2 through 7 - `pfnCloseAdapter`,
+  `pfnGetSupportedVersions`, `pfnGetCaps`, `pfnGetOptionalDDITables`,
+  `pfnFillDDITable`, `pfnDestroyDevice` - are all non-null. If not, it calls
+  `pfnCloseAdapter` to hand the adapter back and answers `0x887A0004`
+  (`DXGI_ERROR_UNSUPPORTED`). That is why all eight are filled from the first
+  commit, and why `pfnCloseAdapter` must be safe on an adapter no device was
+  made on;
+- the first thing it asks the driver afterwards is the 3D pipeline level:
+  `pfnGetCaps` with `D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1` (1074, 8
+  bytes), falling back to `D3D12DDICAPS_TYPE_3DPIPELINESUPPORT` (1007, 4
+  bytes). Refusing both is survivable - the runtime journals
+  `"Driver returned invalid pipeline caps"` and forces generic level 1 - so it
+  is the first cap **057** owes, not 055.
+
+Still unread, and left in T036: the D3D11 runtime's own sequence, and which
+`pfnFillDDITable` types D3D12Core asks for.
 
 ## The device object model - do not re-invent this
 
