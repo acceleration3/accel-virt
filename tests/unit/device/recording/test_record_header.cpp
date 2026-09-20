@@ -135,4 +135,13 @@ TEST(record_header_decode, survives_the_hostile_sweep)
   sweep.run();
   /* Every truncation, every bit flipped, and the all-zero and all-ones cases:
    * a sweep that quietly stopped short would still be a passing sweep. */
-  CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u); }
+  CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u);
+  /* What the format leaves free is what a flip can survive: context, timestamp
+   * and fence constrain nothing, so their 20 bytes are 160 acceptable bits; a
+   * flip of the kind reaches another assigned kind twice (batch -> reply and
+   * batch -> blob); the three low bytes of the length keep a 40-byte payload
+   * under 16 MiB, 24 more. Every shorter input is short of 32 bytes, all-zero
+   * and all-ones carry no magic, and the untouched input is the one
+   * acceptance left. */
+  const std::uint32_t acceptable = 160u + 2u + 24u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

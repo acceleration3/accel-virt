@@ -139,7 +139,20 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
 { std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   const HostileSweep sweep(rejects, encoded(primary, bytes), sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size); }
+  CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size);
+  /* A primary is the most constrained descriptor there is, and the sweep says
+   * so. Free: the format (32 bits) and the scanout's source and refresh, which
+   * only a primary may carry at all (96). Judged: clearing the CPU-visible flag
+   * is the one flag a reader knows (1); of the width, the eleven flips that
+   * keep it non-zero and no wider than the 4096-byte pitch (11); of the height,
+   * the two that keep pitch * height inside the allocation (2); of the size,
+   * every flip but the two that drop it below that product (62); and no flip of
+   * the pitch or the kind survives, a wider pitch overflowing the allocation
+   * and any other kind forbidding the scanout this one carries. Every shorter
+   * input is short of 48 bytes, all-zero and all-ones carry no magic, and the
+   * untouched descriptor is the last acceptance. */
+  const std::uint32_t acceptable = 32u + 96u + 1u + 11u + 2u + 62u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 /* Feature 041, US2: the pages an rvk context runs on. A ring the device reads
  * with a power-of-two mask, and the single page its fences are written to - the

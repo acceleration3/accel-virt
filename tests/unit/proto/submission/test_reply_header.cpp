@@ -96,4 +96,12 @@ TEST(reply_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(ReplyHeader(77u, 900u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* Only the fence is free: 77 has four bits set, so no single flip can zero
+   * it, and all 64 are acceptable. Every other field is pinned by the answer's
+   * own consistency - a flipped status leaves an answer of 900 bytes claiming
+   * to be too large, and a flipped size or required makes the two disagree.
+   * Every shorter input is short of 32 bytes, all-zero and all-ones carry no
+   * magic, and the untouched input is the last acceptance. */
+  const std::uint32_t acceptable = 64u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

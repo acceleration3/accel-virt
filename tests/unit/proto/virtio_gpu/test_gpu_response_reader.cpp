@@ -96,7 +96,24 @@ TEST(gpu_response_reader_decode, survives_the_hostile_sweep)
   whole.set_capset(capset());
   const av::HostileSweep sweep(rejects, whole.bytes(), whole.length());
   sweep.run();
-  CHECK(sweep.cases_run() > 1000u); }
+  CHECK(sweep.cases_run() > 1000u);
+  /* An answer is a 24-byte virtio-gpu header and, for this type, the 128-byte
+   * capset behind it. The reader reports the type rather than judging it - a
+   * type it does not know is a header-only answer, which is why the all-zero
+   * and all-ones cases are accepted and every one of the type's 32 flips is -
+   * and the header's other 20 bytes are the fence and context ids it does not
+   * read, 160 more. What is judged is the capset: 32 free bits of protocol
+   * version, 64 of features, 64 of the two PCI ids, 128 of UUID and 128 of the
+   * two memory sizes; two flips of the sub-api mask that stay inside 0x7 and
+   * non-empty, 31 of the context count, two of the lowest ring order and one of
+   * the highest that stay inside [12, 24] and in order, two of the device type
+   * that stay within VkPhysicalDeviceType, and 32 of the name - its three
+   * characters, none of which a single flip can turn into a terminator, and the
+   * terminator itself, which just moves one byte on. Every shorter input cuts
+   * the capset short, and the untouched answer is the last acceptance. */
+  const std::uint32_t acceptable = 2u + 32u + 160u + 32u + 64u + 64u + 128u + 128u +
+                                   2u + 31u + 2u + 1u + 2u + 32u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 /* Feature 041: the answer to RESOURCE_MAP_BLOB. The device says how the guest
  * may cache what it just mapped, and the driver has to read it rather than

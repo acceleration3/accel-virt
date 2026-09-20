@@ -19,11 +19,15 @@ public:
 
     HostileSweep(Parser parser, const std::uint8_t *valid, std::size_t length);
 
-    /* Empty, every truncation, oversized length, all-zero, all-ones, and a
-     * bit-flip sweep over the valid input. */
+    /* Empty, every truncation, the valid input itself, a bit-flip sweep over
+     * it, all-zero and all-ones: `length + 1 + 8 * length + 2` cases. */
     void run() const;
 
     std::uint32_t cases_run() const;
+
+    /* How many of those cases the parser refused. A sweep that never measures
+     * this proves only that the decoder did not crash. */
+    std::uint32_t rejections() const;
 
 private:
     void feed(const std::uint8_t *bytes, std::size_t length) const;
@@ -32,6 +36,7 @@ private:
     const std::uint8_t *valid_;
     std::size_t         length_;
     mutable std::uint32_t cases_run_;
+    mutable std::uint32_t rejections_;
 };
 
 }  // namespace av

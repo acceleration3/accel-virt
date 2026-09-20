@@ -89,4 +89,11 @@ TEST(batch_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(BatchHeader(40u, 3u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 128u); }
+  CHECK(sweep.cases_run() > 128u);
+  /* The format constrains the magic and forbids fence zero; the payload length
+   * is 32 free bits, and the fence's 64 bits are free too, because 3 has two
+   * bits set and no single flip can clear both. Every shorter input is short of
+   * 16 bytes, all-zero and all-ones carry no magic, and the untouched input is
+   * the last acceptance. */
+  const std::uint32_t acceptable = 32u + 64u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

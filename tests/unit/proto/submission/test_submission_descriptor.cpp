@@ -92,4 +92,14 @@ TEST(submission_descriptor_decode, survives_the_hostile_sweep)
   CHECK_STATUS(SubmissionDescriptor(7u, 40u, 88u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* The descriptor constrains its magic and reserved word, forbids fence zero
+   * and demands a non-empty span. The fence's 64 bits are free, because 7 has
+   * three bits set and no single flip can clear them. Of the begin counter
+   * only the six flips that keep 40 under the 88-byte end survive - 8, 32, 41,
+   * 42, 44 and 56 - and of the end counter every flip but the one that drops
+   * 88 to 24, below begin. Every shorter input is short of 32 bytes, all-zero
+   * and all-ones carry no magic, and the untouched input is the last
+   * acceptance. */
+  const std::uint32_t acceptable = 64u + 6u + 63u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
