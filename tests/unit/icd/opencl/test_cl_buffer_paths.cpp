@@ -200,9 +200,29 @@ TEST(cl_buffer_paths, the_acquire_and_release_of_an_external_object_are_answered
   CHECK_EQ(acquire(opened.queue(), 1u, nullptr, 0u, nullptr, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(acquire(nullptr, 1u, &shared, 0u, nullptr, nullptr), CL_INVALID_COMMAND_QUEUE);
 
+  /* And a buffer of another context is not this queue's to acquire, whatever
+   * it is: two contexts each hold their own objects, and an acquire that
+   * crossed them would release into the wrong one. */
+  cl_device_id device = nullptr;
+  cl_uint      devices = 0u;
+  CHECK_EQ(rig.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
+  rig.host().blob_import(0u, 0x79u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context + 1u, CL_SUCCESS);
+  cl_context const elsewhere = rig.loader().create_context(device, nullptr);
+  CHECK(elsewhere != nullptr);
+  if (elsewhere != nullptr) {
+      rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
+      cl_mem const theirs = rig.loader().create_buffer(elsewhere, CL_MEM_READ_WRITE, buffer_bytes,
+                                                       &error);
+      CHECK(theirs != nullptr);
+      CHECK_EQ(acquire(opened.queue(), 1u, &theirs, 0u, nullptr, nullptr), CL_INVALID_CONTEXT);
+  }
+
   /* An event asked for is the object's place in the queue, which is a marker:
    * the application can wait on it, and it costs the one command. */
-  rig.host().cl_handle(host_event, CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
   const std::uint32_t before = rig.kmt().commands();
   CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, &event), CL_SUCCESS);
@@ -210,6 +230,21 @@ TEST(cl_buffer_paths, the_acquire_and_release_of_an_external_object_are_answered
   CHECK_EQ(rig.kmt().commands(), before + 1u);
   CHECK_EQ(rig.kmt().command_id(before),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
+
+  /* A marker the host will not make is the host's own refusal, and no event
+   * is handed back for an acquire that has no place in the queue. */
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  cl_event refused = nullptr;
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, &refused), CL_OUT_OF_RESOURCES);
+  CHECK(refused == nullptr);
+
+  /* And on a context whose transport has faulted there is nothing to ask at
+   * all: the acquire refuses where every other entry of a lost context does.
+   * Without an event it still answers, because nothing has to be sent. */
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.loader().finish(opened.queue()), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, &refused), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, nullptr), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
 /* The guest ran out of room for the cl_mem the device had already made. The
