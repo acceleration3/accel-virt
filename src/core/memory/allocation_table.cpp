@@ -32,9 +32,15 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
     info.hAllocation = nullptr;
     AllocationDescriptor descriptor;
     const bool           shareable = info.PrivateDriverDataSize == shareable_private_size;
-    if (info.pPrivateDriverData == nullptr ||
-        (info.PrivateDriverDataSize != AllocationDescriptor::encoded_size && !shareable))
-        return Status::invalid_parameter;
+    if (info.pPrivateDriverData == nullptr) return Status::invalid_parameter;
+    /* A length this driver has no shape for is not_supported, where data of a
+     * length it knows but cannot read is invalid_parameter. The two are
+     * different answers to different questions, and telling them apart is what
+     * lets a guest say whether a create was refused by dxgkrnl before it
+     * arrived or by this driver after it did - both of which are
+     * STATUS_INVALID_PARAMETER otherwise (feature 053). */
+    if (info.PrivateDriverDataSize != AllocationDescriptor::encoded_size && !shareable)
+        return Status::not_supported;
     auto *const bytes = static_cast<uint8_t *>(info.pPrivateDriverData);
     if (descriptor.decode(bytes, AllocationDescriptor::encoded_size) != Status::ok)
         return Status::invalid_parameter;

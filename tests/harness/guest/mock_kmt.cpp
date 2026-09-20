@@ -407,8 +407,12 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
      * wants the id calls create_shared_allocation instead (feature 053). */
     const std::uint32_t shareable =
         AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
-    if ((size != AllocationDescriptor::encoded_size && size != shareable) ||
-        decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
+    /* A length the driver has no shape for is not_supported; data of a length
+     * it knows but cannot read is invalid_parameter. The miniport tells them
+     * apart and so must this, or a guest sweep cannot say whether dxgkrnl
+     * refused a create before the driver saw it (feature 053). */
+    if (size != AllocationDescriptor::encoded_size && size != shareable) return refuse(not_supported);
+    if (decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
         return refuse(invalid_parameter);
     if (!zeroed(Call::create_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);

@@ -64,6 +64,14 @@ private:
      * only the second says the shape is wrong, and one that refuses both says
      * something else is (feature 053). */
     void carrier_steps();
+    /* The same create at a spread of private-data lengths, to find where the
+     * kernel stops taking it. Each answers one of three things and they are
+     * now distinguishable: 0 taken, 0xC000000D from dxgkrnl before the driver
+     * was called at all, or 0xC00000BB from the driver saying it has no shape
+     * for that length. Measured rather than judged, because most of these
+     * lengths are ones no caller uses and a sweep that failed the run for them
+     * would fail every run for ever (feature 053). */
+    void carrier_size_steps(uint32_t device);
     /* Memory declared exportable, which is what makes the miniport mint. */
     bool exportable_step(ProbeDevice &device, VkDeviceMemory &memory);
     bool handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle);

@@ -160,3 +160,24 @@ TEST(shared_object_probe, a_step_that_passes_carries_no_status_at_all)
   CHECK(rig.holds("ok shared.exportable"));
   CHECK(!rig.holds("code=0xC000000D"));
   CHECK_EQ(rig.report().failed(), 0u); }
+
+/* The sweep is a measurement and never a verdict: most of its lengths are ones
+ * no caller uses and the driver rightly refuses, so a sweep that failed the run
+ * for them would fail every run for ever. What it must do is put the number on
+ * the line - which is what tells dxgkrnl's refusal from the driver's. */
+TEST(shared_object_probe, the_size_sweep_measures_every_length_and_fails_none_of_them)
+{ Rig rig;
+  rig.run();
+  const char *const lengths[] = {"shared.carrier_size_48", "shared.carrier_size_56",
+                                 "shared.carrier_size_64", "shared.carrier_size_72",
+                                 "shared.carrier_size_80", "shared.carrier_size_88",
+                                 "shared.carrier_size_96", "shared.carrier_size_128"};
+  for (const char *const step : lengths)
+      if (!rig.holds(step)) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, step);
+  /* The two this driver has shapes for are taken and measure nothing; the mock
+   * answers the rest not_supported, as the miniport does. */
+  CHECK(rig.holds("ok shared.carrier_size_48 0"));
+  CHECK(rig.holds("ok shared.carrier_size_88 0"));
+  CHECK(rig.holds("ok shared.carrier_size_64 3221225659"));
+  /* And not one of them failed the run. */
+  CHECK(!rig.holds("FAIL shared.carrier_size")); }

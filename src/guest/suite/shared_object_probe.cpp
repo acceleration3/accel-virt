@@ -110,6 +110,40 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
     steps_.check_kernel("released", refused == 0u ? Status::ok : Status::invalid_state, refused);
 }
 
+void SharedObjectProbe::carrier_size_steps(uint32_t device)
+{
+    AV_SCOPE("SharedObjectProbe::carrier_size_steps");
+    /* Named one per length because a report is read by eye: the step that
+     * stops passing is the answer. 48 is the descriptor alone and 88 the
+     * descriptor with a record, which are the two this driver has shapes for;
+     * the rest exist only to find the boundary, and the driver answers them
+     * not_supported once they reach it. */
+    struct Sweep {
+        const char *step;
+        uint32_t    bytes;
+    };
+    static const Sweep sweep[] = {
+        {"carrier_size_48", 48u},  {"carrier_size_56", 56u},  {"carrier_size_64", 64u},
+        {"carrier_size_72", 72u},  {"carrier_size_80", 80u},  {"carrier_size_88", 88u},
+        {"carrier_size_96", 96u},  {"carrier_size_128", 128u},
+    };
+    uint8_t                    data[128] = {};
+    const AllocationDescriptor carrier(AllocationKind::client, true, SurfaceLayout(),
+                                       SharedObjectRecord::page_size, ScanoutTarget());
+    static_cast<void>(carrier.encode(data, AllocationDescriptor::encoded_size));
+    for (const Sweep &one : sweep) {
+        uint32_t     made = 0u;
+        const Status answered = kmt_.create_allocation(device, data, one.bytes, made);
+        /* Measured, not judged: most of these lengths are ones no caller uses
+         * and the driver rightly refuses, so a sweep that failed the run for
+         * them would fail every run for ever. What is wanted is the number on
+         * the line - 0 taken, 0xC00000BB refused by the driver, 0xC000000D
+         * refused by dxgkrnl before the driver saw it. */
+        steps_.check_measured(one.step, Status::ok, answered == Status::ok ? 0u : kmt_.last_code());
+        if (answered == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, made));
+    }
+}
+
 void SharedObjectProbe::carrier_steps()
 {
     AV_SCOPE("SharedObjectProbe::carrier_steps");
@@ -124,6 +158,8 @@ void SharedObjectProbe::carrier_steps()
     const AllocationDescriptor carrier(AllocationKind::client, true, SurfaceLayout(),
                                        SharedObjectRecord::page_size, ScanoutTarget());
     static_cast<void>(carrier.encode(data, AllocationDescriptor::encoded_size));
+
+    carrier_size_steps(device);
 
     /* The ordinary create, which every other allocation in the guest uses. */
     uint32_t     plain = 0u;

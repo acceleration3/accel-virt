@@ -196,7 +196,10 @@ TEST(allocation_table_create, refuses_a_malformed_request_and_keeps_nothing)
           const AllocationDescriptor wrapping(AllocationKind::client, false, SurfaceLayout(), ~0ull, ScanoutTarget());
           CHECK_STATUS(wrapping.encode(fixture.descriptor(3u), AllocationDescriptor::encoded_size), Status::ok);
       }
-      CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+      /* Knob 5 is a length this driver has no shape for, which is
+       * not_supported; every other knob is a request it can read and will
+       * not take (feature 053). */
+      CHECK_STATUS(fixture.create(), knob == 5 ? Status::not_supported : Status::invalid_parameter);
       CHECK_EQ(fixture.table().live(), 0u);
       CHECK_EQ(fixture.platform().live_allocations(), 0u);
       CHECK(fixture.table().invariants_hold());
@@ -404,10 +407,20 @@ TEST(allocation_table_create, refuses_private_data_of_any_other_length_than_the_
       Fixture fixture;
       fixture.ask_to_share(0u, 4096u);
       fixture.info(0u).PrivateDriverDataSize = length;
-      CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+      /* not_supported, not invalid_parameter: a length this driver has no
+       * shape for is a different answer from data it cannot read, and telling
+       * them apart is what lets a guest say whether dxgkrnl refused a create
+       * before it arrived or this driver refused it after (feature 053). */
+      CHECK_STATUS(fixture.create(), Status::not_supported);
       CHECK_EQ(fixture.table().live(), 0u);
       CHECK_EQ(fixture.shared().live(), 0u);
-  } }
+  }
+  /* Private data that is not there at all is still invalid_parameter: there is
+   * no length to have a shape for. */
+  Fixture missing;
+  missing.ask_to_share(0u, 4096u);
+  missing.info(0u).pPrivateDriverData = nullptr;
+  CHECK_STATUS(missing.create(), Status::invalid_parameter); }
 
 TEST(allocation_table_create, refuses_a_record_that_does_not_decode_and_leaves_no_allocation_behind)
 { Fixture fixture;
@@ -439,7 +452,7 @@ TEST(allocation_table_create, unwinds_the_identity_of_an_earlier_allocation_when
   fixture.ask_to_share(0u, 4096u);
   fixture.ask_to_share(1u, 4096u);
   fixture.info(1u).PrivateDriverDataSize = 7u;
-  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+  CHECK_STATUS(fixture.create(), Status::not_supported);
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK_EQ(fixture.shared().live(), 0u);
   CHECK(fixture.shared().invariants_hold()); }

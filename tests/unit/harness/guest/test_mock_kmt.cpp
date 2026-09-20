@@ -176,8 +176,10 @@ TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
   CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
   ClientDescriptor descriptor(4096u);
   std::uint32_t allocation = 0u;
-  CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), 47u, allocation), Status::invalid_parameter);
-  CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
+  /* A length with no shape is not_supported; the corrupt descriptor below is
+   * the right length and unreadable, which is invalid_parameter. */
+  CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), 47u, allocation), Status::not_supported);
+  CHECK_EQ(kmt.last_code(), MockKmt::not_supported);
   descriptor.corrupt_magic();
   CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), descriptor.size(), allocation), Status::invalid_parameter);
   const ClientDescriptor valid(4096u);
@@ -1273,6 +1275,9 @@ TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back
   CHECK(!unchanged.assigned());
   /* And a length that is neither is still refused. */
   std::uint32_t refused = 9u;
+  /* not_supported: a length this driver has no shape for, as the miniport
+   * answers it, which is what a guest sweep reads to tell dxgkrnl's refusal
+   * from the driver's. */
   CHECK_STATUS(kmt.create_allocation(device, bytes, av::AllocationDescriptor::encoded_size + 1u, refused),
-               Status::invalid_parameter);
+               Status::not_supported);
   CHECK_EQ(refused, 0u); }
