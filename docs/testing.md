@@ -676,9 +676,22 @@ What it cannot see, and L5 still must:
   `VkImportMemoryFdInfoKHR` naming a fresh fd of it. A host whose driver cannot
   share by fd makes no such device, and the test names which condition failed
   and returns
+- one shared object named by two rvk contexts of one adapter
+  (`test_fullstack_shared_objects.cpp`, 053): the miniport mints an identity
+  into a carrier's private driver data, the creating context publishes it, an
+  NT handle carries those bytes to the other context, and the device opens one
+  host resource for it - one real descriptor with two holders, closed once, by
+  the last of them. The publishing context is then torn down with the object
+  still open, which is the claim US3 makes and the thing neither side can show
+  alone: the miniport mints the id and knows nothing of descriptors, and the
+  device holds the descriptor and knows nothing of allocations. The hostile
+  half is here too - an id nobody published, a kind and a size that disagree, a
+  publish under somebody else's id, and one context opening the same object
+  twice - each answered with a status, the object untouched and both contexts
+  still running
 
-Still to come: a shared allocation opened by a second simulated process, and a
-display path - a VidPn committed and a primary scanned out - through the rig.
+Still to come: a display path - a VidPn committed and a primary scanned out -
+through the rig.
 
 Loopback tests are the cheapest place to find protocol design errors, and
 protocol design errors are the expensive kind. Write the loopback test for a
