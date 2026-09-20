@@ -1382,3 +1382,9 @@
 "glVertexArrayVertexBindingDivisorEXT" = 197984
 "glVertexArrayVertexAttribLOffsetEXT" = 197985
 "glVertexArrayVertexAttribDivisorEXT" = 197986
+"glBufferStorageMemEXT" = 197987
+"glTextureStorageMem2DEXT" = 197988
+"glDeleteMemoryObjectsEXT" = 197989
+"glDeleteSemaphoresEXT" = 197990
+"glSignalSemaphoreEXT" = 197991
+"glWaitSemaphoreEXT" = 197992

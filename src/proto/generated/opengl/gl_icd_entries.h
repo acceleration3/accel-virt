@@ -1081,6 +1081,12 @@ void APIENTRY Wrap_glProgramUniformHandleui64NV(GLuint program, GLint location, 
 void APIENTRY Wrap_glProgramUniformHandleui64vNV(GLuint program, GLint location, GLsizei count, const GLuint64* values);
 GLboolean APIENTRY Wrap_glIsTextureHandleResidentNV(GLuint64 handle);
 GLboolean APIENTRY Wrap_glIsImageHandleResidentNV(GLuint64 handle);
+void APIENTRY Wrap_glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset);
+void APIENTRY Wrap_glTextureStorageMem2DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
+void APIENTRY Wrap_glDeleteMemoryObjectsEXT(GLsizei n, const GLuint* memoryObjects);
+void APIENTRY Wrap_glDeleteSemaphoresEXT(GLsizei n, const GLuint* semaphores);
+void APIENTRY Wrap_glSignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts);
+void APIENTRY Wrap_glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts);
 void APIENTRY Wrap_glMakeBufferResidentNV(GLenum target, GLenum access);
 void APIENTRY Wrap_glMakeBufferNonResidentNV(GLenum target);
 GLboolean APIENTRY Wrap_glIsBufferResidentNV(GLenum target);

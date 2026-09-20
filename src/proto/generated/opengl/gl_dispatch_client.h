@@ -1083,6 +1083,12 @@ void rvk_glProgramUniformHandleui64NV(::av::ClientTransport& rvk_t, GLuint progr
 void rvk_glProgramUniformHandleui64vNV(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLsizei count, const GLuint64* values);
 GLboolean rvk_glIsTextureHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle);
 GLboolean rvk_glIsImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 handle);
+void rvk_glBufferStorageMemEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset);
+void rvk_glTextureStorageMem2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
+void rvk_glDeleteMemoryObjectsEXT(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* memoryObjects);
+void rvk_glDeleteSemaphoresEXT(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* semaphores);
+void rvk_glSignalSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts);
+void rvk_glWaitSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts);
 void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLenum access);
 void rvk_glMakeBufferNonResidentNV(::av::ClientTransport& rvk_t, GLenum target);
 GLboolean rvk_glIsBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target);

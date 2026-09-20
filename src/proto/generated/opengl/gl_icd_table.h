@@ -1110,6 +1110,12 @@ inline const NamedEntry kNamedEntries[] = {
     {"glProgramUniformHandleui64vNV", reinterpret_cast<GlProc>(&Wrap_glProgramUniformHandleui64vNV)},
     {"glIsTextureHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glIsTextureHandleResidentNV)},
     {"glIsImageHandleResidentNV", reinterpret_cast<GlProc>(&Wrap_glIsImageHandleResidentNV)},
+    {"glBufferStorageMemEXT", reinterpret_cast<GlProc>(&Wrap_glBufferStorageMemEXT)},
+    {"glTextureStorageMem2DEXT", reinterpret_cast<GlProc>(&Wrap_glTextureStorageMem2DEXT)},
+    {"glDeleteMemoryObjectsEXT", reinterpret_cast<GlProc>(&Wrap_glDeleteMemoryObjectsEXT)},
+    {"glDeleteSemaphoresEXT", reinterpret_cast<GlProc>(&Wrap_glDeleteSemaphoresEXT)},
+    {"glSignalSemaphoreEXT", reinterpret_cast<GlProc>(&Wrap_glSignalSemaphoreEXT)},
+    {"glWaitSemaphoreEXT", reinterpret_cast<GlProc>(&Wrap_glWaitSemaphoreEXT)},
     {"glMakeBufferResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeBufferResidentNV)},
     {"glMakeBufferNonResidentNV", reinterpret_cast<GlProc>(&Wrap_glMakeBufferNonResidentNV)},
     {"glIsBufferResidentNV", reinterpret_cast<GlProc>(&Wrap_glIsBufferResidentNV)},
@@ -1967,6 +1973,6 @@ inline const NamedEntry kNamedEntries[] = {
     {"glWindowPos3svMESA", reinterpret_cast<GlProc>(&Wrap_glWindowPos3sv)},
 };
 
-inline constexpr uint32_t kNamedEntryCount = 1591u;
+inline constexpr uint32_t kNamedEntryCount = 1597u;
 
 }  // namespace av::glicd::generated

@@ -8617,6 +8617,48 @@ GLboolean APIENTRY Wrap_glIsImageHandleResidentNV(GLuint64 handle) {
     return ::av::glproto::rvk_glIsImageHandleResidentNV(*rvk_t, handle);
 }
 
+void APIENTRY Wrap_glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glBufferStorageMemEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glBufferStorageMemEXT(*rvk_t, target, size, memory, offset);
+}
+
+void APIENTRY Wrap_glTextureStorageMem2DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTextureStorageMem2DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTextureStorageMem2DEXT(*rvk_t, texture, levels, internalFormat, width, height, memory, offset);
+}
+
+void APIENTRY Wrap_glDeleteMemoryObjectsEXT(GLsizei n, const GLuint* memoryObjects) {
+    AV_SCOPE("glDeleteMemoryObjectsEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glDeleteMemoryObjectsEXT(*rvk_t, n, memoryObjects);
+}
+
+void APIENTRY Wrap_glDeleteSemaphoresEXT(GLsizei n, const GLuint* semaphores) {
+    AV_SCOPE("glDeleteSemaphoresEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glDeleteSemaphoresEXT(*rvk_t, n, semaphores);
+}
+
+void APIENTRY Wrap_glSignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts) {
+    AV_SCOPE("glSignalSemaphoreEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glSignalSemaphoreEXT(*rvk_t, semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, dstLayouts);
+}
+
+void APIENTRY Wrap_glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts) {
+    AV_SCOPE("glWaitSemaphoreEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glWaitSemaphoreEXT(*rvk_t, semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, srcLayouts);
+}
+
 void APIENTRY Wrap_glMakeBufferResidentNV(GLenum target, GLenum access) {
     AV_SCOPE("glMakeBufferResidentNV");
     auto* rvk_t = ::av::glicd::wire();

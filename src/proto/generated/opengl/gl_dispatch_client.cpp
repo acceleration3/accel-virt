@@ -29703,6 +29703,313 @@ GLboolean rvk_glIsImageHandleResidentNV(::av::ClientTransport& rvk_t, GLuint64 h
     return static_cast<GLboolean>(rvk_ret);
 }
 
+void rvk_glBufferStorageMemEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glBufferStorageMemEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(size));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glBufferStorageMemEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glBufferStorageMemEXT, rvk_b);
+}
+
+void rvk_glTextureStorageMem2DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTextureStorageMem2DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTextureStorageMem2DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTextureStorageMem2DEXT, rvk_b);
+}
+
+void rvk_glDeleteMemoryObjectsEXT(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* memoryObjects) {
+    AV_SCOPE("rvk_glDeleteMemoryObjectsEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(n));
+    size_t memoryObjects_want = 0;
+    if (memoryObjects != nullptr) memoryObjects_want = (static_cast<size_t>(n) * sizeof(GLuint));
+    ::av::ClientBlobLease memoryObjects_lease{};
+    bool memoryObjects_via_blob = false;
+    if (memoryObjects != nullptr &&
+        memoryObjects_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            memoryObjects_lease = rvk_blobs.take(memoryObjects_want);
+            if (memoryObjects_lease.taken()) {
+                __builtin_memcpy(memoryObjects_lease.data(), memoryObjects, memoryObjects_want);
+                memoryObjects_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(memoryObjects == nullptr ? 0 : (memoryObjects_via_blob ? 3 : 1));
+    if (memoryObjects_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(memoryObjects_want));
+        rvk_b.write_varint(static_cast<uint64_t>(memoryObjects_lease.offset()));
+    } else if (memoryObjects != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(memoryObjects_want));
+        if (memoryObjects_want != 0) rvk_b.write(memoryObjects, memoryObjects_want);
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glDeleteMemoryObjectsEXT",
+                                       rvk_b.offset());
+        if (memoryObjects_via_blob) {
+            rvk_t.blobs()
+                .give_back(memoryObjects_lease);
+        }
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glDeleteMemoryObjectsEXT, rvk_b);
+}
+
+void rvk_glDeleteSemaphoresEXT(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* semaphores) {
+    AV_SCOPE("rvk_glDeleteSemaphoresEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(n));
+    size_t semaphores_want = 0;
+    if (semaphores != nullptr) semaphores_want = (static_cast<size_t>(n) * sizeof(GLuint));
+    ::av::ClientBlobLease semaphores_lease{};
+    bool semaphores_via_blob = false;
+    if (semaphores != nullptr &&
+        semaphores_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            semaphores_lease = rvk_blobs.take(semaphores_want);
+            if (semaphores_lease.taken()) {
+                __builtin_memcpy(semaphores_lease.data(), semaphores, semaphores_want);
+                semaphores_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(semaphores == nullptr ? 0 : (semaphores_via_blob ? 3 : 1));
+    if (semaphores_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(semaphores_want));
+        rvk_b.write_varint(static_cast<uint64_t>(semaphores_lease.offset()));
+    } else if (semaphores != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(semaphores_want));
+        if (semaphores_want != 0) rvk_b.write(semaphores, semaphores_want);
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glDeleteSemaphoresEXT",
+                                       rvk_b.offset());
+        if (semaphores_via_blob) {
+            rvk_t.blobs()
+                .give_back(semaphores_lease);
+        }
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glDeleteSemaphoresEXT, rvk_b);
+}
+
+void rvk_glSignalSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts) {
+    AV_SCOPE("rvk_glSignalSemaphoreEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(semaphore));
+    rvk_b.write_varint(static_cast<uint64_t>(numBufferBarriers));
+    size_t buffers_want = 0;
+    if (buffers != nullptr) buffers_want = (static_cast<size_t>(numBufferBarriers) * sizeof(GLuint));
+    ::av::ClientBlobLease buffers_lease{};
+    bool buffers_via_blob = false;
+    if (buffers != nullptr &&
+        buffers_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            buffers_lease = rvk_blobs.take(buffers_want);
+            if (buffers_lease.taken()) {
+                __builtin_memcpy(buffers_lease.data(), buffers, buffers_want);
+                buffers_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
+    if (buffers_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_want));
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_lease.offset()));
+    } else if (buffers != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_want));
+        if (buffers_want != 0) rvk_b.write(buffers, buffers_want);
+    }
+    rvk_b.write_varint(static_cast<uint64_t>(numTextureBarriers));
+    size_t textures_want = 0;
+    if (textures != nullptr) textures_want = (static_cast<size_t>(numTextureBarriers) * sizeof(GLuint));
+    ::av::ClientBlobLease textures_lease{};
+    bool textures_via_blob = false;
+    if (textures != nullptr &&
+        textures_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            textures_lease = rvk_blobs.take(textures_want);
+            if (textures_lease.taken()) {
+                __builtin_memcpy(textures_lease.data(), textures, textures_want);
+                textures_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
+    if (textures_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(textures_want));
+        rvk_b.write_varint(static_cast<uint64_t>(textures_lease.offset()));
+    } else if (textures != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(textures_want));
+        if (textures_want != 0) rvk_b.write(textures, textures_want);
+    }
+    size_t dstLayouts_want = 0;
+    if (dstLayouts != nullptr) dstLayouts_want = (static_cast<size_t>(numTextureBarriers) * sizeof(GLenum));
+    ::av::ClientBlobLease dstLayouts_lease{};
+    bool dstLayouts_via_blob = false;
+    if (dstLayouts != nullptr &&
+        dstLayouts_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            dstLayouts_lease = rvk_blobs.take(dstLayouts_want);
+            if (dstLayouts_lease.taken()) {
+                __builtin_memcpy(dstLayouts_lease.data(), dstLayouts, dstLayouts_want);
+                dstLayouts_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(dstLayouts == nullptr ? 0 : (dstLayouts_via_blob ? 3 : 1));
+    if (dstLayouts_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(dstLayouts_want));
+        rvk_b.write_varint(static_cast<uint64_t>(dstLayouts_lease.offset()));
+    } else if (dstLayouts != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(dstLayouts_want));
+        if (dstLayouts_want != 0) rvk_b.write(dstLayouts, dstLayouts_want);
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glSignalSemaphoreEXT",
+                                       rvk_b.offset());
+        if (buffers_via_blob) {
+            rvk_t.blobs()
+                .give_back(buffers_lease);
+        }
+        if (textures_via_blob) {
+            rvk_t.blobs()
+                .give_back(textures_lease);
+        }
+        if (dstLayouts_via_blob) {
+            rvk_t.blobs()
+                .give_back(dstLayouts_lease);
+        }
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glSignalSemaphoreEXT, rvk_b);
+}
+
+void rvk_glWaitSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts) {
+    AV_SCOPE("rvk_glWaitSemaphoreEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(semaphore));
+    rvk_b.write_varint(static_cast<uint64_t>(numBufferBarriers));
+    size_t buffers_want = 0;
+    if (buffers != nullptr) buffers_want = (static_cast<size_t>(numBufferBarriers) * sizeof(GLuint));
+    ::av::ClientBlobLease buffers_lease{};
+    bool buffers_via_blob = false;
+    if (buffers != nullptr &&
+        buffers_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            buffers_lease = rvk_blobs.take(buffers_want);
+            if (buffers_lease.taken()) {
+                __builtin_memcpy(buffers_lease.data(), buffers, buffers_want);
+                buffers_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
+    if (buffers_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_want));
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_lease.offset()));
+    } else if (buffers != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(buffers_want));
+        if (buffers_want != 0) rvk_b.write(buffers, buffers_want);
+    }
+    rvk_b.write_varint(static_cast<uint64_t>(numTextureBarriers));
+    size_t textures_want = 0;
+    if (textures != nullptr) textures_want = (static_cast<size_t>(numTextureBarriers) * sizeof(GLuint));
+    ::av::ClientBlobLease textures_lease{};
+    bool textures_via_blob = false;
+    if (textures != nullptr &&
+        textures_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            textures_lease = rvk_blobs.take(textures_want);
+            if (textures_lease.taken()) {
+                __builtin_memcpy(textures_lease.data(), textures, textures_want);
+                textures_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
+    if (textures_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(textures_want));
+        rvk_b.write_varint(static_cast<uint64_t>(textures_lease.offset()));
+    } else if (textures != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(textures_want));
+        if (textures_want != 0) rvk_b.write(textures, textures_want);
+    }
+    size_t srcLayouts_want = 0;
+    if (srcLayouts != nullptr) srcLayouts_want = (static_cast<size_t>(numTextureBarriers) * sizeof(GLenum));
+    ::av::ClientBlobLease srcLayouts_lease{};
+    bool srcLayouts_via_blob = false;
+    if (srcLayouts != nullptr &&
+        srcLayouts_want >= ::av::glproto::kPixelBlobFloor) {
+        auto& rvk_blobs = rvk_t.blobs();
+        if (rvk_blobs.ready()) {
+            srcLayouts_lease = rvk_blobs.take(srcLayouts_want);
+            if (srcLayouts_lease.taken()) {
+                __builtin_memcpy(srcLayouts_lease.data(), srcLayouts, srcLayouts_want);
+                srcLayouts_via_blob = true;
+            }
+        }
+    }
+    rvk_b.write_pod<uint8_t>(srcLayouts == nullptr ? 0 : (srcLayouts_via_blob ? 3 : 1));
+    if (srcLayouts_via_blob) {
+        rvk_b.write_varint(static_cast<uint64_t>(srcLayouts_want));
+        rvk_b.write_varint(static_cast<uint64_t>(srcLayouts_lease.offset()));
+    } else if (srcLayouts != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(srcLayouts_want));
+        if (srcLayouts_want != 0) rvk_b.write(srcLayouts, srcLayouts_want);
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glWaitSemaphoreEXT",
+                                       rvk_b.offset());
+        if (buffers_via_blob) {
+            rvk_t.blobs()
+                .give_back(buffers_lease);
+        }
+        if (textures_via_blob) {
+            rvk_t.blobs()
+                .give_back(textures_lease);
+        }
+        if (srcLayouts_via_blob) {
+            rvk_t.blobs()
+                .give_back(srcLayouts_lease);
+        }
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glWaitSemaphoreEXT, rvk_b);
+}
+
 void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLenum access) {
     AV_SCOPE("rvk_glMakeBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();

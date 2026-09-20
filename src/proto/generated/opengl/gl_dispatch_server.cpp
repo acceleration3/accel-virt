@@ -35523,6 +35523,369 @@ static bool decode_glIsImageHandleResidentNV(const RealGl& rvk_gl, ::av::WireRea
     return true;
 }
 
+static bool decode_glBufferStorageMemEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glBufferStorageMemEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizeiptr size{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      size = static_cast<GLsizeiptr>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glBufferStorageMemEXT == nullptr) return false;
+    rvk_gl.glBufferStorageMemEXT(target, size, memory, offset);
+    return true;
+}
+
+static bool decode_glTextureStorageMem2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorageMem2DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint texture{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      texture = static_cast<GLuint>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTextureStorageMem2DEXT == nullptr) return false;
+    rvk_gl.glTextureStorageMem2DEXT(texture, levels, internalFormat, width, height, memory, offset);
+    return true;
+}
+
+static bool decode_glDeleteMemoryObjectsEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteMemoryObjectsEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLsizei n{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      n = static_cast<GLsizei>(rvk_v); }
+    const GLuint* memoryObjects = nullptr;
+    uint64_t memoryObjects_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            memoryObjects = reinterpret_cast<const GLuint*>(rvk_from);
+            memoryObjects_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            memoryObjects_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            memoryObjects = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    if (n < 0) return false;
+    const uint64_t memoryObjects_elements = static_cast<uint64_t>(n);
+    uint64_t memoryObjects_needed = 0;
+    if (__builtin_mul_overflow(memoryObjects_elements, static_cast<uint64_t>(sizeof(GLuint)), &memoryObjects_needed)) return false;
+    if (memoryObjects == nullptr ? (memoryObjects_needed != 0 && !(false)) : memoryObjects_room < memoryObjects_needed) return false;
+    if (rvk_gl.glDeleteMemoryObjectsEXT == nullptr) return false;
+    rvk_gl.glDeleteMemoryObjectsEXT(n, memoryObjects);
+    return true;
+}
+
+static bool decode_glDeleteSemaphoresEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glDeleteSemaphoresEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLsizei n{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      n = static_cast<GLsizei>(rvk_v); }
+    const GLuint* semaphores = nullptr;
+    uint64_t semaphores_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            semaphores = reinterpret_cast<const GLuint*>(rvk_from);
+            semaphores_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            semaphores_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            semaphores = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    if (n < 0) return false;
+    const uint64_t semaphores_elements = static_cast<uint64_t>(n);
+    uint64_t semaphores_needed = 0;
+    if (__builtin_mul_overflow(semaphores_elements, static_cast<uint64_t>(sizeof(GLuint)), &semaphores_needed)) return false;
+    if (semaphores == nullptr ? (semaphores_needed != 0 && !(false)) : semaphores_room < semaphores_needed) return false;
+    if (rvk_gl.glDeleteSemaphoresEXT == nullptr) return false;
+    rvk_gl.glDeleteSemaphoresEXT(n, semaphores);
+    return true;
+}
+
+static bool decode_glSignalSemaphoreEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glSignalSemaphoreEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint semaphore{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      semaphore = static_cast<GLuint>(rvk_v); }
+    GLuint numBufferBarriers{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      numBufferBarriers = static_cast<GLuint>(rvk_v); }
+    const GLuint* buffers = nullptr;
+    uint64_t buffers_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            buffers = reinterpret_cast<const GLuint*>(rvk_from);
+            buffers_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            buffers_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            buffers = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    GLuint numTextureBarriers{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      numTextureBarriers = static_cast<GLuint>(rvk_v); }
+    const GLuint* textures = nullptr;
+    uint64_t textures_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            textures = reinterpret_cast<const GLuint*>(rvk_from);
+            textures_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            textures_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            textures = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    const GLenum* dstLayouts = nullptr;
+    uint64_t dstLayouts_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            dstLayouts = reinterpret_cast<const GLenum*>(rvk_from);
+            dstLayouts_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            dstLayouts_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLenum) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLenum>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            dstLayouts = reinterpret_cast<const GLenum*>(rvk_run);
+        }
+    }
+    const uint64_t buffers_elements = static_cast<uint64_t>(numBufferBarriers);
+    uint64_t buffers_needed = 0;
+    if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
+    if (buffers == nullptr ? (buffers_needed != 0 && !(false)) : buffers_room < buffers_needed) return false;
+    const uint64_t textures_elements = static_cast<uint64_t>(numTextureBarriers);
+    uint64_t textures_needed = 0;
+    if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
+    if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
+    const uint64_t dstLayouts_elements = static_cast<uint64_t>(numTextureBarriers);
+    uint64_t dstLayouts_needed = 0;
+    if (__builtin_mul_overflow(dstLayouts_elements, static_cast<uint64_t>(sizeof(GLenum)), &dstLayouts_needed)) return false;
+    if (dstLayouts == nullptr ? (dstLayouts_needed != 0 && !(false)) : dstLayouts_room < dstLayouts_needed) return false;
+    if (rvk_gl.glSignalSemaphoreEXT == nullptr) return false;
+    rvk_gl.glSignalSemaphoreEXT(semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, dstLayouts);
+    return true;
+}
+
+static bool decode_glWaitSemaphoreEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glWaitSemaphoreEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint semaphore{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      semaphore = static_cast<GLuint>(rvk_v); }
+    GLuint numBufferBarriers{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      numBufferBarriers = static_cast<GLuint>(rvk_v); }
+    const GLuint* buffers = nullptr;
+    uint64_t buffers_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            buffers = reinterpret_cast<const GLuint*>(rvk_from);
+            buffers_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            buffers_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            buffers = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    GLuint numTextureBarriers{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      numTextureBarriers = static_cast<GLuint>(rvk_v); }
+    const GLuint* textures = nullptr;
+    uint64_t textures_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            textures = reinterpret_cast<const GLuint*>(rvk_from);
+            textures_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            textures_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLuint) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLuint>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            textures = reinterpret_cast<const GLuint*>(rvk_run);
+        }
+    }
+    const GLenum* srcLayouts = nullptr;
+    uint64_t srcLayouts_room = 0;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 3) {
+            uint64_t rvk_bytes = 0;
+            uint64_t rvk_at = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (!rvk_r.read_varint(rvk_at)) return false;
+            if (rvk_gl.rvk_blob == nullptr) return false;
+            const void* rvk_from = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);
+            if (rvk_from == nullptr) return false;
+            srcLayouts = reinterpret_cast<const GLenum*>(rvk_from);
+            srcLayouts_room = rvk_bytes;
+        } else if (rvk_present != 0) {
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            if (rvk_bytes > rvk_r.remaining()) return false;
+            srcLayouts_room = rvk_bytes;
+            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof(GLenum) + 1;
+            auto* rvk_run = rvk_arena.allocate<GLenum>(rvk_elements);
+            if (rvk_run == nullptr) return false;
+            if (rvk_bytes != 0 &&
+                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;
+            srcLayouts = reinterpret_cast<const GLenum*>(rvk_run);
+        }
+    }
+    const uint64_t buffers_elements = static_cast<uint64_t>(numBufferBarriers);
+    uint64_t buffers_needed = 0;
+    if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
+    if (buffers == nullptr ? (buffers_needed != 0 && !(false)) : buffers_room < buffers_needed) return false;
+    const uint64_t textures_elements = static_cast<uint64_t>(numTextureBarriers);
+    uint64_t textures_needed = 0;
+    if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
+    if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
+    const uint64_t srcLayouts_elements = static_cast<uint64_t>(numTextureBarriers);
+    uint64_t srcLayouts_needed = 0;
+    if (__builtin_mul_overflow(srcLayouts_elements, static_cast<uint64_t>(sizeof(GLenum)), &srcLayouts_needed)) return false;
+    if (srcLayouts == nullptr ? (srcLayouts_needed != 0 && !(false)) : srcLayouts_room < srcLayouts_needed) return false;
+    if (rvk_gl.glWaitSemaphoreEXT == nullptr) return false;
+    rvk_gl.glWaitSemaphoreEXT(semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, srcLayouts);
+    return true;
+}
+
 static bool decode_glMakeBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
     AV_SCOPE("server:glMakeBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
@@ -47884,6 +48247,12 @@ bool dispatch_command(const RealGl& rvk_gl, uint32_t cmd_id,
         case kCmd_glProgramUniformHandleui64vNV: return decode_glProgramUniformHandleui64vNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glIsTextureHandleResidentNV: return decode_glIsTextureHandleResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glIsImageHandleResidentNV: return decode_glIsImageHandleResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glBufferStorageMemEXT: return decode_glBufferStorageMemEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTextureStorageMem2DEXT: return decode_glTextureStorageMem2DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glDeleteMemoryObjectsEXT: return decode_glDeleteMemoryObjectsEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glDeleteSemaphoresEXT: return decode_glDeleteSemaphoresEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glSignalSemaphoreEXT: return decode_glSignalSemaphoreEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glWaitSemaphoreEXT: return decode_glWaitSemaphoreEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glMakeBufferResidentNV: return decode_glMakeBufferResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glMakeBufferNonResidentNV: return decode_glMakeBufferNonResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glIsBufferResidentNV: return decode_glIsBufferResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);

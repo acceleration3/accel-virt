@@ -141,6 +141,20 @@ extra = [
     "glProgramUniformHandleui64NV", "glProgramUniformHandleui64vNV",
     "glIsTextureHandleResidentNV", "glIsImageHandleResidentNV",
 
+    # External memory objects and semaphores (feature 053), less the four
+    # the guest never sends.
+    #
+    # A memory object and a semaphore are made by the *device*, inside
+    # OPEN_SHARED_OBJECT, and their names are what it answers - so
+    # glCreateMemoryObjectsEXT and glGenSemaphoresEXT never cross, and
+    # neither do the two glImport*Win32HandleEXT, whose HANDLE is a value
+    # only the guest kernel resolves. What does cross is every use of the
+    # name afterwards: binding memory under a buffer or a texture,
+    # signalling and waiting on a semaphore, and deleting either.
+    "glBufferStorageMemEXT", "glTextureStorageMem2DEXT",
+    "glDeleteMemoryObjectsEXT", "glDeleteSemaphoresEXT",
+    "glSignalSemaphoreEXT", "glWaitSemaphoreEXT",
+
     # A buffer's memory addressed by its GPU address rather than by a
     # binding. Same shape as the handles above: the address is the
     # host's and travels as a number.
@@ -1113,6 +1127,28 @@ role = "buffer_offset"
 # How many values a query answers with, where it is not one. Anything
 # not named here answers with one value, which is true of the great
 # majority of enums and is what the guest assumes.
+# GL_EXT_semaphore's barrier lists (feature 053). The registry writes all
+# three as COMPSIZE, which here means nothing more than the count that
+# precedes them: how many buffers this signal or wait is a barrier for,
+# and how many textures - the layouts running one per texture.
+[params."glSignalSemaphoreEXT.buffers"]
+len = "numBufferBarriers"
+
+[params."glSignalSemaphoreEXT.textures"]
+len = "numTextureBarriers"
+
+[params."glSignalSemaphoreEXT.dstLayouts"]
+len = "numTextureBarriers"
+
+[params."glWaitSemaphoreEXT.buffers"]
+len = "numBufferBarriers"
+
+[params."glWaitSemaphoreEXT.textures"]
+len = "numTextureBarriers"
+
+[params."glWaitSemaphoreEXT.srcLayouts"]
+len = "numTextureBarriers"
+
 [pname_counts]
 GL_VIEWPORT = 4
 GL_SCISSOR_BOX = 4

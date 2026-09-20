@@ -1081,6 +1081,12 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glProgramUniformHandleui64vNV: return "glProgramUniformHandleui64vNV";
         case kCmd_glIsTextureHandleResidentNV: return "glIsTextureHandleResidentNV";
         case kCmd_glIsImageHandleResidentNV: return "glIsImageHandleResidentNV";
+        case kCmd_glBufferStorageMemEXT: return "glBufferStorageMemEXT";
+        case kCmd_glTextureStorageMem2DEXT: return "glTextureStorageMem2DEXT";
+        case kCmd_glDeleteMemoryObjectsEXT: return "glDeleteMemoryObjectsEXT";
+        case kCmd_glDeleteSemaphoresEXT: return "glDeleteSemaphoresEXT";
+        case kCmd_glSignalSemaphoreEXT: return "glSignalSemaphoreEXT";
+        case kCmd_glWaitSemaphoreEXT: return "glWaitSemaphoreEXT";
         case kCmd_glMakeBufferResidentNV: return "glMakeBufferResidentNV";
         case kCmd_glMakeBufferNonResidentNV: return "glMakeBufferNonResidentNV";
         case kCmd_glIsBufferResidentNV: return "glIsBufferResidentNV";
