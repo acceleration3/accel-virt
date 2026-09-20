@@ -181,6 +181,20 @@ commands = [
     "clSetEventCallback",
 ]
 
+# Commands the driver answers itself and never sends.
+#
+# `cl_khr_external_memory`'s two. The object they name was acquired on the
+# host when the device opened it and stays acquired for its life - the GL
+# context it is imported through is the device's own import vehicle and
+# never draws - so there is no host acquire for these to carry. What is
+# left of their meaning is ordering, which the driver keeps by enqueuing a
+# marker over the wait list, and the argument checking, which is the ICD's
+# own (feature 053, research.md §21).
+driver_implemented = [
+    "clEnqueueAcquireExternalMemObjectsKHR",
+    "clEnqueueReleaseExternalMemObjectsKHR",
+]
+
 # Commands the client does not wait for. Reference counting is the
 # obvious set: nothing reads the result, and a failure to release
 # surfaces at the next call that synchronises.

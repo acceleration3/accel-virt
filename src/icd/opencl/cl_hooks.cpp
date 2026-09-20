@@ -404,6 +404,26 @@ cl_int CL_API_CALL set_event_callback(cl_event event, cl_int status,
     return root.watch_event(event, status, notify, user_data);
 }
 
+/* `cl_khr_external_memory`'s two, which the loader asks for by name: they are
+ * not slots of cl_icd_dispatch, because the ICD ABI predates the extension. */
+cl_int CL_API_CALL acquire_external_objects(cl_command_queue queue, cl_uint num_mem_objects,
+                                           const cl_mem *mem_objects, cl_uint, const cl_event *,
+                                           cl_event *event)
+{
+    AV_SCOPE("acquire_external_objects");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_external(queue, num_mem_objects, mem_objects, event);
+}
+
+cl_int CL_API_CALL release_external_objects(cl_command_queue queue, cl_uint num_mem_objects,
+                                           const cl_mem *mem_objects, cl_uint, const cl_event *,
+                                           cl_event *event)
+{
+    AV_SCOPE("release_external_objects");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_external(queue, num_mem_objects, mem_objects, event);
+}
+
 #undef AV_CL_ROOT_OR
 
 }  // namespace
@@ -484,6 +504,18 @@ void *ClDispatchTable::icd_get_platform_ids() const
 {
     AV_SCOPE("ClDispatchTable::icd_get_platform_ids");
     return reinterpret_cast<void *>(&icd_get_platform_ids_entry);
+}
+
+void *ClDispatchTable::external_mem_acquire() const
+{
+    AV_SCOPE("ClDispatchTable::external_mem_acquire");
+    return reinterpret_cast<void *>(&acquire_external_objects);
+}
+
+void *ClDispatchTable::external_mem_release() const
+{
+    AV_SCOPE("ClDispatchTable::external_mem_release");
+    return reinterpret_cast<void *>(&release_external_objects);
 }
 
 uint32_t ClDispatchTable::claimed() const

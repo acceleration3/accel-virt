@@ -150,4 +150,31 @@ def lower(raw: RawRegistry, profile) -> Registry:
             cmd.params.append(param)
         reg.commands[name] = cmd
 
+    _carry_extensions(raw, reg, profile)
     return reg
+
+
+def _carry_extensions(raw: RawRegistry, reg: Registry, profile) -> None:
+    """Which extensions this build can offer.
+
+    One rule, and the same one the OpenGL half has: an extension is carried
+    when an application gets a working entry point for every command the
+    registry puts in it - one that crosses the wire, or one the driver
+    answers itself. An extension needing an entry point that does neither is
+    not one this driver can offer, whatever the host reports.
+
+    The registry's `depends` is the second half: cl_khr_external_memory_win32
+    carries no command of its own and everything an application does with it
+    goes through cl_khr_external_memory's two, so it is carried only where
+    that one is."""
+    answered = set(reg.commands) | set(profile.driver_implemented)
+    carried = {name for name, ext in raw.extensions.items()
+               if all(command in answered for command in ext.commands)}
+    dropped = True
+    while dropped:
+        dropped = False
+        for name in sorted(carried):
+            if any(need not in carried for need in raw.extensions[name].depends):
+                carried.discard(name)
+                dropped = True
+    reg.carried_extensions = [name for name in sorted(raw.extensions) if name in carried]

@@ -10,6 +10,10 @@ from pathlib import Path
 @dataclass
 class Profile:
     commands: list[str] = field(default_factory=list)
+    # Commands the driver answers itself and never sends. They are not on
+    # the wire and get no id, but an application does get a working entry
+    # point for each, so they count towards an extension being carried.
+    driver_implemented: set[str] = field(default_factory=set)
     async_commands: set[str] = field(default_factory=set)
     params: dict[str, dict] = field(default_factory=dict)
     ids: dict[str, int] = field(default_factory=dict)
@@ -49,6 +53,7 @@ def load(profile_path: Path, ids_path: Path) -> Profile:
         ids = dict(tomllib.loads(ids_path.read_text()).get("commands", {}))
     return Profile(
         commands=list(data.get("commands", [])),
+        driver_implemented=set(data.get("driver_implemented", [])),
         async_commands=set(data.get("async", [])),
         params=dict(data.get("params", {})),
         ids=ids,

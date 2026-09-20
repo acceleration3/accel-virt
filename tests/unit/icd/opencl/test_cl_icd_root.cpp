@@ -128,11 +128,16 @@ TEST(cl_icd_root, the_device_answers_the_adapters_identity_and_the_hosts_everyth
 
 /* CL_DEVICE_EXTENSIONS is the one query that is neither the report's answer
  * nor the host's: the host says what the GPU has, a policy row says what this
- * ICD carries, and an application is shown the two intersected. The policy
- * ships empty on purpose - nothing is carried, tested or reported - so the
- * answer today is the empty string, whatever the host lists. Forwarding the
+ * ICD carries, and an application is shown the two intersected. Forwarding the
  * host's would offer an application every extension rusticl implements over a
- * wire that carries none of them (constitution VI). */
+ * wire that carries none of them (constitution VI).
+ *
+ * The two rows are the external-memory pair, and both are answered over a host
+ * extension of another name: a Linux OpenCL has no Win32 handle to take, and
+ * the device opens the descriptor through the host's `cl_khr_gl_sharing`
+ * instead (research.md §21). So a host that lists that name is shown them, a
+ * host that does not is shown nothing, and neither is ever shown the host's
+ * own list. */
 TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_the_host_s_own)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
@@ -140,9 +145,9 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
 
   /* A host naming extensions this ICD has no row for, including one whose
    * name is a prefix of another so a match on anything but a whole word
-   * shows. */
-  static const char listed[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_sharing";
-  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+   * shows, and no cl_khr_gl_sharing: nothing of it reaches the application. */
+  static const char plain[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_shar";
+  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
   char   reported[128];
   std::memset(reported, 'x', sizeof reported);
   std::size_t answered = 0u;
@@ -153,19 +158,30 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
    * terminated empty string rather than untouched room. */
   CHECK_EQ(answered, 1u);
   CHECK_EQ(reported[0], '\0');
-  CHECK(std::strstr(listed, "cl_khr_fp64") != nullptr);
+  CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
   CHECK_EQ(std::strcmp(reported, ""), 0);
+
+  /* The same host with the one name the rows are answered over: both are
+   * reported, in the policy's order, and still nothing else of the host's. */
+  static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il";
+  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+  std::memset(reported, 'x', sizeof reported);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
+                                    &answered),
+           CL_SUCCESS);
+  CHECK_EQ(std::strcmp(reported, "cl_khr_external_memory cl_khr_external_memory_win32"), 0);
+  CHECK_EQ(answered, std::strlen(reported) + 1u);
 
   /* The size query, which an application makes first: the same length, and
    * the host is asked again because the answer is the host's to change. */
-  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
   std::size_t wanted = 0u;
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted),
            CL_SUCCESS);
   CHECK_EQ(wanted, 1u);
 
   /* Room the answer does not fit is the API's own refusal, not a truncation. */
-  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
   char cramped[1] = {'x'};
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr),
            CL_INVALID_VALUE);
@@ -177,6 +193,53 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
   rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
                                     nullptr),
+           CL_OUT_OF_RESOURCES); }
+
+/* The query that goes with the rows: what handle types an import may name.
+ * This driver takes the opaque Win32 handle and nothing else - a guest has no
+ * file descriptors, which is the whole reason the Win32 names exist - and it
+ * answers at all only where it reports the extension that defines the query. */
+TEST(cl_icd_root, the_import_handle_types_are_this_drivers_own_and_only_where_it_reports_them)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  static const char sharing[] = "cl_khr_gl_sharing";
+
+  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+  cl_external_memory_handle_type_khr taken = 0u;
+  std::size_t                        answered = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
+                                    sizeof taken, &taken, &answered),
+           CL_SUCCESS);
+  CHECK_EQ(taken, static_cast<cl_external_memory_handle_type_khr>(
+                      CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR));
+  CHECK_EQ(answered, sizeof taken);
+
+  /* The size query, and room it does not fit. */
+  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+  std::size_t wanted = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 0u,
+                                    nullptr, &wanted),
+           CL_SUCCESS);
+  CHECK_EQ(wanted, sizeof taken);
+  rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
+  char cramped[1] = {'x'};
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, 1u,
+                                    cramped, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(cramped[0], 'x');
+
+  /* A host this driver reports no external memory over has no such query:
+   * answering one would be answering for an extension nobody was offered. */
+  static const char plain[] = "cl_khr_fp64";
+  rig.host().cl_info(CL_SUCCESS, plain, sizeof plain);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
+                                    sizeof taken, &taken, nullptr),
+           CL_INVALID_VALUE);
+  /* And a host that will not say is its own status. */
+  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR,
+                                    sizeof taken, &taken, nullptr),
            CL_OUT_OF_RESOURCES); }
 
 TEST(cl_icd_root, a_device_pointer_the_icd_never_made_is_an_invalid_device)

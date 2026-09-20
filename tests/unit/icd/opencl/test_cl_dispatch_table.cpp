@@ -95,6 +95,20 @@ TEST(cl_dispatch_table, the_enumeration_is_answered_outside_the_table)
    * dispatch through at all. */
   CHECK(table.icd_get_platform_ids() != nullptr); }
 
+/* And the other two the loader asks for by name: cl_khr_external_memory's
+ * acquire and release, which the ICD ABI predates - cl_icd_dispatch has no
+ * slot for either, so an application reaches them through
+ * clGetExtensionFunctionAddressForPlatform or not at all. */
+TEST(cl_dispatch_table, the_external_memory_pair_is_answered_outside_the_table_too)
+{ ClDispatchTable table;
+  table.fill();
+  CHECK(table.external_mem_acquire() != nullptr);
+  CHECK(table.external_mem_release() != nullptr);
+  /* Two entry points, not one answered twice: an application that acquires
+   * where it meant to release would otherwise never find out. */
+  CHECK(table.external_mem_acquire() != table.external_mem_release());
+  CHECK(table.external_mem_acquire() != table.icd_get_platform_ids()); }
+
 TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
 { ClDispatchTable table;
   table.fill();

@@ -38,6 +38,7 @@ constexpr std::uint64_t host_device = 0x6300u;
 constexpr std::uint64_t host_context = 0x6400u;
 constexpr std::uint64_t host_queue = 0x6500u;
 constexpr std::uint64_t host_buffer = 0x6600u;
+constexpr std::uint64_t host_event = 0x6700u;
 /* What the host's own map answers. Not an address the guest ever reads
  * through - the unmap names it and nothing else does. */
 constexpr std::uint64_t host_mapped = 0x7F0000008000ull;
@@ -148,6 +149,67 @@ TEST(cl_buffer_paths, a_buffer_over_a_shared_object_is_opened_and_released_as_on
   CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent + 2u);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::CommandHeader::release_shared_object_id);
+  CHECK(rig.root().invariants_hold()); }
+
+/* cl_khr_external_memory's acquire and release, which an application reaches
+ * by name rather than through a dispatch slot. The object was acquired on the
+ * host when the device opened it and stays acquired for its life, so what is
+ * left here is the argument checking and the event - and nothing crosses the
+ * wire unless the application asks for one. */
+TEST(cl_buffer_paths, the_acquire_and_release_of_an_external_object_are_answered_by_this_driver)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t     handle = shared_handle(rig);
+  const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                    static_cast<cl_mem_properties>(handle), 0u};
+  rig.host().shared_object(0u, host_buffer);
+  cl_int error = CL_INVALID_VALUE;
+  cl_mem shared = rig.loader().create_buffer_with_properties(opened.context(), list,
+                                                             CL_MEM_READ_WRITE, buffer_bytes, &error);
+  CHECK(shared != nullptr);
+  if (shared == nullptr) return;
+
+  auto *const acquire = reinterpret_cast<clEnqueueAcquireExternalMemObjectsKHR_fn>(
+      rig.root().extension_function("clEnqueueAcquireExternalMemObjectsKHR"));
+  auto *const release = reinterpret_cast<clEnqueueReleaseExternalMemObjectsKHR_fn>(
+      rig.root().extension_function("clEnqueueReleaseExternalMemObjectsKHR"));
+  CHECK(acquire != nullptr);
+  CHECK(release != nullptr);
+  /* A name this driver does not answer is answered by nobody. */
+  CHECK(rig.root().extension_function("clEnqueueAcquireExternalMemObjects") == nullptr);
+  CHECK(rig.root().extension_function("clEnqueueAcquireExternalMemObjectsKHR_and_more") == nullptr);
+  if (acquire == nullptr || release == nullptr) return;
+
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(release(opened.queue(), 1u, &shared, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  /* An ordinary buffer is not an external object, whatever queue it is named
+   * on, and the arguments the API refuses are refused here. */
+  rig.host().cl_handle(host_buffer + 1u, CL_SUCCESS);
+  cl_mem const ordinary = rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE,
+                                                     buffer_bytes, &error);
+  CHECK(ordinary != nullptr);
+  CHECK_EQ(acquire(opened.queue(), 1u, &ordinary, 0u, nullptr, nullptr), CL_INVALID_MEM_OBJECT);
+  cl_mem nothing = nullptr;
+  CHECK_EQ(acquire(opened.queue(), 1u, &nothing, 0u, nullptr, nullptr), CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(acquire(opened.queue(), 0u, &shared, 0u, nullptr, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(acquire(opened.queue(), 1u, nullptr, 0u, nullptr, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(acquire(nullptr, 1u, &shared, 0u, nullptr, nullptr), CL_INVALID_COMMAND_QUEUE);
+
+  /* An event asked for is the object's place in the queue, which is a marker:
+   * the application can wait on it, and it costs the one command. */
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  cl_event event = nullptr;
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 0u, nullptr, &event), CL_SUCCESS);
+  CHECK(event != nullptr);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK_EQ(rig.kmt().command_id(before),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
   CHECK(rig.root().invariants_hold()); }
 
 /* The guest ran out of room for the cl_mem the device had already made. The

@@ -47,7 +47,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      icd::ThreadLock &send_lock, icd::LogSink &log,
                      icd::ServiceThread &watcher_thread, ClIcdBinding &binding)
     : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
-      extensions_(reported_extensions, 0u), objects_(memory, dispatch_.table()), connection_(kmt),
+      extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table()), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
       device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_()
 {
@@ -107,17 +107,27 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
     return platform_.info(platform, name, value_bytes, value, size_ret);
 }
 
+bool ClIcdRoot::spells(const char *name, const char *wanted) const
+{
+    AV_SCOPE("ClIcdRoot::spells");
+    size_t index = 0u;
+    while (wanted[index] != '\0' && name[index] == wanted[index]) ++index;
+    return wanted[index] == '\0' && name[index] == '\0';
+}
+
 void *ClIcdRoot::extension_function(const char *name)
 {
     AV_SCOPE("ClIcdRoot::extension_function");
     if (name == nullptr) return nullptr;
-    /* The one name the loader asks for, and the only one this ICD answers:
-     * everything else it wants, it reaches through the dispatch table. */
-    const char wanted[] = "clIcdGetPlatformIDsKHR";
-    size_t index = 0u;
-    while (wanted[index] != '\0' && name[index] == wanted[index]) ++index;
-    if (wanted[index] != '\0' || name[index] != '\0') return nullptr;
-    return dispatch_.icd_get_platform_ids();
+    /* The three names the loader asks for rather than dispatching through a
+     * slot: the ICD's own platform enumeration, which the ABI has no slot
+     * for, and `cl_khr_external_memory`'s two, which the ABI predates. */
+    if (spells(name, "clIcdGetPlatformIDsKHR")) return dispatch_.icd_get_platform_ids();
+    if (spells(name, "clEnqueueAcquireExternalMemObjectsKHR"))
+        return dispatch_.external_mem_acquire();
+    if (spells(name, "clEnqueueReleaseExternalMemObjectsKHR"))
+        return dispatch_.external_mem_release();
+    return nullptr;
 }
 
 Status ClIcdRoot::open_device()
@@ -239,6 +249,12 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
      * through would offer an application every extension rusticl implements
      * over a wire that carries none of them. */
     if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*object, value_bytes, value, size_ret);
+    /* And the handle types an import may name, which is the question an
+     * application asks before it names one: this driver takes the opaque
+     * Win32 handle and nothing else, and answers so only where it reports the
+     * extension that defines the query. */
+    if (name == CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR)
+        return import_handle_types(*object, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
     return av::clproto::rvk_clGetDeviceInfo(*wire, object->wire(), name, value_bytes, value,
@@ -267,6 +283,25 @@ cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *
     if (value == nullptr) return CL_SUCCESS;
     if (value_bytes < needed) return CL_INVALID_VALUE;
     static_cast<void>(extensions_.report(host, answered, static_cast<char *>(value), value_bytes));
+    return CL_SUCCESS;
+}
+
+cl_int ClIcdRoot::import_handle_types(ClObject &device, size_t value_bytes, void *value,
+                                      size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::import_handle_types");
+    char         reported[host_extensions_bytes] = {};
+    const cl_int asked = device_extensions(device, sizeof reported, reported, nullptr);
+    if (asked != CL_SUCCESS) return asked;
+    /* A query of an extension this device does not report is a query it does
+     * not have, which is what the API answers CL_INVALID_VALUE for. */
+    if (!extensions_.offered_by(reported, sizeof reported, "cl_khr_external_memory"))
+        return CL_INVALID_VALUE;
+    const cl_external_memory_handle_type_khr taken = CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR;
+    if (size_ret != nullptr) *size_ret = sizeof taken;
+    if (value == nullptr) return CL_SUCCESS;
+    if (value_bytes < sizeof taken) return CL_INVALID_VALUE;
+    *static_cast<cl_external_memory_handle_type_khr *>(value) = taken;
     return CL_SUCCESS;
 }
 
@@ -804,6 +839,35 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
             wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
     }
     return ran;
+}
+
+cl_int ClIcdRoot::enqueue_external(cl_command_queue queue, cl_uint count, const cl_mem *objects,
+                                   cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_external");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    if (count == 0u || objects == nullptr) return CL_INVALID_VALUE;
+    GuestClContext *const context = context_of(*held);
+    if (context == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    for (cl_uint index = 0u; index < count; index++) {
+        ClObject *const named = judged(objects[index], ClObject::Kind::mem);
+        if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+        /* An ordinary buffer is not an external object, and one of another
+         * context is not this queue's to acquire. */
+        if (context_of(*named) != context) return CL_INVALID_CONTEXT;
+        if (!context->external().answered(named->wire())) return CL_INVALID_MEM_OBJECT;
+    }
+    if (event == nullptr) return CL_SUCCESS;
+    ClientTransport *const wire = context->wire();
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    uint64_t     produced = 0u;
+    const cl_int marked =
+        av::clproto::rvk_clEnqueueMarkerWithWaitList(*wire, held->wire(), 0u, nullptr, &produced);
+    if (marked != CL_SUCCESS) return marked;
+    *event = static_cast<cl_event>(
+        wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool blocking,

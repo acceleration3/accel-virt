@@ -236,7 +236,16 @@ TEST(cl_external_memory, a_handle_this_process_opened_reaches_the_object_behind_
                                  second),
            CL_SUCCESS);
   CHECK_EQ(second, host_buffer + 1u);
-  CHECK_EQ(process.log().holding("rvkcl: a Win32 handle this process may not open"), 0u); }
+  CHECK_EQ(process.log().holding("rvkcl: a Win32 handle this process may not open"), 0u);
+
+  /* And what the acquire and release of cl_khr_external_memory are judged by:
+   * the cl_mem this table answered is one of its own, and nothing else is -
+   * not an ordinary buffer's, and not the object id behind the row, which is
+   * a different number entirely. */
+  CHECK(process.memory().answered(host_buffer + 1u));
+  CHECK(!process.memory().answered(host_buffer));
+  CHECK(!process.memory().answered(0u));
+  CHECK(!process.memory().answered(object_id)); }
 
 /* A size that is not the object's is the device's to refuse, but a size of 0
  * never reaches it: the wire body has no shape for a memory object of no

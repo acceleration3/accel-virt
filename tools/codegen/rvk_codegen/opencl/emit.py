@@ -1538,8 +1538,42 @@ def emit_all(reg: Registry, out_dir: Path, raw=None) -> None:
     emit_server(reg, out_dir)
     emit_real_dispatch(reg, out_dir)
     emit_default_dispatch(reg, out_dir)
+    emit_supported_extensions(reg, out_dir)
     if raw is not None:
         emit_icd_stubs(raw, reg, out_dir)
+
+
+# ---------------------------------------------------------------------
+# What the driver may report
+#
+# An extension is the API's promise that a set of entry points exists
+# and works. The ICD's policy table decides which of them this driver
+# offers; this list is what that table is held to, so that a row can
+# never name an extension whose commands nothing here answers.
+def emit_supported_extensions(reg: Registry, out_dir: Path) -> None:
+    out = [HEADER, "#pragma once\n", "#include <stddef.h>", "",
+           "namespace av::clproto {", "",
+           "// Every extension whose commands this build answers - over the",
+           "// wire or in the driver - and whose own dependencies it answers",
+           "// too. An extension needing an entry point that does neither is",
+           "// not one this driver can offer, whatever the host reports.",
+           "inline constexpr const char* kCarriedExtensions[] = {"]
+    for name in reg.carried_extensions:
+        out.append(f'    "{name}",')
+    out += ["};", "",
+            "inline constexpr size_t kCarriedExtensionCount =",
+            "    sizeof(kCarriedExtensions) / sizeof(kCarriedExtensions[0]);",
+            "",
+            "[[nodiscard]] inline bool extension_is_carried(const char* name) noexcept {",
+            "    if (name == nullptr) return false;",
+            "    for (size_t i = 0; i < kCarriedExtensionCount; ++i) {",
+            "        if (__builtin_strcmp(name, kCarriedExtensions[i]) == 0) return true;",
+            "    }",
+            "    return false;",
+            "}",
+            "",
+            "}  // namespace av::clproto", ""]
+    write(out_dir / "cl_supported_extensions.h", "\n".join(out))
 
 
 # ---------------------------------------------------------------------

@@ -104,6 +104,11 @@ public:
     cl_int open(ClientTransport &wire, uint32_t device, const ClPropertyList &list, uint64_t size,
                 uint64_t &made);
 
+    /* Whether `made` is a `cl_mem` this table answered: what the acquire and
+     * release of `cl_khr_external_memory` are judged by, since those two name
+     * external objects and nothing else. */
+    bool   answered(uint64_t made) const;
+
     /* The object behind `made` released on the device and the row dropped.
      * False for a `cl_mem` this table never answered - an ordinary buffer,
      * which its caller then gives back the ordinary way. */
@@ -127,7 +132,8 @@ private:
      * there is one buffer. False when the list names no external handle at
      * all. */
     bool                names_handle(const ClPropertyList &list, uint64_t &handle, bool &taken) const;
-    ClImportedMemoryRow *row_of(uint64_t made);
+    ClImportedMemoryRow       *row_of(uint64_t made);
+    const ClImportedMemoryRow *row_of(uint64_t made) const;
     /* Whether this context already holds the object `object_id` names. */
     bool                 holds(uint64_t object_id) const;
 

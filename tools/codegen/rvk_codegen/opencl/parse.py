@@ -39,11 +39,24 @@ class RawCommand:
 
 
 @dataclass
+class RawExtension:
+    name: str
+    # The commands the registry puts in it; empty for the ones that only
+    # add enums to another extension, as the external-memory family does.
+    commands: list[str] = field(default_factory=list)
+    # The other extensions it is written on top of, from `depends`. Version
+    # names there (CL_VERSION_3_0) are not extensions and are dropped: the
+    # wire's tier is not this list's business.
+    depends: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RawRegistry:
     commands: dict[str, RawCommand] = field(default_factory=dict)
     # Type name -> category, for the categories the emitters care about.
     handles: set[str] = field(default_factory=set)
     structs: dict[str, list[tuple[str, CType]]] = field(default_factory=dict)
+    extensions: dict[str, RawExtension] = field(default_factory=dict)
 
 
 def _ctype_from(node: ET.Element) -> CType:
@@ -109,5 +122,17 @@ def parse(path: Path) -> RawRegistry:
                 continue
             raw.params.append(RawParam(pname, _ctype_from(p)))
         reg.commands[name] = raw
+
+    for ext in root.findall("./extensions/extension"):
+        name = ext.get("name") or ""
+        if not name.startswith("cl_"):
+            continue
+        depends = [part for part in (ext.get("depends") or "").replace("(", "")
+                   .replace(")", "").replace(",", "+").split("+")
+                   if part.startswith("cl_")]
+        reg.extensions[name] = RawExtension(
+            name=name,
+            commands=[c.get("name") or "" for c in ext.iter("command")],
+            depends=depends)
 
     return reg

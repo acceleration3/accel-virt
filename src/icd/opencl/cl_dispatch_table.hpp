@@ -39,6 +39,12 @@ public:
      * address clGetExtensionFunctionAddress answers. */
     void *icd_get_platform_ids() const;
 
+    /* `cl_khr_external_memory`'s acquire and release, which the loader also
+     * asks for by name: cl_icd_dispatch has no slot for either, because the
+     * ICD ABI predates the extension. */
+    void *external_mem_acquire() const;
+    void *external_mem_release() const;
+
     /* How many slots this ICD claims itself, which is what a test counts to
      * know the table did not quietly shrink. */
     uint32_t claimed() const;
