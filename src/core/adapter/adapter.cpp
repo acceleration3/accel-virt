@@ -724,7 +724,7 @@ int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t created = NtStatus(allocations_.create(*request)).value();
-    log_status("rvkgpu: CreateAllocation", created);
+    log_allocation(*request, created);
     return created;
 }
 
@@ -1036,6 +1036,25 @@ void Adapter::follow_display_change()
     if (platform_.load_atomic(display_changed_) == 0u) return;
     platform_.store_atomic(display_changed_, 0u);
     log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
+}
+
+/* The private-data length shares the line because the length is the question a
+ * guest sweep asks: a length this driver answered leaves a line naming it, and
+ * one dxgkrnl refused before the call leaves no line at all. Without the
+ * number the two are told apart by counting lines, which is not evidence
+ * (feature 053). */
+void Adapter::log_allocation(const DxgkargCreateAllocationRecord &request, int32_t status)
+{
+    AV_SCOPE("Adapter::log_allocation");
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: CreateAllocation bytes ");
+    message.append_decimal(request.pAllocationInfo == nullptr ? 0u
+                                                              : request.pAllocationInfo[0].PrivateDriverDataSize);
+    message.append(" status 0x");
+    message.append_hex(static_cast<uint32_t>(status), 8u);
+    platform_.log(message.text());
 }
 
 void Adapter::log_status(const char *step, int32_t status)

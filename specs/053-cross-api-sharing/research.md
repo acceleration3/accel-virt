@@ -303,3 +303,90 @@ for OpenGL, and the machinery T034-T036 built waits on one of two things:
 Until one of them lands, a conformance subset should carry `cl_khr_gl_sharing`
 and nothing of OpenGL's - not even the `_win32` rows, which §11 offered before
 this was measured.
+
+## §13 — The 88-byte carrier refusal: dxgkrnl refuses *after* the driver agrees
+
+The shareable carrier (`AllocationDescriptor::encoded_size` + 40 bytes of
+`SharedObjectRecord` = 88) is refused by `D3DKMTCreateAllocation2` with
+`STATUS_INVALID_PARAMETER` while the same descriptor at 48 is taken. Four guest
+runs narrowed it; this section records what the fourth one actually proved,
+including a wrong reading of the third that cost a boot.
+
+### The sweep, and why its 88 row was misread
+
+`SharedObjectProbe::carrier_size_steps` creates at 48/56/64/72/80/88/96/128
+with **the same bytes every time** - a valid 48-byte descriptor followed by
+zeros. The measured answers were:
+
+| bytes | to the caller | who answered |
+|---|---|---|
+| 48 | `0x00000000` | taken |
+| 56, 64, 72, 80 | `0xC00000BB` | the driver, `not_supported` (no shape) |
+| 88 | `0xC000000D` | **the driver**, `invalid_parameter` |
+| 96, 128 | `0xC00000BB` | the driver, `not_supported` (no shape) |
+
+The first reading of that table was "dxgkrnl refuses 88 and nothing else". It
+does not. 88 is the one swept length the driver *has* a shape for, so it takes
+the length, reaches `AllocationTable::share`, decodes a record from the zero
+bytes, fails the magic check and returns `invalid_parameter`. The
+`not_supported`/`invalid_parameter` split added for exactly this purpose only
+separates lengths the driver does **not** know; at a length it does know, its
+own content refusal wears dxgkrnl's code.
+
+The rule this leaves behind: **`0xC00000BB` proves the driver was reached;
+`0xC000000D` proves nothing about who answered.**
+
+### The length is exonerated outright
+
+The sweep sent **96 and 128** bytes and the *caller* received `0xC00000BB` -
+a code only this driver produces, and only from `create_one`. So dxgkrnl
+carries private driver data of at least 128 bytes to the driver without
+refusing it, and 88 is not a length it objects to. The four runs spent hunting
+a length threshold were hunting something that does not exist.
+
+### What the same run says about who refused the carrier
+
+Three steps reported `0xC000000D` to the caller - `carrier_size_88`,
+`carrier_long` and `carrier_shared`. The whole of `rvkgpu.log` contains
+**exactly one** `CreateAllocation status 0xC000000D` line. So at least two of
+those three refusals were not the driver's, and by the paragraph above the
+driver was called for all three.
+
+The one that is the driver's is `carrier_size_88`: filler, so `share` decodes a
+record from zeros and fails. The other two carry a valid record, so `share`
+decodes, mints, writes back and `create_one` returns `ok`.
+
+That leaves one reading: at 88 bytes **`DxgkDdiCreateAllocation` succeeds and
+`D3DKMTCreateAllocation2` fails anyway**. dxgkrnl is not refusing before the
+call, it is refusing after the driver agrees. This driver has met that shape
+before - `Allocation::report_to` carries a comment recording three experiments
+where VidMm answered `STATUS_INVALID_PARAMETER` at `CreateAllocation` for an
+allocation the driver had already accepted.
+
+It also means the length question is *not* fully closed, only relocated: the
+only length at which the driver has ever succeeded is 48, so dxgkrnl's
+post-success path has never been exercised at any other length. Whether it
+minds the 88 or minds what `share` did to the buffer is the open question, and
+`report_to` is identical in both cases, so the suspicion falls on the write-back
+into `pPrivateDriverData` - the one thing the 88-byte path does that the
+48-byte path does not.
+
+### The instrument
+
+The reading above turns on which log line belongs to which call, and the log
+did not say. So `Adapter::log_allocation` now puts the private-data length on
+the line:
+
+```
+rvkgpu: CreateAllocation bytes 88 status 0x00000000
+```
+
+A length that reached the driver names itself; one dxgkrnl refused leaves no
+line at all. `bytes 88 status 0x00000000` present in a run where `carrier_long`
+reports `0xC000000D` is the whole argument above, read rather than inferred.
+
+`carrier_size_96_valid` sends a descriptor **and a real unassigned record** at
+96, the length the sweep sent filler at. It cannot reach the post-success path,
+because the driver refuses 96 for its shape either way; what it settles is that
+the refusal at 96 is about the shape and not the bytes, which is the last thing
+still taken on trust about the sweep.

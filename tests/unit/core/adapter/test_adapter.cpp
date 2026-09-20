@@ -2541,6 +2541,18 @@ TEST(adapter_create_allocation, every_allocation_ddi_refuses_a_missing_argument_
   CHECK_EQ(nt(fixture.adapter().close_allocation(nullptr, nullptr)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(nullptr)), invalid_parameter); }
 
+/* The length is on the line because a guest sweep reads this log to tell whose
+ * refusal it read: a length the driver answered leaves a line here, and one
+ * dxgkrnl refused before the call leaves none (feature 053). */
+TEST(adapter_create_allocation, the_log_line_names_the_private_data_length)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateAllocationRecord request = {};
+  request.NumAllocations = 1u;
+  CHECK_EQ(nt(fixture.adapter().create_allocation(&request)), invalid_parameter);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: CreateAllocation bytes 0 status 0xC000000D") == 0); }
+
 TEST(adapter_create_allocation, before_start_there_is_no_segment_to_place_it_in)
 { Fixture fixture;
   ShadowSurface shadow(fixture.adapter());
@@ -2556,7 +2568,8 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   CHECK(std::strcmp(fixture.platform().last_log(),
                     "rvkgpu: GetStandardAllocationDriverData status 0x00000000") == 0);
   CHECK_EQ(shadow.create(), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: CreateAllocation status 0x00000000") == 0);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: CreateAllocation bytes 48 status 0x00000000") == 0);
   av::DxgkargCreateDeviceRecord device = {};
   device.hDevice = &fixture;   /* the runtime's handle, which the driver replaces with its own */
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
@@ -3014,6 +3027,10 @@ TEST(adapter_dpc_routine, a_storm_of_refusals_is_silent_once_the_window_is_spent
   av::DxgkargCreateDeviceRecord device = {};
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
   CHECK_EQ(fixture.platform().logged(), spent);   /* and the handle line */
+  av::DxgkargCreateAllocationRecord allocation = {};
+  allocation.NumAllocations = 1u;
+  CHECK_EQ(nt(fixture.adapter().create_allocation(&allocation)), invalid_parameter);
+  CHECK_EQ(fixture.platform().logged(), spent);   /* and the line naming the private-data length */
   for (std::uint16_t index = 0u; index < 2u; index++) {
       const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(index);
       const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));

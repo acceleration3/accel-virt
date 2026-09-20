@@ -137,11 +137,26 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
         /* Measured, not judged: most of these lengths are ones no caller uses
          * and the driver rightly refuses, so a sweep that failed the run for
          * them would fail every run for ever. What is wanted is the number on
-         * the line - 0 taken, 0xC00000BB refused by the driver, 0xC000000D
-         * refused by dxgkrnl before the driver saw it. */
+         * the line. 0xC00000BB is this driver refusing a shape it has none
+         * for; 0xC000000D is *not* proof of dxgkrnl, because at 88 the driver
+         * knows the shape and refuses the zeroed record with the same code.
+         * The driver log names the length on each line, and that - not this
+         * number - says which side answered. */
         steps_.check_measured(one.step, Status::ok, answered == Status::ok ? 0u : kmt_.last_code());
         if (answered == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, made));
     }
+    /* A length the driver has no shape for, carrying the bytes it would want
+     * at the length it does. Paired with the filler at 88 this separates the
+     * two things every earlier run changed together: if dxgkrnl reads the
+     * content it must answer this differently from the filler at 96, and if it
+     * reads only the length it must answer them the same (feature 053). */
+    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
+                          .encode(data + AllocationDescriptor::encoded_size,
+                                  SharedObjectRecord::encoded_size));
+    uint32_t     filled = 0u;
+    const Status carried = kmt_.create_allocation(device, data, 96u, filled);
+    steps_.check_measured("carrier_size_96_valid", Status::ok, carried == Status::ok ? 0u : kmt_.last_code());
+    if (carried == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, filled));
 }
 
 void SharedObjectProbe::carrier_steps()

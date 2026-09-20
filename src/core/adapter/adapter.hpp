@@ -366,6 +366,7 @@ private:
      * monitor asks, because asking waits and the DPC may not. */
     void                 follow_display_change();
     void                 log_status(const char *step, int32_t status);
+    void                 log_allocation(const DxgkargCreateAllocationRecord &request, int32_t status);
     /* Which source dxgkrnl showed or hid. */
     void                 log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status);
     /* Where dxgkrnl points a source, which is the only place the scanout can
