@@ -188,7 +188,26 @@ void SharedObjectProbe::carrier_steps()
 
     carrier_size_steps(device);
 
-    /* The ordinary create, which every other allocation in the guest uses. */
+    /* The control for the experiment below: the same length through the same
+     * call, of a kind the driver does not write the descriptor back over. If
+     * this passes and carrier_plain does not, the write is the whole
+     * difference (feature 053, research.md §13). */
+    uint8_t                    unwritten[AllocationDescriptor::encoded_size] = {};
+    /* A shadow surface reports exactly what a client allocation does - neither
+     * is scanned out and neither is published as a blob - so the segment, the
+     * flags and the size the driver hands back are the same, and the write is
+     * the only thing that differs. */
+    const AllocationDescriptor quiet(AllocationKind::shadow, true, SurfaceLayout(64u, 64u, 21u, 256u), bytes,
+                                     ScanoutTarget());
+    static_cast<void>(quiet.encode(unwritten, AllocationDescriptor::encoded_size));
+    uint32_t     untouched = 0u;
+    const Status left = kmt_.create_allocation(device, unwritten, sizeof unwritten, untouched);
+    steps_.check("carrier_plain_unwritten", left);
+    if (left == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, untouched));
+
+    /* The ordinary create, which every other allocation in the guest uses -
+     * and, while the experiment stands, the one the driver writes the
+     * descriptor back over. */
     uint32_t     plain = 0u;
     const Status made = kmt_.create_allocation(device, data, AllocationDescriptor::encoded_size, plain);
     steps_.check("carrier_plain", made);

@@ -49,6 +49,22 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
     Allocation *allocation = nullptr;
     const Status status = allocations_.create(allocation, platform_, segments_, descriptor, size);
     if (status != Status::ok) return status;
+    /* EXPERIMENT (feature 053, research.md §13), to be taken out once it has
+     * answered. A create of 88 bytes returns success from here and reaches its
+     * caller as STATUS_INVALID_PARAMETER, and the only thing the 88-byte path
+     * does that the 48-byte one does not is write into pPrivateDriverData. So
+     * the 48-byte path is made to write too - the descriptor over itself,
+     * changing not one byte - which tells the two readings apart: if a plain
+     * create starts failing, writing to that buffer is refused outright and
+     * the length was never the variable; if it keeps passing, the refusal is
+     * about writing at or past offset 48.
+     *
+     * Only for a client allocation, which is what a user-mode caller and the
+     * ICD's carrier both are. The display path's own allocations are left
+     * alone on purpose: an experiment that stops the driver starting produces
+     * no reading at all. */
+    if (!shareable && descriptor.kind() == AllocationKind::client)
+        static_cast<void>(descriptor.encode(bytes, AllocationDescriptor::encoded_size));
     const Status shared = shareable ? share(*allocation, bytes) : Status::ok;
     if (shared != Status::ok) {
         static_cast<void>(allocations_.destroy(allocation));

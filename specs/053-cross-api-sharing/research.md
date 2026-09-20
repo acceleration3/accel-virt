@@ -460,3 +460,60 @@ one log line, which is why the line is the experiment.
 because the driver refuses 96 for its shape either way; what it settles is that
 the refusal at 96 is about the shape and not the bytes, which is the last thing
 still taken on trust about the sweep.
+
+## §14 — The two experiments in hand, and what each answer means
+
+§13 left one candidate: `share()`'s write into `pPrivateDriverData`, the only
+thing the 88-byte path does that the 48-byte path does not. Two experiments are
+built and waiting on a boot. They are independent, and having both matters -
+if the second convicts the verifier, the first's answer changes meaning.
+
+### (a) The 48-byte path made to write
+
+`AllocationTable::create_one` now writes the descriptor back over a **client**
+allocation's own bytes, changing not one of them, before it reports. The probe
+runs a matched pair:
+
+| step | length | kind | driver writes |
+|---|---|---|---|
+| `carrier_plain_unwritten` | 48 | shadow | no |
+| `carrier_plain` | 48 | client | yes |
+
+A shadow surface and a client allocation report identically - neither is
+scanned out and neither is published as a blob, so `report_to` puts both in the
+same segment with the same flags and size. The write is the only difference.
+
+- **`carrier_plain` fails, `carrier_plain_unwritten` passes** → writing to
+  `pPrivateDriverData` is refused outright and the length was never the
+  variable. The whole carrier design has to find another channel for the minted
+  id; `Adapter::escape` is the WDDM one.
+- **Both pass** → writing below offset 48 is fine, and the refusal is about
+  writing at or past it, or about the 88 itself.
+- **Both fail** → something else changed and the run is void.
+
+The scope is deliberate. The display path's own allocations - the ring, the
+fence page, the reply slot - are left alone, because an experiment that stops
+the driver starting produces no reading at all.
+
+This is an experiment and not a design: it comes out once it has answered, and
+the unit test that pins it says so, so that what it was stays on the record.
+
+### (b) A boot with no Driver Verifier
+
+`provision.ps1`'s install stage has run `verifier /standard /driver rvkgpu.sys`
+unconditionally since the guest existed, so every measurement this feature has
+ever taken was taken through it. Driver Verifier's DDI compliance checking
+interposes on every call, and "the driver returned success and the caller got a
+refusal" is the shape an interposer produces. That is too plausible a cause to
+leave unremovable.
+
+`run_guest_suite.py --no-verifier` passes `-NoVerifier` to the install stage,
+which skips the line and says which driver it installed. It is refused with
+`--power-cycles`, whose pool-leak check reads what the verifier tracked: with
+no verifier that scenario reads nothing and passes, and a scenario that cannot
+fail is worse than one that is not run.
+
+If a `--no-verifier` boot takes the 88-byte carrier, the verifier is convicted
+and (a)'s answer is about the verifier's own buffer handling rather than
+dxgkrnl's. If it refuses it exactly as before, the verifier is eliminated and
+every earlier measurement stands.

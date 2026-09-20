@@ -9,7 +9,8 @@
 #   sign     trust a self-signed test certificate, catalog and sign the package,
 #            turn test signing on
 #   install  install the package on virtio-gpu-rvk-pci, Driver Verifier's
-#            standard checks on rvkgpu.sys
+#            standard checks on rvkgpu.sys - or, with -NoVerifier, without
+#            them, for a run measuring what the verifier itself changes
 #   check    the adapter started on rvkgpu with no problem code; the verifier's
 #            settings
 #   modes    every display mode the driver offers, one "mode: WxH" line each,
@@ -37,6 +38,7 @@ param(
     [int]$Height = 0,
     [int]$Minutes = 0,
     [switch]$MemoryDump,
+    [switch]$NoVerifier,
     [switch]$Enable,
     [string[]]$Programs = @()
 )
@@ -223,7 +225,15 @@ switch ($Stage) {
         }
         pnputil /add-driver "$Package\rvkgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
-        verifier /standard /driver rvkgpu.sys | Out-Null
+        if ($NoVerifier) {
+            # Driver Verifier interposes on every DDI call, so a run that is
+            # trying to find out whether the verifier is the thing refusing a
+            # call has to be able to take it away (feature 053).
+            Write-Output 'verifier: skipped, rvkgpu.sys installed with no Driver Verifier checks'
+        } else {
+            verifier /standard /driver rvkgpu.sys | Out-Null
+            Write-Output 'verifier: standard checks on rvkgpu.sys'
+        }
         exit $RebootRequired
     }
     'check' {

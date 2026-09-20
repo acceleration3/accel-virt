@@ -377,11 +377,18 @@ def arguments():
     parser.add_argument("--vnc", type=int, metavar="DISPLAY", help="the guest's display on 127.0.0.1:5900+DISPLAY")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
                         help="enable QEMU trace events matching PATTERN into qemu.log, e.g. 'virtio_gpu_*'")
+    parser.add_argument("--no-verifier", action="store_true",
+                        help="install the driver without Driver Verifier. The verifier interposes on every "
+                             "DDI call, so a run measuring what it changes has to be able to take it away; "
+                             "refused with --power-cycles, whose pool-leak check is a verifier reading")
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
     if parsed.opengl_discovery and (parsed.rvk or parsed.vulkan or parsed.opengl):
         parser.error("--opengl-discovery is its own boot: pass it without --rvk, --vulkan and --opengl")
+    if parsed.no_verifier and parsed.power_cycles:
+        parser.error("--no-verifier leaves nothing to read: --power-cycles judges the pool allocations "
+                     "Driver Verifier tracked, and without it every cycle reports none")
     return parsed
 
 
@@ -1014,9 +1021,9 @@ class GuestRun:
             raise StepFailed(name, f"exited {code}: {text.strip()[-400:]}")
         return text
 
-    def stage(self, name, saved=None):
+    def stage(self, name, saved=None, extra=()):
         """Runs one provisioning stage: whether it asked for a reboot."""
-        code, out, error = self.provision(name)
+        code, out, error = self.provision(name, extra)
         if saved is not None:
             (self.work / saved).write_bytes(out + error)
         if code not in (0, REBOOT_REQUIRED):
@@ -1870,7 +1877,11 @@ class GuestRun:
     def install_and_test(self):
         if self.stage("sign"):
             self.reboot("sign")
-        if self.stage("install"):
+        # The verifier is part of what the install decides, so the run says which
+        # driver it is about to measure before it measures anything.
+        if self.args.no_verifier:
+            self.say("install: no Driver Verifier, by --no-verifier")
+        if self.stage("install", extra=("-NoVerifier",) if self.args.no_verifier else ()):
             self.reboot("install")
         self.check_monitors(self.stage_output("check", saved="device.txt"))
         self.segments()

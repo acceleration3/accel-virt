@@ -229,6 +229,43 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("Current Pool Allocations", (self.work / "cycle.txt").read_text())
         self.assert_clean()
 
+    def test_no_verifier_installs_without_it_and_says_so(self):
+        """Feature 053: Driver Verifier interposes on every DDI call, so a run
+        trying to find out whether the verifier is what refused a call has to be
+        able to take it away. The install stage is where it goes on, so that is
+        where the switch is, and the run says which driver it is measuring."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "install": "verifier: skipped, rvkgpu.sys installed with no Driver Verifier "
+                                        "checks\r\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--no-verifier")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("install -NoVerifier", self.stage_calls())
+        self.assertIn("install: no Driver Verifier, by --no-verifier", result.stdout)
+        self.assert_clean()
+
+    def test_without_the_flag_the_install_stage_is_asked_for_the_verifier(self):
+        """The default is unchanged: nothing is passed, so the stage installs it."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("install", self.stage_calls())
+        self.assertNotIn("install -NoVerifier", self.stage_calls())
+        self.assertNotIn("no Driver Verifier", result.stdout)
+        self.assert_clean()
+
+    def test_no_verifier_is_refused_with_the_scenario_that_reads_it(self):
+        """The cycle scenario judges the pool allocations Driver Verifier
+        tracked. Without the verifier it would read none and pass, which is a
+        scenario that cannot fail - so the combination is refused rather than
+        quietly weakened."""
+        result = self.run_suite("--no-verifier", "--power-cycles", "50")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--no-verifier leaves nothing to read", result.stderr)
+
     def test_the_upgrade_scenario_installs_a_higher_version_without_a_reboot(self):
         """Feature 040 US2: a package that arrives over the running one."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [0]},
