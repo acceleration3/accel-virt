@@ -1223,16 +1223,17 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
                Status::invalid_parameter);
   CHECK_EQ(allocation, 0u);
 
-  /* A record whose size is not the allocation's names something else. */
-  std::uint8_t           mismatched[sizeof bytes] = {};
-  std::memcpy(mismatched, bytes, sizeof bytes);
-  const av::SharedObjectRecord wrong_size(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
-                                          8u * 4096u);
-  CHECK_STATUS(wrong_size.encode(mismatched + av::AllocationDescriptor::encoded_size,
-                                 av::SharedObjectRecord::encoded_size),
+  /* A record whose size is not the allocation's is *not* refused: the size it
+   * declares is the object's, and an ICD sharing host memory mints over a
+   * one-page carrier that is nothing like the object (feature 053, T031). */
+  std::uint8_t           bigger[sizeof bytes] = {};
+  std::memcpy(bigger, bytes, sizeof bytes);
+  const av::SharedObjectRecord wide(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 64u * 4096u);
+  CHECK_STATUS(wide.encode(bigger + av::AllocationDescriptor::encoded_size,
+                           av::SharedObjectRecord::encoded_size),
                Status::ok);
-  CHECK_STATUS(kmt.create_shared_allocation(device, mismatched, sizeof mismatched, allocation),
-               Status::invalid_parameter);
+  CHECK_STATUS(kmt.create_shared_allocation(device, bigger, sizeof bigger, allocation), Status::ok);
+  CHECK(allocation != 0u);
 
   /* And it is scriptable, as every other call is. */
   kmt.fail_at(MockKmt::Call::create_shared_allocation, 1u, refused_code);

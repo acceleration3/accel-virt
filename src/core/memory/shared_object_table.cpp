@@ -53,7 +53,13 @@ Status SharedObjectTable::mint(Allocation &allocation, SharedObjectRecord &recor
     MutexGuard lock(mutex_);
     InvariantScope<SharedObjectTable> guard(platform_, *this, "mint");
     if (adapter_ == 0u) return Status::invalid_state;
-    if (record.assigned() || record.size() != allocation.size()) return Status::invalid_parameter;
+    /* The size is the object's, not the allocation's. An ICD sharing host
+     * memory has no guest allocation of it at all and creates a one-page
+     * carrier for the identity alone (feature 053, T031), so tying the two
+     * would cost a guest allocation the size of every shared texture. Nothing
+     * is lost: the size a record declares is what an open is refused against,
+     * and a forger who changes it disagrees with the object this minted. */
+    if (record.assigned()) return Status::invalid_parameter;
     SharedObject *object = nullptr;
     const Status  created =
         objects_.create(object, platform_, next_id_, record.kind(), record.size(), allocation);

@@ -91,6 +91,10 @@ public:
     /* IMPORT_BLOB's answer: the host's status, a reserved word and the device
      * memory. */
     void blob_import(std::uint32_t status, std::uint64_t memory);
+    /* What a shared-object command answers: the device's status, a reserved
+     * word, and the wire handle an open made - 0 for a share, a release and
+     * every refusal (feature 053). */
+    void shared_object(std::uint32_t status, std::uint64_t wire_handle);
     /* `count` queue families, each with `count` graphics queues: a void
      * command's zero, the count, and the structures. */
     void vk_queue_families(std::uint32_t count);

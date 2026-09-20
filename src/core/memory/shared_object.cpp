@@ -64,6 +64,9 @@ bool SharedObject::invariants_hold() const
 {
     AV_SCOPE("SharedObject::invariants_hold");
     if (id_ == 0u || !kind_.known() || allocation_ == nullptr) return false;
+    /* Each kind's own size, which is the record's rule and the wire body's: a
+     * fence has none at all (feature 053, T031). */
+    if (kind_.is_fence()) return size_ == 0u;
     return size_ != 0u && size_ % Allocation::page_bytes == 0u;
 }
 

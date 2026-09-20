@@ -183,23 +183,40 @@ TEST(shared_object_table_mint, gives_a_fresh_id_to_every_allocation_and_never_re
   rig.check();
   CHECK(record.object_id() > ids[2]); }
 
-TEST(shared_object_table_mint, refuses_a_record_that_already_names_one_and_one_whose_size_is_not_the_allocations)
+TEST(shared_object_table_mint, refuses_a_record_that_already_names_one)
 { Fixture rig;
   Allocation *const allocation = rig.allocate(2u * page);
   SharedObjectRecord already(4u, SharedObjectKind(SharedObjectKind::memory), 9u, 2u * page);
   CHECK_STATUS(rig.table().mint(*allocation, already), Status::invalid_parameter);
   rig.check();
   CHECK_EQ(already.object_id(), 4u);
-  CHECK_EQ(rig.table().live(), 0u);
-
-  SharedObjectRecord wrong = rig.asking(page);
-  CHECK_STATUS(rig.table().mint(*allocation, wrong), Status::invalid_parameter);
-  rig.check();
-  CHECK(!wrong.assigned());
-  SharedObjectRecord bigger = rig.asking(4u * page);
-  CHECK_STATUS(rig.table().mint(*allocation, bigger), Status::invalid_parameter);
-  rig.check();
   CHECK_EQ(rig.table().live(), 0u); }
+
+/* The size a record declares is the object's and need not be the allocation's:
+ * an ICD sharing host memory has no guest allocation of it and creates a
+ * one-page carrier for the identity alone (feature 053, T031). What the size
+ * still binds is the open - a record whose size was changed afterwards
+ * disagrees with the object this minted, which is the only thing the check
+ * ever protected. */
+TEST(shared_object_table_mint, a_one_page_carrier_may_name_an_object_of_any_size)
+{ Fixture rig;
+  Allocation *const carrier = rig.allocate(page);
+  SharedObjectRecord bigger = rig.asking(64u * page);
+  CHECK_STATUS(rig.table().mint(*carrier, bigger), Status::ok);
+  rig.check();
+  CHECK(bigger.assigned());
+  CHECK_EQ(rig.table().live(), 1u);
+  /* The object is the size the record declared, so an open naming any other
+   * size is refused however big the carrier was. */
+  SharedObject *found = nullptr;
+  CHECK_STATUS(rig.table().open(bigger, found), Status::ok);
+  CHECK(found != nullptr);
+  CHECK_STATUS(rig.table().close(*found), Status::ok);
+  SharedObjectRecord tampered(bigger.object_id(), SharedObjectKind(SharedObjectKind::memory),
+                              bigger.adapter_id(), 2u * page);
+  CHECK_STATUS(rig.table().open(tampered, found), Status::invalid_parameter);
+  CHECK(found == nullptr);
+  rig.check(); }
 
 TEST(shared_object_table_mint, propagates_a_pool_that_cannot_grow)
 { Fixture rig;
@@ -297,9 +314,9 @@ TEST(shared_object_table_open, refuses_a_kind_or_a_size_that_disagrees_with_the_
 
   const SharedObjectRecord wrong[] = {
       SharedObjectRecord(minted.object_id(), SharedObjectKind(SharedObjectKind::monitored_fence),
-                         minted.adapter_id(), 2u * page),
+                         minted.adapter_id(), 0u),
       SharedObjectRecord(minted.object_id(), SharedObjectKind(SharedObjectKind::native_fence),
-                         minted.adapter_id(), 2u * page),
+                         minted.adapter_id(), 0u),
       SharedObjectRecord(minted.object_id(), minted.kind(), minted.adapter_id(), page),
       SharedObjectRecord(minted.object_id(), minted.kind(), minted.adapter_id(), 4u * page),
   };
@@ -386,7 +403,8 @@ TEST(shared_object_table, is_apc_at_most_and_the_mock_says_so)
 TEST(shared_object_table_report, names_the_adapter_and_every_object_it_holds)
 { Fixture rig;
   Allocation *const allocation = rig.allocate(3u * page);
-  SharedObjectRecord record = rig.asking(3u * page, SharedObjectKind::native_fence);
+  /* A fence carries no size, which is the record's rule (feature 053). */
+  SharedObjectRecord record = rig.asking(0u, SharedObjectKind::native_fence);
   CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
   SharedObject *found = nullptr;
   CHECK_STATUS(rig.table().open(record, found), Status::ok);
@@ -398,7 +416,7 @@ TEST(shared_object_table_report, names_the_adapter_and_every_object_it_holds)
   CHECK(std::strstr(writer.dump(), "busy=false") != nullptr);
   CHECK(std::strstr(writer.dump(), "live=1") != nullptr);
   CHECK(std::strstr(writer.dump(), "kind=3") != nullptr);
-  CHECK(std::strstr(writer.dump(), "size=12288") != nullptr);
+  CHECK(std::strstr(writer.dump(), "size=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
   CHECK_STATUS(rig.table().close(*found), Status::ok);
   rig.check(); }

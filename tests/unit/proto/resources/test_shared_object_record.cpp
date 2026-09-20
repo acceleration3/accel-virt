@@ -80,7 +80,7 @@ TEST(shared_object_record_decode, round_trips_every_field_of_a_record_a_creator_
 
 TEST(shared_object_record_decode, an_id_of_zero_is_a_creator_asking_for_one_and_is_not_assigned)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
-  encode(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::native_fence), 0u, page), bytes);
+  encode(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::native_fence), 0u, 0u), bytes);
   SharedObjectRecord decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.object_id(), 0u);
@@ -151,7 +151,7 @@ TEST(shared_object_record_decode, a_field_no_record_can_have_is_an_invalid_param
 TEST(shared_object_record_decode, the_widest_representable_record_round_trips)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
   const std::uint64_t size = 0xFFFFFFFFFFFFF000u;
-  encode(SharedObjectRecord(0xFFFFFFFFFFFFFFFFu, SharedObjectKind(SharedObjectKind::native_fence),
+  encode(SharedObjectRecord(0xFFFFFFFFFFFFFFFFu, SharedObjectKind(SharedObjectKind::memory),
                             0xFFFFFFFFFFFFFFFFu, size),
          bytes);
   SharedObjectRecord decoded;
@@ -159,6 +159,25 @@ TEST(shared_object_record_decode, the_widest_representable_record_round_trips)
   CHECK_EQ(decoded.object_id(), 0xFFFFFFFFFFFFFFFFu);
   CHECK_EQ(decoded.adapter_id(), 0xFFFFFFFFFFFFFFFFu);
   CHECK_EQ(decoded.size(), size); }
+
+/* A fence has no size, exactly as the wire body says: the two describe one
+ * object and an opener compares them, so a rule either one kept alone would be
+ * a record no open could match (feature 053, T031). */
+TEST(shared_object_record_decode, a_fence_carries_no_size_and_memory_carries_pages)
+{ std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
+  const std::uint32_t fences[] = {SharedObjectKind::monitored_fence, SharedObjectKind::native_fence};
+  for (const std::uint32_t kind : fences) {
+      encode(SharedObjectRecord(7u, SharedObjectKind(kind), 9u, 0u), bytes);
+      SharedObjectRecord decoded;
+      CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
+      CHECK_EQ(decoded.size(), 0u);
+      encode(SharedObjectRecord(7u, SharedObjectKind(kind), 9u, page), bytes);
+      SharedObjectRecord refused;
+      CHECK_STATUS(refused.decode(bytes, sizeof bytes), Status::invalid_parameter);
+  }
+  encode(SharedObjectRecord(7u, SharedObjectKind(SharedObjectKind::memory), 9u, 0u), bytes);
+  SharedObjectRecord no_size;
+  CHECK_STATUS(no_size.decode(bytes, sizeof bytes), Status::invalid_parameter); }
 
 TEST(shared_object_record_decode, survives_the_hostile_sweep)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};

@@ -22,6 +22,7 @@
 #include "core/support/nt_status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
@@ -82,7 +83,8 @@ std::uint16_t config_u16(const std::uint8_t *config, std::uint16_t offset)
 DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
                FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host)
     : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump), host_(host),
-      handles_(), fences_(), devices_{}, allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
+      handles_(), fences_(), devices_{}, shared_{}, next_shared_handle_(first_shared_handle),
+      allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
       fabric_(platform), hardware_scheduling_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
       next_chunk_address_(chunk_ram_address), last_code_(0u)
@@ -276,6 +278,7 @@ Status DdiKmt::create_allocation(std::uint32_t device, const std::uint8_t *descr
     for (Allocation &slot : allocations_) {
         if (slot.handle != 0u || slot.block != nullptr) continue;
         std::memcpy(slot.private_data, descriptor, size);
+        slot.private_size = size;
         DxgkAllocationInfoRecord info = {};
         info.pPrivateDriverData = slot.private_data;
         info.PrivateDriverDataSize = size;
@@ -351,7 +354,10 @@ Status DdiKmt::open_on(Allocation &slot, void *driver_device)
     DxgkOpenAllocationInfoRecord info = {};
     info.hAllocation = slot.handle;
     info.pPrivateDriverData = slot.private_data;
-    info.PrivateDriverDataSize = max_private_data;
+    /* The length the create carried, not the buffer's: the miniport takes 48
+     * bytes or 88 and refuses every other, so a shared allocation could not be
+     * opened at all if this named the whole buffer (feature 053). */
+    info.PrivateDriverDataSize = slot.private_size;
     DxgkargOpenAllocationRecord request = {};
     request.NumAllocations = 1u;
     request.pOpenAllocation = &info;
@@ -425,6 +431,13 @@ Status DdiKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation
         DdiSlot::DxgkDdiCloseAllocation)(owner->driver, &close));
     if (closed != Status::ok) return closed;
     found->opened = nullptr;
+    if (found->opened_only) {
+        /* A second device's open of somebody else's allocation: closing it is
+         * all this slot ever owned. */
+        found->driver = nullptr;
+        release(*found);
+        return refuse(Status::ok);
+    }
     void *const                    list[1] = {found->driver};
     DxgkargDestroyAllocationRecord request = {};
     request.NumAllocations = 1u;
@@ -959,11 +972,12 @@ DoorbellFabric &DdiKmt::fabric()
     return fabric_;
 }
 
-/* Feature 053: the miniport really does mint here - this rig drives the real
- * DxgkDdiCreateAllocation - so the identity that comes back is the driver's
- * own, and a test above can read it out of the bytes it passed in. What this
- * rig has no kernel for is the NT handle, which is dxgkrnl's and not the
- * miniport's; the three calls below say so. */
+/* Feature 053. The miniport is real here - this rig drives DxgkDdiCreateAllocation
+ * and DxgkDdiOpenAllocation - so the identity that comes back is the driver's
+ * own. What is modelled is dxgkrnl's NT handle table, which is dxgkrnl's and
+ * not the driver's, and which this class is standing in for. Nothing about the
+ * miniport's half is faked: an open here really calls the driver with the
+ * creating device's own bytes, which is the whole thing under test. */
 Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
                                         std::uint32_t &allocation)
 {
@@ -976,26 +990,84 @@ Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *priv
     const Allocation *const slot = find_allocation(allocation);
     if (slot == nullptr) return refuse(Status::invalid_state);
     std::memcpy(private_data, slot->private_data, size);
-    return Status::ok;
+    return refuse(Status::ok);
 }
 
-Status DdiKmt::share_object(std::uint32_t, std::uint32_t, std::uint64_t &handle)
+DdiKmt::SharedHandle *DdiKmt::find_shared(std::uint64_t handle)
+{
+    if (handle == 0u) return nullptr;
+    for (SharedHandle &row : shared_)
+        if (row.handle == handle) return &row;
+    return nullptr;
+}
+
+Status DdiKmt::share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle)
 {
     handle = 0u;
-    return Status::not_supported;
+    const Allocation *const slot = find_allocation(allocation);
+    if (slot == nullptr || slot->device != device) return refuse(Status::invalid_parameter);
+    /* An allocation created without asking for an identity carries no record,
+     * and dxgkrnl has nothing to share it by. */
+    if (slot->private_size != AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size)
+        return refuse(Status::not_supported);
+    for (SharedHandle &row : shared_) {
+        if (row.handle != 0u) continue;
+        row.handle = next_shared_handle_;
+        next_shared_handle_ += 4u;
+        row.allocation = allocation;
+        handle = row.handle;
+        return refuse(Status::ok);
+    }
+    return refuse(Status::no_space);
 }
 
-Status DdiKmt::open_shared_object(std::uint32_t, std::uint64_t, std::uint32_t &allocation, std::uint8_t *,
-                                 std::uint32_t, std::uint32_t &written)
+Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                  std::uint8_t *private_data, std::uint32_t capacity, std::uint32_t &written)
 {
     allocation = 0u;
     written = 0u;
-    return Status::not_supported;
+    const SharedHandle *const row = find_shared(handle);
+    if (row == nullptr || private_data == nullptr) return refuse(Status::invalid_parameter);
+    Device *const     opener = find_device(device);
+    Allocation *const created = find_allocation(row->allocation);
+    if (opener == nullptr || created == nullptr) return refuse(Status::invalid_parameter);
+    if (created->private_size > capacity) return refuse(Status::invalid_parameter);
+    for (Allocation &slot : allocations_) {
+        if (slot.handle != 0u || slot.block != nullptr) continue;
+        /* A second handle on the same driver allocation, opened on the other
+         * device with the *creating* device's bytes - which is exactly what
+         * dxgkrnl carries between two processes. */
+        slot.driver = created->driver;
+        slot.bytes = created->bytes;
+        slot.private_size = created->private_size;
+        slot.opened_only = true;
+        std::memcpy(slot.private_data, created->private_data, created->private_size);
+        slot.handle = handles_.insert(slot.driver);
+        if (slot.handle == 0u) {
+            std::memset(static_cast<void *>(&slot), 0, sizeof slot);
+            return refuse(Status::no_space);
+        }
+        slot.device = device;
+        const Status opened = open_on(slot, opener->driver);
+        if (opened != Status::ok) {
+            handles_.remove(slot.handle);
+            std::memset(static_cast<void *>(&slot), 0, sizeof slot);
+            return opened;
+        }
+        std::memcpy(private_data, created->private_data, created->private_size);
+        written = created->private_size;
+        allocation = slot.handle;
+        return refuse(Status::ok);
+    }
+    return refuse(Status::no_space);
 }
 
-Status DdiKmt::close_shared_object(std::uint64_t)
+Status DdiKmt::close_shared_object(std::uint64_t handle)
 {
-    return Status::not_supported;
+    SharedHandle *const row = find_shared(handle);
+    if (row == nullptr) return refuse(Status::invalid_parameter);
+    *row = SharedHandle{};
+    return refuse(Status::ok);
 }
 
 }  // namespace av

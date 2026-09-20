@@ -1,5 +1,13 @@
 #include "icd/vulkan/icd_root.hpp"
 
+#include "guest/transport/shared_object_call.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
+
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -16,6 +24,7 @@
 #include "icd/common/sliced_wait.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
+#include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/generated/vulkan/vk_icd_entries.h"
 #include "proto/wire/foreign_enum.hpp"
 
@@ -155,7 +164,7 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
      * external-property queries - because nothing here turns a Direct3D object
      * into a host one. */
     {"VK_KHR_external_memory_win32", 1u,
-            "icd_external_handles.a_handle_exported_is_imported_as_a_fresh_fd_of_what_it_names",
+            "icd_external_handles.a_handle_exported_is_opened_by_the_device_on_import",
             "VK_KHR_external_memory_fd"},
     {"VK_KHR_external_semaphore_win32", 1u,
             "icd_external_handles.a_semaphore_handle_becomes_the_host_s_own_fd_import",
@@ -202,7 +211,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
       entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock),
-      externals_(lock),
+      externals_(lock), shared_handles_(kmt, lock),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
       semaphore_handles_(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -505,21 +514,173 @@ void IcdRoot::destroy_descriptor_update_template(VkDevice device, VkDescriptorUp
     vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, made, allocator);
 }
 
+uint64_t IcdRoot::shared_bytes(uint64_t size) const
+{
+    AV_SCOPE("IcdRoot::shared_bytes");
+    constexpr uint64_t page = SharedObjectRecord::page_size;
+    if (size == 0u || size > ~uint64_t{0} - (page - 1u)) return 0u;
+    return (size + page - 1u) & ~(page - 1u);
+}
+
+/* 047's path, unchanged in what it does: a fresh fd of the memory this process
+ * holds, imported on the asking device as the host's own structure. The fd is
+ * asked for each time, because a driver takes ownership of one it imports. */
+VkResult IcdRoot::own_process_allocation(LoaderHandle &made, VkDevice device,
+                                         const ExternalObjectSlot &holder, const VkMemoryAllocateInfo &info,
+                                         const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
+{
+    AV_SCOPE("IcdRoot::own_process_allocation");
+    int            fd = -1;
+    const VkResult shared = host_memory_fd(made, holder.device_, holder.memory_, fd);
+    if (shared != VK_SUCCESS) return shared;
+    /* The application's own request, with the import node in the Win32 one's
+     * place: its size and above all its memory type index are what the driver
+     * is asked for, and an import into another type is not this memory. */
+    MemoryAllocateChain chain;
+    const Status        built = chain.take(info, memory_handles_, fd);
+    if (built != Status::ok) {
+        note("vkAllocateMemory: the chain of an imported allocation is not one this driver can send, status",
+             static_cast<uint64_t>(built));
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    return vkproto::rvk_vkAllocateMemory(made.connection()->transport(), device, chain.forwarded(), allocator,
+                                         &memory);
+}
+
+VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, uint64_t size,
+                          VkDeviceMemory memory, VkSemaphore semaphore)
+{
+    AV_SCOPE("IcdRoot::publish");
+    const uint32_t guest_device = made.connection()->device();
+    /* One page, and its pages are never read. What is shared is the host
+     * object; this exists only because dxgkrnl mints an identity over an
+     * allocation and there is no guest allocation of host memory at all. */
+    uint8_t carrier_data[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
+    static_cast<void>(AllocationDescriptor(AllocationKind::client, true, SurfaceLayout(),
+                                           SharedObjectRecord::page_size, ScanoutTarget())
+                          .encode(carrier_data, AllocationDescriptor::encoded_size));
+    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(kind), 0u, size)
+                          .encode(carrier_data + AllocationDescriptor::encoded_size,
+                                  SharedObjectRecord::encoded_size));
+    uint32_t     carrier = 0u;
+    const Status created =
+        kmt_.create_shared_allocation(guest_device, carrier_data, sizeof carrier_data, carrier);
+    if (created != Status::ok) {
+        note("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS",
+             kmt_.last_code());
+        return VK_ERROR_TOO_MANY_OBJECTS;
+    }
+    ScopeExit             unwind([&] { static_cast<void>(kmt_.destroy_allocation(guest_device, carrier)); });
+    SharedObjectRecord    minted;
+    if (minted.decode(carrier_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
+            Status::ok ||
+        !minted.assigned()) {
+        log_.write("rvkvk: the miniport minted no identity into a shared object's carrier");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    /* Published before the handle is minted: a handle naming an object the
+     * device does not hold is one an opening process would follow to nothing. */
+    SharedObjectCall     call(made.connection()->transport());
+    const uint64_t       wire_handle = memory != VK_NULL_HANDLE ? vkproto::handle_to_wire(memory)
+                                                                : vkproto::handle_to_wire(semaphore);
+    const Status         published = call.share(minted.object_id(), kind, size, wire_handle);
+    if (published != Status::ok) {
+        note("vkAllocateMemory: the device would not publish a shared object, status", call.device_status());
+        return VK_ERROR_TOO_MANY_OBJECTS;
+    }
+    uint64_t     handle = 0u;
+    const Status shared = shared_handles_.mint(guest_device, carrier, minted.object_id(), handle);
+    if (shared != Status::ok) {
+        note("vkAllocateMemory: no NT handle for a shared object, NTSTATUS", kmt_.last_code());
+        static_cast<void>(call.release(minted.object_id(), kind, size));
+        return VK_ERROR_TOO_MANY_OBJECTS;
+    }
+    if (!externals_.remember(device, memory, semaphore, minted.object_id(), size, handle, carrier)) {
+        shared_handles_.forget(handle);
+        static_cast<void>(call.release(minted.object_id(), kind, size));
+        return VK_ERROR_TOO_MANY_OBJECTS;
+    }
+    unwind.dismiss();
+    return VK_SUCCESS;
+}
+
+uint64_t IcdRoot::object_of(LoaderHandle &made, void *handle)
+{
+    AV_SCOPE("IcdRoot::object_of");
+    const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
+    uint64_t       object_id = 0u;
+    if (shared_handles_.resolve(named, object_id)) return object_id;
+    /* Not one of this process's: the kernel is asked whether it may open it,
+     * which is the only thing that can tell a handle another process sent from
+     * a number an application invented. */
+    const Status adopted = shared_handles_.adopt(made.connection()->device(), named, object_id);
+    if (adopted == Status::ok) return object_id;
+    note("a Win32 handle this process may not open, NTSTATUS", kmt_.last_code());
+    return 0u;
+}
+
+void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
+{
+    AV_SCOPE("IcdRoot::release_shared");
+    const uint32_t kind = row.memory_ != VK_NULL_HANDLE ? SharedObjectKind::memory
+                                                        : SharedObjectKind::monitored_fence;
+    const uint64_t size = row.memory_ != VK_NULL_HANDLE ? row.size_ : 0u;
+    SharedObjectCall call(made.connection()->transport());
+    static_cast<void>(call.release(row.object_id_, kind, size));
+    shared_handles_.forget(row.handle_);
+    /* Only a carrier this process made: an object it opened was minted into
+     * somebody else's allocation, and SharedHandles destroyed the one its own
+     * open created. */
+    if (row.carrier_ != 0u)
+        static_cast<void>(kmt_.destroy_allocation(made.connection()->device(), row.carrier_));
+}
+
+/* Nothing is asked of the host or the kernel here. The identity and the NT
+ * handle were made when the object was created, because Vulkan promises that a
+ * handle to memory an application declared exportable can be got afterwards
+ * without failing for want of resources - so the refusal belongs at the
+ * allocate, where the application can still act on it (feature 053). */
 VkResult IcdRoot::export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle)
 {
     AV_SCOPE("IcdRoot::export_memory_handle");
-    if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    /* Nothing is asked of the host: the fd it shares by is asked for at the
-     * import, because a driver takes ownership of one it imports. */
-    return externals_.export_memory(device, request, handle);
+    if (allocating_device(device) == nullptr || request == nullptr || handle == nullptr)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (foreign_enum(request->type_) != static_cast<int32_t>(memory_get_win32_handle_info) ||
+        request->handle_type_ != opaque_win32_memory)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    const uint64_t named = externals_.handle_of_memory(request->memory_);
+    if (named == 0u) {
+        log_.write("rvkvk: vkGetMemoryWin32HandleKHR names memory this process never declared exportable");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    *handle = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
+    return VK_SUCCESS;
 }
 
 VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin32HandleRecord *request,
                                           void **handle)
 {
     AV_SCOPE("IcdRoot::export_semaphore_handle");
-    if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    return externals_.export_semaphore(device, request, handle);
+    if (allocating_device(device) == nullptr || request == nullptr || handle == nullptr)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (foreign_enum(request->type_) != static_cast<int32_t>(semaphore_get_win32_handle_info) ||
+        request->handle_type_ != opaque_win32_semaphore)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    LoaderHandle *const made = allocating_device(device);
+    /* A semaphore is published the first time a handle to it is asked for:
+     * unlike memory, nothing in its creation says it will be shared. */
+    uint64_t named = externals_.handle_of_semaphore(request->semaphore_);
+    if (named == 0u) {
+        if (request->semaphore_ == VK_NULL_HANDLE) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+        if (lost(*made->connection(), "vkGetSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
+        const VkResult published =
+            publish(*made, device, SharedObjectKind::monitored_fence, 0u, VK_NULL_HANDLE,
+                    request->semaphore_);
+        if (published != VK_SUCCESS) return published;
+        named = externals_.handle_of_semaphore(request->semaphore_);
+    }
+    *handle = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
+    return VK_SUCCESS;
 }
 
 VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)
@@ -560,10 +721,31 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     if (lost(*made->connection(), "vkImportSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
-    VkDevice          owner = VK_NULL_HANDLE;
-    const VkSemaphore exported = externals_.imported_semaphore(request, owner);
+    if (request == nullptr || request->name_ != nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (foreign_enum(request->type_) != static_cast<int32_t>(import_semaphore_win32_handle_info) ||
+        request->handle_type_ != opaque_win32_semaphore)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    const uint64_t object_id = object_of(*made, request->handle_);
+    if (object_id == 0u) {
+        log_.write("rvkvk: vkImportSemaphoreWin32HandleKHR names a handle this process may not open");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    /* Vulkan imports a payload into a semaphore the application already made,
+     * and OPEN_SHARED_OBJECT answers a semaphore the *device* made - there is
+     * no field on that command for "into this one". So an object this process
+     * published is imported the way 047 did it, from a fresh fd of the
+     * semaphore this process holds; one published by another process has no
+     * path yet and is refused rather than half-served (feature 053, T031). */
+    ExternalObjectSlot holder = {};
+    VkDevice           owner = VK_NULL_HANDLE;
+    VkSemaphore        exported = VK_NULL_HANDLE;
+    if (externals_.holder_of(object_id, holder) && holder.semaphore_ != VK_NULL_HANDLE) {
+        owner = holder.device_;
+        exported = holder.semaphore_;
+    }
     if (exported == VK_NULL_HANDLE) {
-        log_.write("rvkvk: vkImportSemaphoreWin32HandleKHR names a handle this driver did not export");
+        log_.write("rvkvk: vkImportSemaphoreWin32HandleKHR of a semaphore another process published needs "
+                   "a device-side import, which the executor ABI has no call for");
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     int            fd = -1;
@@ -581,7 +763,9 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
 void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_semaphore");
-    externals_.forget_semaphore(semaphore);
+    LoaderHandle *const made = allocating_device(device);
+    ExternalObjectSlot  row = {};
+    if (made != nullptr && externals_.take_semaphore(semaphore, row)) release_shared(*made, row);
     vkicd::generated::Wrap_vkDestroySemaphore(device, semaphore, allocator);
 }
 
@@ -671,36 +855,89 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
                                     const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
 {
     AV_SCOPE("IcdRoot::shared_allocation");
+    const uint64_t size = shared_bytes(info.allocationSize);
+    if (size == 0u) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     const ImportMemoryWin32HandleRecord *const importing = imported_memory_record(info.pNext);
-    int                                        fd = -1;
-    if (importing != nullptr) {
-        VkDevice             owner = VK_NULL_HANDLE;
-        const VkDeviceMemory exported = externals_.imported_memory(importing, owner);
-        if (exported == VK_NULL_HANDLE) {
-            log_.write("rvkvk: vkAllocateMemory names a handle this driver did not export");
-            return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-        }
-        const VkResult shared = host_memory_fd(made, owner, exported, fd);
-        if (shared != VK_SUCCESS) return shared;
-    }
+    if (importing != nullptr)
+        return imported_allocation(made, device, *importing, info, allocator, size, memory);
     MemoryAllocateChain chain;
-    const Status        built = chain.take(info, memory_handles_, fd);
+    const Status        built = chain.take(info, memory_handles_, -1);
     if (built != Status::ok) {
         note("vkAllocateMemory: the chain of a shared allocation is not one this driver can send, status",
              static_cast<uint64_t>(built));
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    return vkproto::rvk_vkAllocateMemory(made.connection()->transport(), device, chain.forwarded(), allocator,
-                                         &memory);
+    const VkResult allocated = vkproto::rvk_vkAllocateMemory(made.connection()->transport(), device,
+                                                             chain.forwarded(), allocator, &memory);
+    if (allocated != VK_SUCCESS) return allocated;
+    /* Declared exportable, so the identity is minted now: Vulkan promises the
+     * handle can be got later without failing for want of resources, and a
+     * memory nobody shares is never given one (feature 053, T031). */
+    const VkResult published = publish(made, device, SharedObjectKind::memory, size, memory, VK_NULL_HANDLE);
+    if (published == VK_SUCCESS) return VK_SUCCESS;
+    vkproto::rvk_vkFreeMemory(made.connection()->transport(), device, memory, allocator);
+    memory = VK_NULL_HANDLE;
+    return published;
+}
+
+/* Memory a Win32 handle names, imported into another device of this process or
+ * opened from another process entirely (feature 053, T031).
+ *
+ * The two are different paths on purpose. Every device of one process shares
+ * one guest context, and a context that publishes an object may not open it
+ * again - a second handle for one object in one context is one the guest could
+ * free twice. So an object this process published is imported the way 047 did
+ * it, from a fresh fd of the memory this process holds, which gives the second
+ * VkDevice a VkDeviceMemory of its own. An object another process published
+ * has no such memory here, and is opened on the device. */
+VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
+                                      const ImportMemoryWin32HandleRecord &importing,
+                                      const VkMemoryAllocateInfo &info,
+                                      const VkAllocationCallbacks *allocator, uint64_t size,
+                                      VkDeviceMemory &memory)
+{
+    AV_SCOPE("IcdRoot::imported_allocation");
+    if (importing.name_ != nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (importing.handle_type_ != opaque_win32_memory) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    const uint64_t object_id = object_of(made, importing.handle_);
+    if (object_id == 0u) {
+        log_.write("rvkvk: vkAllocateMemory names a Win32 handle this process may not open");
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    ExternalObjectSlot holder = {};
+    if (externals_.holder_of(object_id, holder) && holder.memory_ != VK_NULL_HANDLE)
+        return own_process_allocation(made, device, holder, info, allocator, memory);
+    SharedObjectCall call(made.connection()->transport());
+    uint64_t         opened = 0u;
+    const Status     answered = call.open(object_id, SharedObjectKind::memory, size, opened);
+    if (answered != Status::ok) {
+        note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    if (!vkproto::wire_to_handle(opened, memory)) {
+        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
+                             static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
+        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
+        memory = VK_NULL_HANDLE;
+        return VK_ERROR_TOO_MANY_OBJECTS;
+    }
+    return VK_SUCCESS;
 }
 
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("IcdRoot::destroy_device");
     templates_.forget_device(device);
-    externals_.forget_device(device);
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
+    /* A process that exits holding everything leaves nothing: each object's
+     * reference on the device, its NT handle and its carrier are given back
+     * before the device that owns them goes (feature 053, T033). */
+    ExternalObjectSlot row = {};
+    while (externals_.take_any_of_device(device, row)) release_shared(*made, row);
     /* A swapchain frees its memory through the device: before the device's own. */
     presentation_.forget_device(device);
     release_device_memory(*made);
@@ -814,7 +1051,15 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
     memory_lock_.acquire();
-    ScopeExit           release([&] { memory_lock_.release(); });
+    ScopeExit          release([&] { memory_lock_.release(); });
+    ExternalObjectSlot row = {};
+    if (externals_.take_memory(memory, row)) {
+        release_shared(*made, row);
+        /* Memory this process opened was made by the device inside the open
+         * and destroyed by the release; only memory it allocated itself is
+         * still the host's to free. */
+        if (row.carrier_ == 0u) return;
+    }
     DeviceMemory *const owned = memory_of(*made);
     if (owned != nullptr) owned->free(device, memory, allocator);
 }

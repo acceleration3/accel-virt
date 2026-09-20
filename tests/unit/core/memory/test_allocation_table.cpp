@@ -418,12 +418,20 @@ TEST(allocation_table_create, refuses_a_record_that_does_not_decode_and_leaves_n
   CHECK_EQ(fixture.shared().live(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
-TEST(allocation_table_create, refuses_a_record_whose_size_is_not_the_allocations)
+/* The size a record declares is the object's, which need not be the
+ * allocation's: an ICD sharing host memory has no guest allocation of it and
+ * asks for an identity over a one-page carrier (feature 053, T031). What the
+ * allocation still owns is the identity's lifetime. */
+TEST(allocation_table_create, a_record_may_name_an_object_bigger_than_the_allocation_carrying_it)
 { Fixture fixture;
   fixture.ask_to_share(0u, 8192u);   /* the descriptor rounds to one page */
-  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
-  CHECK_EQ(fixture.table().live(), 0u);
-  CHECK_EQ(fixture.shared().live(), 0u); }
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK_EQ(fixture.table().live(), 1u);
+  CHECK_EQ(fixture.shared().live(), 1u);
+  const av::SharedObjectRecord record = fixture.minted(0u);
+  CHECK(record.assigned());
+  CHECK_EQ(record.size(), 8192u);
+  CHECK(fixture.table().invariants_hold()); }
 
 TEST(allocation_table_create, unwinds_the_identity_of_an_earlier_allocation_when_a_later_one_fails)
 { Fixture fixture;

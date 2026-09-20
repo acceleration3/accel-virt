@@ -1,11 +1,12 @@
-/* The Win32 handles this process exported, and what an import may follow
- * (feature 047, US3, contracts/external_objects.md).
+/* The host objects this process shares, and the identities they were published
+ * under (feature 047 US3, feature 053 US2).
  *
- * A handle here is the ICD's own, so every refusal matters: a handle this
- * process did not export, a named one - a name is what another process would
- * open - and a handle type this path does not answer. The records the
- * application fills in are Windows structures portable code cannot declare, so
- * they are read as layouts, and their fields are hostile.
+ * Since 053 a handle is an NT handle the kernel minted, and whether it is one
+ * this process may follow is `icd::SharedHandles`' question. What is left here
+ * is the ICD's own bookkeeping, and every test asks the same thing of it: does
+ * a row still name exactly one object, and does what a free is handed carry
+ * enough to release everything that object cost - the device's reference, the
+ * NT handle, and the carrier allocation nothing else knows about.
  */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
@@ -16,341 +17,241 @@
 
 namespace av::icd {
 
-/* The states no export can leave a slot in, which is what makes each clause of
- * the invariant worth stating. */
+/* The states no remember can leave a slot in, which is what makes each clause
+ * of the invariant worth stating. */
 struct ExternalObjectsProbe {
     static ExternalObjectSlot &slot(ExternalObjects &objects, std::uint32_t index)
-    {
-        return objects.slots_[index];
-    }
-    static void both_kinds_at_once(ExternalObjects &objects)
-    {
-        slot(objects, 0u).semaphore_ = reinterpret_cast<VkSemaphore>(0x9999u);
-    }
-    static void neither_kind(ExternalObjects &objects) { slot(objects, 0u).memory_ = VK_NULL_HANDLE; }
-    static void an_object_in_an_empty_slot(ExternalObjects &objects)
-    {
-        slot(objects, 1u).memory_ = reinterpret_cast<VkDeviceMemory>(0x9998u);
-    }
-    static void a_semaphore_in_an_empty_slot(ExternalObjects &objects)
-    {
-        slot(objects, 1u).semaphore_ = reinterpret_cast<VkSemaphore>(0x9997u);
-    }
-    static void the_same_memory_twice(ExternalObjects &objects) { slot(objects, 1u) = slot(objects, 0u); }
+    { return objects.slots_[index]; }
 };
 
 }  // namespace av::icd
 
-using av::LockTrace;
-using av::RecordingThreadLock;
-using av::icd::ExternalObjects;
-using av::icd::ExternalObjectsProbe;
-using av::icd::ImportMemoryWin32HandleRecord;
-using av::icd::ImportSemaphoreWin32HandleRecord;
-using av::icd::MemoryGetWin32HandleRecord;
-using av::icd::SemaphoreGetWin32HandleRecord;
-
 namespace {
 
-VkDevice const       device = reinterpret_cast<VkDevice>(0x9010u);
-VkDevice const       second_device = reinterpret_cast<VkDevice>(0x9020u);
-VkDeviceMemory const memory = reinterpret_cast<VkDeviceMemory>(0x9110u);
-VkDeviceMemory const other_memory = reinterpret_cast<VkDeviceMemory>(0x9120u);
-VkSemaphore const    semaphore = reinterpret_cast<VkSemaphore>(0x9210u);
+using av::icd::ExternalObjects;
+using av::icd::ExternalObjectSlot;
+using av::icd::ExternalObjectsProbe;
 
-MemoryGetWin32HandleRecord memory_export(VkDeviceMemory which)
-{
-    MemoryGetWin32HandleRecord request = {};
-    request.type_ = av::icd::memory_get_win32_handle_info;
-    request.memory_ = which;
-    request.handle_type_ = av::icd::opaque_win32_memory;
-    return request;
-}
+VkDevice device_at(std::uint64_t value) { return reinterpret_cast<VkDevice>(value); }
+VkDeviceMemory memory_at(std::uint64_t value) { return reinterpret_cast<VkDeviceMemory>(value); }
+VkSemaphore semaphore_at(std::uint64_t value) { return reinterpret_cast<VkSemaphore>(value); }
 
-ImportMemoryWin32HandleRecord memory_import(void *handle)
-{
-    ImportMemoryWin32HandleRecord request = {};
-    request.type_ = av::icd::import_memory_win32_handle_info;
-    request.handle_type_ = av::icd::opaque_win32_memory;
-    request.handle_ = handle;
-    return request;
-}
+constexpr std::uint64_t first_id = 0x1111u;
+constexpr std::uint64_t first_handle = 0x8000'0000'0000'0004ull;
+constexpr std::uint32_t carrier = 0x4000'0010u;
+/* Memory is shared in whole pages and a fence in none, which is the wire
+ * body's rule and so this table's. */
+constexpr std::uint64_t object_bytes = 4u * 4096u;
 
-SemaphoreGetWin32HandleRecord semaphore_export(VkSemaphore which)
-{
-    SemaphoreGetWin32HandleRecord request = {};
-    request.type_ = av::icd::semaphore_get_win32_handle_info;
-    request.semaphore_ = which;
-    request.handle_type_ = av::icd::opaque_win32_semaphore;
-    return request;
-}
-
-ImportSemaphoreWin32HandleRecord semaphore_import(void *handle)
-{
-    ImportSemaphoreWin32HandleRecord request = {};
-    request.type_ = av::icd::import_semaphore_win32_handle_info;
-    request.handle_type_ = av::icd::opaque_win32_semaphore;
-    request.handle_ = handle;
-    return request;
-}
-
-class Exported {
+/* One table under a recording lock, which fails the test if a call nests or
+ * leaves the lock held. */
+class Table {
 public:
-    Exported() : lock_(trace_, 'X'), objects_(lock_) {}
-    Exported(const Exported &) = delete;
-    Exported &operator=(const Exported &) = delete;
-
-    ExternalObjects     &objects() { return objects_; }
-    RecordingThreadLock &lock() { return lock_; }
+    Table() : trace_(), lock_(trace_, 'E'), objects_(lock_) {}
+    ExternalObjects &objects() { return objects_; }
+    av::RecordingThreadLock &lock() { return lock_; }
 
 private:
-    LockTrace           trace_;
-    RecordingThreadLock lock_;
-    ExternalObjects     objects_;
+    av::LockTrace           trace_;
+    av::RecordingThreadLock lock_;
+    ExternalObjects         objects_;
 };
 
 }  // namespace
 
-/* US3 scenario 1, the guest half: a handle exported for one device is the
- * memory another device in the same process imports. */
-TEST(external_objects, a_handle_exported_names_the_memory_an_import_follows)
-{ VkDevice owner = VK_NULL_HANDLE;
-  Exported held;
-  CHECK(held.objects().invariants_hold());
-  CHECK_EQ(held.objects().live(), 0u);
-  void *handle = nullptr;
-  const MemoryGetWin32HandleRecord request = memory_export(memory);
-  CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_SUCCESS);
-  CHECK(handle != nullptr);
-  CHECK_EQ(held.objects().live(), 1u);
-  CHECK(held.objects().invariants_hold());
-  /* The second device imports it and gets the same memory. */
-  const ImportMemoryWin32HandleRecord importing = memory_import(handle);
-  CHECK(held.objects().imported_memory(&importing, owner) == memory);
-  /* And names the device it was exported for, which is what a fresh fd of the
-   * memory is asked of (feature 047, US3). */
-  CHECK(owner == device);
-  /* The same memory exported again is the same handle: one object, one
-   * handle, as Windows has it. */
-  void *again = nullptr;
-  CHECK_EQ(held.objects().export_memory(second_device, &request, &again), VK_SUCCESS);
-  CHECK(again == handle);
-  CHECK_EQ(held.objects().live(), 1u);
-  /* Every answer took the lock and gave it back. */
-  CHECK(!held.lock().held());
-  CHECK(held.lock().acquisitions() > 0u); }
+TEST(external_objects, a_new_table_names_nothing)
+{ Table table;
+  CHECK_EQ(table.objects().live(), 0u);
+  CHECK_EQ(table.objects().handle_of_memory(memory_at(1u)), 0u);
+  CHECK_EQ(table.objects().handle_of_memory(VK_NULL_HANDLE), 0u);
+  CHECK_EQ(table.objects().handle_of_semaphore(semaphore_at(1u)), 0u);
+  CHECK_EQ(table.objects().handle_of_semaphore(VK_NULL_HANDLE), 0u);
+  ExternalObjectSlot row = {};
+  CHECK(!table.objects().take_memory(memory_at(1u), row));
+  CHECK(!table.objects().take_semaphore(semaphore_at(1u), row));
+  CHECK(!table.objects().take_any_of_device(device_at(1u), row));
+  CHECK(!table.objects().take_any_of_device(VK_NULL_HANDLE, row));
+  CHECK(table.objects().invariants_hold()); }
 
-/* A semaphore is the same story, and the two kinds do not answer for each
- * other: a memory handle imported as a semaphore is nothing. */
-TEST(external_objects, a_semaphore_handle_is_a_semaphore_and_not_a_memory)
-{ VkDevice owner = VK_NULL_HANDLE;
-  Exported held;
-  void    *memory_handle = nullptr;
-  void    *semaphore_handle = nullptr;
-  const MemoryGetWin32HandleRecord    exporting_memory = memory_export(memory);
-  const SemaphoreGetWin32HandleRecord exporting_semaphore = semaphore_export(semaphore);
-  CHECK_EQ(held.objects().export_memory(device, &exporting_memory, &memory_handle), VK_SUCCESS);
-  CHECK_EQ(held.objects().export_semaphore(device, &exporting_semaphore, &semaphore_handle), VK_SUCCESS);
-  CHECK(memory_handle != semaphore_handle);
-  CHECK_EQ(held.objects().live(), 2u);
-  const ImportSemaphoreWin32HandleRecord importing_semaphore = semaphore_import(semaphore_handle);
-  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == semaphore);
-  const ImportMemoryWin32HandleRecord importing_memory = memory_import(memory_handle);
-  CHECK(held.objects().imported_memory(&importing_memory, owner) == memory);
-  /* Crossed: a semaphore's handle names no memory, and the other way round. */
-  const ImportMemoryWin32HandleRecord memory_from_semaphore = memory_import(semaphore_handle);
-  CHECK(held.objects().imported_memory(&memory_from_semaphore, owner) == VK_NULL_HANDLE);
-  /* A handle that names nothing names no device either. */
-  CHECK(owner == VK_NULL_HANDLE);
-  const ImportSemaphoreWin32HandleRecord semaphore_from_memory = semaphore_import(memory_handle);
-  CHECK(held.objects().imported_semaphore(&semaphore_from_memory, owner) == VK_NULL_HANDLE);
-  CHECK(held.objects().invariants_hold()); }
+TEST(external_objects_remember, an_exported_memory_answers_its_handle_and_carries_its_carrier)
+{ Table table;
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x20u), VK_NULL_HANDLE, first_id, object_bytes, first_handle, carrier));
+  CHECK_EQ(table.objects().live(), 1u);
+  CHECK_EQ(table.objects().handle_of_memory(memory_at(0x20u)), first_handle);
+  /* The two name spaces are separate: a semaphore of the same number is not
+   * this row. */
+  CHECK_EQ(table.objects().handle_of_semaphore(semaphore_at(0x20u)), 0u);
+  CHECK(table.objects().invariants_hold());
+  ExternalObjectSlot row = {};
+  CHECK(table.objects().take_memory(memory_at(0x20u), row));
+  CHECK(row.device_ == device_at(1u));
+  CHECK(row.memory_ == memory_at(0x20u));
+  CHECK(row.semaphore_ == VK_NULL_HANDLE);
+  CHECK_EQ(row.object_id_, first_id);
+  CHECK_EQ(row.handle_, first_handle);
+  CHECK_EQ(row.carrier_, carrier);
+  CHECK_EQ(table.objects().live(), 0u);
+  CHECK(table.objects().invariants_hold()); }
 
-/* Every refusal of contracts/external_objects.md, on the export side. */
-TEST(external_objects, an_export_it_cannot_answer_is_refused)
-{ Exported held;
-  void    *handle = reinterpret_cast<void *>(1);
-  MemoryGetWin32HandleRecord request = memory_export(memory);
-  /* A record that is not one: another structure's type in the same place. */
-  request.type_ = static_cast<VkStructureType>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-  CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  /* A type field that is not a structure type at all. */
-  request.type_ = static_cast<VkStructureType>(0x7FFFFFFF);
-  CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  request = memory_export(memory);
-  /* Handle types this path does not answer: the KMT one, a D3D texture, none
-   * at all, and two at once. */
-  const VkFlags refused[] = {0x00000004u, 0x00000008u, 0u,
-                             av::icd::opaque_win32_memory | 0x00000004u, 0xFFFFFFFFu};
-  for (const VkFlags type : refused) {
-      request.handle_type_ = type;
-      CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+/* An object this process opened has no carrier: the identity was minted in
+ * whichever process created it, and destroying that allocation is not this
+ * one's business. */
+TEST(external_objects_remember, an_opened_object_carries_no_carrier)
+{ Table table;
+  CHECK(table.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(0x30u), first_id, 0u, first_handle, 0u));
+  CHECK_EQ(table.objects().handle_of_semaphore(semaphore_at(0x30u)), first_handle);
+  ExternalObjectSlot row = {};
+  CHECK(table.objects().take_semaphore(semaphore_at(0x30u), row));
+  CHECK_EQ(row.carrier_, 0u);
+  CHECK(row.semaphore_ == semaphore_at(0x30u));
+  CHECK(row.memory_ == VK_NULL_HANDLE); }
+
+TEST(external_objects_remember, refuses_every_row_that_would_name_nothing_or_two_things)
+{ Table table;
+  /* No device, neither object, both objects, no id, no handle. */
+  CHECK(!table.objects().remember(VK_NULL_HANDLE, memory_at(1u), VK_NULL_HANDLE, first_id, object_bytes, first_handle, 0u));
+  CHECK(!table.objects().remember(device_at(1u), VK_NULL_HANDLE, VK_NULL_HANDLE, first_id, 0u, first_handle, 0u));
+  CHECK(!table.objects().remember(device_at(1u), memory_at(1u), semaphore_at(1u), first_id, object_bytes, first_handle, 0u));
+  CHECK(!table.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, 0u, object_bytes, first_handle, 0u));
+  CHECK(!table.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, first_id, object_bytes, 0u, 0u));
+  CHECK_EQ(table.objects().live(), 0u);
+  /* One object is shared once: a second row for it would be a second handle
+   * the application could free twice. */
+  CHECK(table.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, first_id, object_bytes, first_handle, 0u));
+  CHECK(!table.objects().remember(device_at(2u), memory_at(1u), VK_NULL_HANDLE, first_id + 1u, object_bytes, first_handle + 4u, 0u));
+  CHECK_EQ(table.objects().live(), 1u);
+  CHECK(table.objects().invariants_hold()); }
+
+TEST(external_objects, fills_up_and_then_remembers_nothing_more)
+{ Table table;
+  for (std::uint32_t i = 1u; i <= ExternalObjects::max_objects; i++)
+      CHECK(table.objects().remember(device_at(1u), memory_at(i), VK_NULL_HANDLE, first_id + i, object_bytes, first_handle + i * 4u, 0u));
+  CHECK_EQ(table.objects().live(), ExternalObjects::max_objects);
+  CHECK(!table.objects().remember(device_at(1u), memory_at(0x9999u), VK_NULL_HANDLE, 0x9999u, object_bytes, 0x9999u, 0u));
+  CHECK(table.objects().invariants_hold());
+  ExternalObjectSlot row = {};
+  CHECK(table.objects().take_memory(memory_at(1u), row));
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x9999u), VK_NULL_HANDLE, 0x9999u, object_bytes, 0x9999u, 0u));
+  CHECK(table.objects().invariants_hold()); }
+
+/* A device destroyed hands back every row it held, once each, so a teardown
+ * can release each object rather than leak the device's reference to it. */
+TEST(external_objects_take_any_of_device, hands_back_every_row_of_that_device_and_no_others)
+{ Table table;
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x10u), VK_NULL_HANDLE, 1u, object_bytes, first_handle, 7u));
+  CHECK(table.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(0x11u), 2u, 0u, first_handle + 4u, 0u));
+  CHECK(table.objects().remember(device_at(2u), memory_at(0x12u), VK_NULL_HANDLE, 3u, object_bytes, first_handle + 8u, 9u));
+  ExternalObjectSlot row = {};
+  std::uint32_t      seen = 0u;
+  std::uint32_t      carriers = 0u;
+  while (table.objects().take_any_of_device(device_at(1u), row)) {
+      CHECK(row.device_ == device_at(1u));
+      seen++;
+      carriers += row.carrier_;
+      CHECK(table.objects().invariants_hold());
   }
-  request.handle_type_ = av::icd::opaque_win32_memory;
-  /* Nothing to export, nowhere to put the handle, no device. */
-  request.memory_ = VK_NULL_HANDLE;
-  CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  request.memory_ = memory;
-  CHECK_EQ(held.objects().export_memory(device, &request, nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(held.objects().export_memory(device, nullptr, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(held.objects().export_memory(VK_NULL_HANDLE, &request, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  /* The same for a semaphore's export, refusal by refusal. */
-  SemaphoreGetWin32HandleRecord semaphore_request = semaphore_export(semaphore);
-  semaphore_request.handle_type_ = 0x00000004u;
-  CHECK_EQ(held.objects().export_semaphore(device, &semaphore_request, &handle),
-           VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  semaphore_request = semaphore_export(semaphore);
-  semaphore_request.type_ = static_cast<VkStructureType>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
-  CHECK_EQ(held.objects().export_semaphore(device, &semaphore_request, &handle),
-           VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  semaphore_request = semaphore_export(VK_NULL_HANDLE);
-  CHECK_EQ(held.objects().export_semaphore(device, &semaphore_request, &handle),
-           VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  semaphore_request = semaphore_export(semaphore);
-  CHECK_EQ(held.objects().export_semaphore(device, &semaphore_request, nullptr),
-           VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(held.objects().export_semaphore(VK_NULL_HANDLE, &semaphore_request, &handle),
-           VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(held.objects().export_semaphore(device, nullptr, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(held.objects().live(), 0u);
-  CHECK(held.objects().invariants_hold()); }
+  CHECK_EQ(seen, 2u);
+  CHECK_EQ(carriers, 7u);
+  CHECK_EQ(table.objects().live(), 1u);
+  CHECK_EQ(table.objects().handle_of_memory(memory_at(0x12u)), first_handle + 8u); }
 
-/* And on the import side, where a wrong answer would hand one application
- * another's memory. */
-TEST(external_objects, an_import_it_did_not_export_follows_nothing)
-{ VkDevice owner = VK_NULL_HANDLE;
-  Exported held;
-  void    *handle = nullptr;
-  const MemoryGetWin32HandleRecord exporting = memory_export(memory);
-  CHECK_EQ(held.objects().export_memory(device, &exporting, &handle), VK_SUCCESS);
-  ImportMemoryWin32HandleRecord importing = memory_import(handle);
-  /* A handle this process did not export. */
-  importing.handle_ = reinterpret_cast<void *>(0x1234u);
-  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
-  importing.handle_ = nullptr;
-  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
-  importing.handle_ = handle;
-  /* A named handle: a name is what another process would open, and
-   * cross-process identity is feature 053's. */
-  const char name[] = "Local\\rvk";
-  importing.name_ = name;
-  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
-  importing.name_ = nullptr;
-  /* A handle type or a structure type this path does not answer. */
-  importing.handle_type_ = 0x00000004u;
-  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
-  importing.handle_type_ = av::icd::opaque_win32_memory;
-  importing.type_ = static_cast<VkStructureType>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
-  CHECK(held.objects().imported_memory(&importing, owner) == VK_NULL_HANDLE);
-  CHECK(held.objects().imported_memory(nullptr, owner) == VK_NULL_HANDLE);
-  /* The same refusals for a semaphore. */
-  void *semaphore_handle = nullptr;
-  const SemaphoreGetWin32HandleRecord exporting_semaphore = semaphore_export(semaphore);
-  CHECK_EQ(held.objects().export_semaphore(device, &exporting_semaphore, &semaphore_handle), VK_SUCCESS);
-  ImportSemaphoreWin32HandleRecord importing_semaphore = semaphore_import(semaphore_handle);
-  importing_semaphore.name_ = name;
-  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
-  importing_semaphore.name_ = nullptr;
-  importing_semaphore.handle_type_ = 0u;
-  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
-  importing_semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
-  importing_semaphore.type_ = static_cast<VkStructureType>(0x7FFFFFFF);
-  CHECK(held.objects().imported_semaphore(&importing_semaphore, owner) == VK_NULL_HANDLE);
-  CHECK(held.objects().imported_semaphore(nullptr, owner) == VK_NULL_HANDLE);
-  /* A well-formed import of a handle this table never gave out: the lookup
-   * finds no slot at all rather than the nearest one. */
-  ImportSemaphoreWin32HandleRecord stranger = semaphore_import(reinterpret_cast<void *>(0x4321u));
-  CHECK(held.objects().imported_semaphore(&stranger, owner) == VK_NULL_HANDLE);
-  /* What was exported is still there after all of that. */
-  const ImportMemoryWin32HandleRecord good = memory_import(handle);
-  CHECK(held.objects().imported_memory(&good, owner) == memory); }
+TEST(external_objects_invariants, refuse_each_state_a_remember_never_leaves)
+{ Table table;
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x10u), VK_NULL_HANDLE, 1u, object_bytes, first_handle, 0u));
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x11u), VK_NULL_HANDLE, 2u, object_bytes, first_handle + 4u, 0u));
+  CHECK(table.objects().invariants_hold());
+  ExternalObjectSlot &second = ExternalObjectsProbe::slot(table.objects(), 1u);
+  const ExternalObjectSlot whole = second;
 
-/* An object destroyed takes its handle with it, and so does its device: a
- * handle that outlived what it names is one an import could still follow. */
-TEST(external_objects, what_is_destroyed_takes_its_handle_with_it)
-{ VkDevice owner = VK_NULL_HANDLE;
-  Exported held;
-  void    *first = nullptr;
-  void    *second = nullptr;
-  void    *third = nullptr;
-  const MemoryGetWin32HandleRecord    one = memory_export(memory);
-  const MemoryGetWin32HandleRecord    two = memory_export(other_memory);
-  const SemaphoreGetWin32HandleRecord three = semaphore_export(semaphore);
-  CHECK_EQ(held.objects().export_memory(device, &one, &first), VK_SUCCESS);
-  CHECK_EQ(held.objects().export_memory(second_device, &two, &second), VK_SUCCESS);
-  CHECK_EQ(held.objects().export_semaphore(device, &three, &third), VK_SUCCESS);
-  CHECK_EQ(held.objects().live(), 3u);
+  second.semaphore_ = semaphore_at(9u);
+  CHECK(!table.objects().invariants_hold());   /* both kinds at once */
+  second = whole;
+  second.memory_ = VK_NULL_HANDLE;
+  CHECK(!table.objects().invariants_hold());   /* neither kind */
+  second = whole;
+  second.object_id_ = 0u;
+  CHECK(!table.objects().invariants_hold());
+  second = whole;
+  second.handle_ = 0u;
+  CHECK(!table.objects().invariants_hold());
+  second = whole;
+  second.object_id_ = 1u;
+  CHECK(!table.objects().invariants_hold());   /* one id, two rows */
+  second = whole;
+  second.handle_ = first_handle;
+  CHECK(!table.objects().invariants_hold());   /* one handle, two rows */
+  second = whole;
+  second.memory_ = memory_at(0x10u);
+  CHECK(!table.objects().invariants_hold());   /* one object, two rows */
+  second = whole;
+  CHECK(table.objects().invariants_hold());
 
-  held.objects().forget_memory(memory);
-  const ImportMemoryWin32HandleRecord gone = memory_import(first);
-  CHECK(held.objects().imported_memory(&gone, owner) == VK_NULL_HANDLE);
-  CHECK_EQ(held.objects().live(), 2u);
-  /* One it never had, and none at all: neither takes a slot away. */
-  held.objects().forget_memory(memory);
-  held.objects().forget_memory(VK_NULL_HANDLE);
-  held.objects().forget_semaphore(VK_NULL_HANDLE);
-  held.objects().forget_device(VK_NULL_HANDLE);
-  CHECK_EQ(held.objects().live(), 2u);
+  /* And an empty slot holding anything at all. */
+  ExternalObjectSlot &empty = ExternalObjectsProbe::slot(table.objects(), 2u);
+  empty.memory_ = memory_at(0x77u);
+  CHECK(!table.objects().invariants_hold());
+  empty = ExternalObjectSlot{};
+  empty.semaphore_ = semaphore_at(0x77u);
+  CHECK(!table.objects().invariants_hold());
+  empty = ExternalObjectSlot{};
+  empty.object_id_ = 5u;
+  CHECK(!table.objects().invariants_hold());
+  empty = ExternalObjectSlot{};
+  empty.handle_ = 5u;
+  CHECK(!table.objects().invariants_hold());
+  empty = ExternalObjectSlot{};
+  empty.carrier_ = 5u;
+  CHECK(!table.objects().invariants_hold());
+  empty = ExternalObjectSlot{};
+  CHECK(table.objects().invariants_hold()); }
 
-  held.objects().forget_semaphore(semaphore);
-  CHECK_EQ(held.objects().live(), 1u);
-  held.objects().forget_device(second_device);
-  CHECK_EQ(held.objects().live(), 0u);
-  CHECK(held.objects().invariants_hold()); }
+/* Each kind carries its own size, because the wire body demands it: memory in
+ * whole pages, a fence in none. A row that broke that would send a body the
+ * device faults the context for. */
+TEST(external_objects_remember, refuses_a_size_that_is_not_its_kinds)
+{ Table table;
+  CHECK(!table.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, first_id, 0u, first_handle,
+                                  0u));
+  CHECK(!table.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(1u), first_id, object_bytes,
+                                  first_handle, 0u));
+  CHECK_EQ(table.objects().live(), 0u);
+  CHECK(table.objects().remember(device_at(1u), memory_at(1u), VK_NULL_HANDLE, first_id, object_bytes,
+                                 first_handle, 0u));
+  ExternalObjectSlot row = {};
+  CHECK(table.objects().take_memory(memory_at(1u), row));
+  CHECK_EQ(row.size_, object_bytes); }
 
-/* Every slot taken: an export is refused rather than one handle quietly
- * replacing another, which would hand an importer the wrong object. */
-TEST(external_objects, a_table_with_no_room_refuses_an_export)
-{ Exported held;
-  for (std::uint32_t index = 0u; index < ExternalObjects::max_objects; index++) {
-      void                                  *handle = nullptr;
-      const MemoryGetWin32HandleRecord request =
-          memory_export(reinterpret_cast<VkDeviceMemory>(0xA000u + index));
-      CHECK_EQ(held.objects().export_memory(device, &request, &handle), VK_SUCCESS);
-  }
-  CHECK_EQ(held.objects().live(), ExternalObjects::max_objects);
-  void                                  *refused = nullptr;
-  const MemoryGetWin32HandleRecord one_more = memory_export(reinterpret_cast<VkDeviceMemory>(0xB000u));
-  CHECK_EQ(held.objects().export_memory(device, &one_more, &refused), VK_ERROR_TOO_MANY_OBJECTS);
-  CHECK(refused == nullptr);
-  void                                  *semaphore_refused = nullptr;
-  const SemaphoreGetWin32HandleRecord waiting = semaphore_export(semaphore);
-  CHECK_EQ(held.objects().export_semaphore(device, &waiting, &semaphore_refused), VK_ERROR_TOO_MANY_OBJECTS);
-  /* What it already held is intact. */
-  CHECK_EQ(held.objects().live(), ExternalObjects::max_objects);
-  CHECK(held.objects().invariants_hold()); }
+/* What an in-process import follows: the row the identity belongs to. An id
+ * this process never published is one another process did, and answers
+ * nothing rather than somebody else's object. */
+TEST(external_objects_holder_of, finds_the_row_an_identity_belongs_to_and_no_other)
+{ Table              table;
+  ExternalObjectSlot row = {};
+  CHECK(!table.objects().holder_of(0u, row));
+  CHECK(!table.objects().holder_of(first_id, row));
+  CHECK(table.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(0x40u), first_id, 0u,
+                                 first_handle, carrier));
+  CHECK(table.objects().holder_of(first_id, row));
+  CHECK(row.semaphore_ == semaphore_at(0x40u));
+  CHECK(row.device_ == device_at(1u));
+  CHECK_EQ(row.carrier_, carrier);
+  CHECK(!table.objects().holder_of(first_id + 1u, row));
+  /* Taken, it belongs to nobody. */
+  ExternalObjectSlot taken = {};
+  CHECK(table.objects().take_semaphore(semaphore_at(0x40u), taken));
+  CHECK(!table.objects().holder_of(first_id, row)); }
 
-/* Each clause of the invariant refuses the state it names: a slot with both
- * kinds of object or neither, an object in a slot no device owns, and the same
- * memory in two slots - which is what would hand two importers one object
- * through two handles. */
-TEST(external_objects, an_invariant_refuses_each_state_a_slot_cannot_be_in)
-{ const MemoryGetWin32HandleRecord exporting = memory_export(memory);
-  { Exported held;
-    void    *handle = nullptr;
-    CHECK_EQ(held.objects().export_memory(device, &exporting, &handle), VK_SUCCESS);
-    ExternalObjectsProbe::both_kinds_at_once(held.objects());
-    CHECK(!held.objects().invariants_hold()); }
-  { Exported held;
-    void    *handle = nullptr;
-    CHECK_EQ(held.objects().export_memory(device, &exporting, &handle), VK_SUCCESS);
-    ExternalObjectsProbe::neither_kind(held.objects());
-    CHECK(!held.objects().invariants_hold()); }
-  { Exported held;
-    ExternalObjectsProbe::an_object_in_an_empty_slot(held.objects());
-    CHECK(!held.objects().invariants_hold()); }
-  { Exported held;
-    ExternalObjectsProbe::a_semaphore_in_an_empty_slot(held.objects());
-    CHECK(!held.objects().invariants_hold()); }
-  { Exported held;
-    void    *handle = nullptr;
-    CHECK_EQ(held.objects().export_memory(device, &exporting, &handle), VK_SUCCESS);
-    ExternalObjectsProbe::the_same_memory_twice(held.objects());
-    CHECK(!held.objects().invariants_hold()); }
-  { Exported held;
-    void    *handle = nullptr;
-    const SemaphoreGetWin32HandleRecord exporting_semaphore = semaphore_export(semaphore);
-    CHECK_EQ(held.objects().export_semaphore(device, &exporting_semaphore, &handle), VK_SUCCESS);
-    /* A semaphore in two slots is the same mistake the other way round. */
-    ExternalObjectsProbe::the_same_memory_twice(held.objects());
-    CHECK(!held.objects().invariants_hold()); } }
+TEST(external_objects_invariants, refuse_a_row_whose_size_is_not_its_kinds)
+{ Table table;
+  CHECK(table.objects().remember(device_at(1u), memory_at(0x10u), VK_NULL_HANDLE, 1u, object_bytes,
+                                 first_handle, 0u));
+  CHECK(table.objects().invariants_hold());
+  ExternalObjectSlot &only = ExternalObjectsProbe::slot(table.objects(), 0u);
+  only.size_ = 0u;
+  CHECK(!table.objects().invariants_hold());
+  only.size_ = object_bytes;
+  CHECK(table.objects().invariants_hold());
+  /* And an empty slot holding a size. */
+  ExternalObjectSlot &empty = ExternalObjectsProbe::slot(table.objects(), 1u);
+  empty.size_ = object_bytes;
+  CHECK(!table.objects().invariants_hold()); }

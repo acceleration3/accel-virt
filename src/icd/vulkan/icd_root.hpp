@@ -31,7 +31,10 @@
 #include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/icd_entry_lookup.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/external_objects.hpp"
+#include "icd/vulkan/memory_win32_handle_record.hpp"
+#include "icd/vulkan/semaphore_win32_handle_record.hpp"
 #include "icd/vulkan/win32_handle_kind.hpp"
 #include "icd/vulkan/presentation.hpp"
 
@@ -271,6 +274,9 @@ private:
     Presentation           presentation_;
     DescriptorTemplateTable templates_;
     ExternalObjects         externals_;
+    /* The NT handles this process holds for the objects in `externals_`, which
+     * is what makes one of them nameable in another process (feature 053). */
+    SharedHandles           shared_handles_;
     Win32HandleKind         memory_handles_;
     Win32HandleKind         semaphore_handles_;
     /* A fresh fd of an object of `owner`, asked of the host each time an
@@ -286,10 +292,42 @@ private:
     /* Whether an allocation's chain exports or imports a Win32 handle, which
      * is what makes it the host's to allocate whole. */
     bool                    shares_memory(const void *chain) const;
-    /* An allocation that shares memory: the chain rebuilt over the host's own
-     * mechanism, and sent. */
+    /* An allocation that shares memory: imported from a handle, or allocated
+     * on the host and published so another process can open it. */
     VkResult                shared_allocation(LoaderHandle &made, VkDevice device, const VkMemoryAllocateInfo &info,
                                               const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
+    /* Memory this process published, imported into another of its devices the
+     * way 047 did it: a fresh fd, and a VkDeviceMemory of that device's own. */
+    VkResult                own_process_allocation(LoaderHandle &made, VkDevice device,
+                                                   const ExternalObjectSlot &holder,
+                                                   const VkMemoryAllocateInfo &info,
+                                                   const VkAllocationCallbacks *allocator,
+                                                   VkDeviceMemory &memory);
+    /* Memory a Win32 handle names, opened into this context. */
+    VkResult                imported_allocation(LoaderHandle &made, VkDevice device,
+                                                const ImportMemoryWin32HandleRecord &importing,
+                                                const VkMemoryAllocateInfo &info,
+                                                const VkAllocationCallbacks *allocator, uint64_t size,
+                                                VkDeviceMemory &memory);
+    /* An object of this process given an identity another process can name: a
+     * one-page carrier allocation the miniport mints into - the host object
+     * itself has no guest allocation, and the carrier's pages are never read -
+     * the object published on the wire under that id, and an NT handle over
+     * the carrier. Exactly one of `memory` and `semaphore` is set.
+     * VK_ERROR_TOO_MANY_OBJECTS or VK_ERROR_INVALID_EXTERNAL_HANDLE, with
+     * nothing left behind, for every refusal on the way. */
+    VkResult                publish(LoaderHandle &made, VkDevice device, uint32_t kind, uint64_t size,
+                                    VkDeviceMemory memory, VkSemaphore semaphore);
+    /* The object id `handle` names: one this process published, or one another
+     * process sent, which is opened here. 0 for a handle from nowhere. */
+    uint64_t                object_of(LoaderHandle &made, void *handle);
+    /* Everything one row cost, given back: the device's reference to the
+     * object, the NT handle, and the carrier allocation nothing else knows
+     * about. */
+    void                    release_shared(LoaderHandle &made, const ExternalObjectSlot &row);
+    /* The bytes an object of `size` is shared as: whole pages, because the
+     * record and the wire body both demand them. 0 when the rounding wraps. */
+    uint64_t                shared_bytes(uint64_t size) const;
 
     friend struct IcdRootProbe;
 };

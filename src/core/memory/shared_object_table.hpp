@@ -43,9 +43,12 @@ public:
 
     /* CreateAllocation: an identity for `allocation`, written into `record`.
      * invalid_parameter for a record that already carries one - a creator
-     * names the kind and the size and neither of the other two - or one whose
-     * size is not the allocation's; no_memory when the pool cannot grow.
-     * Nothing is minted unless ok. */
+     * names the kind and the size and neither of the other two; no_memory when
+     * the pool cannot grow. Nothing is minted unless ok.
+     *
+     * The size the record declares is the *object's*, which need not be the
+     * allocation's: an ICD sharing host memory has no guest allocation of it
+     * and creates a one-page carrier for the identity alone (feature 053). */
     [[nodiscard]] Status mint(Allocation &allocation, SharedObjectRecord &record);
     /* OpenAllocation: the object `record` names, with one more device holding
      * it. not_found for an id this adapter never minted and for one from

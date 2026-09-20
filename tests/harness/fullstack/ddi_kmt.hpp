@@ -188,6 +188,20 @@ private:
         /* The guest-RAM address of a chunk's pages; 0 for platform memory. */
         std::uint64_t  guest_ram;
         std::uint8_t  private_data[max_private_data];
+        /* How much of it the create carried, which is what an open must name:
+         * the miniport reads 48 bytes or 88 and refuses every other length. */
+        std::uint32_t  private_size;
+        /* A slot that is a second device's *open* of somebody else's
+         * allocation: it closes its open and lets the creator's allocation
+         * alone (feature 053). */
+        bool           opened_only;
+    };
+    /* One NT handle this rig minted. dxgkrnl owns the handle table, and this
+     * class is dxgkrnl over the real miniport - so the token is modelled here
+     * while every allocation call below stays the driver's own. */
+    struct SharedHandle {
+        std::uint64_t handle;
+        std::uint32_t allocation;
     };
     struct Context {
         std::uint32_t handle;
@@ -222,7 +236,8 @@ private:
     Status  refuse(Status status);
 
     Device     *find_device(std::uint32_t handle);
-    Allocation *find_allocation(std::uint32_t handle);
+    Allocation   *find_allocation(std::uint32_t handle);
+    SharedHandle *find_shared(std::uint64_t handle);
     Context    *find_context(std::uint32_t handle);
     Queue      *find_queue(std::uint32_t handle);
     HardwareQueue *find_hardware_queue(std::uint32_t handle);
@@ -254,6 +269,10 @@ private:
     FakeHandleTable              handles_;
     NodeFences                   fences_;
     Device                       devices_[max_devices];
+    static constexpr std::uint32_t max_shared = 8u;
+    static constexpr std::uint64_t first_shared_handle = 0x4000000000000004ull;
+    SharedHandle                 shared_[max_shared];
+    std::uint64_t                next_shared_handle_;
     Allocation                   allocations_[max_allocations];
     Context                      contexts_[max_contexts];
     Queue                        queues_[max_queues];

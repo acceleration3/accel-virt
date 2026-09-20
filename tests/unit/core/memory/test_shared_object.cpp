@@ -165,5 +165,18 @@ TEST(shared_object_invariants, refuse_an_object_with_no_id_no_kind_no_allocation
   SharedObjectProbe::set_size(rig.object(), 2u * page);
   CHECK(rig.object().invariants_hold());
 
+  /* A fence's size is none at all, which is the record's rule and the wire
+   * body's: an object of either kind holding pages is one no create made. */
+  SharedObjectProbe::set_kind(rig.object(), SharedObjectKind::monitored_fence);
+  CHECK(!rig.object().invariants_hold());
+  SharedObjectProbe::set_size(rig.object(), 0u);
+  CHECK(rig.object().invariants_hold());
+  SharedObjectProbe::set_kind(rig.object(), SharedObjectKind::native_fence);
+  CHECK(rig.object().invariants_hold());
+  SharedObjectProbe::set_kind(rig.object(), SharedObjectKind::memory);
+  CHECK(!rig.object().invariants_hold());
+  SharedObjectProbe::set_size(rig.object(), 2u * page);
+  CHECK(rig.object().invariants_hold());
+
   SharedObjectProbe::forget_allocation(rig.object());
   CHECK(!rig.object().invariants_hold()); }

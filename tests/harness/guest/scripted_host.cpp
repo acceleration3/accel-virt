@@ -226,6 +226,15 @@ void ScriptedHost::blob_import(std::uint32_t status, std::uint64_t memory)
     queue(writer);
 }
 
+void ScriptedHost::shared_object(std::uint32_t status, std::uint64_t wire_handle)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_u32(status);
+    writer.write_u32(0u);
+    writer.write_u64(wire_handle);
+    queue(writer);
+}
+
 void ScriptedHost::vk_queue_families(std::uint32_t count)
 {
     WireWriter writer(answer_, sizeof answer_);

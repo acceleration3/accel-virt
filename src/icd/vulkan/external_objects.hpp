@@ -1,22 +1,20 @@
-/* The Win32 handles this process exported, and the host objects they name
- * (feature 047, US3, contracts/external_objects.md).
+/* The Win32 handles this process holds, and the host objects they name
+ * (feature 047 US3, feature 053 US2; contracts/external_objects.md).
  *
- * No host driver on Linux has VK_KHR_external_memory_win32 or
- * VK_KHR_external_semaphore_win32, and a HANDLE is not a thing the wire
- * carries, so a handle here is this ICD's own: an opaque value that this table
- * turns back into the object it was exported for. Within one process that is
- * the whole of what DXGI interop needs - two devices seeing one image, one
- * fence waking another. A handle from another process is refused until feature
- * 053 gives objects a device-global identity, and a named handle is refused
- * because a name is exactly what another process would open.
+ * A handle used to be this table's own address, which meant something inside
+ * one process and nothing outside it. Since 053 it is an NT handle over a
+ * carrier allocation, minted by the kernel and resolved by
+ * `icd::SharedHandles`, so the refusal of "a handle this process did not
+ * export" lives there and this table no longer guesses at it. What is left
+ * here is what only the ICD knows: which host object a handle names *in this
+ * process*, which identity it was published under, and - for an object this
+ * process exported - the carrier allocation that identity was minted into,
+ * which nothing else will destroy.
  *
  * The lock is its own: an export happens on the calling application's thread,
  * and nothing it does reaches back into the root. */
 #ifndef AV_ICD_EXTERNAL_OBJECTS_HPP
 #define AV_ICD_EXTERNAL_OBJECTS_HPP
-
-#include "icd/vulkan/memory_win32_handle_record.hpp"
-#include "icd/vulkan/semaphore_win32_handle_record.hpp"
 
 #include <stdint.h>
 
@@ -27,14 +25,25 @@ namespace av::icd {
 class ThreadLock;
 struct ExternalObjectsProbe;
 
-/* One exported handle. A type of its own so the table's slots are complete
- * (tools/header_scan.py reads a class's members only to its first nested
- * type). */
+/* One object this process shares. A type of its own so the table's slots are
+ * complete (tools/header_scan.py reads a class's members only to its first
+ * nested type). */
 struct ExternalObjectSlot {
     VkDevice     device_;
     /* Exactly one of the two is set; the other is null. */
     VkDeviceMemory memory_;
     VkSemaphore    semaphore_;
+    /* What the object is called on the wire and in every other process. */
+    uint64_t       object_id_;
+    /* The bytes it was published as - whole pages, and 0 for a fence, which is
+     * what the wire body demands of each kind. */
+    uint64_t       size_;
+    /* The NT handle that names `object_id_` to another process. */
+    uint64_t       handle_;
+    /* The one-page allocation the identity was minted into, which this ICD
+     * created and must destroy; 0 for an object this process opened rather
+     * than exported, whose carrier belongs to whoever created it. */
+    uint32_t       carrier_;
 };
 
 class ExternalObjects {
@@ -47,37 +56,44 @@ public:
     ExternalObjects(const ExternalObjects &) = delete;
     ExternalObjects &operator=(const ExternalObjects &) = delete;
 
-    /* A handle naming `request`'s memory, exported for `device`. The same
-     * memory exported twice answers the same handle, as Windows does for a
-     * handle to one object. VK_ERROR_INVALID_EXTERNAL_HANDLE for a record that
-     * is not one, a handle type this path does not answer, or no memory;
-     * VK_ERROR_TOO_MANY_OBJECTS when every slot is taken. */
-    VkResult export_memory(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle);
-    /* The memory a handle names and the device it was exported for, or null
-     * for a handle this process did not export, a named one, or a handle type
-     * this path does not answer. `owner` is what a fresh fd of the memory is
-     * asked of, since memory belongs to one device. */
-    VkDeviceMemory imported_memory(const ImportMemoryWin32HandleRecord *request, VkDevice &owner) const;
-    VkResult       export_semaphore(VkDevice device, const SemaphoreGetWin32HandleRecord *request, void **handle);
-    VkSemaphore    imported_semaphore(const ImportSemaphoreWin32HandleRecord *request, VkDevice &owner) const;
+    /* An object this process shares, with the identity it was published under
+     * and the handle that names it. Exactly one of `memory` and `semaphore` is
+     * set. `carrier` is the allocation the identity was minted into for an
+     * object this process exported, and 0 for one it opened. False for neither
+     * object or both, an id or a handle of 0, an object already held, and a
+     * table with no room. */
+    [[nodiscard]] bool remember(VkDevice device, VkDeviceMemory memory, VkSemaphore semaphore,
+                                uint64_t object_id, uint64_t size, uint64_t handle, uint32_t carrier);
+    /* The NT handle `memory` was published under, or 0 for memory this process
+     * did not share - which is what an application asking for a handle to
+     * memory it never declared exportable is told. */
+    uint64_t           handle_of_memory(VkDeviceMemory memory) const;
+    uint64_t           handle_of_semaphore(VkSemaphore semaphore) const;
+    /* The row published under `object_id`, copied into `row`; false for an id
+     * no object of this process holds - which is what an object another
+     * process published looks like from here. */
+    [[nodiscard]] bool holder_of(uint64_t object_id, ExternalObjectSlot &row) const;
+    /* The row naming the object, dropped and copied into `row`, so its caller
+     * can release what it names. False for an object this table does not hold,
+     * which leaves `row` alone. */
+    [[nodiscard]] bool take_memory(VkDeviceMemory memory, ExternalObjectSlot &row);
+    [[nodiscard]] bool take_semaphore(VkSemaphore semaphore, ExternalObjectSlot &row);
+    /* One row of `device`, dropped: what a device's teardown releases them all
+     * through. False once it holds none. */
+    [[nodiscard]] bool take_any_of_device(VkDevice device, ExternalObjectSlot &row);
 
-    /* An object destroyed takes its handle with it: a handle that outlived
-     * what it names would be one an import could still follow. */
-    void     forget_memory(VkDeviceMemory memory);
-    void     forget_semaphore(VkSemaphore semaphore);
-    void     forget_device(VkDevice device);
     uint32_t live() const;
 
-    /* A slot is empty or names exactly one object of one device, and no object
-     * appears twice. */
+    /* A slot is empty or names exactly one object of one device under one
+     * non-zero id and handle, and no object, id or handle appears twice. */
     bool invariants_hold() const;
 
 private:
-    /* The slot `handle` is, or null when it is not one of this table's. */
-    const ExternalObjectSlot *slot_of(void *handle) const;
-    ExternalObjectSlot       *taken(VkDevice device, VkDeviceMemory memory, VkSemaphore semaphore);
-    /* A handle is its slot's address, as a surface's is (SurfaceTable). */
-    void                     *handle_of(const ExternalObjectSlot *slot) const;
+    /* The slot naming the object, or null. The caller holds the lock. */
+    ExternalObjectSlot       *find(VkDeviceMemory memory, VkSemaphore semaphore);
+    const ExternalObjectSlot *find(VkDeviceMemory memory, VkSemaphore semaphore) const;
+    /* The row copied out and its slot emptied. The caller holds the lock. */
+    void                      give_back(ExternalObjectSlot &slot, ExternalObjectSlot &row);
 
     ThreadLock        &lock_;
     ExternalObjectSlot slots_[max_objects];

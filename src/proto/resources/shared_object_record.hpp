@@ -51,8 +51,9 @@ public:
     /* malformed for any length but encoded_size; invalid_parameter for a magic
      * that is not this record's, a version this build does not know, a kind it
      * does not know, a non-zero reserved field, an id without an adapter or an
-     * adapter without an id, or a size that is zero or not a whole number of
-     * pages. Unchanged unless ok. */
+     * adapter without an id, or a size that is not its kind's - whole non-zero
+     * pages for memory, and none at all for either fence, which is the rule
+     * the wire body keeps. Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:

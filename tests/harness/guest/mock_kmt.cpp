@@ -438,8 +438,10 @@ Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *pri
             Status::ok)
         return refuse(invalid_parameter);
     /* A record that already names an object is one the miniport would refuse:
-     * a creator can know neither number. */
-    if (record.assigned() || record.size() != decoded.size()) return refuse(invalid_parameter);
+     * a creator can know neither number. Its size is the *object's* and need
+     * not be the allocation's - an ICD sharing host memory mints over a
+     * one-page carrier (feature 053, T031). */
+    if (record.assigned()) return refuse(invalid_parameter);
     if (!zeroed(Call::create_shared_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
     Object *const created = find(Kind::allocation, allocation);
