@@ -597,3 +597,58 @@ still name the same object - that is the cross-process case and is unchanged.
 This is not a new hole. An opener has to resolve the allocation handle before
 `claim` runs at all, and on the cross-process path that handle comes from the
 NT handle; the record was never the capability.
+
+## §16 — D3DKMTShareObjects shares a *resource*, and the carrier is not one
+
+With §15's fix in, the carrier is created, the identity is minted and the
+record reaches the caller. The next call refuses:
+
+```
+rvkvk: vkAllocateMemory: no NT handle for a shared object, NTSTATUS 3221225485
+```
+
+`3221225485` is `0xC000000D` out of `D3DKMTShareObjects`. Read out of
+`dxgkrnl.sys`, `DxgkShareObjectsInternal` at `14034e3c0` validates, in order:
+
+| check | refusal |
+|---|---|
+| a process context | logged, `0xC000000D` |
+| `count - 1 < 3`, so 1, 2 or 3 objects | "Input handle count is out of range" |
+| `pObjectAttributes != nullptr` | "Invalid object attributes" |
+| the first handle is not 0 | "Input object handle is NULL" |
+| `HMGRTABLE::GetEntryType(handle) == 4` | **nothing at all** |
+
+That last one is ours. There is no message for it: the type check falls
+straight through to `0xC000000D`, which is why the ICD log carries a status and
+the driver log carries nothing. Type 4 is the resource type - the branch it
+guards calls `CreateSharedResourceNtObject`, whose locals are `DXGRESOURCE` and
+`DXGSHAREDRESOURCE`, and the two- and three-object forms add a keyed mutex and
+a sync object (the D3D11 trio), each of which must "use NT security sharing".
+
+**So `D3DKMTShareObjects` shares a resource, and the carrier is a bare
+allocation.** `GdiKmt::create_shared_allocation` passes `hResource = 0` and
+sets no flags, so no resource is created and the handle handed to
+`D3DKMTShareObjects` is an allocation's. Nothing about the object attributes is
+wrong - the hand-written `ShareAttributes` is the correct x64
+`OBJECT_ATTRIBUTES`, 48 bytes with the right offsets, and dxgkrnl only checks
+it for null before handing it to the object manager. The suspicion recorded
+against it is cleared.
+
+### What it takes
+
+The carrier has to become a shared resource, which is a change on both sides:
+
+- **Guest.** `create_shared_allocation` sets `Flags.CreateResource`,
+  `Flags.CreateShared` and `Flags.NtSecuritySharing`, and shares the
+  `hResource` that comes back rather than `hAllocation`.
+  `SharedHandles::mint` then mints over the resource, and the open side becomes
+  `D3DKMTOpenResourceFromNtHandle` rather than an allocation open.
+- **Miniport.** `DXGKARG_CREATEALLOCATION::hResource` is in/out: with the
+  resource flag set, the driver has to answer a handle of its own and destroy
+  it when the resource goes. `DxgkargCreateAllocationRecord` already carries
+  `hResource` and `Flags`, so the DDI surface is there; what is missing is an
+  object behind it and the destroy path that releases it.
+
+This is a data-model change rather than a patch, and it is the last one this
+feature needs: the record, the identity and the wire are all working, and what
+is left is the kernel object the handle is minted over.

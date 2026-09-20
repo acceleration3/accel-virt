@@ -72,7 +72,6 @@ TEST(shared_object_probe, a_host_with_no_external_objects_stops_at_the_question)
   rig.run();
   CHECK(rig.holds("ok shared.adapter"));
   /* The kernel's own question is asked whatever the host GPU offers. */
-  CHECK(rig.holds("shared.carrier_plain_unwritten"));
   CHECK(rig.holds("shared.carrier_plain"));
   CHECK(rig.holds("shared.carrier_long"));
   CHECK(rig.holds("shared.carrier_shared"));
@@ -297,20 +296,13 @@ TEST(shared_object_probe, a_device_the_kernel_will_not_make_stops_the_carrier_st
 TEST(shared_object_probe, each_of_the_three_carrier_creates_fails_on_its_own)
 { constexpr std::uint32_t invalid_parameter = 0xC000000Du;
   { Rig rig;
-    /* Nine swept lengths come first, so the unwritten control is the tenth. */
+    /* Nine swept lengths come first, so the ordinary create is the tenth. */
     rig.kmt().fail_at(MockKmt::Call::create_allocation, 10u, invalid_parameter);
-    rig.run();
-    CHECK(rig.holds("FAIL shared.carrier_plain_unwritten"));
-    /* The control failing does not stop the one it is a control for. */
-    CHECK(rig.holds("ok shared.carrier_plain")); }
-  { Rig rig;
-    /* And the ordinary create is the eleventh. */
-    rig.kmt().fail_at(MockKmt::Call::create_allocation, 11u, invalid_parameter);
     rig.run();
     CHECK(rig.holds("FAIL shared.carrier_plain"));
     CHECK(rig.holds("shared.carrier_long")); }
   { Rig rig;
-    rig.kmt().fail_at(MockKmt::Call::create_allocation, 12u, invalid_parameter);
+    rig.kmt().fail_at(MockKmt::Call::create_allocation, 11u, invalid_parameter);
     rig.run();
     CHECK(rig.holds("ok shared.carrier_plain"));
     CHECK(rig.holds("FAIL shared.carrier_long"));
