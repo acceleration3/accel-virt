@@ -2077,16 +2077,23 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertFalse((self.work / "hostmem.bin").exists())
         self.assert_clean()
 
-    def test_a_pattern_the_host_cannot_find_is_a_skip_until_something_asks_for_host_memory(self):
+    def test_a_pattern_the_host_cannot_find_is_a_skip_because_the_segment_is_parked(self):
         """The driver reports the segment and asks VidMm for nothing in it - a
         live guest refused every allocation that preferred it - so the pattern
         is in guest memory and the host cannot find it. That is where feature
-        041 landed: a skip with the reason, not a failure (T026)."""
+        041 landed: a skip with the reason, not a failure (T026).
+
+        The reason is no longer that nothing asks. Feature 052's every OpenCL
+        context opens a blob arena of host-visible memory; what it gets is
+        FR-007's fallback, guest pages the device imports, which is what this
+        read cannot find and must not call a client's absence."""
         self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
         result = self.run_suite("--hostmem", "4")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("nothing asks for host memory yet (feature 043)", result.stdout)
+        self.assertIn("041's segment is still parked", result.stdout)
+        self.assertIn("take FR-007's fallback", result.stdout)
+        self.assertNotIn("nothing asks for host memory", result.stdout)
         self.assert_clean()
 
     def test_a_pattern_the_host_cannot_find_in_the_bar_fails_the_run(self):
