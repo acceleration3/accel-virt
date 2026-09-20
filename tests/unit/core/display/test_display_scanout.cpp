@@ -3,6 +3,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/display/display_mode.hpp"
 #include "core/display/display_scanout.hpp"
+#include "proto/context/capset_info.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/memory/allocation.hpp"
@@ -69,6 +70,8 @@ namespace {
 
 constexpr std::uint32_t ok_nodata = 0x1100u;
 constexpr std::uint32_t create_2d = 0x0101u, set_scanout = 0x0103u, flush = 0x0104u;
+constexpr std::uint32_t transfer = 0x0105u, unref = 0x0102u;
+constexpr std::uint32_t create_blob = 0x010Cu, set_scanout_blob = 0x010Du;
 
 std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
 {
@@ -159,6 +162,45 @@ private:
 const DisplayMode mode(1280u, 800u);
 
 }  // namespace
+
+/* The capset decides which of the two backings every source uses, once, and a
+ * device that says nothing keeps the 2D path: that is what feature 038's green
+ * scenarios rest on. With the bit, the same desktop is carried as a blob over
+ * its own pages and not one byte is transferred (feature 058, T032). */
+TEST(display_scanout, the_capset_bit_chooses_the_backing_and_the_default_is_the_2d_path)
+{ { Fixture fixture;
+    FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+    CHECK(!fixture.scanout().scans_out_blobs());
+    fixture.scanout().offer(av::CapsetInfo());
+    CHECK(!fixture.scanout().scans_out_blobs());
+    fixture.live(0u, mode);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+    CHECK_EQ(control.respond_all(ok_nodata), 5u);
+    CHECK_EQ(control.request_type(0u), create_2d);
+    CHECK_EQ(control.request_type(3u), transfer); }
+
+  { Fixture   fixture;
+    FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+    av::CapsetInfo capset;
+    capset.announce(av::CapsetInfo::feature_dmabuf_scanout);
+    fixture.scanout().offer(capset);
+    CHECK(fixture.scanout().scans_out_blobs());
+    fixture.live(0u, mode);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false), Status::ok);
+    CHECK_EQ(control.respond_all(ok_nodata), 3u);
+    CHECK_EQ(control.request_type(0u), create_blob);
+    CHECK_EQ(control.request_type(1u), set_scanout_blob);
+    CHECK_EQ(control.request_type(2u), flush);
+    /* Every frame after it is one flush, and never a transfer. */
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::ok);
+    CHECK_EQ(control.respond_all(ok_nodata), 1u);
+    CHECK_EQ(control.request_type(3u), flush);
+    CHECK(fixture.scanout().invariants_hold());
+    /* And what it made is given back on the way out. */
+    fixture.scanout().release();
+    CHECK_EQ(control.respond_all(ok_nodata), 2u);
+    CHECK_EQ(control.request_type(5u), unref);
+    CHECK(fixture.scanout().invariants_hold()); } }
 
 TEST(display_scanout_refresh, carries_a_visible_source_to_the_host)
 { Fixture fixture;

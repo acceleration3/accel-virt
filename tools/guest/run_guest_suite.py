@@ -541,6 +541,10 @@ POWER_ATTEMPTS = 24
 """Screendumps to wait for the display to go dark or come back: with the default
 poll that is two minutes, and the policy's shortest timeout is one."""
 SETTLE_SECONDS = 1.0
+# How long a display step waits for a console to have a surface at all. A
+# blob scanout gives one only at the driver's first flip, which is a DPC
+# after the mode commit rather than part of it (feature 058).
+SCANOUT_WAIT_SECONDS = 30.0
 """Long enough for the DPC that follows a commit to have run."""
 OFFERED_MODES = ["1024x768", "1280x800"]
 """The modes this run works with, both of which
@@ -570,16 +574,27 @@ class Screendump:
     def __init__(self, path):
         self.path = pathlib.Path(path)
 
-    def capture(self, qmp, head=0):
+    def capture(self, qmp, head=0, wait=0.0):
         """Writes the dump of `head`; raises StepFailed when QEMU refuses or
-        writes nothing."""
+        writes nothing.
+
+        `wait` seconds of "no surface" are taken as "not yet". A console
+        showing a dma-buf has no surface until the guest's first flip puts one
+        there - stock 2D scanout makes one at the mode commit, a blob scanout
+        only when the driver's DPC has an address to name (feature 058).
+        """
         arguments = {"filename": str(self.path)}
         if head != 0:
             arguments.update({"device": DISPLAY_DEVICE, "head": head})
-        try:
-            qmp.execute("screendump", arguments)
-        except AgentError as error:
-            raise StepFailed("screendump", str(error))
+        deadline = time.monotonic() + wait
+        while True:
+            try:
+                qmp.execute("screendump", arguments)
+                break
+            except AgentError as error:
+                if "no surface" not in str(error) or time.monotonic() >= deadline:
+                    raise StepFailed("screendump", str(error))
+                time.sleep(0.5)
         if not self.path.exists() or self.path.stat().st_size == 0:
             raise StepFailed("screendump", f"QEMU wrote no dump to {self.path}")
         return self
@@ -1364,8 +1379,14 @@ class GuestRun:
 
     def placeholder(self, head):
         """Whether the head shows QEMU's "display output is not active" rather
-        than a scanout of ours."""
-        dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head)
+        than a scanout of ours. A console with no surface at all shows nothing
+        of ours either, which is the same answer."""
+        try:
+            dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head)
+        except StepFailed as refusal:
+            if "no surface" not in str(refusal):
+                raise
+            return True
         width, height = dump.size()
         if width == 0 or height == 0:
             return True
@@ -1377,7 +1398,7 @@ class GuestRun:
     def display_head(self, head):
         """One head's scanout: the committed size, and our resource rather than
         QEMU's placeholder."""
-        dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head)
+        dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head, SCANOUT_WAIT_SECONDS)
         width, height = dump.size()
         if width == 0 or height == 0:
             raise StepFailed("display", f"the screendump is not a PPM: {dump.path}")
@@ -2036,13 +2057,44 @@ class GuestRun:
         """What only a whole guest session answers, and what makes a run long:
         the display, its modes and power, the adapter cycled and upgraded, and
         the machine slept and hibernated."""
-        self.display()
-        self.mode_switch()
-        self.display_power()
+        if self.args.display == "egl-headless":
+            self.scanout_blob()
+        else:
+            self.display()
+            self.mode_switch()
+            self.display_power()
         self.cycle()
         self.upgrade()
         self.suspend()
         self.hibernate()
+
+    def scanout_blob(self):
+        """The display scenarios, for a console that can take a dma-buf.
+
+        Every screendump-based check is unavailable here, and not because
+        anything failed: a console showing a dma-buf has no DisplaySurface at
+        all - `qemu_console_surface` answers NULL for `SCANOUT_DMABUF`
+        (`ui/console.c`), so `qmp_screendump` answers "no surface" for this
+        scanout as it would for stock virtio-gpu-gl's. What can be read instead
+        is the device's own account of it, which is stronger about the thing
+        this run is for: that the frame reached the host with no copy.
+        """
+        shown = "a head shows a guest blob"
+        for _attempt in range(POWER_ATTEMPTS):
+            if shown in self.qemu_log.read_text(errors="replace"):
+                break
+            time.sleep(self.args.power_poll)
+        else:
+            raise StepFailed("scanout", "no head ever showed a blob: the guest kept the 2D path, or the "
+                                        "device refused every SET_SCANOUT_BLOB (see qemu.log)")
+        log = self.qemu_log.read_text(errors="replace")
+        for refusal in ("shows no dma-buf on the head asked for", "makes no dma-buf over a blob's memory"):
+            if refusal in log:
+                raise StepFailed("scanout", f"the device refused a scanout: {refusal}")
+        driver = self.driver_log()
+        if "rvkgpu: scanout blob" in driver:
+            raise StepFailed("scanout", "the driver could not carry a frame: see rvkgpu.log")
+        self.say("scanout ok: a head shows the guest's primary as a dma-buf, and no frame is copied")
 
     def prepare_guest(self):
         if self.stage("prepare"):

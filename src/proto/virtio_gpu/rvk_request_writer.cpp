@@ -95,7 +95,7 @@ Status RvkRequestWriter::guest_blob_pages(uint32_t resource_id, const GuestPageL
     }
     WireWriter writer(bytes_, capacity_);
     if (!begin(writer, resource_create_blob, 0u,
-               guest_blob_fixed + size_t{runs} * guest_blob_entry))
+               guest_blob_fixed_size + size_t{runs} * guest_blob_entry_size))
         return Status::too_large;
     writer.write_u32(resource_id);
     writer.write_u32(blob_memory_guest);

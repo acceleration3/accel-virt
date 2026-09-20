@@ -205,6 +205,7 @@ void Adapter::remember_device()
     if (read == Status::ok) {
         identity_.remember(capset);
         host_visible_.offer(capset);
+        scanout_.offer(capset);
         open_region();
     }
     log_status("rvkgpu: device capset", NtStatus(read).value());

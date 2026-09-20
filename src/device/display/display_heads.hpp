@@ -79,6 +79,7 @@ private:
     Display                          display_;
     bool                             said_no_display_;
     bool                             said_no_descriptor_;
+    bool                             said_showing_;
     ObjectStorage<ScanoutBinding>    heads_[max_heads];
 
     friend struct DisplayHeadsProbe;

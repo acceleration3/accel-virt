@@ -20,6 +20,11 @@ class WireWriter;
 class RvkRequestWriter {
 public:
     static constexpr size_t max_request_size = 96u;
+    /* What a create-blob request costs before its memory entries, and what
+     * each entry costs: a caller sizing a buffer for one over N pages needs
+     * both (feature 058's scanout blob). */
+    static constexpr size_t guest_blob_fixed_size = 56u;
+    static constexpr size_t guest_blob_entry_size = 16u;
 
     RvkRequestWriter(uint8_t *bytes, size_t capacity);
 
@@ -63,9 +68,7 @@ private:
     static constexpr size_t   header_size = 24u;
     static constexpr size_t   short_request_size = 32u;
     static constexpr size_t   create_context_size = 96u;
-    static constexpr size_t   guest_blob_fixed = 56u;   /* header + fields, before entries */
-    static constexpr size_t   guest_blob_entry = 16u;
-    static constexpr size_t   guest_blob_size = guest_blob_fixed + guest_blob_entry;
+    static constexpr size_t   guest_blob_size = guest_blob_fixed_size + guest_blob_entry_size;
     static constexpr size_t   host_blob_size = 56u;
     static constexpr size_t   map_blob_size = 40u;
     static constexpr uint32_t name_bytes = 64u;

@@ -18,7 +18,12 @@ class WireWriter;
 class GpuRequestWriter {
 public:
     static constexpr size_t   header_size = 24u;        /* struct virtio_gpu_ctrl_hdr */
-    static constexpr size_t   max_request_size = 64u;
+    /* SET_SCANOUT_BLOB is the largest request that is not a page list: the
+     * header, the rectangle, and four planes' strides and offsets. Every
+     * request this size or under takes a narrow slot of the command queue,
+     * which is what keeps the one wide slot for the page lists. */
+    static constexpr size_t   max_request_size = 96u;
+    static constexpr size_t   scanout_blob_request_size = max_request_size;
     static constexpr size_t   response_size = 24u;      /* a response the driver reads: its header */
     static constexpr uint32_t response_ok_nodata = 0x1100u;
     /* The OK range of virtio-gpu answers (virtio 1.2 5.7.6.7): anything below
@@ -51,6 +56,13 @@ public:
     /* What `scanout` shows, from the top left of `resource_id`; resource 0
      * shows nothing. */
     [[nodiscard]] Status set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height);
+    /* SET_SCANOUT_BLOB (virtio 1.2 5.7.6.10): the head shows the whole of the
+     * framebuffer at the start of `resource_id`'s blob, one plane, B8G8R8A8.
+     * A resource of 0 turns the head off, as SET_SCANOUT's does, and then the
+     * geometry is zero too - which is what the device's own record demands of
+     * a disable (specs/058, contracts/scanout_blob.md). */
+    [[nodiscard]] Status set_scanout_blob(uint32_t scanout, uint32_t resource_id, uint32_t width,
+                                          uint32_t height, uint32_t stride);
     /* The host reads the resource's pixels again, over that rectangle. */
     [[nodiscard]] Status resource_flush(uint32_t resource_id, uint32_t width, uint32_t height);
     /* The host may forget the resource; a mode change makes a new one. */
@@ -70,6 +82,7 @@ private:
         get_display_info_type = 0x0100u,
         resource_unref_type = 0x0102u,
         set_scanout_type = 0x0103u,
+        set_scanout_blob_type = 0x010Du,
         resource_flush_type = 0x0104u,
         transfer_to_host_2d_type = 0x0105u,
         resource_attach_backing = 0x0106u,

@@ -9,7 +9,7 @@ namespace av {
 
 DisplayHeads::DisplayHeads(Host &host, BlobTable &blobs)
     : host_(host), blobs_(blobs), display_(Display::unasked), said_no_display_(false),
-      said_no_descriptor_(false)
+      said_no_descriptor_(false), said_showing_(false)
 {
     AV_SCOPE("DisplayHeads::DisplayHeads");
 }
@@ -64,6 +64,10 @@ Status DisplayHeads::show(uint32_t head, uint32_t blob, const ScanoutFramebuffer
     const Status shown = binding(head).show(blob, framebuffer);
     if (shown == Status::not_supported)
         say_once(said_no_descriptor_, "virtio-gpu-rvk: this host makes no dma-buf over a blob's memory");
+    /* The first frame a head shows, once: it is the moment the guest stopped
+     * copying, and a run that never reaches it says nothing at all. */
+    if (shown == Status::ok)
+        say_once(said_showing_, "virtio-gpu-rvk: a head shows a guest blob; no frame is copied any more");
     return shown;
 }
 
