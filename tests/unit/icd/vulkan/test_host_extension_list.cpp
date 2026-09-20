@@ -87,3 +87,34 @@ TEST(host_extension_list, a_win32_external_object_extension_is_asked_for_as_an_f
   CHECK(std::strcmp(asked.names()[0], "VK_KHR_external_memory_win32_and_more") == 0);
   CHECK(std::strcmp(asked.names()[1], "VK_KHR_external_memory") == 0);
   CHECK(asked.invariants_hold()); }
+
+/* A name the ICD adds of its own, on top of what the application asked for:
+ * nothing is added twice, nothing is added past the room there is, and no
+ * name at all is not a name (feature 053). */
+TEST(host_extension_list, a_name_the_driver_adds_is_added_once_and_only_while_there_is_room)
+{ HostExtensionList asked;
+  const char *const enabled[] = {"VK_KHR_external_memory_fd"};
+  CHECK_STATUS(asked.take(enabled, 1u), Status::ok);
+  CHECK(!asked.add(nullptr));
+  CHECK_EQ(asked.count(), 1u);
+  /* Already there: answered yes, and still one. */
+  CHECK(asked.add("VK_KHR_external_memory_fd"));
+  CHECK_EQ(asked.count(), 1u);
+  CHECK(asked.add("VK_EXT_external_memory_dma_buf"));
+  CHECK_EQ(asked.count(), 2u);
+  CHECK(asked.invariants_hold());
+  /* Filled to the brim by the application, one more is refused rather than
+   * written past the array. */
+  HostExtensionList full;
+  const char       *many[HostExtensionList::max_names] = {};
+  char              spellings[HostExtensionList::max_names][16] = {};
+  for (std::uint32_t index = 0u; index < HostExtensionList::max_names; index++) {
+      spellings[index][0] = 'V';
+      spellings[index][1] = static_cast<char>('a' + index % 26u);
+      spellings[index][2] = static_cast<char>('a' + index / 26u);
+      many[index] = spellings[index];
+  }
+  CHECK_STATUS(full.take(many, HostExtensionList::max_names), Status::ok);
+  CHECK(!full.add("VK_EXT_external_memory_dma_buf"));
+  CHECK_EQ(full.count(), HostExtensionList::max_names);
+  CHECK(full.invariants_hold()); }

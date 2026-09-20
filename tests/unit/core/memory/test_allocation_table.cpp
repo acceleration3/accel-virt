@@ -112,6 +112,20 @@ public:
             AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
     }
 
+    /* A creator claiming an identity it cannot have: only the kernel knows an
+     * id, so a record that already names one is a forgery, and the allocation
+     * goes with it. */
+    void claim_an_identity(std::uint32_t index, std::uint64_t size, std::uint64_t object_id)
+    {
+        av::SharedObjectRecord forged(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, size);
+        forged.assign(object_id, 1u);
+        CHECK_STATUS(forged.encode(descriptors_[index] + AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     Status::ok);
+        infos_[index].PrivateDriverDataSize =
+            AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
+    }
+
     /* The record the miniport wrote back, as the opening process reads it. */
     av::SharedObjectRecord minted(std::uint32_t index) const
     {
@@ -464,4 +478,17 @@ TEST(allocation_table_destroy, takes_the_identity_with_the_allocation)
   CHECK_EQ(fixture.shared().live(), 1u);
   CHECK_STATUS(fixture.destroy(1u), Status::ok);
   CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.shared().invariants_hold()); }
+
+/* A create whose record already names an object: a caller can know no id, so
+ * this is a forgery, and the allocation it came with is destroyed rather than
+ * left behind holding an identity nobody minted (feature 053). */
+TEST(allocation_table_create, a_record_that_already_names_an_object_takes_its_allocation_with_it)
+{ Fixture fixture;
+  fixture.claim_an_identity(0u, 4096u, 77u);
+  CHECK_STATUS(fixture.create(), Status::invalid_parameter);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.info(0u).hAllocation == nullptr);
+  CHECK(fixture.table().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }

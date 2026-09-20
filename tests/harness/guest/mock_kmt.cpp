@@ -35,7 +35,7 @@ MockKmt::MockKmt()
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
       next_shared_handle_(first_shared_handle),
-      next_object_id_(first_object_id), next_handle_(first_handle),
+      next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), clock_step_(0u), clock_reader_(nullptr),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
@@ -425,7 +425,7 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
          * sees an id. */
         created->created_size = size;
         for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
-        if (size == shareable) {
+        if (size == shareable && !keep_record_) {
             SharedObjectRecord record;
             if (record.decode(created->created_with + AllocationDescriptor::encoded_size,
                               SharedObjectRecord::encoded_size) == Status::ok &&
@@ -463,6 +463,12 @@ Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *pri
      * not be the allocation's - an ICD sharing host memory mints over a
      * one-page carrier (feature 053, T031). */
     if (record.assigned()) return refuse(invalid_parameter);
+    if (scribble_record_) {
+        scribble_record_ = false;
+        for (std::uint32_t index = AllocationDescriptor::encoded_size; index < size; index++)
+            private_data[index] = 0xFFu;
+        return succeed();
+    }
     if (!zeroed(Call::create_shared_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
     Object *const created = find(Kind::allocation, allocation);
@@ -537,6 +543,10 @@ Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, s
         private_data[index] = row->carried[index];
     }
     written = row->carried_size;
+    if (short_record_) {
+        short_record_ = false;
+        written = AllocationDescriptor::encoded_size;
+    }
     allocation = opened;
     return succeed();
 }
@@ -1072,6 +1082,12 @@ void MockKmt::fail_first(Call call, std::uint32_t count, std::uint32_t code)
     failing_run_[static_cast<unsigned>(call)] = count;
     failures_[static_cast<unsigned>(call)] = code;
 }
+
+void MockKmt::scribble_the_next_record() { scribble_record_ = true; }
+
+void MockKmt::keep_the_next_record() { keep_record_ = true; }
+
+void MockKmt::hand_back_a_short_record() { short_record_ = true; }
 
 void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = true; }
 

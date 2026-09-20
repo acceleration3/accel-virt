@@ -775,3 +775,130 @@ TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outs
   CHECK(entry != nullptr);
   CHECK_EQ(entry(rig.physical_device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter); }
+
+/* A request that is the wrong structure, or names the wrong handle type, or
+ * names an object this process never published: each is refused before
+ * anything reaches the kernel, and each on its own, because a caller cannot
+ * fix what it is not told (feature 053). */
+TEST(icd_external_handles, a_malformed_export_request_is_refused_on_each_of_its_parts)
+{ SharingRig rig;
+  av::icd::IcdRoot   &root = rig.rig().root();
+  const std::uint32_t before = rig.rig().kmt().commands();
+  void               *handle = nullptr;
+
+  MemoryGetWin32HandleRecord memory = {};
+  memory.type_ = av::icd::memory_get_win32_handle_info;
+  memory.memory_ = reinterpret_cast<VkDeviceMemory>(host_memory);
+  memory.handle_type_ = av::icd::opaque_win32_memory;
+  /* Some other structure in the same place. */
+  memory.type_ = av::icd::semaphore_get_win32_handle_info;
+  CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  memory.type_ = av::icd::memory_get_win32_handle_info;
+  /* The right structure asking for a handle type this driver has no answer
+   * for: a D3D11 texture handle is not memory it shared. (The two "opaque
+   * Win32" constants are the same bit in two enums, so the type that
+   * discriminates a memory request from a semaphore one is the structure's,
+   * not this field's.) */
+  memory.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT);
+  CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  memory.handle_type_ = av::icd::opaque_win32_memory;
+  /* Well formed, and naming memory nobody declared exportable. */
+  CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+
+  SemaphoreGetWin32HandleRecord semaphore = {};
+  semaphore.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
+  semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
+  semaphore.type_ = av::icd::memory_get_win32_handle_info;
+  CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  semaphore.type_ = av::icd::semaphore_get_win32_handle_info;
+  semaphore.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT);
+  CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
+  /* No semaphore at all: nothing to publish, and nothing goes out for it. */
+  semaphore.semaphore_ = VK_NULL_HANDLE;
+  CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.rig().kmt().commands(), before); }
+
+/* A semaphore is published the first time its handle is asked for and not
+ * again: the second ask is answered from the table, with the same handle and
+ * nothing on the wire. */
+TEST(icd_external_handles, a_semaphore_is_published_once_and_the_second_ask_sends_nothing)
+{ SharingRig rig;
+  void *const         first = rig.exported_semaphore();
+  const std::uint32_t after = rig.rig().kmt().commands();
+  SemaphoreGetWin32HandleRecord request = {};
+  request.type_ = av::icd::semaphore_get_win32_handle_info;
+  request.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
+  request.handle_type_ = av::icd::opaque_win32_semaphore;
+  void *second = nullptr;
+  CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &request, &second),
+           VK_SUCCESS);
+  CHECK(second == first);
+  CHECK_EQ(rig.rig().kmt().commands(), after); }
+
+/* An import request that is the wrong structure, names the wrong type, or
+ * names an object by a string: each refused on its own part. */
+TEST(icd_external_handles, a_malformed_semaphore_import_is_refused_on_each_of_its_parts)
+{ SharingRig rig;
+  av::icd::IcdRoot &root = rig.rig().root();
+  void *const       exported = rig.exported_semaphore();
+  ImportSemaphoreWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_semaphore;
+  importing.handle_ = exported;
+  importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+  /* A handle named by a string rather than a value: nothing here has a name. */
+  int stack = 0;
+  importing.name_ = &stack;
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  importing.name_ = nullptr;
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT);
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
+
+/* A handle that names memory cannot be imported as a semaphore, and one that
+ * names an object another process published has no path here at all: both are
+ * refused rather than half-served, and the second is the limit the executor
+ * ABI leaves (feature 053, T031). */
+TEST(icd_external_handles, a_semaphore_import_of_memory_or_of_another_process_is_refused)
+{ SharingRig rig;
+  av::icd::IcdRoot                &root = rig.rig().root();
+  ImportSemaphoreWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_semaphore;
+  importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+  /* The handle of memory this process published: the row is there and holds no
+   * semaphore. */
+  importing.handle_ = rig.exported_memory();
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  /* And one minted on another guest device, which this table never saw. */
+  importing.handle_ = rig.foreign_handle();
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
+
+/* vkDestroySemaphore on a device this ICD did not make forgets nothing and
+ * sends nothing: there is no connection to send over, and the generated
+ * wrapper would have followed a null one. The loader never routes such a
+ * device here, which is exactly why nothing had caught it. */
+TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_nothing)
+{ SharingRig rig;
+  void *const         held = rig.exported_semaphore();
+  const std::uint32_t before = rig.rig().kmt().commands();
+  int                 stack = 0;
+  av::icd::IcdRoot   &root = rig.rig().root();
+  root.destroy_semaphore(reinterpret_cast<VkDevice>(&stack), reinterpret_cast<VkSemaphore>(host_semaphore),
+                         nullptr);
+  CHECK_EQ(rig.rig().kmt().commands(), before);
+  /* And the object it named is still held, because nothing released it. */
+  MemoryGetWin32HandleRecord unused = {};
+  static_cast<void>(unused);
+  CHECK(held != nullptr);
+  SemaphoreGetWin32HandleRecord asking = {};
+  asking.type_ = av::icd::semaphore_get_win32_handle_info;
+  asking.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
+  asking.handle_type_ = av::icd::opaque_win32_semaphore;
+  void *again = nullptr;
+  CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &asking, &again),
+           VK_SUCCESS);
+  CHECK(again == held); }

@@ -186,6 +186,23 @@ TEST(external_objects_invariants, refuse_each_state_a_remember_never_leaves)
   second = whole;
   CHECK(table.objects().invariants_hold());
 
+  /* The same of a semaphore, which the memory rows above cannot say: a fence
+   * shared twice under two identities is the state a double free comes from. */
+  Table fences;
+  CHECK(fences.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(0x20u), 1u, 0u, first_handle, 0u));
+  CHECK(fences.objects().remember(device_at(1u), VK_NULL_HANDLE, semaphore_at(0x21u), 2u, 0u, first_handle + 4u, 0u));
+  CHECK(fences.objects().invariants_hold());
+  ExternalObjectsProbe::slot(fences.objects(), 1u).semaphore_ = semaphore_at(0x20u);
+  CHECK(!fences.objects().invariants_hold());
+  ExternalObjectsProbe::slot(fences.objects(), 1u).semaphore_ = semaphore_at(0x21u);
+  CHECK(fences.objects().invariants_hold());
+  /* And a lookup that has to walk past a row which is not the one asked for,
+   * of each kind. */
+  CHECK_EQ(fences.objects().handle_of_semaphore(semaphore_at(0x21u)), first_handle + 4u);
+  CHECK_EQ(fences.objects().handle_of_memory(memory_at(0x21u)), 0u);
+  CHECK_EQ(table.objects().handle_of_memory(memory_at(0x11u)), first_handle + 4u);
+  CHECK_EQ(table.objects().handle_of_semaphore(semaphore_at(0x11u)), 0u);
+
   /* And an empty slot holding anything at all. */
   ExternalObjectSlot &empty = ExternalObjectsProbe::slot(table.objects(), 2u);
   empty.memory_ = memory_at(0x77u);

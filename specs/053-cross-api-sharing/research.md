@@ -385,6 +385,15 @@ A length that reached the driver names itself; one dxgkrnl refused leaves no
 line at all. `bytes 88 status 0x00000000` present in a run where `carrier_long`
 reports `0xC000000D` is the whole argument above, read rather than inferred.
 
+Its absence would mean something else again, and worth naming in advance: that
+`share`'s write-back into `pPrivateDriverData` does not return, so
+`Adapter::create_allocation` never reaches its log line and the eleven lines
+were a miscount. That would make the write-back itself the bug - the guest is
+running under Driver Verifier with special pool, DDI compliance checking and
+security checks on `rvkgpu.sys` (`diag/verifier.txt`), which is worth knowing
+about every refusal this driver reads from dxgkrnl. The two readings differ by
+one log line, which is why the line is the experiment.
+
 `carrier_size_96_valid` sends a descriptor **and a real unassigned record** at
 96, the length the sweep sent filler at. It cannot reach the post-success path,
 because the driver refuses 96 for its shape either way; what it settles is that

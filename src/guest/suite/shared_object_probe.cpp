@@ -32,14 +32,17 @@ Status answered(VkResult result)
     return result == VK_SUCCESS ? Status::ok : Status::invalid_state;
 }
 
+/* `wanted` is this file's own literal and terminates well inside the array the
+ * registry sizes every extension name by, so the compare runs to its end and
+ * then demands the same end of the other - which is the bound, since what a
+ * host reports is not guaranteed terminated. */
 bool names(const VkExtensionProperties &listed, const char *wanted)
 {
     AV_SCOPE("names");
-    for (uint32_t index = 0u; index < sizeof listed.extensionName; index++) {
+    uint32_t index = 0u;
+    for (; wanted[index] != '\0'; index++)
         if (listed.extensionName[index] != wanted[index]) return false;
-        if (wanted[index] == '\0') return true;
-    }
-    return false;
+    return listed.extensionName[index] == '\0';
 }
 
 }  // namespace
@@ -83,12 +86,18 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
     allocate.allocationSize = bytes;
     allocate.memoryTypeIndex = type;
     const VkResult made = vulkan_.allocate_memory(device.device(), &allocate, &memory);
-    /* The driver's NTSTATUS, not this probe's: the kernel call was made inside
-     * the ICD, by its own Kmt, and every one of them answers the application
-     * the same VK_ERROR_TOO_MANY_OBJECTS. */
-    return steps_.check_kernel("exportable", answered(made), vulkan_.last_kernel_status(device.instance(), device.physical_device())) ==
-               Status::ok &&
-           memory != VK_NULL_HANDLE;
+    /* Judged on the memory and not the VkResult alone: a host answering success
+     * and nothing would otherwise have this step read "ok" in a report where
+     * every step after it is missing, which is the one thing a guest report
+     * must never do.
+     *
+     * The status on the line is the driver's NTSTATUS, not this probe's: the
+     * kernel call was made inside the ICD, by its own Kmt, and every one of
+     * them answers the application the same VK_ERROR_TOO_MANY_OBJECTS. */
+    const Status judged = made == VK_SUCCESS && memory != VK_NULL_HANDLE ? Status::ok : Status::invalid_state;
+    return steps_.check_kernel("exportable", judged,
+                               vulkan_.last_kernel_status(device.instance(), device.physical_device())) ==
+           Status::ok;
 }
 
 bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle)
@@ -117,23 +126,38 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
      * stops passing is the answer. 48 is the descriptor alone and 88 the
      * descriptor with a record, which are the two this driver has shapes for;
      * the rest exist only to find the boundary, and the driver answers them
-     * not_supported once they reach it. */
+     * not_supported once they reach it.
+     *
+     * Every length but the last sends the same filler - a valid descriptor
+     * and zeros - so that the length is the only thing that varies. The last
+     * sends a real unassigned record at a length the driver has no shape for,
+     * which is what separates a refusal of the length from a refusal of the
+     * bytes (feature 053). */
     struct Sweep {
         const char *step;
         uint32_t    bytes;
+        bool        with_record;
     };
     static const Sweep sweep[] = {
-        {"carrier_size_48", 48u},  {"carrier_size_56", 56u},  {"carrier_size_64", 64u},
-        {"carrier_size_72", 72u},  {"carrier_size_80", 80u},  {"carrier_size_88", 88u},
-        {"carrier_size_96", 96u},  {"carrier_size_128", 128u},
+        {"carrier_size_48", 48u, false},       {"carrier_size_56", 56u, false},
+        {"carrier_size_64", 64u, false},       {"carrier_size_72", 72u, false},
+        {"carrier_size_80", 80u, false},       {"carrier_size_88", 88u, false},
+        {"carrier_size_96", 96u, false},       {"carrier_size_128", 128u, false},
+        {"carrier_size_96_valid", 96u, true},
     };
-    uint8_t                    data[128] = {};
+    uint8_t                    filler[128] = {};
+    uint8_t                    carried[128] = {};
     const AllocationDescriptor carrier(AllocationKind::client, true, SurfaceLayout(),
                                        SharedObjectRecord::page_size, ScanoutTarget());
-    static_cast<void>(carrier.encode(data, AllocationDescriptor::encoded_size));
+    static_cast<void>(carrier.encode(filler, AllocationDescriptor::encoded_size));
+    static_cast<void>(carrier.encode(carried, AllocationDescriptor::encoded_size));
+    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
+                          .encode(carried + AllocationDescriptor::encoded_size,
+                                  SharedObjectRecord::encoded_size));
     for (const Sweep &one : sweep) {
-        uint32_t     made = 0u;
-        const Status answered = kmt_.create_allocation(device, data, one.bytes, made);
+        uint32_t             made = 0u;
+        const uint8_t *const from = one.with_record ? carried : filler;
+        const Status         answered = kmt_.create_allocation(device, from, one.bytes, made);
         /* Measured, not judged: most of these lengths are ones no caller uses
          * and the driver rightly refuses, so a sweep that failed the run for
          * them would fail every run for ever. What is wanted is the number on
@@ -142,21 +166,9 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
          * knows the shape and refuses the zeroed record with the same code.
          * The driver log names the length on each line, and that - not this
          * number - says which side answered. */
-        steps_.check_measured(one.step, Status::ok, answered == Status::ok ? 0u : kmt_.last_code());
+        steps_.check_measured(one.step, Status::ok, kmt_.last_code());
         if (answered == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, made));
     }
-    /* A length the driver has no shape for, carrying the bytes it would want
-     * at the length it does. Paired with the filler at 88 this separates the
-     * two things every earlier run changed together: if dxgkrnl reads the
-     * content it must answer this differently from the filler at 96, and if it
-     * reads only the length it must answer them the same (feature 053). */
-    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
-                          .encode(data + AllocationDescriptor::encoded_size,
-                                  SharedObjectRecord::encoded_size));
-    uint32_t     filled = 0u;
-    const Status carried = kmt_.create_allocation(device, data, 96u, filled);
-    steps_.check_measured("carrier_size_96_valid", Status::ok, carried == Status::ok ? 0u : kmt_.last_code());
-    if (carried == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, filled));
 }
 
 void SharedObjectProbe::carrier_steps()

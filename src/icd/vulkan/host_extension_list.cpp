@@ -27,7 +27,7 @@ constexpr uint32_t host_spelling_count = sizeof host_spellings / sizeof host_spe
 
 }  // namespace
 
-HostExtensionList::HostExtensionList() : names_{}, count_(0u), given_(0u), kept_(0u)
+HostExtensionList::HostExtensionList() : names_{}, count_(0u), given_(0u), kept_(0u), added_(0u)
 {
     AV_SCOPE("HostExtensionList::HostExtensionList");
 }
@@ -39,6 +39,7 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
     if (names == nullptr && count != 0u) return Status::invalid_parameter;
     count_ = 0u;
     kept_ = 0u;
+    added_ = 0u;
     given_ = count;
     for (uint32_t index = 0u; index < count; index++) {
         const char *const name = names[index];
@@ -62,6 +63,7 @@ bool HostExtensionList::add(const char *name)
         if (__builtin_strcmp(names_[index], name) == 0) return true;
     if (count_ == max_names) return false;
     names_[count_++] = name;
+    added_++;
     return true;
 }
 
@@ -105,7 +107,7 @@ bool HostExtensionList::invariants_hold() const
     /* Every name it holds came from the list it was given, and the ones it
      * kept for this ICD are the rest of that list. `take` refuses a longer one
      * before it writes anything, so there is no room left to overrun. */
-    return count_ + kept_ <= given_;
+    return count_ + kept_ <= given_ + added_;
 }
 
 }  // namespace av::icd

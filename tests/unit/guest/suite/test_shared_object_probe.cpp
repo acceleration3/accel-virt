@@ -180,4 +180,201 @@ TEST(shared_object_probe, the_size_sweep_measures_every_length_and_fails_none_of
   CHECK(rig.holds("ok shared.carrier_size_88 0"));
   CHECK(rig.holds("ok shared.carrier_size_64 3221225659"));
   /* And not one of them failed the run. */
-  CHECK(!rig.holds("FAIL shared.carrier_size")); }
+  CHECK(!rig.holds("FAIL shared.carrier_size"));
+  /* The one length that carries a real record rather than filler: it is a
+   * length no shape is known for, so what it must show is the same refusal the
+   * filler got there - the bytes are not what is being refused. */
+  CHECK(rig.holds("ok shared.carrier_size_96 3221225659"));
+  CHECK(rig.holds("ok shared.carrier_size_96_valid 3221225659")); }
+
+/* The host's answer to "do you have external memory at all" is read, not
+ * assumed, and every way it can go wrong stops the run at that question
+ * rather than somewhere later that would be blamed on this driver. */
+TEST(shared_object_probe, a_host_that_cannot_be_asked_for_its_extensions_stops_at_the_question)
+{ Rig rig;
+  rig.vulkan().answer_extensions(2u, VK_ERROR_OUT_OF_HOST_MEMORY, VK_SUCCESS);
+  rig.run();
+  CHECK(rig.holds("shared.reported"));
+  CHECK(!rig.holds("shared.device")); }
+
+/* More extensions than the probe keeps room for: it will not read past its own
+ * array to find out, and says the host offers nothing it can use. */
+TEST(shared_object_probe, a_host_listing_more_extensions_than_there_is_room_for_is_not_read)
+{ Rig rig;
+  rig.vulkan().answer_extensions(SharedObjectProbe::max_extensions + 1u, VK_SUCCESS, VK_SUCCESS);
+  rig.run();
+  CHECK(rig.holds("shared.reported"));
+  CHECK(!rig.holds("shared.device")); }
+
+/* A host that counts its extensions and then refuses to name them. */
+TEST(shared_object_probe, a_host_that_will_not_name_its_extensions_stops_at_the_question)
+{ Rig rig;
+  rig.vulkan().answer_extensions(2u, VK_SUCCESS, VK_ERROR_OUT_OF_HOST_MEMORY);
+  rig.run();
+  CHECK(rig.holds("shared.reported"));
+  CHECK(!rig.holds("shared.device")); }
+
+/* And a host with a list that simply does not hold the one name: every entry is
+ * read to the end and none of them is it. */
+TEST(shared_object_probe, a_host_listing_other_extensions_offers_no_external_memory)
+{ Rig rig;
+  rig.vulkan().answer_extensions(2u, VK_SUCCESS, VK_SUCCESS);
+  rig.run();
+  CHECK(rig.holds("shared.reported"));
+  CHECK(!rig.holds("shared.device")); }
+
+/* A device with no memory type an export could use: the step says not_supported
+ * rather than allocating from a type the host never offered. */
+TEST(shared_object_probe, no_usable_memory_type_is_a_refused_export_and_not_a_guess)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().set_memory_types(0u);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.exportable"));
+  CHECK(!rig.holds("shared.handle"));
+  CHECK(rig.report().failed() != 0u); }
+
+/* A host that answers success and no memory. The step passed on the VkResult
+ * alone would report an allocation that does not exist, so what it judges is
+ * the memory. */
+TEST(shared_object_probe, an_allocate_that_answers_success_and_nothing_is_still_a_failure)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().allocate_nothing();
+  rig.run();
+  CHECK(rig.holds("FAIL shared.exportable"));
+  CHECK(!rig.holds("shared.handle"));
+  CHECK(rig.report().failed() != 0u); }
+
+/* The same of the export: success and no handle is no handle. */
+TEST(shared_object_probe, an_export_that_answers_success_and_no_handle_is_a_failed_step)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().hand_out_no_handle();
+  rig.run();
+  CHECK(rig.holds("ok shared.exportable"));
+  CHECK(rig.holds("FAIL shared.handle"));
+  CHECK(rig.report().failed() != 0u); }
+
+/* Freeing gives the identity, the handle and the carrier back, and the step is
+ * the kernel's own verdict on all three: a driver that refused any of them
+ * leaves an NTSTATUS behind and the release has not happened. */
+TEST(shared_object_probe, a_release_the_kernel_refused_is_reported_with_its_status)
+{ Rig rig;
+  constexpr std::uint32_t invalid_parameter = 0xC000000Du;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().refuse_the_release(invalid_parameter);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.released"));
+  CHECK(rig.holds("code=0xC000000D"));
+  CHECK(rig.report().failed() != 0u); }
+
+/* The carrier steps ask the kernel again rather than reusing what the first
+ * step found, so each of their own refusals is a step of its own: a reader
+ * must be able to tell "no adapter" from "no device on it" from "no
+ * allocation on that". */
+TEST(shared_object_probe, the_carrier_steps_name_their_own_adapter_and_device_refusals)
+{ Rig rig;
+  rig.kmt().fail_at(MockKmt::Call::enumerate_adapters, 2u, 0xC000009Au);
+  rig.run();
+  CHECK(rig.holds("ok shared.adapter"));
+  CHECK(rig.holds("FAIL shared.carrier_adapter"));
+  CHECK(!rig.holds("shared.carrier_device"));
+  CHECK(!rig.holds("shared.carrier_size_48")); }
+
+TEST(shared_object_probe, a_device_the_kernel_will_not_make_stops_the_carrier_steps)
+{ Rig rig;
+  rig.kmt().fail_at(MockKmt::Call::create_device, 1u, 0xC000009Au);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.carrier_device"));
+  CHECK(!rig.holds("shared.carrier_size_48"));
+  CHECK(!rig.holds("shared.carrier_plain")); }
+
+/* The three carrier creates are separate steps because they separate three
+ * things: the ordinary create, the same length through a buffer the caller
+ * does not own, and the two-way one. Each must be able to fail alone. */
+TEST(shared_object_probe, each_of_the_three_carrier_creates_fails_on_its_own)
+{ constexpr std::uint32_t invalid_parameter = 0xC000000Du;
+  { Rig rig;
+    /* Nine swept lengths come first, so the ordinary create is the tenth. */
+    rig.kmt().fail_at(MockKmt::Call::create_allocation, 10u, invalid_parameter);
+    rig.run();
+    CHECK(rig.holds("FAIL shared.carrier_plain"));
+    CHECK(rig.holds("shared.carrier_long")); }
+  { Rig rig;
+    rig.kmt().fail_at(MockKmt::Call::create_allocation, 11u, invalid_parameter);
+    rig.run();
+    CHECK(rig.holds("ok shared.carrier_plain"));
+    CHECK(rig.holds("FAIL shared.carrier_long"));
+    CHECK(rig.holds("shared.carrier_shared")); }
+  { Rig rig;
+    rig.kmt().fail_at(MockKmt::Call::create_shared_allocation, 1u, invalid_parameter);
+    rig.run();
+    CHECK(rig.holds("ok shared.carrier_long"));
+    CHECK(rig.holds("FAIL shared.carrier_shared"));
+    CHECK(!rig.holds("shared.carrier_minted")); } }
+
+/* A two-way create that answers success and mints nothing: the record comes
+ * back as it went in, and the step that reads it must say so rather than
+ * trusting the status. */
+TEST(shared_object_probe, a_shared_create_that_mints_nothing_is_caught_by_reading_the_record)
+{ Rig rig;
+  rig.kmt().zero_next(MockKmt::Call::create_shared_allocation);
+  rig.run();
+  CHECK(rig.holds("ok shared.carrier_shared"));
+  CHECK(rig.holds("FAIL shared.carrier_minted"));
+  CHECK(rig.report().failed() != 0u); }
+
+/* Every step between the adapter and the export stops the run where it failed,
+ * so a report never shows a device made on a physical device nothing chose. */
+TEST(shared_object_probe, each_step_up_to_the_device_stops_the_run_where_it_failed)
+{ { Rig rig;
+    rig.vulkan().fail(ScriptedVulkan::Call::create_instance, 1u, VK_ERROR_INITIALIZATION_FAILED);
+    rig.run();
+    CHECK(rig.holds("FAIL shared.instance"));
+    CHECK(!rig.holds("shared.physical_device")); }
+  { Rig rig;
+    rig.vulkan().fail(ScriptedVulkan::Call::enumerate_physical_devices, 1u, VK_ERROR_INITIALIZATION_FAILED);
+    rig.run();
+    CHECK(rig.holds("FAIL shared.physical_device"));
+    CHECK(!rig.holds("shared.chosen")); }
+  { /* A host whose devices carry other LUIDs than this adapter's: none of them
+     * is the one an export would prove anything about. */
+    Rig rig;
+    rig.vulkan().set_luid(0u, adapter_luid ^ 0xFFull, true);
+    rig.run();
+    CHECK(rig.holds("FAIL shared.chosen"));
+    CHECK(!rig.holds("shared.family")); }
+  { Rig rig;
+    rig.vulkan().set_queue_families(0u, 0u);
+    rig.run();
+    CHECK(rig.holds("FAIL shared.family"));
+    CHECK(!rig.holds("shared.reported")); }
+  { Rig rig;
+    rig.vulkan().report_external_objects(minted_handle);
+    rig.vulkan().fail(ScriptedVulkan::Call::create_device, 1u, VK_ERROR_INITIALIZATION_FAILED);
+    rig.run();
+    CHECK(rig.holds("ok shared.reported"));
+    CHECK(rig.holds("FAIL shared.device"));
+    CHECK(!rig.holds("shared.exportable")); } }
+
+/* A host that answers VK_INCOMPLETE because the probe's array was the smaller
+ * of the two: the names it did get are still read, which is all the question
+ * needs. */
+TEST(shared_object_probe, a_partial_extension_list_is_read_as_far_as_it_goes)
+{ Rig rig;
+  rig.vulkan().answer_extensions(2u, VK_SUCCESS, VK_INCOMPLETE);
+  rig.run();
+  CHECK(rig.holds("shared.reported"));
+  CHECK(!rig.holds("shared.device")); }
+
+/* The two-way create's whole point is the record that comes back, so bytes no
+ * record decodes from are caught by reading them - a driver writing nonsense
+ * back must not read as a minted identity. */
+TEST(shared_object_probe, a_record_that_comes_back_as_nonsense_is_not_a_minted_identity)
+{ Rig rig;
+  rig.kmt().scribble_the_next_record();
+  rig.run();
+  CHECK(rig.holds("ok shared.carrier_shared"));
+  CHECK(rig.holds("FAIL shared.carrier_minted"));
+  CHECK(rig.report().failed() != 0u); }

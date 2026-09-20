@@ -34,7 +34,9 @@ ScriptedVulkan::ScriptedVulkan()
       miscompute_(false), misdraw_(false), hold_fences_(false), fault_answer_(VK_ERROR_DEVICE_LOST),
       idle_after_fault_(VK_ERROR_DEVICE_LOST), luid_xor_(0u),
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
-      external_objects_(false), win32_handle_(nullptr), kernel_status_(0u),
+      external_objects_(false), win32_handle_(nullptr), scripted_extensions_(false), extension_count_(0u),
+      extension_first_(VK_SUCCESS), extension_second_(VK_SUCCESS), allocate_nothing_(false), no_handle_(false),
+      release_code_(0u), kernel_status_(0u),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
       pacing_adapter_(0u), pacing_device_(0u), instance_names_{}, instance_name_count_(0u), device_names_{},
@@ -333,6 +335,10 @@ VkResult ScriptedVulkan::allocate_memory(VkDevice, const VkMemoryAllocateInfo *i
 {
     const VkResult result = use(Call::allocate_memory);
     if (result != VK_SUCCESS) return result;
+    if (allocate_nothing_) {
+        *memory = VK_NULL_HANDLE;
+        return VK_SUCCESS;
+    }
     for (Allocation &allocation : allocations_) {
         if (allocation.memory != 0u) continue;
         allocation.memory = make(Kind::memory, 0u);
@@ -352,24 +358,40 @@ void ScriptedVulkan::report_external_objects(void *handle)
     win32_handle_ = handle;
 }
 
+void ScriptedVulkan::answer_extensions(std::uint32_t count, VkResult first, VkResult second)
+{
+    scripted_extensions_ = true;
+    extension_count_ = count;
+    extension_first_ = first;
+    extension_second_ = second;
+}
+
+void ScriptedVulkan::allocate_nothing() { allocate_nothing_ = true; }
+
+void ScriptedVulkan::hand_out_no_handle() { no_handle_ = true; }
+
+void ScriptedVulkan::refuse_the_release(std::uint32_t code) { release_code_ = code; }
+
 VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint32_t *count,
                                                      VkExtensionProperties *properties)
 {
     static const char *const reported[] = {"VK_KHR_external_memory_win32", "VK_KHR_external_semaphore_win32"};
-    const std::uint32_t      listed = external_objects_ ? 2u : 0u;
+    static const char *const others[] = {"VK_KHR_external_memory_fd", "VK_KHR_swapchain"};
+    const std::uint32_t      listed = scripted_extensions_ ? extension_count_ : (external_objects_ ? 2u : 0u);
     if (properties == nullptr) {
         *count = listed;
-        return VK_SUCCESS;
+        return scripted_extensions_ ? extension_first_ : VK_SUCCESS;
     }
     const std::uint32_t room = *count < listed ? *count : listed;
     for (std::uint32_t index = 0u; index < room; index++) {
         properties[index] = VkExtensionProperties{};
-        const char *const name = reported[index];
+        const char *const name = scripted_extensions_ ? others[index % 2u] : reported[index];
         for (std::uint32_t at = 0u; name[at] != '\0' && at + 1u < sizeof properties[index].extensionName; at++)
             properties[index].extensionName[at] = name[at];
         properties[index].specVersion = 1u;
     }
     *count = room;
+    if (scripted_extensions_) return extension_second_;
     return room < listed ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
@@ -388,6 +410,7 @@ VkResult ScriptedVulkan::memory_win32_handle(VkDevice, VkDeviceMemory memory, vo
     *handle = nullptr;
     if (!external_objects_) return VK_ERROR_EXTENSION_NOT_PRESENT;
     if (memory == VK_NULL_HANDLE) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (no_handle_) return VK_SUCCESS;
     *handle = win32_handle_;
     return win32_handle_ != nullptr ? VK_SUCCESS : VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
@@ -397,6 +420,7 @@ void ScriptedVulkan::free_memory(VkDevice, VkDeviceMemory memory)
     Allocation *const allocation = allocation_of(raw(memory));
     if (allocation != nullptr) allocation->memory = 0u;
     destroy(Kind::memory, raw(memory));
+    if (release_code_ != 0u) kernel_status_ = release_code_;
 }
 
 VkResult ScriptedVulkan::map_memory(VkDevice, VkDeviceMemory memory, void **data)

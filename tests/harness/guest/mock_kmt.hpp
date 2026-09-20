@@ -253,6 +253,17 @@ public:
     /* The next `call` succeeds with a zero handle or address; a paging queue
      * comes without its fence object. */
     void          zero_next(Call call);
+    /* The next shared create succeeds and leaves bytes where the record was
+     * that no record decodes from: a driver that wrote nonsense back into the
+     * creator's private data, which a caller reading the id must catch rather
+     * than trust the status (feature 053). */
+    void          scribble_the_next_record();
+    /* Every one-way create from here on keeps the record it was given rather
+     * than minting into it, and the next open hands back fewer bytes than a
+     * record needs: two things a driver could do that leave a caller reading
+     * an identity that is not there (feature 053). */
+    void          keep_the_next_record();
+    void          hand_back_a_short_record();
     /* How far the clock moves at each vertical blank; the default is the
      * committed mode's 60 Hz. */
     void          set_blank_period(std::uint64_t ticks);
@@ -463,6 +474,9 @@ private:
     SharedHandle  shared_[max_shared];
     std::uint64_t next_shared_handle_;
     std::uint64_t next_object_id_;
+    bool          scribble_record_;
+    bool          keep_record_;
+    bool          short_record_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

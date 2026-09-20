@@ -582,3 +582,31 @@ TEST(device_table_open, unwinds_an_earlier_shared_open_when_a_later_one_fails)
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
+
+/* A shared allocation opened first and a later one in the same list refused:
+ * the unwind has to give the *object* back too, not only the open, or the
+ * identity is held by a device that opened nothing (feature 053). */
+TEST(device_table_open, unwinds_the_object_of_a_shared_open_when_a_later_open_cannot_be_recorded)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord request = fixture.open_request(2u);
+  static_cast<void>(fixture.share(1u));
+  fixture.hand_over_creator_data(0u);
+  fixture.hand_over_creator_data(1u);
+  /* The second names an identity whose record does not decode, which is
+   * refused inside the loop rather than before it - so the first is already
+   * open, and shared, when the unwind runs. */
+  for (std::uint32_t index = 0u; index < av::SharedObjectRecord::encoded_size; index++)
+      fixture.creator_record(1u)[index] = 0xA5u;
+  CHECK(fixture.devices().open(device, request) != Status::ok);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK(fixture.shared().invariants_hold());
+  /* And the object is openable again, which it would not be had the unwind
+   * kept the reference the first open took. */
+  DxgkargOpenAllocationRecord again = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok); }

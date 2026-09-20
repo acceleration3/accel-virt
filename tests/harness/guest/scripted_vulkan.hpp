@@ -176,6 +176,21 @@ public:
      * what its export answers. Off by default, as a host with no fd sharing
      * is. */
     void     report_external_objects(void *handle);
+    /* Feature 053: the device-extension enumeration answers this instead of
+     * the host's own list - `count` extensions none of which the probe is
+     * looking for, with `first` from the counting call and `second` from the
+     * one that fills the names in. What the probe must survive is every one of
+     * them: a host that refuses to be asked, one that claims more extensions
+     * than the probe keeps room for, and one that lists only others. */
+    void     answer_extensions(std::uint32_t count, VkResult first, VkResult second);
+    /* An allocate that answers success and no memory, and a handle export that
+     * answers success and no handle: a host keeping neither promise, which the
+     * probe must read as a failed step rather than a passed one. */
+    void     allocate_nothing();
+    void     hand_out_no_handle();
+    /* The NTSTATUS the driver reports after the free, which a release that
+     * went wrong leaves non-zero. */
+    void     refuse_the_release(std::uint32_t code);
     VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info, VkDeviceMemory *memory) override;
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
@@ -311,6 +326,13 @@ private:
      * handle its export answers - what a probe over it is judged against. */
     bool          external_objects_;
     void         *win32_handle_;
+    bool          scripted_extensions_;
+    std::uint32_t extension_count_;
+    VkResult      extension_first_;
+    VkResult      extension_second_;
+    bool          allocate_nothing_;
+    bool          no_handle_;
+    std::uint32_t release_code_;
     std::uint32_t kernel_status_;
     Allocation    allocations_[max_allocations];
     std::uint32_t allocated_types_[max_allocations * 4u];

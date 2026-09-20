@@ -864,8 +864,13 @@ void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const Vk
 {
     AV_SCOPE("IcdRoot::destroy_semaphore");
     LoaderHandle *const made = allocating_device(device);
-    ExternalObjectSlot  row = {};
-    if (made != nullptr && externals_.take_semaphore(semaphore, row)) release_shared(*made, row);
+    /* A device this ICD did not make has no connection to send over, and the
+     * generated wrapper follows one without asking. Every other entry point
+     * here answers such a device INVALID_EXTERNAL_HANDLE; this one returns
+     * nothing, because vkDestroySemaphore has nothing to answer with. */
+    if (made == nullptr) return;
+    ExternalObjectSlot row = {};
+    if (externals_.take_semaphore(semaphore, row)) release_shared(*made, row);
     vkicd::generated::Wrap_vkDestroySemaphore(device, semaphore, allocator);
 }
 

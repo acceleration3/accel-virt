@@ -55,6 +55,11 @@ private:
     uint32_t    count_;
     uint32_t    given_;
     uint32_t    kept_;
+    /* Names this ICD added on top of the list it was given: `add` is how the
+     * driver asks the host for something the application never named, so they
+     * are not part of `given_` and the invariant has to know they exist
+     * (feature 053). */
+    uint32_t    added_;
 };
 
 }  // namespace av::icd
