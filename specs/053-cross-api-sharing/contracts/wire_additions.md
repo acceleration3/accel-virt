@@ -157,5 +157,15 @@ the memory object inside `OPEN_SHARED_OBJECT` - so at the moment an application
 sets them there is no host object to set them on. Reporting
 `GL_EXT_memory_object` would promise an ordering this design cannot keep, and
 the registry has `GL_EXT_memory_object_win32` require the base extension, so it
-cannot be reported alone either. A conformance subset should carry
-`cl_khr_gl_sharing` and nothing of OpenGL's until that is answered.
+cannot be reported alone either.
+
+**T040 decided: neither OpenCL row is reported either**, which strikes the last
+sentence this contract used to end on. `cl_khr_external_memory_win32` is built
+in the guest - `ClExternalMemory` and `clCreateBufferWithProperties` take a
+Win32 handle all the way to `OPEN_SHARED_OBJECT` - and refused on the host,
+because the device's OpenCL backend cannot import a shared object until T019
+finds a host whose OpenCL lists `cl_khr_external_memory_dma_buf`.
+`cl_khr_gl_sharing` needs the *host's* CL context created against the *host's*
+GL context, which belongs to another rvk context that nothing on the wire names
+(research.md §18). So a conformance subset carries none of these six rows
+today, and each of the three reasons is a different thing to fix.
