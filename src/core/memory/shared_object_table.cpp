@@ -69,6 +69,23 @@ Status SharedObjectTable::mint(Allocation &allocation, SharedObjectRecord &recor
     return Status::ok;
 }
 
+Status SharedObjectTable::open_minted(uint64_t object_id, SharedObject *&found, SharedObjectRecord &minted)
+{
+    AV_SCOPE("SharedObjectTable::open_minted");
+    platform_.require_irql_at_most(Irql::apc, "SharedObjectTable::open_minted");
+    MutexGuard lock(mutex_);
+    InvariantScope<SharedObjectTable> guard(platform_, *this, "open_minted");
+    found = nullptr;
+    if (object_id == 0u) return Status::invalid_parameter;
+    SharedObject *const object = find(object_id);
+    if (object == nullptr) return Status::not_found;
+    const Status opened = object->open();
+    if (opened != Status::ok) return opened;
+    minted = SharedObjectRecord(object_id, object->kind(), adapter_, object->size());
+    found = object;
+    return Status::ok;
+}
+
 Status SharedObjectTable::open(const SharedObjectRecord &record, SharedObject *&found)
 {
     AV_SCOPE("SharedObjectTable::open");

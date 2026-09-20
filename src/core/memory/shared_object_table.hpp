@@ -56,6 +56,14 @@ public:
      * or whose kind or size disagrees with the object; the object's answer at
      * its ceiling. Nothing is held unless ok. */
     [[nodiscard]] Status open(const SharedObjectRecord &record, SharedObject *&found);
+    /* The same open, for the creating device, which has no record to present:
+     * dxgkrnl copies the caller's own bytes back over the ones CreateAllocation
+     * wrote before it runs the open inside every create, so the creator's open
+     * arrives carrying the unassigned record it started with. `minted` is
+     * filled with the record that names the object, which the caller writes
+     * into the bytes dxgkrnl copies out (research.md §15). not_found for an id
+     * this table does not hold. */
+    [[nodiscard]] Status open_minted(uint64_t object_id, SharedObject *&found, SharedObjectRecord &minted);
     /* CloseAllocation: one fewer device. invalid_parameter for an object this
      * table does not hold, and for one nobody holds. */
     [[nodiscard]] Status close(SharedObject &object);

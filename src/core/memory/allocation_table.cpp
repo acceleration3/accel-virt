@@ -74,19 +74,21 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
     return Status::ok;
 }
 
-Status AllocationTable::share(Allocation &allocation, uint8_t *private_data)
+Status AllocationTable::share(Allocation &allocation, const uint8_t *private_data)
 {
     AV_SCOPE("AllocationTable::share");
     SharedObjectRecord record;
-    uint8_t *const     at = private_data + AllocationDescriptor::encoded_size;
+    const uint8_t *const at = private_data + AllocationDescriptor::encoded_size;
     if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
     const Status minted = shared_.mint(allocation, record);
     if (minted != Status::ok) return minted;
-    /* Written back into the creator's own bytes, which is the only thing that
-     * reaches the opening process (docs/kb/04-memory.md). The bytes are the
-     * ones it just decoded from, so the encode has exactly the room it
-     * needs. */
-    static_cast<void>(record.encode(at, SharedObjectRecord::encoded_size));
+    /* Nothing is written back here. dxgkrnl copies the caller's own bytes over
+     * this buffer before the open it runs inside every create, so a record
+     * written at create time is discarded before anyone reads it - which is
+     * what DeviceTable::claim was refusing for four guest boots. The minting
+     * belongs here, because this is where the allocation is; the writing
+     * belongs in the open, which is where the bytes survive
+     * (research.md §15). */
     allocation.shared_as(record.object_id());
     return Status::ok;
 }

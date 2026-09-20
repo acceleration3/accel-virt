@@ -772,7 +772,12 @@ int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *requ
     AV_SCOPE("Adapter::open_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::open_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(devices_.open(device, *request)).value();
+    const int32_t opened = NtStatus(devices_.open(device, *request)).value();
+    /* dxgkrnl runs an open inside every create, so a refusal here is one a
+     * caller reads as a failed CreateAllocation. This was the only DDI in the
+     * driver with no line, and it cost four guest boots (research.md §15). */
+    log_status("rvkgpu: OpenAllocation", opened);
+    return opened;
 }
 
 int32_t Adapter::close_allocation(void *device, const DxgkargCloseAllocationRecord *request)

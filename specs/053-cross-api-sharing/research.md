@@ -517,3 +517,83 @@ If a `--no-verifier` boot takes the 88-byte carrier, the verifier is convicted
 and (a)'s answer is about the verifier's own buffer handling rather than
 dxgkrnl's. If it refuses it exactly as before, the verifier is eliminated and
 every earlier measurement stands.
+
+## §15 — Answered: dxgkrnl restores the caller's bytes before the create-time open
+
+Read out of `dxgkrnl.sys` (Ghidra, `re/ghidra-proj`), and it accounts for every
+observation without a residue.
+
+### What CreateAllocation actually does
+
+`DXGDEVICE::CreateAllocation` captures each allocation's private driver data
+**twice**. At `1403516c8`, for every element of `pAllocationInfo`:
+
+```c
+if (two_copies) size *= 2;
+buffer = operator_new__(size, 'DxgK', 0x102);
+driver_copy[i]   = buffer;            // what the miniport is given
+pristine_copy[i] = buffer + size;     // the caller's bytes, kept aside
+memcpy(pristine_copy[i], user_bytes, size);
+```
+
+It then calls `CreateDriverAllocations` - which calls
+`DxgkDdiCreateAllocation` - and immediately afterwards
+`DXGDEVICE::OpenAllocations` at `140371600`, in the same syscall. That second
+function is the whole answer. Before it calls the miniport again it does this,
+per allocation:
+
+```c
+open_info[i].hAllocation          = allocation->handle;
+open_info[i].PrivateDriverDataSize = user_info[i].PrivateDriverDataSize;   // 88
+open_info[i].pPrivateDriverData    = driver_copy[i];
+memcpy(driver_copy[i], pristine_copy[i], size);   /* <- the caller's bytes,
+                                                     over whatever the
+                                                     miniport just wrote */
+ADAPTER_RENDER::DdiOpenAllocation(...);
+```
+
+and only after the open returns does it copy the buffer out to user memory and
+refresh the pristine copy. So:
+
+**Whatever `DxgkDdiCreateAllocation` writes into `pPrivateDriverData` is
+overwritten before `DxgkDdiOpenAllocation` sees it, and never reaches the
+caller. The write that reaches the caller is the one made during the open.**
+
+### Why that fails this driver at 88 bytes and not at 48
+
+1. `DxgkDdiCreateAllocation` mints an id, writes the record, records it on the
+   allocation, returns success - and is logged `bytes 88 status 0x00000000`.
+2. dxgkrnl restores the caller's bytes: the record is **unassigned** again.
+3. `DxgkDdiOpenAllocation` runs on the creating device. `DeviceTable::claim`
+   sees `allocation.shared_id() != 0`, decodes the restored record, and
+   compares: `record.object_id()` is 0 and the allocation's is not, so it
+   answers `invalid_parameter`.
+4. `Adapter::open_allocation` is **the one DDI in this driver with no log
+   line**, so the refusal left no trace.
+5. `D3DKMTCreateAllocation2` returns that status: `0xC000000D`.
+
+At 48 bytes `allocation.shared_id()` is 0, `claim` returns `ok` on its first
+line, and nothing of this runs. That is the whole of the difference, and it is
+why every experiment that varied the length or the write found the boundary
+between 48 and 88 without finding a cause.
+
+It also explains the four boots that read as "the driver succeeded and dxgkrnl
+refused": the driver did succeed, at the DDI that logs, and then failed at the
+DDI that does not.
+
+### What it means for the design
+
+The record in the allocation's private driver data is still the channel - but
+the **open** is where it must be written, not the create. The create is where
+the identity is minted, because that is where the allocation exists; the open
+is where the bytes survive.
+
+So `claim` gains one case: a record that decodes and is **unassigned**, on an
+allocation that already has an id, is the creating device's own open. It opens
+the object by the allocation's id and writes the minted record back, which is
+what dxgkrnl then copies out to the caller. A record that *is* assigned must
+still name the same object - that is the cross-process case and is unchanged.
+
+This is not a new hole. An opener has to resolve the allocation handle before
+`claim` runs at all, and on the cross-process path that handle comes from the
+NT handle; the record was never the capability.

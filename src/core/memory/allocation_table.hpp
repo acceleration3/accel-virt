@@ -64,7 +64,7 @@ private:
     [[nodiscard]] Status create_one(struct DxgkAllocationInfoRecord &info);
     /* Mints an identity for `allocation` into the record that follows the
      * descriptor in `private_data`, and writes it back there. */
-    [[nodiscard]] Status share(Allocation &allocation, uint8_t *private_data);
+    [[nodiscard]] Status share(Allocation &allocation, const uint8_t *private_data);
     void                 destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count);
 
     Platform               &platform_;

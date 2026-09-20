@@ -396,12 +396,24 @@ TEST(allocation_table_create, mints_an_identity_for_a_creator_that_asked_for_one
   fixture.ask_to_share(0u, 4096u);
   CHECK_STATUS(fixture.create(), Status::ok);
   CHECK_EQ(fixture.shared().live(), 1u);
+  /* The create writes nothing back. dxgkrnl copies the caller's own bytes over
+   * this buffer before the open it runs inside every create, so a record
+   * written here would be discarded before anyone read it; the open is where
+   * it goes (research.md §15). What the create leaves is the identity on the
+   * allocation. */
   const av::SharedObjectRecord record = fixture.minted(0u);
-  CHECK(record.assigned());
-  CHECK_EQ(record.adapter_id(), fixture.shared().adapter());
-  CHECK_EQ(record.size(), 4096u);
+  CHECK(!record.assigned());
   const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
-  CHECK_EQ(allocation->shared_id(), record.object_id());
+  CHECK(allocation->shared_id() != 0u);
+  /* And the object it minted is the one the record asked for: an open with a
+   * record naming it agrees about the kind and the size, which is the only
+   * thing that makes such an open succeed. */
+  const av::SharedObjectRecord names(allocation->shared_id(), av::SharedObjectKind(av::SharedObjectKind::memory),
+                                     fixture.shared().adapter(), 4096u);
+  av::SharedObject *object = nullptr;
+  CHECK_STATUS(fixture.shared().open(names, object), Status::ok);
+  CHECK(object != nullptr);
+  CHECK_STATUS(fixture.shared().close(*object), Status::ok);
   CHECK(fixture.table().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }
 
@@ -455,9 +467,18 @@ TEST(allocation_table_create, a_record_may_name_an_object_bigger_than_the_alloca
   CHECK_STATUS(fixture.create(), Status::ok);
   CHECK_EQ(fixture.table().live(), 1u);
   CHECK_EQ(fixture.shared().live(), 1u);
-  const av::SharedObjectRecord record = fixture.minted(0u);
-  CHECK(record.assigned());
-  CHECK_EQ(record.size(), 8192u);
+  /* The object is the size the record asked for and the allocation is one
+   * page: an open naming 8192 agrees with the object, and one naming the
+   * allocation's own size does not. */
+  const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  const av::SharedObjectRecord names(allocation->shared_id(), av::SharedObjectKind(av::SharedObjectKind::memory),
+                                     fixture.shared().adapter(), 8192u);
+  av::SharedObject *object = nullptr;
+  CHECK_STATUS(fixture.shared().open(names, object), Status::ok);
+  CHECK_STATUS(fixture.shared().close(*object), Status::ok);
+  const av::SharedObjectRecord smaller(allocation->shared_id(), av::SharedObjectKind(av::SharedObjectKind::memory),
+                                       fixture.shared().adapter(), 4096u);
+  CHECK_STATUS(fixture.shared().open(smaller, object), Status::invalid_parameter);
   CHECK(fixture.table().invariants_hold()); }
 
 TEST(allocation_table_create, unwinds_the_identity_of_an_earlier_allocation_when_a_later_one_fails)

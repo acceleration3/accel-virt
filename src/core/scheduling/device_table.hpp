@@ -61,6 +61,10 @@ private:
      * adapter gave an identity to; null, with ok, for one it did not
      * (feature 053). The record is the creating process's own bytes, which is
      * what dxgkrnl hands the opening process. */
+    /* The creating device's own open, where the minted record is written into
+     * the bytes dxgkrnl copies out (research.md §15). */
+    [[nodiscard]] Status adopt(const Allocation &allocation, const struct DxgkOpenAllocationInfoRecord &info,
+                               SharedObject *&object);
     [[nodiscard]] Status claim(const Allocation &allocation, const struct DxgkOpenAllocationInfoRecord &info,
                                SharedObject *&object);
     void                 close_opened(DxgkargOpenAllocationRecord &request, uint32_t count);

@@ -90,10 +90,36 @@ Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocation
     const auto *const  at =
         static_cast<const uint8_t *>(info.pPrivateDriverData) + AllocationDescriptor::encoded_size;
     if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
+    /* An unassigned record on an allocation that already has an identity is
+     * the creating device's own open, which dxgkrnl runs inside every create
+     * after copying the caller's bytes back over whatever the create wrote. So
+     * this is where the minted record is written: the bytes handed to an open
+     * are the ones dxgkrnl copies out to the caller, and the ones it stores
+     * for another process to open by (research.md §15).
+     *
+     * It is no weaker than the assigned case. An opener reaches claim only
+     * once dxgkrnl has resolved the allocation handle for it, and across
+     * processes that handle comes from the NT handle; the record was never
+     * what made the open allowed. */
+    if (!record.assigned()) return adopt(allocation, info, object);
     /* The allocation dxgkrnl resolved and the record the creator wrote have to
      * be the same object: either alone is something a process can arrange. */
     if (record.object_id() != allocation.shared_id()) return Status::invalid_parameter;
     return shared_.open(record, object);
+}
+
+/* The creating device's own open: the identity is the allocation's, and the
+ * record goes back into the bytes dxgkrnl will copy out. */
+Status DeviceTable::adopt(const Allocation &allocation, const DxgkOpenAllocationInfoRecord &info,
+                          SharedObject *&object)
+{
+    AV_SCOPE("DeviceTable::adopt");
+    SharedObjectRecord minted;
+    const Status       opened = shared_.open_minted(allocation.shared_id(), object, minted);
+    if (opened != Status::ok) return opened;
+    auto *const at = static_cast<uint8_t *>(info.pPrivateDriverData) + AllocationDescriptor::encoded_size;
+    static_cast<void>(minted.encode(at, SharedObjectRecord::encoded_size));
+    return Status::ok;
 }
 
 Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)

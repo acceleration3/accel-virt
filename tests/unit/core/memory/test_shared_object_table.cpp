@@ -468,3 +468,47 @@ TEST(shared_object_table_invariants, refuse_two_objects_that_name_one_id)
   av::SharedObjectProbe::set_id(*found, two.object_id());
   CHECK_STATUS(rig.table().close(*found), Status::ok);
   CHECK(rig.table().invariants_hold()); }
+
+/* The creating device's open, which arrives with no record to present because
+ * dxgkrnl copied the caller's own bytes back over the ones CreateAllocation
+ * wrote. The table opens by the id the allocation carries and answers the
+ * record that names the object, which is what the caller is finally given
+ * (research.md §15). */
+TEST(shared_object_table_open_minted, opens_by_the_allocations_own_id_and_answers_the_record)
+{ Fixture fixture;
+  Allocation *const carrier = fixture.allocate(4096u);
+  CHECK(carrier != nullptr);
+  SharedObjectRecord asking = fixture.asking(8192u);
+  CHECK_STATUS(fixture.table().mint(*carrier, asking), Status::ok);
+  CHECK(asking.assigned());
+
+  SharedObject      *object = nullptr;
+  SharedObjectRecord minted;
+  CHECK_STATUS(fixture.table().open_minted(asking.object_id(), object, minted), Status::ok);
+  CHECK(object != nullptr);
+  CHECK(minted.assigned());
+  CHECK_EQ(minted.object_id(), asking.object_id());
+  CHECK_EQ(minted.adapter_id(), fixture.table().adapter());
+  CHECK_EQ(minted.size(), 8192u);
+  CHECK(minted.kind().same_as(asking.kind()));
+  /* It is a real open: the object is held until it is closed. */
+  CHECK_STATUS(fixture.table().close(*object), Status::ok);
+  CHECK(fixture.table().invariants_hold());
+
+  /* An id this table never minted, and no id at all. */
+  SharedObject *nothing = nullptr;
+  CHECK_STATUS(fixture.table().open_minted(asking.object_id() + 0x1000u, nothing, minted), Status::not_found);
+  CHECK(nothing == nullptr);
+  CHECK_STATUS(fixture.table().open_minted(0u, nothing, minted), Status::invalid_parameter);
+  CHECK(nothing == nullptr);
+  /* And an object already held by as many devices as it can be: the creator's
+   * open is refused like any other rather than counted past the ceiling. */
+  SharedObject *held = nullptr;
+  CHECK_STATUS(fixture.table().open_minted(asking.object_id(), held, minted), Status::ok);
+  av::SharedObjectProbe::set_opens(*held, 0xFFFFFFFFu);
+  SharedObject *past = fixture.sentinel();
+  CHECK_STATUS(fixture.table().open_minted(asking.object_id(), past, minted), Status::no_space);
+  CHECK(past == nullptr);
+  av::SharedObjectProbe::set_opens(*held, 1u);
+  CHECK_STATUS(fixture.table().close(*held), Status::ok);
+  CHECK(fixture.table().invariants_hold()); }

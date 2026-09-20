@@ -954,6 +954,22 @@ public:
         return status;
     }
 
+    /* The open dxgkrnl runs inside every create, which this rig did not model
+     * and which is why it never caught the carrier bug: the caller's own bytes
+     * are put back over whatever CreateAllocation wrote, and the creating
+     * device is opened on them. That open is where the miniport writes the
+     * minted record, and what it leaves is what dxgkrnl copies out to the
+     * caller and stores for another process (research.md §15). */
+    std::int32_t creator_open(std::uint32_t which, std::uint64_t record_size,
+                              std::uint32_t kind = av::SharedObjectKind::memory)
+    {
+        const av::SharedObjectRecord asking(0u, av::SharedObjectKind(kind), 0u, record_size);
+        CHECK_STATUS(asking.encode(private_ + av::AllocationDescriptor::encoded_size,
+                                   av::SharedObjectRecord::encoded_size),
+                     av::Status::ok);
+        return open(which);
+    }
+
     /* The id the miniport minted into the creator's own bytes, which is the
      * value the runtime keeps and hands the opening process. */
     av::SharedObjectRecord minted() const
@@ -1039,16 +1055,18 @@ TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_i
   CHECK_EQ(device.start_device(), 0);
   { SharedRuntime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
-    /* The id reached the creator's bytes, which is the only channel that
-     * crosses a process boundary. */
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.create_device(1u), 0);
+    /* The create writes nothing; the open dxgkrnl runs inside it does. */
+    CHECK(!runtime.minted().assigned());
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
+    /* Now the id has reached the creator's bytes, which is the only channel
+     * that crosses a process boundary. */
     const av::SharedObjectRecord record = runtime.minted();
     CHECK(record.assigned());
     CHECK(record.object_id() != 0u);
     CHECK(record.adapter_id() != 0u);
     CHECK_EQ(record.size(), SharedRuntime::bytes);
-    CHECK_EQ(runtime.create_device(0u), 0);
-    CHECK_EQ(runtime.create_device(1u), 0);
-    CHECK_EQ(runtime.open(0u), 0);
     CHECK_EQ(runtime.open(1u), 0);
     /* Neither open may destroy what the other still holds. */
     CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
@@ -1073,7 +1091,7 @@ TEST(ddi_scenario, a_device_destroyed_holding_a_shared_allocation_lets_go_of_it)
     CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
     CHECK_EQ(runtime.create_device(0u), 0);
     CHECK_EQ(runtime.create_device(1u), 0);
-    CHECK_EQ(runtime.open(0u), 0);
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
     CHECK_EQ(runtime.open(1u), 0);
     /* The opening process exits without closing. */
     CHECK_EQ(runtime.destroy_device(1u), 0);
@@ -1093,7 +1111,10 @@ TEST(ddi_scenario, an_open_carrying_a_forged_record_is_refused_and_opens_nothing
   { SharedRuntime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
     CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
     const av::SharedObjectRecord real = runtime.minted();
+    CHECK(real.assigned());
+    CHECK_EQ(runtime.close(0u), 0);
     std::uint8_t forged[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
     const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
                                               av::SurfaceLayout(64u, 64u, 21u, 256u), SharedRuntime::bytes,

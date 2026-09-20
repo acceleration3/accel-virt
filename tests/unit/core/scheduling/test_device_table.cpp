@@ -172,11 +172,20 @@ public:
         kernel_handles_.remove(handles_[i]);
         handles_[i] = kernel_handles_.insert(infos_[i].hAllocation);
 
-        av::SharedObjectRecord record;
-        CHECK_STATUS(record.decode(descriptors_[i] + AllocationDescriptor::encoded_size,
+        /* The create writes nothing into the caller's bytes - dxgkrnl would
+         * discard it - so what a creator's private data carries afterwards is
+         * what the open dxgkrnl runs inside the create left there. The fixture
+         * does that here, because every test below opens against it
+         * (research.md §15). */
+        const av::Allocation *const made = allocations_.find(infos_[i].hAllocation);
+        CHECK(made != nullptr);
+        const av::SharedObjectRecord minted(made->shared_id(),
+                                            av::SharedObjectKind(av::SharedObjectKind::memory),
+                                            shared_.adapter(), 0x1000u);
+        CHECK_STATUS(minted.encode(descriptors_[i] + AllocationDescriptor::encoded_size,
                                    av::SharedObjectRecord::encoded_size),
                      Status::ok);
-        return record;
+        return minted;
     }
 
     /* Allocation `i` created again as a context's ring, which is published to
@@ -656,3 +665,73 @@ TEST(device_table_open, a_blob_another_device_already_holds_is_refused_and_unwou
   CHECK_EQ(fixture.devices().opens(), 1u);
   CHECK(fixture.devices().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }
+
+/* The open dxgkrnl runs inside every create, which is where this feature was
+ * failing. dxgkrnl copies the caller's own bytes back over the private data
+ * before that open, so the creating device's open arrives carrying the
+ * *unassigned* record the caller wrote - not the one CreateAllocation minted.
+ * It must be taken, and it is where the minted record goes into the bytes
+ * dxgkrnl then copies out to the caller (research.md §15). */
+TEST(device_table_open, the_creating_devices_own_open_carries_no_record_and_is_given_one)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  const auto *const made = fixture.allocation(0u);
+  CHECK(made->shared_id() != 0u);
+  /* The caller's bytes, as dxgkrnl restores them: the record it asked with,
+   * naming no object at all. */
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 0x1000u);
+  CHECK_STATUS(asking.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::ok);
+  CHECK_EQ(fixture.devices().opens(), 1u);
+
+  /* And the bytes now name the object, which is how the creating process gets
+   * an id it can share by - the only channel out of the kernel there is. */
+  av::SharedObjectRecord given;
+  CHECK_STATUS(given.decode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  CHECK(given.assigned());
+  CHECK_EQ(given.object_id(), made->shared_id());
+  CHECK_EQ(given.adapter_id(), fixture.shared().adapter());
+  CHECK_EQ(given.size(), 0x1000u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK(fixture.shared().invariants_hold());
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
+
+/* An unassigned record on an allocation with no identity is still nothing to
+ * open: the creator's-open path is reached only where the allocation already
+ * names an object. */
+TEST(device_table_open, an_unassigned_record_on_an_ordinary_allocation_opens_nothing_shared)
+{ Fixture fixture;
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 0x1000u);
+  CHECK_STATUS(asking.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::ok);
+  CHECK_EQ(fixture.shared().live(), 0u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
+
+/* The creating device's open of an allocation naming an object the table does
+ * not hold: refused, and the bytes are left as they came rather than given a
+ * record for an open that did not happen. Only the kernel writes an id onto an
+ * allocation, so this is a state no caller can reach - which is exactly why
+ * the open must not assume it away. */
+TEST(device_table_open, the_creating_devices_open_of_an_identity_the_table_lost_is_refused)
+{ Fixture fixture;
+  static_cast<void>(fixture.share(0u));
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 0x1000u);
+  CHECK_STATUS(asking.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  fixture.allocation(0u)->shared_as(fixture.allocation(0u)->shared_id() + 0x1000u);
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  fixture.hand_over_creator_data(0u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::not_found);
+  CHECK_EQ(fixture.devices().opens(), 0u);
+  av::SharedObjectRecord left;
+  CHECK_STATUS(left.decode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  CHECK(!left.assigned());
+  CHECK(fixture.devices().invariants_hold()); }
