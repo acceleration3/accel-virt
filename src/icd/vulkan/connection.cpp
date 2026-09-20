@@ -15,7 +15,7 @@ namespace av::icd {
 
 Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock)
     : kmt_(kmt), memory_(memory), lock_(lock), search_(kmt), connection_(kmt), staging_(nullptr), transport_(),
-      locked_(), luid_(0u)
+      locked_(), luid_(0u), host_dma_buf_(false)
       {
           AV_SCOPE("Connection::Connection");
       }
@@ -149,6 +149,18 @@ bool Connection::invariants_hold() const
     if (!opened()) return !transport_.constructed() && staging_ == nullptr && !connection_.opened() && !search_.found();
     if (!transport_.constructed() || !transport_.object().invariants_hold()) return false;
     return staging_ != nullptr && connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
+}
+
+void Connection::note_host_dma_buf()
+{
+    AV_SCOPE("Connection::note_host_dma_buf");
+    host_dma_buf_ = true;
+}
+
+bool Connection::host_has_dma_buf() const
+{
+    AV_SCOPE("Connection::host_has_dma_buf");
+    return host_dma_buf_;
 }
 
 }  // namespace av::icd

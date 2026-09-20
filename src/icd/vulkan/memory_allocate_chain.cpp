@@ -13,7 +13,8 @@ MemoryAllocateChain::MemoryAllocateChain()
     AV_SCOPE("MemoryAllocateChain::MemoryAllocateChain");
 }
 
-Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind, int fd)
+Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind,
+                                 VkFlags share_type, int fd)
 {
     AV_SCOPE("MemoryAllocateChain::take");
     clear();
@@ -37,7 +38,7 @@ Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32Ha
             const auto *asked = reinterpret_cast<const VkExportMemoryAllocateInfo *>(node);
             if (!kind.answers(asked->handleTypes)) return refusal(Status::not_supported);
             export_.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-            export_.handleTypes = kind.host_type();
+            export_.handleTypes = share_type;
             link(&export_);
             exports_ = true;
             continue;
@@ -45,7 +46,7 @@ Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32Ha
         if (type == import_memory_win32_handle_info) {
             if (fd < 0) return refusal(Status::invalid_parameter);
             import_.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
-            import_.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(kind.host_type());
+            import_.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(share_type);
             import_.fd = fd;
             link(&import_);
             imports_ = true;

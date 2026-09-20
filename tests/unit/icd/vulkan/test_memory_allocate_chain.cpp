@@ -53,6 +53,11 @@ VkMemoryAllocateInfo allocation(const void *chain)
   info.memoryTypeIndex = 3u;
   return info; }
 
+/* What the host is asked for, which every case here shares by: the opaque fd
+ * of a host with no dma-buf extension. The dma-buf answer is the same chain
+ * with another number in it, and is asserted where the decision is made. */
+constexpr VkFlags shared_as = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+
 Win32HandleKind memory_kind()
 { return Win32HandleKind(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                          VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT); }
@@ -81,7 +86,7 @@ TEST(memory_allocate_chain, an_export_of_a_win32_handle_is_sent_as_an_opaque_fd)
   const Win32HandleKind        kind = memory_kind();
   MemoryAllocateChain          chain;
   CHECK(chain.invariants_hold());
-  CHECK_STATUS(chain.take(info, kind, -1), Status::ok);
+  CHECK_STATUS(chain.take(info, kind, shared_as, -1), Status::ok);
   CHECK(chain.invariants_hold());
   CHECK(chain.exports());
   CHECK(!chain.imports());
@@ -114,7 +119,7 @@ TEST(memory_allocate_chain, an_import_of_a_handle_is_sent_as_the_fd_it_was_resol
   const VkMemoryAllocateInfo info = allocation(&importing);
   const Win32HandleKind      kind = memory_kind();
   MemoryAllocateChain        chain;
-  CHECK_STATUS(chain.take(info, kind, 7), Status::ok);
+  CHECK_STATUS(chain.take(info, kind, shared_as, 7), Status::ok);
   CHECK(chain.invariants_hold());
   CHECK(chain.imports());
   CHECK(!chain.exports());
@@ -132,7 +137,7 @@ TEST(memory_allocate_chain, an_import_of_a_handle_is_sent_as_the_fd_it_was_resol
   CHECK_EQ(kept->flags, static_cast<VkFlags>(VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT));
   /* An import with no fd resolved for it is nothing to send. */
   MemoryAllocateChain nothing;
-  CHECK_STATUS(nothing.take(info, kind, -1), Status::invalid_parameter);
+  CHECK_STATUS(nothing.take(info, kind, shared_as, -1), Status::invalid_parameter);
   CHECK_EQ(nodes_of(*nothing.forwarded()), 0u);
   CHECK(!nothing.imports());
   CHECK(nothing.invariants_hold()); }
@@ -149,40 +154,40 @@ TEST(memory_allocate_chain, a_chain_it_cannot_carry_whole_is_refused)
   VkExportMemoryAllocateInfo other = {};
   other.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
   other.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
-  CHECK_STATUS(chain.take(allocation(&other), kind, -1), Status::not_supported);
+  CHECK_STATUS(chain.take(allocation(&other), kind, shared_as, -1), Status::not_supported);
   CHECK(!chain.exports());
   other.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT |
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
-  CHECK_STATUS(chain.take(allocation(&other), kind, -1), Status::not_supported);
+  CHECK_STATUS(chain.take(allocation(&other), kind, shared_as, -1), Status::not_supported);
 
   /* A node nobody taught it: dropping it would be memory the application
    * asked for and did not get. */
   VkMemoryOpaqueCaptureAddressAllocateInfo captured = {};
   captured.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
-  CHECK_STATUS(chain.take(allocation(&captured), kind, -1), Status::not_supported);
+  CHECK_STATUS(chain.take(allocation(&captured), kind, shared_as, -1), Status::not_supported);
   /* And a type that is no structure type at all. */
   VkBaseInStructure nonsense = {};
   nonsense.sType = static_cast<VkStructureType>(0x7FFFFFFF);
-  CHECK_STATUS(chain.take(allocation(&nonsense), kind, -1), Status::not_supported);
+  CHECK_STATUS(chain.take(allocation(&nonsense), kind, shared_as, -1), Status::not_supported);
 
   /* The same node twice, which is what a cycle looks like one step in. */
   VkMemoryDedicatedAllocateInfo first = {};
   first.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
   VkMemoryDedicatedAllocateInfo second = first;
   first.pNext = &second;
-  CHECK_STATUS(chain.take(allocation(&first), kind, -1), Status::malformed);
+  CHECK_STATUS(chain.take(allocation(&first), kind, shared_as, -1), Status::malformed);
 
   /* A chain that never ends repeats a type one step in, which is how the walk
    * ends at all. */
   VkMemoryDedicatedAllocateInfo ring = {};
   ring.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
   ring.pNext = &ring;
-  CHECK_STATUS(chain.take(allocation(&ring), kind, -1), Status::malformed);
+  CHECK_STATUS(chain.take(allocation(&ring), kind, shared_as, -1), Status::malformed);
   CHECK_EQ(nodes_of(*chain.forwarded()), 0u);
   CHECK(chain.invariants_hold());
 
   /* An allocation with no chain at all is carried as it is. */
-  CHECK_STATUS(chain.take(allocation(nullptr), kind, -1), Status::ok);
+  CHECK_STATUS(chain.take(allocation(nullptr), kind, shared_as, -1), Status::ok);
   CHECK_EQ(nodes_of(*chain.forwarded()), 0u);
   CHECK(!chain.exports());
   CHECK(!chain.imports()); }
@@ -194,12 +199,12 @@ TEST(memory_allocate_chain, a_chain_of_nodes_it_does_not_own_is_named)
   MemoryAllocateChain   chain;
   VkMemoryDedicatedAllocateInfo dedicated = {};
   dedicated.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-  CHECK_STATUS(chain.take(allocation(&dedicated), kind, -1), Status::ok);
+  CHECK_STATUS(chain.take(allocation(&dedicated), kind, shared_as, -1), Status::ok);
   CHECK(chain.invariants_hold());
   MemoryAllocateChainProbe::a_chain_that_never_ends(chain);
   CHECK(!chain.invariants_hold());
 
   MemoryAllocateChain other;
-  CHECK_STATUS(other.take(allocation(&dedicated), kind, -1), Status::ok);
+  CHECK_STATUS(other.take(allocation(&dedicated), kind, shared_as, -1), Status::ok);
   MemoryAllocateChainProbe::a_node_of_someone_else_s(other, &dedicated);
   CHECK(!other.invariants_hold()); }

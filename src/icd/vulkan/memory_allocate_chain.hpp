@@ -41,13 +41,17 @@ public:
     MemoryAllocateChain(const MemoryAllocateChain &) = delete;
     MemoryAllocateChain &operator=(const MemoryAllocateChain &) = delete;
 
-    /* The chain of `info`, with `kind`'s Win32 export said as the host's fd
-     * type and a Win32 import said as `fd`. not_supported for a node this does
-     * not carry and for an export of any other handle type, malformed for the
-     * same node twice, invalid_parameter for an import with no fd to name, and
-     * too_large for a chain past `max_nodes`. Unchanged unless it answers
-     * ok. */
-    [[nodiscard]] Status take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind, int fd);
+    /* The chain of `info`, with `kind`'s Win32 export said as `share_type` and
+     * a Win32 import of `fd` said as the same. `kind` is what recognises the
+     * two Win32 nodes; `share_type` is what the host is asked for, which is a
+     * dma-buf where the host has one and its opaque fd otherwise - the two
+     * nodes must agree, since the fd was exported as whatever the import then
+     * names (feature 053). not_supported for a node this does not carry and
+     * for an export of any other handle type, malformed for the same node
+     * twice, invalid_parameter for an import with no fd to name, and too_large
+     * for a chain past `max_nodes`. Unchanged unless it answers ok. */
+    [[nodiscard]] Status take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind,
+                              VkFlags share_type, int fd);
     /* The allocation the host is sent, valid while this is. */
     const VkMemoryAllocateInfo *forwarded() const;
     bool                        exports() const;

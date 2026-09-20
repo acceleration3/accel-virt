@@ -54,6 +54,17 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
     return Status::ok;
 }
 
+bool HostExtensionList::add(const char *name)
+{
+    AV_SCOPE("HostExtensionList::add");
+    if (name == nullptr) return false;
+    for (uint32_t index = 0u; index < count_; index++)
+        if (__builtin_strcmp(names_[index], name) == 0) return true;
+    if (count_ == max_names) return false;
+    names_[count_++] = name;
+    return true;
+}
+
 const char *const *HostExtensionList::names() const
 {
     AV_SCOPE("HostExtensionList::names");

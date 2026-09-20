@@ -32,6 +32,21 @@ namespace av::icd {
 
 namespace {
 
+/* The host extension a shared allocation is exported through, and the
+ * application extension whose presence asks for it (feature 053). */
+constexpr const char *dma_buf_extension = "VK_EXT_external_memory_dma_buf";
+constexpr const char *win32_memory_extension = "VK_KHR_external_memory_win32";
+
+/* Whether `count` names hold `wanted`. */
+bool names_hold(const char *const *names, uint32_t count, const char *wanted)
+{
+    AV_SCOPE("names_hold");
+    if (names == nullptr) return false;
+    for (uint32_t index = 0u; index < count; index++)
+        if (names[index] != nullptr && __builtin_strcmp(names[index], wanted) == 0) return true;
+    return false;
+}
+
 using Entry = vkicd::generated::Entry;
 using Level = vkicd::generated::DispatchLevel;
 
@@ -418,7 +433,37 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
     ScopeExit released([&] { memory_.release(host); });
     result = vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed, host);
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) return result;
+    /* The one time the host's own list is in hand: whether it shares by
+     * dma-buf is decided here and read everywhere else (feature 053, T031). */
+    for (uint32_t index = 0u; index < listed; index++)
+        if (__builtin_strcmp(host[index].extensionName, dma_buf_extension) == 0)
+            made->connection()->note_host_dma_buf();
     return extensions_.report(host, listed, count, properties);
+}
+
+/* Whether this host has the dma-buf extension, asked once per connection. A
+ * refusal or a host that lists none leaves the answer as it was, which is the
+ * opaque fd - what every host shared by before feature 053. */
+void IcdRoot::learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_device)
+{
+    AV_SCOPE("IcdRoot::learn_host_sharing");
+    if (made.connection()->host_has_dma_buf()) return;
+    ClientTransport &transport = made.connection()->transport();
+    uint32_t         listed = 0u;
+    if (vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed,
+                                                          nullptr) != VK_SUCCESS)
+        return;
+    if (listed == 0u || listed > max_host_extensions) return;
+    auto *const host =
+        static_cast<VkExtensionProperties *>(memory_.allocate(listed * sizeof(VkExtensionProperties), Pool::paged));
+    if (host == nullptr) return;
+    ScopeExit      released([&] { memory_.release(host); });
+    const VkResult result =
+        vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed, host);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) return;
+    for (uint32_t index = 0u; index < listed; index++)
+        if (__builtin_strcmp(host[index].extensionName, dma_buf_extension) == 0)
+            made.connection()->note_host_dma_buf();
 }
 
 VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *create,
@@ -446,6 +491,20 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
         return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+    /* Where the host has it, the dma-buf extension is asked for beside the fd
+     * one: a shared allocation is exported as a dma-buf so another process's
+     * open can import it, and VkExportMemoryAllocateInfo naming that type on a
+     * device made without the extension is refused (feature 053). */
+    if (names_hold(create->ppEnabledExtensionNames, create->enabledExtensionCount, win32_memory_extension)) {
+        /* Asked here rather than waiting for the application to enumerate:
+         * what a shared allocation is exported as has to be settled before the
+         * device is made, and an application may never ask for the list. */
+        learn_host_sharing(*made, physical_device);
+        if (made->connection()->host_has_dma_buf() && !asked.add(dma_buf_extension)) {
+            log_.write("rvkvk: vkCreateDevice: no room to ask the host for its dma-buf extension");
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
     }
     /* A swapchain is this ICD's own, so the host's device is not asked for it. */
     VkDeviceCreateInfo forwarded = *create;
@@ -514,6 +573,21 @@ void IcdRoot::destroy_descriptor_update_template(VkDevice device, VkDescriptorUp
     vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, made, allocator);
 }
 
+/* What a shared allocation is exported and imported as. A dma-buf where the
+ * host has it, because that is the only kind the *device* can import for
+ * another process: vkGetMemoryFdPropertiesKHR refuses an opaque fd, whose
+ * memory type is implicit and known only to whoever allocated it, so an opaque
+ * fd can be imported only where the importing application names the type
+ * itself - which is this process and no other. An opaque fd is still what a
+ * host without the extension shares by, and within one process that works;
+ * across one, such a host shares nothing (feature 053, T031). */
+VkFlags IcdRoot::memory_share_type(const Connection &connection) const
+{
+    AV_SCOPE("IcdRoot::memory_share_type");
+    if (connection.host_has_dma_buf()) return VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    return memory_handles_.host_type();
+}
+
 uint64_t IcdRoot::shared_bytes(uint64_t size) const
 {
     AV_SCOPE("IcdRoot::shared_bytes");
@@ -537,7 +611,8 @@ VkResult IcdRoot::own_process_allocation(LoaderHandle &made, VkDevice device,
      * place: its size and above all its memory type index are what the driver
      * is asked for, and an import into another type is not this memory. */
     MemoryAllocateChain chain;
-    const Status        built = chain.take(info, memory_handles_, fd);
+    const Status        built =
+        chain.take(info, memory_handles_, memory_share_type(*made.connection()), fd);
     if (built != Status::ok) {
         note("vkAllocateMemory: the chain of an imported allocation is not one this driver can send, status",
              static_cast<uint64_t>(built));
@@ -699,7 +774,8 @@ VkResult IcdRoot::host_memory_fd(LoaderHandle &made, VkDevice owner, VkDeviceMem
     VkMemoryGetFdInfoKHR get = {};
     get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
     get.memory = memory;
-    get.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_handles_.host_type());
+    get.handleType =
+        static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_share_type(*made.connection()));
     /* A faulted connection needs no check of its own: the call through it
      * answers VK_ERROR_DEVICE_LOST. */
     return vkproto::rvk_vkGetMemoryFdKHR(made.connection()->transport(), owner, &get, &fd);
@@ -785,7 +861,7 @@ void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
     }
     VkPhysicalDeviceExternalBufferInfo asked = *info;
     asked.pNext = nullptr;
-    asked.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_handles_.host_type());
+    asked.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_share_type(*connection));
     VkExternalBufferProperties answered = {};
     answered.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
     vkproto::rvk_vkGetPhysicalDeviceExternalBufferProperties(connection->transport(), physical_device, &asked,
@@ -861,7 +937,8 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
     if (importing != nullptr)
         return imported_allocation(made, device, *importing, info, allocator, size, memory);
     MemoryAllocateChain chain;
-    const Status        built = chain.take(info, memory_handles_, -1);
+    const Status        built =
+        chain.take(info, memory_handles_, memory_share_type(*made.connection()), -1);
     if (built != Status::ok) {
         note("vkAllocateMemory: the chain of a shared allocation is not one this driver can send, status",
              static_cast<uint64_t>(built));

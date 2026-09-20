@@ -480,3 +480,19 @@ TEST(connection, a_chunk_whose_release_is_refused_is_still_closed)
   CHECK(!chunk.constructed());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_allocation), 1u);
   CHECK(!rig.lock().held()); }
+
+/* What the host said when it was asked for its device extensions, kept for the
+ * one decision that reads it: whether a shared allocation is exported as a
+ * dma-buf or as an opaque fd (feature 053, T031). A connection never asked is
+ * taken not to have it, which is the answer every host gave before 053 and the
+ * one that shares within a process and not across one. */
+TEST(connection, remembers_whether_the_host_shares_by_dma_buf_and_starts_saying_no)
+{ Rig rig;
+  CHECK(!rig.connection().host_has_dma_buf());
+  CHECK(rig.connection().invariants_hold());
+  rig.connection().note_host_dma_buf();
+  CHECK(rig.connection().host_has_dma_buf());
+  /* Said twice by two enumerations is still once. */
+  rig.connection().note_host_dma_buf();
+  CHECK(rig.connection().host_has_dma_buf());
+  CHECK(rig.connection().invariants_hold()); }

@@ -62,6 +62,13 @@ public:
     uint32_t             device() const;
     /* The adapter's LUID, 0 until open. */
     uint64_t             luid() const;
+    /* Remembered from the one time the host was asked for its device
+     * extensions: whether it has VK_EXT_external_memory_dma_buf, which decides
+     * what a shared allocation is exported as. A host never asked is taken not
+     * to have it, which is the answer that shares by an opaque fd - what every
+     * host did before feature 053. */
+    void                 note_host_dma_buf();
+    bool                 host_has_dma_buf() const;
     /* What the generated wrappers send through, only while open: the root
      * closes a connection only as it destroys it. */
     ClientTransport     &transport();
@@ -98,6 +105,7 @@ private:
     ObjectStorage<KmtTransport>    transport_;
     ObjectStorage<LockedTransport> locked_;
     uint64_t                       luid_;
+    bool                           host_dma_buf_;
 
     friend struct ConnectionProbe;
 };

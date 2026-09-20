@@ -31,6 +31,11 @@ public:
     /* The `count` names an application enabled, less the ones this ICD answers
      * itself; too_large for a list longer than this holds. */
     [[nodiscard]] Status take(const char *const *names, uint32_t count);
+    /* One more name the host is asked for, which no application named: the
+     * dma-buf extension a shared allocation is exported through, where the
+     * host has it (feature 053). Ignored when the list already holds it, and
+     * false when there is no room. */
+    [[nodiscard]] bool   add(const char *name);
     const char *const   *names() const;
     uint32_t             count() const;
     /* How many of the application's names this ICD answers itself. */

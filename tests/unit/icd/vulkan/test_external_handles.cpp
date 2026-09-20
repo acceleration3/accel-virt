@@ -27,8 +27,10 @@
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::CommandHeader;
 using av::IcdRig;
@@ -66,9 +68,19 @@ constexpr std::uint64_t shared_size = 4096u;
 /* A device on the scripted host, and the entry points sharing needs. */
 class SharingRig {
 public:
-    SharingRig() : instance_(rig_.create_instance()), physical_device_(rig_.physical_device(instance_)),
-                   device_(VK_NULL_HANDLE)
+    /* `host_dma_buf` asks the host for its device extensions first, answering
+     * a list that holds VK_EXT_external_memory_dma_buf - which is the one
+     * moment the ICD decides what a shared allocation is exported as
+     * (feature 053, T031). Without it the host was never asked, and the
+     * opaque fd is what every host shared by before 053. */
+    explicit SharingRig(bool host_dma_buf = false)
+        : instance_(rig_.create_instance()), physical_device_(rig_.physical_device(instance_)),
+          device_(VK_NULL_HANDLE)
     {
+        /* The device create asks the host for its list before it makes the
+         * device, because what a shared allocation is exported as has to be
+         * settled first (feature 053). Two answers, always. */
+        list_host_extensions(host_dma_buf);
         rig_.host().vk_handle(0, ScriptedHost::vk_device);
         VkDeviceCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -89,6 +101,25 @@ public:
     }
     SharingRig(const SharingRig &) = delete;
     SharingRig &operator=(const SharingRig &) = delete;
+
+    /* The host's own extension list, queued for the one enumeration the create
+     * makes: the count, then the names. */
+    void list_host_extensions(bool with_dma_buf)
+    { const char *const listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+      const std::uint32_t count = with_dma_buf ? 2u : 1u;
+      rig_.host().vk_count(0, count);
+      std::uint8_t answer[MockKmt::max_answer] = {};
+      av::WireWriter writer(answer, sizeof answer);
+      writer.write_pod<std::int32_t>(0);
+      writer.write_pod<std::uint32_t>(count);
+      for (std::uint32_t index = 0u; index < count; index++) {
+          VkExtensionProperties entry = {};
+          std::strncpy(entry.extensionName, listed[index], sizeof entry.extensionName - 1u);
+          entry.specVersion = 1u;
+          serialize_VkExtensionProperties(writer, entry);
+      }
+      CHECK_STATUS(writer.status(), av::Status::ok);
+      rig_.kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset())); }
 
     IcdRig          &rig() { return rig_; }
     VkDevice         device() const { return device_; }
@@ -627,3 +658,69 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
            VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.rig().kmt().commands(), before + 1u); }
+
+/* Feature 053, T031. A host with VK_EXT_external_memory_dma_buf shares by
+ * dma-buf and not by its opaque fd, because a dma-buf is the only kind the
+ * *device* can import for another process: vkGetMemoryFdPropertiesKHR refuses
+ * an opaque fd, whose memory type is implicit and known only to whoever
+ * allocated it. The extension is asked of the host as well, since an export
+ * naming that type on a device made without it is refused. */
+TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_asks_for_it)
+{ SharingRig rig(true);
+  const VkDeviceMemory shared = rig.allocate_shared();
+  CHECK(shared != VK_NULL_HANDLE);
+  WireReader           body = rig.body_before_last();
+  VkMemoryAllocateInfo sent = {};
+  std::uint8_t         block[1024] = {};
+  av::WireArena        arena(block, sizeof block);
+  CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+  const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
+  CHECK(node != nullptr);
+  CHECK_EQ(static_cast<std::uint32_t>(node->sType),
+           static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO));
+  CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
+           static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
+
+  /* And an import of a handle this process published asks the host for a
+   * descriptor of the same kind: the two must agree, or the fd names a type
+   * the import does not. */
+  void *const handle = rig.handle_of(shared);
+  av::icd::ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = handle;
+  VkMemoryAllocateInfo sharing = {};
+  sharing.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  sharing.pNext = &importing;
+  sharing.allocationSize = shared_size;
+  rig.rig().host().vk_fd(0, shared_fd);
+  rig.rig().host().vk_handle(0, 0x7900u);
+  VkDeviceMemory imported = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &sharing, nullptr, &imported), VK_SUCCESS);
+  WireReader           second = rig.last_body();
+  VkMemoryAllocateInfo taken = {};
+  std::uint8_t         more[1024] = {};
+  av::WireArena        arena_again(more, sizeof more);
+  CHECK(deserialize_VkMemoryAllocateInfo(second, &taken, arena_again));
+  const auto *const import_node = static_cast<const VkBaseInStructure *>(taken.pNext);
+  CHECK(import_node != nullptr);
+  CHECK_EQ(static_cast<std::uint32_t>(import_node->sType),
+           static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR));
+  CHECK_EQ(static_cast<std::uint32_t>(
+               reinterpret_cast<const VkImportMemoryFdInfoKHR *>(import_node)->handleType),
+           static_cast<std::uint32_t>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)); }
+
+/* A host without it shares by its opaque fd, which is what every host did
+ * before 053 and what works inside one process. */
+TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_opaque_fd)
+{ SharingRig rig;
+  CHECK(rig.allocate_shared() != VK_NULL_HANDLE);
+  WireReader           body = rig.body_before_last();
+  VkMemoryAllocateInfo sent = {};
+  std::uint8_t         block[1024] = {};
+  av::WireArena        arena(block, sizeof block);
+  CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+  const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
+  CHECK(node != nullptr);
+  CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
+           static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)); }

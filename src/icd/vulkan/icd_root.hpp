@@ -325,6 +325,12 @@ private:
      * object, the NT handle, and the carrier allocation nothing else knows
      * about. */
     void                    release_shared(LoaderHandle &made, const ExternalObjectSlot &row);
+    /* Asks the host, once per connection, whether it has the dma-buf
+     * extension a shared allocation is exported through. */
+    void                    learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_device);
+    /* What a shared allocation is exported and imported as on `connection`'s
+     * host: a dma-buf where it has one, an opaque fd otherwise. */
+    VkFlags                 memory_share_type(const Connection &connection) const;
     /* The bytes an object of `size` is shared as: whole pages, because the
      * record and the wire body both demand them. 0 when the rounding wraps. */
     uint64_t                shared_bytes(uint64_t size) const;
