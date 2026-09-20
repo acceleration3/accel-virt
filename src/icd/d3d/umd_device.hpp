@@ -31,6 +31,8 @@ namespace av::d3d {
 class UmdAdapter;
 struct D3d10ddiargCreateDeviceRecord;
 
+struct UmdDeviceProbe;
+
 class UmdDevice {
 public:
     UmdDevice(UmdAdapter &adapter, icd::LogSink &log);
@@ -71,6 +73,8 @@ private:
     uint32_t      runtime_version_;
     DxgiBaseTable dxgi_;
     DeviceRemoval removal_;
+
+    friend struct UmdDeviceProbe;
 };
 
 }  // namespace av::d3d

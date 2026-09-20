@@ -6,7 +6,7 @@
 
 namespace av::d3d {
 
-DeviceTable::DeviceTable(BlockSource &memory, icd::LogSink &log) : log_(log), devices_(memory), live_(0u)
+DeviceTable::DeviceTable(BlockSource &memory, icd::LogSink &log) : log_(log), devices_(memory)
 {
     AV_SCOPE("DeviceTable::DeviceTable");
 }
@@ -23,7 +23,6 @@ Status DeviceTable::make(UmdDevice *&made, UmdAdapter &adapter, void *block)
     cookie->clear();
     cookie->write(*device);
     adapter.device_made();
-    live_++;
     made = device;
     return Status::ok;
 }
@@ -43,17 +42,14 @@ Status DeviceTable::destroy(void *block)
     UmdDevice *const device = device_of(block);
     if (device == nullptr) return Status::invalid_parameter;
     device->adapter().device_gone();
-    const Status destroyed = devices_.destroy(device);
-    if (destroyed != Status::ok) return destroyed;
     static_cast<DeviceCookie *>(block)->clear();
-    live_--;
-    return Status::ok;
+    return devices_.destroy(device);
 }
 
 uint32_t DeviceTable::live_devices() const
 {
     AV_SCOPE("DeviceTable::live_devices");
-    return live_;
+    return devices_.live();
 }
 
 void DeviceTable::report(StateWriter &writer) const
@@ -69,7 +65,6 @@ void DeviceTable::report(StateWriter &writer) const
 bool DeviceTable::invariants_hold() const
 {
     AV_SCOPE("DeviceTable::invariants_hold");
-    if (devices_.live() != live_) return false;
     return devices_.all_of([](const UmdDevice &device) { return device.invariants_hold(); });
 }
 

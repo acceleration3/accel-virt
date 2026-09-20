@@ -25,6 +25,8 @@ class LogSink;
 
 namespace av::d3d {
 
+struct AdapterIdentityProbe;
+
 class AdapterIdentity {
 public:
     static constexpr uint32_t description_bytes = 64u;
@@ -59,6 +61,8 @@ private:
     uint64_t dedicated_;
     uint64_t shared_;
     char     description_[description_bytes];
+
+    friend struct AdapterIdentityProbe;
 };
 
 }  // namespace av::d3d

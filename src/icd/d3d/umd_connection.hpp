@@ -27,6 +27,8 @@ class StateWriter;
 
 namespace av::d3d {
 
+struct UmdConnectionProbe;
+
 class UmdConnection {
 public:
     explicit UmdConnection(Kmt &kmt);
@@ -53,6 +55,8 @@ public:
 private:
     AdapterSearch search_;
     uint32_t      opens_;
+
+    friend struct UmdConnectionProbe;
 };
 
 }  // namespace av::d3d

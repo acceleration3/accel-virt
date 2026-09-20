@@ -19,6 +19,8 @@ class LogSink;
 
 namespace av::d3d {
 
+struct DeviceRemovalProbe;
+
 class DeviceRemoval {
 public:
     DeviceRemoval();
@@ -43,6 +45,8 @@ private:
     Hresult  reason_;
     uint32_t later_causes_;
     bool     reported_;
+
+    friend struct DeviceRemovalProbe;
 };
 
 }  // namespace av::d3d

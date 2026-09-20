@@ -12,7 +12,7 @@ INF = ROOT / "src" / "km" / "rvkgpu.inf"
 DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-rvk.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
 MANIFEST = ROOT / "src" / "um" / "vulkan" / "rvkvk.json"
-PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll")
+PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkumd.dll")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 
@@ -99,7 +99,10 @@ class DriverPackage(unittest.TestCase):
                                   "OpenGLVersion": ("0x00010001", "2"),
                                   "OpenGLFlags": ("0x00010001", "1")})
         self.assertNotIn("OpenGLDrivers", self.text)
-        self.assertNotIn("Wow", self.text)
+        # No ...Wow value is written: the 32-bit arm is feature 061's. Comments
+        # may say so, so this reads the directives rather than the whole file.
+        directives = "\n".join(line for line in self.text.splitlines() if not line.lstrip().startswith(";"))
+        self.assertNotIn("Wow", directives)
         self.assertIn("rvkgl.dll = 1", self.text)
         files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         self.assertIn("rvkgl.dll", files.split())
@@ -155,7 +158,7 @@ class Provisioning(unittest.TestCase):
                  if "=" in line and not line.lstrip().startswith(";")}
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
         staged = set(re.findall(r'PACKAGE_DIRECTORY \+ "\\\\([\w.]+)"', runner))
-        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll"})
+        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkumd.dll"})
         self.assertEqual(staged, named | {"rvkgpu.inf"})
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
         self.assertIn("New-FileCatalog -Path $Package ", script)

@@ -26,6 +26,8 @@ namespace av::d3d {
 
 struct D3dddiAdapterCallbacksRecord;
 
+struct UmdAdapterProbe;
+
 class UmdAdapter {
 public:
     UmdAdapter(RuntimeKind runtime, void *runtime_adapter, const D3dddiAdapterCallbacksRecord *callbacks,
@@ -62,6 +64,8 @@ private:
     uint32_t                            devices_;
     DdiVersionList                      versions_;
     AdapterIdentity                     identity_;
+
+    friend struct UmdAdapterProbe;
 };
 
 }  // namespace av::d3d

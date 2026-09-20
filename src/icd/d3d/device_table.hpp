@@ -30,6 +30,8 @@ namespace av::d3d {
 
 class UmdAdapter;
 
+struct DeviceTableProbe;
+
 class DeviceTable {
 public:
     DeviceTable(BlockSource &memory, icd::LogSink &log);
@@ -59,7 +61,8 @@ public:
 private:
     icd::LogSink         &log_;
     ObjectPool<UmdDevice> devices_;
-    uint32_t              live_;
+
+    friend struct DeviceTableProbe;
 };
 
 }  // namespace av::d3d

@@ -24,6 +24,7 @@ rvkgpu.sys = 1
 rvkvk.dll = 1
 rvkvk.json = 1
 rvkgl.dll = 1
+rvkumd.dll = 1
 
 ; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
 [Manufacturer]

@@ -92,7 +92,7 @@ private:
      * device, its recorded handles and its published DXGI table. Feature 056's
      * create is this plus a filled device-functions table and hr_ok. */
     Hresult adopt_device(UmdAdapter &adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made);
-    void    release_device(void *block);
+    void    forget_device(void *block);
     void    note(const char *what, uint64_t value);
 
     Kmt             &kmt_;

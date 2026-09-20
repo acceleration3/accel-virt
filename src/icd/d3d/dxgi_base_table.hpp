@@ -36,6 +36,8 @@ struct DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord;
 struct DxgiDdiBaseArgsRecord;
 struct DxgiDdiBaseCallbacksRecord;
 
+struct DxgiBaseTableProbe;
+
 class DxgiBaseTable {
 public:
     /* Only the WDDM 3.2 revision is filled: this driver declares one DDI
@@ -86,6 +88,8 @@ private:
     UmdDevice                        &device_;
     Revision                          revision_;
     const DxgiDdiBaseCallbacksRecord *callbacks_;
+
+    friend struct DxgiBaseTableProbe;
 };
 
 }  // namespace av::d3d

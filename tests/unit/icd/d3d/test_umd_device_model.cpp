@@ -32,7 +32,7 @@ struct UmdRootProbe {
         if (open_adapter == nullptr) return hr_invalid_arg;
         return root.adopt_device(*open_adapter, create, made);
     }
-    static void release(UmdRoot &root, void *block) { root.release_device(block); }
+    static void release(UmdRoot &root, void *block) { root.forget_device(block); }
 };
 
 }  // namespace av::d3d

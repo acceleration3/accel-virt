@@ -16,6 +16,8 @@
 
 namespace av::d3d {
 
+struct DdiVersionListProbe;
+
 class DdiVersionList {
 public:
     /* Room for the revisions 056, 057 and 064 will add without reshaping this. */
@@ -42,6 +44,8 @@ public:
 private:
     uint64_t words_[max_words];
     uint32_t count_;
+
+    friend struct DdiVersionListProbe;
 };
 
 }  // namespace av::d3d

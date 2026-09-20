@@ -22,6 +22,8 @@ namespace av::d3d {
 
 struct D3dddiAdapterCallbacksRecord;
 
+struct AdapterTableProbe;
+
 class AdapterTable {
 public:
     explicit AdapterTable(BlockSource &memory);
@@ -45,7 +47,8 @@ public:
 
 private:
     ObjectPool<UmdAdapter> adapters_;
-    uint32_t               open_;
+
+    friend struct AdapterTableProbe;
 };
 
 }  // namespace av::d3d

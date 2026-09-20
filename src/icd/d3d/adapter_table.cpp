@@ -5,7 +5,7 @@
 
 namespace av::d3d {
 
-AdapterTable::AdapterTable(BlockSource &memory) : adapters_(memory), open_(0u)
+AdapterTable::AdapterTable(BlockSource &memory) : adapters_(memory)
 {
     AV_SCOPE("AdapterTable::AdapterTable");
 }
@@ -20,7 +20,6 @@ Status AdapterTable::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtim
     const Status created =
         adapters_.create(made, runtime, runtime_adapter, callbacks, interface_version, runtime_version);
     if (created != Status::ok) return created;
-    open_++;
     opened = made;
     return Status::ok;
 }
@@ -38,16 +37,13 @@ Status AdapterTable::close(void *handle)
     UmdAdapter *const adapter = adapter_of(handle);
     if (adapter == nullptr) return Status::invalid_parameter;
     if (adapter->devices() != 0u) return Status::conflict;
-    const Status destroyed = adapters_.destroy(adapter);
-    if (destroyed != Status::ok) return destroyed;
-    open_--;
-    return Status::ok;
+    return adapters_.destroy(adapter);
 }
 
 uint32_t AdapterTable::open_adapters() const
 {
     AV_SCOPE("AdapterTable::open_adapters");
-    return open_;
+    return adapters_.live();
 }
 
 void AdapterTable::report(StateWriter &writer) const
@@ -63,7 +59,6 @@ void AdapterTable::report(StateWriter &writer) const
 bool AdapterTable::invariants_hold() const
 {
     AV_SCOPE("AdapterTable::invariants_hold");
-    if (adapters_.live() != open_) return false;
     return adapters_.all_of([](const UmdAdapter &adapter) { return adapter.invariants_hold(); });
 }
 
