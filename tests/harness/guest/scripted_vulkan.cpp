@@ -373,7 +373,7 @@ VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint
     return room < listed ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-std::uint32_t ScriptedVulkan::last_kernel_status(VkInstance)
+std::uint32_t ScriptedVulkan::last_kernel_status(VkInstance, VkPhysicalDevice)
 {
     return kernel_status_;
 }

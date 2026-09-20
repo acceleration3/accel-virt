@@ -228,12 +228,14 @@ struct MemoryGetWin32HandleInfo {
     VkFlags         handle_type;
 };
 
-uint32_t LoaderVulkan::last_kernel_status(VkInstance instance)
+uint32_t LoaderVulkan::last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device)
 {
     AV_SCOPE("LoaderVulkan::last_kernel_status");
-    const auto call = reinterpret_cast<uint32_t (VKAPI_PTR *)()>(
-        get_instance_proc_addr_(instance, "vkRvkLastKernelStatus"));
-    return call != nullptr ? call() : 0u;
+    using Ask = VkResult (VKAPI_PTR *)(VkPhysicalDevice, uint32_t *);
+    const auto ask = reinterpret_cast<Ask>(get_instance_proc_addr_(instance, "vkRvkLastKernelStatus"));
+    uint32_t   status = 0u;
+    if (ask == nullptr || ask(physical_device, &status) != VK_SUCCESS) return 0u;
+    return status;
 }
 
 VkResult LoaderVulkan::enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,

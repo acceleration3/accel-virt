@@ -193,8 +193,9 @@ public:
     /* The NTSTATUS of the last D3DKMT call this driver made, for a probe that
      * cannot see the driver's own Kmt: every kernel call behind feature 053
      * answers the application VK_ERROR_TOO_MANY_OBJECTS, so without this a
-     * guest run cannot say which of them refused. */
-    uint32_t last_kernel_status() const;
+     * guest run cannot say which of them refused. `physical_device` is there
+     * for the loader to dispatch on and is checked like any other handle. */
+    VkResult last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status);
     /* What the host says of its own opaque fd, said in Win32's spelling; every
      * other handle type is answered as absent, since nothing here turns a
      * Direct3D object into a host one. */

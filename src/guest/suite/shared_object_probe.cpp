@@ -7,6 +7,12 @@
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/probe_device.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
 #include "guest/suite/vulkan_entry.hpp"
 
 namespace av {
@@ -80,7 +86,7 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
     /* The driver's NTSTATUS, not this probe's: the kernel call was made inside
      * the ICD, by its own Kmt, and every one of them answers the application
      * the same VK_ERROR_TOO_MANY_OBJECTS. */
-    return steps_.check_kernel("exportable", answered(made), vulkan_.last_kernel_status(device.instance())) ==
+    return steps_.check_kernel("exportable", answered(made), vulkan_.last_kernel_status(device.instance(), device.physical_device())) ==
                Status::ok &&
            memory != VK_NULL_HANDLE;
 }
@@ -90,7 +96,7 @@ bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, 
     AV_SCOPE("SharedObjectProbe::handle_step");
     const VkResult got = vulkan_.memory_win32_handle(device.device(), memory, &handle);
     const Status   status = got == VK_SUCCESS && handle != nullptr ? Status::ok : Status::invalid_state;
-    return steps_.check_kernel("handle", status, vulkan_.last_kernel_status(device.instance())) == Status::ok;
+    return steps_.check_kernel("handle", status, vulkan_.last_kernel_status(device.instance(), device.physical_device())) == Status::ok;
 }
 
 void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory)
@@ -100,8 +106,48 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
      * handle and destroys the carrier allocation the identity was minted into.
      * What says it worked is that the kernel refused none of it. */
     vulkan_.free_memory(device.device(), memory);
-    const uint32_t refused = vulkan_.last_kernel_status(device.instance());
+    const uint32_t refused = vulkan_.last_kernel_status(device.instance(), device.physical_device());
     steps_.check_kernel("released", refused == 0u ? Status::ok : Status::invalid_state, refused);
+}
+
+void SharedObjectProbe::carrier_steps()
+{
+    AV_SCOPE("SharedObjectProbe::carrier_steps");
+    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+    AdapterSearch     search(kmt_);
+    if (steps_.check("carrier_adapter", search.find(rvkgpu)) != Status::ok) return;
+    uint32_t device = 0u;
+    if (steps_.check("carrier_device", kmt_.create_device(search.adapter(), device)) != Status::ok) return;
+
+    uint8_t     data[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
+    const AllocationDescriptor carrier(AllocationKind::client, true, SurfaceLayout(),
+                                       SharedObjectRecord::page_size, ScanoutTarget());
+    static_cast<void>(carrier.encode(data, AllocationDescriptor::encoded_size));
+
+    /* The ordinary create, which every other allocation in the guest uses. */
+    uint32_t     plain = 0u;
+    const Status made = kmt_.create_allocation(device, data, AllocationDescriptor::encoded_size, plain);
+    steps_.check("carrier_plain", made);
+    if (made == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, plain));
+
+    /* And the two-way one, whose private data is a descriptor followed by an
+     * unassigned record - the only thing about it that differs. */
+    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
+                          .encode(data + AllocationDescriptor::encoded_size,
+                                  SharedObjectRecord::encoded_size));
+    uint32_t     shared = 0u;
+    const Status minted = kmt_.create_shared_allocation(device, data, sizeof data, shared);
+    steps_.check("carrier_shared", minted);
+    if (minted == Status::ok) {
+        SharedObjectRecord read;
+        const Status       decoded = read.decode(data + AllocationDescriptor::encoded_size,
+                                                 SharedObjectRecord::encoded_size);
+        steps_.check("carrier_minted", decoded == Status::ok && read.assigned() ? Status::ok
+                                                                               : Status::invalid_state);
+        static_cast<void>(kmt_.destroy_allocation(device, shared));
+    }
+    static_cast<void>(kmt_.destroy_device(device));
 }
 
 void SharedObjectProbe::run()
@@ -130,6 +176,10 @@ void SharedObjectProbe::run()
     const bool offered = reported_step(device);
     steps_.check("reported", offered ? Status::ok : Status::not_supported);
     if (!offered) return;
+    /* Asked of the kernel directly before anything goes through the ICD: if
+     * the carrier create is refused here it is refused there too, and this
+     * says so without the ICD in the way. */
+    carrier_steps();
     const char *const shared_extensions[] = {win32_memory};
     if (steps_.check("device", answered(device.make_device(shared_extensions, 1u))) != Status::ok) return;
     VkDeviceMemory memory = VK_NULL_HANDLE;

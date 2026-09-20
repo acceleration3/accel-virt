@@ -498,7 +498,7 @@ TEST(loader_vulkan, the_win32_memory_handle_is_found_through_the_loader_or_refus
   /* And the driver's own NTSTATUS, which a probe reports because its own Kmt
    * never made the call: 0 from a loader that has no such function, and the
    * ICD's own once it does. */
-  CHECK_EQ(bare.last_kernel_status(instance), 0u);
+  CHECK_EQ(bare.last_kernel_status(instance, physical), 0u);
   LoaderVulkan icd(&av::bound_icd_instance_proc_addr);
-  CHECK_EQ(icd.last_kernel_status(instance), rig.kmt().last_code());
+  CHECK_EQ(icd.last_kernel_status(instance, physical), rig.kmt().last_code());
   rig.destroy_instance(instance); }

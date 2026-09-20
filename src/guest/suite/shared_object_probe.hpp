@@ -57,6 +57,13 @@ private:
     /* Whether the driver reports VK_KHR_external_memory_win32 on `device`'s
      * physical device. */
     bool reported_step(ProbeDevice &device);
+    /* The kernel call the whole feature rests on, asked directly rather than
+     * through the ICD: an ordinary 48-byte create on this probe's own device,
+     * then the 88-byte two-way one the ICD needs. Two steps because the answer
+     * that matters is which of them the kernel takes - a guest that refuses
+     * only the second says the shape is wrong, and one that refuses both says
+     * something else is (feature 053). */
+    void carrier_steps();
     /* Memory declared exportable, which is what makes the miniport mint. */
     bool exportable_step(ProbeDevice &device, VkDeviceMemory &memory);
     bool handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle);

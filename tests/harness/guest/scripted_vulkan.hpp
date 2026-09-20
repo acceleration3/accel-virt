@@ -180,7 +180,7 @@ public:
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
                                          VkExtensionProperties *properties) override;
-    std::uint32_t last_kernel_status(VkInstance instance) override;
+    std::uint32_t last_kernel_status(VkInstance instance, VkPhysicalDevice physical_device) override;
     /* The NTSTATUS a scripted driver says its last kernel call answered. */
     void          set_kernel_status(std::uint32_t code);
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;

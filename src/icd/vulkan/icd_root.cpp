@@ -87,7 +87,7 @@ const Entry        local_rows[] = {
     {"vkRvkForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkRvkForceContextFault),
             Level::physical_device},
     {"vkRvkLastKernelStatus", reinterpret_cast<PFN_vkVoidFunction>(&local_vkRvkLastKernelStatus),
-            Level::instance},
+            Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties), Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties2",
@@ -765,10 +765,15 @@ VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin
     return VK_SUCCESS;
 }
 
-uint32_t IcdRoot::last_kernel_status() const
+VkResult IcdRoot::last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status)
 {
     AV_SCOPE("IcdRoot::last_kernel_status");
-    return kmt_.last_code();
+    if (status == nullptr) return VK_ERROR_INITIALIZATION_FAILED;
+    *status = 0u;
+    if (connection_of(physical_device, LoaderHandle::Kind::physical_device) == nullptr)
+        return VK_ERROR_INITIALIZATION_FAILED;
+    *status = kmt_.last_code();
+    return VK_SUCCESS;
 }
 
 VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)

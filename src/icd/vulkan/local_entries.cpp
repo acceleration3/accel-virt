@@ -204,10 +204,10 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkForceContextFault(VkPhysicalDevice phy
     return icd_binding.root().force_context_fault(physicalDevice);
 }
 
-VKAPI_ATTR uint32_t VKAPI_CALL local_vkRvkLastKernelStatus()
+VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkLastKernelStatus(VkPhysicalDevice physicalDevice, uint32_t *status)
 {
     AV_SCOPE("local_vkRvkLastKernelStatus");
-    return icd_binding.root().last_kernel_status();
+    return icd_binding.root().last_kernel_status(physicalDevice, status);
 }
 
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)

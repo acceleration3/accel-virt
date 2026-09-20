@@ -731,15 +731,26 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
  * VK_ERROR_TOO_MANY_OBJECTS. Without this the guest run that found the first
  * refusal reported code=0 while the driver had 0xC000000D in hand. */
 TEST(icd_external_handles, the_drivers_last_kernel_status_is_readable_from_outside)
-{ SharingRig rig;
-  CHECK_EQ(rig.rig().root().last_kernel_status(), rig.rig().kmt().last_code());
+{ SharingRig    rig;
+  std::uint32_t status = 9u;
+  CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK_EQ(status, rig.rig().kmt().last_code());
   /* A refused kernel call moves it, and the entry point answers the same. */
   std::uint64_t handle = 0u;
   CHECK(rig.rig().kmt().share_object(0x9999u, 0x9999u, handle) != av::Status::ok);
-  CHECK_EQ(rig.rig().root().last_kernel_status(), rig.rig().kmt().last_code());
-  CHECK(rig.rig().root().last_kernel_status() != 0u);
-  /* And the loader finds it by name, as it finds the fault hook. */
-  using LastStatus = std::uint32_t (*)();
+  CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK_EQ(status, rig.rig().kmt().last_code());
+  CHECK(status != 0u);
+  /* A physical device this driver did not make, and no place to put the
+   * answer, are both refused rather than answered with somebody's number. */
+  CHECK(rig.rig().root().last_kernel_status(rig.physical_device(), nullptr) != VK_SUCCESS);
+  CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkPhysicalDevice>(0xDEADu), &status) !=
+        VK_SUCCESS);
+  CHECK_EQ(status, 0u);
+  /* And the loader finds it by name, as it finds the fault hook - with a
+   * dispatchable handle first, which is what the loader trampolines on. */
+  using LastStatus = VkResult (*)(VkPhysicalDevice, std::uint32_t *);
   const auto entry = rig.entry<LastStatus>("vkRvkLastKernelStatus");
   CHECK(entry != nullptr);
-  CHECK_EQ(entry(), rig.rig().kmt().last_code()); }
+  CHECK_EQ(entry(rig.physical_device(), &status), VK_SUCCESS);
+  CHECK_EQ(status, rig.rig().kmt().last_code()); }
