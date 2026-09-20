@@ -205,13 +205,19 @@ function:
 | an owner dying leaves the object alive | L1 + L4 | yes |
 | the ICDs report the extensions only where the host has the fd ones | L1 | yes |
 | two host devices really see the same pixels | L4 on a host GPU | only where the host imports (docs/testing.md) |
-| two guest *processes* see the same pixels | L5 | no: no prepared guest image here |
+| two guest *processes* see the same pixels | L5 | no: one process per boot is what the runner drives |
 | OpenGL imports a descriptor another API exported | L1 on a host GPU | yes: this host's GL lists both fd extensions |
 | OpenCL imports a descriptor another API exported | L1 on a host GPU | no: this host's OpenCL is rusticl, which has no `cl_khr_external_memory_dma_buf` |
+| an OpenCL context shares an OpenGL object | L1 + L5 | no: the host CL context is not made from a GL context, and nothing on the wire names one (§18) |
+| a host driver refusing an import is survived | L1 on a host GPU | no: radv refuses nothing (§19); the branch carries this feature's one `AV_UNTESTABLE` |
+| a Win32 handle crosses `D3DKMTShareObjects` and comes back | L5 | **yes**: `rvkvkprobe`'s twenty `shared.*` steps, both boots green |
 
-SC-001 and SC-003 are L5 claims and are not demonstrated by this change; the
-gate reports the guest as skipped, and the spec's US1 in-guest half stays open
-until an image is available.
+SC-001 and SC-003 are L5 claims that need two guest *processes* and the
+extensions that would carry the objects between them. The guest is no longer
+skipped - the gate runs both boots against the prepared image, and the probe's
+`shared.handle` and `shared.released` steps are the kernel half of US1 proven
+on a real dxgkrnl - but the interop matrix and DWM composition wait on the
+second process and on the rows §12, §18 and T019 leave unreported.
 
 The OpenCL row is the one entry that changed a task rather than a report. The
 device's `import_object` for OpenCL is left unbuilt, not built and untested:
