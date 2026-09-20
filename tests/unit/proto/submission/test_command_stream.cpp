@@ -120,4 +120,17 @@ TEST(command_stream_next, survives_the_hostile_sweep)
   payload.command(0x10001u, 5u).command(0x10002u, 0u, CommandHeader::generate_reply).command(0x10003u, 9u);
   const av::HostileSweep sweep(rejects, payload.bytes(), payload.size());
   sweep.run();
-  CHECK(!rejects(payload.bytes(), payload.size())); }
+  CHECK(!rejects(payload.bytes(), payload.size()));
+  /* A floor here is weaker than for a fixed structure, because the framing is a
+   * chain: a flipped size moves every later command, and whether the chain
+   * still lands exactly on the last byte depends on the lengths this payload
+   * happens to use, not on the format. So the size bits are bounded as
+   * acceptable rather than counted - 24 per header, 72 - and the sweep asserts
+   * only what the format does settle: the 14 payload bytes are opaque (112
+   * bits), the three ids are unconstrained (96), one flip per header clears or
+   * sets its reply flag (3), a truncation is clean only where it lands on a
+   * command boundary, at 13 and 21 bytes, and on the empty payload, and the
+   * untouched payload walks. All-zero is a size below the header and all-ones
+   * a flag nobody defined. The real refusal count is far above this floor. */
+  const std::uint32_t acceptable = 112u + 96u + 72u + 3u + 3u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

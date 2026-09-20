@@ -184,4 +184,17 @@ TEST(shared_object_record_decode, survives_the_hostile_sweep)
   encode(valid(), bytes);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 320u); }
+  CHECK(sweep.cases_run() > 320u);
+  /* The same free fields as the request - 64 bits of object id and 51 of the
+   * eight-page size - plus 64 of adapter id, which travels with the object id
+   * and so need only stay non-zero, as no single flip of 0x100002b71 makes it.
+   * Nothing else is free: the magic and the version are compared whole, so all
+   * 64 of their bits are fixed; the kind's 32 flips leave an unknown kind or a
+   * fence carrying a size; the four reserved bytes must be zero; and all-zero,
+   * all-ones and every truncation fail on the magic or the length.
+   *
+   * The count is exact, not a bound: it was checked as an equality before
+   * being written as a floor, so a decoder that starts refusing one of these
+   * has changed its format. */
+  const std::uint32_t acceptable = 64u + 64u + 51u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

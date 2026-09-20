@@ -134,4 +134,14 @@ TEST(trace_escape_record, hostile_requests_never_claim_a_window_past_their_bytes
   CHECK_STATUS(TraceEscapeRecord(Kind::state, 5u, 64u).encode(valid, sizeof valid), Status::ok);
   av::HostileSweep sweep(&reject_request, valid, sizeof valid);
   sweep.run();
-  CHECK(sweep.cases_run() > sizeof valid); }
+  CHECK(sweep.cases_run() > sizeof valid);
+  /* The record is 40 bytes in front of a 64-byte window, and the window's 512
+   * bits are payload no reader touches. Of the record, only the offset is free
+   * (64 bits): the magic, the version, the kind, the reserved word and the
+   * answer fields a request must leave zero are all judged, and of the window
+   * length only the flip that clears 64 to nothing still fits the bytes it
+   * arrived in. Every shorter input either cannot hold the record or cannot
+   * hold the window it claims, all-zero and all-ones carry no magic, and the
+   * untouched request is the last acceptance. */
+  const std::uint32_t acceptable = 512u + 64u + 1u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

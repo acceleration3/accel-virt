@@ -24,14 +24,23 @@ private:
     std::uint8_t bytes_[64];
 };
 
+/* Every BAR is decoded, so none of them may read outside the snapshot, but the
+ * verdict is BAR 4's alone: this device leaves the other five unassigned, and
+ * refusing an unassigned BAR says something about the fixture rather than about
+ * the bytes fed. */
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
     const PciBaseAddresses bars(bytes, length);
     std::uint64_t address = 0u;
-    bool any_rejected = false;
-    for (std::uint8_t bar = 0u; bar < PciBaseAddresses::bar_count; bar++)
-        any_rejected = bars.address(bar, address) != Status::ok || any_rejected;
-    return any_rejected;
+    for (std::uint8_t bar = 0u; bar < PciBaseAddresses::bar_count; bar++) {
+        const Status status = bars.address(bar, address);
+        if (status != Status::ok && status != Status::not_found &&
+            status != Status::not_supported && status != Status::malformed)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__,
+                                                        "a BAR answered a status the contract does not name");
+    }
+    std::uint64_t assigned = 0u;
+    return bars.address(4u, assigned) != Status::ok;
 }
 
 }  // namespace
@@ -104,4 +113,19 @@ TEST(pci_base_addresses_hostile, survives_every_mutation_of_a_real_header)
   std::memcpy(fixture.mutable_bytes() + 0x24u, &high, 4u);
   const av::HostileSweep sweep(rejects, fixture.bytes(), 64u);
   sweep.run();
-  CHECK(sweep.cases_run() > 500u); }
+  CHECK(sweep.cases_run() > 500u);
+  /* BAR 4 is this device's 64-bit memory window, and it survives a flip only
+   * where the flip cannot reach it: the 14 bytes in front of the header type
+   * (112 bits), the byte behind it (8), the four unassigned BARs (128), the 24
+   * bytes of the header past the BARs (192), and the bit of the header type
+   * byte that the type mask throws away (1). Of the BAR's own low register, the
+   * three bits that make it I/O space, a reserved type or an unassigned 32-bit
+   * BAR are refused and the other five accepted, its remaining three bytes only
+   * moving the address (24); of its high register every flip but the one that
+   * clears the whole address (31). A snapshot shorter than the 40 bytes the
+   * BARs need is refused, the 24 longer truncations still hold them, all-zero
+   * leaves BAR 4 unassigned, all-ones is not a type 0 header, and the untouched
+   * header is the last acceptance. */
+  const std::uint32_t acceptable =
+      112u + 8u + 128u + 192u + 1u + 5u + 24u + 31u + 24u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

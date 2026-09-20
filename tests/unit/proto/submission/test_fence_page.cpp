@@ -82,4 +82,13 @@ TEST(fence_page_decode, survives_the_hostile_sweep)
   CHECK_STATUS(FencePage(3u, 4u, 5u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* The page constrains its magic, its flags and its reserved word, and leaves
+   * the values to FenceProgress: the completed fence and the progress counter
+   * are 128 free bits, and once the page says faulted the 32 bits of the fault
+   * code are free too. A flipped flag word either names a flag nobody defined
+   * or clears "faulted" while a code stands. Every shorter input is short of
+   * 32 bytes, all-zero and all-ones carry no magic, and the untouched input is
+   * the last acceptance. */
+  const std::uint32_t acceptable = 128u + 32u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

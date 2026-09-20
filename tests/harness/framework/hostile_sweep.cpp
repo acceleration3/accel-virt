@@ -10,14 +10,17 @@ namespace av {
 
 HostileSweep::HostileSweep(Parser parser, const std::uint8_t *valid,
                            std::size_t length)
-    : parser_(parser), valid_(valid), length_(length), cases_run_(0u) {}
+    : parser_(parser), valid_(valid), length_(length), cases_run_(0u),
+      rejections_(0u) {}
 
 std::uint32_t HostileSweep::cases_run() const { return cases_run_; }
+
+std::uint32_t HostileSweep::rejections() const { return rejections_; }
 
 void HostileSweep::feed(const std::uint8_t *bytes, std::size_t length) const
 {
     cases_run_++;
-    parser_(bytes, length);
+    rejections_ += parser_(bytes, length) ? 1u : 0u;
 }
 
 void HostileSweep::run() const

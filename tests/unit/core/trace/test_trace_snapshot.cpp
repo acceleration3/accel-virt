@@ -203,7 +203,19 @@ TEST(trace_snapshot_read, hostile_tables_never_read_outside_the_bytes)
 { WrittenTable written;
   av::HostileSweep sweep(&reject, written.bytes, sizeof written.bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > sizeof written.bytes); }
+  CHECK(sweep.cases_run() > sizeof written.bytes);
+  /* A read judges the header's structure and nothing else, so the acceptable
+   * flips are the ones outside it: the two slots' 1648 bytes, which the slot
+   * views judge when they are walked (13184 bits), and the 48 bytes of process,
+   * crash and clock fields, which are values rather than structure (384). The
+   * module name is 16 bytes holding six, so every flip leaves a terminator
+   * behind it (128). Of the slot count only the flip to zero still fits the
+   * bytes, every other count asking for more table than arrived. Every
+   * truncation is either short of the 96-byte header or short of the two slots
+   * the count promises, all-zero and all-ones carry no magic, and the untouched
+   * table is the last acceptance. */
+  const std::uint32_t acceptable = 13184u + 384u + 128u + 1u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(trace_snapshot, before_a_read_holds_nothing)
 { const TraceSnapshot snapshot;

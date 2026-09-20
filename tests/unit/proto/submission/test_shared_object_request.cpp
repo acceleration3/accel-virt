@@ -138,4 +138,19 @@ TEST(shared_object_request_decode, survives_the_hostile_sweep)
   encode(valid(), bytes);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* The object id is 64 free bits - no single flip of an id with many bits set
+   * reaches zero - and the wire handle is 64 more, which nothing validates. Of
+   * the size's 64, the three above the page shift and the 48 above the one bit
+   * it has set keep it a non-zero whole number of pages; the twelve below the
+   * shift do not, and flipping its only set bit leaves nothing. Every flip of
+   * the kind leaves 0 or something above native_fence, save the one that
+   * leaves a fence - which may not carry a size. Every flip of the four
+   * reserved bytes makes them non-zero, all-zero has no object id, all-ones
+   * has reserved bytes set, and every other length is refused outright.
+   *
+   * The count is exact, not a bound: it was checked as an equality before
+   * being written as a floor, so a decoder that starts refusing one of these
+   * has changed its format. */
+  const std::uint32_t acceptable = 64u + 64u + 51u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

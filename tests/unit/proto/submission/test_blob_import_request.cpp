@@ -110,4 +110,13 @@ TEST(blob_import_request_decode, survives_the_hostile_sweep)
   encode(BlobImportRequest(0x00100146u, page, 16u * page, 2u), bytes);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* The request names a resource and a memory type it does not judge - 64 free
+   * bits - and a range it does: of the offset's 64 bits the twelve below a page
+   * leave it unaligned, so 52 are acceptable; of the size's, those twelve and
+   * the one that clears 64 KiB to nothing leave 51. Both reserved words must be
+   * zero. A body of any length but 32 bytes is framing, so every shorter input
+   * is refused, all-zero has no size, all-ones is unaligned, and the untouched
+   * input is the last acceptance. */
+  const std::uint32_t acceptable = 64u + 52u + 51u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

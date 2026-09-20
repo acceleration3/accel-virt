@@ -126,4 +126,17 @@ TEST(shared_object_answer_decode, survives_the_hostile_sweep)
   encode(SharedObjectAnswer(SharedObjectAnswer::done, 0x4000u), bytes);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 128u); }
+  CHECK(sweep.cases_run() > 128u);
+  /* `done` accepts any handle, so the 64 bits of wire_handle are all free;
+   * every flip of the status leaves a code that is not `done` and so demands a
+   * zero handle, which this input does not have, and every flip of the four
+   * reserved bytes makes them non-zero. All-zero is a `done` with no handle,
+   * which is exactly what a release answers, and the untouched input is the
+   * last acceptance. All-ones has reserved bytes nobody may set, and every
+   * truncation is short of sixteen.
+   *
+   * The count is exact, not a bound: it was checked as an equality before
+   * being written as a floor, so a decoder that starts refusing one of these
+   * has changed its format. */
+  const std::uint32_t acceptable = 64u + 1u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

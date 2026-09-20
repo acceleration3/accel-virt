@@ -76,7 +76,15 @@ TEST(command_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(CommandHeader(0x10001u, 40u, CommandHeader::generate_reply).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 64u); }
+  CHECK(sweep.cases_run() > 64u);
+  /* Only the size word is constrained. The id is 32 free bits; the size's
+   * three low bytes are 24 more, because no single flip of 40 drops it under
+   * the 8-byte header; and clearing the reply flag leaves the one other flag
+   * byte a reader accepts. Every shorter input is short of 8 bytes, all-zero
+   * has a size below the header, all-ones has flags nobody defined, and the
+   * untouched input is the last acceptance. */
+  const std::uint32_t acceptable = 32u + 24u + 1u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(command_header, the_shared_object_trio_are_transport_ids_and_are_all_different)
 { const std::uint32_t ids[] = {CommandHeader::share_object_id, CommandHeader::open_shared_object_id,
