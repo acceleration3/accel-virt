@@ -47,3 +47,40 @@ acknowledgement above.
 are this project's to edit - a line added to either is a change to what this
 project's guests can call, which is why they are committed and reviewed rather
 than derived.
+
+## Open: a readable-but-wrong length the refusal does not catch (found by 053)
+
+The generator's safety property is that it **refuses a length it cannot read**
+rather than guessing one - a command whose `len` is a `COMPSIZE` the rules do
+not understand fails the run and has to be explained in the profile. That is
+what keeps an attacker-chosen length out of a decoder, and it works.
+
+It does not cover a length the rules *can* read and read **wrongly**.
+
+`COMPSIZE(pname)` is a form the rules understand: they emit
+`pname_count(pname)`, whose `default:` in `gl_sizes.h` is **1**. For a scalar
+query that default is right and saves a table entry per enum. For a query whose
+data is bytes it is a buffer overrun waiting to happen:
+`glGetUnsignedBytevEXT(GL_DEVICE_UUID_EXT, data)` writes **16** bytes, and
+nothing in the generator would have said so. Feature 053 found this while
+measuring what it would cost to generate the rest of `GL_EXT_memory_object`;
+the command is not generated today, so nothing is wrong in the tree - but the
+next person to add it inherits the hole.
+
+The sizes, measured against the registry, for whoever adds them:
+
+| pname | bytes |
+|---|--:|
+| `GL_DEVICE_UUID_EXT` (0x9597) | 16 |
+| `GL_DRIVER_UUID_EXT` (0x9598) | 16 |
+| `GL_DEVICE_LUID_EXT` (0x9599) | 8 |
+
+**The suggested rule**, narrower than "refuse every unknown pname", which would
+make the profile carry an entry for every scalar query in the registry: keep
+the default for a value-typed output - `GLint *`, `GLfloat *`, `GLboolean *` -
+where a wrong count is a wrong *answer*; refuse it for a `GLubyte *` output,
+where a wrong count is a write past what the decode arena handed out. A byte
+array whose length the profile has not stated is the only case where the
+default is dangerous rather than merely optimistic.
+
+This is the generator's to fix, not any one feature's.
