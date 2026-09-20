@@ -61,6 +61,12 @@ public:
      * handles live on its stack and this is what bounds them; an application
      * asking for more is told, which is a refusal it can see. */
     static constexpr cl_uint max_waited = 64u;
+    /* Room for the host's CL_DEVICE_EXTENSIONS while it is intersected with
+     * the policy. It lives on the asking thread's stack, so it is bounded
+     * here rather than allocated; the longest list any host driver answers is
+     * a few hundred bytes, and a host whose list will not fit is a host this
+     * cannot confirm a single extension against, which is its own answer. */
+    static constexpr size_t  host_extensions_bytes = 4096u;
 
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
               icd::LogSink &log, icd::ServiceThread &watcher_thread, ClIcdBinding &binding);
@@ -188,6 +194,12 @@ private:
     ClientTransport *wire_of(ClObject &object);
     /* Judges an application's pointer and answers the object, or null. */
     ClObject        *judged(const void *pointer, ClObject::Kind kind);
+    /* CL_DEVICE_EXTENSIONS, which is neither the host's answer nor this ICD's
+     * but the two intersected: the host says the GPU has an extension and a
+     * policy row says this ICD carries it, and an application is shown only
+     * what both say. */
+    cl_int           device_extensions(ClObject &device, size_t value_bytes, void *value,
+                                       size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
      * no property named twice, and every name one of `allowed`. */
     cl_int           judge(const uint64_t *properties, const uint64_t *allowed,

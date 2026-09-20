@@ -34,6 +34,18 @@ protected:
     ~AdapterEscapes() = default;
 };
 
+/* What a test does each time the code under test reads the clock. */
+class ClockReader {
+public:
+    ClockReader(const ClockReader &) = delete;
+    ClockReader &operator=(const ClockReader &) = delete;
+    virtual void clock_read() = 0;
+
+protected:
+    ClockReader() = default;
+    ~ClockReader() = default;
+};
+
 class MockKmt final : public Kmt {
 public:
     enum class Call : unsigned {
@@ -257,6 +269,16 @@ public:
     /* The frequency the performance counter answers; ticks_per_second until
      * set, and 0 is a clock that cannot say how long a tick is. */
     void          set_frequency(std::uint64_t frequency);
+    /* A clock that moves when it is read, by `step` ticks, and tells `reader`
+     * each time. Nothing moves and nobody is told until this is called, so a
+     * test whose arithmetic counts ticks is untouched by it.
+     *
+     * It is what a single-threaded test has instead of a second thread: the
+     * code under test spinning on the clock is the only moment at which a fake
+     * can play something happening elsewhere - an ICD's event thread running a
+     * callback while the application waits for it. A null reader is a clock
+     * that only moves. */
+    void          reads_clock(ClockReader *reader, std::uint64_t step);
     /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
     void          slip_every(std::uint32_t nth, std::uint64_t ticks);
     /* From now on a wait on a context created with an RvkContextRecord finds
@@ -448,6 +470,11 @@ private:
     std::uint32_t last_code_;
     std::uint32_t misuses_;
     std::uint64_t ticks_;
+    /* What reading the clock has added to it, which only a read changes -
+     * hence mutable, since reading a clock is const to its caller. */
+    mutable std::uint64_t read_ticks_;
+    std::uint64_t clock_step_;
+    ClockReader  *clock_reader_;
     std::uint64_t blank_period_;
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;

@@ -233,10 +233,40 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
     /* The four this ICD decides name the rvkgpu adapter rather than the host
      * GPU, or cap what it implements; everything else is the host's own. */
     if (device_.decides(name)) return device_.info(name, value_bytes, value, size_ret);
+    /* Except the extensions, which are neither: the host's list is what the
+     * GPU has and the policy is what this ICD carries, and passing the host's
+     * through would offer an application every extension rusticl implements
+     * over a wire that carries none of them. */
+    if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*object, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
     return av::clproto::rvk_clGetDeviceInfo(*wire, object->wire(), name, value_bytes, value,
                                             size_ret);
+}
+
+cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::device_extensions");
+    ClientTransport *const wire = wire_of(device);
+    if (wire == nullptr) return CL_INVALID_DEVICE;
+    char         host[host_extensions_bytes] = {};
+    size_t       answered = 0u;
+    const cl_int asked = av::clproto::rvk_clGetDeviceInfo(
+        *wire, device.wire(), CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
+    if (asked != CL_SUCCESS) return asked;
+    /* `answered` needs no clamp of its own: the generated client refuses a
+     * size the device reports past the room it was given, so a device that
+     * answered CL_SUCCESS answered a length this buffer holds. */
+    /* Measured, then written: the policy writes nothing into room its answer
+     * does not fit, which is what lets the size query and the fetch be the
+     * same call twice. */
+    const size_t needed = extensions_.report(host, answered, nullptr, 0u);
+    if (size_ret != nullptr) *size_ret = needed;
+    if (value == nullptr) return CL_SUCCESS;
+    if (value_bytes < needed) return CL_INVALID_VALUE;
+    static_cast<void>(extensions_.report(host, answered, static_cast<char *>(value), value_bytes));
+    return CL_SUCCESS;
 }
 
 ClObject *ClIcdRoot::judged(const void *pointer, ClObject::Kind kind)
@@ -788,19 +818,31 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
         log_.write("rvkcl: too many reads outstanding; this one blocks");
         produced = 0u;
     }
+    /* A blocking read is answered inside this one call, so the bytes have to
+     * be the host's before it writes the reply: a read the host has only
+     * queued has written nothing, and the reply would carry whatever the
+     * device's decode arena last held. Asking the host to block on a queue
+     * that still has work in it would hold its worker for as long as the
+     * queue takes, which is what TdrDelay measures, so the queue is drained
+     * the way finish() drains it - a marker this side waits for - and only
+     * then is the read sent blocking, with nothing left for the host to wait
+     * on. That is the same order a deferred read is delivered in. */
+    uint64_t     settled = 0u;
+    const cl_int marked =
+        av::clproto::rvk_clEnqueueMarkerWithWaitList(*wire, held->wire(), 0u, nullptr, &settled);
+    if (marked != CL_SUCCESS) return marked;
+    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), settled);
+    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, settled));
+    if (waited != CL_SUCCESS) return waited;
     const cl_int ran = av::clproto::rvk_clEnqueueReadBuffer(
-        *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, into, 0u, nullptr, &produced);
+        *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, into, 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
     if (ran != CL_SUCCESS) return ran;
-    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), produced);
     if (event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
-    } else {
-        /* An application that wanted no event still made one here, and this
-         * is the only place that can give it back. */
-        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
     }
-    return waited;
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,

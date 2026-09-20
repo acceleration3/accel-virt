@@ -840,7 +840,11 @@ int32_t Adapter::destroy_context(void *context)
     /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
     if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
     const Context *const found = contexts_.find(context);
-    if (found != nullptr && found->is_rvk()) {
+    /* Only one the table still holds. Freeing an allocation a context runs on
+     * unbinds it there and then, and that is the order a process exit uses -
+     * dxgkrnl frees the allocations before the context - so asking again here
+     * would answer invalid_parameter and log a failure for the ordinary case. */
+    if (found != nullptr && found->is_rvk() && rvk_contexts_.holds(context)) {
         log_status("rvkgpu: rvk context destroyed", NtStatus(rvk_contexts_.unbind(context, answering_device())).value());
     }
     return NtStatus(contexts_.destroy(context)).value();

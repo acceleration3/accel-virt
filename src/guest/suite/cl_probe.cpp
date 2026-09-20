@@ -1,6 +1,7 @@
 #include "guest/suite/cl_probe.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/kmt.hpp"
 #include "guest/suite/cl_entry.hpp"
 #include "guest/suite/guest_report.hpp"
 
@@ -44,7 +45,7 @@ void callback_ran(void *, int32_t status, void *user_data)
 }
 
 ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
-    : steps_(kmt, report, "opencl"), report_(report), cl_(cl), platform_(nullptr),
+    : steps_(kmt, report, "opencl"), report_(report), kmt_(kmt), cl_(cl), platform_(nullptr),
       device_(nullptr),
       context_(nullptr), queue_(nullptr), program_(nullptr), kernel_(nullptr), buffers_{},
       first_{}, second_{}, sum_{}, callbacks_(0u), callback_status_(0)
@@ -320,9 +321,27 @@ void ClProbe::callback_step()
      * must not need that thread to be anywhere in particular. */
     steps_.check_result("user_event", cl_.set_user_event_status(event, complete));
     steps_.check_result("wait", cl_.wait_for_event(event));
-    steps_.check_measured("callback", callbacks_ == 1u ? Status::ok : Status::conflict,
-                          callbacks_);
+    const uint32_t arrived = callbacks_seen();
+    steps_.check_measured("callback", arrived == 1u ? Status::ok : Status::conflict, arrived);
     cl_.release_event(event);
+}
+
+/* The wait on an event says the host has reached it. It says nothing about
+ * the ICD's own thread having run the callback yet - OpenCL orders neither
+ * against the other, and the conformance suite waits for a callback for the
+ * same reason. Judging the count the moment the wait returned would be
+ * judging which of two threads got there first. */
+uint32_t ClProbe::callbacks_seen() const
+{
+    AV_SCOPE("ClProbe::callbacks_seen");
+    uint64_t       frequency = 0u;
+    const uint64_t started = kmt_.performance_counter(frequency);
+    const uint64_t patience = frequency * callback_seconds;
+    uint32_t       arrived = callbacks_;
+    while (arrived == 0u && kmt_.performance_counter(frequency) - started < patience) {
+        arrived = callbacks_;
+    }
+    return arrived;
 }
 
 void ClProbe::release_all()
@@ -343,7 +362,10 @@ void ClProbe::release_all()
 void ClProbe::callback_arrived(int32_t status)
 {
     AV_SCOPE("ClProbe::callback_arrived");
-    ++callbacks_;
+    /* Read and written rather than incremented: the count is volatile, and a
+     * read-modify-write of one is what C++23 deprecates. Only the ICD's own
+     * thread writes it, so the two halves cannot interleave with each other. */
+    callbacks_ = callbacks_ + 1u;
     callback_status_ = status;
 }
 

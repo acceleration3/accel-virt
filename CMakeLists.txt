@@ -392,6 +392,12 @@ foreach(src ${AV_UNIT_TESTS})
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
     add_dependencies(${name} rvk_executor)
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The executor library opens every host API when it loads, Vulkan among
+    # them, so this test carries the Vulkan loader whether or not it asks
+    # anything of it - and a loader that unloads a driver reports its leaks
+    # from a module no suppression can name. Its three siblings pin this for
+    # the same reason.
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   # The descriptor template proof through the same stack (feature 047): the
   # guest sizes a blob from the template it remembers and the device refuses a
@@ -538,6 +544,21 @@ add_test(NAME rvkclprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
                  --allow-import OpenCL.dll --require-import clGetPlatformIDs)
+
+# The Khronos loader, cross-built beside the probe (feature 052, T005). It is
+# somebody else's source, but it is linked by this build against a kit closure
+# with no C runtime, and that is this repository's to get right: the check's
+# relocated-pointer rule is what catches a C library call the link turned into
+# an __imp_ pointer to nothing, which crashes on the first call rather than at
+# the link. The guest build is a project of its own, so the condition is the
+# one src/um/CMakeLists.txt builds the loader under, not its target.
+if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
+  add_test(NAME opencl_loader_image
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                   ${CMAKE_BINARY_DIR}/guest/OpenCL.dll --dll
+                   --allow-import cfgmgr32.dll --allow-import advapi32.dll --allow-import ole32.dll
+                   --require-export clGetPlatformIDs --require-import CM_Get_Device_ID_ListW)
+endif()
 
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
 add_test(NAME rvkglprobe_image

@@ -116,6 +116,12 @@ public:
      * ways an ICD's event thread gets a callback wrong. */
     void          forget_callbacks();
     void          run_callbacks_twice();
+    /* A callback the event thread has not got to yet when the wait on its
+     * event returns, which is what a real ICD's does whenever the waiting
+     * thread wins the race: setting the event runs nothing, and `deliver`
+     * is the thread catching up. False when there was nothing to run. */
+    void          defer_callbacks();
+    bool          deliver_deferred();
 
     /* The suffix of the platform the run asked for devices of: which of the
      * ones a loader listed the search settled on. */
@@ -232,6 +238,10 @@ private:
     std::uint32_t stale_;
     bool          forgets_callbacks_;
     bool          notifies_twice_;
+    bool          defers_callbacks_;
+    /* The event whose callback was registered and whose status has been set,
+     * waiting for the thread that runs it. */
+    Object       *deferred_;
     Object        objects_[max_objects];
     std::uint32_t live_;
     std::uint32_t misuses_;
