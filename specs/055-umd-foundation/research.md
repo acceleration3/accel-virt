@@ -201,12 +201,16 @@ identity data, `pfnGetOptionalDDITables` answering zero tables, and
 does on the D3D11 side. The device and command-list tables are feature 057's.
 
 **Which calls D3D12Core makes at device creation** is FR-002's question, and it
-is *not* answered here: it needs `d3d12core.dll` symbolized in
-`re/ghidra-proj`, which this environment has no Ghidra install for. T0xx
-carries it, and the fake runtime's recorded sequence is written from it. Until
-then the fake runtime plays the sequence the header and the documentation
-imply, which is enough to build the adapter half against and not enough to
-claim FR-002 is met.
+is answered in §12 from `d3d12core.dll` symbolized in a Ghidra workspace. Two
+notes for anyone repeating it: `AV_PYGHIDRA` must name a Python with
+`pyghidra` installed, and the wheel Ghidra ships
+(`Ghidra/Features/PyGhidra/pypkg/dist/pyghidra-3.1.0-py3-none-any.whl`) is
+where to get one; and Ghidra refuses a project path with a dot-prefixed
+element, so `tools/re/build_workspace.sh`'s `re/ghidra-proj` cannot be used
+from a worktree under `.claude/worktrees/` - the project goes elsewhere and the
+script takes the directory as an argument. Importing the two D3D binaries
+alone, rather than every row of `tools/re/binaries.txt`, is minutes rather than
+an hour.
 
 ## 5. The DXGI seam belongs to CreateDevice, not to the adapter
 
