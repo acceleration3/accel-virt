@@ -371,6 +371,67 @@ minds the 88 or minds what `share` did to the buffer is the open question, and
 into `pPrivateDriverData` - the one thing the 88-byte path does that the
 48-byte path does not.
 
+### Confirmed: the driver succeeds and dxgkrnl refuses anyway
+
+The instrumented boot settled it. `rvkgpu.log`, counted by length:
+
+| bytes | status | count |
+|---|---|---|
+| 48 | `0x00000000` | 26 |
+| 56, 64, 72, 80 | `0xC00000BB` | 1 each |
+| **88** | **`0x00000000`** | **3** |
+| 88 | `0xC000000D` | 1 |
+| 96 | `0xC00000BB` | 2 |
+| 128 | `0xC00000BB` | 1 |
+
+Three 88-byte creates the driver *accepted*, against the two 88-byte steps that
+failed (`carrier_long`, `carrier_shared`) plus the ICD's own carrier inside
+`shared.exportable`. The single `0xC000000D` at 88 is the sweep's filler, as
+predicted. So **`DxgkDdiCreateAllocation` returns success and
+`D3DKMTCreateAllocation2` answers the caller `STATUS_INVALID_PARAMETER`** -
+VidMm refusing an allocation this driver already accepted, the same shape
+`Allocation::report_to`'s comment recorded from three earlier experiments.
+
+`carrier_size_96_valid` answered `0xC00000BB`, the same as the filler at 96, so
+the driver's refusal there is about the shape and not the bytes. The sweep has
+no assumptions left in it.
+
+### What is left, and what it is not
+
+`report_to` is provably identical between the 48- and 88-byte paths:
+`published_as_blob()` reads only `descriptor_.kind()`, `shared_as` touches
+nothing it reads, and both paths carry the same descriptor. So the fields the
+driver reports are not the difference.
+
+That leaves exactly two things dxgkrnl can see, and only one of them is new:
+
+1. `PrivateDriverDataSize` is 88 rather than 48 on a call the driver accepted.
+   The sweep cannot speak to this - it only ever got a *success* out of the
+   driver at 48, so dxgkrnl's post-success path has never run at any other
+   length.
+2. `share()` wrote 40 bytes into `pPrivateDriverData` at offset 48. This is the
+   only thing the 88-byte path does that the 48-byte path does not.
+
+Separating them needs the driver to succeed at 88 *without* writing back, which
+no probe can arrange on its own: `share()` always writes when it mints. The
+cheap version of the experiment is the other way round - have the driver
+re-encode the descriptor over itself on an ordinary 48-byte create. If that
+starts failing, writing to `pPrivateDriverData` is forbidden outright and the
+length was never involved; if it does not, the suspicion narrows to writing at
+or past offset 48, or to the length itself.
+
+Worth knowing before that boot: the guest runs `rvkgpu.sys` under **Driver
+Verifier** with special pool, DDI compliance checking and security checks
+(`tools/guest/provision.ps1:226`, `diag/verifier.txt`). It sits between the
+driver and dxgkrnl on every call, and a run with `verifier /reset` is itself a
+one-variable experiment.
+
+If the write-back is the cause, the fix is a design question rather than a
+patch: the record in `pPrivateDriverData` is how the identity reaches both the
+creating process and the opening one (`docs/kb/04-memory.md`), so dropping the
+write needs another channel for the creator's id. `Adapter::escape` already
+exists and is magic-tagged, which is the WDDM answer to exactly that.
+
 ### The instrument
 
 The reading above turns on which log line belongs to which call, and the log

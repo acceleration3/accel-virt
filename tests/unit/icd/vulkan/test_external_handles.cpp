@@ -12,6 +12,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "icd/vulkan/external_objects.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/memory_win32_handle_record.hpp"
 #include "icd/vulkan/semaphore_win32_handle_record.hpp"
@@ -64,6 +65,8 @@ constexpr std::uint64_t host_semaphore = 0x6600u;
 constexpr int shared_fd = 9;
 /* Whole pages, which is what the wire demands of shared memory. */
 constexpr std::uint64_t shared_size = 4096u;
+/* IcdRoot::max_host_extensions, which a host claiming more than is refused at. */
+constexpr std::uint32_t max_host_extensions = 1024u;
 
 /* A device on the scripted host, and the entry points sharing needs. */
 class SharingRig {
@@ -73,14 +76,28 @@ public:
      * moment the ICD decides what a shared allocation is exported as
      * (feature 053, T031). Without it the host was never asked, and the
      * opaque fd is what every host shared by before 053. */
+    /* What the host answers when the ICD asks for its device extensions, which
+     * it does once per connection to decide what a shared allocation is
+     * exported as. Every field is a way that ask can go wrong (feature 053). */
+    struct HostExtensions {
+        std::int32_t  counted;    /* the counting call's result */
+        std::uint32_t count;      /* how many it claims */
+        bool          dma_buf;    /* whether the list holds VK_EXT_external_memory_dma_buf */
+        std::int32_t  listed;     /* the naming call's result */
+    };
+
     explicit SharingRig(bool host_dma_buf = false)
+        : SharingRig(HostExtensions{0, host_dma_buf ? 2u : 1u, host_dma_buf, 0})
+    {}
+
+    explicit SharingRig(const HostExtensions &host)
         : instance_(rig_.create_instance()), physical_device_(rig_.physical_device(instance_)),
           device_(VK_NULL_HANDLE)
     {
         /* The device create asks the host for its list before it makes the
          * device, because what a shared allocation is exported as has to be
          * settled first (feature 053). Two answers, always. */
-        list_host_extensions(host_dma_buf);
+        list_host_extensions(host);
         rig_.host().vk_handle(0, ScriptedHost::vk_device);
         VkDeviceCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -104,17 +121,20 @@ public:
 
     /* The host's own extension list, queued for the one enumeration the create
      * makes: the count, then the names. */
-    void list_host_extensions(bool with_dma_buf)
-    { const char *const listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
-      const std::uint32_t count = with_dma_buf ? 2u : 1u;
-      rig_.host().vk_count(0, count);
-      std::uint8_t answer[MockKmt::max_answer] = {};
+    void list_host_extensions(const HostExtensions &host)
+    { const char *const names[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+      rig_.host().vk_count(host.counted, host.count);
+      /* The counting call is the only one the ICD makes when it refuses the
+       * answer or the count, so a second is queued only where one is read. */
+      if (host.counted != 0 || host.count == 0u || host.count > max_host_extensions) return;
+      std::uint8_t   answer[MockKmt::max_answer] = {};
       av::WireWriter writer(answer, sizeof answer);
-      writer.write_pod<std::int32_t>(0);
-      writer.write_pod<std::uint32_t>(count);
-      for (std::uint32_t index = 0u; index < count; index++) {
+      writer.write_pod<std::int32_t>(host.listed);
+      writer.write_pod<std::uint32_t>(host.count);
+      for (std::uint32_t index = 0u; index < host.count; index++) {
           VkExtensionProperties entry = {};
-          std::strncpy(entry.extensionName, listed[index], sizeof entry.extensionName - 1u);
+          const char *const     name = host.dma_buf ? names[index % 2u] : names[0];
+          std::strncpy(entry.extensionName, name, sizeof entry.extensionName - 1u);
           entry.specVersion = 1u;
           serialize_VkExtensionProperties(writer, entry);
       }
@@ -902,3 +922,152 @@ TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_noth
   CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &asking, &again),
            VK_SUCCESS);
   CHECK(again == held); }
+
+/* Every way publishing an identity can fail, and what each leaves behind. The
+ * carrier allocation is the ICD's own and nothing else will destroy it, so a
+ * publish that gives up part way has to take it with it - a leaked carrier is
+ * a guest allocation nobody can name again (feature 053, T031). */
+TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
+{ VkExportMemoryAllocateInfo exporting = {};
+  exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+  exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &exporting;
+  allocate.allocationSize = shared_size;
+  allocate.memoryTypeIndex = 0u;
+
+  { /* A size no whole number of pages holds: rounding it up would overflow,
+     * and an object whose declared size is not its real one is one an open
+     * would be refused against for ever. */
+    SharingRig           rig;
+    VkMemoryAllocateInfo huge = allocate;
+    huge.allocationSize = ~std::uint64_t{0};
+    const std::uint32_t  before = rig.rig().kmt().commands();
+    VkDeviceMemory       memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &huge, nullptr, &memory),
+             VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    CHECK(memory == VK_NULL_HANDLE);
+    CHECK_EQ(rig.rig().kmt().commands(), before); }
+
+  { /* The host will not allocate the memory the identity would have named, so
+     * no identity is asked for. */
+    SharingRig          rig;
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().host().vk_handle(0, 0u);
+    VkDeviceMemory      memory = VK_NULL_HANDLE;
+    CHECK(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory) != VK_SUCCESS);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+  { /* The kernel took the carrier and minted nothing into it. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().kmt().zero_next(MockKmt::Call::create_shared_allocation);
+    VkDeviceMemory      memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    CHECK(memory == VK_NULL_HANDLE);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+  { /* And wrote back bytes no record decodes from. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().kmt().scribble_the_next_record();
+    VkDeviceMemory      memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    CHECK(memory == VK_NULL_HANDLE);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+  { /* The device refused to hold the object the identity names. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().host().shared_object(1u, 0u);
+    VkDeviceMemory      memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_TOO_MANY_OBJECTS);
+    CHECK(memory == VK_NULL_HANDLE);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+  { /* The kernel would not mint an NT handle over the carrier. The object is
+     * released again: one published under a name no process can reach is one
+     * nobody will ever close. */
+    SharingRig          rig;
+    rig.rig().host().vk_handle(0, host_memory);
+    rig.rig().host().shared_object(0u, 0u);
+    const std::uint32_t objects = rig.rig().kmt().open_objects();
+    rig.rig().kmt().fail_at(MockKmt::Call::share_object, 1u, 0xC000009Au);
+    VkDeviceMemory      memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_TOO_MANY_OBJECTS);
+    CHECK(memory == VK_NULL_HANDLE);
+    CHECK_EQ(rig.rig().kmt().open_objects(), objects);
+    CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); } }
+
+/* What a shared allocation is exported as is decided once per connection, from
+ * the host's own device extension list. Every way that ask can fail leaves the
+ * answer as it was - the opaque fd, which is what every host shared by before
+ * 053 - rather than guessing at dma-buf (feature 053, T031). */
+TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_the_opaque_fd)
+{ const SharingRig::HostExtensions cases[] = {
+      {VK_ERROR_OUT_OF_HOST_MEMORY, 2u, true, 0},        /* will not be counted */
+      {0, 0u, true, 0},                                  /* claims none */
+      {0, max_host_extensions + 1u, true, 0},            /* claims more than there is room for */
+      {0, 2u, true, VK_ERROR_OUT_OF_HOST_MEMORY},        /* counted, and will not be named */
+  };
+  for (const SharingRig::HostExtensions &host : cases) {
+      SharingRig rig(host);
+      VkExportMemoryAllocateInfo exporting = {};
+      exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exporting;
+      allocate.allocationSize = shared_size;
+      allocate.memoryTypeIndex = 0u;
+      rig.rig().host().vk_handle(0, host_memory);
+      rig.rig().host().shared_object(0u, 0u);
+      VkDeviceMemory memory = VK_NULL_HANDLE;
+      CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory), VK_SUCCESS);
+      /* The allocation that went out asked for an opaque fd, not a dma-buf. */
+      WireReader           body = rig.body_before_last();
+      VkMemoryAllocateInfo sent = {};
+      std::uint8_t         block[1024] = {};
+      av::WireArena        arena(block, sizeof block);
+      CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+      const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
+      CHECK(node != nullptr);
+      CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
+               static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT));
+  } }
+
+/* An import request the ICD will not read: a handle named by a string, and one
+ * asking for a type that is not memory. Both are refused before the handle is
+ * resolved, because a handle this driver cannot say the shape of is one it
+ * must not open (feature 053). */
+TEST(icd_external_handles, a_malformed_memory_import_is_refused_on_each_of_its_parts)
+{ SharingRig rig;
+  void *const         exported = rig.exported_memory();
+  const std::uint32_t before = rig.rig().kmt().commands();
+  ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = exported;
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &importing;
+  allocate.allocationSize = shared_size;
+  int stack = 0;
+  importing.name_ = &stack;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  importing.name_ = nullptr;
+  importing.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT);
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK(memory == VK_NULL_HANDLE);
+  CHECK_EQ(rig.rig().kmt().commands(), before); }

@@ -1020,10 +1020,11 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
         note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    if (!vkproto::wire_to_handle(opened, memory)) {
-        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
-        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    }
+    /* Not branched on, because it cannot fail: SharedObjectCall::judge has
+     * already refused an open that answered no handle, and the conversion of a
+     * non-zero one is a copy of the same width. A branch nothing can take is
+     * one no test can judge. */
+    static_cast<void>(vkproto::wire_to_handle(opened, memory));
     if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
                              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
         static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));

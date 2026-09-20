@@ -45,7 +45,7 @@ claims a layout it did not get from one of those two places.
 | `04-memory.md` | Segments, allocations, residency, the paging buffer, GPU virtual addressing. |
 | `05-scheduling.md` | Packet scheduling, hardware queues, doorbells, fences, native fences, TDR. |
 | `06-display.md` | VidPn, mode enumeration, present and flip. |
-| `07-usermode.md` | D3D12 UMD DDI, and where vkd3d-proton / DXVK actually sit relative to it. |
+| `07-usermode.md` | D3D12 UMD DDI, where vkd3d-proton / DXVK sit relative to it, and the Khronos loader's trampoline rule for driver-private entry points. |
 | `08-wddm3x-delta.md` | Exactly what 3.0, 3.1 and 3.2 added, and which parts matter for a VM. |
 | `09-gpupv.md` | Case study: Microsoft's own paravirtualized GPU, reverse engineered. |
 | `10-warp-kmd.md` | Case study: `basicrender.sys`, a hardware-free WDDM 3.2 KMD. |

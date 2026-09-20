@@ -454,3 +454,41 @@ driver's user-mode side is built x64 only, and a second architecture is a
 second build of the guest tree, its own D3DKMT thunk width and its own
 registry key. Feature 061 is where that belongs, and until then a 32-bit title
 finds no driver rather than a broken one.
+
+## The Khronos loader dispatches an unknown entry point on its first argument
+
+A driver-private Vulkan entry point - one the registry has never heard of, that
+an ICD answers from `vk_icdGetInstanceProcAddr` - does not reach the ICD the
+way an application calls it. The loader has no dispatch table row for a name it
+does not know, so it hands out a **generic trampoline**, and every one of those
+trampolines does the same thing: it reads the call's **first argument**, treats
+it as a dispatchable handle, follows the loader dispatch table at the front of
+it, and jumps to the driver's function through that.
+
+So a driver-private entry point must take a dispatchable Vulkan handle as its
+first parameter - `VkInstance`, `VkPhysicalDevice`, `VkDevice`, `VkQueue` or
+`VkCommandBuffer`. Anything else and the trampoline dereferences whatever was
+in that register.
+
+Feature 053 learned this from a guest, twice:
+
+- `vkRvkLastKernelStatus()` took no arguments at all. The probe crashed with
+  `0xC0000005` inside `vulkan-1.dll+0x80dda` on the first call - the trampoline
+  reading a dispatch table out of an uninitialised register.
+- Respelled `vkRvkLastKernelStatus(VkPhysicalDevice, uint32_t *)` it works, and
+  has been read back from a live guest since.
+
+`vkRvkForceContextFault(VkInstance, VkPhysicalDevice)` from feature 044 had the
+shape right from the start, which is why nothing had caught the rule: both of
+the project's private entry points now begin with a dispatchable handle because
+the loader requires it, not because they need one.
+
+Two things follow for anyone adding another:
+
+- **The handle is the dispatch, so it must be one the ICD made.** A private
+  entry point cannot be called before an instance exists, and cannot be called
+  with a handle from another ICD.
+- **A unit test cannot catch this.** The tests call the ICD's function pointer
+  directly and never go through a loader, so the wrong shape passes every test
+  in the tree and fails on the first real guest. The rule is the review, not the
+  suite.

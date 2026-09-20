@@ -359,3 +359,26 @@ TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placem
   CHECK_EQ(rig.create(enabling, 3u, &device), VK_SUCCESS);
   const char *const placing[] = {"VK_EXT_map_memory_placed"};
   CHECK_EQ(rig.create(placing, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT); }
+
+/* The application's own enumeration is the second place the host's list is
+ * read, and the dma-buf name in it is noted there too. An application that
+ * asks what the host has before it allocates must not be the reason a shared
+ * allocation goes out as an opaque fd (feature 053, T031). */
+TEST(icd_extensions, the_applications_own_enumeration_notes_the_hosts_dma_buf)
+{ ExtensionRig rig;
+  const char *const listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+  std::uint32_t     count = 0u;
+  rig.answer_count(VK_SUCCESS, 2u);
+  rig.answer_list(VK_SUCCESS, 2u, listed, 2u);
+  CHECK_EQ(rig.enumerate(&count, nullptr), VK_SUCCESS);
+  rig.answer_count(VK_SUCCESS, 2u);
+  rig.answer_list(VK_SUCCESS, 2u, listed, 2u);
+  VkExtensionProperties properties[8] = {};
+  std::uint32_t         room = 8u;
+  CHECK_EQ(rig.enumerate(&room, properties), VK_SUCCESS);
+  /* Noted, and not passed on: the host's fd spellings are how this ICD talks
+   * to the host, and an application on Windows is offered the Win32 ones. */
+  for (std::uint32_t index = 0u; index < room; index++) {
+      CHECK(std::strcmp(properties[index].extensionName, "VK_EXT_external_memory_dma_buf") != 0);
+      CHECK(std::strcmp(properties[index].extensionName, "VK_KHR_external_memory_fd") != 0);
+  } }
