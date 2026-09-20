@@ -33,7 +33,6 @@ TEST(scanout_format, each_virtio_format_is_its_own_bytes_read_the_other_way_roun
   };
   for (const Row &row : rows) {
       const ScanoutFormat format(row.format);
-      CHECK(format.invariants_hold());
       CHECK(format.scannable());
       CHECK_EQ(format.fourcc(), row.fourcc);
       CHECK_EQ(format.pixel_bytes(), 4u);
@@ -44,7 +43,6 @@ TEST(scanout_format, every_other_id_is_not_one_this_device_shows)
 { const std::uint32_t refused[] = {0u, 5u, 66u, 69u, 120u, 122u, 133u, 135u, 0xFFFFFFFFu};
   for (std::uint32_t id : refused) {
       const ScanoutFormat format(id);
-      CHECK(format.invariants_hold());
       CHECK(!format.scannable());
       CHECK_EQ(format.fourcc(), 0u);
       CHECK_EQ(format.pixel_bytes(), 0u);

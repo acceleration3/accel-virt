@@ -61,11 +61,4 @@ bool GpuRect::decoded() const
     return decoded_;
 }
 
-bool GpuRect::invariants_hold() const
-{
-    AV_SCOPE("GpuRect::invariants_hold");
-    if (decoded_) return true;
-    return x_ == 0u && y_ == 0u && width_ == 0u && height_ == 0u;
-}
-
 }  // namespace av

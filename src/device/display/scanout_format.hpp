@@ -37,8 +37,6 @@ public:
     uint32_t pixel_bytes() const;
     uint32_t format() const;
 
-    bool invariants_hold() const;
-
 private:
     uint32_t format_;
 };

@@ -42,8 +42,6 @@ public:
     uint32_t       offset() const;
     bool           decoded() const;
 
-    bool invariants_hold() const;
-
 private:
     static constexpr size_t header_size = 24u;
 

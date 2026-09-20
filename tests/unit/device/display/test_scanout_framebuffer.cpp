@@ -190,6 +190,8 @@ TEST(scanout_framebuffer_invariants, each_term_of_the_fit_fails_the_invariant_on
 
   probe.set_width(1279u);
   CHECK(!framebuffer.invariants_hold());   /* the rectangle no longer fits */
+  probe.set_width(0u);
+  CHECK(!framebuffer.invariants_hold());
   probe.set_width(1280u);
 
   probe.set_height(0u);
@@ -197,15 +199,31 @@ TEST(scanout_framebuffer_invariants, each_term_of_the_fit_fails_the_invariant_on
   probe.set_height(800u);
   CHECK(framebuffer.invariants_hold()); }
 
+/* Every field of a framebuffer that holds nothing, set on its own: each is a
+ * framebuffer claiming to hold nothing while holding something. */
 TEST(scanout_framebuffer_invariants, a_framebuffer_that_holds_something_while_claiming_not_to_fails)
 { ScanoutFramebuffer framebuffer;
   ScanoutFramebufferProbe probe(framebuffer);
+  CHECK(framebuffer.invariants_hold());
   probe.set_width(1280u);
   CHECK(!framebuffer.invariants_hold());
   probe.set_width(0u);
-  CHECK(framebuffer.invariants_hold());
+  probe.set_height(800u);
+  CHECK(!framebuffer.invariants_hold());
+  probe.set_height(0u);
+  probe.set_stride(5120u);
+  CHECK(!framebuffer.invariants_hold());
+  probe.set_stride(0u);
+  probe.set_offset(4096u);
+  CHECK(!framebuffer.invariants_hold());
+  probe.set_offset(0u);
+  probe.set_blob_size(desktop_bytes);
+  CHECK(!framebuffer.invariants_hold());
+  probe.set_blob_size(0u);
   probe.set_format(ScanoutFormat::b8g8r8a8);
   CHECK(!framebuffer.invariants_hold());
   probe.set_format(0u);
+  CHECK(framebuffer.invariants_hold());
+  /* And one that claims to hold something while holding nothing. */
   probe.set_adopted(true);
   CHECK(!framebuffer.invariants_hold()); }

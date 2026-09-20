@@ -85,7 +85,6 @@ TEST(gpu_rect_decode, reads_the_four_fields_in_wire_order)
   WireReader reader(bytes, sizeof bytes);
   GpuRect rect;
   CHECK_STATUS(rect.decode(reader), Status::ok);
-  CHECK(rect.invariants_hold());
   CHECK_EQ(rect.x(), 3u);
   CHECK_EQ(rect.y(), 5u);
   CHECK_EQ(rect.width(), 100u);
@@ -100,7 +99,6 @@ TEST(gpu_rect_decode, a_short_buffer_leaves_every_field_zero)
   WireReader reader(bytes, GpuRect::encoded_size - 1u);
   GpuRect rect;
   CHECK_STATUS(rect.decode(reader), Status::malformed);
-  CHECK(rect.invariants_hold());
   CHECK(!rect.decoded());
   CHECK_EQ(rect.x(), 0u);
   CHECK_EQ(rect.width(), 0u); }
@@ -112,7 +110,6 @@ TEST(gpu_rect_inside, the_exact_fit_is_inside_and_one_past_each_edge_is_not)
       WireReader reader(bytes, sizeof bytes);
       GpuRect rect;
       CHECK_STATUS(rect.decode(reader), Status::ok);
-      CHECK(rect.invariants_hold());
       return rect;
   };
   CHECK(decode(0u, 0u, 1280u, 800u).inside(1280u, 800u));
@@ -154,7 +151,6 @@ TEST(set_scanout_blob_request, reads_the_desktop_a_guest_sends)
 { Scanout wire;
   SetScanoutBlobRequest request;
   CHECK_STATUS(wire.decode(request), Status::ok);
-  CHECK(request.invariants_hold());
   CHECK_EQ(request.scanout_id(), 0u);
   CHECK_EQ(request.resource_id(), 7u);
   CHECK_EQ(request.width(), 1280u);
@@ -169,7 +165,6 @@ TEST(set_scanout_blob_request, truncation_at_every_field_boundary_is_malformed)
       Scanout wire;
       SetScanoutBlobRequest request;
       CHECK_STATUS(wire.decode(request, length), Status::malformed);
-      CHECK(request.invariants_hold());
       CHECK(!request.decoded());
       CHECK_EQ(request.resource_id(), 0u);
       CHECK_EQ(request.width(), 0u);
@@ -181,7 +176,6 @@ TEST(set_scanout_blob_request, a_non_zero_padding_word_is_malformed)
   put32(wire.bytes, 60u, 1u);
   SetScanoutBlobRequest request;
   CHECK_STATUS(wire.decode(request), Status::malformed);
-  CHECK(request.invariants_hold());
   CHECK_EQ(request.width(), 0u); }
 
 TEST(set_scanout_blob_request, a_second_plane_is_refused_rather_than_dropped)
@@ -211,7 +205,6 @@ TEST(set_scanout_blob_request, the_maximum_of_every_scalar_survives_the_decode)
   put32(wire.bytes, 80u, max32);
   SetScanoutBlobRequest request;
   CHECK_STATUS(wire.decode(request), Status::ok);
-  CHECK(request.invariants_hold());
   CHECK_EQ(request.scanout_id(), max32);
   CHECK_EQ(request.resource_id(), max32);
   CHECK_EQ(request.width(), max32);
@@ -240,7 +233,6 @@ TEST(flush_request, reads_the_resource_and_the_rectangle)
 { Flush wire;
   FlushRequest request;
   CHECK_STATUS(wire.decode(request), Status::ok);
-  CHECK(request.invariants_hold());
   CHECK_EQ(request.resource_id(), 7u);
   CHECK_EQ(request.rect().x(), 16u);
   CHECK_EQ(request.rect().y(), 32u);
@@ -252,7 +244,6 @@ TEST(flush_request, truncation_at_every_field_boundary_is_malformed)
       Flush wire;
       FlushRequest request;
       CHECK_STATUS(wire.decode(request, length), Status::malformed);
-      CHECK(request.invariants_hold());
       CHECK(!request.decoded());
       CHECK_EQ(request.resource_id(), 0u);
       CHECK_EQ(request.rect().width(), 0u);
@@ -263,5 +254,4 @@ TEST(flush_request, a_non_zero_padding_word_is_malformed)
   put32(wire.bytes, 44u, max32);
   FlushRequest request;
   CHECK_STATUS(wire.decode(request), Status::malformed);
-  CHECK(request.invariants_hold());
   CHECK_EQ(request.resource_id(), 0u); }

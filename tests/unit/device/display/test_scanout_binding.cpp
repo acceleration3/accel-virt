@@ -11,6 +11,7 @@
 #include "device/display/scanout_format.hpp"
 #include "device/display/scanout_framebuffer.hpp"
 #include "device/memory/blob_table.hpp"
+#include "harness/display/scanout_binding_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -308,4 +309,58 @@ TEST(scanout_binding_report, a_state_dump_names_the_blob_the_geometry_and_the_fr
   binding.report(writer);
   CHECK(std::strstr(writer.dump(), "head/1 shown=true blob=1 width=64 height=16 stride=256 offset=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "frames=1") != nullptr);
+  binding.hide(); }
+
+/* Each of the three things a head keeps in step, broken on its own. */
+TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_holds)
+{ Fixture fixture;
+  if (!udmabuf_here(fixture)) return;
+  ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
+  av::ScanoutBindingProbe probe(binding);
+  CHECK(binding.invariants_hold());
+
+  CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
+  CHECK(binding.invariants_hold());
+
+  /* Showing, with no framebuffer to show. */
+  probe.forget_framebuffer();
+  CHECK(!binding.invariants_hold());
+  CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
+  CHECK(binding.invariants_hold());
+
+  /* Showing, naming no blob: the pin would belong to nobody. */
+  probe.set_blob(0u);
+  CHECK(!binding.invariants_hold());
+  probe.set_blob(1u);
+  CHECK(binding.invariants_hold());
+
+  /* Showing the slot it is not holding a descriptor in. */
+  probe.swap_slots();
+  CHECK(!binding.invariants_hold());
+  probe.swap_slots();
+  CHECK(binding.invariants_hold());
+  binding.hide();
+  CHECK(binding.invariants_hold());
+  CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
+  /* The frames a head showed are not forgotten when it stops showing. */
+  CHECK_EQ(binding.frames(), 2u); }
+
+/* A flush that misses the picture vertically is the other way to miss it. */
+TEST(scanout_binding_update, a_flush_above_the_picture_updates_nothing)
+{ Fixture fixture;
+  if (!udmabuf_here(fixture)) return;
+  ScanoutBinding     binding(fixture.host(), fixture.blobs(), 0u);
+  ScanoutFramebuffer lower;
+  std::uint64_t      size = 0u;
+  CHECK_STATUS(fixture.blobs().size(1u, size), Status::ok);
+  CHECK_STATUS(lower.adopt(decode(0u, 8u, picture_width, 8u), size), Status::ok);
+  CHECK_STATUS(binding.show(1u, lower), Status::ok);
+  CHECK_STATUS(binding.update(rect(0u, 0u, picture_width, 8u)), Status::ok);
+  CHECK_EQ(fixture.host().head(0u).updates, 0u);
+  CHECK_STATUS(binding.update(rect(0u, 4u, picture_width, 8u)), Status::ok);
+  CHECK_EQ(fixture.host().head(0u).updates, 1u);
+  std::uint32_t x = 0u, y = 0u, width = 0u, height = 0u;
+  fixture.host().last_update(0u, x, y, width, height);
+  CHECK_EQ(x, 0u); CHECK_EQ(y, 0u); CHECK_EQ(width, picture_width); CHECK_EQ(height, 4u);
+  CHECK(binding.invariants_hold());
   binding.hide(); }

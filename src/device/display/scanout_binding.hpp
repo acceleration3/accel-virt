@@ -28,6 +28,7 @@ class GpuRect;
 class Host;
 class StateWriter;
 struct DisplayHeadsProbe;
+struct ScanoutBindingProbe;
 
 class ScanoutBinding {
 public:
@@ -81,6 +82,8 @@ private:
     uint64_t           frames_;
 
     friend struct DisplayHeadsProbe;
+    friend struct ScanoutBindingProbe;
+struct ScanoutBindingProbe;
 };
 
 }  // namespace av

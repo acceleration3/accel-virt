@@ -107,13 +107,4 @@ bool SetScanoutBlobRequest::decoded() const
     return decoded_;
 }
 
-bool SetScanoutBlobRequest::invariants_hold() const
-{
-    AV_SCOPE("SetScanoutBlobRequest::invariants_hold");
-    if (!rect_.invariants_hold()) return false;
-    if (decoded_) return true;
-    return scanout_id_ == 0u && resource_id_ == 0u && width_ == 0u && height_ == 0u && format_ == 0u &&
-           stride_ == 0u && offset_ == 0u;
-}
-
 }  // namespace av

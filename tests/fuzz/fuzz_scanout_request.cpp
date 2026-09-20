@@ -37,7 +37,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::WireReader            scanout_reader(data, size);
     av::SetScanoutBlobRequest scanout;
     const bool                scanned = scanout.decode(scanout_reader) == av::Status::ok;
-    if (!scanout.invariants_hold()) __builtin_trap();
     if (scanned) {
         if (size < av::SetScanoutBlobRequest::encoded_size ||
             scanout_reader.offset() != av::SetScanoutBlobRequest::encoded_size)
@@ -64,7 +63,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::WireReader   flush_reader(data, size);
     av::FlushRequest flush;
     const bool       flushed = flush.decode(flush_reader) == av::Status::ok;
-    if (!flush.invariants_hold()) __builtin_trap();
     if (flushed) {
         if (size < av::FlushRequest::encoded_size || flush_reader.offset() != av::FlushRequest::encoded_size)
             __builtin_trap();

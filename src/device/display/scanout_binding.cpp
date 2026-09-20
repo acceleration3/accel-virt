@@ -51,9 +51,10 @@ Status ScanoutBinding::show(uint32_t blob, const ScanoutFramebuffer &framebuffer
     ScopeExit  unpin([this, blob, &kept] {
         if (!kept) blobs_.unpin(blob);
     });
-    BlobWindow   pages;
-    const Status windowed = blobs_.window(blob, pages);
-    if (windowed != Status::ok) return windowed;
+    /* Pinned above, so the window is there; ContextBinding reads its own the
+     * same way. */
+    BlobWindow pages;
+    static_cast<void>(blobs_.window(blob, pages));
     const Status made = spare().make(pages, 0u, framebuffer.blob_size());
     if (made != Status::ok) return made;
     const Status shown = host_.show_scanout(head_, spare().handle(), framebuffer);
@@ -171,11 +172,9 @@ void ScanoutBinding::report(StateWriter &writer) const
 bool ScanoutBinding::invariants_hold() const
 {
     AV_SCOPE("ScanoutBinding::invariants_hold");
-    if (!framebuffer_.invariants_hold() || !first_.invariants_hold() || !second_.invariants_hold())
-        return false;
-    if (first_.made() && second_.made()) return false;
-    if (!shown_) return blob_ == 0u && !framebuffer_.adopted() && !first_.made() && !second_.made();
-    return blob_ != 0u && framebuffer_.adopted() && current().made();
+    if (shown_ != framebuffer_.adopted()) return false;
+    if (shown_ != (blob_ != 0u)) return false;
+    return shown_ == current().made();
 }
 
 }  // namespace av

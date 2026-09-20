@@ -190,9 +190,14 @@ TEST(display_heads_flush, every_head_showing_the_blob_is_updated_and_no_other)
   CHECK_STATUS(fixture.heads().flush(2u, rect(0u, 0u, picture_width, picture_height)), Status::ok);
   CHECK_EQ(fixture.host().head(1u).updates, 1u);
   /* A blob no head shows, and a rectangle outside the framebuffer. */
+  /* A head that was used and now shows nothing is passed over, not updated. */
+  CHECK_STATUS(fixture.heads().hide(0u), Status::ok);
+  CHECK_STATUS(fixture.heads().flush(2u, rect(0u, 0u, picture_width, picture_height)), Status::ok);
+  CHECK_EQ(fixture.host().head(1u).updates, 2u);
+  CHECK(!fixture.heads().shows(1u));
+  CHECK(fixture.heads().shows(2u));
   CHECK_STATUS(fixture.heads().flush(3u, rect(0u, 0u, 1u, 1u)), Status::not_found);
-  CHECK_STATUS(fixture.heads().flush(1u, rect(0u, 0u, picture_width + 1u, 1u)), Status::invalid_parameter);
-  CHECK_EQ(fixture.host().head(0u).updates, 1u);
+  CHECK_STATUS(fixture.heads().flush(2u, rect(0u, 0u, picture_width + 1u, 1u)), Status::invalid_parameter);
   CHECK(fixture.heads().invariants_hold());
   fixture.heads().release_all(); }
 

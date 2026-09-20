@@ -108,7 +108,6 @@ uint64_t ScanoutFramebuffer::blob_size() const
 bool ScanoutFramebuffer::invariants_hold() const
 {
     AV_SCOPE("ScanoutFramebuffer::invariants_hold");
-    if (!format_.invariants_hold() || !rect_.invariants_hold()) return false;
     if (!adopted_)
         return width_ == 0u && height_ == 0u && stride_ == 0u && offset_ == 0u && blob_size_ == 0u &&
                !format_.scannable();

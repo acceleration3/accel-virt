@@ -64,10 +64,4 @@ uint32_t ScanoutFormat::format() const
     return format_;
 }
 
-bool ScanoutFormat::invariants_hold() const
-{
-    AV_SCOPE("ScanoutFormat::invariants_hold");
-    return scannable() == (pixel_bytes() != 0u);
-}
-
 }  // namespace av

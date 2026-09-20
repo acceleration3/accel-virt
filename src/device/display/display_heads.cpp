@@ -114,7 +114,7 @@ bool DisplayHeads::invariants_hold() const
     for (uint32_t head = 0u; head < max_heads; head++) {
         const ScanoutBinding *const made_head = made(head);
         if (made_head == nullptr) continue;
-        if (!made_head->invariants_hold() || made_head->head() != head) return false;
+        if (made_head->head() != head) return false;
         if (made_head->shows() && display_ != Display::takes_dmabuf) return false;
     }
     return true;

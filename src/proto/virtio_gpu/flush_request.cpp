@@ -54,11 +54,4 @@ bool FlushRequest::decoded() const
     return decoded_;
 }
 
-bool FlushRequest::invariants_hold() const
-{
-    AV_SCOPE("FlushRequest::invariants_hold");
-    if (!rect_.invariants_hold()) return false;
-    return decoded_ || resource_id_ == 0u;
-}
-
 }  // namespace av

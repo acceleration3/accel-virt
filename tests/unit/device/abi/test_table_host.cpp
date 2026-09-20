@@ -18,6 +18,7 @@
 #include "device/threading/work_item.hpp"
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/host/host_violation.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/virtio_gpu/set_scanout_blob_request.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -434,3 +435,21 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
   before.update_scanout(0u, 0u, 0u, 1u, 1u);
   before.hide_scanout(0u);
   CHECK_EQ(mock.head(0u).updates, mock.head(0u).updates); }
+
+/* A display that will not import the descriptor: not the guest's fault, and
+ * the core is told so rather than being left to believe the head is showing. */
+TEST(table_host_scanout, a_display_that_refuses_the_descriptor_answers_not_supported)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_display_heads(1u);
+  av::ScanoutFramebuffer framebuffer;
+  mock.refuse_scanout_at(1u);
+  CHECK_STATUS(host.show_scanout(0u, 1, framebuffer), Status::not_supported);
+  CHECK(!mock.head(0u).shown);
+  /* A head the host does not have, and a descriptor that is not open: both are
+   * recorded contract breaks, not silent failures. */
+  CHECK_STATUS(host.show_scanout(1u, 1, framebuffer), Status::not_supported);
+  CHECK_STATUS(host.show_scanout(0u, -1, framebuffer), Status::not_supported);
+  host.update_scanout(0u, 0u, 0u, 1u, 1u);
+  CHECK(mock.claim(av::HostViolation::scanout_misuse));
+  CHECK(mock.claim(av::HostViolation::scanout_misuse));
+  CHECK(mock.claim(av::HostViolation::scanout_misuse)); }

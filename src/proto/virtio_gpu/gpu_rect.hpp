@@ -33,8 +33,6 @@ public:
     uint32_t height() const;
     bool     decoded() const;
 
-    bool invariants_hold() const;
-
 private:
     uint32_t x_;
     uint32_t y_;
