@@ -133,17 +133,15 @@ reinterpreted.
   records, but a batch record's payload is the guest's own framed commands, and
   the printer is what walks those - bytes it did not write, which IV.3 asks for
   a target of. Its corpus is the reader's.
-- SC-002 (T031) is left unticked because the number is a guest run's. The
-  no-op round trip it compares is `rvktest.exe`'s, and the comparison needs two
-  boots - one with `--record` and one without - which this environment cannot
-  make (`AV_GUEST_IMAGE` names no prepared image). Everything up to the boots is
-  built: the rvk scenario reads the transport scenario's warm median, keeps it
-  in `recording-cost.txt` in the work directory under the side the run was, and
-  the run that completes the pair says what a recording cost
+- SC-002 (T031) is a measurement no unit test can make, so the feature builds
+  the thing that makes it and the guest run supplies the number. The rvk
+  scenario reads the transport scenario's warm median, keeps it in
+  `recording-cost.txt` in the work directory under the side that run was, and
+  the boot that completes the pair says what a recording cost
   (`tools/recording_cost.py`, `RecordingCost`; `tests/tools/test_recording_cost.py`
   and the four `recording cost` cases of `tests/tools/test_run_guest_suite.py`).
   The median is what is kept rather than the first round trip, which is cold and
   swings by milliseconds - orders of magnitude past one `write` a batch. The two
-  commands that produce the number are in quickstart.md. That a recording costs
-  one branch when it is off is asserted by
+  commands are in quickstart.md, and T031 above holds what they answered. That a
+  recording costs one branch when it is off is asserted by
   `batch_executor_run.with_recording_off_it_asks_the_host_for_no_recording_at_all`.
