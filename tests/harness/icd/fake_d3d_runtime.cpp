@@ -22,8 +22,6 @@ using CloseAdapter = Hresult (*)(void *);
 using DestroyDevice = void (*)(void *);
 using OptionalTables = Hresult (*)(void *, std::uint32_t *, d3d::D3d12ddiTableRequestRecord *);
 using FillTable = Hresult (*)(void *, std::uint32_t, void *, std::size_t, std::uint32_t, void *);
-using DxgiSlot = Hresult (*)(void *);
-
 /* The eight slots of the D3D12 table in the order the header declares them, so
  * the check below can name the six D3D12Core requires by index. */
 void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
@@ -175,11 +173,5 @@ void *FakeD3dRuntime::device_block() { return block_; }
 d3d::Dxgi161DdiBaseFunctionsRecord &FakeD3dRuntime::dxgi_table() { return dxgi_table_; }
 
 const d3d::DxgiDdiBaseCallbacksRecord &FakeD3dRuntime::dxgi_callbacks() const { return dxgi_callbacks_; }
-
-Hresult FakeD3dRuntime::dxgi_slot(std::uint32_t index, void *args)
-{
-    void *const *const slots = reinterpret_cast<void *const *>(&dxgi_table_);
-    return reinterpret_cast<DxgiSlot>(slots[index])(args);
-}
 
 }  // namespace av

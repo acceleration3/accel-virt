@@ -16,7 +16,7 @@ constexpr char     adapter_name[] = "rvkgpu paravirtual GPU";
 
 void note(icd::LogSink &log, const char *what, uint64_t value)
 {
-    AV_SCOPE("av::d3d::note");
+    AV_SCOPE("note");
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
     text.append("rvkumd: ");

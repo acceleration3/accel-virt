@@ -18,58 +18,58 @@
 
 namespace av::d3d {
 
-UmdBinding umd_binding;
+constinit UmdBinding umd_binding;
 
 namespace {
 
-Hresult umd_get_supported_versions(void *adapter, uint32_t *entries, uint64_t *words)
+extern "C" Hresult rvkumd_get_supported_versions(void *adapter, uint32_t *entries, uint64_t *words)
 { return umd_binding.root().supported_versions(adapter, entries, words); }
 
-Hresult umd_get_caps(void *adapter, D3d102ddiargGetCapsRecord *args)
+extern "C" Hresult rvkumd_get_caps(void *adapter, D3d102ddiargGetCapsRecord *args)
 { return umd_binding.root().caps(adapter, args); }
 
-size_t umd_calc_private_device_size(void *adapter, const D3d10ddiargCalcPrivateDeviceSizeRecord *)
+extern "C" size_t rvkumd_calc_private_device_size(void *adapter, const D3d10ddiargCalcPrivateDeviceSizeRecord *)
 { return umd_binding.root().private_device_bytes(adapter); }
 
-Hresult umd_create_device(void *adapter, D3d10ddiargCreateDeviceRecord *create)
+extern "C" Hresult rvkumd_create_device(void *adapter, D3d10ddiargCreateDeviceRecord *create)
 { return umd_binding.root().create_device(adapter, create); }
 
-Hresult umd_create_device12(void *adapter, const void *create)
+extern "C" Hresult rvkumd_create_device12(void *adapter, const void *create)
 { return umd_binding.root().create_device12(adapter, create); }
 
-Hresult umd_close_adapter(void *adapter) { return umd_binding.root().close_adapter(adapter); }
+extern "C" Hresult rvkumd_close_adapter(void *adapter) { return umd_binding.root().close_adapter(adapter); }
 
-void umd_destroy_device(void *block) { umd_binding.root().destroy_device(block); }
+extern "C" void rvkumd_destroy_device(void *block) { umd_binding.root().destroy_device(block); }
 
-Hresult umd_get_optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests)
+extern "C" Hresult rvkumd_get_optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests)
 { return umd_binding.root().optional_ddi_tables(adapter, entries, requests); }
 
-Hresult umd_fill_ddi_table(void *adapter, uint32_t table_type, void *, size_t, uint32_t, void *)
+extern "C" Hresult rvkumd_fill_ddi_table(void *adapter, uint32_t table_type, void *, size_t, uint32_t, void *)
 { return umd_binding.root().fill_ddi_table(adapter, table_type); }
 
 }  // namespace
 
 void fill_d3d10_adapter_funcs(D3d102ddiAdapterFuncsRecord &table)
 {
-    AV_SCOPE("av::d3d::fill_d3d10_adapter_funcs");
-    table.pfnCalcPrivateDeviceSize = reinterpret_cast<void *>(&umd_calc_private_device_size);
-    table.pfnCreateDevice = reinterpret_cast<void *>(&umd_create_device);
-    table.pfnCloseAdapter = reinterpret_cast<void *>(&umd_close_adapter);
-    table.pfnGetSupportedVersions = reinterpret_cast<void *>(&umd_get_supported_versions);
-    table.pfnGetCaps = reinterpret_cast<void *>(&umd_get_caps);
+    AV_SCOPE("fill_d3d10_adapter_funcs");
+    table.pfnCalcPrivateDeviceSize = reinterpret_cast<void *>(&rvkumd_calc_private_device_size);
+    table.pfnCreateDevice = reinterpret_cast<void *>(&rvkumd_create_device);
+    table.pfnCloseAdapter = reinterpret_cast<void *>(&rvkumd_close_adapter);
+    table.pfnGetSupportedVersions = reinterpret_cast<void *>(&rvkumd_get_supported_versions);
+    table.pfnGetCaps = reinterpret_cast<void *>(&rvkumd_get_caps);
 }
 
 void fill_d3d12_adapter_funcs(D3d12ddiAdapterFuncsRecord &table)
 {
-    AV_SCOPE("av::d3d::fill_d3d12_adapter_funcs");
-    table.pfnCalcPrivateDeviceSize = reinterpret_cast<void *>(&umd_calc_private_device_size);
-    table.pfnCreateDevice = reinterpret_cast<void *>(&umd_create_device12);
-    table.pfnCloseAdapter = reinterpret_cast<void *>(&umd_close_adapter);
-    table.pfnGetSupportedVersions = reinterpret_cast<void *>(&umd_get_supported_versions);
-    table.pfnGetCaps = reinterpret_cast<void *>(&umd_get_caps);
-    table.pfnGetOptionalDDITables = reinterpret_cast<void *>(&umd_get_optional_ddi_tables);
-    table.pfnFillDDITable = reinterpret_cast<void *>(&umd_fill_ddi_table);
-    table.pfnDestroyDevice = reinterpret_cast<void *>(&umd_destroy_device);
+    AV_SCOPE("fill_d3d12_adapter_funcs");
+    table.pfnCalcPrivateDeviceSize = reinterpret_cast<void *>(&rvkumd_calc_private_device_size);
+    table.pfnCreateDevice = reinterpret_cast<void *>(&rvkumd_create_device12);
+    table.pfnCloseAdapter = reinterpret_cast<void *>(&rvkumd_close_adapter);
+    table.pfnGetSupportedVersions = reinterpret_cast<void *>(&rvkumd_get_supported_versions);
+    table.pfnGetCaps = reinterpret_cast<void *>(&rvkumd_get_caps);
+    table.pfnGetOptionalDDITables = reinterpret_cast<void *>(&rvkumd_get_optional_ddi_tables);
+    table.pfnFillDDITable = reinterpret_cast<void *>(&rvkumd_fill_ddi_table);
+    table.pfnDestroyDevice = reinterpret_cast<void *>(&rvkumd_destroy_device);
 }
 
 }  // namespace av::d3d

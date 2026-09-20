@@ -78,9 +78,6 @@ public:
     void                                   *device_block();
     d3d::Dxgi161DdiBaseFunctionsRecord     &dxgi_table();
     const d3d::DxgiDdiBaseCallbacksRecord  &dxgi_callbacks() const;
-    /* The DXGI slot at `index` (0 is pfnPresent), called with `args`. */
-    d3d::Hresult                            dxgi_slot(std::uint32_t index, void *args);
-
 private:
     d3d::UmdRoot                        &root_;
     d3d::RuntimeKind                     runtime_;
