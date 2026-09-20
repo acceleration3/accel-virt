@@ -61,13 +61,34 @@ add_executable(rvktest ${RVKTEST_ENTRY})
 target_link_options(rvktest PRIVATE /ENTRY:rvktest_entry)
 target_link_libraries(rvktest PRIVATE rvkguest ${RVKTEST_IMPORTS})
 
+# rvkclprobe.exe, feature 052's proof through the Khronos loader (T030). The
+# import library is named apart from the loader target's below: both would
+# otherwise be OpenCL.lib in this directory, and the probe must build whether
+# or not the pinned loader tree is there.
+set(RVKCLPROBE_IMPORTS "")
+foreach(module OpenCL)
+  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}_import.lib)
+  add_custom_command(OUTPUT ${library}
+    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+  list(APPEND RVKCLPROBE_IMPORTS ${library})
+endforeach()
+add_custom_target(rvkclprobe_imports DEPENDS ${RVKCLPROBE_IMPORTS})
+
 # rvkvkprobe.exe, feature 045's proof through the Khronos loader.
 file(GLOB RVKVKPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/*.cpp)
+# And the OpenCL seam from the CL probe's directory - the entry point and the
+# CL probe's own program stay there. Feature 053's shared-object steps need
+# both APIs in one process: Vulkan is the only one that exports, and OpenCL is
+# what opens what it exported (T019).
+list(APPEND RVKVKPROBE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/probe/cl/windows_cl_entry.cpp)
 add_executable(rvkvkprobe ${RVKVKPROBE_SOURCES})
 target_link_options(rvkvkprobe PRIVATE /ENTRY:rvkvkprobe_entry)
 # The present steps make a window and read it back (feature 046), so this
 # probe links user32 as the GL one does; its import library is made below.
-target_link_libraries(rvkvkprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT})
+target_link_libraries(rvkvkprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT}
+                                         ${RVKCLPROBE_IMPORTS})
+add_dependencies(rvkvkprobe rvkclprobe_imports)
 
 # rvkvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
 # the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
@@ -205,19 +226,6 @@ add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
-# rvkclprobe.exe, feature 052's proof through the Khronos loader (T030). The
-# import library is named apart from the loader target's below: both would
-# otherwise be OpenCL.lib in this directory, and the probe must build whether
-# or not the pinned loader tree is there.
-set(RVKCLPROBE_IMPORTS "")
-foreach(module OpenCL)
-  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}_import.lib)
-  add_custom_command(OUTPUT ${library}
-    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
-  list(APPEND RVKCLPROBE_IMPORTS ${library})
-endforeach()
-add_custom_target(rvkclprobe_imports DEPENDS ${RVKCLPROBE_IMPORTS})
 
 file(GLOB RVKCLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/cl/*.cpp)
 add_executable(rvkclprobe ${RVKCLPROBE_SOURCES})

@@ -33,6 +33,10 @@ public:
     [[nodiscard]] bool make_current();
     /* Resolves an entry point, which is what fills the generated table. */
     void              *resolve(const char *name) const;
+    /* The context itself, which OpenCL's context properties name when a
+     * cl_context is to share this one's objects: CL_GL_CONTEXT_KHR takes the
+     * driver's own handle (feature 053, T019). Null until opened. */
+    void              *handle() const;
 
 private:
     const GlDisplay *display_;

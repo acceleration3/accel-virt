@@ -41,6 +41,11 @@ public:
      * OpenGL API on the calling thread first, because EGL keeps the bound API
      * per thread and a worker never bound it. */
     void *create_context(const GlContextAttributes &attributes, void *share) const;
+    /* The EGLDisplay itself, which OpenCL's context properties name beside a
+     * GL context when a cl_context is to share its objects: CL_EGL_DISPLAY_KHR
+     * is how a driver is told which display the GL context belongs to
+     * (feature 053, T019). Null until opened. */
+    void *handle() const;
     [[nodiscard]] bool make_current(void *context) const;
     /* Releases the calling thread's current context, then destroys `context`. */
     void  destroy_context(void *context) const;

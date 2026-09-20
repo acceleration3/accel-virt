@@ -33,6 +33,7 @@
 
 namespace av {
 
+class ClEntry;
 class GuestReport;
 class Kmt;
 class ProbeDevice;
@@ -46,7 +47,12 @@ public:
      * far, since all this asks is whether one name is among them. */
     static constexpr uint32_t max_extensions = 512u;
 
-    SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan);
+    /* `cl` is the OpenCL beside this process, or null. With one, the probe
+     * runs the other half of the interop matrix: OpenCL opens the handle
+     * Vulkan exported and reads what Vulkan wrote into it, which is the only
+     * place in the guest where two APIs meet over one allocation (feature 053,
+     * T019). Without one the Vulkan steps run alone and say so. */
+    SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ClEntry *cl);
     SharedObjectProbe(const SharedObjectProbe &) = delete;
     SharedObjectProbe &operator=(const SharedObjectProbe &) = delete;
 
@@ -74,11 +80,22 @@ private:
     void carrier_size_steps(uint32_t device);
     /* Memory declared exportable, which is what makes the miniport mint. */
     bool exportable_step(ProbeDevice &device, VkDeviceMemory &memory);
+    /* Known bytes into the allocation, which is what the OpenCL read is
+     * judged against. */
+    void fill_step(ProbeDevice &device, VkDeviceMemory memory);
     bool handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle);
     void released_step(ProbeDevice &device, VkDeviceMemory memory);
+    /* The other half of the matrix, with the handle Vulkan just exported:
+     * OpenCL opens it and reads back what Vulkan wrote. Steps `cl_device`,
+     * `cl_context`, `cl_opened` and `cl_read`; every one of them is skipped
+     * rather than failed on a process with no OpenCL, because this is the
+     * Vulkan probe and the loader is not always beside it. */
+    void opencl_steps(void *handle);
 
     Kmt          &kmt_;
     VulkanEntry  &vulkan_;
+    ClEntry      *cl_;
+    bool          filled_;
     ScenarioSteps steps_;
 };
 

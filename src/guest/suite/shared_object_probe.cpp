@@ -1,5 +1,8 @@
 #include "guest/suite/shared_object_probe.hpp"
 
+#include "guest/suite/cl_entry.hpp"
+
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -20,6 +23,14 @@ namespace av {
 namespace {
 
 constexpr const char *scenario = "shared";
+/* CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR and CL_MEM_READ_WRITE, written
+ * out because this file includes no OpenCL header: the probe's seam takes
+ * numbers (feature 053, T019). */
+constexpr uint64_t external_memory_win32 = 0x2061u;
+constexpr uint64_t cl_read_write = 1u;
+/* What the exportable allocation is filled with before it is shared, and what
+ * OpenCL must read back out of it. */
+constexpr uint32_t first_word = 0xABCD0000u;
 constexpr const char *win32_memory = "VK_KHR_external_memory_win32";
 
 /* A VkResult read as a Status, so a step's report carries the NTSTATUS of the
@@ -47,10 +58,57 @@ bool names(const VkExtensionProperties &listed, const char *wanted)
 
 }  // namespace
 
-SharedObjectProbe::SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan)
-    : kmt_(kmt), vulkan_(vulkan), steps_(kmt, report, scenario)
+SharedObjectProbe::SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ClEntry *cl)
+    : kmt_(kmt), vulkan_(vulkan), cl_(cl), filled_(false), steps_(kmt, report, scenario)
 {
     AV_SCOPE("SharedObjectProbe::SharedObjectProbe");
+}
+
+void SharedObjectProbe::opencl_steps(void *handle)
+{
+    AV_SCOPE("SharedObjectProbe::opencl_steps");
+    /* Nothing runs without an OpenCL beside this process, and nothing is worth
+     * running when the bytes were never written: a read judged against memory
+     * nobody filled would pass or fail on whatever was there. */
+    if (cl_ == nullptr || !filled_) return;
+    /* The device this process's OpenCL shows, which is the rvkgpu adapter's:
+     * the ICD shows one platform and one device, so the first of each is it. */
+    void    *platforms[4] = {};
+    uint32_t written = 0u;
+    if (steps_.check_result("cl_platform", cl_->platforms(platforms, 4u, written)) != Status::ok) return;
+    if (steps_.check("cl_platform_found", written != 0u ? Status::ok : Status::not_found) != Status::ok)
+        return;
+    void *devices[4] = {};
+    if (steps_.check_result("cl_device", cl_->devices(platforms[0], devices, 4u, written)) != Status::ok)
+        return;
+    if (steps_.check("cl_device_found", written != 0u ? Status::ok : Status::not_found) != Status::ok) return;
+    int32_t     error = 0;
+    void *const context = cl_->create_context(devices[0], error);
+    if (steps_.check_result("cl_context", context != nullptr ? 0 : error) != Status::ok) return;
+    ScopeExit dropping_context([&] { cl_->release_context(context); });
+    void *const queue = cl_->create_queue(context, devices[0], error);
+    if (steps_.check_result("cl_queue", queue != nullptr ? 0 : error) != Status::ok) return;
+    ScopeExit dropping_queue([&] { cl_->release_queue(queue); });
+
+    /* The whole point: a buffer over the memory Vulkan exported, named by the
+     * NT handle and by nothing else. */
+    const uint64_t properties[] = {external_memory_win32,
+                                   static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle)), 0u};
+    void *const    shared =
+        cl_->create_buffer_with_properties(context, properties, cl_read_write, bytes, error);
+    if (steps_.check_result("cl_opened", shared != nullptr ? 0 : error) != Status::ok) return;
+    /* Given back before the memory is freed: the object the device opened is
+     * held by this context until it is, and the Vulkan release that follows is
+     * what the run judges. */
+    ScopeExit dropping_buffer([&] { cl_->release_buffer(shared); });
+
+    /* And the bytes: what Vulkan put there is what OpenCL reads. A buffer that
+     * was a copy rather than the same memory reads zeroes here, which is the
+     * failure this step exists to catch. */
+    uint32_t read[8] = {};
+    const int32_t taken = cl_->read_buffer(queue, shared, sizeof read, read);
+    const bool    same = taken == 0 && read[0] == first_word && read[1] == first_word + 1u;
+    steps_.check_result("cl_read", same ? 0 : (taken != 0 ? taken : -1));
 }
 
 bool SharedObjectProbe::reported_step(ProbeDevice &device)
@@ -70,8 +128,14 @@ bool SharedObjectProbe::reported_step(ProbeDevice &device)
 bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &memory)
 {
     AV_SCOPE("SharedObjectProbe::exportable_step");
+    /* Host visible, so the probe can put known bytes in it: what proves the
+     * sharing is that OpenCL reads *these* bytes back, and a type no CPU can
+     * write is one nothing could check (feature 053, T019). */
     uint32_t type = 0u;
-    if (!device.memory_type(~uint32_t{0}, 0u, type)) {
+    if (!device.memory_type(~uint32_t{0},
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                            type) &&
+        !device.memory_type(~uint32_t{0}, 0u, type)) {
         steps_.check("exportable", Status::not_supported);
         return false;
     }
@@ -98,6 +162,27 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
     return steps_.check_kernel("exportable", judged,
                                vulkan_.last_kernel_status(device.instance(), device.physical_device())) ==
            Status::ok;
+}
+
+/* The bytes the other API must read back. A host-visible allocation is filled
+ * here; one that is not leaves `filled_` false and the OpenCL read is skipped
+ * rather than compared against memory nobody wrote. */
+void SharedObjectProbe::fill_step(ProbeDevice &device, VkDeviceMemory memory)
+{
+    AV_SCOPE("SharedObjectProbe::fill_step");
+    void          *mapped = nullptr;
+    const VkResult opened = vulkan_.map_memory(device.device(), memory, &mapped);
+    if (opened != VK_SUCCESS || mapped == nullptr) {
+        steps_.check("filled", Status::not_supported);
+        return;
+    }
+    auto *const words = static_cast<uint32_t *>(mapped);
+    for (uint32_t index = 0u; index < bytes / sizeof(uint32_t); index++) words[index] = first_word + index;
+    /* Left mapped: the memory is host coherent, so the writes are visible
+     * without one, and vkFreeMemory unmaps what it frees. The probe's seam has
+     * no unmap because nothing else here needed one. */
+    filled_ = true;
+    steps_.check("filled", Status::ok);
 }
 
 bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle)
@@ -265,8 +350,9 @@ void SharedObjectProbe::run()
     if (steps_.check("device", answered(device.make_device(shared_extensions, 1u))) != Status::ok) return;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     if (!exportable_step(device, memory)) return;
+    fill_step(device, memory);
     void *handle = nullptr;
-    static_cast<void>(handle_step(device, memory, handle));
+    if (handle_step(device, memory, handle)) opencl_steps(handle);
     released_step(device, memory);
 }
 

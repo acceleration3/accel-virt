@@ -36,6 +36,7 @@ ScriptedVulkan::ScriptedVulkan()
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
       external_objects_(false), win32_handle_(nullptr), scripted_extensions_(false), extension_count_(0u),
       extension_first_(VK_SUCCESS), extension_second_(VK_SUCCESS), allocate_nothing_(false), no_handle_(false),
+      map_nothing_(false),
       release_code_(0u), kernel_status_(0u),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
@@ -370,6 +371,8 @@ void ScriptedVulkan::allocate_nothing() { allocate_nothing_ = true; }
 
 void ScriptedVulkan::hand_out_no_handle() { no_handle_ = true; }
 
+void ScriptedVulkan::map_nothing() { map_nothing_ = true; }
+
 void ScriptedVulkan::refuse_the_release(std::uint32_t code) { release_code_ = code; }
 
 VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint32_t *count,
@@ -434,7 +437,7 @@ VkResult ScriptedVulkan::map_memory(VkDevice, VkDeviceMemory memory, void **data
         misuses_++;
         return VK_ERROR_MEMORY_MAP_FAILED;
     }
-    *data = allocation->bytes;
+    *data = map_nothing_ ? nullptr : allocation->bytes;
     return VK_SUCCESS;
 }
 

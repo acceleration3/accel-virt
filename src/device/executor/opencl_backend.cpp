@@ -1,5 +1,13 @@
 #include "device/executor/opencl_backend.hpp"
 
+#include <CL/cl_gl.h>
+
+#include "device/shim/gl_context.hpp"
+#include "device/shim/gl_display.hpp"
+#include "device/shim/gl_host_import.hpp"
+#include "device/shim/gl_shared_buffer.hpp"
+#include "device/shim/opencl_device.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/cl_event_registration.hpp"
@@ -35,16 +43,88 @@ extern "C" void CL_CALLBACK rvk_cl_event_completed(cl_event, cl_int, void *user_
 }
 
 OpenClBackend::OpenClBackend()
-    : bound_(nullptr), handles_(), svm_(), events_(), ran_(0u), lost_(false)
+    : bound_(nullptr), display_(nullptr), vehicle_(), import_(), buffers_(), shared_(), context_(nullptr),
+      queue_(nullptr), handles_(), svm_(), events_(), ran_(0u), lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
-bool OpenClBackend::initialize(const OpenClDevice *device)
+bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display)
 {
     AV_SCOPE("OpenClBackend::initialize");
     bound_ = device;
-    return bound_ != nullptr;
+    if (bound_ == nullptr) return false;
+    /* The vehicle is optional and its failure is not this context's: a GPU
+     * with no EGL display, or a driver that will not make a context, leaves
+     * OpenCL running everything it ran before and refusing to open a shared
+     * object (feature 053, T019). */
+    if (display == nullptr || !display->open()) return true;
+    /* The defaults: this context draws nothing and is never shown to the
+     * guest, so it wants no version, no profile and no debug flag. */
+    const GlContextAttributes plain(nullptr);
+    if (!vehicle_.open(*display, plain, nullptr)) return true;
+    display_ = display;
+    import_.configure(vehicle_);
+    buffers_.configure(vehicle_);
+    return true;
+}
+
+void *OpenClBackend::acquire_queue()
+{
+    AV_SCOPE("OpenClBackend::acquire_queue");
+    if (queue_ != nullptr) return queue_;
+    if (context_ == nullptr || bound_ == nullptr) return nullptr;
+    cl_int made = CL_SUCCESS;
+    queue_ = ::clCreateCommandQueueWithProperties(static_cast<cl_context>(context_),
+                                                  static_cast<cl_device_id>(bound_->device()), nullptr,
+                                                  &made);
+    return queue_;
+}
+
+bool OpenClBackend::sharing() const
+{
+    AV_SCOPE("OpenClBackend::sharing");
+    return display_ != nullptr && import_.imports_memory() && buffers_.makes_buffers();
+}
+
+cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *properties, cl_uint num_devices,
+                                             const cl_device_id *devices, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateContext");
+    if (!sharing()) return RealDispatch::on_clCreateContext(properties, num_devices, devices, errcode_ret);
+    /* The guest's list, with the two properties that let this context name a
+     * GL object appended before its terminator. The decoder has already
+     * refused anything but a CL_CONTEXT_PLATFORM naming the bound platform,
+     * so what is copied is short and known. */
+    cl_context_properties named[max_context_properties] = {};
+    uint32_t               at = 0u;
+    if (properties != nullptr) {
+        while (properties[at] != 0 && at + 4u < max_context_properties) {
+            named[at] = properties[at];
+            named[at + 1u] = properties[at + 1u];
+            at += 2u;
+        }
+        /* A list longer than this is one the guest built to overflow it. */
+        if (properties[at] != 0) {
+            if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_PROPERTY;
+            return nullptr;
+        }
+    }
+    named[at] = CL_GL_CONTEXT_KHR;
+    named[at + 1u] = reinterpret_cast<cl_context_properties>(vehicle_.handle());
+    named[at + 2u] = CL_EGL_DISPLAY_KHR;
+    named[at + 3u] = reinterpret_cast<cl_context_properties>(display_->handle());
+    named[at + 4u] = 0;
+    cl_int           made = CL_SUCCESS;
+    cl_context const shared = RealDispatch::on_clCreateContext(named, num_devices, devices, &made);
+    if (shared != nullptr) {
+        if (errcode_ret != nullptr) *errcode_ret = made;
+        return shared;
+    }
+    /* A host that will not make a GL-sharing context still runs OpenCL: the
+     * guest gets the context it asked for, and an open of a shared object is
+     * what will be refused instead. */
+    return RealDispatch::on_clCreateContext(properties, num_devices, devices, errcode_ret);
 }
 
 bool OpenClBackend::knows(uint32_t command_id) const
@@ -147,6 +227,10 @@ void OpenClBackend::made(clproto::HandleKind kind, void *object)
     /* A registry with no room loses the device rather than hand the guest a
      * number this host would refuse when it came back. */
     if (!handles_.remember(kind, object)) lost_ = true;
+    /* The first context is the one a shared object is opened into: it is the
+     * one created naming this backend's GL context, so it is the only one
+     * clCreateFromGLBuffer would take (feature 053, T019). */
+    if (kind == clproto::HandleKind::context && context_ == nullptr) context_ = object;
 }
 
 void OpenClBackend::retained(clproto::HandleKind kind, void *object)
@@ -222,10 +306,37 @@ void OpenClBackend::shut_down()
     svm_.forget_all();
     mapped_.forget_all();
     arena_.give_back();
+    /* The shared objects before the handles, because each holds a cl_mem the
+     * registry would otherwise release underneath it, and its GL objects go
+     * with it while the vehicle context is still there to delete them. */
+    uint64_t mem = 0u;
+    uint32_t buffer = 0u;
+    uint32_t memory = 0u;
+    while (shared_.take_any(mem, buffer, memory)) {
+        cl_mem const shared = reinterpret_cast<cl_mem>(mem);
+        if (queue_ != nullptr) {
+            static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared,
+                                                          0u, nullptr, nullptr));
+            static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
+        }
+        static_cast<void>(::clReleaseMemObject(shared));
+        buffers_.destroy(buffer);
+        import_.delete_memory(memory);
+    }
+    if (queue_ != nullptr) {
+        static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
+        queue_ = nullptr;
+    }
+    context_ = nullptr;
     /* Every event callback still to come goes stale here. The host cannot be
      * told to stop calling them, so being called and doing nothing is what
      * they do from now on. */
     events_.shut_down();
+    /* The vehicle last: its context is what deleted the GL objects above. */
+    buffers_.give_back();
+    import_.give_back();
+    vehicle_.close();
+    display_ = nullptr;
     bound_ = nullptr;
     ran_ = 0u;
     lost_ = false;
@@ -337,16 +448,70 @@ bool OpenClBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int
     return false;
 }
 
-bool OpenClBackend::import_object(uint32_t, uint32_t, int, uint64_t, uint64_t &wire_handle)
+bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
+                                  uint64_t &wire_handle)
 {
     AV_SCOPE("OpenClBackend::import_object");
     wire_handle = 0u;
-    return false;
+    /* Memory only, and only as a dma-buf: a fence is a host semaphore that
+     * OpenCL names through a different extension this host has not got, and an
+     * opaque fd is another driver's private handle that OpenGL cannot read
+     * (research.md §7). */
+    if (kind != RVK_SHARED_MEMORY || handle_kind != RVK_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
+        return false;
+    if (!sharing() || context_ == nullptr || acquire_queue() == nullptr) return false;
+    uint32_t memory = 0u;
+    if (!import_.import_memory(fd, size, memory)) return false;
+    uint32_t buffer = 0u;
+    if (!buffers_.make(memory, size, buffer)) {
+        import_.delete_memory(memory);
+        return false;
+    }
+    cl_int   made = CL_SUCCESS;
+    cl_mem const shared =
+        ::clCreateFromGLBuffer(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, buffer, &made);
+    if (shared == nullptr) {
+        buffers_.destroy(buffer);
+        import_.delete_memory(memory);
+        return false;
+    }
+    /* Acquired once and held: the acquire is the rule about OpenGL and OpenCL
+     * taking turns over one object, and the GL context here is an import
+     * vehicle that never draws - so OpenCL's turn is the whole of the object's
+     * life, and no enqueue has to be bracketed. Proven on this host: a write
+     * and a read across enqueues under one acquire, and what OpenCL wrote read
+     * back through the exporting Vulkan device's own mapping. */
+    const bool taken =
+        ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr,
+                                    nullptr) == CL_SUCCESS &&
+        ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;
+    if (!taken || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) {
+        static_cast<void>(::clReleaseMemObject(shared));
+        buffers_.destroy(buffer);
+        import_.delete_memory(memory);
+        return false;
+    }
+    wire_handle = reinterpret_cast<uint64_t>(shared);
+    return true;
 }
 
-void OpenClBackend::release_object(uint32_t, uint64_t)
+void OpenClBackend::release_object(uint32_t, uint64_t wire_handle)
 {
     AV_SCOPE("OpenClBackend::release_object");
+    uint32_t buffer = 0u;
+    uint32_t memory = 0u;
+    if (!shared_.forget(wire_handle, buffer, memory)) return;
+    /* The reverse of the making: the turn given back, then the cl_mem, then
+     * the buffer that was its storage, and the memory object last. */
+    cl_mem const shared = reinterpret_cast<cl_mem>(wire_handle);
+    if (queue_ != nullptr) {
+        static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
+                                                      nullptr, nullptr));
+        static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
+    }
+    static_cast<void>(::clReleaseMemObject(shared));
+    buffers_.destroy(buffer);
+    import_.delete_memory(memory);
 }
 
 }  // namespace av

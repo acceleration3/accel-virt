@@ -31,6 +31,7 @@ public:
         create_context,
         create_queue,
         create_buffer,
+        create_buffer_with_properties,
         create_program,
         build_program,
         program_build_text,
@@ -64,6 +65,9 @@ public:
     static constexpr std::uint32_t max_objects = 16u;
     /* As many as ClProbe's vector add has. */
     static constexpr std::uint32_t max_elements = 64u;
+    /* As many words of an exported allocation as the shared-object probe reads
+     * back out of it. */
+    static constexpr std::uint32_t max_shared_words = 8u;
     /* CL_INVALID_VALUE: what a call this refuses answers. */
     static constexpr std::int32_t  refused = -30;
     /* The LUID and vendor a device carries until a test says otherwise. */
@@ -97,6 +101,8 @@ public:
      * Nothing stops a real one doing this, and the probe's own bound is what
      * keeps it inside its array when one does. */
     void          overstate_platforms();
+    /* A loader with no ICD registered at all, which lists nothing. */
+    void          list_no_platforms();
     void          set_device_count(std::uint32_t count);
     void          set_device_name(const char *name);
     void          set_luid(std::uint64_t luid);
@@ -123,6 +129,12 @@ public:
     void          defer_callbacks();
     bool          deliver_deferred();
 
+    /* The memory an exported NT handle names, as whoever exported it left it.
+     * A buffer created over that handle reads these words back; one created
+     * over any other handle is refused, which is what an ICD does with a
+     * handle it never opened (feature 053). */
+    void          memory_behind(void *handle, const std::uint32_t *words, std::uint32_t count);
+
     /* The suffix of the platform the run asked for devices of: which of the
      * ones a loader listed the search settled on. */
     const char   *asked_devices_of() const;
@@ -146,6 +158,9 @@ public:
     void        *create_queue(void *context, void *device, std::int32_t &error) override;
     void        *create_buffer(void *context, std::uint64_t flags, std::size_t bytes,
                                std::int32_t &error) override;
+    void        *create_buffer_with_properties(void *context, const std::uint64_t *properties,
+                                               std::uint64_t flags, std::size_t bytes,
+                                               std::int32_t &error) override;
     void        *create_program(void *context, const char *source, std::int32_t &error) override;
     std::int32_t build_program(void *program, void *device, const char *options) override;
     std::int32_t program_build_text(void *program, void *device, char *into, std::size_t room,
@@ -245,6 +260,10 @@ private:
     Object        objects_[max_objects];
     std::uint32_t live_;
     std::uint32_t misuses_;
+    /* The NT handle a buffer can be opened over, and what the memory behind
+     * it holds. */
+    void         *exported_handle_;
+    std::uint32_t exported_words_[max_shared_words];
     /* The one shared allocation svm_alloc hands out, and who holds it. */
     float         shared_[max_elements];
     bool          shared_live_;

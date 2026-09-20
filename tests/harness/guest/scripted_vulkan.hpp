@@ -188,6 +188,9 @@ public:
      * probe must read as a failed step rather than a passed one. */
     void     allocate_nothing();
     void     hand_out_no_handle();
+    /* And a map that answers success and no pointer, which a probe that wrote
+     * through it would write to address zero. */
+    void     map_nothing();
     /* The NTSTATUS the driver reports after the free, which a release that
      * went wrong leaves non-zero. */
     void     refuse_the_release(std::uint32_t code);
@@ -332,6 +335,7 @@ private:
     VkResult      extension_second_;
     bool          allocate_nothing_;
     bool          no_handle_;
+    bool          map_nothing_;
     std::uint32_t release_code_;
     std::uint32_t kernel_status_;
     Allocation    allocations_[max_allocations];

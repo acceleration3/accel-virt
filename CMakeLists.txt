@@ -536,10 +536,14 @@ add_test(NAME guest_image
 
 # The probe binds to the Khronos loader and nothing else beyond the three
 # (feature 045).
+# It links OpenCL beside Vulkan from feature 053: the shared-object steps are
+# the one place in the guest where two APIs meet over one allocation, and only
+# a process with both can walk them (T019).
 add_test(NAME rvkvkprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe
-                 --allow-import vulkan-1.dll --allow-import user32.dll --require-import vkGetInstanceProcAddr)
+                 --allow-import vulkan-1.dll --allow-import user32.dll --allow-import OpenCL.dll
+                 --require-import vkGetInstanceProcAddr --require-import clCreateBufferWithProperties)
 
 # The trace reader needs nothing past the three either (docs/trace.md).
 add_test(NAME rvkinspect_image

@@ -6,6 +6,7 @@
 #ifndef AV_PROBE_PROGRAM_HPP
 #define AV_PROBE_PROGRAM_HPP
 
+#include "um/probe/cl/windows_cl_entry.hpp"
 #include "um/probe/gdi_window_frame.hpp"
 #include "um/probe/probe_window.hpp"
 #include "um/probe/windows_image_sink.hpp"
@@ -32,6 +33,9 @@ private:
     GdiKmt          kmt_;
     GuestReport     report_;
     LoaderVulkan    vulkan_;
+    /* The OpenCL beside this process, for the half of the interop matrix only
+     * a process with both APIs can walk (feature 053, T019). */
+    WindowsClEntry  cl_;
     WindowsImageSink images_;
     /* The window the present steps put their frames on (feature 046). */
     ProbeWindow     window_;
