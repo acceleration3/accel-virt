@@ -11,6 +11,10 @@ coverage/
 *.profraw
 *.profdata
 tests/corpus/*/crash-*
+# libFuzzer writes crash-<sha1> beside wherever it was run, which is not
+# always a corpus directory: one reached the repository root and was
+# committed.
+crash-*
 tests/corpus/*/leak-*
 __pycache__/
 third_party/windows-kit/
