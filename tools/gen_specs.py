@@ -180,24 +180,45 @@ def body(feat, rows):
 
 
 def classes_written(block):
-    """What a plan wrote under the classes heading: the table's rows and any
-    prose after them. It lives inside the generated block, so regeneration must
-    carry it over or it erases the plan's design decisions."""
+    """What a plan wrote under the classes heading: whatever it put above the
+    table saying where its classes live, the table's rows, and any prose after
+    them. All of it lives inside the generated block, so regeneration must
+    carry it over or it erases the plan's design decisions.
+
+    Answers (lead, rows) - the lead being the lines between the heading and the
+    table header, which feature 052 lost when only the rows were carried."""
     if CLASSES_HEADING not in block:
         return None
     lines = block.split(CLASSES_HEADING, 1)[1].split("\n### ", 1)[0].split("\n")
+    header = next((i for i, ln in enumerate(lines) if ln.startswith("| Class")), None)
     rule = next((i for i, ln in enumerate(lines) if ln.startswith("|---")), None)
     if rule is None:
         return None
     written = "\n".join(lines[rule + 1:]).strip("\n")
-    return None if written in ("", CLASSES_PLACEHOLDER) else written
+    lead = "\n".join(lines[:header]).strip("\n") if header is not None else ""
+    if written in ("", CLASSES_PLACEHOLDER) and lead == "":
+        return None
+    return lead, ("" if written == CLASSES_PLACEHOLDER else written)
 
 
 def carry_class_rows(new_block, old_block):
-    written = classes_written(old_block)
-    if written is None:
+    carried = classes_written(old_block)
+    if carried is None:
         return new_block
-    return new_block.replace(CLASSES_PLACEHOLDER, written, 1)
+    lead, written = carried
+    if written:
+        new_block = new_block.replace(CLASSES_PLACEHOLDER, written, 1)
+    fresh = classes_written(new_block)
+    # The lead is spliced, never prepended: what a fresh block puts there is
+    # this tool's own "fill this in" comment, and prepending to it would both
+    # keep the comment a plan deliberately replaced and grow the block on every
+    # run. Equal leads mean nothing was written there, so nothing is carried.
+    if fresh is not None and lead != fresh[0]:
+        head = CLASSES_HEADING + "\n\n"
+        at = new_block.index(head) + len(head)
+        table = new_block.index("| Class", at)
+        new_block = new_block[:at] + (lead + "\n\n" if lead else "") + new_block[table:]
+    return new_block
 
 
 def main():

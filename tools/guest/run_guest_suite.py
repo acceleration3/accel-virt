@@ -1121,9 +1121,19 @@ class GuestRun:
         # nothing in it: every allocation whose PreferredSegment was that
         # segment came back STATUS_INVALID_PARAMETER on a live guest, so the
         # pattern is in guest memory and this read cannot find it (feature 041,
-        # T026). --require-host-visible is what feature 043 turns on once it has
-        # a client that asks for the memory.
-        self.say(f"hostvisible skipped: {missing}; nothing asks for host memory yet (feature 043)")
+        # T026).
+        #
+        # Clients do ask for host-visible memory now - every OpenCL context
+        # opens a blob arena (feature 052), and the Vulkan and OpenGL contexts
+        # ask the same way - and every one of them gets FR-007's fallback: the
+        # allocation is guest pages, and the device imports those pages rather
+        # than placing the blob in the BAR. So this read finding nothing is the
+        # fallback working, not a client missing. --require-host-visible is what
+        # unparks the segment: turn it on in the change that makes VidMm place
+        # an allocation there, and this becomes a failure again.
+        self.say(f"hostvisible skipped: {missing}; the clients that ask for it "
+                 f"(feature 052's blob arena among them) take FR-007's fallback and the device "
+                 f"imports their guest pages, so 041's segment is still parked")
 
     def read_guest_memory(self, address, size):
         """QMP pmemsave: QEMU's own read of a guest physical range, which over

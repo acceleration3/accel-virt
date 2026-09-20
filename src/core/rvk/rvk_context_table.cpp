@@ -386,6 +386,15 @@ uint32_t RvkContextTable::bound() const
     return count;
 }
 
+/* Unlocked, as doorbell_of is: a caller asking whether the table holds its own
+ * context is the only thing that could be unbinding it. */
+bool RvkContextTable::holds(const void *context) const
+{
+    AV_SCOPE("RvkContextTable::holds");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::holds");
+    return slot_of(context) != no_slot;
+}
+
 /* One line per context set up or refused: which doorbell, and which message
  * its fence interrupts arrive on, is what a guest that never wakes needs. */
 void RvkContextTable::log_binding(uint32_t slot, uint32_t message, Status status)

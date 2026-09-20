@@ -374,6 +374,8 @@ public:
 
     cl_int flush() { return table_of(queue_)->clFlush(queue_); }
 
+    cl_int finish() { return table_of(queue_)->clFinish(queue_); }
+
     /* Pushes the queue, waits for `event`, and gives it back.
      *
      * The flush is the application's own and stays here: clWaitForEvents is
@@ -887,6 +889,53 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
     CHECK_EQ(loader.release_event(ran), CL_SUCCESS);
     CHECK_EQ(loader.release_event(delivered), CL_SUCCESS);
     CHECK_EQ(loader.release_event(gate), CL_SUCCESS);
+    CHECK(process.root().invariants_hold()); }
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* T065, US2: the read an application asks for blocking. Every other read here
+ * is the deferred kind, whose bytes are fetched once the marker says the queue
+ * has reached them; a blocking read is answered inside the one call, so it is
+ * the only read whose bytes the host must already have written when it
+ * serialises the reply. This is the guest probe's own sequence - write, run,
+ * clFinish, clEnqueueReadBuffer with CL_TRUE - and a device asked to read
+ * without blocking answers it with whatever its decode arena last held. */
+TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wrote)
+{ const WidestHostGpu &gpu = widest_gpu();
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) {
+      std::fprintf(stderr, "host runs no OpenCL; nothing to judge\n");
+      return;
+  }
+  const ExecutorLibraryFile &library = shared_library();
+  CHECK(library.ops() != nullptr);
+  if (library.ops() == nullptr) return;
+
+  Deadline patience(patience_seconds);
+  FullStackRig rig(*library.ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  { ClProcess process(rig.kmt());
+    FakeClLoader &loader = process.loader();
+    CHECK(loader.load() == FakeClLoader::Load::kept);
+
+    ClVectorAdd run(loader);
+    if (!run.make()) return;
+
+    CHECK_EQ(run.enqueue(nullptr), CL_SUCCESS);
+    CHECK_EQ(run.finish(), CL_SUCCESS);
+    float read[elements];
+    std::memset(read, 0xEE, sizeof read);
+    /* No event: an application that blocks wants the bytes, not a handle. */
+    CHECK_EQ(run.read(read, CL_TRUE, nullptr), CL_SUCCESS);
+    CHECK_EQ(run.wrong(read), 0u);
+
+    /* And once more with an event, because the two answer the read through
+     * different halves of the call and only one of them was ever run. */
+    std::memset(read, 0xEE, sizeof read);
+    cl_event delivered = nullptr;
+    CHECK_EQ(run.read(read, CL_TRUE, &delivered), CL_SUCCESS);
+    CHECK_EQ(run.wrong(read), 0u);
+    CHECK(delivered != nullptr);
+    if (delivered != nullptr) CHECK_EQ(loader.release_event(delivered), CL_SUCCESS);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }

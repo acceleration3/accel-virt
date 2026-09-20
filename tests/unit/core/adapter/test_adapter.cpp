@@ -3863,6 +3863,11 @@ TEST(adapter_rvk_context, freeing_memory_a_context_runs_on_destroys_the_host_con
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(fixture.context_requests(), requests + 4u);   /* nothing more to destroy */
+  /* And nothing is said about it. The context went with its memory, so the
+   * destroy has nothing left to unbind - which is the order a process exit
+   * uses, and a line claiming a failed destroy for it would be a failure
+   * logged where there is none (constitution IX). */
+  CHECK(!fixture.platform().logged_line("rvk context destroyed"));
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
 /* A record is honoured only where it can run: a device with no doorbell pages,

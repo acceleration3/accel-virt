@@ -11,6 +11,14 @@ set(CMAKE_CXX_COMPILER_TARGET x86_64-pc-windows-msvc)
 # guest test artifact (feature 052).
 set(CMAKE_C_COMPILER clang-cl)
 set(CMAKE_C_COMPILER_TARGET x86_64-pc-windows-msvc)
+# No C runtime is linked, so CMake must not choose one: its default
+# MultiThreadedDebugDLL puts /MDd on every compile, which defines _DLL, which
+# makes the kit's crtdefs.h declare every C library function
+# __declspec(dllimport). A guest binary that then calls one - only the
+# vendored OpenCL loader does - gets an __imp_ pointer lld-link resolves to
+# nothing, and the call jumps to the image base at run time.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "")
+
 set(CMAKE_LINKER lld-link)
 set(CMAKE_AR llvm-lib)
 set(CMAKE_RC_COMPILER llvm-rc)

@@ -34,7 +34,13 @@ OPTIONAL_PE32 = 0x10B
 OPTIONAL_PE32_PLUS = 0x20B
 EXPORT_DIRECTORY = 0
 IMPORT_DIRECTORY = 1
+RELOCATION_DIRECTORY = 5
 DELAY_IMPORT_DIRECTORY = 13
+RELOCATION_BLOCK_HEADER = 8
+# IMAGE_REL_BASED_DIR64: the whole 64-bit pointer at the entry's RVA has the
+# image base added to it. Type 0 is IMAGE_REL_BASED_ABSOLUTE, the padding every
+# linker ends a block with, and it relocates nothing.
+RELOCATED_DIR64 = 10
 KNOWN_DIRECTORIES = 16
 SECTION_HEADER_SIZE = 40
 IMPORT_DESCRIPTOR_SIZE = 20
@@ -77,6 +83,7 @@ class PeImage:
         if directories_at + 8 * directory_count > optional + optional_size:
             raise Malformed("the data directories overrun the optional header")
         self.subsystem = self.u16(optional + 68)
+        self.image_base = int.from_bytes(self.bytes_at(optional + 24, self.thunk_size), "little")
         self.directories = [(self.u32(directories_at + 8 * index), self.u32(directories_at + 8 * index + 4))
                             for index in range(directory_count)]
         sections = optional + optional_size
@@ -110,6 +117,9 @@ class PeImage:
 
     def u32_at(self, rva):
         return self.u32(self.offset_of(rva, 4))
+
+    def u64_at(self, rva):
+        return int.from_bytes(self.bytes_at(self.offset_of(rva, 8), 8), "little")
 
     def thunk_at(self, rva):
         raw = self.bytes_at(self.offset_of(rva, self.thunk_size), self.thunk_size)
@@ -162,6 +172,27 @@ class PeImage:
                 found.append(self.string_at((thunk & 0x7FFFFFFF) + 2))
             table += self.thunk_size
 
+    def relocated_pointers(self):
+        """The RVA and value of every 64-bit pointer the base relocation table
+        names, as the file holds them."""
+        at, remaining = self.directories[RELOCATION_DIRECTORY] if len(self.directories) > RELOCATION_DIRECTORY \
+            else (0, 0)
+        found = []
+        while at and remaining >= RELOCATION_BLOCK_HEADER:
+            page, size = self.u32_at(at), self.u32_at(at + 4)
+            if size <= RELOCATION_BLOCK_HEADER:
+                raise Malformed(f"a relocation block of {size} bytes has no entries")
+            if size > remaining:
+                raise Malformed(f"a relocation block of {size} bytes overruns the {remaining} bytes "
+                                "of the table")
+            for offset in range(RELOCATION_BLOCK_HEADER, size - 1, 2):
+                entry = self.u16_at(at + offset)
+                if entry >> 12 == RELOCATED_DIR64:
+                    rva = page + (entry & 0xFFF)
+                    found.append((rva, self.u64_at(rva)))
+            at, remaining = at + size, remaining - size
+        return found
+
     def exports(self):
         """Every exported name, and the ordinal of every export with none."""
         directory = self.directory(EXPORT_DIRECTORY)
@@ -198,6 +229,13 @@ def violations_of(image, arguments):
                           + " or ".join(SUBSYSTEMS[subsystem] for subsystem in wanted))
     if arguments.dll and not image.characteristics & FILE_DLL:
         violations.append("not a DLL: IMAGE_FILE_DLL is clear")
+
+    # A relocated pointer holding the image base points at RVA 0, which is the
+    # DOS header and never a symbol. lld-link writes one where a
+    # __declspec(dllimport) declaration had no import library to satisfy it:
+    # the link succeeds, and the first call through it jumps to the image base.
+    violations += [f"the relocated pointer at RVA 0x{rva:X} holds the image base, so it points at nothing"
+                   for rva, value in image.relocated_pointers() if value == image.image_base]
 
     allowed = GUEST_MODULES | {module.lower() for module in arguments.allow_import}
     imported = set()

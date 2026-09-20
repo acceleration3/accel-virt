@@ -126,6 +126,59 @@ TEST(cl_icd_root, the_device_answers_the_adapters_identity_and_the_hosts_everyth
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_NAME, sizeof name, name, nullptr), CL_SUCCESS);
   CHECK_EQ(std::strcmp(name, "a host gpu"), 0); }
 
+/* CL_DEVICE_EXTENSIONS is the one query that is neither the report's answer
+ * nor the host's: the host says what the GPU has, a policy row says what this
+ * ICD carries, and an application is shown the two intersected. The policy
+ * ships empty on purpose - nothing is carried, tested or reported - so the
+ * answer today is the empty string, whatever the host lists. Forwarding the
+ * host's would offer an application every extension rusticl implements over a
+ * wire that carries none of them (constitution VI). */
+TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_the_host_s_own)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+
+  /* A host naming extensions this ICD has no row for, including one whose
+   * name is a prefix of another so a match on anything but a whole word
+   * shows. */
+  static const char listed[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_sharing";
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  char   reported[128];
+  std::memset(reported, 'x', sizeof reported);
+  std::size_t answered = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
+                                    &answered),
+           CL_SUCCESS);
+  /* Nothing of the host's reached the application, and what it got is a
+   * terminated empty string rather than untouched room. */
+  CHECK_EQ(answered, 1u);
+  CHECK_EQ(reported[0], '\0');
+  CHECK(std::strstr(listed, "cl_khr_fp64") != nullptr);
+  CHECK_EQ(std::strcmp(reported, ""), 0);
+
+  /* The size query, which an application makes first: the same length, and
+   * the host is asked again because the answer is the host's to change. */
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  std::size_t wanted = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted),
+           CL_SUCCESS);
+  CHECK_EQ(wanted, 1u);
+
+  /* Room the answer does not fit is the API's own refusal, not a truncation. */
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  char cramped[1] = {'x'};
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(cramped[0], 'x');
+
+  /* And a host that will not answer is the host's status, not an empty list:
+   * an ICD that reported "no extensions" for a device it could not ask would
+   * be answering for a device it has lost. */
+  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
+                                    nullptr),
+           CL_OUT_OF_RESOURCES); }
+
 TEST(cl_icd_root, a_device_pointer_the_icd_never_made_is_an_invalid_device)
 { ClIcdRig rig;
   CHECK(opened_device(rig) != nullptr);
@@ -988,16 +1041,19 @@ TEST(cl_icd_root, a_blocking_read_is_not_deferred_and_has_its_bytes_when_it_retu
 
   unsigned char into[8] = {};
   const unsigned char answered[8] = {9u, 8u, 7u, 6u, 5u, 4u, 3u, 2u};
-  /* Enqueued with an event of its own, then waited for here - the host is
-   * never asked to block. */
-  rig.host().cl_bytes_for(CL_SUCCESS, answered, sizeof answered, host_event);
+  /* A marker of its own drains the queue, so that the read the host is asked
+   * to block on has nothing in front of it. */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
   /* The queue is flushed before it is asked about: the application handed the
    * ICD a blocking call and never saw a queue, so this side owes the flush. */
   rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  /* The event it made is given back: the application asked for none. */
+  /* The marker is given back. */
   rig.host().cl_result(CL_SUCCESS);
+  /* And the read is what answers the bytes, with no event: the application
+   * asked for none. */
+  rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
   CHECK_EQ(rig.root().enqueue_read(queue, buffer, CL_TRUE, 0u, sizeof into, into, nullptr),
            CL_SUCCESS);
   for (std::size_t index = 0u; index < sizeof into; ++index)
@@ -1268,10 +1324,14 @@ TEST(cl_icd_root, every_entry_refuses_an_object_whose_context_is_gone)
   CHECK_EQ(rig.root().watch_event(as_event, CL_COMPLETE, nullptr, nullptr), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().set_user_event_status(as_event, CL_COMPLETE), CL_OUT_OF_RESOURCES);
 
-  /* And a device query the host would own. */
+  /* And the device queries the host would own: the ones forwarded whole, and
+   * the extensions, which are the host's list intersected with the policy and
+   * so need the host as much as a forwarded query does. */
   char        name[8] = {};
   std::size_t answered = 0u;
   CHECK_EQ(rig.root().device_info(as_device, CL_DEVICE_NAME, sizeof name, name, &answered),
+           CL_INVALID_DEVICE);
+  CHECK_EQ(rig.root().device_info(as_device, CL_DEVICE_EXTENSIONS, sizeof name, name, &answered),
            CL_INVALID_DEVICE);
 
   /* Not one of them reached the driver. */
