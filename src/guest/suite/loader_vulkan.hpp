@@ -50,6 +50,9 @@ public:
     VkResult bind_image_memory(VkDevice device, VkImage image, VkDeviceMemory memory) override;
     VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info, VkDeviceMemory *memory) override;
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
+    VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,
+                                         VkExtensionProperties *properties) override;
+    VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
     VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info, VkImageView *view) override;
     void     destroy_image_view(VkDevice device, VkImageView view) override;
@@ -139,6 +142,8 @@ private:
         bind_image_memory,
         allocate_memory,
         free_memory,
+        enumerate_device_extensions,
+        memory_win32_handle,
         map_memory,
         create_image_view,
         destroy_image_view,

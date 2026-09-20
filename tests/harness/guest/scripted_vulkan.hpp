@@ -172,8 +172,15 @@ public:
     void     destroy_image(VkDevice device, VkImage image) override;
     void     image_memory_requirements(VkDevice device, VkImage image, VkMemoryRequirements *requirements) override;
     VkResult bind_image_memory(VkDevice device, VkImage image, VkDeviceMemory memory) override;
+    /* Feature 053: whether this host reports VK_KHR_external_memory_win32 and
+     * what its export answers. Off by default, as a host with no fd sharing
+     * is. */
+    void     report_external_objects(void *handle);
     VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info, VkDeviceMemory *memory) override;
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
+    VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
+                                         VkExtensionProperties *properties) override;
+    VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
     VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info, VkImageView *view) override;
     void     destroy_image_view(VkDevice device, VkImageView view) override;
@@ -297,6 +304,10 @@ private:
     Object        objects_[max_objects];
     std::uint32_t misuses_;
     std::uint64_t next_handle_;
+    /* Feature 053: which external-object extensions this host reports, and the
+     * handle its export answers - what a probe over it is judged against. */
+    bool          external_objects_;
+    void         *win32_handle_;
     Allocation    allocations_[max_allocations];
     std::uint32_t allocated_types_[max_allocations * 4u];
     std::uint32_t allocations_made_;

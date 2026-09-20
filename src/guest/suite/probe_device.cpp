@@ -95,9 +95,14 @@ bool ProbeDevice::choose_family()
     return false;
 }
 
-VkResult ProbeDevice::make_device()
+VkResult ProbeDevice::make_device(const char *const *extra, uint32_t extra_count)
 {
     AV_SCOPE("ProbeDevice::make_device");
+    if (extra_count > max_device_extensions - device_extension_count) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const char *asked[max_device_extensions] = {};
+    for (uint32_t index = 0u; index < device_extension_count; index++) asked[index] = device_extensions[index];
+    for (uint32_t index = 0u; index < extra_count; index++)
+        asked[device_extension_count + index] = extra[index];
     vulkan_.memory_properties(physical_device_, &memory_);
     VkDeviceQueueCreateInfo queue = {};
     queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -108,8 +113,8 @@ VkResult ProbeDevice::make_device()
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = 1u;
     info.pQueueCreateInfos = &queue;
-    info.enabledExtensionCount = device_extension_count;
-    info.ppEnabledExtensionNames = device_extensions;
+    info.enabledExtensionCount = device_extension_count + extra_count;
+    info.ppEnabledExtensionNames = asked;
     const VkResult made = vulkan_.create_device(physical_device_, &info, &device_);
     if (made != VK_SUCCESS) return made;
     vulkan_.device_queue(device_, family_, 0u, &queue_);

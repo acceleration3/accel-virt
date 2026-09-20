@@ -474,3 +474,25 @@ TEST(loader_vulkan, the_window_system_commands_answer_through_the_instance)
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+/* Feature 053: the export the shared-object probe asks for, resolved through
+ * the loader. A loader whose driver has no such function answers
+ * VK_ERROR_EXTENSION_NOT_PRESENT and sends nothing - which is what a host with
+ * no fd sharing looks like from the guest, and is not a crash. */
+TEST(loader_vulkan, the_win32_memory_handle_is_found_through_the_loader_or_refused)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  LoaderVulkan bare(&without_fault);
+  const VkPhysicalDevice physical = rig.physical_device(instance);
+  const std::uint32_t sent = rig.kmt().commands();
+  void *handle = reinterpret_cast<void *>(0x1234u);
+  CHECK_EQ(bare.memory_win32_handle(reinterpret_cast<VkDevice>(0x1u),
+                                    reinterpret_cast<VkDeviceMemory>(0x2u), &handle),
+           VK_ERROR_EXTENSION_NOT_PRESENT);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  /* And the extension list the probe reads to decide whether to ask at all,
+   * which the same loader answers the same way. */
+  std::uint32_t count = 9u;
+  CHECK_EQ(bare.enumerate_device_extensions(physical, &count, nullptr), VK_ERROR_EXTENSION_NOT_PRESENT);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  rig.destroy_instance(instance); }

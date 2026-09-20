@@ -51,6 +51,15 @@ public:
     virtual VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
                                      VkDeviceMemory *memory) = 0;
     virtual void     free_memory(VkDevice device, VkDeviceMemory memory) = 0;
+    /* The extensions a physical device reports, as far as `count` has room:
+     * VK_INCOMPLETE is a list and not a failure (feature 053). */
+    virtual VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,
+                                                 VkExtensionProperties *properties) = 0;
+    /* vkGetMemoryWin32HandleKHR for memory allocated with an NT handle export.
+     * The handle is the process's and is closed with the memory. A loader that
+     * answers no such function answers VK_ERROR_EXTENSION_NOT_PRESENT
+     * (feature 053). */
+    virtual VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) = 0;
     /* The whole allocation, from offset 0. */
     virtual VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) = 0;
     virtual VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info,

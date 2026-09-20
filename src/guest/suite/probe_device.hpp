@@ -31,6 +31,8 @@ public:
     static const char *const  device_extensions[];
     static constexpr uint32_t instance_extension_count = 2u;
     static constexpr uint32_t device_extension_count = 1u;
+    /* The window-system one and whatever a step adds. */
+    static constexpr uint32_t max_device_extensions = 8u;
 
     /* At API version 1.3, with the window-system extensions enabled. */
     VkResult make_instance();
@@ -42,8 +44,11 @@ public:
     /* Chooses the chosen device's first family that draws and computes:
      * whether one does. */
     bool     choose_family();
-    /* A device on the chosen one with one queue of the chosen family. */
-    VkResult make_device();
+    /* A device on the chosen one with one queue of the chosen family, and
+     * `extra` extension names beside the window-system one. A step that needs
+     * an extension the driver reports only sometimes asks for it here rather
+     * than widening what every probe device is made with (feature 053). */
+    VkResult make_device(const char *const *extra = nullptr, uint32_t extra_count = 0u);
     /* The lowest type in `allowed` with every flag in `wanted`: whether one is. */
     bool     memory_type(uint32_t allowed, VkMemoryPropertyFlags wanted, uint32_t &type) const;
 

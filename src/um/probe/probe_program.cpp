@@ -1,5 +1,7 @@
 #include "um/probe/probe_program.hpp"
 
+#include "guest/suite/shared_object_probe.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "guest/suite/vulkan_probe.hpp"
 
@@ -24,6 +26,12 @@ uint32_t ProbeProgram::run()
         VulkanProbe probe(kmt_, report_, vulkan_, images_, frames_, window_.module(),
                           opened ? window_.window() : nullptr);
         probe.run();
+        /* Feature 053: the three D3DKMT calls nothing else in the guest
+         * reaches. Its own instance and device, because the probe above
+         * destroys everything it made and these steps need a device asked for
+         * with the external-object extensions. */
+        SharedObjectProbe shared(kmt_, report_, vulkan_);
+        shared.run();
     } else {
         report_.check("program", "initialize", initialized, 0u);
     }
