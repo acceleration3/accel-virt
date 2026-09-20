@@ -163,6 +163,12 @@ void SharedObjectProbe::run()
     if (found == Status::ok) found = kmt_.adapter_luid(search.adapter(), luid);
     if (steps_.check("adapter", found) != Status::ok) return;
 
+    /* Asked of the kernel first, and whatever the host GPU can do: whether
+     * dxgkrnl takes the carrier create is a question about this machine's
+     * Windows, not about fd sharing, and a host that offers no external
+     * objects still answers it. */
+    carrier_steps();
+
     ProbeDevice device(vulkan_);
     if (steps_.check("instance", answered(device.make_instance())) != Status::ok) return;
     if (steps_.check("physical_device", answered(device.list_physical_devices())) != Status::ok) return;
@@ -176,10 +182,6 @@ void SharedObjectProbe::run()
     const bool offered = reported_step(device);
     steps_.check("reported", offered ? Status::ok : Status::not_supported);
     if (!offered) return;
-    /* Asked of the kernel directly before anything goes through the ICD: if
-     * the carrier create is refused here it is refused there too, and this
-     * says so without the ICD in the way. */
-    carrier_steps();
     const char *const shared_extensions[] = {win32_memory};
     if (steps_.check("device", answered(device.make_device(shared_extensions, 1u))) != Status::ok) return;
     VkDeviceMemory memory = VK_NULL_HANDLE;

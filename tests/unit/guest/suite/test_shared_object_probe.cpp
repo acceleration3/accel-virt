@@ -71,6 +71,9 @@ TEST(shared_object_probe, a_host_with_no_external_objects_stops_at_the_question)
 { Rig rig;
   rig.run();
   CHECK(rig.holds("ok shared.adapter"));
+  /* The kernel's own question is asked whatever the host GPU offers. */
+  CHECK(rig.holds("shared.carrier_plain"));
+  CHECK(rig.holds("shared.carrier_shared"));
   CHECK(rig.holds("ok shared.chosen"));
   CHECK(rig.holds("shared.reported"));
   /* The device is not even made: one asked for with an extension the driver
