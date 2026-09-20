@@ -23,6 +23,7 @@ class GpuRect;
 class Host;
 class ScanoutFramebuffer;
 class StateWriter;
+struct DisplayHeadsProbe;
 
 class DisplayHeads {
 public:
@@ -72,6 +73,8 @@ private:
     BlobTable                       &blobs_;
     Display                          display_;
     ObjectStorage<ScanoutBinding>    heads_[max_heads];
+
+    friend struct DisplayHeadsProbe;
 };
 
 }  // namespace av

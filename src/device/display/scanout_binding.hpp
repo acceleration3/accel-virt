@@ -27,6 +27,7 @@ class BlobTable;
 class GpuRect;
 class Host;
 class StateWriter;
+struct DisplayHeadsProbe;
 
 class ScanoutBinding {
 public:
@@ -78,6 +79,8 @@ private:
     bool               second_is_current_;
     bool               shown_;
     uint64_t           frames_;
+
+    friend struct DisplayHeadsProbe;
 };
 
 }  // namespace av

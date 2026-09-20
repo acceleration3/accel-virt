@@ -216,3 +216,26 @@ TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_w
   WireWriter short_writer(short_bytes, sizeof short_bytes);
   capset.encode(short_writer);
   CHECK(short_writer.status() != Status::ok); }
+
+/* The one bit a device cannot decide when it describes its capset: QEMU
+ * registers its display backends after every device has realized, so whether
+ * a head can show a dma-buf is announced later, into the same field the
+ * others live in - no encoding change, no new capability (feature 058). */
+TEST(capset_info_announce, adds_the_scanout_bit_without_disturbing_the_rest)
+{ CapsetInfo capset(ProtocolVersion(1u, 0u), 0x1u, 1u, 12u, 12u,
+                    CapsetInfo::feature_host_visible_memory, GpuIdentity());
+  CHECK(!capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  capset.announce(CapsetInfo::feature_dmabuf_scanout);
+  CHECK(capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  CHECK(capset.has_feature(CapsetInfo::feature_host_visible_memory));
+  capset.announce(CapsetInfo::feature_dmabuf_scanout);
+  CHECK(capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  std::uint8_t bytes[CapsetInfo::encoded_size] = {};
+  CHECK_STATUS(capset.encode(bytes, sizeof bytes), Status::ok);
+  CapsetInfo decoded;
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
+  CHECK(decoded.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  capset.withdraw(CapsetInfo::feature_dmabuf_scanout);
+  CHECK(!capset.has_feature(CapsetInfo::feature_dmabuf_scanout));
+  CHECK(capset.has_feature(CapsetInfo::feature_host_visible_memory));
+  CHECK_EQ(CapsetInfo::feature_dmabuf_scanout, 8u); }
