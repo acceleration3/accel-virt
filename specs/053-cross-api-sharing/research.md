@@ -912,3 +912,27 @@ entry per API and OpenCL has none, so any row at all fails the gate today. The
 row would be inert on this machine anyway, since the device strikes the host
 name out inside QEMU; it lands with the host that can share, or with the answer
 to why this one cannot.
+
+### The eight marks the OpenCL import adds, and why each is one
+
+`tests/untestable_baseline.txt` goes from 1 to 9. Every new mark is on the same
+kind of branch: a host driver refusing something it has never refused on any
+machine this runs on, inside a path that exists only for real hardware. They
+are, in the order they appear in `src/device/executor/opencl_backend.cpp`:
+
+| Branch | Why no test reaches it |
+|---|---|
+| `initialize`: the three abilities together | this host answers yes to all three; the one inside QEMU refuses the last, which is why it is measured at all |
+| `shares_with_gl`: the context refused | the same refusal, at the call that makes it |
+| `import_object`: no command queue | `clCreateCommandQueueWithProperties` on a context this driver just made |
+| `import_object`: the GL import refused | a descriptor this host's GL will not take. An ordinary file *is* taken by `glImportMemoryFdEXT` and then faults inside `si_resource_from_memobj`, so feeding one in tests a shape the device never produces |
+| `import_object`: no buffer storage | `glBufferStorageMemEXT` over a memory object this driver just imported |
+| `import_object`: no `cl_mem` | `clCreateFromGLBuffer` over a buffer this driver just made |
+| `import_object`: the acquire refused | `clEnqueueAcquireGLObjects` and `clFinish` on that object |
+| `import_object`: the row not kept | the acquire above, and a table sixty-four live imports would be needed to fill |
+
+Everything else the import path can answer is covered by a test: an unopened
+display, a context the guest has not made, a descriptor of the wrong kind or
+size, a property list too long to copy, a second context, and the extension
+string surgery in every shape a list can take - which is what found the one
+real bug here, a terminator written one past a list that filled its room.

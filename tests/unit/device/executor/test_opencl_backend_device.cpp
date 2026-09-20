@@ -322,6 +322,72 @@ TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_de
       std::fprintf(stderr, "this host's OpenCL lists no cl_khr_gl_sharing\n");
   backend.shut_down(); }
 
+/* An import on a host that can share and a guest that has made no context:
+ * there is nothing for the cl_mem to belong to, and the descriptor is left
+ * untouched for the context that will come.
+ *
+ * A descriptor of the wrong *kind* is deliberately not tested here. An
+ * ordinary file passes `glImportMemoryFdEXT` on this host and then faults
+ * inside radeonsi's `si_resource_from_memobj`, so a test that fed one in would
+ * be testing a shape this device never produces: every descriptor that reaches
+ * an import came out of `vkGetMemoryFdKHR` on this same GPU (research.md
+ * §21). */
+TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs_the_descriptor_nothing)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  Exported written;
+  if (!written.make(hosts.uuid(0u))) { backend.shut_down(); return; }
+
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, written.handle(), page, made));
+  CHECK_EQ(made, 0u);
+
+  /* And with a context, the same descriptor imports: the refusal cost it
+   * nothing. */
+  if (guest_context(backend, *hosts.device(0u)) == nullptr) { backend.shut_down(); return; }
+  if (backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, written.handle(), page, made)) {
+      CHECK(made != 0u);
+      backend.release_object(RVK_SHARED_MEMORY, made);
+  }
+  backend.shut_down(); }
+
+/* The guest's own property list is copied into the one this driver sends, and
+ * a list too long for it is refused rather than truncated - a truncated one
+ * would be a context made with properties the guest did not write. */
+TEST(opencl_backend_device, a_property_list_longer_than_the_drivers_own_is_refused)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  cl_device_id named = static_cast<cl_device_id>(hosts.device(0u)->device());
+
+  /* Longer than the thirty-two entries the driver copies into its own list. */
+  cl_context_properties overlong[34] = {};
+  for (std::uint32_t at = 0u; at + 1u < 32u; at += 2u) {
+      overlong[at] = CL_CONTEXT_PLATFORM;
+      overlong[at + 1u] = reinterpret_cast<cl_context_properties>(hosts.device(0u)->platform());
+  }
+  cl_int error = CL_SUCCESS;
+  CHECK(backend.on_clCreateContext(overlong, 1u, &named, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+  /* The same list, with nowhere to put the error: refused just the same. */
+  CHECK(backend.on_clCreateContext(overlong, 1u, &named, nullptr) == nullptr);
+
+  /* And a context made with no room asked for the error is still a context -
+   * which is also the second one this backend sees, and the second is not the
+   * one a shared object is opened into. */
+  cl_context const first = guest_context(backend, *hosts.device(0u));
+  if (first == nullptr) { backend.shut_down(); return; }
+  cl_context_properties list[] = {CL_CONTEXT_PLATFORM,
+                                  reinterpret_cast<cl_context_properties>(hosts.device(0u)->platform()), 0};
+  cl_context const second = backend.on_clCreateContext(list, 1u, &named, nullptr);
+  CHECK(second != nullptr);
+  backend.made(av::clproto::HandleKind::context, second);
+  static_cast<void>(::clReleaseContext(second));
+  backend.shut_down(); }
+
 /* What is refused before any host object is made, which is every question the
  * wire's answer depends on: a kind this API cannot import, a descriptor of the
  * wrong kind, no descriptor, and no size. */

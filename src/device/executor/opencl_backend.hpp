@@ -25,6 +25,10 @@ namespace av {
 
 class GlDisplay;
 class OpenClDevice;
+/* What the tests reach the extension-string surgery through: `without` is
+ * private because nothing but `on_clGetDeviceInfo` may call it, and its cases
+ * are strings no host answers. */
+struct OpenClBackendProbe;
 
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
 public:
@@ -160,6 +164,8 @@ public:
     uint64_t ran() const;
 
 private:
+    friend struct OpenClBackendProbe;
+
     /* Every OpenCL command id carries this in its top 16 bits. */
     static constexpr uint32_t opencl_api = 2u;
     /* A context property list this device will copy: OpenCL defines a handful

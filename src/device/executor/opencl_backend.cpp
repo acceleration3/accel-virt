@@ -69,17 +69,16 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     const GlContextAttributes plain(nullptr);
     if (!vehicle_.open(*display, plain, nullptr)) return true;
     display_ = display;
-    /* Asked before anything is claimed: a host that will not make the context
-     * shares nothing, and this context then runs everything else exactly as a
-     * host with no display does. */
-    if (!shares_with_gl()) {
-        AV_UNTESTABLE("no OpenCL beside a test here refuses a GL-sharing context; one inside QEMU does");
+    import_.configure(vehicle_);
+    buffers_.configure(vehicle_);
+    /* Measured before anything is claimed, and all three together because a
+     * context that cannot do every one of them cannot open a shared object at
+     * all: it then runs exactly as a context on a GPU with no display does. */
+    if (!import_.imports_memory() || !buffers_.makes_buffers() || !shares_with_gl()) { AV_UNTESTABLE("no host beside a test here refuses any of the three; one inside QEMU refuses the last");
         display_ = nullptr;
         vehicle_.close();
         return true;
     }
-    import_.configure(vehicle_);
-    buffers_.configure(vehicle_);
     return true;
 }
 
@@ -128,7 +127,9 @@ size_t OpenClBackend::without(char *text, size_t bytes, const char *name) const
         }
         at = end;
     }
-    text[written] = '\0';
+    /* Only where it fits: a list that filled its room with no terminator gets
+     * none written past the end of that room. */
+    if (written < bytes) text[written] = '\0';
     return written + 1u;
 }
 
@@ -143,7 +144,7 @@ bool OpenClBackend::shares_with_gl() const
     cl_device_id const one = static_cast<cl_device_id>(bound_->device());
     cl_int             made = CL_SUCCESS;
     cl_context const   asked = ::clCreateContext(named, 1u, &one, nullptr, nullptr, &made);
-    if (asked == nullptr) return false;
+    if (asked == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a GL-sharing context"); return false; }
     static_cast<void>(::clReleaseContext(asked));
     return true;
 }
@@ -152,7 +153,8 @@ void *OpenClBackend::acquire_queue()
 {
     AV_SCOPE("OpenClBackend::acquire_queue");
     if (queue_ != nullptr) return queue_;
-    if (context_ == nullptr || bound_ == nullptr) return nullptr;
+    /* A context and a device, because `import_object` is the only caller and
+     * it has already refused a backend without either. */
     cl_int made = CL_SUCCESS;
     queue_ = ::clCreateCommandQueueWithProperties(static_cast<cl_context>(context_),
                                                   static_cast<cl_device_id>(bound_->device()), nullptr,
@@ -163,7 +165,7 @@ void *OpenClBackend::acquire_queue()
 bool OpenClBackend::sharing() const
 {
     AV_SCOPE("OpenClBackend::sharing");
-    return display_ != nullptr && import_.imports_memory() && buffers_.makes_buffers();
+    return display_ != nullptr;
 }
 
 cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *properties, cl_uint num_devices,
@@ -194,16 +196,13 @@ cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *proper
     named[at + 2u] = CL_EGL_DISPLAY_KHR;
     named[at + 3u] = reinterpret_cast<cl_context_properties>(display_->handle());
     named[at + 4u] = 0;
+    /* Whatever it answers is the guest's answer: a context that got this far
+     * was made on a host that made one at bind time, so a refusal here is a
+     * real one and not this driver's own arrangement failing. */
     cl_int           made = CL_SUCCESS;
     cl_context const shared = RealDispatch::on_clCreateContext(named, num_devices, devices, &made);
-    if (shared != nullptr) {
-        if (errcode_ret != nullptr) *errcode_ret = made;
-        return shared;
-    }
-    /* A host that will not make a GL-sharing context still runs OpenCL: the
-     * guest gets the context it asked for, and an open of a shared object is
-     * what will be refused instead. */
-    return RealDispatch::on_clCreateContext(properties, num_devices, devices, errcode_ret);
+    if (errcode_ret != nullptr) *errcode_ret = made;
+    return shared;
 }
 
 bool OpenClBackend::knows(uint32_t command_id) const
@@ -393,11 +392,9 @@ void OpenClBackend::shut_down()
     uint32_t memory = 0u;
     while (shared_.take_any(mem, buffer, memory)) {
         cl_mem const shared = reinterpret_cast<cl_mem>(mem);
-        if (queue_ != nullptr) {
-            static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared,
-                                                          0u, nullptr, nullptr));
-            static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
-        }
+        static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
+                                                      nullptr, nullptr));
+        static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
         static_cast<void>(::clReleaseMemObject(shared));
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
@@ -538,18 +535,19 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * (research.md §7). */
     if (kind != RVK_SHARED_MEMORY || handle_kind != RVK_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
         return false;
-    if (!sharing() || context_ == nullptr || acquire_queue() == nullptr) return false;
+    if (!sharing() || context_ == nullptr) return false;
+    if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }
     uint32_t memory = 0u;
-    if (!import_.import_memory(fd, size, memory)) return false;
+    if (!import_.import_memory(fd, size, memory)) return false; // AV_UNTESTABLE("a descriptor this host's GL refuses; an ordinary fd is taken and then faults in the driver")
     uint32_t buffer = 0u;
-    if (!buffers_.make(memory, size, buffer)) {
+    if (!buffers_.make(memory, size, buffer)) { AV_UNTESTABLE("no host beside a test here refuses storage over memory it imported");
         import_.delete_memory(memory);
         return false;
     }
     cl_int   made = CL_SUCCESS;
     cl_mem const shared =
         ::clCreateFromGLBuffer(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, buffer, &made);
-    if (shared == nullptr) {
+    if (shared == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a buffer it imported itself");
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
         return false;
@@ -560,11 +558,8 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * life, and no enqueue has to be bracketed. Proven on this host: a write
      * and a read across enqueues under one acquire, and what OpenCL wrote read
      * back through the exporting Vulkan device's own mapping. */
-    const bool taken =
-        ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr,
-                                    nullptr) == CL_SUCCESS &&
-        ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;
-    if (!taken || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) {
+    const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;  // AV_UNTESTABLE("no host beside a test here refuses an acquire")
+    if (!taken || !shared_.remember(reinterpret_cast<uint64_t>(shared), buffer, memory)) { AV_UNTESTABLE("the acquire above, and a table no guest fills without sixty-four live imports");
         static_cast<void>(::clReleaseMemObject(shared));
         buffers_.destroy(buffer);
         import_.delete_memory(memory);
@@ -582,12 +577,12 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle)
     if (!shared_.forget(wire_handle, buffer, memory)) return;
     /* The reverse of the making: the turn given back, then the cl_mem, then
      * the buffer that was its storage, and the memory object last. */
+    /* The queue is the import's own and outlives every row it made, so a row
+     * to give back is a queue to give it back on. */
     cl_mem const shared = reinterpret_cast<cl_mem>(wire_handle);
-    if (queue_ != nullptr) {
-        static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
-                                                      nullptr, nullptr));
-        static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
-    }
+    static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
+                                                  nullptr, nullptr));
+    static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
     static_cast<void>(::clReleaseMemObject(shared));
     buffers_.destroy(buffer);
     import_.delete_memory(memory);

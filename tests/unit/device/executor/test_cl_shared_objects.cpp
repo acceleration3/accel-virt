@@ -45,6 +45,14 @@ TEST(cl_shared_objects, a_new_table_holds_nothing_and_finds_nothing)
   CHECK(!objects.forget(first_mem, buffer, memory));
   CHECK_EQ(buffer, 9u);
   CHECK_EQ(memory, 9u);
+  /* And nothing is ever the handle 0: a release naming it names no row, in an
+   * empty table and in a full one alike. */
+  CHECK(!objects.forget(0u, buffer, memory));
+  CHECK(objects.remember(first_mem, 1u, 2u));
+  CHECK(!objects.forget(0u, buffer, memory));
+  CHECK_EQ(buffer, 9u);
+  CHECK_EQ(objects.count(), 1u);
+  CHECK(objects.forget(first_mem, buffer, memory));
   std::uint64_t mem = 9u;
   CHECK(!objects.take_any(mem, buffer, memory));
   CHECK(objects.invariants_hold()); }

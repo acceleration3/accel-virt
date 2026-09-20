@@ -6,6 +6,7 @@
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/opencl_backend.hpp"
+#include "device/shim/gl_display.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -292,6 +293,75 @@ private:
 cl_platform_id other_platform() { return reinterpret_cast<cl_platform_id>(&host_objects[1]); }
 
 }  // namespace
+
+namespace av {
+
+/* The extension-string surgery, reached from outside because the strings that
+ * exercise it are ones no host answers: a name that ends where the list's word
+ * does not, a word that is only the start of the name, a list that fills its
+ * room with no terminator, and one that ends in spaces. */
+struct OpenClBackendProbe {
+    OpenClBackend &backend;
+
+    std::size_t without(char *text, std::size_t bytes, const char *name) const
+    { return backend.without(text, bytes, name); }
+    bool names(const char *text, std::size_t length, const char *name) const
+    { return backend.names(text, length, name); }
+};
+
+}  // namespace av
+
+/* What is struck out, and what is not: only the whole word, wherever it is in
+ * the list, and the list stays a list. */
+TEST(opencl_backend, striking_a_name_out_of_a_list_takes_the_word_and_nothing_near_it)
+{ OpenClBackend      backend;
+  av::OpenClBackendProbe probe{backend};
+  char first[] = "cl_khr_gl_sharing cl_khr_fp16 cl_khr_icd";
+  CHECK_EQ(probe.without(first, sizeof first, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16 cl_khr_icd") + 1u);
+  CHECK(std::strcmp(first, "cl_khr_fp16 cl_khr_icd") == 0);
+  char last[] = "cl_khr_fp16 cl_khr_gl_sharing";
+  CHECK_EQ(probe.without(last, sizeof last, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
+  CHECK(std::strcmp(last, "cl_khr_fp16") == 0);
+  /* A word the name only starts, and a word that only starts the name: neither
+   * is the name. */
+  char longer[] = "cl_khr_gl_sharing_more cl_khr_gl";
+  CHECK_EQ(probe.without(longer, sizeof longer, "cl_khr_gl_sharing"), sizeof longer);
+  CHECK(std::strcmp(longer, "cl_khr_gl_sharing_more cl_khr_gl") == 0);
+  /* A list that ends in spaces, and one that fills its room with no
+   * terminator at all: both are read as far as they go and no further. */
+  char spaced[] = "cl_khr_fp16   ";
+  CHECK_EQ(probe.without(spaced, sizeof spaced, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
+  CHECK(std::strcmp(spaced, "cl_khr_fp16") == 0);
+  char unterminated[11] = {'c', 'l', '_', 'k', 'h', 'r', '_', 'f', 'p', '1', '6'};
+  CHECK_EQ(probe.without(unterminated, 11u, "cl_khr_gl_sharing"), 12u);
+  /* An empty list stays empty. */
+  char empty[] = "";
+  CHECK_EQ(probe.without(empty, sizeof empty, "cl_khr_gl_sharing"), 1u);
+  CHECK_EQ(empty[0], '\0');
+  /* And the comparison itself, at the two ends nothing else reaches. */
+  CHECK(probe.names("cl_khr_fp16", 11u, "cl_khr_fp16"));
+  CHECK(!probe.names("cl_khr_fp16", 5u, "cl_khr_fp16"));
+  CHECK(!probe.names("cl_khr_fp16x", 12u, "cl_khr_fp16")); }
+
+/* A display that was never opened is no display: the context binds, shares
+ * nothing, and runs everything else. */
+TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_nothing)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  av::GlDisplay closed;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device(), &closed));
+  cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
+  /* Nothing is opened into it, and the extension it would have been opened
+   * through is not shown. */
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK_EQ(made, 0u);
+  char   answered[4096] = {};
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),
+           CL_SUCCESS);
+  CHECK(std::strstr(answered, "cl_khr_gl_sharing") == nullptr);
+  backend.shut_down(); }
 
 /* A context the host found no device for is not one: it is refused at setup,
  * and until it is bound it is shown no platform and no device, and makes no
