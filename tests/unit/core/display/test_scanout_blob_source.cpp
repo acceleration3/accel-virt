@@ -102,6 +102,7 @@ public:
     ~Fixture() { storage_.destroy(); }
 
     av::MockPlatform         &platform() { return mapped_.platform(); }
+    av::LogBudget            &budget() { return budget_; }
     av::MappedVirtioFunction &mapped() { return mapped_; }
     ScanoutBlobSource        &scanout() { return scanout_; }
     Frame                    &frame() { return frame_; }
@@ -337,6 +338,93 @@ TEST(scanout_blob_source_refresh, a_host_with_no_room_refuses_and_leaves_nothing
       fixture.scanout().release();
       CHECK(fixture.scanout().invariants_hold());
   } }
+
+/* Every remaining way the source answers without asking the host, each of
+ * which a run really takes: a question before the mode, a mode that changes in
+ * one dimension only, a mode that needs no more room than the last, and a
+ * device that went away under a blob nobody gave back. */
+TEST(scanout_blob_source_configure, the_mode_decides_what_is_asked_and_what_is_kept)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  /* Before any mode there is nothing to need pages for. */
+  CHECK(!fixture.scanout().needs_pages(0x40000000u));
+
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 480u)), Status::ok);
+  /* The same width, another height: a mode is both, so this is a new one. */
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 600u)), Status::ok);
+  /* And a smaller mode needs no more room than the request buffer already
+   * has, so nothing is allocated for it. */
+  const std::uint32_t allocations = fixture.platform().allocations_made();
+  CHECK_STATUS(fixture.configure(DisplayMode(320u, 240u)), Status::ok);
+  CHECK_EQ(fixture.platform().allocations_made(), allocations);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK(fixture.scanout().invariants_hold()); }
+
+/* A device that goes away under a blob: the source has nothing to give it back
+ * to and says so rather than reaching through a storage that is empty. */
+TEST(scanout_blob_source_release, a_blob_whose_device_is_gone_is_refused_rather_than_freed)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.configure(DisplayMode(64u, 64u)), Status::ok);
+  CHECK_STATUS(fixture.refresh(0x40000000u, true), Status::ok);
+  fixture.lose_device();
+  /* No forget_device: this is the order a stop takes when the device is torn
+   * down first. */
+  fixture.scanout().release();
+  CHECK(fixture.scanout().invariants_hold()); }
+
+/* Two addresses that cannot be carried are two lines, and the budget is what
+ * stops a third thousand. */
+TEST(scanout_blob_source_refresh, each_address_that_cannot_be_carried_is_said_once)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 480u)), Status::ok);
+  fixture.frame().describe(0x40000000u, pages_for(640u, 480u));
+  fixture.frame().lose_a_page(3u);
+  CHECK_STATUS(fixture.scanout().refresh(0x40000000u, fixture.frame().pages(), true),
+               Status::invalid_parameter);
+  const std::uint32_t first = fixture.platform().logged();
+  /* Another address, refused for the same reason: its own line. */
+  fixture.frame().describe(0x50000000u, pages_for(640u, 480u));
+  fixture.frame().lose_a_page(3u);
+  CHECK_STATUS(fixture.scanout().refresh(0x50000000u, fixture.frame().pages(), true),
+               Status::invalid_parameter);
+  CHECK(fixture.platform().logged() > first);
+
+  /* And a driver whose log budget is spent says nothing at all, however many
+   * addresses fail. */
+  for (std::uint32_t line = 0u; line < av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.budget().allows());
+  const std::uint32_t spent = fixture.platform().logged();
+  fixture.frame().describe(0x60000000u, pages_for(640u, 480u));
+  fixture.frame().lose_a_page(3u);
+  CHECK_STATUS(fixture.scanout().refresh(0x60000000u, fixture.frame().pages(), true),
+               Status::invalid_parameter);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  CHECK(fixture.scanout().invariants_hold()); }
+
+/* A host with nowhere to put the give-back: the source answers the refusal and
+ * keeps the blob it could not free rather than forgetting it. */
+TEST(scanout_blob_source_refresh, a_give_back_the_host_refuses_stops_the_rebind)
+{ /* Four descriptors: two requests in flight, so the flush of the first frame
+   * already has nowhere to go and every give-back after it is refused too. */
+  Fixture             fixture(0u, 4u);
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  CHECK_STATUS(fixture.configure(DisplayMode(64u, 64u)), Status::ok);
+  CHECK_STATUS(fixture.refresh(0x40000000u, true), Status::no_space);
+  CHECK(fixture.scanout().invariants_hold());
+
+  /* A new mode gives the blob back first, and cannot. */
+  CHECK_STATUS(fixture.configure(DisplayMode(128u, 128u)), Status::no_space);
+  CHECK(fixture.scanout().invariants_hold());
+  /* So does a new address. */
+  CHECK_STATUS(fixture.refresh(0x50000000u, true), Status::no_space);
+  CHECK(fixture.scanout().invariants_hold());
+
+  /* And once the host answers, the source carries on from where it stopped
+   * rather than from a state nobody can name. */
+  CHECK(control.respond_all(ok_nodata) != 0u);
+  const Status carried = fixture.refresh(0x40000000u, true);
+  CHECK(carried == Status::ok || carried == Status::no_space);
+  CHECK(fixture.scanout().invariants_hold()); }
 
 /* The invariants, each made to fail by a deliberate mutation no correct path
  * reaches. */

@@ -211,6 +211,10 @@ TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(tiny.update_cursor(0u, 0, 0, 1u, 0u, 0u), Status::too_large);
   CHECK_STATUS(tiny.set_scanout(0u, 1u, 1u, 1u), Status::too_large);
   CHECK_STATUS(tiny.resource_flush(1u, 1u, 1u), Status::too_large);
+  /* The scanout blob is the longest of them, so the buffer every other
+   * request fits is still too small for it. */
+  CHECK_STATUS(writer.set_scanout_blob(0u, 1u, 64u, 64u, 256u), Status::too_large);
+  CHECK_STATUS(tiny.set_scanout_blob(0u, 1u, 64u, 64u, 256u), Status::too_large);
   CHECK_EQ(tiny.length(), 0u);
   /* An unref is 32 bytes, so it fits where the bigger requests do not. */
   CHECK_STATUS(tiny.resource_unref(1u), Status::ok);

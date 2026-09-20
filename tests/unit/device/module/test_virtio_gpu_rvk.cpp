@@ -12,6 +12,7 @@
 #include "device/recording/record_kinds.hpp"
 #include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "harness/display/display_heads_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -96,6 +97,10 @@ struct VirtioGpuRvkProbe {
     { HostSharedObjectProbe::restore_id(HostSharedObjectsProbe::first(device.shared_), id); }
     static Status publish_shared(VirtioGpuRvk &device, int descriptor)
     { return device.shared_.publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, descriptor); }
+    /* A head that believes it is showing on a device whose display never
+     * agreed to show anything, which is what the heads' own invariant
+     * catches and the device's has to carry (feature 058). */
+    static av::DisplayHeads &heads(VirtioGpuRvk &device) { return device.heads_; }
     /* The ring header a guest writes before its setup. */
     static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
     {
@@ -771,6 +776,15 @@ TEST(virtio_gpu_rvk_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_witho
   unref_shown.u32(2u).u32(0u);
   CHECK_EQ(send(unref_shown), 0x1205u);
   CHECK(device.invariants_hold());
+
+  /* The device's invariant folds in its heads': a head still showing on a
+   * device whose display has withdrawn its answer is a state neither of them
+   * may report as sound. */
+  { av::DisplayHeadsProbe heads(av::VirtioGpuRvkProbe::heads(device));
+    heads.forget_the_display();
+    CHECK(!device.invariants_hold());
+    heads.remember_the_display();
+    CHECK(device.invariants_hold()); }
 
   device.reset();
   CHECK_EQ(device.scanouts(), 0u);

@@ -3,6 +3,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/display/display_mode.hpp"
 #include "core/display/display_scanout.hpp"
+#include "core/display/scanout_blob_source.hpp"
 #include "proto/context/capset_info.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/platform/log_budget.hpp"
@@ -62,6 +63,18 @@ struct ScanoutResourceProbe {
 struct DisplayScanoutProbe {
     static ScanoutResource &resource(DisplayScanout &scanout, std::uint32_t source)
     { return scanout.resources_[source]; }
+    static av::ScanoutBlobSource &blob(DisplayScanout &scanout, std::uint32_t source)
+    { return scanout.blobs_[source]; }
+};
+
+/* The one state a blob source's invariant guards that this collection's must
+ * carry: a head shown out of no address. */
+struct ScanoutBlobSourceProbe {
+    static void shown_from_no_address(av::ScanoutBlobSource &source)
+    {
+        source.created_ = true;
+        source.scanning_out_ = true;
+    }
 };
 
 }  // namespace av
@@ -201,6 +214,38 @@ TEST(display_scanout, the_capset_bit_chooses_the_backing_and_the_default_is_the_
     CHECK_EQ(control.respond_all(ok_nodata), 2u);
     CHECK_EQ(control.request_type(5u), unref);
     CHECK(fixture.scanout().invariants_hold()); } }
+
+/* The rest of what the blob path answers through the collection: a source
+ * dxgkrnl has given no primary allocation, a source taken off the screen, and
+ * a blob source whose own invariant broke. */
+TEST(display_scanout, the_blob_path_answers_a_source_with_no_primary_and_one_taken_off_the_screen)
+{ Fixture        fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  av::CapsetInfo capset;
+  capset.announce(av::CapsetInfo::feature_dmabuf_scanout);
+  fixture.scanout().offer(capset);
+
+  /* Visible, with an address, and no primary behind it: nothing is sent and
+   * the source is left alone rather than shown pages nobody recorded. */
+  CHECK_STATUS(fixture.sources().commit(0u, &mode), Status::ok);
+  CHECK_STATUS(fixture.sources().set_visible(0u, true), Status::ok);
+  CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address, nullptr), Status::ok);
+  CHECK_STATUS(fixture.scanout().configure(0u, mode), Status::ok);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), true), Status::invalid_parameter);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK(fixture.scanout().invariants_hold());
+
+  /* Disabling the source gives back whatever it made, on this path as on the
+   * other. */
+  CHECK_STATUS(fixture.scanout().disable(0u), Status::ok);
+  CHECK(fixture.scanout().invariants_hold());
+  CHECK_STATUS(fixture.scanout().disable(DisplaySources::max_sources), Status::invalid_parameter); }
+
+TEST(display_scanout_invariants, a_blob_source_that_lost_its_own_are_the_collection_s)
+{ Fixture fixture;
+  CHECK(fixture.scanout().invariants_hold());
+  av::ScanoutBlobSourceProbe::shown_from_no_address(av::DisplayScanoutProbe::blob(fixture.scanout(), 0u));
+  CHECK(!fixture.scanout().invariants_hold()); }
 
 TEST(display_scanout_refresh, carries_a_visible_source_to_the_host)
 { Fixture fixture;
