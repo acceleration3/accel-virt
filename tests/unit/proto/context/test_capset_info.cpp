@@ -186,7 +186,23 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
   sweep.run();
   CHECK(sweep.cases_run() > CapsetInfo::encoded_size * 8u);
   CHECK(rejects(nullptr, 0u));
-  CHECK(rejects(nullptr, CapsetInfo::encoded_size)); }
+  CHECK(rejects(nullptr, CapsetInfo::encoded_size));
+  /* What the capset does not judge is what a flip survives: the protocol
+   * version (32 bits), the feature mask, whose unknown bits are kept on purpose
+   * (64), the two PCI ids (64), the UUID (128) and the two memory sizes (128).
+   * What it does judge leaves less: three flips of the sub-api mask stay inside
+   * 0x7 and non-empty, every flip of 64 contexts but the one that clears it is
+   * still a count, two flips of the lowest ring order and three of the highest
+   * stay inside [12, 24] and in order, and two flips of the device type stay
+   * within VkPhysicalDeviceType. The 48-byte name must be text then zeroes:
+   * 172 of its 176 character bits leave it so, the exceptions being the bit
+   * that turns one of the four spaces into a terminator with text behind it,
+   * and the terminator's own 8 bits just move it one byte on. Every shorter
+   * input is short of 128 bytes, all-zero and all-ones carry no magic, and the
+   * untouched capset is the last acceptance. */
+  const std::uint32_t acceptable =
+      32u + 64u + 64u + 128u + 128u + 3u + 31u + 2u + 3u + 2u + 180u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_writer_latches)
 { const CapsetInfo capset = sample();
