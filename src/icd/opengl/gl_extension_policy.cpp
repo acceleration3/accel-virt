@@ -112,8 +112,17 @@ bool GlExtensionPolicy::withheld(const char *name) const
 uint32_t GlExtensionPolicy::reportable(const char *name) const
 {
     AV_SCOPE("GlExtensionPolicy::reportable");
-    for (uint32_t row = 0u; row < gl_count_; row++)
-        if (__builtin_strcmp(gl_rows_[row].name_, name) == 0) return carried(name) ? row : max_rows;
+    for (uint32_t row = 0u; row < gl_count_; row++) {
+        /* A row that names the host extension it is answered over is found by
+         * that name and by no other: GL_EXT_memory_object_win32 is this
+         * driver's spelling of the host's GL_EXT_memory_object_fd, because a
+         * guest has no file descriptors - and a host that lists the Win32 name
+         * itself would be a host that is not this one (feature 053). */
+        const char *const looked_for =
+            gl_rows_[row].host_ != nullptr ? gl_rows_[row].host_ : gl_rows_[row].name_;
+        if (__builtin_strcmp(looked_for, name) != 0) continue;
+        return carried(gl_rows_[row].name_) ? row : max_rows;
+    }
     return max_rows;
 }
 

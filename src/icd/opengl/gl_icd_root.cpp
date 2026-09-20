@@ -33,16 +33,30 @@ struct SharedObjectEntry {
 };
 
 const SharedObjectEntry shared_object_entries[] = {
-    {"glCreateMemoryObjectsEXT", reinterpret_cast<void *>(&entry::glCreateMemoryObjectsEXT)},
     {"glDeleteMemoryObjectsEXT", reinterpret_cast<void *>(&entry::glDeleteMemoryObjectsEXT)},
-    {"glImportMemoryWin32HandleEXT", reinterpret_cast<void *>(&entry::glImportMemoryWin32HandleEXT)},
-    {"glGenSemaphoresEXT", reinterpret_cast<void *>(&entry::glGenSemaphoresEXT)},
     {"glDeleteSemaphoresEXT", reinterpret_cast<void *>(&entry::glDeleteSemaphoresEXT)},
-    {"glImportSemaphoreWin32HandleEXT", reinterpret_cast<void *>(&entry::glImportSemaphoreWin32HandleEXT)},
     {"glBufferStorageMemEXT", reinterpret_cast<void *>(&entry::glBufferStorageMemEXT)},
     {"glTextureStorageMem2DEXT", reinterpret_cast<void *>(&entry::glTextureStorageMem2DEXT)},
     {"glSignalSemaphoreEXT", reinterpret_cast<void *>(&entry::glSignalSemaphoreEXT)},
     {"glWaitSemaphoreEXT", reinterpret_cast<void *>(&entry::glWaitSemaphoreEXT)},
+    /* The rest of what the four rows promise (feature 053, T037). The queries
+     * and parameters are answered here because they are about an object the
+     * host has not been told of; the ten storage commands are generated and
+     * are here to substitute the host's name before they go out; the two name
+     * imports are answered to refuse them, which is a driver saying no rather
+     * than an entry point that is not there. */
+    {"glNamedBufferStorageMemEXT", reinterpret_cast<void *>(&entry::glNamedBufferStorageMemEXT)},
+    {"glTexStorageMem1DEXT", reinterpret_cast<void *>(&entry::glTexStorageMem1DEXT)},
+    {"glTexStorageMem2DEXT", reinterpret_cast<void *>(&entry::glTexStorageMem2DEXT)},
+    {"glTexStorageMem2DMultisampleEXT", reinterpret_cast<void *>(&entry::glTexStorageMem2DMultisampleEXT)},
+    {"glTexStorageMem3DEXT", reinterpret_cast<void *>(&entry::glTexStorageMem3DEXT)},
+    {"glTexStorageMem3DMultisampleEXT", reinterpret_cast<void *>(&entry::glTexStorageMem3DMultisampleEXT)},
+    {"glTextureStorageMem1DEXT", reinterpret_cast<void *>(&entry::glTextureStorageMem1DEXT)},
+    {"glTextureStorageMem2DMultisampleEXT",
+     reinterpret_cast<void *>(&entry::glTextureStorageMem2DMultisampleEXT)},
+    {"glTextureStorageMem3DEXT", reinterpret_cast<void *>(&entry::glTextureStorageMem3DEXT)},
+    {"glTextureStorageMem3DMultisampleEXT",
+     reinterpret_cast<void *>(&entry::glTextureStorageMem3DMultisampleEXT)},
 };
 
 /* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
@@ -58,6 +72,21 @@ constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", 
 constexpr icd::ExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_compatibility", 1u,
      "fullstack_opengl_icd.a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list"},
+    /* The external objects (feature 053, T037), each answered over the host's
+     * own fd spelling: a guest has no file descriptors, which is the whole
+     * reason the Win32 names exist. All four are reported together or not at
+     * all - the registry has each _win32 row require its base extension, and
+     * the base extensions are what the host's fd ones make possible. */
+    {"GL_EXT_memory_object", 1u,
+     "manual_calls.every_storage_command_names_the_hosts_memory_object", "GL_EXT_memory_object_fd"},
+    {"GL_EXT_memory_object_win32", 1u,
+     "manual_calls.an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releases_the_object",
+     "GL_EXT_memory_object_fd"},
+    {"GL_EXT_semaphore", 1u,
+     "manual_calls.the_queries_and_parameters_are_answered_without_the_host", "GL_EXT_semaphore_fd"},
+    {"GL_EXT_semaphore_win32", 1u,
+     "manual_calls.an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one",
+     "GL_EXT_semaphore_fd"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The WGL extensions the functions DrvGetProcAddress answers make whole, each

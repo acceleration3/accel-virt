@@ -1087,6 +1087,18 @@ const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
         case kCmd_glDeleteSemaphoresEXT: return "glDeleteSemaphoresEXT";
         case kCmd_glSignalSemaphoreEXT: return "glSignalSemaphoreEXT";
         case kCmd_glWaitSemaphoreEXT: return "glWaitSemaphoreEXT";
+        case kCmd_glTexStorageMem1DEXT: return "glTexStorageMem1DEXT";
+        case kCmd_glTexStorageMem2DEXT: return "glTexStorageMem2DEXT";
+        case kCmd_glTexStorageMem2DMultisampleEXT: return "glTexStorageMem2DMultisampleEXT";
+        case kCmd_glTexStorageMem3DEXT: return "glTexStorageMem3DEXT";
+        case kCmd_glTexStorageMem3DMultisampleEXT: return "glTexStorageMem3DMultisampleEXT";
+        case kCmd_glTextureStorageMem1DEXT: return "glTextureStorageMem1DEXT";
+        case kCmd_glTextureStorageMem2DMultisampleEXT: return "glTextureStorageMem2DMultisampleEXT";
+        case kCmd_glTextureStorageMem3DEXT: return "glTextureStorageMem3DEXT";
+        case kCmd_glTextureStorageMem3DMultisampleEXT: return "glTextureStorageMem3DMultisampleEXT";
+        case kCmd_glNamedBufferStorageMemEXT: return "glNamedBufferStorageMemEXT";
+        case kCmd_glGetUnsignedBytevEXT: return "glGetUnsignedBytevEXT";
+        case kCmd_glGetUnsignedBytei_vEXT: return "glGetUnsignedBytei_vEXT";
         case kCmd_glMakeBufferResidentNV: return "glMakeBufferResidentNV";
         case kCmd_glMakeBufferNonResidentNV: return "glMakeBufferNonResidentNV";
         case kCmd_glIsBufferResidentNV: return "glIsBufferResidentNV";

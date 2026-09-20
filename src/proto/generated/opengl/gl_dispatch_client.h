@@ -1089,6 +1089,18 @@ void rvk_glDeleteMemoryObjectsEXT(::av::ClientTransport& rvk_t, GLsizei n, const
 void rvk_glDeleteSemaphoresEXT(::av::ClientTransport& rvk_t, GLsizei n, const GLuint* semaphores);
 void rvk_glSignalSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts);
 void rvk_glWaitSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts);
+void rvk_glTexStorageMem1DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset);
+void rvk_glTexStorageMem2DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
+void rvk_glTexStorageMem2DMultisampleEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset);
+void rvk_glTexStorageMem3DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset);
+void rvk_glTexStorageMem3DMultisampleEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset);
+void rvk_glTextureStorageMem1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset);
+void rvk_glTextureStorageMem2DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset);
+void rvk_glTextureStorageMem3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset);
+void rvk_glTextureStorageMem3DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset);
+void rvk_glNamedBufferStorageMemEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset);
+void rvk_glGetUnsignedBytevEXT(::av::ClientTransport& rvk_t, GLenum pname, GLubyte* data);
+void rvk_glGetUnsignedBytei_vEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLubyte* data);
 void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLenum access);
 void rvk_glMakeBufferNonResidentNV(::av::ClientTransport& rvk_t, GLenum target);
 GLboolean rvk_glIsBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target);

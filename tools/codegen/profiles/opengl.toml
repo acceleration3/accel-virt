@@ -155,6 +155,21 @@ extra = [
     "glDeleteMemoryObjectsEXT", "glDeleteSemaphoresEXT",
     "glSignalSemaphoreEXT", "glWaitSemaphoreEXT",
 
+    # The rest of GL_EXT_memory_object's storage commands, and the two
+    # queries both extensions share (feature 053, T037). A row promises
+    # every command in its extension, so the ten storage entry points and
+    # the device's UUIDs have to cross before GL_EXT_memory_object or
+    # GL_EXT_semaphore can be reported at all; the six that do not cross
+    # are answered by the ICD itself, because they name an object the host
+    # has not been told about yet or ask something only the ICD knows.
+    "glTexStorageMem1DEXT", "glTexStorageMem2DEXT",
+    "glTexStorageMem2DMultisampleEXT", "glTexStorageMem3DEXT",
+    "glTexStorageMem3DMultisampleEXT",
+    "glTextureStorageMem1DEXT", "glTextureStorageMem2DMultisampleEXT",
+    "glTextureStorageMem3DEXT", "glTextureStorageMem3DMultisampleEXT",
+    "glNamedBufferStorageMemEXT",
+    "glGetUnsignedBytevEXT", "glGetUnsignedBytei_vEXT",
+
     # A buffer's memory addressed by its GPU address rather than by a
     # binding. Same shape as the handles above: the address is the
     # host's and travels as a number.
@@ -318,6 +333,26 @@ answered_by_guest = ["glGetError"]
 # needs one is an extension this driver can offer. Naming them here is
 # what keeps the two facts from disagreeing.
 driver_implemented = [
+    # GL_EXT_memory_object and GL_EXT_semaphore, the twelve this ICD answers
+    # itself (feature 053, T037). Four of them make or name an object before
+    # the host has one: the device makes the memory object and the semaphore
+    # inside OPEN_SHARED_OBJECT, so the create, the import and the two queries
+    # are about a name only the ICD holds. The two parameter pairs are recorded
+    # on the ICD's row, because they are set *before* the import and there is
+    # nothing on the host to set them on. The two Win32 name imports are
+    # answered in order to refuse them: a named section is what another process
+    # opens by name, and this path shares by handle.
+    #
+    # They are here rather than merely absent so that the two facts agree - an
+    # application gets a working entry point for every one of them, so the
+    # extension is one this driver may offer.
+    "glCreateMemoryObjectsEXT", "glGenSemaphoresEXT",
+    "glImportMemoryWin32HandleEXT", "glImportSemaphoreWin32HandleEXT",
+    "glImportMemoryWin32NameEXT", "glImportSemaphoreWin32NameEXT",
+    "glIsMemoryObjectEXT", "glIsSemaphoreEXT",
+    "glMemoryObjectParameterivEXT", "glGetMemoryObjectParameterivEXT",
+    "glSemaphoreParameterui64vEXT", "glGetSemaphoreParameterui64vEXT",
+
     # The direct-state-access spellings the guest answers itself. An
     # extension is claimed only when every command it needs is answered,
     # and these are answered here rather than on the wire.
@@ -1149,7 +1184,26 @@ len = "numTextureBarriers"
 [params."glWaitSemaphoreEXT.srcLayouts"]
 len = "numTextureBarriers"
 
+# glGetUnsignedBytei_vEXT's only defined target is GL_DEVICE_UUID_EXT, and a
+# device UUID is GL_UUID_SIZE_EXT bytes - the registry writes COMPSIZE(target)
+# because the entry point is shaped for targets it never gained. Sixteen is
+# therefore the whole of what this command can answer, and a target that is not
+# that one is refused by the driver rather than sized here (feature 053, T037).
+[params."glGetUnsignedBytei_vEXT.data"]
+len = "16"
+
 [pname_counts]
+# The device and driver identity GL_EXT_memory_object and GL_EXT_semaphore are
+# matched to a Vulkan device by. `glGetUnsignedBytevEXT.data` is COMPSIZE(pname)
+# - a length the rules *can* read, and would read as one byte without these
+# four lines, which is how a sixteen-byte UUID becomes a one-byte read and
+# fifteen bytes of the driver's answer written past what the decode arena gave
+# out. The generator cannot catch this one: it refuses only what it cannot
+# read (feature 053, research.md §12).
+GL_DEVICE_UUID_EXT = 16
+GL_DRIVER_UUID_EXT = 16
+GL_DEVICE_LUID_EXT = 8
+GL_DEVICE_NODE_MASK_EXT = 4
 GL_VIEWPORT = 4
 GL_SCISSOR_BOX = 4
 GL_COLOR_CLEAR_VALUE = 4

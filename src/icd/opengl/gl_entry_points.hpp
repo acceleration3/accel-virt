@@ -58,12 +58,8 @@ void      APIENTRY get_integerv(GLenum pname, GLint *data);
  * resolves. The last four it did emit, and these replace them - the name the
  * application holds is this ICD's own and the host knows another, so each
  * substitutes before the command goes out. */
-void      APIENTRY glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects);
 void      APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects);
-void      APIENTRY glImportMemoryWin32HandleEXT(GLuint memory, GLuint64 size, GLenum handleType, void *handle);
-void      APIENTRY glGenSemaphoresEXT(GLsizei n, GLuint *semaphores);
 void      APIENTRY glDeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores);
-void      APIENTRY glImportSemaphoreWin32HandleEXT(GLuint semaphore, GLenum handleType, void *handle);
 void      APIENTRY glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset);
 void      APIENTRY glTextureStorageMem2DEXT(GLuint texture, GLsizei levels, GLenum internalFormat,
                                             GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
@@ -73,6 +69,34 @@ void      APIENTRY glSignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarrie
 void      APIENTRY glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers,
                                       GLuint numTextureBarriers, const GLuint *textures,
                                       const GLenum *srcLayouts);
+void      APIENTRY glNamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset);
+void      APIENTRY glTexStorageMem1DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                        GLuint memory, GLuint64 offset);
+void      APIENTRY glTexStorageMem2DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                        GLsizei height, GLuint memory, GLuint64 offset);
+void      APIENTRY glTexStorageMem2DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat,
+                                                   GLsizei width, GLsizei height,
+                                                   GLboolean fixedSampleLocations, GLuint memory,
+                                                   GLuint64 offset);
+void      APIENTRY glTexStorageMem3DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                        GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset);
+void      APIENTRY glTexStorageMem3DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat,
+                                                   GLsizei width, GLsizei height, GLsizei depth,
+                                                   GLboolean fixedSampleLocations, GLuint memory,
+                                                   GLuint64 offset);
+void      APIENTRY glTextureStorageMem1DEXT(GLuint texture, GLsizei levels, GLenum internalFormat,
+                                            GLsizei width, GLuint memory, GLuint64 offset);
+void      APIENTRY glTextureStorageMem2DMultisampleEXT(GLuint texture, GLsizei samples,
+                                                       GLenum internalFormat, GLsizei width, GLsizei height,
+                                                       GLboolean fixedSampleLocations, GLuint memory,
+                                                       GLuint64 offset);
+void      APIENTRY glTextureStorageMem3DEXT(GLuint texture, GLsizei levels, GLenum internalFormat,
+                                            GLsizei width, GLsizei height, GLsizei depth, GLuint memory,
+                                            GLuint64 offset);
+void      APIENTRY glTextureStorageMem3DMultisampleEXT(GLuint texture, GLsizei samples,
+                                                       GLenum internalFormat, GLsizei width, GLsizei height,
+                                                       GLsizei depth, GLboolean fixedSampleLocations,
+                                                       GLuint memory, GLuint64 offset);
 
 }  // namespace av::glicd::entry
 

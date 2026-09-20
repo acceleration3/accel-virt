@@ -422,4 +422,88 @@ void APIENTRY Wrap_glVertexPointer(GLint, GLenum, GLsizei, const void*)
     static_cast<void>(::av::glicd::gl_icd_binding.root().record_legacy());
 }
 
+
+/* GL_EXT_memory_object and GL_EXT_semaphore's twelve, which never cross: the
+ * device makes the object inside OPEN_SHARED_OBJECT, so a create, an import, a
+ * query and a parameter are all about a name only this ICD holds (feature 053,
+ * T037). Declared driver_implemented in the profile, which is what lets the
+ * extensions be reported at all. */
+void APIENTRY Wrap_glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects)
+{
+    AV_SCOPE("Wrap_glCreateMemoryObjectsEXT");
+    ::av::glicd::gl_icd_binding.root().manual().create_memory_objects(n, memoryObjects);
+}
+
+void APIENTRY Wrap_glGenSemaphoresEXT(GLsizei n, GLuint *semaphores)
+{
+    AV_SCOPE("Wrap_glGenSemaphoresEXT");
+    ::av::glicd::gl_icd_binding.root().manual().gen_semaphores(n, semaphores);
+}
+
+void APIENTRY Wrap_glImportMemoryWin32HandleEXT(GLuint memory, GLuint64 size, GLenum handleType,
+                                                void *handle)
+{
+    AV_SCOPE("Wrap_glImportMemoryWin32HandleEXT");
+    ::av::glicd::gl_icd_binding.root().manual().import_memory_win32(memory, size, handleType, handle);
+}
+
+void APIENTRY Wrap_glImportSemaphoreWin32HandleEXT(GLuint semaphore, GLenum handleType, void *handle)
+{
+    AV_SCOPE("Wrap_glImportSemaphoreWin32HandleEXT");
+    ::av::glicd::gl_icd_binding.root().manual().import_semaphore_win32(semaphore, handleType, handle);
+}
+
+void APIENTRY Wrap_glImportMemoryWin32NameEXT(GLuint memory, GLuint64 size, GLenum handleType,
+                                              const void *name)
+{
+    AV_SCOPE("Wrap_glImportMemoryWin32NameEXT");
+    ::av::glicd::gl_icd_binding.root().manual().import_memory_win32_name(memory, size, handleType, name);
+}
+
+void APIENTRY Wrap_glImportSemaphoreWin32NameEXT(GLuint semaphore, GLenum handleType, const void *name)
+{
+    AV_SCOPE("Wrap_glImportSemaphoreWin32NameEXT");
+    ::av::glicd::gl_icd_binding.root().manual().import_semaphore_win32_name(semaphore, handleType, name);
+}
+
+GLboolean APIENTRY Wrap_glIsMemoryObjectEXT(GLuint memoryObject)
+{
+    AV_SCOPE("Wrap_glIsMemoryObjectEXT");
+    /* GL_TRUE and GL_FALSE are 1 and 0, so the answer converts rather than
+     * branching. */
+    return static_cast<GLboolean>(::av::glicd::gl_icd_binding.root().manual().is_memory_object(memoryObject));
+}
+
+GLboolean APIENTRY Wrap_glIsSemaphoreEXT(GLuint semaphore)
+{
+    AV_SCOPE("Wrap_glIsSemaphoreEXT");
+    /* GL_TRUE and GL_FALSE are 1 and 0, so the answer converts rather than
+     * branching. */
+    return static_cast<GLboolean>(::av::glicd::gl_icd_binding.root().manual().is_semaphore(semaphore));
+}
+
+void APIENTRY Wrap_glMemoryObjectParameterivEXT(GLuint memoryObject, GLenum pname, const GLint *params)
+{
+    AV_SCOPE("Wrap_glMemoryObjectParameterivEXT");
+    ::av::glicd::gl_icd_binding.root().manual().memory_object_parameter(memoryObject, pname, params);
+}
+
+void APIENTRY Wrap_glGetMemoryObjectParameterivEXT(GLuint memoryObject, GLenum pname, GLint *params)
+{
+    AV_SCOPE("Wrap_glGetMemoryObjectParameterivEXT");
+    ::av::glicd::gl_icd_binding.root().manual().get_memory_object_parameter(memoryObject, pname, params);
+}
+
+void APIENTRY Wrap_glSemaphoreParameterui64vEXT(GLuint semaphore, GLenum pname, const GLuint64 *params)
+{
+    AV_SCOPE("Wrap_glSemaphoreParameterui64vEXT");
+    ::av::glicd::gl_icd_binding.root().manual().semaphore_parameter(semaphore, pname, params);
+}
+
+void APIENTRY Wrap_glGetSemaphoreParameterui64vEXT(GLuint semaphore, GLenum pname, GLuint64 *params)
+{
+    AV_SCOPE("Wrap_glGetSemaphoreParameterui64vEXT");
+    ::av::glicd::gl_icd_binding.root().manual().get_semaphore_parameter(semaphore, pname, params);
+}
+
 }  // namespace av::glicd::generated

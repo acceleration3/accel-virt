@@ -602,6 +602,103 @@ bool ManualCalls::substituted(uint32_t kind, uint32_t name, GuestGlContext *&con
     return true;
 }
 
+/* The queries and parameters the two extensions promise. Every one of them is
+ * about an object the host has not been told about - a name this ICD chose -
+ * so the table is what answers, and none of them crosses the wire. */
+bool ManualCalls::is_memory_object(uint32_t memory)
+{
+    AV_SCOPE("ManualCalls::is_memory_object");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return false;
+    return context->externals().holds(SharedObjectKind::memory, memory);
+}
+
+bool ManualCalls::is_semaphore(uint32_t semaphore)
+{
+    AV_SCOPE("ManualCalls::is_semaphore");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return false;
+    return context->externals().holds(SharedObjectKind::monitored_fence, semaphore);
+}
+
+void ManualCalls::memory_object_parameter(uint32_t memory, uint32_t pname, const int32_t *params)
+{
+    AV_SCOPE("ManualCalls::memory_object_parameter");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (params == nullptr) {
+        context->record(gl_invalid_value);
+        return;
+    }
+    const uint32_t error =
+        context->externals().set_parameter(SharedObjectKind::memory, memory, pname, params[0]);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::get_memory_object_parameter(uint32_t memory, uint32_t pname, int32_t *params)
+{
+    AV_SCOPE("ManualCalls::get_memory_object_parameter");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error =
+        context->externals().get_parameter(SharedObjectKind::memory, memory, pname, params);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::semaphore_parameter(uint32_t semaphore, uint32_t pname, const uint64_t *params)
+{
+    AV_SCOPE("ManualCalls::semaphore_parameter");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    static_cast<void>(params);
+    /* Not branched on: a semaphore's only parameter names a D3D12 fence's
+     * value and nothing here is imported from one, so the table refuses every
+     * pname for a row of that kind - an unknown name with GL_INVALID_VALUE and
+     * a known one with GL_INVALID_ENUM. There is no answer but a refusal. */
+    context->record(
+        context->externals().set_parameter(SharedObjectKind::monitored_fence, semaphore, pname, 0));
+}
+
+void ManualCalls::get_semaphore_parameter(uint32_t semaphore, uint32_t pname, uint64_t *params)
+{
+    AV_SCOPE("ManualCalls::get_semaphore_parameter");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    int32_t unused = 0;
+    /* As above: always a refusal, so the answer is recorded rather than
+     * tested. The query is still asked with `unused` or with nothing, because
+     * a caller that passed nowhere to write is its own refusal. */
+    context->record(context->externals().get_parameter(SharedObjectKind::monitored_fence, semaphore, pname,
+                                                       params != nullptr ? &unused : nullptr));
+}
+
+void ManualCalls::import_memory_win32_name(uint32_t memory, uint64_t size, uint32_t handle_type,
+                                           const void *name)
+{
+    AV_SCOPE("ManualCalls::import_memory_win32_name");
+    static_cast<void>(memory);
+    static_cast<void>(size);
+    static_cast<void>(handle_type);
+    static_cast<void>(name);
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    /* A named section is what another process opens *by name*, and nothing on
+     * this wire carries a name: an object crosses as an id the miniport minted
+     * and a handle the kernel made (feature 053). */
+    context->record(gl_invalid_operation);
+}
+
+void ManualCalls::import_semaphore_win32_name(uint32_t semaphore, uint32_t handle_type, const void *name)
+{
+    AV_SCOPE("ManualCalls::import_semaphore_win32_name");
+    static_cast<void>(semaphore);
+    static_cast<void>(handle_type);
+    static_cast<void>(name);
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->record(gl_invalid_operation);
+}
+
 void ManualCalls::buffer_storage_mem(uint32_t target, intptr_t size, uint32_t memory, uint64_t offset)
 {
     AV_SCOPE("ManualCalls::buffer_storage_mem");
@@ -620,6 +717,96 @@ void ManualCalls::texture_storage_mem_2d(uint32_t texture, int32_t levels, uint3
     if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
     glproto::rvk_glTextureStorageMem2DEXT(*context->wire(), texture, levels, format, width, height, made,
                                           offset);
+}
+
+void ManualCalls::named_buffer_storage_mem(uint32_t buffer, intptr_t size, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::named_buffer_storage_mem");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glNamedBufferStorageMemEXT(*context->wire(), buffer, size, made, offset);
+}
+
+void ManualCalls::tex_storage_mem_1d(uint32_t target, int32_t levels, uint32_t format, int32_t width, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::tex_storage_mem_1d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTexStorageMem1DEXT(*context->wire(), target, levels, format, width, made, offset);
+}
+
+void ManualCalls::tex_storage_mem_2d(uint32_t target, int32_t levels, uint32_t format, int32_t width, int32_t height, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::tex_storage_mem_2d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTexStorageMem2DEXT(*context->wire(), target, levels, format, width, height, made, offset);
+}
+
+void ManualCalls::tex_storage_mem_2d_multisample(uint32_t target, int32_t samples, uint32_t format, int32_t width, int32_t height, bool fixed_locations, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::tex_storage_mem_2d_multisample");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTexStorageMem2DMultisampleEXT(*context->wire(), target, samples, format, width, height, fixed_locations, made, offset);
+}
+
+void ManualCalls::tex_storage_mem_3d(uint32_t target, int32_t levels, uint32_t format, int32_t width, int32_t height, int32_t depth, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::tex_storage_mem_3d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTexStorageMem3DEXT(*context->wire(), target, levels, format, width, height, depth, made, offset);
+}
+
+void ManualCalls::tex_storage_mem_3d_multisample(uint32_t target, int32_t samples, uint32_t format, int32_t width, int32_t height, int32_t depth, bool fixed_locations, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::tex_storage_mem_3d_multisample");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTexStorageMem3DMultisampleEXT(*context->wire(), target, samples, format, width, height, depth, fixed_locations, made, offset);
+}
+
+void ManualCalls::texture_storage_mem_1d(uint32_t texture, int32_t levels, uint32_t format, int32_t width, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::texture_storage_mem_1d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTextureStorageMem1DEXT(*context->wire(), texture, levels, format, width, made, offset);
+}
+
+void ManualCalls::texture_storage_mem_2d_multisample(uint32_t texture, int32_t samples, uint32_t format, int32_t width, int32_t height, bool fixed_locations, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::texture_storage_mem_2d_multisample");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTextureStorageMem2DMultisampleEXT(*context->wire(), texture, samples, format, width, height, fixed_locations, made, offset);
+}
+
+void ManualCalls::texture_storage_mem_3d(uint32_t texture, int32_t levels, uint32_t format, int32_t width, int32_t height, int32_t depth, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::texture_storage_mem_3d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTextureStorageMem3DEXT(*context->wire(), texture, levels, format, width, height, depth, made, offset);
+}
+
+void ManualCalls::texture_storage_mem_3d_multisample(uint32_t texture, int32_t samples, uint32_t format, int32_t width, int32_t height, int32_t depth, bool fixed_locations, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::texture_storage_mem_3d_multisample");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTextureStorageMem3DMultisampleEXT(*context->wire(), texture, samples, format, width, height, depth, fixed_locations, made, offset);
 }
 
 void ManualCalls::signal_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,

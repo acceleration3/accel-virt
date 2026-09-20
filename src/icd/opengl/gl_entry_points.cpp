@@ -169,11 +169,6 @@ void APIENTRY get_integerv(GLenum pname, GLint *data)
 
 /* ---- GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32 (feature 053) -- */
 
-void APIENTRY glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects)
-{
-    AV_SCOPE("glCreateMemoryObjectsEXT");
-    gl_icd_binding.root().manual().create_memory_objects(n, memoryObjects);
-}
 
 void APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects)
 {
@@ -181,17 +176,7 @@ void APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects)
     gl_icd_binding.root().manual().delete_memory_objects(n, memoryObjects);
 }
 
-void APIENTRY glImportMemoryWin32HandleEXT(GLuint memory, GLuint64 size, GLenum handleType, void *handle)
-{
-    AV_SCOPE("glImportMemoryWin32HandleEXT");
-    gl_icd_binding.root().manual().import_memory_win32(memory, size, handleType, handle);
-}
 
-void APIENTRY glGenSemaphoresEXT(GLsizei n, GLuint *semaphores)
-{
-    AV_SCOPE("glGenSemaphoresEXT");
-    gl_icd_binding.root().manual().gen_semaphores(n, semaphores);
-}
 
 void APIENTRY glDeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores)
 {
@@ -199,11 +184,6 @@ void APIENTRY glDeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores)
     gl_icd_binding.root().manual().delete_semaphores(n, semaphores);
 }
 
-void APIENTRY glImportSemaphoreWin32HandleEXT(GLuint semaphore, GLenum handleType, void *handle)
-{
-    AV_SCOPE("glImportSemaphoreWin32HandleEXT");
-    gl_icd_binding.root().manual().import_semaphore_win32(semaphore, handleType, handle);
-}
 
 void APIENTRY glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset)
 {
@@ -234,6 +214,101 @@ void APIENTRY glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, con
     AV_SCOPE("glWaitSemaphoreEXT");
     gl_icd_binding.root().manual().wait_semaphore(semaphore, numBufferBarriers, buffers, numTextureBarriers,
                                                   textures, srcLayouts);
+}
+
+
+
+
+
+
+
+
+
+void APIENTRY glNamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glNamedBufferStorageMemEXT");
+    gl_icd_binding.root().manual().named_buffer_storage_mem(buffer, size, memory, offset);
+}
+
+void APIENTRY glTexStorageMem1DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                   GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTexStorageMem1DEXT");
+    gl_icd_binding.root().manual().tex_storage_mem_1d(target, levels, internalFormat, width, memory, offset);
+}
+
+void APIENTRY glTexStorageMem2DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                   GLsizei height, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTexStorageMem2DEXT");
+    gl_icd_binding.root().manual().tex_storage_mem_2d(target, levels, internalFormat, width, height, memory,
+                                                      offset);
+}
+
+void APIENTRY glTexStorageMem2DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat,
+                                              GLsizei width, GLsizei height, GLboolean fixedSampleLocations,
+                                              GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTexStorageMem2DMultisampleEXT");
+    gl_icd_binding.root().manual().tex_storage_mem_2d_multisample(target, samples, internalFormat, width,
+                                                                  height, fixedSampleLocations != 0u,
+                                                                  memory, offset);
+}
+
+void APIENTRY glTexStorageMem3DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                   GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTexStorageMem3DEXT");
+    gl_icd_binding.root().manual().tex_storage_mem_3d(target, levels, internalFormat, width, height, depth,
+                                                      memory, offset);
+}
+
+void APIENTRY glTexStorageMem3DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat,
+                                              GLsizei width, GLsizei height, GLsizei depth,
+                                              GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTexStorageMem3DMultisampleEXT");
+    gl_icd_binding.root().manual().tex_storage_mem_3d_multisample(target, samples, internalFormat, width,
+                                                                  height, depth,
+                                                                  fixedSampleLocations != 0u, memory,
+                                                                  offset);
+}
+
+void APIENTRY glTextureStorageMem1DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                       GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTextureStorageMem1DEXT");
+    gl_icd_binding.root().manual().texture_storage_mem_1d(texture, levels, internalFormat, width, memory,
+                                                          offset);
+}
+
+void APIENTRY glTextureStorageMem2DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat,
+                                                  GLsizei width, GLsizei height,
+                                                  GLboolean fixedSampleLocations, GLuint memory,
+                                                  GLuint64 offset)
+{
+    AV_SCOPE("glTextureStorageMem2DMultisampleEXT");
+    gl_icd_binding.root().manual().texture_storage_mem_2d_multisample(
+        texture, samples, internalFormat, width, height, fixedSampleLocations != 0u, memory, offset);
+}
+
+void APIENTRY glTextureStorageMem3DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                       GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTextureStorageMem3DEXT");
+    gl_icd_binding.root().manual().texture_storage_mem_3d(texture, levels, internalFormat, width, height,
+                                                          depth, memory, offset);
+}
+
+void APIENTRY glTextureStorageMem3DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat,
+                                                  GLsizei width, GLsizei height, GLsizei depth,
+                                                  GLboolean fixedSampleLocations, GLuint memory,
+                                                  GLuint64 offset)
+{
+    AV_SCOPE("glTextureStorageMem3DMultisampleEXT");
+    gl_icd_binding.root().manual().texture_storage_mem_3d_multisample(
+        texture, samples, internalFormat, width, height, depth, fixedSampleLocations != 0u, memory,
+        offset);
 }
 
 }  // namespace av::glicd::entry

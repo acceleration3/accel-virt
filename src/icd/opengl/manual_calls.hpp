@@ -63,9 +63,45 @@ public:
     void  gen_semaphores(int32_t count, uint32_t *semaphores);
     void  delete_semaphores(int32_t count, const uint32_t *semaphores);
     void  import_semaphore_win32(uint32_t semaphore, uint32_t handle_type, void *handle);
+    /* glIsMemoryObjectEXT and glIsSemaphoreEXT, and the parameter pair beside
+     * each: answered by the context's table, because a created name is an
+     * object before the host has heard of it (feature 053, T037). */
+    bool  is_memory_object(uint32_t memory);
+    bool  is_semaphore(uint32_t semaphore);
+    void  memory_object_parameter(uint32_t memory, uint32_t pname, const int32_t *params);
+    void  get_memory_object_parameter(uint32_t memory, uint32_t pname, int32_t *params);
+    void  semaphore_parameter(uint32_t semaphore, uint32_t pname, const uint64_t *params);
+    void  get_semaphore_parameter(uint32_t semaphore, uint32_t pname, uint64_t *params);
+    /* The two name imports, which this path refuses: a named section is what
+     * another process opens *by name*, and these share by handle. */
+    void  import_memory_win32_name(uint32_t memory, uint64_t size, uint32_t handle_type, const void *name);
+    void  import_semaphore_win32_name(uint32_t semaphore, uint32_t handle_type, const void *name);
     void  buffer_storage_mem(uint32_t target, intptr_t size, uint32_t memory, uint64_t offset);
+    void  named_buffer_storage_mem(uint32_t buffer, intptr_t size, uint32_t memory, uint64_t offset);
+    void  tex_storage_mem_1d(uint32_t target, int32_t levels, uint32_t format, int32_t width,
+                             uint32_t memory, uint64_t offset);
+    void  tex_storage_mem_2d(uint32_t target, int32_t levels, uint32_t format, int32_t width,
+                             int32_t height, uint32_t memory, uint64_t offset);
+    void  tex_storage_mem_2d_multisample(uint32_t target, int32_t samples, uint32_t format, int32_t width,
+                                         int32_t height, bool fixed_locations, uint32_t memory,
+                                         uint64_t offset);
+    void  tex_storage_mem_3d(uint32_t target, int32_t levels, uint32_t format, int32_t width, int32_t height,
+                             int32_t depth, uint32_t memory, uint64_t offset);
+    void  tex_storage_mem_3d_multisample(uint32_t target, int32_t samples, uint32_t format, int32_t width,
+                                         int32_t height, int32_t depth, bool fixed_locations,
+                                         uint32_t memory, uint64_t offset);
+    void  texture_storage_mem_1d(uint32_t texture, int32_t levels, uint32_t format, int32_t width,
+                                 uint32_t memory, uint64_t offset);
     void  texture_storage_mem_2d(uint32_t texture, int32_t levels, uint32_t format, int32_t width,
                                  int32_t height, uint32_t memory, uint64_t offset);
+    void  texture_storage_mem_2d_multisample(uint32_t texture, int32_t samples, uint32_t format,
+                                             int32_t width, int32_t height, bool fixed_locations,
+                                             uint32_t memory, uint64_t offset);
+    void  texture_storage_mem_3d(uint32_t texture, int32_t levels, uint32_t format, int32_t width,
+                                 int32_t height, int32_t depth, uint32_t memory, uint64_t offset);
+    void  texture_storage_mem_3d_multisample(uint32_t texture, int32_t samples, uint32_t format,
+                                             int32_t width, int32_t height, int32_t depth,
+                                             bool fixed_locations, uint32_t memory, uint64_t offset);
     void  signal_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,
                            uint32_t texture_barriers, const uint32_t *textures, const uint32_t *layouts);
     void  wait_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,

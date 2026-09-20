@@ -64,11 +64,47 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
      * whole, and the names it did not get would be numbers of its own stack. */
     if (wanted > max_objects - live_) return gl_out_of_memory;
     for (uint32_t index = 0u; index < wanted; index++) {
-        rows_[live_] = GlSharedObjectRow{next_name_, 0u, 0u, 0u, memory};
+        rows_[live_] = GlSharedObjectRow{next_name_, 0u, 0u, 0u, memory, false, false};
         names[index] = next_name_;
         next_name_++;
         live_++;
     }
+    return gl_no_error;
+}
+
+bool GlExternalObjects::holds(uint32_t kind, uint32_t name) const
+{
+    AV_SCOPE("GlExternalObjects::holds");
+    bool memory = false;
+    if (!known(kind, memory)) return false;
+    return row_of(memory, name) != nullptr;
+}
+
+uint32_t GlExternalObjects::set_parameter(uint32_t kind, uint32_t name, uint32_t pname, int32_t value)
+{
+    AV_SCOPE("GlExternalObjects::set_parameter");
+    bool memory = false;
+    if (!known(kind, memory)) return gl_invalid_value;
+    GlSharedObjectRow *const row = row_of(memory, name);
+    if (row == nullptr) return gl_invalid_value;
+    /* A semaphore's only parameter names a D3D12 fence's value, and nothing
+     * here is ever imported from one, so no pname reaches a row of that kind. */
+    if (!memory || (pname != dedicated && pname != protected_memory)) return gl_invalid_enum;
+    if (pname == dedicated) row->dedicated_ = value != 0;
+    else row->protected_ = value != 0;
+    return gl_no_error;
+}
+
+uint32_t GlExternalObjects::get_parameter(uint32_t kind, uint32_t name, uint32_t pname,
+                                          int32_t *value) const
+{
+    AV_SCOPE("GlExternalObjects::get_parameter");
+    bool memory = false;
+    if (!known(kind, memory) || value == nullptr) return gl_invalid_value;
+    const GlSharedObjectRow *const row = row_of(memory, name);
+    if (row == nullptr) return gl_invalid_value;
+    if (!memory || (pname != dedicated && pname != protected_memory)) return gl_invalid_enum;
+    *value = (pname == dedicated ? row->dedicated_ : row->protected_) ? 1 : 0;
     return gl_no_error;
 }
 
@@ -86,6 +122,16 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t kind, uint32_
     /* A name this context never made, or one already naming an object: GL has
      * no way to say "imported twice" and the second would leak the first. */
     if (row == nullptr || row->made_ != 0u) return gl_invalid_value;
+    /* What the application asked for before it got here. Dedicated memory is
+     * an allocation made for this one image and protected memory is a
+     * different heap; the device makes the object inside OPEN_SHARED_OBJECT
+     * and is told neither, so the honest answer is the error the extension
+     * has rather than an import that quietly ignores both (research.md §12). */
+    if (row->dedicated_ || row->protected_) {
+        log_.write("rvkgl: a memory object asked for dedicated or protected memory, which a shared "
+                   "object cannot be");
+        return gl_invalid_operation;
+    }
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
     uint64_t       object_id = 0u;
     if (!handles_.resolve(named, object_id)) {

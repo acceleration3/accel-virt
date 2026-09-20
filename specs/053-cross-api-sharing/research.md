@@ -310,6 +310,8 @@ Until one of them lands, a conformance subset should carry `cl_khr_gl_sharing`
 and nothing of OpenGL's - not even the `_win32` rows, which §11 offered before
 this was measured.
 
+**Superseded by §20: option 1 was built, and all four rows are reported.**
+
 ## §13 — The 88-byte carrier refusal: dxgkrnl refuses *after* the driver agrees
 
 The shareable carrier (`AllocationDescriptor::encoded_size` + 40 bytes of
@@ -786,3 +788,56 @@ describes - "a branch that genuinely cannot be reached from a test is marked
 fails if the count rises without a spec change, and every mark is reviewed."
 The baseline moves 0 → 1 with this feature, and the mark names the reason and
 points here.
+
+
+## §20 — Answered: option 1, and what an extension row costs
+
+§12 left T037 two ways out and called the first the smaller. It was built, and
+this is what it took - written down because the cost is not where §12 guessed.
+
+**The parameters were the easy half.** `GL_DEDICATED_MEMORY_OBJECT_EXT` and
+`GL_PROTECTED_MEMORY_OBJECT_EXT` are set before an import that this design
+performs on the device, so there is nothing on the host to set them on. They
+are now recorded on the ICD's own row and the *import* refuses with
+`GL_INVALID_OPERATION` when either was asked for. That keeps the promise the
+row makes: an application that wants dedicated or protected memory is told no,
+in the extension's own vocabulary, rather than handed memory that is neither.
+
+**The generator was the larger half, and it found a bug on the way.** A row
+promises every command in its extension, and `GL_EXT_memory_object` has 19 of
+which 053 answered 4. Ten more are storage commands the guest really does send,
+so they are generated now; the two `glGetUnsignedByte*EXT` queries are
+generated with them. That is where §12's warning came due:
+`glGetUnsignedBytevEXT.data` is `COMPSIZE(pname)`, which the rules *can* read
+and read as one value - so a 16-byte device UUID would have been decoded as one
+byte and the driver's answer written fifteen bytes past what the decode arena
+handed out. Four `[pname_counts]` lines fix it, and the emitted table now says
+`case 0x9597: return 16`. The generator refuses only what it cannot read, so
+nothing would have caught this but reading the registry.
+
+**And the reporting rule had to learn what a driver-implemented command is.**
+Six entry points never cross - `glIsMemoryObjectEXT` and `glIsSemaphoreEXT`
+answer from the ICD's table, because a created name is an object before the
+host has heard of it, and the two parameter pairs are the recording above. Two
+more, the `glImport*Win32NameEXT` pair, are answered in order to refuse: a
+named section is what another process opens *by name*, and this path shares by
+handle. All twelve are declared `driver_implemented` in the profile, which is
+what makes the generator carry the extension - "an application gets a working
+entry point for every one of them" - and they are defined as `Wrap_*` beside
+the other driver-implemented entries rather than in a second table of the
+ICD's own.
+
+**One gate was wrong and is now right.** `tools/check_extension_policy.py`
+demanded that the host extension a row is answered over be one the *generator*
+implemented, reasoning that "the ICD cannot translate to something this build
+never generated". True for Vulkan, where the ICD itself translates
+`vkGetMemoryWin32HandleKHR` into `vkGetMemoryFdKHR`. Not true here: the guest
+never sends an fd command at all, because the memory object is made inside
+`OPEN_SHARED_OBJECT` by `src/device/shim/gl_host_import.cpp`, which resolves
+`glImportMemoryFdEXT` itself and checks `GL_EXT_memory_object_fd` on the host.
+The gate now accepts a host extension the *device's shim* names, which is still
+a check - a row answered over something nothing uses fails exactly as before.
+
+So the four rows are reported when the host lists `GL_EXT_memory_object_fd` and
+`GL_EXT_semaphore_fd`, which is the condition `contracts/wire_additions.md`
+always stated, and the conformance-subset advice above is withdrawn.

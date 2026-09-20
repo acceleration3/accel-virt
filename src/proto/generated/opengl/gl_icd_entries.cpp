@@ -8659,6 +8659,90 @@ void APIENTRY Wrap_glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers
     ::av::glproto::rvk_glWaitSemaphoreEXT(*rvk_t, semaphore, numBufferBarriers, buffers, numTextureBarriers, textures, srcLayouts);
 }
 
+void APIENTRY Wrap_glTexStorageMem1DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTexStorageMem1DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTexStorageMem1DEXT(*rvk_t, target, levels, internalFormat, width, memory, offset);
+}
+
+void APIENTRY Wrap_glTexStorageMem2DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTexStorageMem2DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTexStorageMem2DEXT(*rvk_t, target, levels, internalFormat, width, height, memory, offset);
+}
+
+void APIENTRY Wrap_glTexStorageMem2DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTexStorageMem2DMultisampleEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTexStorageMem2DMultisampleEXT(*rvk_t, target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
+}
+
+void APIENTRY Wrap_glTexStorageMem3DEXT(GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTexStorageMem3DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTexStorageMem3DEXT(*rvk_t, target, levels, internalFormat, width, height, depth, memory, offset);
+}
+
+void APIENTRY Wrap_glTexStorageMem3DMultisampleEXT(GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTexStorageMem3DMultisampleEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTexStorageMem3DMultisampleEXT(*rvk_t, target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
+}
+
+void APIENTRY Wrap_glTextureStorageMem1DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTextureStorageMem1DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTextureStorageMem1DEXT(*rvk_t, texture, levels, internalFormat, width, memory, offset);
+}
+
+void APIENTRY Wrap_glTextureStorageMem2DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTextureStorageMem2DMultisampleEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTextureStorageMem2DMultisampleEXT(*rvk_t, texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
+}
+
+void APIENTRY Wrap_glTextureStorageMem3DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTextureStorageMem3DEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTextureStorageMem3DEXT(*rvk_t, texture, levels, internalFormat, width, height, depth, memory, offset);
+}
+
+void APIENTRY Wrap_glTextureStorageMem3DMultisampleEXT(GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glTextureStorageMem3DMultisampleEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glTextureStorageMem3DMultisampleEXT(*rvk_t, texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
+}
+
+void APIENTRY Wrap_glNamedBufferStorageMemEXT(GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("glNamedBufferStorageMemEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glNamedBufferStorageMemEXT(*rvk_t, buffer, size, memory, offset);
+}
+
+void APIENTRY Wrap_glGetUnsignedBytevEXT(GLenum pname, GLubyte* data) {
+    AV_SCOPE("glGetUnsignedBytevEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glGetUnsignedBytevEXT(*rvk_t, pname, data);
+}
+
+void APIENTRY Wrap_glGetUnsignedBytei_vEXT(GLenum target, GLuint index, GLubyte* data) {
+    AV_SCOPE("glGetUnsignedBytei_vEXT");
+    auto* rvk_t = ::av::glicd::wire();
+    if (rvk_t == nullptr) return;
+    ::av::glproto::rvk_glGetUnsignedBytei_vEXT(*rvk_t, target, index, data);
+}
+
 void APIENTRY Wrap_glMakeBufferResidentNV(GLenum target, GLenum access) {
     AV_SCOPE("glMakeBufferResidentNV");
     auto* rvk_t = ::av::glicd::wire();

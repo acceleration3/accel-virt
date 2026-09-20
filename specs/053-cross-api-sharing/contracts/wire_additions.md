@@ -135,12 +135,12 @@ will call entry points that resolve to null - the trap `tools/codegen/profiles/o
 already records for sparse textures ("an extension may be claimed only when
 every command it needs is generated"), met again here for real.
 
-| Row | Commands in the registry | Answered after T036 |
-|---|--:|--:|
-| `GL_EXT_memory_object` | 19 | 4 |
-| `GL_EXT_memory_object_win32` | 2 | 1 |
-| `GL_EXT_semaphore` | 9 | 4 |
-| `GL_EXT_semaphore_win32` | 2 | 1 |
+| Row | Commands in the registry | After T036 | After T037 |
+|---|--:|--:|--:|
+| `GL_EXT_memory_object` | 19 | 4 | 19 |
+| `GL_EXT_memory_object_win32` | 2 | 1 | 2 |
+| `GL_EXT_semaphore` | 9 | 4 | 9 |
+| `GL_EXT_semaphore_win32` | 2 | 1 | 2 |
 
 The four answered of `GL_EXT_memory_object` are `glCreateMemoryObjectsEXT`,
 `glDeleteMemoryObjectsEXT`, `glBufferStorageMemEXT` and
@@ -150,14 +150,19 @@ one missing from each `_win32` row is its `glImport*Win32NameEXT`, which is
 refused on purpose: a named section is what another process opens *by name*,
 and this path shares by handle.
 
-**T037 decided: none of the four is reported yet** (research.md §12).
+**T037 decided, and then built: all four are reported** (research.md §12 for
+the problem, §20 for what it took). The paragraph below is why it could not be
+done at first; the answer was to record the two parameters on the ICD's own row
+and refuse the import that asked for them, which keeps the promise in the
+extension's own vocabulary.
 `GL_DEDICATED_MEMORY_OBJECT_EXT` and `GL_PROTECTED_MEMORY_OBJECT_EXT` are set
 with `glMemoryObjectParameterivEXT` *before* the import, and 053's device makes
 the memory object inside `OPEN_SHARED_OBJECT` - so at the moment an application
 sets them there is no host object to set them on. Reporting
 `GL_EXT_memory_object` would promise an ordering this design cannot keep, and
 the registry has `GL_EXT_memory_object_win32` require the base extension, so it
-cannot be reported alone either.
+cannot be reported alone either. Both are reported now, on the host condition
+this table always named.
 
 **T040 decided: neither OpenCL row is reported either**, which strikes the last
 sentence this contract used to end on. `cl_khr_external_memory_win32` is built

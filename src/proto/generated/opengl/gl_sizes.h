@@ -34,6 +34,10 @@ namespace av::glproto {
         case 0x8459: return 4;  // GL_CURRENT_SECONDARY_COLOR
         case 0x0B03: return 4;  // GL_CURRENT_TEXTURE_COORDS
         case 0x0B70: return 2;  // GL_DEPTH_RANGE
+        case 0x9599: return 8;  // GL_DEVICE_LUID_EXT
+        case 0x959A: return 4;  // GL_DEVICE_NODE_MASK_EXT
+        case 0x9597: return 16;  // GL_DEVICE_UUID_EXT
+        case 0x9598: return 16;  // GL_DRIVER_UUID_EXT
         case 0x0B66: return 4;  // GL_FOG_COLOR
         case 0x0B53: return 4;  // GL_LIGHT_MODEL_AMBIENT
         case 0x0B22: return 2;  // GL_LINE_WIDTH_RANGE

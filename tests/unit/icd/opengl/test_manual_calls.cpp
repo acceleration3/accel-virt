@@ -857,7 +857,33 @@ TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
   calls.buffer_storage_mem(0x8892u, 4096, 1u, 0u);
   calls.texture_storage_mem_2d(1u, 1, 0x8058u, 4, 4, 1u, 0u);
   calls.signal_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr);
-  calls.wait_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr); }
+  calls.wait_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr);
+  /* And the ones T037 added, which an application can reach as soon as the
+   * extension is reported: with nothing current there is no table to ask. */
+  CHECK(!calls.is_memory_object(1u));
+  CHECK(!calls.is_semaphore(1u));
+  const GLint value = 1;
+  const GLuint64 wide = 1u;
+  GLint read = 7;
+  GLuint64 got = 7u;
+  calls.memory_object_parameter(1u, av::glicd::GlExternalObjects::dedicated, &value);
+  calls.get_memory_object_parameter(1u, av::glicd::GlExternalObjects::dedicated, &read);
+  CHECK_EQ(read, 7);
+  calls.semaphore_parameter(1u, av::glicd::GlExternalObjects::d3d12_fence_value, &wide);
+  calls.get_semaphore_parameter(1u, av::glicd::GlExternalObjects::d3d12_fence_value, &got);
+  CHECK_EQ(got, 7u);
+  calls.import_memory_win32_name(1u, 4096u, 0x9587u, "shared");
+  calls.import_semaphore_win32_name(1u, 0x9587u, "shared");
+  calls.named_buffer_storage_mem(1u, 4096, 1u, 0u);
+  calls.tex_storage_mem_1d(0x0DE0u, 1, 0x8058u, 4, 1u, 0u);
+  calls.tex_storage_mem_2d(0x0DE1u, 1, 0x8058u, 4, 4, 1u, 0u);
+  calls.tex_storage_mem_2d_multisample(0x9100u, 4, 0x8058u, 4, 4, true, 1u, 0u);
+  calls.tex_storage_mem_3d(0x806Fu, 1, 0x8058u, 4, 4, 2, 1u, 0u);
+  calls.tex_storage_mem_3d_multisample(0x9102u, 4, 0x8058u, 4, 4, 2, true, 1u, 0u);
+  calls.texture_storage_mem_1d(1u, 1, 0x8058u, 4, 1u, 0u);
+  calls.texture_storage_mem_2d_multisample(1u, 4, 0x8058u, 4, 4, false, 1u, 0u);
+  calls.texture_storage_mem_3d(1u, 1, 0x8058u, 4, 4, 2, 1u, 0u);
+  calls.texture_storage_mem_3d_multisample(1u, 4, 0x8058u, 4, 4, 2, false, 1u, 0u); }
 
 /* The substitution itself: an object imported from a handle this process holds
  * crosses under the *host's* name, never the one the application was given. */
@@ -1013,6 +1039,185 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
   calls.signal_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
   CHECK_EQ(context.take_error(), 0u);
   CHECK(rig.kmt().commands() > before); }
+
+/* Every storage command GL_EXT_memory_object has, not the two this feature
+ * started with: a row promises all of them, so all of them substitute the
+ * host's name and none may reach the host under the application's (feature
+ * 053, T037). The last of each pair is a name this context never imported,
+ * which must be refused rather than sent - the host's number under it belongs
+ * to another application's object, or to nothing. */
+TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  constexpr std::uint32_t host_memory = 0x4200u;
+  GLuint memory = 0u;
+  calls.create_memory_objects(1, &memory);
+  rig.host().shared_object(0u, host_memory);
+  calls.import_memory_win32(memory, 4096u, av::glicd::GlExternalObjects::opaque_win32,
+                            openable_handle(rig));
+  CHECK_EQ(context.take_error(), 0u);
+  const GLuint stranger = memory + 0x1000u;
+
+  /* Every one of the ten, and the one this feature already had beside them.
+   * Each is checked the same way: the command went out, and the name in it is
+   * the host's rather than the application's. */
+  struct Sent {
+    const char *what;
+    std::uint32_t id;
+  };
+  std::uint32_t before = 0u;
+  const std::uint32_t named_at = rig.kmt().commands();
+  calls.named_buffer_storage_mem(1u, 4096, memory, 0u);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK_EQ(rig.kmt().command_id(named_at), static_cast<std::uint32_t>(ids::kCmd_glNamedBufferStorageMemEXT));
+
+  before = rig.kmt().commands();
+  calls.tex_storage_mem_1d(0x0DE0u, 1, 0x8058u, 16, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem1DEXT));
+  before = rig.kmt().commands();
+  calls.tex_storage_mem_2d(0x0DE1u, 1, 0x8058u, 16, 16, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem2DEXT));
+  before = rig.kmt().commands();
+  calls.tex_storage_mem_2d_multisample(0x9100u, 4, 0x8058u, 16, 16, true, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before),
+           static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem2DMultisampleEXT));
+  before = rig.kmt().commands();
+  calls.tex_storage_mem_3d(0x806Fu, 1, 0x8058u, 16, 16, 4, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem3DEXT));
+  before = rig.kmt().commands();
+  calls.tex_storage_mem_3d_multisample(0x9102u, 4, 0x8058u, 16, 16, 4, true, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before),
+           static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem3DMultisampleEXT));
+  before = rig.kmt().commands();
+  calls.texture_storage_mem_1d(2u, 1, 0x8058u, 16, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem1DEXT));
+  before = rig.kmt().commands();
+  calls.texture_storage_mem_2d_multisample(3u, 4, 0x8058u, 16, 16, false, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before),
+           static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem2DMultisampleEXT));
+  before = rig.kmt().commands();
+  calls.texture_storage_mem_3d(4u, 1, 0x8058u, 16, 16, 4, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DEXT));
+  before = rig.kmt().commands();
+  calls.texture_storage_mem_3d_multisample(5u, 4, 0x8058u, 16, 16, 4, false, memory, 0u);
+  CHECK_EQ(rig.kmt().command_id(before),
+           static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DMultisampleEXT));
+  CHECK_EQ(context.take_error(), 0u);
+
+  /* The host's name is what each carried: read out of the named-buffer one,
+   * whose memory argument is its third - buffer, size, memory, offset. */
+  { av::WireReader body(rig.kmt().command_bytes(named_at) + av::CommandHeader::encoded_size,
+                        av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+    std::uint64_t buffer = 0u;
+    std::uint64_t size = 0u;
+    std::uint64_t named = 0u;
+    CHECK(body.read_varint(buffer));
+    CHECK(body.read_varint(size));
+    CHECK(body.read_varint(named));
+    CHECK_EQ(named, static_cast<std::uint64_t>(host_memory));
+    CHECK(named != memory); }
+
+  /* And a name this context never imported reaches none of them. */
+  const std::uint32_t quiet = rig.kmt().commands();
+  calls.named_buffer_storage_mem(1u, 4096, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.tex_storage_mem_1d(0x0DE0u, 1, 0x8058u, 16, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.tex_storage_mem_2d(0x0DE1u, 1, 0x8058u, 16, 16, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.tex_storage_mem_2d_multisample(0x9100u, 4, 0x8058u, 16, 16, true, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.tex_storage_mem_3d(0x806Fu, 1, 0x8058u, 16, 16, 4, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.tex_storage_mem_3d_multisample(0x9102u, 4, 0x8058u, 16, 16, 4, true, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.texture_storage_mem_1d(2u, 1, 0x8058u, 16, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.texture_storage_mem_2d_multisample(3u, 4, 0x8058u, 16, 16, false, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.texture_storage_mem_3d(4u, 1, 0x8058u, 16, 16, 4, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.texture_storage_mem_3d_multisample(5u, 4, 0x8058u, 16, 16, 4, false, stranger, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  CHECK_EQ(rig.kmt().commands(), quiet); }
+
+/* The six entry points that never cross: what an application asks about an
+ * object whose host counterpart does not exist yet, answered by the ICD's own
+ * table. A row promises these as much as it promises the storage commands. */
+TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  GLuint memory = 0u;
+  GLuint semaphore = 0u;
+  calls.create_memory_objects(1, &memory);
+  calls.gen_semaphores(1, &semaphore);
+  const std::uint32_t quiet = rig.kmt().commands();
+
+  /* Created, they are objects - before anything is imported, which is what
+   * the extension says and what the host cannot answer. */
+  CHECK(calls.is_memory_object(memory));
+  CHECK(calls.is_semaphore(semaphore));
+  CHECK(!calls.is_memory_object(semaphore));
+  CHECK(!calls.is_semaphore(memory));
+  CHECK(!calls.is_memory_object(memory + 0x1000u));
+
+  /* The parameters are remembered, and the import is what refuses them. */
+  const GLint dedicated = 1;
+  calls.memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, &dedicated);
+  CHECK_EQ(context.take_error(), 0u);
+  GLint read = 0;
+  calls.get_memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, &read);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK_EQ(read, 1);
+  calls.import_memory_win32(memory, 4096u, av::glicd::GlExternalObjects::opaque_win32,
+                            openable_handle(rig));
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+
+  /* A semaphore has no parameter this path can keep, and a pname the
+   * extension does not define is refused for either kind. */
+  const GLuint64 value = 7u;
+  calls.semaphore_parameter(semaphore, av::glicd::GlExternalObjects::d3d12_fence_value, &value);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_enum});
+  GLuint64 got = 0u;
+  calls.get_semaphore_parameter(semaphore, av::glicd::GlExternalObjects::d3d12_fence_value, &got);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_enum});
+  calls.get_semaphore_parameter(semaphore, av::glicd::GlExternalObjects::d3d12_fence_value, nullptr);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
+  calls.memory_object_parameter(memory, 0x1234u, &dedicated);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_enum});
+  /* And a query with nowhere to write, which the API leaves to the driver. */
+  calls.get_memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, nullptr);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
+  calls.memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, nullptr);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
+
+  /* A named section is what another process opens by name; this path shares by
+   * handle and says so. */
+  calls.import_memory_win32_name(memory, 4096u, av::glicd::GlExternalObjects::opaque_win32, "shared");
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.import_semaphore_win32_name(semaphore, av::glicd::GlExternalObjects::opaque_win32, "shared");
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+
+  /* Not one of them reached the device. */
+  CHECK_EQ(rig.kmt().commands(), quiet); }
 
 /* An argument no GL call can have, on each of the four entries that takes a
  * count: the table refuses it and the context keeps the error, because these

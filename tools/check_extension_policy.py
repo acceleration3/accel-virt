@@ -37,6 +37,13 @@ WINDOW_SYSTEM_API = "opengl"
 WGL_ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_wgl_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
 WGL_NAME = re.compile(r"^WGL_\w+$")
 TESTS_DIRECTORY = "tests"
+# Where the device resolves a host extension's own entry points. A row answered
+# over a host extension is a promise that *something in this build* can use that
+# mechanism - which for Vulkan is the ICD, whose translation the generator had
+# to emit, and for OpenGL is the device: the guest never sends an fd command,
+# because the memory object is made inside OPEN_SHARED_OBJECT by the shim here
+# (feature 053, T037).
+DEVICE_SHIM_DIRECTORY = "src/device/shim"
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
 EMPTY = re.compile(r"ExtensionPolicy::Row\s*\*\s*reported_extensions\s*=\s*nullptr\s*;")
@@ -143,6 +150,22 @@ class PolicyCheck:
             violations += unreadable + self.row_violations(where, rows, tests, None)
         return violations
 
+    def device_uses(self, extension):
+        """Whether the device's shim names `extension`: it resolves the host's
+        own entry points there, so a host mechanism the ICD never touches is
+        still one this build uses."""
+        shim = os.path.join(self.root, DEVICE_SHIM_DIRECTORY)
+        if not os.path.isdir(shim):
+            return False
+        for base, _directories, names in os.walk(shim):
+            for name in names:
+                if not name.endswith((".cpp", ".hpp")):
+                    continue
+                with open(os.path.join(base, name)) as source:
+                    if extension in source.read():
+                        return True
+        return False
+
     def row_violations(self, where, rows, tests, implemented):
         """What is wrong with `rows`: judged against `implemented` names, or as
         WGL names when there is no generated list for them."""
@@ -156,11 +179,14 @@ class PolicyCheck:
                 violations.append(f"{where}: {name} is not a WGL extension")
             elif implemented is not None and name not in implemented[1]:
                 violations.append(f"{where}: {name} is not in {implemented[0]}")
-            if host is not None and implemented is not None and host not in implemented[1]:
+            if (host is not None and implemented is not None and host not in implemented[1]
+                    and not self.device_uses(host)):
                 # A row answered over another extension is a promise about that
-                # mechanism: the ICD cannot translate to something this build
-                # never generated.
-                violations.append(f"{where}: {name} is answered over {host}, which is not in {implemented[0]}")
+                # mechanism, and the promise is kept by whichever side uses it:
+                # the ICD, whose translation the generator had to emit, or the
+                # device, which names the host extension in its own shim.
+                violations.append(f"{where}: {name} is answered over {host}, which is in neither "
+                                  f"{implemented[0]} nor {DEVICE_SHIM_DIRECTORY}")
             if version == 0:
                 violations.append(f"{where}: {name} has spec version 0")
             if not TEST_NAME.match(test):

@@ -1388,3 +1388,15 @@
 "glDeleteSemaphoresEXT" = 197990
 "glSignalSemaphoreEXT" = 197991
 "glWaitSemaphoreEXT" = 197992
+"glTexStorageMem1DEXT" = 197993
+"glTexStorageMem2DEXT" = 197994
+"glTexStorageMem2DMultisampleEXT" = 197995
+"glTexStorageMem3DEXT" = 197996
+"glTexStorageMem3DMultisampleEXT" = 197997
+"glTextureStorageMem1DEXT" = 197998
+"glTextureStorageMem2DMultisampleEXT" = 197999
+"glTextureStorageMem3DEXT" = 198000
+"glTextureStorageMem3DMultisampleEXT" = 198001
+"glNamedBufferStorageMemEXT" = 198002
+"glGetUnsignedBytevEXT" = 198003
+"glGetUnsignedBytei_vEXT" = 198004

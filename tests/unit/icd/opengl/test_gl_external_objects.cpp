@@ -483,3 +483,139 @@ TEST(gl_external_objects_import, a_device_that_answers_a_name_of_zero_in_32_bits
            GlExternalObjects::gl_out_of_memory);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
   CHECK(one.objects().invariants_hold()); }
+
+/* glIsMemoryObjectEXT and glIsSemaphoreEXT, which GL_EXT_memory_object and
+ * GL_EXT_semaphore both promise. A created name is an object whether or not
+ * anything was imported into it - that is what the extension says, and it is
+ * why the table rather than the host is what answers: the host has no object
+ * for a name until the import. */
+TEST(gl_external_objects, a_created_name_is_an_object_before_it_is_imported)
+{ Process       one;
+  std::uint32_t memory = 0u;
+  std::uint32_t semaphore = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &memory), GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 1, &semaphore),
+           GlExternalObjects::gl_no_error);
+  CHECK(one.objects().holds(SharedObjectKind::memory, memory));
+  CHECK(one.objects().holds(SharedObjectKind::monitored_fence, semaphore));
+  /* Either fence kind asks about the one semaphore namespace. */
+  CHECK(one.objects().holds(SharedObjectKind::native_fence, semaphore));
+  /* And the two namespaces are separate: a memory name is no semaphore. */
+  CHECK(!one.objects().holds(SharedObjectKind::monitored_fence, memory));
+  CHECK(!one.objects().holds(SharedObjectKind::memory, semaphore));
+  /* A name nothing made, the zero name, and a kind that is not one. */
+  CHECK(!one.objects().holds(SharedObjectKind::memory, memory + 0x1000u));
+  CHECK(!one.objects().holds(SharedObjectKind::memory, 0u));
+  CHECK(!one.objects().holds(SharedObjectKind::native_fence + 1u, memory));
+  /* Imported, it is still an object. */
+  const Answer made(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(made.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, memory, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
+  CHECK(one.objects().holds(SharedObjectKind::memory, memory));
+  /* Deleted, it is not. */
+  CHECK_EQ(one.objects().destroy(one.wire(), SharedObjectKind::memory, 1, &memory),
+           GlExternalObjects::gl_no_error);
+  CHECK(!one.objects().holds(SharedObjectKind::memory, memory));
+  CHECK(one.objects().invariants_hold()); }
+
+/* The two memory-object parameters, which are the reason this feature could
+ * not report GL_EXT_memory_object until now (research.md §12). They are set
+ * *before* the import and the import is what makes the host object, so there
+ * is nothing to set them on when they are asked for - they are recorded here,
+ * and the import refuses when either was asked for, which is a documented
+ * error rather than a promise quietly broken. */
+TEST(gl_external_objects, a_parameter_this_path_cannot_keep_is_refused_at_the_import)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  std::int32_t read = 9;
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, &read),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(read, 0);
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, 1),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, &read),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(read, 1);
+  /* The import is refused, nothing is sent, and the name is still importable
+   * once the application stops asking for dedicated memory. */
+  const std::uint32_t sends = one.wire().sends();
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_invalid_operation);
+  CHECK_EQ(one.wire().sends(), sends);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
+  CHECK_EQ(one.log().holding("rvkgl: a memory object asked for dedicated or protected memory"), 1u);
+
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, name, GlExternalObjects::dedicated, 0),
+           GlExternalObjects::gl_no_error);
+  const Answer made(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(made.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
+  CHECK(one.objects().invariants_hold()); }
+
+/* Protected memory is the other one, and it is refused the same way. */
+TEST(gl_external_objects, protected_memory_is_refused_at_the_import_too)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, name,
+                                       GlExternalObjects::protected_memory, 1),
+           GlExternalObjects::gl_no_error);
+  std::int32_t read = 0;
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, name,
+                                       GlExternalObjects::protected_memory, &read),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(read, 1);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_invalid_operation);
+  CHECK(one.objects().invariants_hold()); }
+
+/* Every way a parameter call can be wrong. A semaphore has no parameter this
+ * path can keep: the one the registry gives it names a D3D12 fence's value,
+ * and nothing here is ever imported from one. */
+TEST(gl_external_objects, a_parameter_of_the_wrong_kind_name_or_pname_is_refused)
+{ Process       one;
+  std::uint32_t memory = 0u;
+  std::uint32_t semaphore = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &memory), GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().create(SharedObjectKind::monitored_fence, 1, &semaphore),
+           GlExternalObjects::gl_no_error);
+  std::int32_t read = 9;
+  /* A name this context did not make. */
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, memory + 0x1000u,
+                                       GlExternalObjects::dedicated, 1),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, memory + 0x1000u,
+                                       GlExternalObjects::dedicated, &read),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(read, 9);
+  /* A pname the extension does not define for a memory object. */
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::memory, memory, 0x1234u, 1),
+           GlExternalObjects::gl_invalid_enum);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, memory, 0x1234u, &read),
+           GlExternalObjects::gl_invalid_enum);
+  /* A semaphore has none at all: the registry's one names a D3D12 fence. */
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::monitored_fence, semaphore,
+                                       GlExternalObjects::d3d12_fence_value, 7),
+           GlExternalObjects::gl_invalid_enum);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::monitored_fence, semaphore,
+                                       GlExternalObjects::d3d12_fence_value, &read),
+           GlExternalObjects::gl_invalid_enum);
+  /* A kind that is not one, and nowhere to write the answer. */
+  CHECK_EQ(one.objects().set_parameter(SharedObjectKind::native_fence + 1u, memory,
+                                       GlExternalObjects::dedicated, 1),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::memory, memory,
+                                       GlExternalObjects::dedicated, nullptr),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(one.objects().get_parameter(SharedObjectKind::native_fence + 1u, memory,
+                                       GlExternalObjects::dedicated, &read),
+           GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(read, 9);
+  CHECK(one.objects().invariants_hold()); }

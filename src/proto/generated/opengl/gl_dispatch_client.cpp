@@ -30010,6 +30010,260 @@ void rvk_glWaitSemaphoreEXT(::av::ClientTransport& rvk_t, GLuint semaphore, GLui
     (void)rvk_t.send_async(kCmd_glWaitSemaphoreEXT, rvk_b);
 }
 
+void rvk_glTexStorageMem1DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTexStorageMem1DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTexStorageMem1DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTexStorageMem1DEXT, rvk_b);
+}
+
+void rvk_glTexStorageMem2DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTexStorageMem2DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTexStorageMem2DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTexStorageMem2DEXT, rvk_b);
+}
+
+void rvk_glTexStorageMem2DMultisampleEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTexStorageMem2DMultisampleEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(samples));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(fixedSampleLocations));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTexStorageMem2DMultisampleEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTexStorageMem2DMultisampleEXT, rvk_b);
+}
+
+void rvk_glTexStorageMem3DEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTexStorageMem3DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(depth));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTexStorageMem3DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTexStorageMem3DEXT, rvk_b);
+}
+
+void rvk_glTexStorageMem3DMultisampleEXT(::av::ClientTransport& rvk_t, GLenum target, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTexStorageMem3DMultisampleEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(samples));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(depth));
+    rvk_b.write_varint(static_cast<uint64_t>(fixedSampleLocations));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTexStorageMem3DMultisampleEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTexStorageMem3DMultisampleEXT, rvk_b);
+}
+
+void rvk_glTextureStorageMem1DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTextureStorageMem1DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTextureStorageMem1DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTextureStorageMem1DEXT, rvk_b);
+}
+
+void rvk_glTextureStorageMem2DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTextureStorageMem2DMultisampleEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(samples));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(fixedSampleLocations));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTextureStorageMem2DMultisampleEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTextureStorageMem2DMultisampleEXT, rvk_b);
+}
+
+void rvk_glTextureStorageMem3DEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTextureStorageMem3DEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(levels));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(depth));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTextureStorageMem3DEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTextureStorageMem3DEXT, rvk_b);
+}
+
+void rvk_glTextureStorageMem3DMultisampleEXT(::av::ClientTransport& rvk_t, GLuint texture, GLsizei samples, GLenum internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedSampleLocations, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glTextureStorageMem3DMultisampleEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(samples));
+    rvk_b.write_varint(static_cast<uint64_t>(internalFormat));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(depth));
+    rvk_b.write_varint(static_cast<uint64_t>(fixedSampleLocations));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glTextureStorageMem3DMultisampleEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glTextureStorageMem3DMultisampleEXT, rvk_b);
+}
+
+void rvk_glNamedBufferStorageMemEXT(::av::ClientTransport& rvk_t, GLuint buffer, GLsizeiptr size, GLuint memory, GLuint64 offset) {
+    AV_SCOPE("rvk_glNamedBufferStorageMemEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(buffer));
+    rvk_b.write_varint(static_cast<uint64_t>(size));
+    rvk_b.write_varint(static_cast<uint64_t>(memory));
+    rvk_b.write_varint(static_cast<uint64_t>(offset));
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glNamedBufferStorageMemEXT",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glNamedBufferStorageMemEXT, rvk_b);
+}
+
+void rvk_glGetUnsignedBytevEXT(::av::ClientTransport& rvk_t, GLenum pname, GLubyte* data) {
+    AV_SCOPE("rvk_glGetUnsignedBytevEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    const ::av::SyncCallScope rvk_call{rvk_t};
+    rvk_b.write_varint(static_cast<uint64_t>(pname));
+    const size_t data_want = data != nullptr ? (::av::glproto::pname_count(rvk_t, pname) * sizeof(GLubyte)) : 0u;
+    rvk_b.write_pod<uint8_t>(data != nullptr ? 1 : 0);
+    if (data != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(data_want));
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetUnsignedBytevEXT",
+                                       rvk_b.offset());
+        return;
+    }
+    ::av::WireReader rvk_r{nullptr, 0u};
+    const bool rvk_sent = rvk_t.send_sync(kCmd_glGetUnsignedBytevEXT, rvk_b, rvk_r) ==
+        ::av::TransportResult::ok;
+    if (!rvk_sent) {
+        return;
+    }
+    if (data != nullptr) {
+        uint64_t rvk_bytes = 0;
+        if (!rvk_r.read_varint(rvk_bytes)) return;
+        if (rvk_bytes > static_cast<uint64_t>(data_want)) return;
+        if (rvk_bytes != 0 &&
+            !rvk_r.read(data, static_cast<size_t>(rvk_bytes))) return;
+    }
+}
+
+void rvk_glGetUnsignedBytei_vEXT(::av::ClientTransport& rvk_t, GLenum target, GLuint index, GLubyte* data) {
+    AV_SCOPE("rvk_glGetUnsignedBytei_vEXT");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    const ::av::SyncCallScope rvk_call{rvk_t};
+    rvk_b.write_varint(static_cast<uint64_t>(target));
+    rvk_b.write_varint(static_cast<uint64_t>(index));
+    const size_t data_want = data != nullptr ? (16 * sizeof(GLubyte)) : 0u;
+    rvk_b.write_pod<uint8_t>(data != nullptr ? 1 : 0);
+    if (data != nullptr) {
+        rvk_b.write_varint(static_cast<uint64_t>(data_want));
+    }
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetUnsignedBytei_vEXT",
+                                       rvk_b.offset());
+        return;
+    }
+    ::av::WireReader rvk_r{nullptr, 0u};
+    const bool rvk_sent = rvk_t.send_sync(kCmd_glGetUnsignedBytei_vEXT, rvk_b, rvk_r) ==
+        ::av::TransportResult::ok;
+    if (!rvk_sent) {
+        return;
+    }
+    if (data != nullptr) {
+        uint64_t rvk_bytes = 0;
+        if (!rvk_r.read_varint(rvk_bytes)) return;
+        if (rvk_bytes > static_cast<uint64_t>(data_want)) return;
+        if (rvk_bytes != 0 &&
+            !rvk_r.read(data, static_cast<size_t>(rvk_bytes))) return;
+    }
+}
+
 void rvk_glMakeBufferResidentNV(::av::ClientTransport& rvk_t, GLenum target, GLenum access) {
     AV_SCOPE("rvk_glMakeBufferResidentNV");
     ::av::WireWriter rvk_b = rvk_t.request_writer();

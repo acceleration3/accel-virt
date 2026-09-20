@@ -51,6 +51,11 @@ struct GlSharedObjectRow {
     uint64_t size_;
     /* Which GL namespace the name is in: memory, or a semaphore. */
     bool     memory_;
+    /* GL_DEDICATED_MEMORY_OBJECT_EXT and GL_PROTECTED_MEMORY_OBJECT_EXT as the
+     * application set them, which is always before the import - so they are
+     * kept here and read by the import, which refuses what it cannot give. */
+    bool     dedicated_;
+    bool     protected_;
 };
 
 class GlExternalObjects {
@@ -61,6 +66,7 @@ public:
     /* The GL errors it answers, which are the ones these entry points have. */
     enum : uint32_t {
         gl_no_error = 0u,
+        gl_invalid_enum = 0x0500u,
         gl_invalid_value = 0x0501u,
         gl_invalid_operation = 0x0502u,
         gl_out_of_memory = 0x0505u,
@@ -68,6 +74,12 @@ public:
     /* GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, the one type these imports take: the
      * KMT and D3D spellings name objects nothing here turns into a host one. */
     static constexpr uint32_t opaque_win32 = 0x9587u;
+    /* The parameters the two extensions define. A memory object has two and a
+     * semaphore has one - GL_D3D12_FENCE_VALUE_EXT, which names the value of a
+     * D3D12 fence and is refused, because nothing here is imported from one. */
+    static constexpr uint32_t dedicated = 0x9581u;
+    static constexpr uint32_t protected_memory = 0x959Bu;
+    static constexpr uint32_t d3d12_fence_value = 0x9595u;
 
     GlExternalObjects(icd::SharedHandles &handles, icd::LogSink &log);
     GlExternalObjects(const GlExternalObjects &) = delete;
@@ -98,6 +110,22 @@ public:
      * which is what every entry point naming an object substitutes, and what
      * makes a name the application invented reach no object at all. */
     uint32_t made(uint32_t kind, uint32_t name) const;
+    /* glIsMemoryObjectEXT and glIsSemaphoreEXT: whether this context created
+     * `name` in `kind`'s namespace, imported or not. The extension says a
+     * created name is an object, and the host has none for it until the
+     * import, so this is what answers rather than the host. */
+    bool     holds(uint32_t kind, uint32_t name) const;
+    /* glMemoryObjectParameterivEXT and glSemaphoreParameterui64vEXT, and the
+     * two queries beside them. A parameter is recorded rather than sent: it is
+     * set before the import, which is where the host object is made, so there
+     * is nothing on the host to set it on - and `import` is what refuses one
+     * this path cannot keep (research.md §12).
+     *
+     * GL_INVALID_VALUE for a name this context did not create, for a kind that
+     * is not one, and for a query with nowhere to answer; GL_INVALID_ENUM for
+     * a pname the object's kind does not have. */
+    uint32_t set_parameter(uint32_t kind, uint32_t name, uint32_t pname, int32_t value);
+    uint32_t get_parameter(uint32_t kind, uint32_t name, uint32_t pname, int32_t *value) const;
 
     /* Every object still held, released: what a context torn down gives back,
      * since the device counts this context as a holder of each. */

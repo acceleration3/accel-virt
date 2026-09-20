@@ -35886,6 +35886,390 @@ static bool decode_glWaitSemaphoreEXT(const RealGl& rvk_gl, ::av::WireReader& rv
     return true;
 }
 
+static bool decode_glTexStorageMem1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorageMem1DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTexStorageMem1DEXT == nullptr) return false;
+    rvk_gl.glTexStorageMem1DEXT(target, levels, internalFormat, width, memory, offset);
+    return true;
+}
+
+static bool decode_glTexStorageMem2DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorageMem2DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTexStorageMem2DEXT == nullptr) return false;
+    rvk_gl.glTexStorageMem2DEXT(target, levels, internalFormat, width, height, memory, offset);
+    return true;
+}
+
+static bool decode_glTexStorageMem2DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorageMem2DMultisampleEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizei samples{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      samples = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLboolean fixedSampleLocations{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      fixedSampleLocations = static_cast<GLboolean>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTexStorageMem2DMultisampleEXT == nullptr) return false;
+    rvk_gl.glTexStorageMem2DMultisampleEXT(target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
+    return true;
+}
+
+static bool decode_glTexStorageMem3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorageMem3DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLsizei depth{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      depth = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTexStorageMem3DEXT == nullptr) return false;
+    rvk_gl.glTexStorageMem3DEXT(target, levels, internalFormat, width, height, depth, memory, offset);
+    return true;
+}
+
+static bool decode_glTexStorageMem3DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTexStorageMem3DMultisampleEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLsizei samples{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      samples = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLsizei depth{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      depth = static_cast<GLsizei>(rvk_v); }
+    GLboolean fixedSampleLocations{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      fixedSampleLocations = static_cast<GLboolean>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTexStorageMem3DMultisampleEXT == nullptr) return false;
+    rvk_gl.glTexStorageMem3DMultisampleEXT(target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
+    return true;
+}
+
+static bool decode_glTextureStorageMem1DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorageMem1DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint texture{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      texture = static_cast<GLuint>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTextureStorageMem1DEXT == nullptr) return false;
+    rvk_gl.glTextureStorageMem1DEXT(texture, levels, internalFormat, width, memory, offset);
+    return true;
+}
+
+static bool decode_glTextureStorageMem2DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorageMem2DMultisampleEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint texture{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      texture = static_cast<GLuint>(rvk_v); }
+    GLsizei samples{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      samples = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLboolean fixedSampleLocations{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      fixedSampleLocations = static_cast<GLboolean>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTextureStorageMem2DMultisampleEXT == nullptr) return false;
+    rvk_gl.glTextureStorageMem2DMultisampleEXT(texture, samples, internalFormat, width, height, fixedSampleLocations, memory, offset);
+    return true;
+}
+
+static bool decode_glTextureStorageMem3DEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorageMem3DEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint texture{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      texture = static_cast<GLuint>(rvk_v); }
+    GLsizei levels{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      levels = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLsizei depth{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      depth = static_cast<GLsizei>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTextureStorageMem3DEXT == nullptr) return false;
+    rvk_gl.glTextureStorageMem3DEXT(texture, levels, internalFormat, width, height, depth, memory, offset);
+    return true;
+}
+
+static bool decode_glTextureStorageMem3DMultisampleEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glTextureStorageMem3DMultisampleEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint texture{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      texture = static_cast<GLuint>(rvk_v); }
+    GLsizei samples{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      samples = static_cast<GLsizei>(rvk_v); }
+    GLenum internalFormat{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      internalFormat = static_cast<GLenum>(rvk_v); }
+    GLsizei width{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      width = static_cast<GLsizei>(rvk_v); }
+    GLsizei height{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      height = static_cast<GLsizei>(rvk_v); }
+    GLsizei depth{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      depth = static_cast<GLsizei>(rvk_v); }
+    GLboolean fixedSampleLocations{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      fixedSampleLocations = static_cast<GLboolean>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glTextureStorageMem3DMultisampleEXT == nullptr) return false;
+    rvk_gl.glTextureStorageMem3DMultisampleEXT(texture, samples, internalFormat, width, height, depth, fixedSampleLocations, memory, offset);
+    return true;
+}
+
+static bool decode_glNamedBufferStorageMemEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glNamedBufferStorageMemEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLuint buffer{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      buffer = static_cast<GLuint>(rvk_v); }
+    GLsizeiptr size{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      size = static_cast<GLsizeiptr>(rvk_v); }
+    GLuint memory{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      memory = static_cast<GLuint>(rvk_v); }
+    GLuint64 offset{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      offset = static_cast<GLuint64>(rvk_v); }
+    if (rvk_gl.glNamedBufferStorageMemEXT == nullptr) return false;
+    rvk_gl.glNamedBufferStorageMemEXT(buffer, size, memory, offset);
+    return true;
+}
+
+static bool decode_glGetUnsignedBytevEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUnsignedBytevEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum pname{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      pname = static_cast<GLenum>(rvk_v); }
+    GLubyte* data_storage = nullptr;
+    size_t data_storage_count = 0;
+    GLubyte* data = nullptr;
+    size_t data_bytes = 0;
+    bool data_answered = false;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present != 0) {
+            data_answered = true;
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            data_bytes = static_cast<size_t>(rvk_bytes);
+        }
+    }
+    uint64_t data_elements = kQuerySlack;
+    if (true) {
+        uint64_t rvk_room = static_cast<uint64_t>(data_bytes / sizeof(GLubyte));
+        if (rvk_room < data_elements) rvk_room = data_elements;
+        if (rvk_room >= SIZE_MAX / sizeof(GLubyte)) return false;
+        data_storage_count = static_cast<size_t>(rvk_room) + 1;
+        data_storage = rvk_arena.allocate<GLubyte>(data_storage_count);
+        if (data_storage == nullptr) return false;
+        for (size_t rvk_z = 0; rvk_z < data_storage_count; ++rvk_z) { data_storage[rvk_z] = {}; }
+        data = data_storage;
+    }
+    if (rvk_gl.glGetUnsignedBytevEXT == nullptr) return false;
+    rvk_gl.glGetUnsignedBytevEXT(pname, data);
+    if (data_answered) {
+        rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
+        if (data_bytes != 0) rvk_reply.write(data, data_bytes);
+    }
+    return true;
+}
+
+static bool decode_glGetUnsignedBytei_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
+    AV_SCOPE("server:glGetUnsignedBytei_vEXT");
+    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
+    GLenum target{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      target = static_cast<GLenum>(rvk_v); }
+    GLuint index{};
+    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
+      index = static_cast<GLuint>(rvk_v); }
+    GLubyte* data_storage = nullptr;
+    size_t data_storage_count = 0;
+    GLubyte* data = nullptr;
+    size_t data_bytes = 0;
+    bool data_answered = false;
+    {
+        uint8_t rvk_present = 0;
+        if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present != 0) {
+            data_answered = true;
+            uint64_t rvk_bytes = 0;
+            if (!rvk_r.read_varint(rvk_bytes)) return false;
+            data_bytes = static_cast<size_t>(rvk_bytes);
+        }
+    }
+    const uint64_t data_elements = 16;
+    if (true) {
+        uint64_t rvk_room = static_cast<uint64_t>(data_bytes / sizeof(GLubyte));
+        if (rvk_room < data_elements) rvk_room = data_elements;
+        if (rvk_room >= SIZE_MAX / sizeof(GLubyte)) return false;
+        data_storage_count = static_cast<size_t>(rvk_room) + 1;
+        data_storage = rvk_arena.allocate<GLubyte>(data_storage_count);
+        if (data_storage == nullptr) return false;
+        for (size_t rvk_z = 0; rvk_z < data_storage_count; ++rvk_z) { data_storage[rvk_z] = {}; }
+        data = data_storage;
+    }
+    if (rvk_gl.glGetUnsignedBytei_vEXT == nullptr) return false;
+    rvk_gl.glGetUnsignedBytei_vEXT(target, index, data);
+    if (data_answered) {
+        rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
+        if (data_bytes != 0) rvk_reply.write(data, data_bytes);
+    }
+    return true;
+}
+
 static bool decode_glMakeBufferResidentNV(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
     AV_SCOPE("server:glMakeBufferResidentNV");
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
@@ -48253,6 +48637,18 @@ bool dispatch_command(const RealGl& rvk_gl, uint32_t cmd_id,
         case kCmd_glDeleteSemaphoresEXT: return decode_glDeleteSemaphoresEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glSignalSemaphoreEXT: return decode_glSignalSemaphoreEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glWaitSemaphoreEXT: return decode_glWaitSemaphoreEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTexStorageMem1DEXT: return decode_glTexStorageMem1DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTexStorageMem2DEXT: return decode_glTexStorageMem2DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTexStorageMem2DMultisampleEXT: return decode_glTexStorageMem2DMultisampleEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTexStorageMem3DEXT: return decode_glTexStorageMem3DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTexStorageMem3DMultisampleEXT: return decode_glTexStorageMem3DMultisampleEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTextureStorageMem1DEXT: return decode_glTextureStorageMem1DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTextureStorageMem2DMultisampleEXT: return decode_glTextureStorageMem2DMultisampleEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTextureStorageMem3DEXT: return decode_glTextureStorageMem3DEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glTextureStorageMem3DMultisampleEXT: return decode_glTextureStorageMem3DMultisampleEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glNamedBufferStorageMemEXT: return decode_glNamedBufferStorageMemEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glGetUnsignedBytevEXT: return decode_glGetUnsignedBytevEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
+        case kCmd_glGetUnsignedBytei_vEXT: return decode_glGetUnsignedBytei_vEXT(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glMakeBufferResidentNV: return decode_glMakeBufferResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glMakeBufferNonResidentNV: return decode_glMakeBufferNonResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glIsBufferResidentNV: return decode_glIsBufferResidentNV(rvk_gl, rvk_r, rvk_reply, rvk_arena);

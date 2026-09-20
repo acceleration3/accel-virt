@@ -1019,36 +1019,66 @@ TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
   CHECK_EQ(rig.kmt().commands(), lost);
   CHECK(rig.root().invariants_hold()); }
 
-/* Feature 053, T036. Four of these the generator never emitted - an object is
- * made by the device inside the import, and a Win32 HANDLE is a value only the
- * guest kernel resolves - and four of them it did. The four it emitted must
- * still reach this ICD rather than the generated wrapper, because the name the
- * application holds is this driver's own and the host knows another one. So
- * every one of the ten answers an address of this ICD's, and the generated
- * table is not what is found. */
-TEST(gl_icd_root, the_external_object_entries_are_this_drivers_and_not_the_generated_ones)
+/* Feature 053, T036 and T037. Every command of the four external-object
+ * extensions is answered, because a row promises all of them - and each is
+ * answered by the right half of this driver.
+ *
+ * Sixteen are generated and must still reach *this* ICD rather than the
+ * generated wrapper: the name the application holds is this driver's own and
+ * the host knows another one, so each substitutes before it goes out. Twelve
+ * never cross at all - a create, an import, a query or a parameter is about a
+ * name only this ICD holds - and those are declared driver_implemented in the
+ * profile, so the generated name table finds them and they land in ManualCalls
+ * the same way. What must never happen is a null: an application that resolved
+ * one and called it would jump into nothing. */
+TEST(gl_icd_root, every_external_object_entry_is_answered_by_the_half_that_owns_it)
 { GlIcdRig rig;
   struct Named { const char *name; void *own; };
-  const Named entries[] = {
-      {"glCreateMemoryObjectsEXT", reinterpret_cast<void *>(&av::glicd::entry::glCreateMemoryObjectsEXT)},
+  /* Substituted: generated, and answered here so the host's name goes out. */
+  const Named substituted[] = {
       {"glDeleteMemoryObjectsEXT", reinterpret_cast<void *>(&av::glicd::entry::glDeleteMemoryObjectsEXT)},
-      {"glImportMemoryWin32HandleEXT",
-       reinterpret_cast<void *>(&av::glicd::entry::glImportMemoryWin32HandleEXT)},
-      {"glGenSemaphoresEXT", reinterpret_cast<void *>(&av::glicd::entry::glGenSemaphoresEXT)},
       {"glDeleteSemaphoresEXT", reinterpret_cast<void *>(&av::glicd::entry::glDeleteSemaphoresEXT)},
-      {"glImportSemaphoreWin32HandleEXT",
-       reinterpret_cast<void *>(&av::glicd::entry::glImportSemaphoreWin32HandleEXT)},
       {"glBufferStorageMemEXT", reinterpret_cast<void *>(&av::glicd::entry::glBufferStorageMemEXT)},
+      {"glNamedBufferStorageMemEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glNamedBufferStorageMemEXT)},
+      {"glTexStorageMem1DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTexStorageMem1DEXT)},
+      {"glTexStorageMem2DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTexStorageMem2DEXT)},
+      {"glTexStorageMem2DMultisampleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glTexStorageMem2DMultisampleEXT)},
+      {"glTexStorageMem3DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTexStorageMem3DEXT)},
+      {"glTexStorageMem3DMultisampleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glTexStorageMem3DMultisampleEXT)},
+      {"glTextureStorageMem1DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem1DEXT)},
       {"glTextureStorageMem2DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem2DEXT)},
+      {"glTextureStorageMem2DMultisampleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem2DMultisampleEXT)},
+      {"glTextureStorageMem3DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem3DEXT)},
+      {"glTextureStorageMem3DMultisampleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem3DMultisampleEXT)},
       {"glSignalSemaphoreEXT", reinterpret_cast<void *>(&av::glicd::entry::glSignalSemaphoreEXT)},
       {"glWaitSemaphoreEXT", reinterpret_cast<void *>(&av::glicd::entry::glWaitSemaphoreEXT)},
   };
-  for (const Named &entry : entries) {
+  for (const Named &entry : substituted) {
       void *const found = rig.root().get_proc_address(entry.name);
       if (found != entry.own)
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, entry.name);
   }
-  /* The two Win32 *name* imports are not answered at all: a named section is
-   * what another process opens by name, which this path refuses. */
-  CHECK(rig.root().get_proc_address("glImportMemoryWin32NameEXT") == nullptr);
-  CHECK(rig.root().get_proc_address("glImportSemaphoreWin32NameEXT") == nullptr); }
+
+  /* Answered by this driver through the generated name table. */
+  const char *const local[] = {"glCreateMemoryObjectsEXT", "glGenSemaphoresEXT",
+                               "glImportMemoryWin32HandleEXT", "glImportSemaphoreWin32HandleEXT",
+                               "glImportMemoryWin32NameEXT", "glImportSemaphoreWin32NameEXT",
+                               "glIsMemoryObjectEXT", "glIsSemaphoreEXT",
+                               "glMemoryObjectParameterivEXT", "glGetMemoryObjectParameterivEXT",
+                               "glSemaphoreParameterui64vEXT", "glGetSemaphoreParameterui64vEXT"};
+  for (const char *const name : local) {
+      if (rig.root().get_proc_address(name) == nullptr)
+          av::TestRegistry::instance().record_failure(__FILE__, __LINE__, name);
+  }
+  /* The two name imports among them are answered in order to refuse: a named
+   * section is what another process opens by name, and this path shares by
+   * handle. An entry point that is not there would be a crash instead. */
+  CHECK(rig.root().get_proc_address("glImportMemoryWin32NameEXT") ==
+        reinterpret_cast<void *>(&av::glicd::generated::Wrap_glImportMemoryWin32NameEXT));
+  CHECK(rig.root().get_proc_address("glImportSemaphoreWin32NameEXT") ==
+        reinterpret_cast<void *>(&av::glicd::generated::Wrap_glImportSemaphoreWin32NameEXT)); }
