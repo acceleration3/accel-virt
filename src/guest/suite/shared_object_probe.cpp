@@ -131,6 +131,20 @@ void SharedObjectProbe::carrier_steps()
     steps_.check("carrier_plain", made);
     if (made == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, plain));
 
+    /* The same 88 bytes through the *one-way* create, which copies them into a
+     * buffer of its own before handing them to the kernel. This is what
+     * separates the two things the two-way create changes at once: if the
+     * kernel takes 88 bytes here and refuses them below, the length is fine
+     * and the fault is in handing it the caller's own buffer; if it refuses
+     * both, the length is the fault (feature 053). */
+    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
+                          .encode(data + AllocationDescriptor::encoded_size,
+                                  SharedObjectRecord::encoded_size));
+    uint32_t     copied = 0u;
+    const Status longer = kmt_.create_allocation(device, data, sizeof data, copied);
+    steps_.check("carrier_long", longer);
+    if (longer == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, copied));
+
     /* And the two-way one, whose private data is a descriptor followed by an
      * unassigned record - the only thing about it that differs. */
     static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)

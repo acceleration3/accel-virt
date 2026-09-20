@@ -643,8 +643,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     const Status created =
         kmt_.create_shared_allocation(guest_device, carrier_data, sizeof carrier_data, carrier);
     if (created != Status::ok) {
-        note("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS",
-             kmt_.last_code());
+        refused("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS");
         /* What the refusal was about, because the status alone cannot say:
          * a device of 0 is a connection that never opened, and the length is
          * the one thing this request has that an ordinary create does not. */
@@ -673,7 +672,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     uint64_t     handle = 0u;
     const Status shared = shared_handles_.mint(guest_device, carrier, minted.object_id(), handle);
     if (shared != Status::ok) {
-        note("vkAllocateMemory: no NT handle for a shared object, NTSTATUS", kmt_.last_code());
+        refused("vkAllocateMemory: no NT handle for a shared object, NTSTATUS");
         static_cast<void>(call.release(minted.object_id(), kind, size));
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
@@ -697,7 +696,7 @@ uint64_t IcdRoot::object_of(LoaderHandle &made, void *handle)
      * a number an application invented. */
     const Status adopted = shared_handles_.adopt(made.connection()->device(), named, object_id);
     if (adopted == Status::ok) return object_id;
-    note("a Win32 handle this process may not open, NTSTATUS", kmt_.last_code());
+    refused("a Win32 handle this process may not open, NTSTATUS");
     return 0u;
 }
 
@@ -765,6 +764,13 @@ VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin
     return VK_SUCCESS;
 }
 
+void IcdRoot::refused(const char *what)
+{
+    AV_SCOPE("IcdRoot::refused");
+    kernel_refusal_ = kmt_.last_code();
+    note(what, kernel_refusal_);
+}
+
 VkResult IcdRoot::last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status)
 {
     AV_SCOPE("IcdRoot::last_kernel_status");
@@ -772,7 +778,7 @@ VkResult IcdRoot::last_kernel_status(VkPhysicalDevice physical_device, uint32_t 
     *status = 0u;
     if (connection_of(physical_device, LoaderHandle::Kind::physical_device) == nullptr)
         return VK_ERROR_INITIALIZATION_FAILED;
-    *status = kmt_.last_code();
+    *status = kernel_refusal_;
     return VK_SUCCESS;
 }
 

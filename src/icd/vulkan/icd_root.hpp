@@ -190,11 +190,17 @@ public:
      * as: none, because a handle this ICD did not export names nothing
      * (contracts/external_objects.md). */
     VkResult memory_handle_properties(VkDevice device, void *handle);
-    /* The NTSTATUS of the last D3DKMT call this driver made, for a probe that
-     * cannot see the driver's own Kmt: every kernel call behind feature 053
-     * answers the application VK_ERROR_TOO_MANY_OBJECTS, so without this a
-     * guest run cannot say which of them refused. `physical_device` is there
-     * for the loader to dispatch on and is checked like any other handle. */
+    /* The NTSTATUS of the last D3DKMT call this driver made that *refused*,
+     * for a probe that cannot see the driver's own Kmt: every kernel call
+     * behind feature 053 answers the application VK_ERROR_TOO_MANY_OBJECTS, so
+     * without this a guest run cannot say which of them refused.
+     *
+     * The refusal is latched rather than read back from the Kmt at the end,
+     * because `last_code()` is the last call of any kind: a driver that has
+     * just failed to share something goes on to free what it half-made, and
+     * those calls succeed and wipe it. Two guest runs reported zero that way.
+     * `physical_device` is there for the loader to dispatch on and is checked
+     * like any other handle. */
     VkResult last_kernel_status(VkPhysicalDevice physical_device, uint32_t *status);
     /* What the host says of its own opaque fd, said in Win32's spelling; every
      * other handle type is answered as absent, since nothing here turns a
@@ -283,6 +289,8 @@ private:
     /* The NT handles this process holds for the objects in `externals_`, which
      * is what makes one of them nameable in another process (feature 053). */
     SharedHandles           shared_handles_;
+    /* The NTSTATUS of the last kernel call that refused; 0 until one does. */
+    uint32_t                kernel_refusal_;
     Win32HandleKind         memory_handles_;
     Win32HandleKind         semaphore_handles_;
     /* A fresh fd of an object of `owner`, asked of the host each time an
@@ -331,6 +339,9 @@ private:
      * object, the NT handle, and the carrier allocation nothing else knows
      * about. */
     void                    release_shared(LoaderHandle &made, const ExternalObjectSlot &row);
+    /* A kernel call this driver made refused: written to the log with its
+     * NTSTATUS, and kept for a probe to read afterwards. */
+    void                    refused(const char *what);
     /* Asks the host, once per connection, whether it has the dma-buf
      * extension a shared allocation is exported through. */
     void                    learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_device);

@@ -728,29 +728,50 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
 /* Feature 053: the NTSTATUS a probe reads back. The kernel call is made by
  * *this* driver's Kmt, inside the DLL, so nothing outside can see it - and
  * every one of the calls behind sharing answers the application the same
- * VK_ERROR_TOO_MANY_OBJECTS. Without this the guest run that found the first
- * refusal reported code=0 while the driver had 0xC000000D in hand. */
-TEST(icd_external_handles, the_drivers_last_kernel_status_is_readable_from_outside)
+ * VK_ERROR_TOO_MANY_OBJECTS.
+ *
+ * What is kept is the last kernel call that *refused*, not the last call of
+ * any kind. A driver that has just failed to share something goes on to free
+ * what it half-made, and those calls succeed; reading the Kmt afterwards gave
+ * zero, which is what two guest runs reported while the answer sat in the
+ * log. */
+TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outside)
 { SharingRig    rig;
   std::uint32_t status = 9u;
   CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
-  CHECK_EQ(status, rig.rig().kmt().last_code());
-  /* A refused kernel call moves it, and the entry point answers the same. */
-  std::uint64_t handle = 0u;
-  CHECK(rig.rig().kmt().share_object(0x9999u, 0x9999u, handle) != av::Status::ok);
+  /* Nothing has refused yet. */
+  CHECK_EQ(status, 0u);
+
+  /* The kernel refuses the carrier, and the driver then frees the host memory
+   * it had already allocated - a call that succeeds. The refusal survives it. */
+  rig.rig().kmt().fail_at(MockKmt::Call::create_shared_allocation, 1u, MockKmt::invalid_parameter);
+  rig.rig().host().vk_handle(0, host_memory);
+  VkExportMemoryAllocateInfo exporting = {};
+  exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+  exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &exporting;
+  allocate.allocationSize = shared_size;
+  VkDeviceMemory refused = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &refused),
+           VK_ERROR_TOO_MANY_OBJECTS);
+  CHECK(rig.rig().kmt().last_code() != MockKmt::invalid_parameter);   /* the free wiped it */
   CHECK_EQ(rig.rig().root().last_kernel_status(rig.physical_device(), &status), VK_SUCCESS);
-  CHECK_EQ(status, rig.rig().kmt().last_code());
-  CHECK(status != 0u);
+  CHECK_EQ(status, MockKmt::invalid_parameter);
+
   /* A physical device this driver did not make, and no place to put the
    * answer, are both refused rather than answered with somebody's number. */
   CHECK(rig.rig().root().last_kernel_status(rig.physical_device(), nullptr) != VK_SUCCESS);
   CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkPhysicalDevice>(0xDEADu), &status) !=
         VK_SUCCESS);
   CHECK_EQ(status, 0u);
+
   /* And the loader finds it by name, as it finds the fault hook - with a
-   * dispatchable handle first, which is what the loader trampolines on. */
+   * dispatchable handle first, which is what the loader trampolines on: a hook
+   * with no arguments crashed rvkvkprobe.exe inside vulkan-1.dll. */
   using LastStatus = VkResult (*)(VkPhysicalDevice, std::uint32_t *);
   const auto entry = rig.entry<LastStatus>("vkRvkLastKernelStatus");
   CHECK(entry != nullptr);
   CHECK_EQ(entry(rig.physical_device(), &status), VK_SUCCESS);
-  CHECK_EQ(status, rig.rig().kmt().last_code()); }
+  CHECK_EQ(status, MockKmt::invalid_parameter); }

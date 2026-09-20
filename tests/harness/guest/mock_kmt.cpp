@@ -400,11 +400,15 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     if (!begin(Call::create_allocation)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
     AllocationDescriptor decoded;
-    /* Only the unshared length. A create asking for an identity goes through
-     * create_shared_allocation, whose buffer is two-way: taken here it would
-     * answer an allocation whose record was never minted, which is a thing no
-     * real kernel produces (feature 053). */
-    if (size != AllocationDescriptor::encoded_size || decoded.decode(descriptor, size) != Status::ok)
+    /* Either length, as the real one takes either: the descriptor is the first
+     * 48 bytes and a record may follow it. What this one cannot do is hand the
+     * minted id back - its buffer is const, and the real kernel copies the
+     * caller's bytes before the driver writes into them, so a caller that
+     * wants the id calls create_shared_allocation instead (feature 053). */
+    const std::uint32_t shareable =
+        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
+    if ((size != AllocationDescriptor::encoded_size && size != shareable) ||
+        decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
         return refuse(invalid_parameter);
     if (!zeroed(Call::create_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
@@ -412,9 +416,22 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     if (created != nullptr) {
         created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
         /* Kept as the runtime keeps it: these are the bytes dxgkrnl hands the
-         * opening process, and nothing else crosses with the allocation. */
+         * opening process, and nothing else crosses with the allocation. The
+         * miniport mints into *this* copy, which is why a one-way caller never
+         * sees an id. */
         created->created_size = size;
         for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
+        if (size == shareable) {
+            SharedObjectRecord record;
+            if (record.decode(created->created_with + AllocationDescriptor::encoded_size,
+                              SharedObjectRecord::encoded_size) == Status::ok &&
+                !record.assigned()) {
+                record.assign(next_object_id_, shared_adapter);
+                next_object_id_++;
+                static_cast<void>(record.encode(created->created_with + AllocationDescriptor::encoded_size,
+                                                SharedObjectRecord::encoded_size));
+            }
+        }
     }
     return succeed();
 }

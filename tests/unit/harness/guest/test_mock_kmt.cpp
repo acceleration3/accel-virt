@@ -1242,9 +1242,10 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
   CHECK_STATUS(kmt.create_shared_allocation(device, bytes, sizeof bytes, allocation), Status::ok);
   CHECK(allocation != 0u); }
 
-/* The plain create takes the unshared length only: a create asking for an
- * identity has a two-way buffer and goes through its own call. */
-TEST(mock_kmt_create_allocation, refuses_the_shareable_length)
+/* The plain create takes either length, as the real one does - what it cannot
+ * do is hand the minted id back, because its buffer is const. A caller that
+ * wants the id calls create_shared_allocation instead. */
+TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back)
 { MockKmt kmt;
   kmt.add_adapter(rvk, 3200u);
   std::uint32_t adapter = 0u;
@@ -1257,6 +1258,21 @@ TEST(mock_kmt_create_allocation, refuses_the_shareable_length)
                                             av::ScanoutTarget());
   std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
   CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
-  std::uint32_t allocation = 9u;
-  CHECK_STATUS(kmt.create_allocation(device, bytes, sizeof bytes, allocation), Status::invalid_parameter);
-  CHECK_EQ(allocation, 0u); }
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  std::uint32_t allocation = 0u;
+  CHECK_STATUS(kmt.create_allocation(device, bytes, sizeof bytes, allocation), Status::ok);
+  CHECK(allocation != 0u);
+  /* The caller's bytes are untouched: the kernel minted into its own copy. */
+  av::SharedObjectRecord unchanged;
+  CHECK_STATUS(unchanged.decode(bytes + av::AllocationDescriptor::encoded_size,
+                                av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  CHECK(!unchanged.assigned());
+  /* And a length that is neither is still refused. */
+  std::uint32_t refused = 9u;
+  CHECK_STATUS(kmt.create_allocation(device, bytes, av::AllocationDescriptor::encoded_size + 1u, refused),
+               Status::invalid_parameter);
+  CHECK_EQ(refused, 0u); }
