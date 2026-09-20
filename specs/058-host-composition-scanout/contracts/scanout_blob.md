@@ -33,9 +33,12 @@ error - the guest may disable twice, and does, on a mode change.
 
 ### Showing a blob
 
-Everything else binds head `scanout_id` to blob `resource_id`. The head is
-unbound first if it showed something, so a rebind never leaves two dma-bufs
-alive for one head. The answer is `VIRTIO_GPU_RESP_OK_NODATA`.
+Everything else binds head `scanout_id` to blob `resource_id`. A head that was
+already showing something is not hidden first: the new descriptor is made and
+the new pin taken, the host is told, and only then are the old ones let go, so
+the head never goes dark between two pictures (US2 scenario 2) and a refused
+rebind leaves it showing exactly what it showed. The answer is
+`VIRTIO_GPU_RESP_OK_NODATA`.
 
 ### Every refusal, and why
 
@@ -45,10 +48,9 @@ alive for one head. The answer is `VIRTIO_GPU_RESP_OK_NODATA`.
 | `padding` is not 0 | `ERR_INVALID_PARAMETER` |
 | any of `strides[1..3]` or `offsets[1..3]` is not 0 | `ERR_INVALID_PARAMETER` |
 | `scanout_id` is at or beyond 16 heads | `ERR_INVALID_PARAMETER` |
-| the host has no head `scanout_id` | `ERR_INVALID_PARAMETER` |
+| the host has no head `scanout_id` | `ERR_UNSPEC` |
 | the display cannot show a dma-buf | `ERR_UNSPEC` |
 | `resource_id` names no blob | `ERR_INVALID_RESOURCE_ID` |
-| `resource_id` names a host-visible blob | `ERR_INVALID_PARAMETER` |
 | `format` is not one of the eight in data-model.md | `ERR_INVALID_PARAMETER` |
 | `width` or `height` is 0 | `ERR_INVALID_PARAMETER` |
 | `strides[0]` is less than `width x 4` | `ERR_INVALID_PARAMETER` |
@@ -57,18 +59,19 @@ alive for one head. The answer is `VIRTIO_GPU_RESP_OK_NODATA`.
 | that sum is beyond the blob's size | `ERR_INVALID_PARAMETER` |
 | `r` is not inside `width x height`, or has a zero side | `ERR_INVALID_PARAMETER` |
 | the blob's pages cannot become a dma-buf | `ERR_UNSPEC` |
-| the blob is already pinned to the table's limit | `ERR_OUT_OF_MEMORY` |
+| the host-visible blob it names has none to make | `ERR_UNSPEC` |
 
 A refusal changes nothing: the head goes on showing what it showed, no pin is
-taken and no descriptor is opened. The two `ERR_UNSPEC` rows are the host
-refusing rather than the guest being wrong, and each is logged once per device
-with the value that caused it (FR-006); every `ERR_INVALID_*` row is the guest
-being wrong and is logged under the existing refusal budget.
+taken and no descriptor is opened. The rule the answers follow is one line -
+`ERR_INVALID_PARAMETER` is the guest being wrong, anything else is the host
+declining and is `ERR_UNSPEC` - so a guest can tell the two apart without a
+table.
 
-`ERR_INVALID_PARAMETER` for a host-visible blob is a statement about today, not
-about the shape: rung 2 of research §3 makes such a blob scanout-able, and the
-row becomes a success then. It is refused rather than silently ignored so the
-guest cannot believe a scanout it did not get.
+The three `ERR_UNSPEC` rows are all the same thing from the guest's side: this
+host will not show this memory. A host-visible blob is one of them today
+because `Host::create_host_memory` is a memfd with no seals and udmabuf takes
+only a sealed one (research §3); rung 2 makes that row a success, and nothing
+about the answer's shape changes when it does.
 
 ## `RESOURCE_FLUSH` (0x0104), 48 bytes
 
@@ -94,10 +97,10 @@ binding it twice.
 
 ## `SET_SCANOUT` (0x0103) naming a blob
 
-`ERR_INVALID_RESOURCE_ID`, exactly as `RESOURCE_CREATE_2D` over a blob id
-already answers (`blob_commands.cpp`): a blob is not a 2D resource and the
-2D scanout command is not the one that shows it. A request naming a 2D
-resource is left to the base class.
+Not intercepted, and that is a decision rather than an omission. The base class
+answers `ERR_INVALID_RESOURCE_ID` for any resource it does not hold, and a blob
+is not one of its resources, so the guest already gets the right answer.
+Intercepting it would mean a third decoder to say what is already said.
 
 ## `RESOURCE_UNREF` of a blob a head shows
 

@@ -1038,6 +1038,18 @@ tools/guest/run_guest_suite.py --memory-dump      # also pull C:\Windows\MEMORY.
 tools/guest/run_guest_suite.py --trace 'virtio_gpu_*' --trace 'virtio_queue_*'   # QEMU trace events into qemu.log
 ```
 
+**The display the run gives QEMU decides what the device can do.** A run uses
+`-vga none -display none`, and a console with no display backend has no GL
+context - it is the backend that calls `qemu_console_set_display_gl_ctx`, not
+the device - so `qemu_console_has_gl` is false and the device offers no dma-buf
+scanout at all (feature 058, `docs/kb/06-display.md`). `-display egl-headless`
+is what gives it one, and it keeps QMP `screendump` working: `egl-headless`
+imports the dma-buf as a texture, blits it and reads it back into the console's
+surface (`ui/egl-headless.c`, `egl_scanout_flush`), which is a host-side copy
+per flush that a `gtk,gl=on` run does not pay. It also needs QEMU built with
+GBM; without it `egl_scanout_dmabuf` is compiled out and a scanout the device
+hands over is dropped in silence.
+
 A held guest is reached with `tools/guest/guest_shell.py`, over the agent
 socket the runner lets go of:
 

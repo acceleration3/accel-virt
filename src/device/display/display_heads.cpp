@@ -8,7 +8,8 @@
 namespace av {
 
 DisplayHeads::DisplayHeads(Host &host, BlobTable &blobs)
-    : host_(host), blobs_(blobs), display_(Display::unasked)
+    : host_(host), blobs_(blobs), display_(Display::unasked), said_no_display_(false),
+      said_no_descriptor_(false)
 {
     AV_SCOPE("DisplayHeads::DisplayHeads");
 }
@@ -30,6 +31,14 @@ bool DisplayHeads::takes_dmabuf()
 
 /* A binding acquires nothing at construction, so the only way construct
  * refuses is a slot already made, which is what the guard asks. */
+void DisplayHeads::say_once(bool &said, const char *what)
+{
+    AV_SCOPE("DisplayHeads::say_once");
+    if (said) return;
+    said = true;
+    host_.log(what);
+}
+
 ScanoutBinding &DisplayHeads::binding(uint32_t head)
 {
     AV_SCOPE("DisplayHeads::binding");
@@ -48,9 +57,14 @@ Status DisplayHeads::show(uint32_t head, uint32_t blob, const ScanoutFramebuffer
     AV_SCOPE("DisplayHeads::show");
     host_.require_main_loop("DisplayHeads::show");
     if (head >= max_heads) return Status::invalid_parameter;
-    if (!takes_dmabuf()) return Status::not_supported;
-    if (!host_.display_takes_dmabuf(head)) return Status::not_supported;
-    return binding(head).show(blob, framebuffer);
+    if (!takes_dmabuf() || !host_.display_takes_dmabuf(head)) {
+        say_once(said_no_display_, "virtio-gpu-rvk: this display shows no dma-buf on the head asked for");
+        return Status::not_supported;
+    }
+    const Status shown = binding(head).show(blob, framebuffer);
+    if (shown == Status::not_supported)
+        say_once(said_no_descriptor_, "virtio-gpu-rvk: this host makes no dma-buf over a blob's memory");
+    return shown;
 }
 
 Status DisplayHeads::hide(uint32_t head)

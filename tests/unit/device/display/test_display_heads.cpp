@@ -130,11 +130,32 @@ TEST(display_heads, a_host_with_no_gl_display_shows_nothing_and_says_so_once)
 { Fixture fixture(0u);
   CHECK(!fixture.heads().takes_dmabuf());
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK(std::strstr(fixture.host().last_log(), "shows no dma-buf") != nullptr);
+  /* A guest that keeps asking does not keep saying it: the log is the reason
+   * this host cannot, not a frame counter. */
+  for (std::uint32_t again = 0u; again < 20u; again++)
+      CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  CHECK_EQ(fixture.host().logged(), 1u);
   CHECK(fixture.heads().invariants_hold());
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
   /* Nothing was pinned, so the guest may still release the blob. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
+
+/* The other thing a host can fail at, said once for the same reason. */
+TEST(display_heads_show, a_host_that_makes_no_descriptor_says_so_once)
+{ Fixture fixture(1u);
+  fixture.host().refuse_dmabufs();
+  CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
+  CHECK(std::strstr(fixture.host().last_log(), "makes no dma-buf") != nullptr);
+  const std::uint32_t said = fixture.host().logged();
+  for (std::uint32_t again = 0u; again < 20u; again++)
+      CHECK_STATUS(fixture.heads().show(0u, 2u, fixture.whole()), Status::not_supported);
+  CHECK_EQ(fixture.host().logged(), said);
+  CHECK(fixture.heads().invariants_hold());
+  CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
+  CHECK_STATUS(fixture.blobs().release(2u), Status::ok); }
 
 TEST(display_heads_show, a_head_the_host_does_not_have_is_refused_even_when_the_display_takes_dma_bufs)
 { Fixture fixture(1u);

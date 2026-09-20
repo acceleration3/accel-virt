@@ -65,6 +65,11 @@ private:
     enum class Display : uint32_t { unasked, takes_dmabuf, refuses_dmabuf };
 
     /* Head `head`, made on first use; `head` must be below max_heads. */
+    /* The first refusal of each kind, once per device (FR-006): a display that
+     * will not show a dma-buf and a blob whose memory cannot become one are
+     * both things about this host, and a guest that keeps asking must not turn
+     * the log into the reason the run is slow. */
+    void                  say_once(bool &said, const char *what);
     ScanoutBinding       &binding(uint32_t head);
     /* Head `head` if it has ever been used, else null. */
     const ScanoutBinding *made(uint32_t head) const;
@@ -72,6 +77,8 @@ private:
     Host                            &host_;
     BlobTable                       &blobs_;
     Display                          display_;
+    bool                             said_no_display_;
+    bool                             said_no_descriptor_;
     ObjectStorage<ScanoutBinding>    heads_[max_heads];
 
     friend struct DisplayHeadsProbe;

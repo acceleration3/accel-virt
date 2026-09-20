@@ -46,6 +46,8 @@ void DeviceCapset::resolve_display(bool takes_dmabuf)
     if (display_resolved_) return;
     display_resolved_ = true;
     if (described_ && takes_dmabuf) info_.announce(CapsetInfo::feature_dmabuf_scanout);
+    host_.log(takes_dmabuf ? "virtio-gpu-rvk: the display shows dma-bufs; blobs may be scanned out"
+                           : "virtio-gpu-rvk: the display shows no dma-buf; the guest keeps the 2D path");
 }
 
 bool DeviceCapset::display_resolved() const

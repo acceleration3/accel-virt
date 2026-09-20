@@ -94,6 +94,28 @@ Three mechanisms, in increasing order of preference:
    several planes and have it composite. Skip this initially; it is a large
    surface and DWM works fine without it.
 
+### What the host can show, and who decides it
+
+A paravirtual driver has one more option than those three, and it is not on the
+list because it is not a DDI at all: hand the host's display the guest's own
+pages and let it sample them, so no frame is transferred. QEMU takes that as a dma-buf -
+`qemu_console_gl_scanout_dmabuf` then `qemu_console_gl_update` - and the device
+side of it is feature 058.
+
+Two things about it are worth knowing before reading that code:
+
+- **The device does not decide whether it is available; the display backend
+  does.** `qemu_console_has_gl(con)` is true only once something has called
+  `qemu_console_set_display_gl_ctx`, and the only callers are the display
+  backends themselves (`ui/egl-headless.c`, `ui/gtk.c`, `ui/sdl2.c`,
+  `ui/dbus.c`, `ui/spice-display.c`). **`-display none` therefore has no dma-buf
+  scanout at all**, whatever the device offers, and that is the configuration
+  the guest suite runs in today.
+- **It is not decidable at realize.** QEMU registers its displays in
+  `qemu_init_displays()`, after `qmp_x_exit_preconfig()` has realized every
+  device, so a device that asks during realize is told no on every host. The
+  device asks when the guest first reads the capset instead.
+
 `DxgkDdiControlInterrupt` / `ControlInterrupt2` / `ControlInterrupt3` is how
 `dxgkrnl` asks you to enable or disable vsync interrupt reporting. A virtual
 display must synthesize vsync — a timer at the mode's refresh rate calling
