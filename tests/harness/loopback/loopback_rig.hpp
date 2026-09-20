@@ -25,7 +25,8 @@ public:
 
     /* `gpu` names the host GPU the device is bound to; rigs share one unless a
      * test asks for another (feature 040, FR-005). */
-    explicit LoopbackRig(const std::uint8_t *gpu = LoopbackDevice::default_gpu);
+    explicit LoopbackRig(const std::uint8_t *gpu = LoopbackDevice::default_gpu,
+                         const char *record = nullptr);
     ~LoopbackRig();
     LoopbackRig(const LoopbackRig &) = delete;
     LoopbackRig &operator=(const LoopbackRig &) = delete;

@@ -42,6 +42,12 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(qdev);
     VirtIOGPU *g = VIRTIO_GPU(qdev);
     const RvkExecutorOps *executor = NULL;
+    const RvkRecordingOptions recording = {
+        .path = r->record,
+        .limit_bytes = r->record_limit,
+        .kinds = r->record_kinds,
+        .wrap = r->record_wrap,
+    };
     char error[256];
 
     /* Before the core: its capset reports host-visible memory from the region. */
@@ -84,7 +90,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     rvk_device_trace_start(virtio_gpu_rvk_schedule);
     virtio_gpu_rvk_host_init(r);
     r->core = rvk_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
-                                error, sizeof(error));
+                                &recording, error, sizeof(error));
     if (!r->core) {
         error_setg(errp, "%s", error);
         return;
@@ -188,6 +194,10 @@ static void virtio_gpu_rvk_instance_init(Object *obj)
 static const Property virtio_gpu_rvk_properties[] = {
     DEFINE_PROP_STRING("host-gpu", VirtIOGPURvk, host_gpu),
     DEFINE_PROP_STRING("executor", VirtIOGPURvk, executor),
+    DEFINE_PROP_STRING("record", VirtIOGPURvk, record),
+    DEFINE_PROP_UINT64("record-limit", VirtIOGPURvk, record_limit, 0),
+    DEFINE_PROP_STRING("record-kinds", VirtIOGPURvk, record_kinds),
+    DEFINE_PROP_BOOL("record-wrap", VirtIOGPURvk, record_wrap, false),
 };
 
 static void virtio_gpu_rvk_class_init(ObjectClass *klass, const void *data)

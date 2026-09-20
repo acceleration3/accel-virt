@@ -29,7 +29,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3 umddi-4")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
@@ -64,17 +64,22 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 # feature has built yet - a transport (043), an ICD connection (045), a backend
 # registry (042). They are generated and committed all the same, because the
 # gate compares the whole tree; each joins a build when its feature arrives.
-set(AV_GENERATED_SOURCES
+# The three command-name tables are strings the registries gave their ids and
+# nothing else - no API header, no registry type - so they compile wherever the
+# rest of the tree does and the recording tools can name a command on a
+# checkout with no registries fetched (feature 065).
+set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp)
+set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_descriptor_template_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
   # The OpenGL host decode path, which compiles now that the sync hooks are
   # fields on RealGl rather than free functions with nowhere to keep state
   # (feature 042).
@@ -98,9 +103,14 @@ endif()
 # that name (feature 042).
 set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/executor_ops.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
+# rvkrecord's own entry point, for the same reason: a main() in a library is a
+# second main wherever that library is linked (feature 065).
+set(AV_RECORD_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/recording_tool.cpp)
+list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RECORD_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
+list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
 # The guest's encoders join the core too, and nothing of the device's: the rvk
 # scenarios in src/guest send real Vulkan and OpenCL streams (044), and the
 # device core for QEMU below never encodes one.
@@ -151,8 +161,10 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
 list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
+list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
+list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
 if(AV_GENERATED)
   list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_SOURCES})
 endif()
@@ -190,6 +202,14 @@ set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
 # object has exactly one thing to say: the symbol QEMU looks up. Anything else
 # reaching the dynamic table is surface nobody asked for.
 target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
+
+# ---- rvkrecord: a recording printed, and replayed into a library (065) -----
+# Built in every configuration, before AV_QEMU's return: it reads what a device
+# wrote and drives the same rvk_executor.h a device drives, so it belongs
+# wherever either of those is built.
+add_executable(rvkrecord ${AV_RECORD_ENTRY})
+target_link_libraries(rvkrecord PRIVATE av_core ${CMAKE_DL_LIBS})
+target_include_directories(rvkrecord PRIVATE src)
 
 # ---- two libraries that exist to be held to the ABI ------------------------
 # Built in every configuration, before AV_QEMU's return: the qemu smoke and
@@ -330,6 +350,21 @@ if(AV_GENERATED)
   target_link_options(av_cl_icd PUBLIC ${AV_TEST_FLAGS})
 endif()
 
+# The Direct3D user-mode driver's portable core (feature 055): src/icd/d3d over
+# the pieces all three user-mode drivers share. Its own archive, apart from the
+# two ICDs', as the three DLLs are apart - and unlike them it needs no
+# generated tree, because the D3D DDI is the WDK's shape, not a registry's.
+# ExtensionPolicy is the one piece of src/icd/common a Direct3D driver has no
+# use for - it reports Khronos extensions - and it is the one that needs the
+# Vulkan headers, so this archive names what it takes rather than globbing.
+file(GLOB_RECURSE AV_D3D_UMD_SOURCES CONFIGURE_DEPENDS src/icd/d3d/*.cpp)
+add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
+  ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/sliced_wait.cpp)
+target_link_libraries(av_d3d_umd PUBLIC av_core)
+target_compile_options(av_d3d_umd PRIVATE ${AV_TEST_FLAGS})
+target_link_options(av_d3d_umd PUBLIC ${AV_TEST_FLAGS})
+
 # ---- unit tests: one binary per module, so a crash isolates -----------------
 enable_testing()
 if(AV_COVERAGE)
@@ -369,6 +404,8 @@ foreach(src ${AV_UNIT_TESTS})
       target_link_libraries(${name} PRIVATE av_cl_icd)
     elseif(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
     target_link_libraries(${name} PRIVATE av_gl_icd)
+  elseif(src MATCHES "/tests/unit/icd/d3d/" OR name MATCHES "^test_(umd_rig|fake_d3d_runtime|fullstack_umd)$")
+    target_link_libraries(${name} PRIVATE av_d3d_umd)
   elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
@@ -486,7 +523,8 @@ ExternalProject_Add(rvktest
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe)
+                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
@@ -529,6 +567,14 @@ add_test(NAME rvkgl_image
                  --require-export DrvShareLists --require-export DrvGetProcAddress
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
+
+# The Direct3D user-mode driver exports exactly the two names the runtimes
+# resolve (feature 055, contracts/umd_interface.md). No user32: nothing in it
+# touches a window, and the DXGI seam presents through the KMD, not GDI.
+add_test(NAME rvkumd_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkumd.dll --dll --only-exports
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
 
 # The OpenCL ICD exports exactly the two names the Khronos loader may resolve
 # (feature 052, research §1); it presents nothing, so it wants no user32.

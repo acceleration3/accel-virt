@@ -17,7 +17,7 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The ICDs' shims, rvkvkprobe.exe's and rvkinspect.exe's are their own
 # targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|opencl|probe|inspect)/")
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|opencl|d3d|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -311,3 +311,40 @@ if(EXISTS ${OPENCL_LOADER_TREE}/loader/icd.c)
 else()
   message(STATUS "OpenCL loader: skipped, no pinned tree; run tools/fetch_opencl_loader.py")
 endif()
+
+# rvkumd.dll, the Direct3D user-mode driver (feature 055): the driver's
+# decisions in src/icd/d3d over the transport, D3DKMT through gdi32, and the
+# shim all three user-mode drivers share in icd/. Unlike the two ICDs it links
+# no generated tree - the D3D DDI is the WDK's shape, not a registry's - and
+# unlike them it imports no user32: nothing here touches a window.
+file(GLOB_RECURSE RVKUMD_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/d3d/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/d3d/*.cpp)
+list(REMOVE_ITEM RVKUMD_SOURCES ${RVKTEST_GENERATED})
+# ExtensionPolicy reports Khronos extensions, which a Direct3D driver has none
+# of; GdiWindowSurface is the ICDs' presentation seam.
+list(FILTER RVKUMD_SOURCES EXCLUDE REGEX "(extension_policy|gdi_window_surface)\\.cpp$")
+list(APPEND RVKUMD_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
+add_library(rvkumd SHARED ${RVKUMD_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_dependencies(rvkumd rvktest_imports)
+set_target_properties(rvkumd PROPERTIES PREFIX "")
+target_include_directories(rvkumd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
+# d3d10umddi.h includes d3dkmddi.h, the kernel DDI header, which the WDK ships
+# in shared/ - the kit's wdk-shared. Only this target sees it: it is where the
+# UMD DDI's own definitions come from, and nothing else in user mode needs it.
+target_compile_options(rvkumd PRIVATE -imsvc/windows-kit/wdk-shared)
+target_link_options(rvkumd PRIVATE /ENTRY:rvkumd_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/d3d/rvkumd.def)
+set_property(TARGET rvkumd APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/d3d/rvkumd.def)
+target_link_libraries(rvkumd PRIVATE ${RVKTEST_IMPORTS})

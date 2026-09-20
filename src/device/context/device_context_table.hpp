@@ -20,6 +20,7 @@ class FenceInterrupts;
 class HostSharedObjects;
 class Host;
 class StateWriter;
+class WireRecorder;
 struct DeviceContextTableProbe;
 
 class DeviceContextTable {
@@ -28,7 +29,7 @@ public:
     static constexpr uint32_t max_contexts = 64u;
 
     DeviceContextTable(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
-                       const ExecutorLibrary &library);
+                       const ExecutorLibrary &library, WireRecorder &recorder);
     ~DeviceContextTable();
     DeviceContextTable(const DeviceContextTable &) = delete;
     DeviceContextTable &operator=(const DeviceContextTable &) = delete;
@@ -62,6 +63,7 @@ private:
     HostSharedObjects           &shared_;
     FenceInterrupts             &interrupts_;
     const ExecutorLibrary       &library_;
+    WireRecorder                &recorder_;
     /* Before the contexts, whose executors are withdrawn from it as they go. */
     ExecutorShares               shares_;
     ObjectStorage<DeviceContext> slots_[max_contexts];

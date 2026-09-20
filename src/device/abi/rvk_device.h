@@ -125,7 +125,29 @@ typedef struct RvkHostOps {
     int (*dmabuf_over_guest)(void *opaque, void *const *runs, const uint64_t *sizes, uint32_t count,
                              int *fd);
     void (*close_dmabuf)(void *opaque, int fd);
+    /* The wire recording at `path`, emptied if it was there: its handle, or
+     * NULL (feature 065). */
+    void *(*create_recording)(void *opaque, const char *path);
+    /* `size` bytes appended to the recording and flushed to the file system,
+     * from any thread: nonzero when the host could not write them all. */
+    int (*append_recording)(void *opaque, void *file, const uint8_t *bytes, size_t size);
+    /* The recording back to empty; nonzero when the host could not. */
+    int (*truncate_recording)(void *opaque, void *file);
+    void (*close_recording)(void *opaque, void *file);
 } RvkHostOps;
+
+/* What a device writes down of what crosses its wire (docs/protocol.md), from
+ * the device's own properties; NULL, or a NULL `path`, is recording off. */
+typedef struct RvkRecordingOptions {
+    const char *path;
+    /* The ceiling in bytes; 0 is the default 256 MiB. */
+    uint64_t limit_bytes;
+    /* The comma-separated record kinds, or NULL for the default set. */
+    const char *kinds;
+    /* Nonzero: at the ceiling, wrap back to the file header instead of
+     * stopping. */
+    int wrap;
+} RvkRecordingOptions;
 
 /* Runs routine(context) later on QEMU's main loop, under the big lock; any
  * thread, and with no device's state behind it. */
@@ -143,7 +165,8 @@ void rvk_device_trace_start(RvkMainLoopScheduler schedule);
  * `base_blobs` is the base class's blob property. NULL on failure, with the
  * reason in `error`. `ops` and `executor` must outlive the device. Main loop. */
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, char *error, size_t error_size);
+                             int base_blobs, const RvkRecordingOptions *recording, char *error,
+                             size_t error_size);
 /* Nonzero when the core answered the control request (a
  * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);

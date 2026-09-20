@@ -5,6 +5,7 @@
 #include "device/context/context_signal.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/fence/fence_window.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
@@ -62,7 +63,8 @@ public:
     Fixture()
         : page_{}, page_pointer_(page_), page_length_(sizeof page_), ring_bytes_{}, ring_pointer_(ring_bytes_),
           ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, ring_order), interrupts_(host_),
-          fences_(host_, interrupts_), execution_(host_, fences_, ring_order),
+          recorder_(host_), fences_(host_, interrupts_, recorder_, 1u),
+          execution_(host_, fences_, ring_order),
           ring_(host_, fences_, execution_.batches()), worker_(host_, ring_), signal_(host_, worker_, fences_)
     {
         std::memset(page_, 0xEE, sizeof page_);
@@ -122,6 +124,7 @@ private:
     MockHost                 host_;
     GuestRing                guest_;
     FenceInterrupts          interrupts_;
+    av::WireRecorder         recorder_;
     FenceReporter            fences_;
     av::MockContextExecution execution_;
     RingConsumer             ring_;

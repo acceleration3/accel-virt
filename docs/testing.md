@@ -488,6 +488,29 @@ What it covers today (M2's rvk contexts):
   fence it raises afterwards reaches no notifier while the fence page still
   advances, and the next `DRIVER_OK` connects them again
 
+### Recordings: the same run, read back and replayed
+
+The device can write down what crossed the wire (`docs/protocol.md`, feature
+065), and that turns a loopback run into two more tests, both in
+`tests/loopback/test_loopback_recording.cpp`:
+
+- `LoopbackRig(gpu, "loopback.rvk")` records into the `MockHost`'s memory, and
+  the recording read back holds the blobs, the setup, every batch with the
+  bytes the executor received, the replies and the fences, in order. That is
+  the only place where what the device wrote down is compared against what the
+  real guest core actually sent.
+- the same recording replays into an executor library through
+  `rvk_executor.h`, and every recorded reply is the answer the replay
+  produced - a round trip with the wire in the middle.
+
+A recording read back is bytes this side did not write, so `RecordingReader`
+has a hostile-input table and `fuzz_recording_reader` at L3. The printer and
+the replay are built on the reader and never frame a record themselves, but a
+batch record's payload is the guest's own framed commands, which the reader
+does not walk: `fuzz_recording_printer` drives the printer over arbitrary bytes
+for that, with and without the payload hex and under a filter that reads every
+command's name.
+
 ### The full-stack rig: L2 and L4 joined
 
 `LoopbackRig` stands in for the miniport, and `LoopbackKmt` (043) does the

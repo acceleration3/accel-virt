@@ -39,6 +39,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cts_results import CtsRatchet, QpaResults, SuiteComparison  # noqa: E402
+from recording_cost import RecordingCost  # noqa: E402
 from submit_ratchet import SubmitRatchet  # noqa: E402
 from cts_shards import CtsShards  # noqa: E402
 from cts_subset import CtsSubset  # noqa: E402
@@ -63,6 +64,11 @@ RVK_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
 # transport that has stopped being interrupt-driven, and one near dxgkrnl's 2 s
 # TdrDelay is a reset waiting to happen.
 RVK_LATENCY_LIMIT_US = 50000
+# SC-002's own measurement (feature 065): the same no-op, 31 warm rounds after
+# the first, whose median is what a recording's cost is taken from. The first
+# round trip is cold and swings by milliseconds on this host, which is orders
+# of magnitude more than the one write a record costs.
+RVK_WARM_MEDIAN = re.compile(rb"^ok transport\.warm_median (\d+)", re.MULTILINE)
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
@@ -244,6 +250,8 @@ def arguments():
                         help="the OpenGL ICD the package names (feature 050)")
     parser.add_argument("--cl-icd", default=str(ROOT / "build" / "guest" / "rvkcl.dll"),
                         help="the OpenCL ICD the package names (feature 052)")
+    parser.add_argument("--umd", default=str(ROOT / "build" / "guest" / "rvkumd.dll"),
+                        help="the Direct3D user-mode driver the package names (feature 055)")
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
@@ -253,6 +261,11 @@ def arguments():
     parser.add_argument("--require-host-visible", action="store_true",
                         help="fail the run when the host cannot find the guest's pattern in the BAR; off until "
                              "something asks for host memory (feature 043)")
+    parser.add_argument("--record", action="store_true",
+                        help="write a wire recording to recording.rvk in the work directory, which "
+                             "build/rvkrecord prints and replays (feature 065)")
+    parser.add_argument("--record-limit", type=int, default=256 * 1024 * 1024, metavar="BYTES",
+                        help="the recording's ceiling; it stops there rather than growing past it")
     parser.add_argument("--hostmem", type=int, default=256, metavar="MIB",
                         help="the device's host-visible region, in MiB; 0 gives it none, where the driver "
                              "reports one segment and the same allocation goes to guest memory "
@@ -382,6 +395,11 @@ def qemu_command(args, work, disk, rescue):
     # it is a run against an adapter that must fall back (feature 041, FR-001).
     if args.hostmem:
         properties.append(f"hostmem={args.hostmem}M")
+    # What crossed the wire, written beside qemu.log so a run that rendered
+    # wrong can be printed and replayed afterwards (feature 065, FR-001).
+    if args.record and not rescue:
+        properties.append(f"record={work / RECORDING}")
+        properties.append(f"record-limit={args.record_limit}")
     device = [] if rescue else ["-device", ",".join(properties)]
     command = [
         args.qemu, "-machine", f"q35,accel={args.accel},memory-backend=ram",
@@ -473,6 +491,11 @@ DISPLAY_SIZE = (1280, 800)
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
 DISPLAY_DEVICE = "gpu"
+RECORDING = "recording.rvk"
+"""What --record writes in the work directory, beside qemu.log (feature 065)."""
+RECORDING_COST = "recording-cost.txt"
+"""Where the rvk scenario keeps each side of SC-002's comparison. It outlives a
+run, because the two sides are two boots: one with --record and one without."""
 # The device's three sources and eight messages its contexts' fence queues
 # share, matching rvkgpu.inf's MessageNumberLimit (feature 043).
 FENCE_VECTORS = 11
@@ -820,6 +843,9 @@ class GuestRun:
         prefix = "rescue." if rescue else ""
         self.qemu_log = self.work / ("qemu-rescue.log" if rescue else "qemu.log")
         self.qmp_lost = False
+        if self.args.record and not rescue:
+            self.say(f"recording what crosses the wire into {self.work / RECORDING}; "
+                     f"build/rvkrecord print it")
         output = open(self.qemu_log, "wb")
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
         # What the test executor is told to do to the host's work: a stall
@@ -874,6 +900,7 @@ class GuestRun:
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
                       (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
                       (self.args.cl_icd, PACKAGE_DIRECTORY + "\\rvkcl.dll"),
+                      (self.args.umd, PACKAGE_DIRECTORY + "\\rvkumd.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:
@@ -1480,6 +1507,36 @@ class GuestRun:
         self.say(f"rvk latency: a transport no-op round trip took {microseconds} us")
         if microseconds > RVK_LATENCY_LIMIT_US:
             raise StepFailed("rvk", f"a no-op took {microseconds} us, past the {RVK_LATENCY_LIMIT_US} us threshold")
+        self.recording_cost(out)
+
+    def recording_cost(self, report):
+        """SC-002: what a wire recording costs a no-op round trip. No boot can
+        say it alone - one runs with --record and one without - so each keeps
+        its warm median beside qemu.log and whichever completes the pair
+        subtracts. Said, never judged: the threshold a run would be failed
+        against is a number this comparison exists to produce."""
+        median = RVK_WARM_MEDIAN.search(report)
+        if median is None:
+            self.say("recording cost skipped: the rvk run timed no warm round trip")
+            return
+        measured = int(median.group(1))
+        side = "on" if self.args.record else "off"
+        record = RecordingCost(self.work / RECORDING_COST)
+        try:
+            record.keep(side, measured)
+        except ValueError as refused:
+            raise StepFailed("recording.cost", str(refused)) from refused
+        cost = record.cost()
+        if cost is None:
+            missing = "without" if self.args.record else "with"
+            self.say(f"recording cost: a no-op round trip took {measured} us with recording {side}; the same "
+                     f"run {missing} --record completes SC-002's pair in {self.work / RECORDING_COST}")
+            return
+        held = record.measured
+        self.say(f"recording cost ok: a no-op round trip took {held['off']} us with recording off and "
+                 f"{held['on']} us with it on; " +
+                 (f"a recording costs {cost} us" if cost > 0 else
+                  "a recording costs nothing this pair could measure"))
 
     def vulkan(self):
         """Feature 045: the Khronos loader finds rvkvk.dll through the adapter's

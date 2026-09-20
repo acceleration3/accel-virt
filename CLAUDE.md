@@ -36,7 +36,10 @@ it, `scope_binding`'s pointer to the binary's trace table (with the device
 module's `DeviceTraceRoot` beside `DeviceModule`), rvktest.exe's
 `ProcessTrace` in `src/um/program_entry.cpp`'s storage, and the OpenGL ICD's
 root behind the `Drv*` exports (`src/um/opengl/rvkgl_exports.cpp`) and
-`GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`) are the only
+`GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`), and the D3D
+user-mode driver's root behind `OpenAdapter10_2` and `OpenAdapter12`
+(`src/um/d3d/rvkumd_exports.cpp`) with `UmdBinding`'s pointer to it
+(`src/icd/d3d/umd_binding.cpp`) are the only
 process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single
 translation unit defining those entry points.
@@ -171,12 +174,16 @@ Changed, because the kernel has no heap operators:
 
 Changed, because the DDI boundary is C structures:
 
-- **Private data members** do not apply to DDI records: the structs in
-  `src/core/ddi/` named `*Record` that overlay memory dxgkrnl owns
-  (`DXGKRNL_INTERFACE`, `DXGK_CHILD_DESCRIPTOR`, ...). Their fields are public,
-  keep the WDK's names so they grep to the header, and every offset is proven in
-  `src/km/ddi_record_layout.cpp`. A record declares no member functions;
-  `tools/check_design.py` enforces both.
+- **Private data members** do not apply to DDI records: the structs named
+  `*Record` in a DDI record directory, which overlay memory their caller owns.
+  `src/core/ddi/` holds dxgkrnl's (`DXGKRNL_INTERFACE`,
+  `DXGK_CHILD_DESCRIPTOR`, ...), proven in `src/km/ddi_record_layout.cpp`;
+  `src/icd/d3d/ddi/` holds the Direct3D runtimes'
+  (`D3D10DDIARG_OPENADAPTER`, `DXGI1_6_1_DDI_BASE_FUNCTIONS`, ...), proven in
+  `src/um/d3d/umd_record_layout.cpp`. Their fields are public and keep the
+  WDK's names so they grep to the header. A record declares no member
+  functions; `tools/check_design.py` enforces both, and
+  `tools/header_scan.py`'s `RECORD_DIRECTORIES` is the list.
 
 Tightened, at the project's request:
 

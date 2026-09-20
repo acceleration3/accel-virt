@@ -1,0 +1,4 @@
+LIBRARY rvkumd.dll
+EXPORTS
+OpenAdapter10_2
+OpenAdapter12

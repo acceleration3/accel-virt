@@ -9,6 +9,7 @@
 #include "device/abi/table_host.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "harness/executor/mock_context_execution.hpp"
 #include "device/host/host.hpp"
@@ -36,7 +37,8 @@ using av::Worker;
 TEST(table_host, a_worker_runs_over_the_c_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   av::FenceInterrupts interrupts(host);
-  av::FenceReporter fences(host, interrupts);
+  av::WireRecorder recorder(host);
+  av::FenceReporter fences(host, interrupts, recorder, 1u);
   av::MockContextExecution execution(host, fences, 12u);
   av::RingConsumer ring(host, fences, execution.batches());
   Worker worker(host, ring);
@@ -334,3 +336,27 @@ TEST(table_host, forwards_the_dma_buf_over_guest_pages_and_its_refusals)
   before.close_dmabuf(7);
   CHECK_EQ(none, -1);
   host.unmap_guest(run, length); }
+
+TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *file = nullptr;
+  CHECK_STATUS(host.create_recording("run.rvk", file), Status::ok);
+  CHECK(file != nullptr);
+  const std::uint8_t bytes[] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(mock.recording_length("run.rvk"), sizeof bytes);
+  CHECK_EQ(mock.recording_bytes("run.rvk")[2], 3u);
+  CHECK_STATUS(host.truncate_recording(file), Status::ok);
+  CHECK_EQ(mock.recording_length("run.rvk"), 0u);
+  mock.fail_recording_append_at(1u);
+  CHECK_STATUS(host.append_recording(file, bytes, sizeof bytes), Status::no_space);
+  mock.fail_recording_truncate_at(1u);
+  CHECK_STATUS(host.truncate_recording(file), Status::no_space);
+  host.close_recording(file);
+  CHECK_EQ(mock.live_recordings(), 0u);
+  /* The bytes outlive the close, as a file does. */
+  CHECK(mock.recording_bytes("run.rvk") != nullptr);
+  mock.fail_recording_create_at(1u);
+  void *refused = &mock;
+  CHECK_STATUS(host.create_recording("again.rvk", refused), Status::no_memory);
+  CHECK(refused == nullptr); }

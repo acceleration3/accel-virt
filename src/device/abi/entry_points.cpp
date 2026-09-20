@@ -26,8 +26,9 @@ void rvk_device_trace_start(RvkMainLoopScheduler schedule)
 
 __attribute__((visibility("default")))
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, char *error, size_t error_size)
-{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, error, error_size)); }
+                             int base_blobs, const RvkRecordingOptions *recording, char *error,
+                             size_t error_size)
+{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, error, error_size)); }
 
 __attribute__((visibility("default")))
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type)

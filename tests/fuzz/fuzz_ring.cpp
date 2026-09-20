@@ -69,7 +69,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     const std::uint64_t page_length = sizeof page;
     av::MockHost        host;
     av::FenceInterrupts interrupts(host);
-    av::FenceReporter   fences(host, interrupts);
+    av::WireRecorder    recorder(host);
+    av::FenceReporter   fences(host, interrupts, recorder, 1u);
     av::MockContextExecution execution(host, fences, 12u);
     av::RingConsumer    consumer(host, fences, execution.batches());
     if (fences.prepare(av::FenceWindow(av::BlobWindow(&page_pointer, &page_length, 1u, page_length)), 0u) !=

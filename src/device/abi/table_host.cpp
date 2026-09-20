@@ -328,4 +328,29 @@ bool TableHost::resource_exists(uint32_t id)
     return ops_.resource_exists(ops_.opaque, id) != 0;
 }
 
+Status TableHost::create_recording(const char *path, void *&file)
+{
+    AV_SCOPE("TableHost::create_recording");
+    file = ops_.create_recording(ops_.opaque, path);
+    return file != nullptr ? Status::ok : Status::no_memory;
+}
+
+Status TableHost::append_recording(void *file, const uint8_t *bytes, size_t size)
+{
+    AV_SCOPE("TableHost::append_recording");
+    return ops_.append_recording(ops_.opaque, file, bytes, size) == 0 ? Status::ok : Status::no_space;
+}
+
+Status TableHost::truncate_recording(void *file)
+{
+    AV_SCOPE("TableHost::truncate_recording");
+    return ops_.truncate_recording(ops_.opaque, file) == 0 ? Status::ok : Status::no_space;
+}
+
+void TableHost::close_recording(void *file)
+{
+    AV_SCOPE("TableHost::close_recording");
+    ops_.close_recording(ops_.opaque, file);
+}
+
 }  // namespace av

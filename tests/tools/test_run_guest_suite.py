@@ -115,7 +115,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
                      "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkcl.dll", "rvkclprobe.exe",
-                     "OpenCL.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
+                     "OpenCL.dll", "rvkumd.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
                      "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
@@ -140,6 +140,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll", "--cl-icd", self.scratch / "rvkcl.dll",
+                     "--umd", self.scratch / "rvkumd.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -178,7 +179,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 9)
+        self.assertEqual(events.count("file"), 10)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -188,6 +189,9 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
         # The OpenGL ICD is in the package too, which names it (feature 050).
         self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
+        # And the Direct3D user-mode driver, which the software key names four
+        # times over (feature 055).
+        self.assertIn("file C:\\rvk\\package\\rvkumd.dll 1000", lines)
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
@@ -372,6 +376,57 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite("--rvk")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("guest: rvk failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
+
+    def rvk_run(self, *extra, median="ok transport.warm_median 640\n"):
+        """An rvk run whose transport scenario timed its warm rounds."""
+        report = "ok transport.nop\nok transport.latency 812\n" + median + "rvktest: 12 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": report, "collect": COLLECTED})
+        return self.run_suite("--rvk", *extra)
+
+    def test_two_rvk_runs_make_the_cost_of_a_recording_a_number(self):
+        """SC-002: the first boot can only keep its own round trip, and the one
+        that completes the pair is the one that says what a recording cost."""
+        first = self.rvk_run()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("guest: recording cost: a no-op round trip took 640 us with recording off; the same run "
+                      f"with --record completes SC-002's pair in {self.work / 'recording-cost.txt'}", first.stdout)
+        second = self.rvk_run("--record", median="ok transport.warm_median 712\n")
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertIn("guest: recording cost ok: a no-op round trip took 640 us with recording off and 712 us "
+                      "with it on; a recording costs 72 us", second.stdout)
+        self.assertIn("off 640\non 712\n", (self.work / "recording-cost.txt").read_text())
+        self.assertIn("recording cost ok", (self.work / "verdict.txt").read_text())
+        self.assert_clean()
+
+    def test_a_recording_no_slower_than_no_recording_is_not_called_a_cost(self):
+        """The two boots are minutes apart on a machine doing other things, so
+        the run with the recording on comes out faster often enough that
+        printing a negative cost would be printing noise as a measurement."""
+        self.assertEqual(self.rvk_run("--record", median="ok transport.warm_median 640\n").returncode, 0)
+        result = self.rvk_run(median="ok transport.warm_median 700\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: recording cost ok: a no-op round trip took 700 us with recording off and 640 us "
+                      "with it on; a recording costs nothing this pair could measure", result.stdout)
+
+    def test_an_rvk_run_that_timed_no_warm_round_trip_measures_no_cost(self):
+        """A run whose warm rounds failed reported a latency and nothing to
+        compare; it must not keep the cold round trip as if it were one."""
+        result = self.rvk_run(median="")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: recording cost skipped: the rvk run timed no warm round trip", result.stdout)
+        self.assertFalse((self.work / "recording-cost.txt").exists())
+
+    def test_a_cost_record_that_is_not_two_round_trips_fails_the_run(self):
+        """A hand-edited record is evidence of something; a run that silently
+        overwrote it would take the comparison with it."""
+        self.work.mkdir(parents=True, exist_ok=True)
+        (self.work / "recording-cost.txt").write_text("off 640\noff 700\n")
+        result = self.rvk_run()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: recording.cost failed", result.stdout)
+        self.assertIn("a second `off`; the record holds one of each", result.stdout)
+        self.assertEqual((self.work / "recording-cost.txt").read_text(), "off 640\noff 700\n")
 
     def test_an_rvk_run_with_a_failed_step_fails(self):
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
@@ -1681,6 +1736,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll",
+                     "--umd", self.scratch / "rvkumd.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,
@@ -2045,6 +2101,27 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: hostvisible ok: 4096 bytes written through the guest's view", result.stdout)
         self.assertIn("guest: hostvisible skipped: with no region on this device", result.stdout)
         self.assertNotIn("pmemsave", "\n".join(self.journal_lines()))
+        self.assert_clean()
+
+    def test_record_writes_a_wire_recording_beside_the_qemu_log(self):
+        """Feature 065, FR-001: the device is told where to write down what
+        crosses the wire, and the run says where it went."""
+        self.script()
+        result = self.run_suite("--record", "--record-limit", "1048576")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        device = self.journal_lines()[0]
+        self.assertIn(f"record={self.work / 'recording.rvk'}", device)
+        self.assertIn("record-limit=1048576", device)
+        self.assertIn(f"guest: recording what crosses the wire into {self.work / 'recording.rvk'}",
+                      result.stdout)
+        self.assert_clean()
+
+    def test_a_run_without_record_asks_the_device_for_no_recording(self):
+        self.script()
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("record=", self.journal_lines()[0])
+        self.assertNotIn("recording what crosses the wire", result.stdout)
         self.assert_clean()
 
     def test_a_driver_that_opened_no_region_fails_the_segments_step(self):

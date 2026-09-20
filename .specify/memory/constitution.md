@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.6.3 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-17
+**Version**: 2.6.4 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-20
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -81,7 +81,12 @@ and `opengl32.dll` calls the OpenGL ICD's `Drv*` exports with no ICD context, so
 that root lives in its exports' translation unit
 (`src/um/opengl/rvkgl_exports.cpp`, feature 050), and the generated OpenGL
 hooks reach it through the single pointer `GlIcdBinding` holds
-(`src/icd/opengl/gl_hooks.cpp`);
+(`src/icd/opengl/gl_hooks.cpp`); and the Direct3D runtimes resolve
+`OpenAdapter10_2` and `OpenAdapter12` by name and then call a table of bare
+function pointers, none of them handed a context, so the D3D user-mode driver's
+root lives in its exports' translation unit (`src/um/d3d/rvkumd_exports.cpp`,
+feature 055) and the table's thunks reach it through the single pointer
+`UmdBinding` holds (`src/icd/d3d/umd_binding.cpp`);
 and every function opens a trace scope (`AV_SCOPE`, docs/trace.md) that no
 caller can hand the binary's trace table, so each binary's table - owned by
 that binary's root above - is reached through the single pointer

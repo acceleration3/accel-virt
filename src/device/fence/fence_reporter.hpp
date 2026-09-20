@@ -17,11 +17,12 @@ namespace av {
 
 class FenceInterrupts;
 class Host;
+class WireRecorder;
 struct FenceReporterProbe;
 
 class FenceReporter {
 public:
-    FenceReporter(Host &host, FenceInterrupts &interrupts);
+    FenceReporter(Host &host, FenceInterrupts &interrupts, WireRecorder &recorder, uint32_t context);
     FenceReporter(const FenceReporter &) = delete;
     FenceReporter &operator=(const FenceReporter &) = delete;
 
@@ -53,6 +54,8 @@ public:
 private:
     Host            &host_;
     FenceInterrupts &interrupts_;
+    WireRecorder    &recorder_;
+    uint32_t         context_;
     FenceWindow      page_;
     uint32_t         line_;
     uint64_t         completed_;

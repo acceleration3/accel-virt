@@ -5,6 +5,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/execution/context_executor.hpp"
 #include "device/host/host.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/memory/guest_dma_buf.hpp"
@@ -13,8 +14,9 @@
 
 namespace av {
 
-BlobImports::BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor)
-    : host_(host), blobs_(blobs), executor_(executor), ring_resource_(0u), next_blob_id_(1u),
+BlobImports::BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor, WireRecorder &recorder,
+                         uint32_t context)
+    : host_(host), blobs_(blobs), executor_(executor), recorder_(recorder), context_(context), ring_resource_(0u), next_blob_id_(1u),
       device_memory_(nullptr), blob_ids_(nullptr), resources_(nullptr)
       {
           AV_SCOPE("BlobImports::BlobImports");
@@ -72,6 +74,9 @@ Status BlobImports::import(uint32_t resource, uint64_t offset, uint64_t size, ui
     unhold.dismiss();
     resources_[slot] = resource;
     device_memory = device_memory_[slot];
+    recorder_.record_blob(context_, BlobAction::imported, memory_type, blob_ids_[slot], offset, size);
+    recorder_.record_blob_bytes(context_, blob_ids_[slot],
+                                offset, static_cast<const uint8_t *>(alias->base()) + offset, size);
     return Status::ok;
 }
 
@@ -144,6 +149,7 @@ void BlobImports::release(uint64_t device_memory)
     const uint32_t slot = device_memory != 0u ? slot_of(device_memory) : max_imports;
     if (slot == max_imports) return;
     executor_.release(blob_ids_[slot]);
+    recorder_.record_blob(context_, BlobAction::released, 0u, blob_ids_[slot], 0u, 0u);
     device_memory_[slot] = 0u;
     blobs_.release_alias(resources_[slot]);
 }

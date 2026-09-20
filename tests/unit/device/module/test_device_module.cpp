@@ -37,7 +37,7 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   host.add_gpu(gpu);
   DeviceModule module;
   char error[96] = "untouched";
-  DeviceInstance *const instance = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
+  DeviceInstance *const instance = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
   CHECK(instance != nullptr);
   CHECK(instance->device().realized());
   CHECK_EQ(error[0], '\0');
@@ -60,8 +60,8 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   root.report(none);
   CHECK(std::strcmp(none.dump(), "module/0 devices=0") == 0);
   char error[96] = {};
-  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
-  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
+  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
   CHECK_STATUS(module.destroy(first), Status::ok);
   av::StateWriter one(dump, sizeof dump);
   root.report(one);
@@ -76,8 +76,8 @@ TEST(device_module_destroy, finds_the_device_named_among_others)
   host.add_gpu(gpu);
   DeviceModule module;
   char error[96] = {};
-  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
-  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, error, sizeof error);
+  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
   CHECK_STATUS(module.destroy(second), Status::ok);
   CHECK_EQ(module.live(), 1u);
   CHECK_STATUS(module.destroy(first), Status::ok); }
@@ -86,10 +86,10 @@ TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
 { MockHost host; MockHostOps ops(host);
   DeviceModule module;
   char error[96] = {};
-  CHECK(module.create(&ops.table(), nullptr, "not-a-uuid", false, error, sizeof error) == nullptr);
+  CHECK(module.create(&ops.table(), nullptr, "not-a-uuid", false, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "is neither auto nor a device UUID") != nullptr);
   CHECK_EQ(module.live(), 0u);
-  CHECK(module.create(nullptr, nullptr, "auto", false, error, sizeof error) == nullptr);
+  CHECK(module.create(nullptr, nullptr, "auto", false, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strcmp(error, "virtio-gpu-rvk: no host operations") == 0); }
 
 TEST(device_module_create, one_device_per_slot)
@@ -99,10 +99,10 @@ TEST(device_module_create, one_device_per_slot)
   char error[96] = {};
   DeviceInstance *instances[DeviceModule::max_devices] = {};
   for (DeviceInstance *&instance : instances) {
-      instance = module.create(&ops.table(), nullptr, nullptr, false, error, sizeof error);
+      instance = module.create(&ops.table(), nullptr, nullptr, false, nullptr, error, sizeof error);
       CHECK(instance != nullptr);
   }
-  CHECK(module.create(&ops.table(), nullptr, nullptr, false, error, sizeof error) == nullptr);
+  CHECK(module.create(&ops.table(), nullptr, nullptr, false, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strcmp(error, "virtio-gpu-rvk: every device slot is in use") == 0);
   for (DeviceInstance *instance : instances) CHECK_STATUS(module.destroy(instance), Status::ok); }
 
@@ -110,7 +110,7 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   char error[96] = {};
-  RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, error, sizeof error);
+  RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, nullptr, error, sizeof error);
   CHECK(device != nullptr);
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
   rvk_device_status(device, 0x0Fu);
@@ -122,7 +122,7 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK_EQ(av::device_module.live(), 1u);
   CHECK_EQ(rvk_device_destroy(device), 0);
   CHECK_EQ(rvk_device_destroy(device), 1);
-  CHECK(rvk_device_create(&ops.table(), nullptr, "gpu0", 0, error, sizeof error) == nullptr);
+  CHECK(rvk_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
 
 TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class_and_rvk_device_capsets_offers_one)
@@ -131,7 +131,7 @@ TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_res
   host.set_hostmem_size(0x10000u);
   av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
   char error[96] = {};
-  RvkDevice *const device = rvk_device_create(&ops.table(), &executor.table(), "auto", 0, error, sizeof error);
+  RvkDevice *const device = rvk_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(rvk_device_capsets(device), 1u);
   GpuRequestBuilder create(0x010Cu);
@@ -144,5 +144,5 @@ TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_res
   CHECK_EQ(rvk_device_control(device, &base, 0x0100u), 0);
   CHECK_EQ(rvk_device_destroy(device), 0);
   CHECK_EQ(host.live_host_memory(), 0u);
-  CHECK(rvk_device_create(&ops.table(), nullptr, "auto", 1, error, sizeof error) == nullptr);
+  CHECK(rvk_device_create(&ops.table(), nullptr, "auto", 1, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "blob=on is not supported") != nullptr); }

@@ -7,6 +7,7 @@
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_consumer.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -78,7 +79,7 @@ private:
 class Fixture {
 public:
     Fixture()
-        : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), fences_(host_, interrupts_),
+        : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), recorder_(host_), fences_(host_, interrupts_, recorder_, 1u),
           execution_(host_, fences_, 12u), consumer_(host_, fences_, execution_.batches())
     {
         static_cast<void>(interrupts_.initialize());
@@ -144,6 +145,7 @@ private:
     std::uint64_t   page_length_;
     MockHost        host_;
     FenceInterrupts interrupts_;
+    av::WireRecorder recorder_;
     FenceReporter   fences_;
     av::MockContextExecution execution_;
     RingConsumer    consumer_;

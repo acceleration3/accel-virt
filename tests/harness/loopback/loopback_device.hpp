@@ -30,7 +30,9 @@ public:
      * remembers what it started on (feature 040, FR-005). */
     static constexpr std::uint8_t default_gpu[16] = {0x10, 0x0B};
 
-    explicit LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu = default_gpu);
+    /* `record` names the wire recording the device writes, or nothing. */
+    explicit LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu = default_gpu,
+                            const char *record = nullptr);
     /* Realized on `executor` instead, bound to the host GPU whose UUID is
      * `gpu`; executor() is then a mock nothing calls. */
     LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu);
@@ -51,7 +53,7 @@ public:
     bool        holding(std::uint32_t count);
 
 private:
-    void realize(const RvkExecutorOps &executor, const std::uint8_t *gpu);
+    void realize(const RvkExecutorOps &executor, const std::uint8_t *gpu, const char *record);
 
     MockPlatform     &guest_;
     MockHost          host_;

@@ -8,12 +8,15 @@
 #include "device/memory/host_shared_object.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
+#include "device/recording/record_kind.hpp"
+#include "device/recording/record_kinds.hpp"
 #include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/ring_blob_writer.hpp"
 #include "proto/context/context_setup.hpp"
@@ -40,7 +43,8 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_, table.library_, table.shares_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_,
+                                                 table.library_, table.shares_, table.recorder_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -133,11 +137,11 @@ TEST(virtio_gpu_rvk_realize, binds_once_and_contexts_follow)
   TextBuffer message(bytes, sizeof bytes);
   CHECK(!device.realized());
   CHECK_STATUS(device.create_context(1u), Status::invalid_state);
-  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
   CHECK_EQ(device.gpu_index(), 1u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::invalid_state);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::invalid_state);
   CHECK_STATUS(device.create_context(1u), Status::invalid_state);   /* no interrupt carries its fences yet */
   device.status(DriverStatus::driver_ok);
   CHECK_STATUS(device.create_context(1u), Status::ok);
@@ -156,7 +160,7 @@ TEST(virtio_gpu_rvk_realize, a_binding_failure_leaves_it_unrealized)
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::not_found);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::not_found);
   CHECK(!device.realized());
   CHECK(device.invariants_hold()); }
 
@@ -166,7 +170,7 @@ TEST(virtio_gpu_rvk_realize, blob_on_is_refused_because_the_device_answers_blob_
   VirtioGpuRvk device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", true, nullptr, message), Status::invalid_parameter);
+  CHECK_STATUS(device.realize("auto", true, nullptr, nullptr, message), Status::invalid_parameter);
   CHECK(std::strcmp(message.text(), "virtio-gpu-rvk: blob=on is not supported; the device answers blob requests itself") == 0);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
@@ -178,7 +182,7 @@ TEST(virtio_gpu_rvk_control, answers_blob_requests_and_reset_releases_every_blob
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x1000u);
   MockRequest request(create.bytes(), create.size());
@@ -220,7 +224,7 @@ TEST(virtio_gpu_rvk_realize, without_an_executor_there_is_no_capset_and_no_conte
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK(device.realized());
   CHECK_EQ(device.capsets(), 0u);
@@ -246,7 +250,7 @@ TEST(virtio_gpu_rvk_realize, an_executor_table_this_abi_does_not_accept_is_refus
   VirtioGpuRvk device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::invalid_parameter);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, message), Status::invalid_parameter);
   CHECK(std::strstr(message.text(), "not ABI version 1 to 4") != nullptr);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
@@ -259,7 +263,7 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK_EQ(device.capsets(), 1u);
   GpuRequestBuilder info(0x0108u);
@@ -321,7 +325,7 @@ TEST(virtio_gpu_rvk_status, the_fence_interrupts_follow_the_drivers_status_byte)
   CHECK(!host.fence_interrupts_connected());
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   device.status(0x0Bu);                     /* acknowledge, driver, features ok */
   CHECK(!host.fence_interrupts_connected());
   device.status(0x0Fu);
@@ -355,11 +359,11 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refu
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(1u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for fence interrupts") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, again), Status::ok);
   /* The refusal, and one line for each probe realize ran. */
   CHECK_EQ(host.logged(), 3u); }
 
@@ -370,11 +374,11 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_the_blob_table_is_refuse
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(2u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the blob table") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, again), Status::ok);
   CHECK(device.invariants_hold());
   device.reset(); }
 
@@ -387,11 +391,11 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_shared_executors_refuses_t
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(4u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the contexts' shared executors") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, again), Status::ok);
   CHECK(device.realized());
   device.reset(); }
 
@@ -403,8 +407,9 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_rea
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the shared objects and the shared executors take the first four */
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the shared objects and the shared
+                             * executors take the first four */
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
   device.reset(); }
@@ -419,7 +424,7 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                        auto *const d = static_cast<VirtioGpuRvk *>(context);
                        char bytes[8];
                        TextBuffer message(bytes, sizeof bytes);
-                       static_cast<void>(d->realize("x", false, nullptr, message));
+                       static_cast<void>(d->realize("x", false, nullptr, nullptr, message));
                        d->reset();
                        static_cast<void>(d->create_context(1u));
                        static_cast<void>(d->destroy_context(1u));
@@ -446,7 +451,7 @@ TEST(virtio_gpu_rvk_invariants, a_context_on_an_unrealized_device_or_a_broken_ta
   VirtioGpuRvk broken(host);
   char bytes[64];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(broken.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(broken.realize("auto", false, nullptr, nullptr, message), Status::ok);
   av::VirtioGpuRvkProbe::duplicate_context(broken, 4u);
   CHECK(!broken.invariants_hold());
   broken.reset();
@@ -467,7 +472,7 @@ TEST(virtio_gpu_rvk_invariants, fence_interrupts_connected_without_driver_ok_are
   VirtioGpuRvk device(host);
   char bytes[64];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   device.status(DriverStatus::driver_ok);
   CHECK(device.invariants_hold());
   device.status(0x0Bu);                    /* the driver stopped: nothing may stay connected */
@@ -506,7 +511,7 @@ TEST(virtio_gpu_rvk_realize, the_import_bit_needs_the_library_to_import_as_well)
   VirtioGpuRvk with_import(importing_host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  CHECK_STATUS(with_import.realize("auto", false, &importing.table(), message), Status::ok);
+  CHECK_STATUS(with_import.realize("auto", false, &importing.table(), nullptr, message), Status::ok);
   with_import.status(DriverStatus::driver_ok);
 
   MockHost copying_host;
@@ -516,11 +521,141 @@ TEST(virtio_gpu_rvk_realize, the_import_bit_needs_the_library_to_import_as_well)
   av::MockExecutorOps copying(RVK_EXECUTOR_SUB_API_VULKAN);
   VirtioGpuRvk without_import(copying_host);
   TextBuffer other(bytes, sizeof bytes);
-  CHECK_STATUS(without_import.realize("auto", false, &copying.table(), other), Status::ok);
+  CHECK_STATUS(without_import.realize("auto", false, &copying.table(), nullptr, other), Status::ok);
   without_import.status(DriverStatus::driver_ok);
 
   CHECK((features_of(with_import) & guest_memory_import) != 0u);
   CHECK_EQ(features_of(without_import) & guest_memory_import, 0u); }
+
+TEST(virtio_gpu_rvk_realize, a_device_with_no_record_property_records_nothing)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[128];
+  TextBuffer message(bytes, sizeof bytes);
+  const RvkRecordingOptions off = {nullptr, 0u, nullptr, 0};
+  CHECK_STATUS(device.realize("auto", false, nullptr, &off, message), Status::ok);
+  CHECK(device.realized());
+  CHECK_EQ(host.recording_length("run.rvk"), 0u);
+  CHECK_EQ(host.live_recordings(), 0u); }
+
+TEST(virtio_gpu_rvk_realize, record_kinds_that_name_nothing_fail_the_realize_with_the_reason)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[160];
+  TextBuffer message(bytes, sizeof bytes);
+  const RvkRecordingOptions nonsense = {"run.rvk", 0u, "batch,nonsense", 0};
+  CHECK_STATUS(device.realize("auto", false, nullptr, &nonsense, message), Status::invalid_parameter);
+  CHECK(std::strstr(message.text(), "record-kinds") != nullptr);
+  CHECK_EQ(host.live_recordings(), 0u);
+  CHECK(device.invariants_hold()); }
+
+/* The recording a realize opens: its header names the GPU this device bound
+ * and the wire its contexts will speak, and nothing has happened yet. What a
+ * context then records is the loopback suite's, over a real guest. */
+TEST(virtio_gpu_rvk_realize, opens_the_recording_its_properties_asked_for)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x20000u);
+  av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuRvk device(host);
+  char bytes[160];
+  TextBuffer message(bytes, sizeof bytes);
+  /* record-wrap on, so the recording wraps at its ceiling rather than stopping. */
+  const RvkRecordingOptions on = {"run.rvk", 1u << 20, "all", 1};
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), &on, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+
+  av::RecordedFile header_only(host, "run.rvk");
+  /* MockHost's GPU, which is what this device bound. */
+  CHECK_EQ(header_only.header().vendor_id(), 0x10DEu);
+  CHECK_EQ(header_only.header().uuid()[0], first[0]);
+  CHECK_EQ(header_only.header().kinds(), av::RecordKinds::every_kind);
+  CHECK(header_only.header().limit() == (1u << 20));
+  CHECK_EQ(header_only.header().wire_version().major_version(), 1u);
+  CHECK_EQ(header_only.remaining(), 0u);
+  device.reset();
+  CHECK(device.invariants_hold()); }
+
+namespace {
+
+/* The ring and the fence page a bound context reads, made once. */
+void make_the_ring(VirtioGpuRvk &device)
+{
+    for (std::uint32_t id = 1u; id <= 2u; id++) {
+        GpuRequestBuilder blob(0x010Cu);
+        blob.u32(id).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x2000u);
+        MockRequest blob_request(blob.bytes(), blob.size());
+        CHECK(device.control(&blob_request, 0x010Cu));
+        CHECK_EQ(blob_request.response_type(), 0x1100u);
+    }
+    av::VirtioGpuRvkProbe::write_ring_header(device, 1u);
+}
+
+/* Binds `context` on that ring, which is what makes a realized device record a
+ * setup, then takes the context away again so the next one may have the ring. */
+void bind_and_destroy(VirtioGpuRvk &device, std::uint32_t context)
+{
+    GpuRequestBuilder create(0x0200u);
+    create.context(context).u32(0u).u32(0x72u).zeros(64u);
+    MockRequest create_request(create.bytes(), create.size());
+    CHECK(device.control(&create_request, 0x0200u));
+    CHECK_EQ(create_request.response_type(), 0x1100u);
+    std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
+    CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
+                     .encode(setup_bytes, sizeof setup_bytes),
+                 Status::ok);
+    GpuRequestBuilder submit(0x0207u);
+    submit.context(context).u32(av::ContextSetup::base_size).u32(0u).append(setup_bytes, sizeof setup_bytes);
+    MockRequest submit_request(submit.bytes(), submit.size());
+    CHECK(device.control(&submit_request, 0x0207u));
+    CHECK_EQ(submit_request.response_type(), 0x1100u);
+    GpuRequestBuilder destroy(0x0201u);
+    destroy.context(context).zeros(8u);
+    MockRequest destroy_request(destroy.bytes(), destroy.size());
+    CHECK(device.control(&destroy_request, 0x0201u));
+    CHECK_EQ(destroy_request.response_type(), 0x1100u);
+}
+
+}  // namespace
+
+/* FR-001 and US1 scenario 5: `record-wrap` is what decides whether a recording
+ * that reaches its ceiling rotates or stops, and the property has to reach the
+ * recorder for either to happen. The ceiling here holds the file header and
+ * exactly one setup record, so the second context is the one at the edge. */
+TEST(virtio_gpu_rvk_realize, record_wrap_decides_what_the_ceiling_does)
+{ struct Case { int wrap; std::uint32_t wraps; std::uint32_t kept; };
+  const Case cases[] = {{1, 1u, 8u}, {0, 0u, 7u}};
+  for (const Case &c : cases) {
+      MockHost host;
+      host.add_gpu(first);
+      host.set_hostmem_size(0x20000u);
+      av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+      VirtioGpuRvk        device(host);
+      char                bytes[160];
+      TextBuffer          message(bytes, sizeof bytes);
+      const std::uint64_t ceiling =
+          av::RecordingHeader::encoded_size + av::RecordHeader::encoded_size + av::ContextSetup::base_size;
+      const RvkRecordingOptions options = {"run.rvk", ceiling, "setup", c.wrap};
+      CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, message), Status::ok);
+      device.status(DriverStatus::driver_ok);
+      make_the_ring(device);
+      bind_and_destroy(device, 7u);
+      bind_and_destroy(device, 8u);
+      av::RecordedFile file(host, "run.rvk");
+      CHECK_EQ(file.header().wraps(), c.wraps);
+      /* Either way the file never passes the ceiling, and holds one record:
+       * the newest when it wrapped, the oldest when it stopped. */
+      CHECK(host.recording_length("run.rvk") <= ceiling);
+      av::RecordHeader    record;
+      const std::uint8_t *payload = file.expect(av::RecordKind::context_setup, record);
+      CHECK(payload != nullptr);
+      CHECK_EQ(record.context(), c.kept);
+      CHECK_EQ(file.remaining(), 0u);
+      device.reset();
+      CHECK(device.invariants_hold());
+  } }
 
 /* Feature 053: the device's shared objects need a lock of their own, between
  * the blob table's and the contexts' shared executors'. */
@@ -531,10 +666,10 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_shared_objects_refuses
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   host.fail_mutex_at(3u);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the shared objects") != nullptr);
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, again), Status::ok);
   CHECK(device.realized());
   device.reset(); }

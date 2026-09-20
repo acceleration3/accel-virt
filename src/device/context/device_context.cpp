@@ -6,6 +6,7 @@
 #include "core/support/scope_exit.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/fence/fence_window.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_window.hpp"
 #include "device/threading/work_item.hpp"
 #include "proto/context/capset_info.hpp"
@@ -15,11 +16,14 @@
 
 namespace av {
 
-DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
-                             const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
-    : id_(id), binding_(host, blobs), fences_(host, interrupts), imports_(host, blobs, executor_),
-      shared_(shared, executor_),
-      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, shared_, staging_, fences_), ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
+DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared,
+                             FenceInterrupts &interrupts, const ExecutorLibrary &library,
+                             ExecutorShares &shares, WireRecorder &recorder, uint32_t id)
+    : recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
+      imports_(host, blobs, executor_, recorder, id), shared_(shared, executor_),
+      executor_(host, library, shares, id), staging_(host),
+      batches_(host, executor_, imports_, shared_, staging_, fences_, recorder, id),
+      ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
       {
           AV_SCOPE("DeviceContext::DeviceContext");
       }
@@ -74,6 +78,7 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     disconnect.dismiss();
     withdraw.dismiss();
     unbind.dismiss();
+    recorder_.record_context_setup(id_, setup);
     return Status::ok;
 }
 

@@ -3,13 +3,15 @@
 #include "core/trace/function_scope.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/host/host.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/threading/doorbell.hpp"
 #include "proto/submission/fence_page.hpp"
 
 namespace av {
 
-FenceReporter::FenceReporter(Host &host, FenceInterrupts &interrupts)
-    : host_(host), interrupts_(interrupts), page_(), line_(0u), completed_(0u), progress_(0u),
+FenceReporter::FenceReporter(Host &host, FenceInterrupts &interrupts, WireRecorder &recorder,
+                             uint32_t context)
+    : host_(host), interrupts_(interrupts), recorder_(recorder), context_(context), page_(), line_(0u), completed_(0u), progress_(0u),
       fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false)
       {
           AV_SCOPE("FenceReporter::FenceReporter");
@@ -50,6 +52,7 @@ void FenceReporter::complete(uint64_t fence)
     progress_++;
     pending_ = true;
     static_cast<void>(page_.publish(FencePage(completed_, progress_)));   /* checked when prepared */
+    recorder_.record_fence(context_, fence);
 }
 
 void FenceReporter::heartbeat()

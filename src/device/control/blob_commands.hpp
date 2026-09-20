@@ -16,6 +16,7 @@ class BlobTable;
 class ControlRequest;
 class GpuResponse;
 class Host;
+class WireRecorder;
 
 class BlobCommands {
 public:
@@ -28,7 +29,7 @@ public:
         resource_unmap_blob = 0x0209u,
     };
 
-    BlobCommands(Host &host, BlobTable &blobs);
+    BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder);
     BlobCommands(const BlobCommands &) = delete;
     BlobCommands &operator=(const BlobCommands &) = delete;
 
@@ -50,8 +51,9 @@ private:
     /* The resource a 32-byte request names, or 0 for a shorter one. */
     uint32_t named_resource(ControlRequest &request);
 
-    Host      &host_;
-    BlobTable &blobs_;
+    Host         &host_;
+    BlobTable    &blobs_;
+    WireRecorder &recorder_;
 };
 
 }  // namespace av

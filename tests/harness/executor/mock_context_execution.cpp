@@ -13,9 +13,10 @@ constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 }  // namespace
 
 MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order)
-    : ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host, library_), executor_(host, library_, shares_, 1u), blobs_(host),
-      shared_objects_(host), imports_(host, blobs_, executor_), shared_(shared_objects_, executor_),
-      staging_(host), batches_(host, executor_, imports_, shared_, staging_, fences)
+    : ops_(RVK_EXECUTOR_SUB_API_VULKAN), recorder_(host), library_(), shares_(host, library_),
+      executor_(host, library_, shares_, 1u), blobs_(host), shared_objects_(host),
+      imports_(host, blobs_, executor_, recorder_, 1u), shared_(shared_objects_, executor_), staging_(host),
+      batches_(host, executor_, imports_, shared_, staging_, fences, recorder_, 1u)
 {
     static_cast<void>(library_.accept(&ops_.table()));
     executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());
@@ -24,6 +25,7 @@ MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, st
 }
 
 MockExecutorOps &MockContextExecution::ops() { return ops_; }
+WireRecorder    &MockContextExecution::recorder() { return recorder_; }
 BatchExecutor   &MockContextExecution::batches() { return batches_; }
 
 }  // namespace av

@@ -40,9 +40,11 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), empty_host_memory_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
-      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u)
+      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u),
+      recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
+      fail_recording_truncate_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -77,6 +79,10 @@ MockHost::~MockHost()
         registry.record_failure(__FILE__, __LINE__, "%u doorbell(s) left connected", live_doorbells());
     if (live_ranges() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u reserved range(s) never released", live_ranges());
+    if (live_recordings() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u recording(s) never closed", live_recordings());
+    for (RecordingFile &recording : recordings_)
+        if (recording.bytes != nullptr) std::free(recording.bytes);
     for (Range &range : ranges_)
         if (range.base != nullptr) munmap(range.base, range.bytes);
     for (void *block : allocations_) std::free(block);
@@ -1170,6 +1176,99 @@ std::uint32_t MockHost::live_mutexes()
     StateLock lock(state_);
     std::uint32_t live = 0u;
     for (const Mutex &mutex : mutexes_) live += mutex.live ? 1u : 0u;
+    return live;
+}
+
+MockHost::RecordingFile *MockHost::recording_of(void *file)
+{
+    for (RecordingFile &recording : recordings_)
+        if (&recording == file) return &recording;
+    record(HostViolation::unknown_handle, "recording");
+    return nullptr;
+}
+
+MockHost::RecordingFile *MockHost::recording_at(const char *path)
+{
+    for (RecordingFile &recording : recordings_)
+        if (recording.bytes != nullptr && std::strncmp(recording.path, path, max_path) == 0) return &recording;
+    return nullptr;
+}
+
+Status MockHost::create_recording(const char *path, void *&file)
+{
+    if (!holds_main_loop()) record(HostViolation::main_loop_required, "create_recording");
+    StateLock lock(state_);
+    if (fail_now(fail_recording_create_)) return Status::no_memory;
+    RecordingFile *slot = nullptr;
+    for (RecordingFile &recording : recordings_) {
+        if (recording.bytes == nullptr) { slot = &recording; break; }
+    }
+    if (slot == nullptr) return Status::no_memory;
+    slot->bytes = static_cast<std::uint8_t *>(std::calloc(1u, recording_capacity));
+    if (slot->bytes == nullptr) return Status::no_memory;
+    std::snprintf(slot->path, sizeof slot->path, "%s", path != nullptr ? path : "");
+    slot->length = 0u;
+    slot->live = true;
+    file = slot;
+    return Status::ok;
+}
+
+Status MockHost::append_recording(void *file, const std::uint8_t *bytes, std::size_t size)
+{
+    StateLock lock(state_);
+    RecordingFile *const recording = recording_of(file);
+    if (recording == nullptr || !recording->live) return Status::no_space;
+    if (fail_now(fail_recording_append_)) return Status::no_space;
+    if (size > recording_capacity - recording->length) return Status::no_space;
+    std::memcpy(recording->bytes + recording->length, bytes, size);
+    recording->length += size;
+    return Status::ok;
+}
+
+Status MockHost::truncate_recording(void *file)
+{
+    StateLock lock(state_);
+    RecordingFile *const recording = recording_of(file);
+    if (recording == nullptr || !recording->live) return Status::no_space;
+    if (fail_now(fail_recording_truncate_)) return Status::no_space;
+    recording->length = 0u;
+    return Status::ok;
+}
+
+void MockHost::close_recording(void *file)
+{
+    StateLock lock(state_);
+    RecordingFile *const recording = recording_of(file);
+    if (recording == nullptr) return;
+    recording->live = false;
+}
+
+void MockHost::fail_recording_create_at(std::uint32_t nth) { StateLock lock(state_); fail_recording_create_ = nth; }
+void MockHost::fail_recording_append_at(std::uint32_t nth) { StateLock lock(state_); fail_recording_append_ = nth; }
+void MockHost::fail_recording_truncate_at(std::uint32_t nth)
+{
+    StateLock lock(state_);
+    fail_recording_truncate_ = nth;
+}
+
+const std::uint8_t *MockHost::recording_bytes(const char *path)
+{
+    StateLock lock(state_);
+    const RecordingFile *const recording = recording_at(path);
+    return recording != nullptr ? recording->bytes : nullptr;
+}
+
+std::size_t MockHost::recording_length(const char *path)
+{
+    StateLock lock(state_);
+    const RecordingFile *const recording = recording_at(path);
+    return recording != nullptr ? recording->length : 0u;
+}
+
+std::uint32_t MockHost::live_recordings()
+{
+    std::uint32_t live = 0u;
+    for (const RecordingFile &recording : recordings_) live += recording.live ? 1u : 0u;
     return live;
 }
 

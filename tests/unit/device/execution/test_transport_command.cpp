@@ -4,6 +4,7 @@
  * and any other transport id is one the device does not know. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_imports.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/context_shared_objects.hpp"
@@ -33,7 +34,9 @@ class Fixture {
 public:
     Fixture()
         : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
-          objects_(host_), imports_(host_, blobs_, executor_), shared_(objects_, executor_) {}
+          objects_(host_), recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 1u),
+          shared_(objects_, executor_)
+    {}
 
     av::MockHost &host() { return host_; }
     Status run(const CommandHeader &header, const std::uint8_t *body = nullptr)
@@ -52,6 +55,7 @@ private:
     av::ContextExecutor executor_;
     av::BlobTable       blobs_;
     av::HostSharedObjects objects_;
+    av::WireRecorder    recorder_;
     av::BlobImports     imports_;
     av::ContextSharedObjects shared_;
     std::uint8_t        reply_[32] = {};

@@ -31,13 +31,14 @@ class HostSharedObjects;
 class ContextSetup;
 class Host;
 class StateWriter;
+class WireRecorder;
 class WorkItem;
 struct DeviceContextProbe;
 
 class DeviceContext {
 public:
     DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
-                  const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id);
+                  const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, uint32_t id);
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
@@ -59,6 +60,7 @@ public:
     void                 report(StateWriter &writer);
 
 private:
+    WireRecorder  &recorder_;
     uint32_t       id_;
     ContextBinding binding_;
     FenceReporter   fences_;

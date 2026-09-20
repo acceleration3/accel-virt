@@ -2,6 +2,7 @@
  * doorbell connected and the ring attached on the worker - all of it, or none. */
 #include "core/support/status.hpp"
 #include "device/context/device_context.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/execution/executor_shares.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -16,6 +17,7 @@
 #include "harness/host/gpu_request_builder.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
@@ -88,7 +90,8 @@ class Fixture {
 public:
     Fixture()
         : blobs_(host_), shared_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
-          shares_(host_, library_), context_(host_, blobs_, shared_, interrupts_, library_, shares_, 5u)
+          shares_(host_, library_), recorder_(host_),
+          context_(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, 5u)
     {
         static_cast<void>(blobs_.initialize());
         static_cast<void>(shared_.initialize());
@@ -108,6 +111,7 @@ public:
     }
 
     MockHost      &host() { return host_; }
+    av::WireRecorder &recorder() { return recorder_; }
     av::MockExecutorOps &ops() { return ops_; }
     BlobTable     &blobs() { return blobs_; }
     DeviceContext &context() { return context_; }
@@ -148,6 +152,7 @@ private:
     av::MockExecutorOps ops_;
     av::ExecutorLibrary library_;
     av::ExecutorShares  shares_;
+    av::WireRecorder    recorder_;
     DeviceContext       context_;
 };
 
@@ -373,10 +378,37 @@ TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
   av::ExecutorLibrary    old;
   CHECK_STATUS(old.accept(&ops.table()), Status::ok);
   av::ExecutorShares     shares(host, old);
-  DeviceContext          context(host, blobs, shared, interrupts, old, shares, 9u);
+  av::WireRecorder       recorder(host);
+  DeviceContext          context(host, blobs, shared, interrupts, old, shares, recorder, 9u);
   const ContextSetup with_options(ProtocolVersion(1u, 1u), SubApi::opengl, ring, 12u, fence, 3u, 0u,
                                   av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u));
   CHECK_STATUS(context.bind(with_options, capset()), Status::invalid_parameter);
   CHECK(!context.binding().bound());
   CHECK_EQ(ops.created(), 0u);
   CHECK_EQ(host.live_doorbells(), 0u); }
+
+TEST(device_context_bind, records_the_setup_it_bound_and_nothing_for_a_bind_it_refused)
+{ Fixture fixture;
+  GuestRing guest = fixture.guest();
+  static_cast<void>(guest);
+  CHECK_STATUS(fixture.recorder().open("setup.rvk", 0u, "setup", av::AtCeiling::stop, av::GpuIdentity(),
+                                       av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
+  /* A second bind of a bound context is refused and leaves no second record. */
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
+  av::RecordedFile    file(fixture.host(), "setup.rvk");
+  av::RecordHeader    record;
+  const std::uint8_t *payload = file.expect(av::RecordKind::context_setup, record);
+  CHECK(payload != nullptr);
+  CHECK_EQ(record.context(), 5u);
+  CHECK(record.fence() == 0u);
+  if (payload != nullptr) {
+      av::ContextSetup decoded;
+      CHECK_STATUS(decoded.decode(payload, record.length()), Status::ok);
+      CHECK_EQ(decoded.doorbell(), 3u);
+      CHECK_EQ(decoded.ring_resource(), ring);
+      CHECK(decoded.sub_api() == SubApi::vulkan);
+  }
+  CHECK_EQ(file.remaining(), 0u);
+  fixture.recorder().close(); }

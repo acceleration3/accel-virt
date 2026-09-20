@@ -3,6 +3,9 @@
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
+#include "device/recording/wire_recorder.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/threading/doorbell.hpp"
@@ -10,6 +13,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/recording/recorded_file.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/fence_page.hpp"
 
@@ -22,6 +26,7 @@ using av::FaultCode;
 using av::FenceInterrupts;
 using av::FencePage;
 using av::FenceReporter;
+using av::WireRecorder;
 using av::FenceWindow;
 using av::HostViolation;
 using av::MockHost;
@@ -44,7 +49,7 @@ constexpr std::uint32_t line = 6u;
 
 class Fixture {
 public:
-    Fixture() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), interrupts_(host_), reporter_(host_, interrupts_)
+    Fixture() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), interrupts_(host_), recorder_(host_), reporter_(host_, interrupts_, recorder_, 3u)
     {
         std::memset(bytes_, 0xEE, sizeof bytes_);
         static_cast<void>(interrupts_.initialize());
@@ -53,6 +58,7 @@ public:
 
     MockHost      &host() { return host_; }
     FenceReporter &reporter() { return reporter_; }
+    WireRecorder  &recorder() { return recorder_; }
     FenceWindow    window() const { return FenceWindow(BlobWindow(&pointer_, &length_, 1u, length_)); }
     std::uint8_t  *bytes() { return bytes_; }
     FencePage      page() const
@@ -86,6 +92,7 @@ private:
     std::uint64_t   length_;
     MockHost        host_;
     FenceInterrupts interrupts_;
+    WireRecorder    recorder_;
     FenceReporter   reporter_;
 };
 
@@ -306,3 +313,41 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   Fixture unprepared;
   av::FenceReporterProbe::fault_without_code(unprepared.reporter());
   CHECK(!unprepared.reporter().invariants_hold()); }
+
+TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.recorder().open("fences.rvk", 0u, "fence", av::AtCeiling::stop,
+                                       av::GpuIdentity(), av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.complete(4u);
+      reporter.heartbeat();
+      reporter.complete(9u);
+  });
+  CHECK(fixture.reporter().invariants_hold());
+  av::RecordedFile   file(fixture.host(), "fences.rvk");
+  av::RecordHeader   record;
+  CHECK(file.expect(av::RecordKind::fence_completed, record) != nullptr);
+  CHECK(record.fence() == 4u);
+  CHECK_EQ(record.context(), 3u);
+  CHECK_EQ(record.length(), 0u);
+  CHECK(file.expect(av::RecordKind::fence_completed, record) != nullptr);
+  CHECK(record.fence() == 9u);
+  /* A heartbeat is progress, not a completion, and leaves no record. */
+  CHECK_EQ(file.remaining(), 0u);
+  fixture.recorder().close(); }
+
+TEST(fence_reporter_complete, a_faulted_context_completes_nothing_and_records_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.recorder().open("fences.rvk", 0u, "fence", av::AtCeiling::stop,
+                                       av::GpuIdentity(), av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.fault(FaultCode::device_lost);
+      reporter.complete(4u);
+  });
+  CHECK(fixture.reporter().invariants_hold());
+  CHECK_EQ(av::RecordedFile(fixture.host(), "fences.rvk").remaining(), 0u);
+  fixture.recorder().close(); }

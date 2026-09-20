@@ -22,19 +22,19 @@ std::uint64_t now_ms()
 
 }  // namespace
 
-LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu)
+LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu, const char *record)
     : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
-    realize(executor_.table(), gpu);
+    realize(executor_.table(), gpu, record);
 }
 
 LoopbackDevice::LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu)
     : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
-    realize(executor, gpu);
+    realize(executor, gpu, nullptr);
 }
 
-void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t *gpu)
+void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t *gpu, const char *record)
 {
     host_.add_gpu(gpu);
     host_.set_hostmem_size(64u << 20u);
@@ -43,7 +43,9 @@ void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t 
     }, &guest_);
     char       bytes[128];
     TextBuffer message(bytes, sizeof bytes);
-    static_cast<void>(device_.realize("auto", false, &executor, message));
+    const RvkRecordingOptions recording = {record, 0u, "all", 0};
+    static_cast<void>(
+        device_.realize("auto", false, &executor, record != nullptr ? &recording : nullptr, message));
     device_.status(DriverStatus::driver_ok);
 }
 

@@ -149,6 +149,17 @@ public:
     /* Main loop. Whether the base virtio-gpu device holds a 2D resource `id`. */
     virtual bool   resource_exists(uint32_t id) = 0;
 
+    /* Main loop. The wire recording at `path`, emptied if it was there:
+     * `file`, or no_memory with the reason logged (feature 065). */
+    [[nodiscard]] virtual Status create_recording(const char *path, void *&file) = 0;
+    /* Any thread. `size` bytes written to the end of the recording and flushed,
+     * so a process that dies next leaves them behind: no_space when the host
+     * could not write them all. */
+    [[nodiscard]] virtual Status append_recording(void *file, const uint8_t *bytes, size_t size) = 0;
+    /* Any thread. The recording back to empty, for a recording that wraps. */
+    [[nodiscard]] virtual Status truncate_recording(void *file) = 0;
+    virtual void                 close_recording(void *file) = 0;
+
 protected:
     Host() = default;
     ~Host() = default;

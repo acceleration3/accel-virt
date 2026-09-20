@@ -14,8 +14,8 @@ constexpr std::uint32_t resources_per_context = 10u;
 
 }  // namespace
 
-LoopbackRig::LoopbackRig(const std::uint8_t *gpu)
-    : platform_(), device_(platform_, gpu), driver_(platform_, device_), query_(platform_),
+LoopbackRig::LoopbackRig(const std::uint8_t *gpu, const char *record)
+    : platform_(), device_(platform_, gpu, record), driver_(platform_, device_), query_(platform_),
       first_memory_(platform_), second_memory_(platform_), first_(platform_, device_.doorbells()), second_(platform_, device_.doorbells()) {}
 
 LoopbackRig::~LoopbackRig() { device_.device().reset(); }
