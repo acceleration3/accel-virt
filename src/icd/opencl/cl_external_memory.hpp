@@ -14,7 +14,15 @@
  * while the fd and dma-buf spellings name descriptors no guest has.
  *
  * One per guest context, because the device counts this context as a holder of
- * every object it opened. */
+ * every object it opened.
+ *
+ * What it does *not* do is forget the NT handle when it gives an object back.
+ * A handle that reached `clCreateBufferWithProperties` is the application's -
+ * OpenCL never took ownership of it - and `icd::SharedHandles::forget` closes
+ * what it forgets, which would close a handle the application still holds. The
+ * price is that the process's handle table keeps a row per distinct handle
+ * adopted, and an application that imports more than it holds is refused once
+ * that table is full rather than once this one is. */
 #ifndef AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 #define AV_CLICD_CL_EXTERNAL_MEMORY_HPP
 
