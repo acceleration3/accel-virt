@@ -48,7 +48,7 @@ STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b
 MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:\[[^\]]*\])*\s*(?:=[^;]*)?;")
 ACCESS_RE = re.compile(r"^\s*(private|protected|public)\s*:")
 PURE_RE = re.compile(r"=\s*0\s*;")
-RECORD_DIRECTORY = "src/core/ddi/"
+RECORD_DIRECTORIES = ("src/core/ddi/", "src/icd/d3d/ddi/")
 RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Za-z_]\w*(?:\[\w+\])?\s*;")
 
 
@@ -101,8 +101,9 @@ def classes_in(lines, relative):
                 yield current
             current = DeclaredClass(match.group(1), relative)
             public = line.lstrip().startswith("struct")
-            # A DDI record overlays a WDK structure, so its fields keep the WDK's names.
-            current.is_record = (public and relative.startswith(RECORD_DIRECTORY)
+            # A DDI record overlays a structure its caller owns - dxgkrnl's, or a
+            # Direct3D runtime's - so its fields keep the WDK's names.
+            current.is_record = (public and relative.startswith(RECORD_DIRECTORIES)
                                  and current.name.endswith("Record"))
             depth = line.count("{") - line.count("}")
             opened = depth > 0

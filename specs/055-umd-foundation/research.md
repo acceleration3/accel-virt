@@ -420,3 +420,77 @@ in 056 and 057. This is recorded as a deliberate narrowing of FR-006.
   images). 055 builds the seam and the refusals.
 - **The recorded D3D12Core call sequence (FR-002)** waits on a Ghidra
   workspace; the task is written and unstarted.
+
+## 12. What D3D12Core actually does with the driver it loaded (FR-002)
+
+Read from `d3d12core.dll` (pinned in `tools/re/binaries.txt`) with its public
+PDB, in a Ghidra workspace built by `tools/re/import.py`. Addresses are that
+binary's.
+
+**`NDXGI::CUMDAdapter::OpenAdapter<0>` @180064008** is the whole of the open,
+and it is stricter than the header suggests:
+
+1. It zeroes **0x40 bytes** at `this+0x110` before the call - eight pointers,
+   which is exactly `D3D12DDI_ADAPTERFUNCS`. A driver that writes fewer slots
+   leaves zeroes, which is what the check below reads.
+2. `GetProcAddress(module, "OpenAdapter12")`. Absent: it journals
+   `"Driver does not have OpenAdapter entrypoint"` and answers `0x887A0002`
+   (`DXGI_ERROR_NOT_FOUND`).
+3. It calls it with a stack structure of four fields in the order
+   `D3D12DDIARG_OPENADAPTER` declares: `hRTAdapter` = the `CUMDAdapter`,
+   `hAdapter` = 0 (out), `pAdapterCallbacks` = `this+0xf8`,
+   `pAdapterFuncs` = `this+0x110`.
+4. A negative `HRESULT` is journaled as `"OpenAdapter12"` and returned as is.
+5. **Then it validates what the driver wrote.** The out `hAdapter` must be
+   non-zero, and the table slots at `+0x120`, `+0x128`, `+0x130`, `+0x138`,
+   `+0x140` and `+0x148` must all be non-null - that is
+   `pfnCloseAdapter`, `pfnGetSupportedVersions`, `pfnGetCaps`,
+   `pfnGetOptionalDDITables`, `pfnFillDDITable` and `pfnDestroyDevice`, slots 2
+   through 7. Slots 0 and 1 (`pfnCalcPrivateDeviceSize`, `pfnCreateDevice`) are
+   not checked here.
+6. If the check fails and `pfnCloseAdapter` is non-null and `hAdapter` is
+   non-zero, it calls `pfnCloseAdapter` to give the driver its adapter back -
+   then journals `"OpenAdapter12"` and answers `0x887A0004`
+   (`DXGI_ERROR_INVALID_CALL`).
+7. On success `hAdapter` is kept at `this+0x150`, and every later table call
+   passes it.
+
+So a partially-filled table is not tolerated, and a refusal after a successful
+open is cleaned up through `pfnCloseAdapter` - which is why 055 fills all eight
+slots from the first commit and why `pfnCloseAdapter` must be safe to call on
+an adapter no device was made on.
+
+**`CCreateDeviceCache::LoadUMD` @18007a230** is what happens next, and the
+first thing it asks the driver is the 3D pipeline level:
+
+- guarded on a DDI version, it calls `pfnGetCaps` with
+  `{ Type = 0x432, pInfo = NULL, pData = <4-byte in, 4-byte out>, DataSize = 8 }`
+  - `D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1` (1074), whose
+  `D3D12DDI_3DPIPELINESUPPORT1_DATA_0081` takes the runtime's highest supported
+  level in and answers the driver's;
+- if that answers a failure, it falls back to `pfnGetCaps` with
+  `{ Type = 0x3ef, pInfo = NULL, pData = <4 bytes>, DataSize = 4 }` -
+  `D3D12DDICAPS_TYPE_3DPIPELINESUPPORT` (1007) - and a failure there is
+  journaled as `"Get3DPipelineLevel"`;
+- the answer must be 1, 2, or 10 through 14
+  (`D3D12DDI_3DPIPELINELEVEL_1_0_GENERIC = 1` upward). Anything else is
+  journaled as `"Driver returned invalid pipeline caps"` with `0x887A0020` and
+  forced to 1.
+
+**Consequence for 055 and 057.** `pfnGetCaps` answering `E_INVALIDARG` to both
+pipeline-level types is a *supported* outcome - the runtime falls back and then
+forces level 1 with a journal entry - so 055's blanket refusal does not crash
+D3D12Core. But it means the first cap 057 must implement is the pipeline level,
+and that until it does, D3D12 on this adapter is generic level 1. That is the
+honest reporting constitution VI asks for, not a gap to paper over. The test
+for `pfnGetCaps` names both types explicitly.
+
+`d3d12core.dll` also carries `QAI (UMDRIVERNAME)`, `Removing device due to bad
+UMD error.`, `UMD reported device removed.`, `UMD reported application bug.`
+and `UMD reported error while device is removed.` - the four ways a UMD's
+reported error is classified, which is what §9's `DeviceRemoval` has to be
+right about once 056 starts calling `pfnSetErrorCb`.
+
+**Still unread**, and left in T036: the D3D11 runtime's own sequence, and which
+`pfnFillDDITable` types D3D12Core asks for before it gives up. Both are in the
+same workspace and are a query away; neither changes anything 055 builds.
