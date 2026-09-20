@@ -79,7 +79,7 @@ typedef struct D3D10DDIARG_OPENADAPTER {
 | Slot | 055 answers | Whose |
 |---|---|---|
 | `pfnGetSupportedVersions` | the count-then-fill protocol over `DdiVersionList`: a null array answers the count; an array shorter than the count is `E_OUTOFMEMORY` with the count written back; an exact array is filled and `S_OK`. Today the list is one word, `D3DWDDM3_2_DDI_SUPPORTED` = `0x000B002D00010000` | 055; **056** adds a word only when it has implemented and tested that revision |
-| `pfnGetCaps` | the caps whose data 055 owns (adapter identity and memory, below); `E_INVALIDARG` for every other `D3D10_2DDICAPS_TYPE`, with a test naming each type refused | 055 for identity; **056** for `D3D11DDICAPS_THREADING`, `_SHADER`, `_3DPIPELINESUPPORT`, the `D3D11_OPTIONS*` family and the format caps |
+| `pfnGetCaps` | `E_INVALIDARG` for every `D3D10_2DDICAPS_TYPE`: 055 implements no D3D cap, and the adapter's identity does not come through here (see below) | **056**: `D3D11DDICAPS_THREADING`, `_SHADER`, `_3DPIPELINESUPPORT`, the `D3D11_OPTIONS*` family and the format caps |
 | `pfnCalcPrivateDeviceSize` | `sizeof(DeviceCookie)`, independent of `Interface`, `Version` and `Flags` | 055, and it does not change: the cookie is a magic and a pointer whatever the device becomes |
 | `pfnCreateDevice` | builds the `UmdDevice`, records the callbacks, fills the DXGI seam, then answers `E_NOTIMPL` because no device-functions table is filled | **056** fills `pWDDM2_6DeviceFuncs` and answers `S_OK`; everything before that line is 055's and must not be re-done |
 | `pfnCloseAdapter` | destroys the adapter; `E_FAIL` if a device made through it is still live | 055 |
@@ -100,7 +100,7 @@ No `Interface` and no `Version`: D3D12 carries the version per table instead.
 | Slot | 055 answers | Whose |
 |---|---|---|
 | `pfnGetSupportedVersions` | as the D3D11 one, over the D3D12 list | 055; **057** adds words |
-| `pfnGetCaps` | the identity caps; `E_INVALIDARG` otherwise | 055 / **057** |
+| `pfnGetCaps` | `E_INVALIDARG` for every `D3D12DDICAPS_TYPE` | **057**, and the 3D pipeline level first (below) |
 | `pfnCalcPrivateDeviceSize` | `sizeof(DeviceCookie)` | 055 |
 | `pfnCreateDevice` | as the D3D11 one, then `E_NOTIMPL` | **057** |
 | `pfnDestroyDevice` | destroys the device the cookie names; a cookie this driver did not write is ignored, not dereferenced | 055 |
@@ -155,8 +155,14 @@ No logic in a thunk - the same rule as `src/core/ddi/entry_points.cpp`.
 
 ## Adapter identity, and what it does and does not decide
 
-`AdapterIdentity` answers, from the same two D3DKMT queries the Vulkan ICD
-makes on the same adapter:
+**It does not come through `pfnGetCaps`.** `DXGI_ADAPTER_DESC`'s description,
+vendor and device ids, LUID and memory figures are dxgkrnl's answers to
+`D3DKMTQueryAdapterInfo`, derived from the miniport - DXGI never asks the UMD
+for them. What `AdapterIdentity` is, then, is the driver's own record of which
+adapter it opened and what that adapter is: it is what a state dump shows, what
+the log names, and what SC-002 compares against Vulkan's answer for the same
+LUID. It reads, from the same two D3DKMT queries the Vulkan ICD makes on the
+same adapter:
 
 | Value | Source |
 |---|---|

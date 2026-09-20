@@ -52,7 +52,9 @@ unit (`src/um/d3d/rvkumd_exports.cpp`).
 - Invariant: every adapter in the pool has exactly one live handle, and every
   handle names an adapter in the pool.
 
-**AdapterIdentity** - one per adapter open.
+**AdapterIdentity** - one per adapter open. Not answered through
+`pfnGetCaps`: DXGI reads the adapter's description from the kernel, so this is
+the driver's own record of which adapter it opened (contracts/umd_interface.md).
 - Fields: the LUID (`Kmt::adapter_luid`), the PCI vendor and device ids
   (`PciIdentity` from `AdapterSearch`), the description, the dedicated and
   shared memory (`Kmt::query_video_memory`, both segment groups).
