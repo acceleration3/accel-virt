@@ -9,6 +9,16 @@
  * look. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_context_rig.hpp"
+#include "guest/transport/guest_connection.hpp"
+#include "icd/common/shared_handles.hpp"
+#include "icd/opencl/cl_property_list.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
+#include "proto/submission/command_header.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -19,11 +29,21 @@ using av::MockKmt;
 using av::Status;
 using av::clicd::GuestClContext;
 
+namespace av::clicd {
+
+/* Rows an open never leaves behind, for the invariant the context folds in. */
+struct ClExternalMemoryProbe {
+    static void set_live(ClExternalMemory &memory, std::uint32_t live) { memory.live_ = live; }
+};
+
+}  // namespace av::clicd
+
 namespace {
 
 GuestClContext made_context(ClContextRig &rig)
 {
-    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.log());
+    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.log(),
+                          rig.handles());
 }
 
 /* What the device answers the context's blob arena. A make asks exactly once,
@@ -58,6 +78,80 @@ TEST(guest_cl_context, making_it_opens_the_adapter_the_device_and_the_transport)
   CHECK(rig.kmt().open_objects() > ClContextRig::link_objects);
   CHECK(context.invariants_hold()); }
 
+/* A process that exits holding a shared object gives it back. Its buffers keep
+ * the cl_context alive while they live, so the only thing that can still be
+ * holding one when the context goes is a process that released nothing - and
+ * an object nobody lets go of is one the host keeps for as long as the device
+ * lives (feature 053). */
+TEST(guest_cl_context, a_context_going_releases_the_shared_objects_it_still_holds)
+{ ClContextRig rig;
+  arena_answers(rig);
+  std::uint32_t adapter = 0u;
+  std::uint32_t found = 0u;
+  CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), Status::ok);
+  std::uint32_t elsewhere = 0u;
+  CHECK_STATUS(rig.kmt().create_device(adapter, elsewhere), Status::ok);
+  const av::AllocationDescriptor carrier(av::AllocationKind::client, true, av::SurfaceLayout(), 4096u,
+                                         av::ScanoutTarget());
+  std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(carrier.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  std::uint32_t allocation = 0u;
+  CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation), Status::ok);
+  std::uint64_t handle = 0u;
+  CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, handle), Status::ok);
+  const std::uint64_t properties[] = {0x2061u, handle, 0u};   /* OPAQUE_WIN32 */
+
+  std::uint32_t sent = 0u;
+  { GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    av::clicd::ClPropertyList list;
+    CHECK(list.read(properties));
+    rig.host().shared_object(0u, 0x9001u);
+    std::uint64_t made = 0u;
+    CHECK_EQ(context.external().open(*context.wire(), context.guest_device(), list, 4096u, made),
+             CL_SUCCESS);
+    CHECK_EQ(made, 0x9001u);
+    CHECK_EQ(context.external().live(), 1u);
+    CHECK(context.invariants_hold());
+    sent = rig.kmt().commands();
+    rig.host().shared_object(0u, 0u);
+  }
+  bool released = false;
+  for (std::uint32_t index = sent; index < rig.kmt().commands(); index++)
+      released = released || rig.kmt().command_id(index) == av::CommandHeader::release_shared_object_id;
+  CHECK(released); }
+
+/* The context's invariant is its parts': a shared-object table that cannot be
+ * true makes the context that owns it untrue too, which is what stops a broken
+ * table going unnoticed until something reads a row that is not there. */
+TEST(guest_cl_context, a_shared_object_table_that_cannot_be_true_makes_the_context_untrue)
+{ ClContextRig rig;
+  GuestClContext context = made_context(rig);
+  CHECK(context.invariants_hold());
+  av::clicd::ClExternalMemoryProbe::set_live(context.external(), 1u);
+  CHECK(!context.invariants_hold());
+  av::clicd::ClExternalMemoryProbe::set_live(context.external(), 0u);
+  CHECK(context.invariants_hold()); }
+
+/* An open of another process's handle is made against the D3DKMT device this
+ * context's transport runs on, so the context is what knows it - and knows it
+ * only once there is one. */
+TEST(guest_cl_context, it_names_the_device_its_transport_runs_on_once_it_has_one)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_EQ(context.guest_device(), 0u);
+  CHECK_STATUS(context.make(), Status::ok);
+  const std::uint32_t device = context.guest_device();
+  CHECK(device != 0u);
+  /* The connection's own, not a number of the context's making. */
+  CHECK_EQ(device, rig.connection().device(0u).device());
+  CHECK(context.invariants_hold()); }
+
 TEST(guest_cl_context, a_second_make_is_refused_and_changes_nothing)
 { ClContextRig rig;
   arena_answers(rig);
@@ -76,8 +170,10 @@ TEST(guest_cl_context, with_no_rvkgpu_adapter_it_is_not_supported_and_holds_noth
   av::RecordingThreadLock send_lock(trace, 'S');
   av::RecordingLog log;
   av::icd::IcdConnection connection(kmt);
+  av::RecordingThreadLock handles_lock(trace, 'H');
+  av::icd::SharedHandles  handles(kmt, handles_lock);
   /* No adapter was added: what a process on a machine with no rvkgpu sees. */
-  GuestClContext context(connection, platform, send_lock, log);
+  GuestClContext context(connection, platform, send_lock, log, handles);
   CHECK_STATUS(context.make(), Status::not_supported);
   CHECK(context.state() == GuestClContext::State::created);
   CHECK_EQ(kmt.open_objects(), 0u);

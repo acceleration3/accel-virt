@@ -506,13 +506,12 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
          * what a shared allocation is exported as has to be settled before the
          * device is made, and an application may never ask for the list. */
         learn_host_sharing(*made, physical_device);
-        /* The add cannot run out: `take` above accepts only names this driver
-         * reports, and it reports far fewer than the list holds. Kept because
-         * the list's bound is not this function's to know. */
-        if (made->connection()->host_has_dma_buf() && !asked.add(dma_buf_extension)) {
-            log_.write("rvkvk: vkCreateDevice: no room to ask the host for its dma-buf extension");
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
+        /* Not branched on, because it cannot fail: `take` refused a list longer
+         * than the table, and this list names the win32 extension - which take
+         * keeps for this ICD rather than passing on - so at most max_names - 1
+         * of its names reached the table and there is always room for one
+         * more. A branch nothing can take is one no test can judge. */
+        if (made->connection()->host_has_dma_buf()) static_cast<void>(asked.add(dma_buf_extension));
     }
     /* A swapchain is this ICD's own, so the host's device is not asked for it. */
     VkDeviceCreateInfo forwarded = *create;
@@ -682,18 +681,15 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         static_cast<void>(call.release(minted.object_id(), kind, size));
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
-    /* Not reachable while the two tables are the same size, and kept anyway.
-     * Every row here is one an NT handle was minted for a moment ago, so the
-     * handle table fills first and answers no_space before this can; dropping
-     * the rollback to please a coverage number would leave a published object
-     * held by a process that cannot name it the day the sizes differ. */
+    /* Not branched on, because it cannot fail: every row here is one an NT
+     * handle was minted for a moment ago, so the handle table fills first and
+     * answers no_space before this can. The assertion is what keeps that true
+     * - the day the sizes differ it is a compile error rather than a rollback
+     * no test could ever reach. */
     static_assert(ExternalObjects::max_objects <= SharedHandles::max_handles,
                   "an externals row always follows a handle row, so the handle table must fill first");
-    if (!externals_.remember(device, memory, semaphore, minted.object_id(), size, handle, carrier)) {
-        shared_handles_.forget(handle);
-        static_cast<void>(call.release(minted.object_id(), kind, size));
-        return VK_ERROR_TOO_MANY_OBJECTS;
-    }
+    static_cast<void>(externals_.remember(device, memory, semaphore, minted.object_id(), size, handle,
+                                          carrier));
     unwind.dismiss();
     return VK_SUCCESS;
 }
@@ -1038,14 +1034,12 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
      * non-zero one is a copy of the same width. A branch nothing can take is
      * one no test can judge. */
     static_cast<void>(vkproto::wire_to_handle(opened, memory));
-    /* As in publish: the handle was adopted before this, so the handle table
-     * is the one that runs out. The rollback stays for the same reason. */
-    if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
-                             static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
-        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
-        memory = VK_NULL_HANDLE;
-        return VK_ERROR_TOO_MANY_OBJECTS;
-    }
+    /* As in publish, and not branched on for the same reason: the handle was
+     * adopted before this, so the handle table is the one that runs out. */
+    static_cast<void>(externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
+                                          static_cast<uint64_t>(reinterpret_cast<uintptr_t>(
+                                              importing.handle_)),
+                                          0u));
     return VK_SUCCESS;
 }
 

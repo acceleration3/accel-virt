@@ -1,5 +1,6 @@
 #include "device/executor/vulkan_backend.hpp"
 
+#include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_gpu.hpp"
@@ -588,9 +589,15 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     const uint32_t memory_type =
         first_memory_type(import_.shared_memory_types(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
     if (memory_type == max_memory_types) return false;
-    if (!import_.import_shared_memory(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,
-                                      memory_type, wire_handle))
-        return false;
+    const bool imported =
+        import_.import_shared_memory(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,
+                                     memory_type, wire_handle);
+    /* The host driver declining an import the backend asked for correctly.
+     * No driver reachable from a test on this machine ever does: radv is the
+     * only one here that takes a dma-buf at all, and it takes one of the wrong
+     * size, one whose device never enabled the extension, and a descriptor
+     * number that names nothing (research.md §19). */
+    if (!imported) { AV_UNTESTABLE("no host driver here refuses an import"); return false; }
     made(wire_handle);
     return true;
 }

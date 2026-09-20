@@ -28,11 +28,27 @@ bool same_word(const char *text, const char *name, size_t length)
 /* The extensions this ICD reports, each with the test that proves it through
  * the ICD (tools/check_extension_policy.py).
  *
- * Empty, and deliberately so. cl_khr_icd is the loader's own contract rather
- * than something an application enables, and this ICD answers its two queries
- * without claiming the extension; cl_khr_gl_sharing waits for feature 053,
- * which is what implements sharing with the OpenGL ICD. Nothing else is
- * carried, tested or reported. */
+ * Still empty after feature 053, and for three separate reasons.
+ *
+ * `cl_khr_icd` is the loader's own contract rather than something an
+ * application enables, and this ICD answers its two queries without claiming
+ * the extension.
+ *
+ * `cl_khr_external_memory_win32` is built in the guest and refused by the
+ * host: `ClExternalMemory` turns a Win32 handle into the object behind it and
+ * opens that on the device, and `clCreateBufferWithProperties` carries it -
+ * but the device's OpenCL backend cannot import a shared object at all (053's
+ * T019, waiting for a host whose OpenCL lists `cl_khr_external_memory_dma_buf`
+ * to prove it against). Reporting a row whose every use the device refuses is
+ * exactly what constitution VI forbids, so the machinery ships unreported and
+ * the row lands with the import.
+ *
+ * `cl_khr_gl_sharing` needs something this design does not have yet: the
+ * *host's* CL context must be created against the *host's* GL context, and the
+ * GL context to share with belongs to another rvk context - the OpenGL ICD's,
+ * in another DLL of the same process - which nothing on the wire names. That
+ * is a wire and executor-ABI change rather than a table, and research.md §18
+ * records what it would take. */
 const ClExtensionPolicy::Row *reported_extensions = nullptr;
 
 ClExtensionPolicy::ClExtensionPolicy(const Row *rows, uint32_t count)

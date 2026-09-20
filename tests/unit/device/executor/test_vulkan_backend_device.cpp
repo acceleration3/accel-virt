@@ -1622,6 +1622,12 @@ TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_ei
       CHECK(!made.backend().import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_OPAQUE_FD, ends[0],
                                           0u, imported));
       CHECK_EQ(imported, 0u);
+      /* Memory is the same answer by a different route: with no entry point
+       * to ask, the descriptor's memory types are none, and an import with no
+       * type to bind into is refused rather than bound into type 0. */
+      CHECK(!made.backend().import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, ends[0], page,
+                                          imported));
+      CHECK_EQ(imported, 0u);
       ::close(ends[0]);
   }
 }

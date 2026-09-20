@@ -151,6 +151,22 @@ cl_mem CL_API_CALL create_buffer(cl_context context, cl_mem_flags flags, size_t 
     return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, nullptr, error);
 }
 
+/* clCreateBufferWithProperties: the same create, with the list the
+ * application wrote. The only names it may carry are the external-memory
+ * ones, and only while that row is reported (feature 053). */
+cl_mem CL_API_CALL create_buffer_with_properties(cl_context context, const cl_mem_properties *properties,
+                                                 cl_mem_flags flags, size_t bytes, void *host_pointer,
+                                                 cl_int *error)
+{
+    AV_SCOPE("create_buffer_with_properties");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer,
+                                               reinterpret_cast<const uint64_t *>(properties), error);
+}
+
 cl_int CL_API_CALL retain_mem(cl_mem buffer)
 {
     AV_SCOPE("retain_mem");
@@ -413,6 +429,7 @@ void ClDispatchTable::fill()
     table_.clRetainCommandQueue = &retain_queue;
     table_.clReleaseCommandQueue = &release_queue;
     table_.clCreateBuffer = &create_buffer;
+    table_.clCreateBufferWithProperties = &create_buffer_with_properties;
     table_.clRetainMemObject = &retain_mem;
     table_.clReleaseMemObject = &release_mem;
     table_.clCreateProgramWithSource = &create_program_with_source;
@@ -442,7 +459,7 @@ void ClDispatchTable::fill()
     table_.clWaitForEvents = &wait_for_events;
     table_.clGetEventInfo = &get_event_info;
     table_.clSetEventCallback = &set_event_callback;
-    claimed_ = 41u;
+    claimed_ = 42u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;

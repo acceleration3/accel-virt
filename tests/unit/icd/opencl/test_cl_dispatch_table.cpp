@@ -64,6 +64,12 @@ TEST(cl_dispatch_table, filling_claims_this_icds_entries_and_refuses_everywhere_
   CHECK(slots.clGetPlatformIDs != nullptr);
   CHECK(slots.clCreateContext != nullptr);
   CHECK(slots.clEnqueueNDRangeKernel != nullptr);
+  /* The two buffer creates are different entries: one carries a property
+   * list and the other has none to carry (feature 053). */
+  CHECK(slots.clCreateBuffer != nullptr);
+  CHECK(slots.clCreateBufferWithProperties != nullptr);
+  CHECK(reinterpret_cast<const void *>(slots.clCreateBuffer) !=
+        reinterpret_cast<const void *>(slots.clCreateBufferWithProperties));
   /* Not claimed, and still not null: the loader would call through it. */
   CHECK(slots.clCreateImage != nullptr);
   CHECK(slots.clSVMAlloc != nullptr);
@@ -139,6 +145,9 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK(table.table().clCreateBuffer(nullptr, 0u, 0u, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
   error = 7;
+  CHECK(table.table().clCreateBufferWithProperties(nullptr, nullptr, 0u, 0u, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
   CHECK(table.table().clCreateProgramWithSource(nullptr, 0u, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
   error = 7;
@@ -171,6 +180,8 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK(table.table().clCreateCommandQueueWithProperties(nullptr, nullptr, nullptr, nullptr) ==
         nullptr);
   CHECK(table.table().clCreateBuffer(nullptr, 0u, 0u, nullptr, nullptr) == nullptr);
+  CHECK(table.table().clCreateBufferWithProperties(nullptr, nullptr, 0u, 0u, nullptr, nullptr) ==
+        nullptr);
   CHECK(table.table().clCreateProgramWithSource(nullptr, 0u, nullptr, nullptr, nullptr) ==
         nullptr);
   CHECK(table.table().clCreateKernel(nullptr, nullptr, nullptr) == nullptr);

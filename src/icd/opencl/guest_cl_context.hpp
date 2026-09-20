@@ -23,6 +23,7 @@
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/locked_transport.hpp"
+#include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/svm_table.hpp"
 
@@ -37,6 +38,7 @@ class StateWriter;
 namespace av::icd {
 class IcdConnection;
 class LogSink;
+class SharedHandles;
 class ThreadLock;
 }  // namespace av::icd
 
@@ -64,7 +66,7 @@ public:
     static constexpr uint32_t max_mappings = 64u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                   icd::LogSink &log);
+                   icd::LogSink &log, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;
@@ -89,6 +91,11 @@ public:
     bool             lost() const;
     /* The shared allocations made on this context. */
     SvmTable        &svm();
+    /* The objects another API made that this context imported. */
+    ClExternalMemory &external();
+    /* The D3DKMT device this context's transport runs on, which is what an
+     * open of another process's handle is made against; 0 before the make. */
+    uint32_t         guest_device() const;
 
     /* Takes a mapping of `bytes` at `offset` into `buffer`, staging the bytes
      * in guest memory. Null when there is no room for another mapping or no
@@ -130,6 +137,7 @@ private:
     ObjectStorage<KmtBlobArena>          arena_;
     ClArenaBlocks                        blocks_;
     SvmTable                             svm_;
+    ClExternalMemory                     external_;
     MappedRegion                         mappings_[max_mappings];
     State                                state_;
 };

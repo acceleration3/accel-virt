@@ -15,6 +15,15 @@
 #include "harness/icd/recording_log.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
+#include "proto/submission/command_header.hpp"
+
+#include <CL/cl_ext.h>
 
 #include <cstdint>
 #include <cstring>
@@ -79,7 +88,172 @@ private:
     cl_command_queue queue_;
 };
 
+/* An NT handle another guest device minted, which is what an application is
+ * handed when some other API exported memory (feature 053). The id behind it
+ * travels in the creating device's own allocation private data and nowhere
+ * else, so the handle is all this test needs to know. */
+std::uint64_t shared_handle(ClIcdRig &rig)
+{
+    std::uint32_t adapter = 0u;
+    std::uint32_t found = 0u;
+    CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), av::Status::ok);
+    std::uint32_t elsewhere = 0u;
+    CHECK_STATUS(rig.kmt().create_device(adapter, elsewhere), av::Status::ok);
+    const av::AllocationDescriptor carrier(av::AllocationKind::client, true, av::SurfaceLayout(), 4096u,
+                                           av::ScanoutTarget());
+    std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+    CHECK_STATUS(carrier.encode(bytes, av::AllocationDescriptor::encoded_size), av::Status::ok);
+    const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
+                                        4096u);
+    CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                               av::SharedObjectRecord::encoded_size),
+                 av::Status::ok);
+    std::uint32_t allocation = 0u;
+    CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation),
+                 av::Status::ok);
+    std::uint64_t named = 0u;
+    CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, named), av::Status::ok);
+    return named;
+}
+
 }  // namespace
+
+/* A buffer over memory another API made: the property list carries the Win32
+ * handle, the ICD turns it into the object behind it and the device answers
+ * the cl_mem it opened. Nothing of the handle crosses the wire. */
+TEST(cl_buffer_paths, a_buffer_over_a_shared_object_is_opened_and_released_as_one)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t handle = shared_handle(rig);
+  const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                    static_cast<cl_mem_properties>(handle), 0u};
+  rig.host().shared_object(0u, host_buffer);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int              error = CL_INVALID_VALUE;
+  cl_mem              buffer = rig.loader().create_buffer_with_properties(
+      opened.context(), list, CL_MEM_READ_WRITE, buffer_bytes, &error);
+  CHECK(buffer != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  /* One command, and it is the open - not a create of any kind: the object
+   * already exists and the device made the cl_mem inside the open. */
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::CommandHeader::open_shared_object_id);
+  CHECK(rig.root().invariants_hold());
+
+  /* Released, the device is told to let the object go rather than to free a
+   * buffer it never allocated. */
+  rig.host().shared_object(0u, 0u);
+  CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::CommandHeader::release_shared_object_id);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The guest ran out of room for the cl_mem the device had already made. The
+ * object is given back to the device rather than the buffer to the host: the
+ * device made that cl_mem inside the open and releasing it behind the device's
+ * back would leave the object held by a context that can no longer name it. */
+TEST(cl_buffer_paths, an_object_the_guest_cannot_keep_is_given_back_to_the_device)
+{ ClIcdRig rig;
+  Opened   opened(rig, false);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t handle = shared_handle(rig);
+
+  /* The object table takes its memory a chunk at a time, so the refusal only
+   * happens on the object that needs a new one: buffers are made until one
+   * costs a chunk, and then the rest of that chunk is filled. */
+  const std::uint32_t before = rig.platform().live_allocations();
+  std::uint32_t       made = 0u;
+  for (; made < 256u; made++) {
+      rig.host().cl_handle(host_buffer + made, CL_SUCCESS);
+      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, buffer_bytes, nullptr) !=
+            nullptr);
+      if (rig.platform().live_allocations() != before) break;
+  }
+  CHECK(made < 256u);
+  for (std::uint32_t index = 1u; index < 64u; index++) {
+      rig.host().cl_handle(host_buffer + 256u + index, CL_SUCCESS);
+      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, buffer_bytes, nullptr) !=
+            nullptr);
+  }
+
+  const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                    static_cast<cl_mem_properties>(handle), 0u};
+  /* Exactly two answers: the open, and the release of what it opened. The
+   * command journal is long full by here, so what says both happened is that
+   * neither answer is left waiting. */
+  rig.host().shared_object(0u, 0x9100u);
+  rig.host().shared_object(0u, 0u);
+  CHECK_EQ(rig.kmt().queued_answers(), 2u);
+  rig.platform().fail_allocation_at(1u);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer_with_properties(opened.context(), list, CL_MEM_READ_WRITE,
+                                                   buffer_bytes, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+/* The four handle types this path cannot turn into a host object, a handle
+ * from nowhere, and a property that is not an external one at all. Each is
+ * refused with the answer the API has for it, and none of them reaches the
+ * device. */
+TEST(cl_buffer_paths, an_external_buffer_this_driver_cannot_make_is_refused_before_the_device)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t handle = shared_handle(rig);
+  const std::uint32_t sent = rig.kmt().commands();
+
+  const cl_mem_properties refused[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KMT_KHR,
+                                       CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_NAME_KHR,
+                                       CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD_KHR,
+                                       CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR};
+  for (const cl_mem_properties name : refused) {
+      const cl_mem_properties list[] = {name, static_cast<cl_mem_properties>(handle), 0u};
+      cl_int                  error = CL_SUCCESS;
+      CHECK(rig.loader().create_buffer_with_properties(opened.context(), list, CL_MEM_READ_WRITE,
+                                                       buffer_bytes, &error) == nullptr);
+      CHECK_EQ(error, CL_INVALID_PROPERTY);
+  }
+
+  /* A handle this process may not open. */
+  const cl_mem_properties nowhere[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, 0x4004u, 0u};
+  cl_int                  error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer_with_properties(opened.context(), nowhere, CL_MEM_READ_WRITE,
+                                                   buffer_bytes, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_VALUE);
+
+  /* And a property OpenCL has that this driver does not implement. */
+  const cl_mem_properties other[] = {CL_MEM_DEVICE_HANDLE_LIST_KHR, 0u, 0u};
+  error = CL_SUCCESS;
+  CHECK(rig.loader().create_buffer_with_properties(opened.context(), other, CL_MEM_READ_WRITE,
+                                                   buffer_bytes, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROPERTY);
+
+  /* Not one of them was sent. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+/* An empty list is the plain create, which is what an application that built
+ * its properties from a loop with nothing in it hands over. */
+TEST(cl_buffer_paths, a_buffer_with_an_empty_property_list_is_an_ordinary_buffer)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const cl_mem_properties empty[] = {0u};
+  rig.host().cl_handle(host_buffer, CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int              error = CL_INVALID_VALUE;
+  cl_mem              buffer = rig.loader().create_buffer_with_properties(
+      opened.context(), empty, CL_MEM_READ_WRITE, buffer_bytes, &error);
+  CHECK(buffer != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(av::clproto::kCmd_clCreateBuffer));
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, an_arena_backed_buffer_is_made_over_the_arena_and_the_log_says_so)
 { ClIcdRig rig;

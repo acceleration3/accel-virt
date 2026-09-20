@@ -39,7 +39,7 @@ public:
     {
         rig_.host().blob_import(0u, 0x77u);
         static_cast<void>(
-            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.log()));
+            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.log(), rig_.handles()));
         CHECK_STATUS(context_.object().make(), Status::ok);
     }
     ~Waiting() { context_.destroy(); }

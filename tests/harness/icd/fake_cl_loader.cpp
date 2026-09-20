@@ -160,6 +160,18 @@ cl_mem FakeClLoader::create_buffer(cl_context context, cl_mem_flags flags, std::
     return table->clCreateBuffer(context, flags, bytes, nullptr, error);
 }
 
+cl_mem FakeClLoader::create_buffer_with_properties(cl_context context,
+                                                   const cl_mem_properties *properties,
+                                                   cl_mem_flags flags, std::size_t bytes, cl_int *error)
+{
+    const cl_icd_dispatch *const table = first_word(context);
+    if (table == nullptr) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return table->clCreateBufferWithProperties(context, properties, flags, bytes, nullptr, error);
+}
+
 cl_program FakeClLoader::create_program(cl_context context, const char *source, cl_int *error)
 {
     const cl_icd_dispatch *const table = first_word(context);

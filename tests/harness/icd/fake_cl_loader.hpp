@@ -73,6 +73,10 @@ public:
     cl_command_queue create_queue(cl_context context, cl_device_id device, cl_int *error);
     cl_mem         create_buffer(cl_context context, cl_mem_flags flags, std::size_t bytes,
                                  cl_int *error);
+    /* The same slot's neighbour, which carries the list an external-memory
+     * create needs (feature 053). */
+    cl_mem         create_buffer_with_properties(cl_context context, const cl_mem_properties *properties,
+                                                 cl_mem_flags flags, std::size_t bytes, cl_int *error);
     cl_program     create_program(cl_context context, const char *source, cl_int *error);
     cl_int         build_program(cl_program program, const char *options);
     cl_kernel      create_kernel(cl_program program, const char *name, cl_int *error);

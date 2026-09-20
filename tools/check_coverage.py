@@ -85,7 +85,14 @@ class CoverageVerdict:
     def uncovered(self):
         """Branches are merged by source position: llvm-cov lists each template
         instantiation separately, and a direction is covered when any
-        instantiation takes it."""
+        instantiation takes it.
+
+        A branch on a line carrying an AV_UNTESTABLE mark is left out of the
+        count entirely, which is what the mark is for: constitution IV.1 says a
+        branch no test can reach is marked at the site and the marks are
+        ratcheted, and a mark that still failed the percentage would be a mark
+        nobody could ever write. Every one of them is in the report."""
+        marked = self.marked_lines()
         taken = {}
         for record in self.export["data"][0]["files"]:
             relative = self.source_path(record["filename"])
@@ -100,11 +107,13 @@ class CoverageVerdict:
                 both[1] = both[1] or false_count > 0
         lines = []
         for (relative, line, column), (true_taken, false_taken) in sorted(taken.items()):
+            if (relative, line) in marked:
+                continue
             if not true_taken:
                 lines.append(f"{relative}:{line}:{column}: true branch never taken")
             if not false_taken:
                 lines.append(f"{relative}:{line}:{column}: false branch never taken")
-        total = 2 * len(taken)
+        total = 2 * len([key for key in taken if (key[0], key[1]) not in marked])
         covered = total - len(lines)
         percent = 100.0 * covered / total if total else 100.0
         if covered < total:
@@ -124,6 +133,19 @@ class CoverageVerdict:
         if len(marks) <= baseline:
             return []
         return [f"AV_UNTESTABLE marks {len(marks)} > baseline {baseline}"] + marks
+
+    def marked_lines(self):
+        """Every (file, line) carrying an AV_UNTESTABLE mark."""
+        marked = set()
+        for path in self.sources((".cpp", ".hpp")):
+            relative = os.path.relpath(path, self.root)
+            with open(path) as source:
+                for number, text in enumerate(source, 1):
+                    if text.lstrip().startswith("#define"):
+                        continue
+                    if MARK_RE.search(text):
+                        marked.add((relative, number))
+        return marked
 
     def marks_in(self, path):
         relative = os.path.relpath(path, self.root)

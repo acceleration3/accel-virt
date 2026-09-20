@@ -9,6 +9,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -47,7 +48,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      icd::ServiceThread &watcher_thread, ClIcdBinding &binding)
     : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, 0u), objects_(memory, dispatch_.table()), connection_(kmt),
-      contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
+      shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
       device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_()
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
@@ -127,7 +128,7 @@ Status ClIcdRoot::open_device()
      * holds the adapter open for as long as a device exists. An application's
      * contexts are its own, made beside this one. */
     GuestClContext *context = nullptr;
-    const Status    made = contexts_.create(context, connection_, memory_, send_lock_, log_);
+    const Status    made = contexts_.create(context, connection_, memory_, send_lock_, log_, shared_handles_);
     if (made != Status::ok) {
         log_.write("rvkcl: no room for the ICD's own context");
         return made;
@@ -390,7 +391,7 @@ cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device
     }
     lock_.acquire();
     GuestClContext *context = nullptr;
-    Status          made = contexts_.create(context, connection_, memory_, send_lock_, log_);
+    Status          made = contexts_.create(context, connection_, memory_, send_lock_, log_, shared_handles_);
     if (made == Status::ok) made = context->make();
     if (made != Status::ok) {
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
@@ -478,6 +479,11 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                 break;
             }
             case ClObject::Kind::mem:
+                /* A cl_mem the device made inside an open of a shared object
+                 * is released rather than freed on the host: what goes is this
+                 * context's reference on the object, and the device destroys
+                 * what it made when the last one goes (feature 053). */
+                if (context->external().give_back(*wire, wire_handle)) break;
                 give_back_to_host(*wire, kind, wire_handle);
                 /* A buffer made over the arena gives its block back with it,
                  * so the next buffer can have that memory. After the host
@@ -580,11 +586,16 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
                                 void *host_pointer, const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_buffer");
-    /* OpenCL 3.0 defines no buffer property, so a list with anything in it
-     * names something this driver does not implement - which is the answer
-     * the API asks for rather than one to ignore. */
+    /* OpenCL 3.0 defines no buffer property of its own, so the only names a
+     * list may carry are cl_khr_external_memory's five. They are let through
+     * whether or not the row that carries them is reported for this device:
+     * the four this path cannot take are refused with the reason by the table
+     * that knows which they are, and the one it can take is refused by the
+     * device until its OpenCL backend can import (T019). Reporting the row is
+     * a separate question, and the answer is still no. */
     ClPropertyList list;
-    const cl_int   judged_list = judge(properties, nullptr, 0u, list);
+    const cl_int   judged_list = judge(properties, ClExternalMemory::handle_properties,
+                                       ClExternalMemory::handle_property_count, list);
     if (judged_list != CL_SUCCESS) {
         report_error(error, judged_list);
         return nullptr;
@@ -613,6 +624,27 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
      * Not when the application brought its own pointer: USE_HOST_PTR and
      * COPY_HOST_PTR both name memory of its own, which is not the arena's. */
     GuestClContext *const on = held->context();
+    if (on->external().asked_for(list)) {
+        uint64_t     opened = 0u;
+        const cl_int taken = on->external().open(*wire, on->guest_device(), list, bytes, opened);
+        if (taken != CL_SUCCESS) {
+            report_error(error, taken);
+            return nullptr;
+        }
+        /* Not through wrap: what it gives back when the guest cannot keep an
+         * object is a clReleaseMemObject, and this cl_mem is the device's own
+         * making inside the open. Releasing it behind the device's back would
+         * leave the shared object held by a context that can no longer name
+         * it, so the object is what goes back. */
+        ClObject *object = nullptr;
+        if (objects_.make(ClObject::Kind::mem, opened, on, held, object) != Status::ok) {
+            static_cast<void>(on->external().give_back(*wire, opened));
+            report_error(error, CL_OUT_OF_HOST_MEMORY);
+            return nullptr;
+        }
+        report_error(error, CL_SUCCESS);
+        return static_cast<cl_mem>(static_cast<void *>(object));
+    }
     const bool            wants_host_memory =
         (flags & static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR)) != 0u &&
         (flags & static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR | CL_MEM_COPY_HOST_PTR)) == 0u;

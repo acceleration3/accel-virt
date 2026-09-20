@@ -16,6 +16,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/shared_handles.hpp"
 
 namespace av {
 
@@ -35,6 +36,8 @@ public:
     RecordingThreadLock    &send_lock();
     RecordingLog           &log();
     av::icd::IcdConnection &connection();
+    /* The NT handles a context's imports resolve through (feature 053). */
+    av::icd::SharedHandles &handles();
 
 private:
     MockPlatform           platform_;
@@ -44,6 +47,8 @@ private:
     RecordingThreadLock    send_lock_;
     RecordingLog           log_;
     av::icd::IcdConnection connection_;
+    RecordingThreadLock    handles_lock_;
+    av::icd::SharedHandles handles_;
 };
 
 }  // namespace av

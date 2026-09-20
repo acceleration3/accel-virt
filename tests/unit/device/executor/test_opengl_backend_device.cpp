@@ -370,7 +370,10 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
       backend.release_object(RVK_SHARED_MEMORY, memory);
       backend.release_object(RVK_SHARED_MEMORY, memory);
 
-      /* A semaphore is the other name space, and one number can be both. */
+      /* A semaphore is the other name space, and one number can be both. Both
+       * guest fence kinds are that one host semaphore, so both are imported:
+       * a driver told the wrong one would make a second object nobody would
+       * ever release. */
       std::uint64_t fence = 0u;
       if (backend.import_object(RVK_SHARED_MONITORED_FENCE, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
                                 0u, fence)) {
@@ -378,9 +381,23 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
           /* Either guest fence kind is the one host semaphore. */
           backend.release_object(RVK_SHARED_NATIVE_FENCE, fence);
       }
+      std::uint64_t native = 0u;
+      if (backend.import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_DMA_BUF, descriptor.handle(),
+                                4096u, native)) {
+          CHECK(native != 0u);
+          backend.release_object(RVK_SHARED_NATIVE_FENCE, native);
+      }
       /* Whatever is left is deleted by the shut down, while the context can
        * still delete it. */
       backend.shut_down();
+      /* And with the context gone the driver has nothing to make a semaphore
+       * on: the import is refused rather than answering a name that names
+       * nothing, which is the one refusal on this path the wire's answer
+       * depends on and no argument can force. */
+      std::uint64_t after = 9u;
+      CHECK(!backend.import_object(RVK_SHARED_NATIVE_FENCE, RVK_SHARED_HANDLE_DMA_BUF,
+                                   descriptor.handle(), 0u, after));
+      CHECK_EQ(after, 0u);
   } }
 
 /* A context holds as many shared objects as it has rows for, and the one past

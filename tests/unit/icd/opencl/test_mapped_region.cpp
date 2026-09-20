@@ -110,7 +110,7 @@ TEST(mapped_region, giving_it_up_leaves_it_answering_for_nothing)
 TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
 
   std::uint8_t *const at = context.take_mapping(host_buffer, host_address, 0u, 128u, CL_MAP_READ);
@@ -132,7 +132,7 @@ TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   CHECK(context.take_mapping(host_buffer, host_address, 0u, 0u, CL_MAP_READ) == nullptr);
   CHECK(context.take_mapping(0u, host_address, 0u, 16u, CL_MAP_READ) == nullptr);
@@ -145,7 +145,7 @@ TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stays_usable)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log());
+  GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   std::uint8_t *first = nullptr;
   for (std::uint32_t index = 0u; index < GuestClContext::max_mappings; ++index) {
@@ -164,7 +164,7 @@ TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stay
 TEST(guest_cl_context, mappings_left_live_go_with_the_context)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
-  { GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log());
+  { GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.handles());
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(context.take_mapping(host_buffer, host_address, 0u, 256u, CL_MAP_WRITE) != nullptr);
     CHECK_EQ(context.mappings(), 1u); }

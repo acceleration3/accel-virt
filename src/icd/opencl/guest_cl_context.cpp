@@ -5,16 +5,18 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "guest/transport/guest_connection.hpp"
 #include "icd/common/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               icd::ThreadLock &send_lock, icd::LogSink &log)
+                               icd::ThreadLock &send_lock, icd::LogSink &log,
+                               icd::SharedHandles &handles)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log),
       link_(icd::IcdConnection::no_link), staging_(nullptr), transport_(), locked_(), arena_(),
-      svm_(memory), mappings_(), state_(State::created)
+      svm_(memory), external_(handles, log), mappings_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -84,6 +86,10 @@ void GuestClContext::teardown()
      * the unmap, so the blocks go here rather than with the buffer. */
     for (uint32_t slot = 0u; slot < max_mappings; ++slot) give_back_mapping(mappings_[slot]);
     svm_.give_back_all();
+    /* Before the transport goes, and only while it can still carry a release:
+     * the device counts this context as a holder of every object it opened,
+     * and a lost context's are released by the device with the context. */
+    if (state_ == State::made && locked_.constructed()) external_.release_all(locked_.object());
     if (arena_.constructed()) {
         /* A lost context's import is forgotten rather than released: the
          * device frees it with the context, and asking a faulted transport
@@ -158,6 +164,19 @@ SvmTable &GuestClContext::svm()
     return svm_;
 }
 
+ClExternalMemory &GuestClContext::external()
+{
+    AV_SCOPE("GuestClContext::external");
+    return external_;
+}
+
+uint32_t GuestClContext::guest_device() const
+{
+    AV_SCOPE("GuestClContext::guest_device");
+    if (link_ == icd::IcdConnection::no_link) return 0u;
+    return connection_.device(link_).device();
+}
+
 bool GuestClContext::has_arena() const
 {
     AV_SCOPE("GuestClContext::has_arena");
@@ -230,13 +249,14 @@ void GuestClContext::report(StateWriter &writer) const
     writer.flag("arena", has_arena());
     writer.number("mappings", mappings());
     svm_.report(writer);
+    external_.report(writer);
     writer.close();
 }
 
 bool GuestClContext::invariants_hold() const
 {
     AV_SCOPE("GuestClContext::invariants_hold");
-    if (!svm_.invariants_hold()) return false;
+    if (!svm_.invariants_hold() || !external_.invariants_hold()) return false;
     for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
         if (!mappings_[slot].invariants_hold()) return false;
         /* No two live mappings answer the same pointer: an unmap would then

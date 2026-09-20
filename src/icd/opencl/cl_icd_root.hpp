@@ -22,6 +22,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/cl_device_report.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
@@ -239,6 +240,9 @@ private:
     ClExtensionPolicy      extensions_;
     ClObjectTable          objects_;
     icd::IcdConnection     connection_;
+    /* The NT handles this process holds for shared objects, which every
+     * context's imports resolve through (feature 053). */
+    icd::SharedHandles     shared_handles_;
     ObjectPool<GuestClContext> contexts_;
     BlockSource           &memory_;
     icd::ThreadLock       &send_lock_;

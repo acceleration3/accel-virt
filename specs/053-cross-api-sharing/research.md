@@ -696,3 +696,87 @@ with `destroy_shared_allocation`. The rigs are where this is proven: `MockKmt`
 and `DdiKmt` now remember whether an object was asked for as a resource and
 refuse each call the handle's type does not fit, so a caller that names the
 wrong one fails in a Linux unit test rather than in a boot.
+
+## §18 — Answered: what `cl_khr_gl_sharing` needs, and why it is not a table
+
+T039 asked for the acquire window an OpenCL context keeps over the GL objects
+it shares. Building it turned out to be the easy half of a question the design
+cannot answer yet, and the answer is worth writing down rather than shipping a
+table nothing can open.
+
+`clCreateFromGLBuffer` and its siblings are already generated
+(`tools/codegen/profiles/opencl.toml`, §8), so the wire is not what is missing.
+What is missing is on the host. The spec is explicit: those calls answer
+`CL_INVALID_CONTEXT` unless the `cl_context` "was created from a GL context" -
+that is, with `CL_GL_CONTEXT_KHR` in its properties naming a live host GL
+context. The device creates its host CL context inside `create_with_options`
+from the properties the guest sent, and the guest's GL context is a number only
+the guest's OpenGL ICD knows.
+
+So three things would have to exist, none of which is a table:
+
+1. **A way to name a GL context on the wire.** The executor's
+   `create_with_options` takes `RvkExecutor *share`, and its contract is "an
+   executor of the same sub-API" - a CL context sharing a GL context is a
+   different relation and needs a different parameter.
+2. **A backend that uses it.** `OpenClBackend` would create its context with
+   `CL_GL_CONTEXT_KHR` (and the EGL display the GL backend holds) rather than
+   with the plain device, which is a change to how a CL executor is made rather
+   than to what it executes.
+3. **One object identity across the two ICDs in one process.** The guest's GL
+   context lives in `rvkgl.dll` and its CL context in `rvkcl.dll`, each with
+   its own `IcdConnection` and its own rvk context. An application handing
+   `clCreateFromGLBuffer` a GL name means a name in the *other* DLL's context.
+   This is the same problem 055's T033 names - one transport link per process -
+   and it is not solvable inside either ICD.
+
+Until those land, `cl_khr_gl_sharing` is not reported and no acquire window is
+kept, because there is nothing to acquire: an application that calls
+`clCreateFromGLBuffer` reaches the generated refusal, which is the honest
+answer. The interop matrix's GL↔CL leg (SC-001) therefore stays open alongside
+the OpenGL rows §12 left open, and both are recorded in §10's list of what this
+environment cannot prove.
+
+**What did land for OpenCL** is the other half of US2: `ClExternalMemory` and
+`clCreateBufferWithProperties`, which take the Win32 handle path all the way to
+`OPEN_SHARED_OBJECT`. That one is blocked only on the device's OpenCL import
+(T019) - a host away, not a design away.
+
+## §19 — One branch this machine cannot reach, and what the mark is for
+
+T045 asked for 100% branch coverage with the `AV_UNTESTABLE` ratchet at 0. Six
+branches stood in the way and five of them were wrong to have: three rollbacks
+in the Vulkan ICD that their own `static_assert`s prove can never run (a
+publish's and an import's `ExternalObjects::remember`, and `vkCreateDevice`
+asking the host for its dma-buf extension), and two refusals in the OpenGL
+backend that a test simply had not asked for. The rollbacks are gone - a branch
+nothing can take is one no test can judge, and the assertion is what keeps the
+assumption true - and the OpenGL ones are now driven, one by importing a native
+fence and one by importing a semaphore with no context to make it on.
+
+The sixth is `VulkanBackend::import_object`'s last refusal: the host driver
+declining an import the backend asked for correctly. Four ways were tried to
+make a driver refuse one, and this machine's only driver that takes a dma-buf
+at all - radv - took every one of them:
+
+| what was handed over | what radv did |
+|---|---|
+| a pipe, as a dma-buf | answered a non-empty memory-type mask |
+| a descriptor number that names nothing | answered a non-empty mask |
+| a dma-buf of one page, imported as 16 MiB | allocated it |
+| the same, on a device that never enabled `VK_EXT_external_memory_dma_buf` | allocated it |
+
+NVIDIA's driver is the other GPU here and takes no dma-buf at all, so it never
+reaches the line. The branch is real - a driver that refuses must not be
+answered with a handle it never made - and no test on this host can reach it.
+
+So it carries the feature's first `AV_UNTESTABLE`, and the gate learned what
+the mark is for. `tools/check_coverage.py` counted marks and ratcheted them but
+still held every branch to 100%, which made a mark something nobody could ever
+write: the percentage failed whatever it said. It now leaves a marked line out
+of the count and lists it in the report, which is what constitution IV.1
+describes - "a branch that genuinely cannot be reached from a test is marked
+`AV_UNTESTABLE("reason")` at the site. The coverage gate counts those marks,
+fails if the count rises without a spec change, and every mark is reviewed."
+The baseline moves 0 → 1 with this feature, and the mark names the reason and
+points here.
