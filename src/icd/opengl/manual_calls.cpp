@@ -1,5 +1,8 @@
 #include "icd/opengl/manual_calls.hpp"
 
+#include "icd/opengl/gl_external_objects.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+
 #include "proto/gl_icd_support.hpp"
 
 #include "icd/opengl/granted_profile.hpp"
@@ -521,6 +524,126 @@ const uint8_t *ManualCalls::string_i(uint32_t name, uint32_t index)
     const char *const answer = name == gl_extensions ? context->extensions().name(index) : nullptr;
     if (answer == nullptr) context->record(name == gl_extensions ? gl_invalid_value : gl_invalid_enum);
     return reinterpret_cast<const uint8_t *>(answer);
+}
+
+/* ---- GL_EXT_memory_object and GL_EXT_semaphore (feature 053) ------------- */
+
+void ManualCalls::create_memory_objects(int32_t count, uint32_t *objects)
+{
+    AV_SCOPE("ManualCalls::create_memory_objects");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error = context->externals().create(SharedObjectKind::memory, count, objects);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::gen_semaphores(int32_t count, uint32_t *semaphores)
+{
+    AV_SCOPE("ManualCalls::gen_semaphores");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error = context->externals().create(SharedObjectKind::monitored_fence, count, semaphores);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::import_memory_win32(uint32_t memory, uint64_t size, uint32_t handle_type, void *handle)
+{
+    AV_SCOPE("ManualCalls::import_memory_win32");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error = context->externals().import(*context->wire(), SharedObjectKind::memory, memory,
+                                                       size, handle_type, handle);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::import_semaphore_win32(uint32_t semaphore, uint32_t handle_type, void *handle)
+{
+    AV_SCOPE("ManualCalls::import_semaphore_win32");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error = context->externals().import(*context->wire(), SharedObjectKind::monitored_fence,
+                                                       semaphore, 0u, handle_type, handle);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::delete_memory_objects(int32_t count, const uint32_t *objects)
+{
+    AV_SCOPE("ManualCalls::delete_memory_objects");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error =
+        context->externals().destroy(*context->wire(), SharedObjectKind::memory, count, objects);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+void ManualCalls::delete_semaphores(int32_t count, const uint32_t *semaphores)
+{
+    AV_SCOPE("ManualCalls::delete_semaphores");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t error =
+        context->externals().destroy(*context->wire(), SharedObjectKind::monitored_fence, count, semaphores);
+    if (error != GlExternalObjects::gl_no_error) context->record(error);
+}
+
+bool ManualCalls::substituted(uint32_t kind, uint32_t name, GuestGlContext *&context, uint32_t &made)
+{
+    AV_SCOPE("ManualCalls::substituted");
+    context = sending();
+    if (context == nullptr) return false;
+    made = context->externals().made(kind, name);
+    /* A name this context never imported names no host object. Sending it
+     * would name whatever the host happens to hold under that number, which is
+     * another application's object or none. */
+    if (made == 0u) {
+        context->record(gl_invalid_operation);
+        return false;
+    }
+    return true;
+}
+
+void ManualCalls::buffer_storage_mem(uint32_t target, intptr_t size, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::buffer_storage_mem");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glBufferStorageMemEXT(*context->wire(), target, size, made, offset);
+}
+
+void ManualCalls::texture_storage_mem_2d(uint32_t texture, int32_t levels, uint32_t format, int32_t width,
+                                         int32_t height, uint32_t memory, uint64_t offset)
+{
+    AV_SCOPE("ManualCalls::texture_storage_mem_2d");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    glproto::rvk_glTextureStorageMem2DEXT(*context->wire(), texture, levels, format, width, height, made,
+                                          offset);
+}
+
+void ManualCalls::signal_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,
+                                   uint32_t texture_barriers, const uint32_t *textures,
+                                   const uint32_t *layouts)
+{
+    AV_SCOPE("ManualCalls::signal_semaphore");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::monitored_fence, semaphore, context, made)) return;
+    glproto::rvk_glSignalSemaphoreEXT(*context->wire(), made, buffer_barriers, buffers, texture_barriers,
+                                      textures, layouts);
+}
+
+void ManualCalls::wait_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,
+                                 uint32_t texture_barriers, const uint32_t *textures,
+                                 const uint32_t *layouts)
+{
+    AV_SCOPE("ManualCalls::wait_semaphore");
+    GuestGlContext *context = nullptr;
+    uint32_t        made = 0u;
+    if (!substituted(SharedObjectKind::monitored_fence, semaphore, context, made)) return;
+    glproto::rvk_glWaitSemaphoreEXT(*context->wire(), made, buffer_barriers, buffers, texture_barriers,
+                                    textures, layouts);
 }
 
 GuestGlContext *ManualCalls::sending()

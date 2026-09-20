@@ -15,6 +15,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/manual_calls.hpp"
@@ -165,6 +166,10 @@ private:
     CurrentContexts   currents_;
     icd::IcdConnection      connection_;
     GlExtensionPolicy extensions_;
+    /* The NT handles this process holds for shared objects, which every
+     * context's imports resolve through (feature 053, US2). Before the
+     * contexts, which name it. */
+    icd::SharedHandles shared_handles_;
     GlContextTable    contexts_;
     ManualCalls       manual_;
     void             *callbacks_[max_callbacks];

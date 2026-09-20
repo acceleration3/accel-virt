@@ -23,12 +23,13 @@ constexpr uint32_t no_error = 0u;
 }  // namespace
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                               icd::LogSink &log, const GlExtensionPolicy &extensions, int32_t pixel_format,
+                               icd::LogSink &log, const GlExtensionPolicy &extensions,
+                               icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log),
+      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -205,6 +206,12 @@ MappedBuffers &GuestGlContext::mappings()
 {
     AV_SCOPE("GuestGlContext::mappings");
     return mappings_;
+}
+
+GlExternalObjects &GuestGlContext::externals()
+{
+    AV_SCOPE("GuestGlContext::externals");
+    return externals_;
 }
 
 WindowFramebuffers &GuestGlContext::framebuffers()

@@ -23,6 +23,7 @@
 #include "icd/common/frame_pacer.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/swap_interval.hpp"
+#include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
@@ -62,7 +63,8 @@ public:
     enum : uint32_t { gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u };
 
     GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, icd::LogSink &log,
-                   const GlExtensionPolicy &extensions, int32_t pixel_format, const GlContextOptions &options);
+                   const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
+                   const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
     GuestGlContext &operator=(const GuestGlContext &) = delete;
@@ -109,6 +111,8 @@ public:
     WindowFramebuffers    &framebuffers();
     /* The buffer ranges the application has mapped. */
     MappedBuffers         &mappings();
+    /* The memory objects and semaphores imported from a Win32 handle. */
+    GlExternalObjects     &externals();
 
     /* The first error recorded is kept until taken. */
     void        record(uint32_t error);
@@ -187,6 +191,7 @@ private:
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     MappedBuffers                  mappings_;
+    GlExternalObjects              externals_;
     char                           strings_[strings][string_bytes];
     uint64_t                       debug_callback_;
     uint64_t                       debug_user_;

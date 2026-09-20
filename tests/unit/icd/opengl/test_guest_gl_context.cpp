@@ -4,6 +4,8 @@
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "icd/opengl/gl_external_objects.hpp"
+#include "proto/resources/shared_object_kind.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
@@ -71,7 +73,8 @@ constexpr const char *renderer = "rvk host renderer";
 class Context {
 public:
     explicit Context(GlContextRig &rig, const GlContextOptions &options = GlContextOptions())
-        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), 7, options)
+        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles(), 7,
+                   options)
     {}
     GuestGlContext &operator*() { return context_; }
     GuestGlContext *operator->() { return &context_; }
@@ -551,3 +554,20 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   CHECK(!made->invariants_hold());
   av::glicd::MappedBuffersProbe::miscount(made->mappings(), 0u);
   CHECK(made->invariants_hold()); }
+
+/* Feature 053: the context owns the memory objects and semaphores it imported,
+ * because a GL name belongs to the context that made it. */
+TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)
+{ GlContextRig rig;
+  Context      context(rig);
+  CHECK_EQ(context->externals().live(), 0u);
+  CHECK(context->externals().invariants_hold());
+  GLuint name = 0u;
+  CHECK_EQ(context->externals().create(av::SharedObjectKind::memory, 1, &name),
+           av::glicd::GlExternalObjects::gl_no_error);
+  CHECK(name != 0u);
+  CHECK_EQ(context->externals().live(), 1u);
+  /* A second context's names are its own, not this one's. */
+  Context other(rig);
+  CHECK_EQ(other->externals().live(), 0u);
+  CHECK_EQ(other->externals().made(av::SharedObjectKind::memory, name), 0u); }

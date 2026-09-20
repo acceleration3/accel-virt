@@ -66,7 +66,7 @@ constexpr std::uint32_t persistent = BufferMapping::map_persistent, explicit_flu
 struct Rig {
     GlContextRig   context_rig;
     GuestGlContext context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
-                           context_rig.log(), context_rig.extensions(), 1, GlContextOptions()};
+                           context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
     MappedBuffers  mappings{context_rig.platform(), context_rig.log()};
 
     Rig()

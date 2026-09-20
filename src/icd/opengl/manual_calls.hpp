@@ -48,6 +48,28 @@ public:
     void  named_buffer_pointer(uint32_t buffer, uint32_t pname, void **params);
     /* A call only a direct-state extension this ICD does not report has. */
     void  refuse();
+
+    /* GL_EXT_memory_object and GL_EXT_semaphore over a Win32 handle
+     * (feature 053). The first four are answered here and never sent: an
+     * object is made by the device inside the import, so a create has nothing
+     * to ask the host and an import is the open. The last four *are* sent, but
+     * not as the application wrote them - the name it holds is this ICD's and
+     * the host knows another, so each substitutes before the generated command
+     * goes out, and a name that was never imported names nothing and is
+     * GL_INVALID_OPERATION with nothing sent. */
+    void  create_memory_objects(int32_t count, uint32_t *objects);
+    void  delete_memory_objects(int32_t count, const uint32_t *objects);
+    void  import_memory_win32(uint32_t memory, uint64_t size, uint32_t handle_type, void *handle);
+    void  gen_semaphores(int32_t count, uint32_t *semaphores);
+    void  delete_semaphores(int32_t count, const uint32_t *semaphores);
+    void  import_semaphore_win32(uint32_t semaphore, uint32_t handle_type, void *handle);
+    void  buffer_storage_mem(uint32_t target, intptr_t size, uint32_t memory, uint64_t offset);
+    void  texture_storage_mem_2d(uint32_t texture, int32_t levels, uint32_t format, int32_t width,
+                                 int32_t height, uint32_t memory, uint64_t offset);
+    void  signal_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,
+                           uint32_t texture_barriers, const uint32_t *textures, const uint32_t *layouts);
+    void  wait_semaphore(uint32_t semaphore, uint32_t buffer_barriers, const uint32_t *buffers,
+                         uint32_t texture_barriers, const uint32_t *textures, const uint32_t *layouts);
     void  attribute_pointer(uint32_t index, uint32_t pname, void **pointer);
     void  pointer(uint32_t pname, void **params);
 
@@ -102,6 +124,10 @@ public:
 private:
     /* The current context's transport's context, when it can send. */
     GuestGlContext *sending();
+    /* The context and the host's own name for `name`, or false with the GL
+     * error already recorded: a name never imported names no host object, and
+     * sending it would name whatever the host has under that number. */
+    bool            substituted(uint32_t kind, uint32_t name, GuestGlContext *&context, uint32_t &made);
     void            record(uint32_t error);
     /* Whether a draw's indices can cross: an offset, or none. */
     bool            indices_cross(const void *indices);

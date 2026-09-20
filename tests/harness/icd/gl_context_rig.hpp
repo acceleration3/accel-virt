@@ -12,6 +12,7 @@
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 
 namespace av {
@@ -34,6 +35,8 @@ public:
     av::icd::IcdConnection  &connection();
     /* A policy reporting nothing, which asks the host nothing at a make. */
     const glicd::GlExtensionPolicy &extensions() const;
+    /* The NT handles a context's imports resolve through (feature 053). */
+    av::icd::SharedHandles &handles();
 
 private:
     MockPlatform        platform_;
@@ -44,6 +47,8 @@ private:
     RecordingLog        log_;
     av::icd::IcdConnection connection_;
     glicd::GlExtensionPolicy extensions_;
+    RecordingThreadLock    handles_lock_;
+    av::icd::SharedHandles handles_;
 };
 
 }  // namespace av

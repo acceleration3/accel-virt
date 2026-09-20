@@ -16,6 +16,10 @@ class BlockSource;
 class StateWriter;
 }  // namespace av
 
+namespace av::icd {
+class SharedHandles;
+}
+
 namespace av::glicd {
 
 struct GlContextTableProbe;
@@ -25,7 +29,7 @@ public:
     static constexpr uint32_t max_contexts = 256u;
 
     GlContextTable(BlockSource &memory, icd::IcdConnection &connection, icd::ThreadLock &send_lock, icd::LogSink &log,
-                   const GlExtensionPolicy &extensions);
+                   const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
     GlContextTable(const GlContextTable &) = delete;
     GlContextTable &operator=(const GlContextTable &) = delete;
 
@@ -54,6 +58,7 @@ private:
     icd::ThreadLock            &send_lock_;
     icd::LogSink               &log_;
     const GlExtensionPolicy    &extensions_;
+    icd::SharedHandles         &handles_;
     ObjectPool<GuestGlContext>  pool_;
     GuestGlContext             *contexts_[max_contexts];
     uint32_t                    generations_[max_contexts];

@@ -56,7 +56,7 @@ constexpr const char *renderer = "host gpu";
 struct Made {
     GlContextRig      rig;
     GlExtensionPolicy empty{nullptr, 0u, nullptr, 0u};
-    GuestGlContext    context{rig.connection(), rig.platform(), rig.send_lock(), rig.log(), empty, 1,
+    GuestGlContext    context{rig.connection(), rig.platform(), rig.send_lock(), rig.log(), empty, rig.handles(), 1,
                               GlContextOptions()};
 
     Made()

@@ -25,6 +25,26 @@ namespace av::glicd {
 
 namespace {
 
+/* GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32, answered here rather
+ * than by the generated table (feature 053). */
+struct SharedObjectEntry {
+    const char *name;
+    void       *address;
+};
+
+const SharedObjectEntry shared_object_entries[] = {
+    {"glCreateMemoryObjectsEXT", reinterpret_cast<void *>(&entry::glCreateMemoryObjectsEXT)},
+    {"glDeleteMemoryObjectsEXT", reinterpret_cast<void *>(&entry::glDeleteMemoryObjectsEXT)},
+    {"glImportMemoryWin32HandleEXT", reinterpret_cast<void *>(&entry::glImportMemoryWin32HandleEXT)},
+    {"glGenSemaphoresEXT", reinterpret_cast<void *>(&entry::glGenSemaphoresEXT)},
+    {"glDeleteSemaphoresEXT", reinterpret_cast<void *>(&entry::glDeleteSemaphoresEXT)},
+    {"glImportSemaphoreWin32HandleEXT", reinterpret_cast<void *>(&entry::glImportSemaphoreWin32HandleEXT)},
+    {"glBufferStorageMemEXT", reinterpret_cast<void *>(&entry::glBufferStorageMemEXT)},
+    {"glTextureStorageMem2DEXT", reinterpret_cast<void *>(&entry::glTextureStorageMem2DEXT)},
+    {"glSignalSemaphoreEXT", reinterpret_cast<void *>(&entry::glSignalSemaphoreEXT)},
+    {"glWaitSemaphoreEXT", reinterpret_cast<void *>(&entry::glWaitSemaphoreEXT)},
+};
+
 /* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
 constexpr uint32_t get_error_slot = 261u;
 constexpr uint32_t get_integerv_slot = 263u;
@@ -62,7 +82,8 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
     : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
       query_(formats_), windows_(), currents_(slot), connection_(kmt),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
-      contexts_(memory, connection_, send_lock, log, extensions_),
+      shared_handles_(kmt, lock),
+      contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),
       manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u), profile_noted_(false)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
@@ -273,6 +294,12 @@ void *GlIcdRoot::get_proc_address(const char *name)
         if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
     if (__builtin_strcmp(name, "rvkForceContextFault") == 0)
         return reinterpret_cast<void *>(&entry::rvkForceContextFault);
+    /* Before the generated table on purpose: four of these the generator never
+     * emitted, and the other four it did - and those must substitute the
+     * host's name for the one the application holds, so this ICD's answer has
+     * to win (feature 053, T036). */
+    for (const SharedObjectEntry &row : shared_object_entries)
+        if (__builtin_strcmp(name, row.name) == 0) return row.address;
     for (uint32_t row = 0u; row < generated::kNamedEntryCount; row++)
         if (__builtin_strcmp(generated::kNamedEntries[row].name, name) == 0)
             return reinterpret_cast<void *>(generated::kNamedEntries[row].address);

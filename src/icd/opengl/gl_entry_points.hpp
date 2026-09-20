@@ -52,6 +52,28 @@ int32_t   APIENTRY rvkForceContextFault();
 /* glGetIntegerv, which answers GL_NUM_EXTENSIONS itself. */
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 
+/* GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32 (feature 053). The
+ * first four the generator never emitted: an object is made by the device
+ * inside the import, and a Win32 HANDLE is a value only the guest kernel
+ * resolves. The last four it did emit, and these replace them - the name the
+ * application holds is this ICD's own and the host knows another, so each
+ * substitutes before the command goes out. */
+void      APIENTRY glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects);
+void      APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects);
+void      APIENTRY glImportMemoryWin32HandleEXT(GLuint memory, GLuint64 size, GLenum handleType, void *handle);
+void      APIENTRY glGenSemaphoresEXT(GLsizei n, GLuint *semaphores);
+void      APIENTRY glDeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores);
+void      APIENTRY glImportSemaphoreWin32HandleEXT(GLuint semaphore, GLenum handleType, void *handle);
+void      APIENTRY glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset);
+void      APIENTRY glTextureStorageMem2DEXT(GLuint texture, GLsizei levels, GLenum internalFormat,
+                                            GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
+void      APIENTRY glSignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers,
+                                        GLuint numTextureBarriers, const GLuint *textures,
+                                        const GLenum *dstLayouts);
+void      APIENTRY glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers,
+                                      GLuint numTextureBarriers, const GLuint *textures,
+                                      const GLenum *srcLayouts);
+
 }  // namespace av::glicd::entry
 
 namespace av::glicd {

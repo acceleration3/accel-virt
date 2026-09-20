@@ -166,6 +166,76 @@ void APIENTRY get_integerv(GLenum pname, GLint *data)
     gl_icd_binding.root().manual().integers(pname, data);
 }
 
+
+/* ---- GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32 (feature 053) -- */
+
+void APIENTRY glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects)
+{
+    AV_SCOPE("glCreateMemoryObjectsEXT");
+    gl_icd_binding.root().manual().create_memory_objects(n, memoryObjects);
+}
+
+void APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects)
+{
+    AV_SCOPE("glDeleteMemoryObjectsEXT");
+    gl_icd_binding.root().manual().delete_memory_objects(n, memoryObjects);
+}
+
+void APIENTRY glImportMemoryWin32HandleEXT(GLuint memory, GLuint64 size, GLenum handleType, void *handle)
+{
+    AV_SCOPE("glImportMemoryWin32HandleEXT");
+    gl_icd_binding.root().manual().import_memory_win32(memory, size, handleType, handle);
+}
+
+void APIENTRY glGenSemaphoresEXT(GLsizei n, GLuint *semaphores)
+{
+    AV_SCOPE("glGenSemaphoresEXT");
+    gl_icd_binding.root().manual().gen_semaphores(n, semaphores);
+}
+
+void APIENTRY glDeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores)
+{
+    AV_SCOPE("glDeleteSemaphoresEXT");
+    gl_icd_binding.root().manual().delete_semaphores(n, semaphores);
+}
+
+void APIENTRY glImportSemaphoreWin32HandleEXT(GLuint semaphore, GLenum handleType, void *handle)
+{
+    AV_SCOPE("glImportSemaphoreWin32HandleEXT");
+    gl_icd_binding.root().manual().import_semaphore_win32(semaphore, handleType, handle);
+}
+
+void APIENTRY glBufferStorageMemEXT(GLenum target, GLsizeiptr size, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glBufferStorageMemEXT");
+    gl_icd_binding.root().manual().buffer_storage_mem(target, size, memory, offset);
+}
+
+void APIENTRY glTextureStorageMem2DEXT(GLuint texture, GLsizei levels, GLenum internalFormat, GLsizei width,
+                                       GLsizei height, GLuint memory, GLuint64 offset)
+{
+    AV_SCOPE("glTextureStorageMem2DEXT");
+    gl_icd_binding.root().manual().texture_storage_mem_2d(texture, levels, internalFormat, width, height,
+                                                          memory, offset);
+}
+
+void APIENTRY glSignalSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers,
+                                   GLuint numTextureBarriers, const GLuint *textures,
+                                   const GLenum *dstLayouts)
+{
+    AV_SCOPE("glSignalSemaphoreEXT");
+    gl_icd_binding.root().manual().signal_semaphore(semaphore, numBufferBarriers, buffers,
+                                                    numTextureBarriers, textures, dstLayouts);
+}
+
+void APIENTRY glWaitSemaphoreEXT(GLuint semaphore, GLuint numBufferBarriers, const GLuint *buffers,
+                                 GLuint numTextureBarriers, const GLuint *textures, const GLenum *srcLayouts)
+{
+    AV_SCOPE("glWaitSemaphoreEXT");
+    gl_icd_binding.root().manual().wait_semaphore(semaphore, numBufferBarriers, buffers, numTextureBarriers,
+                                                  textures, srcLayouts);
+}
+
 }  // namespace av::glicd::entry
 
 namespace av::glicd {

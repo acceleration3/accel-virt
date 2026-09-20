@@ -59,7 +59,7 @@ const PixelFormat single(24u, 8u, false, false, 0u);
 struct Rig {
     GlContextRig              context_rig;
     GuestGlContext            context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
-                                      context_rig.log(), context_rig.extensions(), 1, GlContextOptions()};
+                                      context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
     av::ScriptedWindowSurface surface;
     ClientArrayState          state;
     int                       dcs[10] = {};

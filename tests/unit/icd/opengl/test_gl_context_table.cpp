@@ -34,7 +34,7 @@ namespace {
 
 struct Table {
     GlContextRig   rig;
-    GlContextTable table{rig.platform(), rig.connection(), rig.send_lock(), rig.log(), rig.extensions()};
+    GlContextTable table{rig.platform(), rig.connection(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles()};
 };
 
 }  // namespace
@@ -80,7 +80,7 @@ TEST(gl_context_table, forged_handles_resolve_to_nothing)
   CHECK(fixture.table.resolve(handle) != nullptr);
   CHECK_EQ(fixture.table.live(), 1u);
   GuestGlContext stranger(fixture.rig.connection(), fixture.rig.platform(), fixture.rig.send_lock(),
-                          fixture.rig.log(), fixture.rig.extensions(), 1, GlContextOptions());
+                          fixture.rig.log(), fixture.rig.extensions(), fixture.rig.handles(), 1, GlContextOptions());
   CHECK_EQ(fixture.table.handle_of(stranger), 0u); }
 
 TEST(gl_context_table, refuses_a_257th_context_and_a_pool_that_cannot_grow)

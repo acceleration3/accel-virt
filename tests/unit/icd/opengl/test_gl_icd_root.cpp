@@ -1018,3 +1018,37 @@ TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
   CHECK(rig.opengl32().make_current(rig.dc(), other));
   CHECK_EQ(rig.kmt().commands(), lost);
   CHECK(rig.root().invariants_hold()); }
+
+/* Feature 053, T036. Four of these the generator never emitted - an object is
+ * made by the device inside the import, and a Win32 HANDLE is a value only the
+ * guest kernel resolves - and four of them it did. The four it emitted must
+ * still reach this ICD rather than the generated wrapper, because the name the
+ * application holds is this driver's own and the host knows another one. So
+ * every one of the ten answers an address of this ICD's, and the generated
+ * table is not what is found. */
+TEST(gl_icd_root, the_external_object_entries_are_this_drivers_and_not_the_generated_ones)
+{ GlIcdRig rig;
+  struct Named { const char *name; void *own; };
+  const Named entries[] = {
+      {"glCreateMemoryObjectsEXT", reinterpret_cast<void *>(&av::glicd::entry::glCreateMemoryObjectsEXT)},
+      {"glDeleteMemoryObjectsEXT", reinterpret_cast<void *>(&av::glicd::entry::glDeleteMemoryObjectsEXT)},
+      {"glImportMemoryWin32HandleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glImportMemoryWin32HandleEXT)},
+      {"glGenSemaphoresEXT", reinterpret_cast<void *>(&av::glicd::entry::glGenSemaphoresEXT)},
+      {"glDeleteSemaphoresEXT", reinterpret_cast<void *>(&av::glicd::entry::glDeleteSemaphoresEXT)},
+      {"glImportSemaphoreWin32HandleEXT",
+       reinterpret_cast<void *>(&av::glicd::entry::glImportSemaphoreWin32HandleEXT)},
+      {"glBufferStorageMemEXT", reinterpret_cast<void *>(&av::glicd::entry::glBufferStorageMemEXT)},
+      {"glTextureStorageMem2DEXT", reinterpret_cast<void *>(&av::glicd::entry::glTextureStorageMem2DEXT)},
+      {"glSignalSemaphoreEXT", reinterpret_cast<void *>(&av::glicd::entry::glSignalSemaphoreEXT)},
+      {"glWaitSemaphoreEXT", reinterpret_cast<void *>(&av::glicd::entry::glWaitSemaphoreEXT)},
+  };
+  for (const Named &entry : entries) {
+      void *const found = rig.root().get_proc_address(entry.name);
+      if (found != entry.own)
+          av::TestRegistry::instance().record_failure(__FILE__, __LINE__, entry.name);
+  }
+  /* The two Win32 *name* imports are not answered at all: a named section is
+   * what another process opens by name, which this path refuses. */
+  CHECK(rig.root().get_proc_address("glImportMemoryWin32NameEXT") == nullptr);
+  CHECK(rig.root().get_proc_address("glImportSemaphoreWin32NameEXT") == nullptr); }

@@ -3,6 +3,14 @@
  * MockKmt: what each sends, what each keeps, and what each refuses with no
  * host call. */
 #include "harness/framework/test_registry.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/surface_layout.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_reader.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
@@ -605,7 +613,7 @@ TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
   av::ScriptedThreadSlot slot;
   av::glicd::CurrentContexts currents(slot);
   ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy, 1,
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy, rig.handles(), 1,
                                     av::GlContextOptions());
   CHECK(calls.string_i(0x1F03u, 0u) == nullptr);
   rig.host().gl_make("host gpu", "4.6");
@@ -777,3 +785,143 @@ TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
   const std::uint32_t lost = current.sent();
   gen::Wrap_glDrawBuffers(1, buffers);
   CHECK_EQ(current.sent(), lost); }
+
+/* Feature 053, T036. A memory object and a semaphore are made by the device
+ * inside the import, so a create asks the host nothing and hands out a name of
+ * this ICD's own - and every command that names one afterwards has to put the
+ * host's name in its place, because a GL name on this wire is the host's and
+ * nothing else translates one. A name that was never imported names no host
+ * object, so it is refused rather than sent under a number the host holds
+ * something else at. */
+TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  /* The create sends nothing: there is no host object to name yet. */
+  const std::uint32_t quiet = rig.kmt().commands();
+  GLuint              memory = 0u;
+  calls.create_memory_objects(1, &memory);
+  CHECK(memory != 0u);
+  CHECK_EQ(rig.kmt().commands(), quiet);
+  CHECK_EQ(context.take_error(), 0u);
+
+  /* Used before it is imported, it names nothing and is refused here. */
+  calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  CHECK_EQ(rig.kmt().commands(), quiet);
+
+  /* A handle this process never held is refused before the device. */
+  calls.import_memory_win32(memory, 4096u, 0x9587u, reinterpret_cast<void *>(0xDEADu));
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  CHECK_EQ(rig.kmt().commands(), quiet);
+
+  /* A semaphore is the other namespace: the same number is not this object. */
+  GLuint semaphore = 0u;
+  calls.gen_semaphores(1, &semaphore);
+  CHECK(semaphore != 0u);
+  calls.wait_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  calls.signal_semaphore(memory, 0u, nullptr, 0u, nullptr, nullptr);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
+  CHECK_EQ(rig.kmt().commands(), quiet);
+
+  /* Deleting a name that was never imported has nothing to release. */
+  calls.delete_memory_objects(1, &memory);
+  calls.delete_semaphores(1, &semaphore);
+  CHECK_EQ(rig.kmt().commands(), quiet);
+  CHECK_EQ(context.take_error(), 0u); }
+
+/* With nothing current every one of them does nothing, as OpenGL does. */
+TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
+{ av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  GLuint names[1] = {9u};
+  calls.create_memory_objects(1, names);
+  CHECK_EQ(names[0], 9u);
+  calls.gen_semaphores(1, names);
+  CHECK_EQ(names[0], 9u);
+  calls.import_memory_win32(1u, 4096u, 0x9587u, nullptr);
+  calls.import_semaphore_win32(1u, 0x9587u, nullptr);
+  calls.delete_memory_objects(1, names);
+  calls.delete_semaphores(1, names);
+  calls.buffer_storage_mem(0x8892u, 4096, 1u, 0u);
+  calls.texture_storage_mem_2d(1u, 1, 0x8058u, 4, 4, 1u, 0u);
+  calls.signal_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr);
+  calls.wait_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr); }
+
+/* The substitution itself: an object imported from a handle this process holds
+ * crosses under the *host's* name, never the one the application was given. */
+TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releases_the_object)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  /* A handle another process could have sent: an allocation the kernel minted
+   * an identity into, shared, and adopted into this process's table. */
+  std::uint32_t adapter = 0u;
+  std::uint32_t found = 0u;
+  CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), av::Status::ok);
+  std::uint32_t elsewhere = 0u;
+  CHECK_STATUS(rig.kmt().create_device(adapter, elsewhere), av::Status::ok);
+  const av::AllocationDescriptor carrier(av::AllocationKind::client, true, av::SurfaceLayout(), 4096u,
+                                         av::ScanoutTarget());
+  std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(carrier.encode(bytes, av::AllocationDescriptor::encoded_size), av::Status::ok);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               av::Status::ok);
+  std::uint32_t allocation = 0u;
+  CHECK_STATUS(rig.kmt().create_shared_allocation(elsewhere, bytes, sizeof bytes, allocation), av::Status::ok);
+  std::uint64_t sent = 0u;
+  CHECK_STATUS(rig.kmt().share_object(elsewhere, allocation, sent), av::Status::ok);
+  std::uint64_t id = 0u;
+  CHECK_STATUS(rig.handles().adopt(rig.connection().device(0u).device(), sent, id), av::Status::ok);
+
+  GLuint memory = 0u;
+  calls.create_memory_objects(1, &memory);
+  constexpr std::uint32_t host_name = 0x77u;
+  rig.host().shared_object(0u, host_name);
+  calls.import_memory_win32(memory, 4096u, 0x9587u, reinterpret_cast<void *>(static_cast<std::uintptr_t>(sent)));
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::open_shared_object_id);
+
+  /* Now the use: the body names the host's object, not the application's. */
+  calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u),
+           static_cast<std::uint32_t>(ids::kCmd_glBufferStorageMemEXT));
+  { av::WireReader body(rig.kmt().command_bytes(rig.kmt().commands() - 1u) + av::CommandHeader::encoded_size,
+                        av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+    std::uint64_t target = 0u;
+    std::uint64_t size = 0u;
+    std::uint64_t named = 0u;
+    CHECK(body.read_varint(target));
+    CHECK(body.read_varint(size));
+    CHECK(body.read_varint(named));
+    CHECK_EQ(named, host_name);
+    CHECK(named != memory); }
+
+  /* And the delete releases the object rather than naming it to the host. */
+  rig.host().shared_object(0u, 0u);
+  calls.delete_memory_objects(1, &memory);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::release_shared_object_id);
+  /* Released, the name names nothing again. */
+  calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
+  CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation}); }
