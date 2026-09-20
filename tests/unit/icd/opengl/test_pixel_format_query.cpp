@@ -354,7 +354,19 @@ TEST(pixel_format_query_choose, hostile_lists_answer_only_formats_that_exist)
   std::memcpy(bytes, valid, sizeof bytes);
   av::HostileSweep sweep(&reject_list, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > sizeof bytes); }
+  CHECK(sweep.cases_run() > sizeof bytes);
+  /* An attribute list is name-value pairs ended by a zero name, and only the
+   * names are judged: every value is a criterion the query can hold, so all 128
+   * value bits are acceptable. Of the four names, eleven flips land on another
+   * attribute WGL defines - seven of draw_to_window, three of depth_bits, one
+   * of samples and none of the sRGB name - and the terminator's flip to 0x2000
+   * is another name too, with a zero value behind it. A cut inside a name is
+   * only a partial name at its first byte, the other two bytes of each name
+   * being zero, so 32 of the 36 truncations end in a list that still reads. An
+   * empty list asks for nothing and matches every format, which is why all-zero
+   * is accepted; all-ones is a name nobody defined. */
+  const std::uint32_t acceptable = 128u + 11u + 1u + 32u + 1u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(pixel_format_query_invariants, fail_for_a_table_that_is_not_whole)
 { PixelFormatTable table;

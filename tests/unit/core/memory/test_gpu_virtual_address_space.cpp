@@ -562,6 +562,15 @@ TEST(address_space_translate, hostile_addresses_never_translate_out_of_bounds)
   const av::HostileSweep sweep(reject_hostile_address, valid, sizeof valid);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
+  /* The one mapped range is four pages - 16 KiB - at a base whose only set bit
+   * is bit 36, so an address survives a flip exactly where the flip lands
+   * inside that range: the fourteen bits below 16 KiB. Every other flip leaves
+   * the range or, for bit 36 itself, leaves address zero. The base's top three
+   * bytes are zero, so the 5-, 6- and 7-byte truncations rebuild the same
+   * address and translate; every shorter one is address zero. All-zero is
+   * unmapped and all-ones is past every range. */
+  const std::uint32_t acceptable = 14u + 3u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable);
 
   std::uint32_t object = 0u; std::uint64_t offset = 0u;
   CHECK_STATUS(fixture.space().translate(0u, object, offset), Status::not_found);
