@@ -903,15 +903,24 @@ forwarded untouched. The guest's probe asks its own driver for
 `note shared.cl_external_memory` and stops when it is not reported - a note,
 not a verdict, because a driver that reports no extension is refusing nothing.
 
-**What is left.** The ICD's row for `cl_khr_external_memory_win32`, answered
-over the host's `cl_khr_gl_sharing`. It needs two things this feature did not
-build: `ClExtensionPolicy::report` must honour `Row::host_` as the Vulkan and
-OpenGL policies do, and `tools/check_extension_policy.py` needs a generated
-list of the OpenCL extensions this build carries - `IMPLEMENTED_LISTS` has an
-entry per API and OpenCL has none, so any row at all fails the gate today. The
-row would be inert on this machine anyway, since the device strikes the host
-name out inside QEMU; it lands with the host that can share, or with the answer
-to why this one cannot.
+**What the rows needed, and now have.** `cl_khr_external_memory` and
+`cl_khr_external_memory_win32` are reported, answered over the host's
+`cl_khr_gl_sharing`. Three things had to land with them. The extension's own
+two commands: reporting it promises `clEnqueueAcquireExternalMemObjectsKHR` and
+`clEnqueueReleaseExternalMemObjectsKHR`, which the driver answers itself - the
+object is acquired on the host when the device opens it and stays acquired for
+its life, so what is left is the argument checking and the event, and they are
+reached by name because `cl_icd_dispatch` predates the extension. A generated
+list to hold the rows to: the OpenCL generator now reads cl.xml's extensions
+and their `depends` and emits `cl_supported_extensions.h`, which
+`tools/check_extension_policy.py` holds every OpenCL row to. And `Row::host_`,
+which `ClExtensionPolicy::report` ignored.
+
+On this machine the rows report nothing, because the device strikes
+`cl_khr_gl_sharing` out of what the guest is shown - which is the measurement
+above doing its job. On a host that really shares, the guest's probe runs its
+`shared.cl_*` steps and the sharing is proven end to end from inside the
+guest.
 
 ### The eight marks the OpenCL import adds, and why each is one
 
