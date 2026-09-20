@@ -7,6 +7,7 @@
  * must still decode, and nothing a record answers may be read outside it
  * (ASan). */
 #include "core/support/status.hpp"
+#include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/shared_object_record.hpp"
 
 #include <cstddef>
@@ -25,7 +26,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (std::memcmp(again, data, sizeof again) != 0) __builtin_trap();
     if (!record.kind().known()) __builtin_trap();
     if ((record.object_id() == 0u) != (record.adapter_id() == 0u)) __builtin_trap();
-    if (record.size() == 0u || record.size() % av::SharedObjectRecord::page_size != 0u) __builtin_trap();
+    /* Memory is whole non-zero pages and a fence has no size at all, which is
+     * the same rule the wire body keeps: the two describe one object and an
+     * opener compares them (T031). */
+    if (record.kind().is_fence()) {
+        if (record.size() != 0u) __builtin_trap();
+    } else if (record.size() == 0u || record.size() % av::SharedObjectRecord::page_size != 0u) {
+        __builtin_trap();
+    }
 
     /* Minting an id into a record a creator wrote must leave something the
      * opening process can read back: the whole point of the journey. */

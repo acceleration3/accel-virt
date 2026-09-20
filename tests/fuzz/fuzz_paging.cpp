@@ -17,6 +17,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/shared_object_table.hpp"
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
@@ -106,7 +107,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (segment.initialize(std::int64_t{1} << 30u) != av::Status::ok) __builtin_trap();
     av::HostVisibleSegment host_visible(platform);
     const av::MemorySegments segments(platform, segment, host_visible);
-    av::AllocationTable allocations(platform, segment, segments);
+    av::SharedObjectTable shared(platform);
+    av::AllocationTable   allocations(platform, segment, segments, shared);
     av::LogBudget       budget(platform);
 
     /* One allocation of max_frames pages, so a mapping of any length the

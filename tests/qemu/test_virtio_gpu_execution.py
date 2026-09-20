@@ -179,8 +179,11 @@ class VirtioGpuExecution(unittest.TestCase):
     def test_commands_run_in_order_on_one_thread_and_unknown_ones_are_skipped(self):
         gpu = self.open()
         context = Context(self, gpu, 1, 2)
+        # 0x00007 is the transport id nothing answers: 0x4 to 0x6 became the
+        # shared-object commands in feature 053, and a device that answered one
+        # of those would be answering rather than skipping.
         self.assertTrue(context.run(command(ECHO, b"1"), command(0x10099), command(0x20001, b"cl"),
-                                    command(0x00004), command(ECHO), command(COUNT, b"", GENERATE_REPLY)))
+                                    command(0x00007), command(ECHO), command(COUNT, b"", GENERATE_REPLY)))
         (status, _, size, _), answer = context.answer()
         self.assertEqual((status, size), (STATUS_OK, 12))
         self.assertEqual(struct.unpack("<QI", answer), (2, 1))
