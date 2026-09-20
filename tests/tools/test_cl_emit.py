@@ -180,6 +180,32 @@ class LoweredFromTheRegistry(unittest.TestCase):
             with self.subTest(command=name):
                 self.assertIn(name, registry.commands)
 
+    def test_an_extension_is_carried_only_where_every_command_of_it_is(self):
+        """The rule the ICD's policy rows are held to.
+
+        cl_khr_external_memory is carried because its two commands are
+        answered by the driver, and cl_khr_external_memory_win32 because it
+        adds no command of its own to one that is. cl_khr_gl_event is not:
+        clCreateEventFromGLsyncKHR crosses nowhere and nothing answers it."""
+        registry = cl_lower.lower(self.raw, self.profile)
+        carried = set(registry.carried_extensions)
+        self.assertIn("cl_khr_external_memory", carried)
+        self.assertIn("cl_khr_external_memory_win32", carried)
+        self.assertIn("cl_khr_gl_sharing", carried)
+        self.assertNotIn("cl_khr_gl_event", carried)
+        self.assertNotIn("cl_khr_command_buffer", carried)
+
+    def test_an_extension_whose_dependency_is_not_carried_is_not_carried(self):
+        """The `depends` half of the rule: a name with no command of its own
+        rides on the one it is written over, so dropping that drops it too."""
+        profile = cl_profile.load(
+            ROOT / "tools" / "codegen" / "profiles" / "opencl.toml",
+            ROOT / "tools" / "codegen" / "profiles" / "opencl_ids.toml")
+        profile.driver_implemented = set()
+        carried = set(cl_lower.lower(self.raw, profile).carried_extensions)
+        self.assertNotIn("cl_khr_external_memory", carried)
+        self.assertNotIn("cl_khr_external_memory_win32", carried)
+
     def test_the_svm_pointers_lower_as_svm_pointers(self):
         registry = cl_lower.lower(self.raw, self.profile)
         wanted = {
@@ -243,6 +269,13 @@ class CommittedTreeCarriesThem(unittest.TestCase):
     def test_the_server_interface_carries_svm_for(self):
         header = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.h").read_text()
         self.assertIn("svm_for(", header)
+
+    def test_the_carried_extensions_are_emitted_for_the_policy_gate(self):
+        header = (ROOT / "src" / "proto" / "generated" / "opencl"
+                  / "cl_supported_extensions.h").read_text()
+        self.assertIn("kCarriedExtensions[]", header)
+        self.assertIn('"cl_khr_external_memory_win32",', header)
+        self.assertIn("extension_is_carried(const char* name)", header)
 
     def test_exec_info_still_refuses_an_array_of_svm_pointers(self):
         """The wire carries SVM allocations now, and still not this.

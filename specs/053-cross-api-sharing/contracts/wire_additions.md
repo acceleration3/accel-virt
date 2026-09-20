@@ -114,15 +114,23 @@ only the guest kernel resolves.
 | `VK_KHR_external_semaphore_win32` | the host has `VK_KHR_external_semaphore_fd` |
 | `GL_EXT_memory_object` / `GL_EXT_memory_object_win32` | the context's host lists `GL_EXT_memory_object_fd` |
 | `GL_EXT_semaphore` / `GL_EXT_semaphore_win32` | the context's host lists `GL_EXT_semaphore_fd` |
-| `cl_khr_external_memory_win32` | the host device lists `cl_khr_external_memory_dma_buf` |
+| `cl_khr_external_memory` / `cl_khr_external_memory_win32` | the host device lists `cl_khr_gl_sharing` |
 | `cl_khr_gl_sharing` | the context's device has a GL executor to share with |
 
 **A host extension in the right-hand column is never a row of its own.** The
 `_fd` names are the *host's*, and they are the condition a guest row is
 reported under - a guest has no file descriptors, which is the whole reason the
-Win32 spelling exists. Six rows are reported to a guest and no more:
-`GL_EXT_memory_object`, `GL_EXT_memory_object_win32`, `GL_EXT_semaphore`,
-`GL_EXT_semaphore_win32`, `cl_khr_external_memory_win32` and
+Win32 spelling exists. The OpenCL pair's condition is the odd one and says
+something real: no OpenCL on a Linux host takes a Win32 handle, and no host
+this runs on has `cl_khr_external_memory` at all, so the device opens the
+descriptor through the host's *OpenGL* and names the result with
+`cl_khr_gl_sharing` (research.md §18 and §21). A host that lists that name and
+still refuses a GL-sharing context is a host whose device strikes it out of
+what the guest is shown, so the pair is reported only where it works.
+
+Seven rows are reported to a guest and no more: `GL_EXT_memory_object`,
+`GL_EXT_memory_object_win32`, `GL_EXT_semaphore`, `GL_EXT_semaphore_win32`,
+`cl_khr_external_memory`, `cl_khr_external_memory_win32` and
 `cl_khr_gl_sharing`, beside the two Vulkan ones 047 already reported. Anything
 reading this table to build a conformance subset wants those names and not the
 conditions beside them.
@@ -164,13 +172,18 @@ the registry has `GL_EXT_memory_object_win32` require the base extension, so it
 cannot be reported alone either. Both are reported now, on the host condition
 this table always named.
 
-**T040 decided: neither OpenCL row is reported either**, which strikes the last
-sentence this contract used to end on. `cl_khr_external_memory_win32` is built
-in the guest - `ClExternalMemory` and `clCreateBufferWithProperties` take a
-Win32 handle all the way to `OPEN_SHARED_OBJECT` - and refused on the host,
-because the device's OpenCL backend cannot import a shared object until T019
-finds a host whose OpenCL lists `cl_khr_external_memory_dma_buf`.
-`cl_khr_gl_sharing` needs the *host's* CL context created against the *host's*
-GL context, which belongs to another rvk context that nothing on the wire names
-(research.md §18). So a conformance subset carries none of these six rows
-today, and each of the three reasons is a different thing to fix.
+**T040 decided, and then built: the OpenCL pair is reported.**
+`ClExternalMemory` and `clCreateBufferWithProperties` take a Win32 handle all
+the way to `OPEN_SHARED_OBJECT`, the device opens the descriptor through the
+host's OpenGL and answers a `cl_mem` over it (T019), and the extension's own
+two commands are answered by the driver: the object is acquired on the host
+when it is opened and stays acquired for its life, so `ClIcdRoot::enqueue_external`
+checks the arguments and answers the event. The generator now says which
+extensions this build answers every command of - `cl_supported_extensions.h` -
+and `tools/check_extension_policy.py` holds the rows to it.
+
+`cl_khr_gl_sharing` is still not reported *to a guest*: that needs the host's
+CL context created against the host's GL context belonging to another rvk
+context, which nothing on the wire names (research.md §18). The device uses it
+for its own import, which is a different thing entirely. So a conformance
+subset carries the seven rows above and not that one.
