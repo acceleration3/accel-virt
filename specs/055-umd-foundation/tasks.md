@@ -108,23 +108,24 @@ description: "Tasks: rvkumd.dll - the user-mode driver and DXGI"
 **Where this stopped.** T006-T008 (the private-data envelope and its fuzz
 target) and T030 (the open-adapter fuzz target) are written and unstarted:
 they read bytes from outside, so they need a corpus and a smoke run, and the
-envelope's fields are 056's and 057's (contracts/private_data.md). T031 and
-T032 below are likewise unstarted.
+envelope's fields are 056's and 057's (contracts/private_data.md). T031 is
+likewise unstarted.
 
-**Coverage as measured** (`build-coverage`, the eight `tests/unit/icd/d3d`
-binaries): `src/icd/d3d` is 99.6% of regions and 99.6% of branches, with one
-branch left - the adapter close on `UmdRoot::open`'s refused-identity path,
-marked `AV_UNTESTABLE` because an adapter opened two lines above has no device
-for the close to refuse. `tests/untestable_baseline.txt` rises 0 to 1 with this
-feature. Two other unreachable branches were removed rather than marked, by
-deleting the duplicate counts in `AdapterTable` and `DeviceTable`.
+**Coverage.** `coverage_gate` passes: 100% of branches, and
+`tests/untestable_baseline.txt` stays at 0. Three branches that no caller could
+reach were removed rather than marked - the duplicate counts in `AdapterTable`
+and `DeviceTable`, whose pools already knew how many they held, and the close
+on `UmdRoot::open`'s refused-identity path, which became
+`AdapterTable::discard`: an adapter the caller is holding has no handle to be
+wrong and no device made on it, so there is nothing for a close to refuse and
+no refusal to judge.
 
 ---
 
 ## Phase 6: the full-stack proof on Linux
 
 - [ ] T031 `tests/loopback/test_fullstack_umd.cpp`: `FakeD3dRuntime` over a `UmdRoot` built on `DdiKmt`, so both opens, the identity queries and the device lifecycle cross the real driver and device core; the run ends with `kmt().open_objects() == 0` and `device().device().contexts() == 0`, and the log is dumped to stderr
-- [ ] T032 Coverage: `cmake -S . -B build-coverage -DAV_COVERAGE=ON`, `ctest --test-dir build-coverage -j4 -LE tools`, `coverage_gate` green with no new `AV_UNTESTABLE` mark that is not justified here
+- [X] T032 Coverage: `cmake -S . -B build-coverage -DAV_COVERAGE=ON`, `ctest --test-dir build-coverage -j4 -LE tools`, `coverage_gate` green with no new `AV_UNTESTABLE` mark that is not justified here *As built:* green at 100% of branches with no mark at all, and the fuzz configuration's 44 smoke runs pass beside it. The gate wants literal 100% of `src/icd`; `AV_UNTESTABLE` is only its ratchet and exempts no branch, so an unreachable branch has to go rather than be decorated.
 
 **Checkpoint**: the whole 055 surface at 100% branches through the real driver. Commit.
 
