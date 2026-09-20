@@ -97,6 +97,21 @@ asserts the zeroes reached the runtime's buffer and nothing past it was
 written. A slot that answers `E_NOTIMPL` is a capability that will exist; its
 test asserts the refusal and that the device was not removed by it.
 
+## `E_NOTIMPL` in a `BOOL` slot is `TRUE`
+
+Every one of the 22 slots above answers an `HRESULT`, so this hazard does not
+bite here - but it bites hard one table over, and 056 hit it. `BOOL` and
+`HRESULT` are both `int32_t` through a mirror record, so a decliner that hands
+`E_NOTIMPL` (`0x80004001`) to a `BOOL`-returning slot compiles, and the caller
+reads it as **true**: `pfnResourceIsStagingBusy` would tell every caller the
+resource is busy, forever, and no test of the *return value* would look wrong.
+
+`src/um/d3d/umd_record_layout.cpp` asserts the return type of every slot 055
+fills, against the real header, so a decliner cannot be given the wrong kind of
+answer silently. **A device-functions table has `BOOL` slots; 056, 057 and 064
+each need the same assertion over theirs**, and a decliner generator needs the
+return type as an input rather than one refusal for every slot.
+
 ## `DXGI_STATUS_NO_REDIRECTION` - the one-value decision
 
 *Supporting the DXGI DDI*: a driver whose hardware is not shared with a

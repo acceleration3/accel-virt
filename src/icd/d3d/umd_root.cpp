@@ -1,7 +1,6 @@
 #include "icd/d3d/umd_root.hpp"
 
 #include "core/support/scope_exit.hpp"
-#include "core/support/untestable.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -82,13 +81,11 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
     }
     const Status learned = adapter->identity().learn(kmt_, connection_.adapter(), log_);
     if (learned != Status::ok) {
-        /* The adapter was made a line ago and no device is on it, so nothing
-         * the close judges can refuse - but the status is a value and is
-         * consumed as one. */
-        const Status closed = adapters_.close(adapter);
-        AV_UNTESTABLE("an adapter opened in this function has no device to refuse its close")
-        if (closed != Status::ok) note("adapter close after a refused identity, status",
-                                       static_cast<uint64_t>(closed));
+        /* Discarded rather than closed: the adapter is the one this function
+         * made a line ago, so there is no handle to be wrong and no device to
+         * have been made on it - nothing for a close to refuse, and so no
+         * refusal to judge. */
+        adapters_.discard(*adapter);
         return hr_fail;
     }
     keep = true;

@@ -158,6 +158,26 @@ AV_SAME_OFFSET(DxgiDdiArgCheckPresentDurationSupportRecord, ClosestLargerDuratio
 AV_SAME_OFFSET(DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord, Supported,
                DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT, Supported);
 
+/* Every slot 055 fills answers an HRESULT, except the two the WDK declares
+ * otherwise. This matters because BOOL and HRESULT both mirror to int32_t, so
+ * nothing but this catches a decliner handing E_NOTIMPL to a BOOL-returning
+ * slot - where it reads as TRUE, and a "not supported" becomes a "yes"
+ * (contracts/dxgi_seam.md). The device-functions tables of 056, 057 and 064 do
+ * have BOOL slots; they need the same assertion. */
+static_assert(__is_same(HRESULT, int32_t) || __is_same(HRESULT, long));
+static_assert(sizeof(HRESULT) == sizeof(av::d3d::Hresult));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnPresent(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnGetGammaCaps(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnSetResourcePriority(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnGetMultiplaneOverlayCaps(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnTrimResidencySet(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnCheckPresentDurationSupport(nullptr)), HRESULT));
+static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnReclaimResources1(nullptr)), HRESULT));
+/* The two adapter slots that are not HRESULT, and which the thunks match. */
+static_assert(__is_same(decltype(D3D10_2DDI_ADAPTERFUNCS{}.pfnCalcPrivateDeviceSize(
+                            D3D10DDI_HADAPTER{}, nullptr)), SIZE_T));
+static_assert(__is_same(decltype(D3D12DDI_ADAPTERFUNCS{}.pfnDestroyDevice(D3D12DDI_HDEVICE{})), VOID));
+
 static_assert(av::d3d::hr_ok == S_OK);
 static_assert(av::d3d::hr_not_impl == E_NOTIMPL);
 static_assert(av::d3d::hr_no_interface == E_NOINTERFACE);

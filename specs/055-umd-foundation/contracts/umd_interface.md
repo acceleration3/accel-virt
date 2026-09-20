@@ -211,6 +211,18 @@ returned: through `pfnSetErrorCb` in the core-layer callbacks that
 `D3D10DDIARG_CREATEDEVICE` supplies. 055 records that callback on the device;
 **056** is the first to call it.
 
+## Two things 056 established, kept here so 057 and 064 do not re-find them
+
+- **The D3D11 device-functions table is 176 slots, not 178.** A text scan of
+  `d3d10umddi.h` counts 178; `pfnResetPrimitiveID` and
+  `pfnSetVertexPipelineOutput` sit behind `#ifdef D3D10PSGP`, which nothing
+  defines, and the compiler counts 176 (`sizeof` 1408). Mandatory slots are
+  163. Count a table with the compiler, never with a scan.
+- **`E_NOTIMPL` in a `BOOL` slot reads as `TRUE`** - see
+  `contracts/dxgi_seam.md`. None of 055's slots returns `BOOL`, and
+  `umd_record_layout.cpp` asserts every return type it fills; the device
+  tables do have `BOOL` slots and need the same.
+
 ## What 056 must not assume
 
 - **There is not one transport link per process shared with the ICDs yet.**
@@ -222,6 +234,13 @@ returned: through `pfnSetErrorCb` in the core-layer callbacks that
   handle name the same host object.
 - **No feature level is reported.** Adding one is adding a version word to
   `DdiVersionList` *after* the thing it promises is implemented and tested.
+- **There is no D3DKMT device yet either.** `UmdConnection` holds the kernel
+  adapter and counts opens; it makes no device and no paging queue, because
+  055 submits nothing. `icd::IcdConnection` in `src/icd/common/` is the thing
+  that does - one device per link, with loss tracking, shared by the OpenGL
+  and OpenCL ICDs - and it is what 056 should reach for rather than growing
+  `UmdConnection`. It would want one addition: an accessor for the adapter
+  handle, which `AdapterIdentity::learn` takes.
 - **The private-data records are not written.** 055 owns only the envelope
   (`contracts/private_data.md`); the allocation and resource descriptions nest
   inside it and are 056's and 057's, each with its own hostile table and fuzz
