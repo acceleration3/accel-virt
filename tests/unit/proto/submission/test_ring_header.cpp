@@ -82,4 +82,12 @@ TEST(ring_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(RingHeader(16u, 64u, 32u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  CHECK(sweep.cases_run() > 256u); }
+  CHECK(sweep.cases_run() > 256u);
+  /* The format constrains the magic, the order and two reserved runs, and
+   * leaves the counters to RingProgress. So the acceptable flips are the 128
+   * bits of tail and head, plus the four flips of order 16 that land inside
+   * [12, 24] - 17, 18, 20 and 24. Every shorter input is short of 32 bytes,
+   * all-zero and all-ones carry no magic, and the untouched input is the last
+   * acceptance. */
+  const std::uint32_t acceptable = 128u + 4u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
