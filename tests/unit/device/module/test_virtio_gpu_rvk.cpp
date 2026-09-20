@@ -704,7 +704,7 @@ TEST(virtio_gpu_rvk_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_witho
   VirtioGpuRvk        device(host);
   char                bytes[96];
   TextBuffer          message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, message), Status::ok);
 
   const auto send = [&device, &host](const GpuRequestBuilder &builder) {
       std::uint32_t type = 0u;
@@ -787,7 +787,7 @@ TEST(virtio_gpu_rvk_scanout, a_host_with_no_gl_display_refuses_every_scanout_and
   VirtioGpuRvk device(host);
   char         bytes[96];
   TextBuffer   message(bytes, sizeof bytes);
-  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(4096u);
   create.u64(0x40000000u).u32(4096u).u32(0u);

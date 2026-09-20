@@ -2,6 +2,7 @@
  * refusal of contracts/scanout_blob.md, and what the base class is left. */
 #include "core/support/status.hpp"
 #include "device/control/blob_commands.hpp"
+#include "device/recording/wire_recorder.hpp"
 #include "device/control/control_request.hpp"
 #include "device/control/scanout_commands.hpp"
 #include "device/display/display_heads.hpp"
@@ -230,7 +231,8 @@ TEST(scanout_commands, a_blob_a_head_shows_cannot_be_unreferenced_until_it_is_hi
 { Fixture fixture(1u);
   if (!fixture.udmabuf_here()) return;
   MockHost        &host = fixture.host();
-  av::BlobCommands blobs(host, fixture.blobs());
+  av::WireRecorder recorder(host);
+  av::BlobCommands blobs(host, fixture.blobs(), recorder);
   const auto       unref = [&](std::uint32_t id) {
       GpuRequestBuilder request(av::BlobCommands::resource_unref);
       request.u32(id).u32(0u);

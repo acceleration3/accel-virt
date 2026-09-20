@@ -46,8 +46,8 @@ MockHost::MockHost()
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
       fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u),
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
-      fail_recording_truncate_(0u)
-      display_heads_(0u), refuse_scanout_(0u), scanouts_{}, update_rects_{}
+      fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{},
+      update_rects_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -876,6 +876,8 @@ int MockHost::open_descriptor()
 bool MockHost::descriptor_open(int fd) const
 {
     return fd >= 0 && ::fcntl(fd, F_GETFD) != -1;
+}
+
 /* A host with no GL-capable display - which is what `-display none` gives, and
  * the default here - has no head that can show a dma-buf at all. */
 bool MockHost::display_takes_dmabuf(std::uint32_t head)

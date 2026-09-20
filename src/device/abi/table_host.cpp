@@ -361,6 +361,8 @@ void TableHost::close_recording(void *file)
 {
     AV_SCOPE("TableHost::close_recording");
     ops_.close_recording(ops_.opaque, file);
+}
+
 /* A table from before these four shows nothing, which is the same answer a
  * host with no GL display gives, and the guest then keeps the 2D path. */
 bool TableHost::display_takes_dmabuf(uint32_t head)
