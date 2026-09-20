@@ -251,3 +251,55 @@ a conformance subset should carry `cl_khr_gl_sharing` and the two `_win32` rows
 and leave the two base rows alone, or it will enforce a promise 053 has not yet
 made good - `glTexStorageMem3DEXT`, `glIsMemoryObjectEXT` and a dozen others
 resolve to null today.
+
+## §12 — Why T037 reports no OpenGL extension yet, and what it would take
+
+§11 left T037 a choice: take the remaining 15 and 5 commands so the base
+extensions can honestly be reported, or report something narrower. The answer
+turned out not to be a choice about effort. It was measured by adding all of
+them to the profile and reading what fell out.
+
+**The generator refuses five lengths, and those are easy.** `params` on the two
+memory-object and two semaphore parameter commands has no length in the
+registry at all, and each is one value; `glGetUnsignedBytei_vEXT.data` is a
+`COMPSIZE(target)` the rules cannot read. Five lines in the profile.
+
+**One length it does *not* refuse, and that one is a bug.**
+`glGetUnsignedBytevEXT.data` is `COMPSIZE(pname)`, which the generator accepts
+because it has a rule for it - `pname_count`, whose default for an unknown
+pname is **1**. `GL_DEVICE_UUID_EXT` and `GL_DRIVER_UUID_EXT` are 16 bytes and
+`GL_DEVICE_LUID_EXT` is 8. Generating that command without adding those three
+to `[pname_counts]` would size a UUID at one byte and let the driver write past
+what the decode arena handed out. Nothing would have caught it: the generator
+refuses only what it cannot read, and it *can* read this one - wrongly. If
+those commands are ever added, the three counts go in with them.
+
+**And one thing that is not a length at all.**
+`GL_DEDICATED_MEMORY_OBJECT_EXT` and `GL_PROTECTED_MEMORY_OBJECT_EXT` are set
+with `glMemoryObjectParameterivEXT` *before* `glImportMemory*`: the object's
+storage is fixed at the import, so the parameters have to be in place first.
+053's device makes the memory object *inside* `OPEN_SHARED_OBJECT`, so at the
+moment those parameters are set there is no host object to set them on. This is
+the same shape as the Vulkan semaphore finding in T031 - `OPEN_SHARED_OBJECT`
+makes a new object where the API needs "import into this existing one".
+
+So reporting `GL_EXT_memory_object` today would promise an ordering the design
+cannot keep, and `GL_EXT_memory_object_win32` cannot be reported alone because
+the registry has it require the base extension. T037 therefore reports nothing
+for OpenGL, and the machinery T034-T036 built waits on one of two things:
+
+1. **The ICD answers the three memory-object and three semaphore
+   queries/parameters locally** - `glIsMemoryObjectEXT` and `glIsSemaphoreEXT`
+   from the table (a created name is a memory object whether or not it was
+   imported), the parameters recorded on the row, and an import refused with
+   `GL_INVALID_OPERATION` when the application asked for dedicated or protected
+   memory that this path cannot give it. The ten storage commands substitute
+   the host's name as the four in T036 do. That is honest and reportable, and
+   is the smaller of the two.
+2. **Or the device creates the object at `glCreateMemoryObjectsEXT`** and the
+   open imports into it, which needs an executor ABI call that does not exist
+   and would also settle the Vulkan semaphore case.
+
+Until one of them lands, a conformance subset should carry `cl_khr_gl_sharing`
+and nothing of OpenGL's - not even the `_win32` rows, which §11 offered before
+this was measured.

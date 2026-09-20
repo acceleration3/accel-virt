@@ -150,7 +150,12 @@ one missing from each `_win32` row is its `glImport*Win32NameEXT`, which is
 refused on purpose: a named section is what another process opens *by name*,
 and this path shares by handle.
 
-T037 decides it one way or the other - the profile takes the remaining 15 and
-5, or the policy reports something narrower than the base extensions. Until
-then a conformance subset should carry `cl_khr_gl_sharing` and the two `_win32`
-rows and leave the two base rows out.
+**T037 decided: none of the four is reported yet** (research.md §12).
+`GL_DEDICATED_MEMORY_OBJECT_EXT` and `GL_PROTECTED_MEMORY_OBJECT_EXT` are set
+with `glMemoryObjectParameterivEXT` *before* the import, and 053's device makes
+the memory object inside `OPEN_SHARED_OBJECT` - so at the moment an application
+sets them there is no host object to set them on. Reporting
+`GL_EXT_memory_object` would promise an ordering this design cannot keep, and
+the registry has `GL_EXT_memory_object_win32` require the base extension, so it
+cannot be reported alone either. A conformance subset should carry
+`cl_khr_gl_sharing` and nothing of OpenGL's until that is answered.
