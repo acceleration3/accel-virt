@@ -180,6 +180,9 @@ public:
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
                                          VkExtensionProperties *properties) override;
+    std::uint32_t last_kernel_status(VkInstance instance) override;
+    /* The NTSTATUS a scripted driver says its last kernel call answered. */
+    void          set_kernel_status(std::uint32_t code);
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
     VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info, VkImageView *view) override;
@@ -308,6 +311,7 @@ private:
      * handle its export answers - what a probe over it is judged against. */
     bool          external_objects_;
     void         *win32_handle_;
+    std::uint32_t kernel_status_;
     Allocation    allocations_[max_allocations];
     std::uint32_t allocated_types_[max_allocations * 4u];
     std::uint32_t allocations_made_;

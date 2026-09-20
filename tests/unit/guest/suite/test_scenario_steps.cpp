@@ -74,3 +74,20 @@ TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_c
                     "FAIL vulkan.incomplete status=7 5\n") == 0);
   CHECK_EQ(report.passed(), 1u);
   CHECK_EQ(report.failed(), 2u); }
+
+/* Feature 053: a step whose kernel call was made by somebody else's Kmt. A
+ * probe calling a driver through an API of its own never touches the kernel
+ * itself, so its own last_code() is 0 and reporting that would say no kernel
+ * call was involved - the opposite of the truth. */
+TEST(scenario_steps, check_kernel_reports_a_status_this_kmt_never_answered)
+{ MockKmt       kmt;
+  GuestReport   report("probe");
+  ScenarioSteps steps(kmt, report, "shared");
+  CHECK_EQ(kmt.last_code(), 0u);
+  CHECK_STATUS(steps.check_kernel("refused", av::Status::invalid_state, 0xC000000Du),
+               av::Status::invalid_state);
+  CHECK_STATUS(steps.check_kernel("taken", av::Status::ok, 0u), av::Status::ok);
+  report.finish();
+  CHECK(std::strstr(report.text(), "FAIL shared.refused") != nullptr);
+  CHECK(std::strstr(report.text(), "code=0xC000000D") != nullptr);
+  CHECK(std::strstr(report.text(), "ok shared.taken") != nullptr); }

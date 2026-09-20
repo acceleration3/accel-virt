@@ -34,6 +34,12 @@ public:
     /* The ICD's vkRvkForceContextFault, resolved through `instance`; a loader
      * that answers no such function answers VK_ERROR_EXTENSION_NOT_PRESENT. */
     virtual VkResult force_context_fault(VkInstance instance, VkPhysicalDevice physical_device) = 0;
+    /* The ICD's vkRvkLastKernelStatus, resolved through `instance`: the
+     * NTSTATUS of the last D3DKMT call the *driver* made. A probe's own Kmt
+     * never made it - the driver did, in another module - so this is the only
+     * way a step can report which kernel call refused (feature 053). 0 from a
+     * loader that answers no such function. */
+    virtual uint32_t last_kernel_status(VkInstance instance) = 0;
 
     virtual void     destroy_device(VkDevice device) = 0;
     virtual VkResult device_wait_idle(VkDevice device) = 0;

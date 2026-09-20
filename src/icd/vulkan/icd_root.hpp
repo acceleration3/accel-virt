@@ -190,6 +190,11 @@ public:
      * as: none, because a handle this ICD did not export names nothing
      * (contracts/external_objects.md). */
     VkResult memory_handle_properties(VkDevice device, void *handle);
+    /* The NTSTATUS of the last D3DKMT call this driver made, for a probe that
+     * cannot see the driver's own Kmt: every kernel call behind feature 053
+     * answers the application VK_ERROR_TOO_MANY_OBJECTS, so without this a
+     * guest run cannot say which of them refused. */
+    uint32_t last_kernel_status() const;
     /* What the host says of its own opaque fd, said in Win32's spelling; every
      * other handle type is answered as absent, since nothing here turns a
      * Direct3D object into a host one. */

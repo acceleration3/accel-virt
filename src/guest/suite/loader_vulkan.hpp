@@ -52,6 +52,7 @@ public:
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,
                                          VkExtensionProperties *properties) override;
+    uint32_t last_kernel_status(VkInstance instance) override;
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
     VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info, VkImageView *view) override;

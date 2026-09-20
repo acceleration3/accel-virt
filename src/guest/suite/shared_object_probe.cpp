@@ -77,7 +77,12 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
     allocate.allocationSize = bytes;
     allocate.memoryTypeIndex = type;
     const VkResult made = vulkan_.allocate_memory(device.device(), &allocate, &memory);
-    return steps_.check("exportable", answered(made)) == Status::ok && memory != VK_NULL_HANDLE;
+    /* The driver's NTSTATUS, not this probe's: the kernel call was made inside
+     * the ICD, by its own Kmt, and every one of them answers the application
+     * the same VK_ERROR_TOO_MANY_OBJECTS. */
+    return steps_.check_kernel("exportable", answered(made), vulkan_.last_kernel_status(device.instance())) ==
+               Status::ok &&
+           memory != VK_NULL_HANDLE;
 }
 
 bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle)
@@ -85,7 +90,7 @@ bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, 
     AV_SCOPE("SharedObjectProbe::handle_step");
     const VkResult got = vulkan_.memory_win32_handle(device.device(), memory, &handle);
     const Status   status = got == VK_SUCCESS && handle != nullptr ? Status::ok : Status::invalid_state;
-    return steps_.check("handle", status) == Status::ok;
+    return steps_.check_kernel("handle", status, vulkan_.last_kernel_status(device.instance())) == Status::ok;
 }
 
 void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory)
@@ -95,7 +100,8 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
      * handle and destroys the carrier allocation the identity was minted into.
      * What says it worked is that the kernel refused none of it. */
     vulkan_.free_memory(device.device(), memory);
-    steps_.check("released", kmt_.last_code() == 0u ? Status::ok : Status::invalid_state);
+    const uint32_t refused = vulkan_.last_kernel_status(device.instance());
+    steps_.check_kernel("released", refused == 0u ? Status::ok : Status::invalid_state, refused);
 }
 
 void SharedObjectProbe::run()

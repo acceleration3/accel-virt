@@ -34,7 +34,7 @@ ScriptedVulkan::ScriptedVulkan()
       miscompute_(false), misdraw_(false), hold_fences_(false), fault_answer_(VK_ERROR_DEVICE_LOST),
       idle_after_fault_(VK_ERROR_DEVICE_LOST), luid_xor_(0u),
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
-      external_objects_(false), win32_handle_(nullptr),
+      external_objects_(false), win32_handle_(nullptr), kernel_status_(0u),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
       pacing_adapter_(0u), pacing_device_(0u), instance_names_{}, instance_name_count_(0u), device_names_{},
@@ -371,6 +371,16 @@ VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint
     }
     *count = room;
     return room < listed ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+std::uint32_t ScriptedVulkan::last_kernel_status(VkInstance)
+{
+    return kernel_status_;
+}
+
+void ScriptedVulkan::set_kernel_status(std::uint32_t code)
+{
+    kernel_status_ = code;
 }
 
 VkResult ScriptedVulkan::memory_win32_handle(VkDevice, VkDeviceMemory memory, void **handle)

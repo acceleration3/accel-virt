@@ -20,6 +20,13 @@ Status ScenarioSteps::check(const char *step, Status status)
     return status;
 }
 
+Status ScenarioSteps::check_kernel(const char *step, Status status, uint32_t code)
+{
+    AV_SCOPE("ScenarioSteps::check_kernel");
+    report_.check(scenario_, step, status, code);
+    return status;
+}
+
 Status ScenarioSteps::check_measured(const char *step, Status status, uint32_t measurement)
 {
     AV_SCOPE("ScenarioSteps::check_measured");

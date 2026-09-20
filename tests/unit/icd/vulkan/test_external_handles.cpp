@@ -724,3 +724,22 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
   CHECK(node != nullptr);
   CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)); }
+
+/* Feature 053: the NTSTATUS a probe reads back. The kernel call is made by
+ * *this* driver's Kmt, inside the DLL, so nothing outside can see it - and
+ * every one of the calls behind sharing answers the application the same
+ * VK_ERROR_TOO_MANY_OBJECTS. Without this the guest run that found the first
+ * refusal reported code=0 while the driver had 0xC000000D in hand. */
+TEST(icd_external_handles, the_drivers_last_kernel_status_is_readable_from_outside)
+{ SharingRig rig;
+  CHECK_EQ(rig.rig().root().last_kernel_status(), rig.rig().kmt().last_code());
+  /* A refused kernel call moves it, and the entry point answers the same. */
+  std::uint64_t handle = 0u;
+  CHECK(rig.rig().kmt().share_object(0x9999u, 0x9999u, handle) != av::Status::ok);
+  CHECK_EQ(rig.rig().root().last_kernel_status(), rig.rig().kmt().last_code());
+  CHECK(rig.rig().root().last_kernel_status() != 0u);
+  /* And the loader finds it by name, as it finds the fault hook. */
+  using LastStatus = std::uint32_t (*)();
+  const auto entry = rig.entry<LastStatus>("vkRvkLastKernelStatus");
+  CHECK(entry != nullptr);
+  CHECK_EQ(entry(), rig.rig().kmt().last_code()); }

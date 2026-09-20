@@ -128,3 +128,31 @@ TEST(shared_object_probe, no_adapter_is_the_first_step_and_the_last)
   report.finish();
   CHECK(std::strstr(report.text(), "FAIL shared.adapter") != nullptr);
   CHECK(std::strstr(report.text(), "shared.instance") == nullptr); }
+
+/* The diagnostic itself, which failed on its first real outing: the kernel
+ * call is made inside the ICD by the ICD's own Kmt, so the probe's Kmt has
+ * never heard of it and `last_code()` there is 0. The step must report the
+ * *driver's* status instead, or a reader sees code=0 and concludes no kernel
+ * call was involved - the opposite of the truth (feature 053). */
+TEST(shared_object_probe, a_refusal_carries_the_drivers_ntstatus_and_not_the_probes)
+{ Rig rig;
+  constexpr std::uint32_t invalid_parameter = 0xC000000Du;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().fail(ScriptedVulkan::Call::allocate_memory, 1u, VK_ERROR_TOO_MANY_OBJECTS);
+  rig.vulkan().set_kernel_status(invalid_parameter);
+  rig.run();
+  /* The probe's own Kmt made no call at all, so anything reading it would say
+   * zero. What is on the line is the driver's. */
+  CHECK_EQ(rig.kmt().last_code(), 0u);
+  CHECK(rig.holds("FAIL shared.exportable"));
+  CHECK(rig.holds("code=0xC000000D")); }
+
+/* And a step that passes still carries the driver's zero rather than a stale
+ * number from an earlier refusal. */
+TEST(shared_object_probe, a_step_that_passes_carries_no_status_at_all)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.run();
+  CHECK(rig.holds("ok shared.exportable"));
+  CHECK(!rig.holds("code=0xC000000D"));
+  CHECK_EQ(rig.report().failed(), 0u); }

@@ -86,6 +86,8 @@ const Entry        local_rows[] = {
     {"vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyInstance), Level::instance},
     {"vkRvkForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkRvkForceContextFault),
             Level::physical_device},
+    {"vkRvkLastKernelStatus", reinterpret_cast<PFN_vkVoidFunction>(&local_vkRvkLastKernelStatus),
+            Level::instance},
     {"vkGetPhysicalDeviceMemoryProperties",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties), Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties2",
@@ -643,6 +645,11 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     if (created != Status::ok) {
         note("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS",
              kmt_.last_code());
+        /* What the refusal was about, because the status alone cannot say:
+         * a device of 0 is a connection that never opened, and the length is
+         * the one thing this request has that an ordinary create does not. */
+        note("vkAllocateMemory: the carrier was asked for on guest device", guest_device);
+        note("vkAllocateMemory: the carrier's private driver data was bytes", sizeof carrier_data);
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     ScopeExit             unwind([&] { static_cast<void>(kmt_.destroy_allocation(guest_device, carrier)); });
@@ -756,6 +763,12 @@ VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin
     }
     *handle = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
     return VK_SUCCESS;
+}
+
+uint32_t IcdRoot::last_kernel_status() const
+{
+    AV_SCOPE("IcdRoot::last_kernel_status");
+    return kmt_.last_code();
 }
 
 VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)

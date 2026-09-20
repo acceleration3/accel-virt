@@ -82,6 +82,10 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
 /* Not Vulkan's: the probe's forced fault, a physical-device-level function the
  * loader dispatches to an ICD that names it (loader interface version 7). */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkForceContextFault(VkPhysicalDevice physicalDevice);
+/* The NTSTATUS of the last D3DKMT call this driver made (feature 053): what a
+ * probe reports when an entry point refused, since every one of the kernel
+ * calls behind sharing answers the same VK_ERROR_TOO_MANY_OBJECTS. */
+VKAPI_ATTR uint32_t VKAPI_CALL local_vkRvkLastKernelStatus();
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                                      VkPhysicalDeviceMemoryProperties *pMemoryProperties);

@@ -19,6 +19,12 @@ public:
 
     /* Records a step that must succeed: its status, to chain on. */
     Status check(const char *step, Status status);
+    /* The same, with an NTSTATUS from somewhere other than this scenario's own
+     * Kmt. A probe that calls a driver through an API of its own does not make
+     * the kernel call itself - the driver does, in another module, with its
+     * own Kmt - so the code it must report is the driver's and not this one's
+     * (feature 053). */
+    Status check_kernel(const char *step, Status status, uint32_t code);
     /* Records a step whose failure is explained by a measurement rather than
      * by an NTSTATUS: the value is reported where the code would be. */
     Status check_measured(const char *step, Status status, uint32_t measurement);

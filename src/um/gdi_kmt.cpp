@@ -248,7 +248,13 @@ Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, 
 {
     AV_SCOPE("GdiKmt::create_shared_allocation");
     allocation = 0u;
-    if (private_data == nullptr || size > max_descriptor_bytes)
+    /* Answered as too_large rather than invalid_parameter so that last_code()
+     * tells a refusal of this file's own apart from one dxgkrnl made: both
+     * would otherwise be STATUS_INVALID_PARAMETER, and a guest report saying
+     * which call refused is worth nothing if it cannot say whose refusal it
+     * was (feature 053). */
+    if (size > max_descriptor_bytes) return answer(static_cast<int32_t>(NtStatus(Status::too_large).value()));
+    if (private_data == nullptr)
         return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
     /* The runtime keeps the buffer it was handed, and the driver writes the
      * minted id into it during the call; so unlike create_allocation this one
