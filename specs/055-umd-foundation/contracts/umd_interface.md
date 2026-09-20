@@ -39,7 +39,7 @@ Exactly these, undecorated, from `rvkumd.def`; each is one line into the root.
 |---|---|---|
 | `OpenAdapter10_2(D3D10DDIARG_OPENADAPTER *)` | `d3d11.dll` | opens the adapter for the D3D10/10.1/11 runtime; fills `hAdapter` and `pAdapterFuncs_2`; `S_OK`, or `E_INVALIDARG` for a null argument, `E_FAIL` for no rvkgpu adapter, `E_OUTOFMEMORY` for no room |
 | `OpenAdapter12(D3D12DDIARG_OPENADAPTER *)` | `D3D12Core.dll` | the same for D3D12; fills `hAdapter` and `pAdapterFuncs` |
-| `OpenAdapter9(D3DDDIARG_OPENADAPTER *)` | `d3d9.dll` | **feature 064**; not exported by 055, and `d3d9.dll` then finds no driver rather than a broken one |
+| `OpenAdapter(D3DDDIARG_OPENADAPTER *)` | `d3d9.dll` | **feature 064**; not exported by 055, and `d3d9.dll` then finds no driver rather than a broken one. No suffix: 064 read the literal out of `d3d9.dll` and the export is plain `OpenAdapter` - see `specs/064-d3d9-umd/contracts/adapter_interface.md` |
 
 `OpenAdapter10` is **not** exported: `OpenAdapter10_2` is its superset, the
 runtime prefers it, and the docs require it of a D3D11 driver.
