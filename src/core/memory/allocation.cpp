@@ -12,7 +12,7 @@ namespace av {
 
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
-    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), owner_(nullptr),
+    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), resource_(nullptr), owner_(nullptr),
       aperture_(platform, static_cast<uint32_t>(size / page_bytes))
       {
           AV_SCOPE("Allocation::Allocation");
@@ -33,6 +33,18 @@ uint64_t                    Allocation::shared_id() const
     AV_SCOPE("Allocation::shared_id");
     return shared_id_;
 }
+Resource *Allocation::resource() const
+{
+    AV_SCOPE("Allocation::resource");
+    return resource_;
+}
+
+void Allocation::belongs_to(Resource *resource)
+{
+    AV_SCOPE("Allocation::belongs_to");
+    resource_ = resource;
+}
+
 void                        Allocation::shared_as(uint64_t id)
 {
     AV_SCOPE("Allocation::shared_as");

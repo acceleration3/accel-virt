@@ -21,12 +21,12 @@ namespace av {
 AllocationTable::AllocationTable(Platform &platform, const ApertureSegment &segment,
                                  const MemorySegments &segments, SharedObjectTable &shared)
     : platform_(platform), segment_(segment), segments_(segments), shared_(shared),
-      mutex_(platform, LockRank::allocation_table), allocations_(platform)
+      mutex_(platform, LockRank::allocation_table), resources_(platform), allocations_(platform)
     {
         AV_SCOPE("AllocationTable::AllocationTable");
     }
 
-Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
+Status AllocationTable::create_one(DxgkAllocationInfoRecord &info, Resource *resource)
 {
     AV_SCOPE("AllocationTable::create_one");
     info.hAllocation = nullptr;
@@ -55,6 +55,10 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
         return shared;
     }
     allocation->report_to(info);
+    if (resource != nullptr) {
+        allocation->belongs_to(resource);
+        resource->took_one();
+    }
     return Status::ok;
 }
 
@@ -83,6 +87,7 @@ void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, ui
     for (uint32_t index = 0u; index < count; index++) {
         auto *const allocation = static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation);
         if (allocation->shared_id() != 0u) shared_.forget(*allocation);
+        if (allocation->resource() != nullptr) static_cast<void>(allocation->resource()->released_one());
         static_cast<void>(allocations_.destroy(allocation));
         request.pAllocationInfo[index].hAllocation = nullptr;
     }
@@ -97,14 +102,31 @@ Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
     if (request.NumAllocations == 0u || request.NumAllocations > max_per_call || request.pAllocationInfo == nullptr ||
         request.PrivateDriverDataSize != 0u)
         return Status::invalid_parameter;
-    uint32_t created = 0u;
-    ScopeExit unwind([&] { destroy_created(request, created); });
+    /* A resource is asked for by the flag and answered as a handle of this
+     * driver's own, because D3DKMTShareObjects mints an NT handle over a
+     * resource and refuses anything else (research.md §16). dxgkrnl hands back
+     * the handle it was given when a later create adds to the same resource. */
+    const bool wanted = (request.Flags & resource_flag) != 0u;
+    /* hResource means nothing without the flag, so whatever was in it is not
+     * read and the answer is none. */
+    Resource *resource = wanted ? static_cast<Resource *>(request.hResource) : nullptr;
+    bool      made_here = false;
+    if (wanted && resource == nullptr) {
+        const Status opened = resources_.create(resource, platform_);
+        if (opened != Status::ok) return opened;
+        made_here = true;
+    }
+    uint32_t  created = 0u;
+    ScopeExit unwind([&] {
+        destroy_created(request, created);
+        if (made_here) static_cast<void>(resources_.destroy(resource));
+    });
     for (; created < request.NumAllocations; created++) {
-        const Status status = create_one(request.pAllocationInfo[created]);
+        const Status status = create_one(request.pAllocationInfo[created], resource);
         if (status != Status::ok) return status;
     }
     unwind.dismiss();
-    request.hResource = nullptr;
+    request.hResource = resource;
     return Status::ok;
 }
 
@@ -115,21 +137,32 @@ Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "destroy");
     if (request.NumAllocations != 0u && request.pAllocationList == nullptr) return Status::invalid_parameter;
+    auto *const resource =
+        (request.Flags & resource_flag) != 0u ? static_cast<Resource *>(request.hResource) : nullptr;
+    uint32_t listed_of_resource = 0u;
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         const Allocation *allocation = allocations_.find(request.pAllocationList[index]);
         if (allocation == nullptr) return Status::invalid_parameter;
         if (allocation->opens() != 0u) return Status::invalid_state;
+        if (allocation->resource() == resource) listed_of_resource++;
         for (uint32_t earlier = 0u; earlier < index; earlier++)
             if (request.pAllocationList[earlier] == request.pAllocationList[index]) return Status::invalid_parameter;
     }
+    /* A destroy that takes the resource takes every allocation in it, which is
+     * the call dxgkrnl makes: one naming a resource that would outlive the
+     * list is refused here, before anything is destroyed, because this list is
+     * all-or-nothing like every other. */
+    if (resource != nullptr && listed_of_resource != resource->allocations()) return Status::invalid_state;
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         auto *const allocation = static_cast<Allocation *>(request.pAllocationList[index]);
         /* The identity goes with what it named, so a process holding a stale
          * record finds nothing rather than whatever took its place. */
         if (allocation->shared_id() != 0u) shared_.forget(*allocation);
+        if (allocation->resource() != nullptr) static_cast<void>(allocation->resource()->released_one());
         static_cast<void>(allocations_.destroy(allocation));
     }
-    return Status::ok;
+    if (resource == nullptr) return Status::ok;
+    return resources_.destroy(resource);
 }
 
 Status AllocationTable::describe(DxgkargDescribeAllocationRecord &request, const DisplaySources &sources)
@@ -209,7 +242,7 @@ void AllocationTable::report(StateWriter &writer)
 bool AllocationTable::invariants_hold() const
 {
     AV_SCOPE("AllocationTable::invariants_hold");
-    return allocations_.invariants_hold() &&
+    return allocations_.invariants_hold() && resources_.invariants_hold() &&
            allocations_.all_of([](const Allocation &allocation) { return allocation.invariants_hold(); });
 }
 

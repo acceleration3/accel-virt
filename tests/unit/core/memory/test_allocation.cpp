@@ -3,6 +3,7 @@
 #include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/allocation.hpp"
+#include "core/memory/resource.hpp"
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/pci/pci_base_addresses.hpp"
@@ -484,3 +485,20 @@ TEST(allocation_open, a_shared_allocation_takes_a_second_device_where_a_ring_wou
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK(allocation.invariants_hold()); }
+
+/* The resource an allocation was created into, which the table needs to know so
+ * that destroying the allocation releases one from the resource's count. None
+ * until a create says so: an allocation outside a resource belongs_to nothing
+ * (feature 053, research.md §16). */
+TEST(allocation, belongs_to_the_resource_it_was_created_into_and_to_none_by_default)
+{ MockPlatform platform;
+  Segments     segments(platform);
+  const AllocationDescriptor surface(AllocationKind::shadow, true, SurfaceLayout(16u, 16u, 21u, 64u), 0x1000u,
+                                    ScanoutTarget());
+  Allocation   allocation(platform, segments.segments(), surface, 0x1000u);
+  CHECK(allocation.resource() == nullptr);
+  av::Resource resource(platform);
+  allocation.belongs_to(&resource);
+  CHECK(allocation.resource() == &resource);
+  allocation.belongs_to(nullptr);
+  CHECK(allocation.resource() == nullptr); }

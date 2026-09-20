@@ -86,6 +86,9 @@ namespace {
 constexpr std::uint32_t no_memory = 0xC0000017u;
 constexpr std::uint32_t not_supported = 0xC00000BBu;
 constexpr std::uint32_t invalid_device_state = 0xC0000184u;
+/* DXGK_CREATEALLOCATIONFLAGS::Resource and DXGK_DESTROYALLOCATIONFLAGS::
+ * DestroyResource, which are each bit 0 of their own Value. */
+constexpr std::uint32_t resource_flag = 1u;
 constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
 constexpr std::uint8_t  driver_ok_status = 0x0Fu;
@@ -947,12 +950,25 @@ public:
         av::DxgkargCreateAllocationRecord request = {};
         request.NumAllocations = 1u;
         request.pAllocationInfo = &info_;
+        /* Asked for as a resource, because that is the only thing
+         * D3DKMTShareObjects will mint an NT handle over: its type check
+         * refuses anything but a resource, and silently (research.md §16). The
+         * handle the driver answers here is what the runtime keeps and what a
+         * share names. */
+        request.Flags = resource_flag;
         const std::int32_t status =
             routine<std::int32_t (*)(void *, av::DxgkargCreateAllocationRecord *)>(DdiSlot::DxgkDdiCreateAllocation)(
                 adapter_, &request);
-        if (status >= 0) kernel_handle_ = handles_.insert(info_.hAllocation);
+        if (status >= 0) {
+            kernel_handle_ = handles_.insert(info_.hAllocation);
+            resource_ = request.hResource;
+        }
         return status;
     }
+
+    /* The resource the create answered, which is the object a share names.
+     * Null until a create asks for one. */
+    void *resource() const { return resource_; }
 
     /* The open dxgkrnl runs inside every create, which this rig did not model
      * and which is why it never caught the carrier bug: the caller's own bytes
@@ -1024,8 +1040,15 @@ public:
         av::DxgkargDestroyAllocationRecord request = {};
         request.NumAllocations = 1u;
         request.pAllocationList = &handle;
-        return routine<std::int32_t (*)(void *, const av::DxgkargDestroyAllocationRecord *)>(
-            DdiSlot::DxgkDdiDestroyAllocation)(adapter_, &request);
+        /* The resource goes with the allocations in it, which is how dxgkrnl
+         * destroys one it created here. */
+        request.hResource = resource_;
+        request.Flags = resource_ != nullptr ? resource_flag : 0u;
+        const std::int32_t status =
+            routine<std::int32_t (*)(void *, const av::DxgkargDestroyAllocationRecord *)>(
+                DdiSlot::DxgkDdiDestroyAllocation)(adapter_, &request);
+        if (status >= 0) resource_ = nullptr;
+        return status;
     }
 
     std::int32_t destroy_device(std::uint32_t which)
@@ -1035,6 +1058,7 @@ private:
     const DdiTable                  &table_;
     void                            *adapter_;
     av::DxgkAllocationInfoRecord     info_;
+    void                            *resource_ = nullptr;
     av::DxgkOpenAllocationInfoRecord opens_[2];
     void                            *devices_[2];
     std::uint8_t                     private_[av::AllocationDescriptor::encoded_size +
@@ -2067,3 +2091,28 @@ TEST(ddi_scenario, a_device_without_host_memory_is_the_adapter_as_it_was)
            0);
   CHECK_EQ(out.NbSegment, 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* Feature 053, research.md §16. D3DKMTShareObjects mints an NT handle over a
+ * *resource* - its handle-table type check refuses anything else, and does it
+ * with no message at all - so the carrier a shared object's identity is minted
+ * into has to be one. A create that asks for a resource answers a handle of
+ * the driver's own, and destroying the allocations destroys it with them. */
+TEST(ddi_scenario, a_create_that_asks_for_a_resource_is_answered_one_and_gives_it_back)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    /* The handle the runtime keeps, and the one a share would name. */
+    CHECK(runtime.resource() != nullptr);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
+    CHECK(runtime.minted().assigned());
+    CHECK_EQ(runtime.close(0u), 0);
+    CHECK_EQ(runtime.destroy(), 0);
+    CHECK(runtime.resource() == nullptr);
+    CHECK_EQ(runtime.destroy_device(0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

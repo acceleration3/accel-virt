@@ -14,6 +14,8 @@
 
 namespace av {
 
+class Resource;
+
 class GuestPageList;
 class MemorySegments;
 struct AllocationProbe;
@@ -40,6 +42,11 @@ public:
      * which is the whole point of it. */
     uint64_t                    shared_id() const;
     void                        shared_as(uint64_t id);
+    /* The resource this allocation was created into, which goes when the last
+     * of its allocations does; null for one created outside a resource
+     * (research.md §16). */
+    Resource                   *resource() const;
+    void                        belongs_to(Resource *resource);
 
     /* The DXGK_ALLOCATIONINFO fields the driver answers. */
     void report_to(DxgkAllocationInfoRecord &info);
@@ -83,6 +90,7 @@ private:
     uint32_t             opens_;
     /* 0 unless the adapter minted one at create. */
     uint64_t             shared_id_;
+    Resource            *resource_;
     /* Which device holds it, while any does; only a ring or a fence page keeps
      * anyone else out. */
     const void          *owner_;

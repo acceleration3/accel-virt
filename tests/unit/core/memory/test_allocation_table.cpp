@@ -31,6 +31,8 @@ struct ObjectPoolProbe {
 
 struct AllocationTableProbe {
     static void corrupt_pool(AllocationTable &table) { ObjectPoolProbe::corrupt_live_count(table.allocations_); }
+    static void corrupt_resources(AllocationTable &table)
+    { ObjectPoolProbe::corrupt_live_count(table.resources_); }
 };
 
 struct AllocationProbe {
@@ -134,6 +136,24 @@ public:
                                    av::SharedObjectRecord::encoded_size),
                      Status::ok);
         return record;
+    }
+
+    /* A destroy naming a resource, which is how dxgkrnl takes one. */
+    Status destroy_resource(std::uint32_t count, void *resource)
+    {
+        void *handles[max_infos] = {};
+        for (std::uint32_t i = 0u; i < count; i++) handles[i] = infos_[i].hAllocation;
+        return destroy_list(handles, count, resource);
+    }
+
+    Status destroy_list(void *const *handles, std::uint32_t count, void *resource)
+    {
+        DxgkargDestroyAllocationRecord request = {};
+        request.NumAllocations = count;
+        request.pAllocationList = handles;
+        request.hResource = resource;
+        request.Flags = 1u;
+        return table_.destroy(request);
     }
 
     Status destroy(std::uint32_t count)
@@ -513,3 +533,94 @@ TEST(allocation_table_create, a_record_that_already_names_an_object_takes_its_al
   CHECK(fixture.info(0u).hAllocation == nullptr);
   CHECK(fixture.table().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }
+
+/* Feature 053, research.md §16. D3DKMTShareObjects mints an NT handle over a
+ * resource and refuses anything else - silently - so a shared object's carrier
+ * has to be one. The flag is what asks; the handle answered is this driver's
+ * own, and it goes with the last allocation in it. */
+TEST(allocation_table_create, a_create_that_asks_for_a_resource_is_answered_one)
+{ Fixture fixture;
+  fixture.request().Flags = 1u;   /* DXGK_CREATEALLOCATIONFLAGS::Resource */
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK(fixture.request().hResource != nullptr);
+  CHECK(fixture.table().invariants_hold());
+  /* Destroying the allocation without the flag leaves the resource: dxgkrnl
+   * takes it in the call that says so. */
+  CHECK_STATUS(fixture.destroy(1u), Status::ok);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK(fixture.table().invariants_hold()); }
+
+/* A second create into a resource dxgkrnl already has a handle for: the handle
+ * it was given comes back, one resource holds both allocations, and the
+ * destroy that names it takes it only once they have both gone. */
+TEST(allocation_table_create, a_second_create_into_a_resource_answers_the_same_one)
+{ Fixture fixture;
+  fixture.request().Flags = 1u;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  void *const first = fixture.request().hResource;
+  CHECK(first != nullptr);
+  void *const kept = fixture.info(0u).hAllocation;
+
+  /* The second create, with the handle dxgkrnl kept from the first. */
+  fixture.set_count(1u, shadow);
+  fixture.request().Flags = 1u;
+  fixture.request().hResource = first;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK(fixture.request().hResource == first);
+  CHECK_EQ(fixture.table().live(), 2u);
+  CHECK(fixture.table().invariants_hold());
+
+  /* Named by a destroy while it still holds the first allocation: refused, so
+   * a resource is never taken out from under an allocation dxgkrnl still has. */
+  CHECK_STATUS(fixture.destroy_resource(1u, first), Status::invalid_state);
+  /* And once the other has gone too, it goes. */
+  void *const both[] = {kept, fixture.info(0u).hAllocation};
+  CHECK_STATUS(fixture.destroy_list(both, 2u, first), Status::ok);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK(fixture.table().invariants_hold()); }
+
+/* The flag with no handle behind it, and a host with no memory for a resource:
+ * neither leaves an allocation behind. */
+TEST(allocation_table_create, a_resource_the_host_cannot_hold_and_a_destroy_that_names_none)
+{ { Fixture fixture;
+    fixture.platform().fail_allocation_at(1u);
+    fixture.request().Flags = 1u;
+    CHECK_STATUS(fixture.create(), Status::no_memory);
+    CHECK_EQ(fixture.table().live(), 0u);
+    CHECK(fixture.table().invariants_hold()); }
+  { /* A destroy that says "and the resource" and names none: the allocations
+     * go and there is nothing else to take. */
+    Fixture fixture;
+    CHECK_STATUS(fixture.create(), Status::ok);
+    CHECK_STATUS(fixture.destroy_resource(1u, nullptr), Status::ok);
+    CHECK_EQ(fixture.table().live(), 0u);
+    CHECK(fixture.table().invariants_hold()); } }
+
+/* The table's invariant folds in its resource pool's, as it does its
+ * allocations'. */
+TEST(allocation_table_invariants, a_broken_resource_pool_is_a_broken_table)
+{ Fixture fixture;
+  fixture.request().Flags = 1u;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK(fixture.table().invariants_hold());
+  AllocationTableProbe::corrupt_resources(fixture.table());
+  CHECK(!fixture.table().invariants_hold()); }
+
+/* Every allocation in the list belongs to the one resource, and a create that
+ * fails part way leaves neither the allocations nor the resource behind. */
+TEST(allocation_table_create, a_resource_create_that_fails_part_way_leaves_no_resource)
+{ Fixture fixture;
+  fixture.set_count(3u, shadow);
+  fixture.request().Flags = 1u;
+  /* The third allocation has private data this driver has no shape for. */
+  fixture.info(2u).PrivateDriverDataSize = AllocationDescriptor::encoded_size + 1u;
+  CHECK_STATUS(fixture.create(), Status::not_supported);
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  /* And the one that follows still gets a resource, which it would not if the
+   * pool had kept the first. */
+  Fixture again;
+  again.request().Flags = 1u;
+  CHECK_STATUS(again.create(), Status::ok);
+  CHECK(again.request().hResource != nullptr);
+  CHECK(again.table().invariants_hold()); }
