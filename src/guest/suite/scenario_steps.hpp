@@ -32,6 +32,11 @@ public:
      * success for Vulkan and OpenCL alike: any other value fails the step and
      * is reported, as its two's-complement bits, where the NTSTATUS would be. */
     Status check_result(const char *step, int32_t result);
+    /* Something a step learnt that is not a verdict: `note scenario.key
+     * text`, which a reader of the report sees and the run is not failed for.
+     * What a probe says when the driver has told it there is nothing here to
+     * prove (feature 053). */
+    void   note(const char *key, const char *text);
     /* Records a step the driver must refuse. */
     void   check_refused(const char *step, Status status);
     /* Tears the session down and records it with its first failure's NTSTATUS. */

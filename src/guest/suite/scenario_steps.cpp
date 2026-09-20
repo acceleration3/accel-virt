@@ -41,6 +41,12 @@ Status ScenarioSteps::check_result(const char *step, int32_t result)
     return check_measured(step, Status::invalid_state, static_cast<uint32_t>(result));
 }
 
+void ScenarioSteps::note(const char *key, const char *text)
+{
+    AV_SCOPE("ScenarioSteps::note");
+    report_.note(scenario_, key, text);
+}
+
 void ScenarioSteps::check_refused(const char *step, Status status)
 {
     AV_SCOPE("ScenarioSteps::check_refused");

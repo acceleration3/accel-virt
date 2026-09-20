@@ -36,7 +36,6 @@ ScriptedVulkan::ScriptedVulkan()
       flags_after_fault_(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT), lost_(false), objects_{}, misuses_(0u), next_handle_(first_handle),
       external_objects_(false), win32_handle_(nullptr), scripted_extensions_(false), extension_count_(0u),
       extension_first_(VK_SUCCESS), extension_second_(VK_SUCCESS), allocate_nothing_(false), no_handle_(false),
-      map_nothing_(false),
       release_code_(0u), kernel_status_(0u),
       allocations_{}, allocated_types_{}, allocations_made_(0u), recording_{}, api_version_(0u),
       dispatched_groups_(0u), drawn_vertices_(0u), shader_words_(0u), device_parent_(0u), window_(nullptr), window_handle_(nullptr), pacing_kmt_(nullptr),
@@ -371,8 +370,6 @@ void ScriptedVulkan::allocate_nothing() { allocate_nothing_ = true; }
 
 void ScriptedVulkan::hand_out_no_handle() { no_handle_ = true; }
 
-void ScriptedVulkan::map_nothing() { map_nothing_ = true; }
-
 void ScriptedVulkan::refuse_the_release(std::uint32_t code) { release_code_ = code; }
 
 VkResult ScriptedVulkan::enumerate_device_extensions(VkPhysicalDevice, std::uint32_t *count,
@@ -437,7 +434,7 @@ VkResult ScriptedVulkan::map_memory(VkDevice, VkDeviceMemory memory, void **data
         misuses_++;
         return VK_ERROR_MEMORY_MAP_FAILED;
     }
-    *data = map_nothing_ ? nullptr : allocation->bytes;
+    *data = allocation->bytes;
     return VK_SUCCESS;
 }
 
@@ -645,6 +642,13 @@ void ScriptedVulkan::cmd_copy_image_to_buffer(VkCommandBuffer, VkImage image, Vk
     recording_.copied_to = raw(buffer);
 }
 
+void ScriptedVulkan::cmd_fill_buffer(VkCommandBuffer, VkBuffer buffer, VkDeviceSize size, uint32_t value)
+{
+    if (size == 0u) misuses_++;
+    recording_.filled = raw(buffer);
+    recording_.fill_value = value;
+}
+
 VkResult ScriptedVulkan::queue_submit(VkQueue, const VkSubmitInfo *submit, VkFence fence)
 {
     const VkResult result = use(Call::queue_submit);
@@ -670,6 +674,14 @@ void ScriptedVulkan::run(const Recording &recording)
             value *= 2u;
             std::memcpy(target->bytes + index * element_bytes, &value, sizeof value);
         }
+    }
+    if (recording.filled != 0u) {
+        const Object *const buffer = find(Kind::buffer, recording.filled);
+        Allocation *const   target = buffer != nullptr ? allocation_of(buffer->link) : nullptr;
+        if (target == nullptr) return;
+        for (std::uint64_t at = 0u; at + sizeof recording.fill_value <= max_mapped_bytes;
+             at += sizeof recording.fill_value)
+            std::memcpy(target->bytes + at, &recording.fill_value, sizeof recording.fill_value);
     }
     if (recording.drew) drew_since_present_ = true;
     if (recording.drew && recording.copied_to != 0u) {

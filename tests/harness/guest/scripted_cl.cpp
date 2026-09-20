@@ -12,6 +12,7 @@ constexpr std::uint32_t none = ~std::uint32_t{0};
 constexpr std::uint32_t platform_name = 0x0902u;
 constexpr std::uint32_t platform_icd_suffix = 0x0920u;
 constexpr std::uint32_t device_name = 0x102Bu;
+constexpr std::uint32_t device_extensions = 0x1030u;
 constexpr std::uint32_t device_vendor_id = 0x1001u;
 constexpr std::uint32_t device_luid = 0x106Cu;
 constexpr std::uint32_t device_svm_capabilities = 0x1053u;
@@ -34,7 +35,7 @@ constexpr std::uintptr_t object_base = 0x5300u;
 
 ScriptedCl::ScriptedCl()
     : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
-      device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
+      device_name_("scripted rvkgpu"), device_extensions_(""), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), defers_callbacks_(false), deferred_(nullptr),
       objects_{}, live_(0u), misuses_(0u), exported_handle_(nullptr), exported_words_{},
@@ -89,6 +90,7 @@ void ScriptedCl::set_device_count(std::uint32_t count)
 }
 
 void ScriptedCl::set_device_name(const char *name) { device_name_ = name; }
+void ScriptedCl::set_device_extensions(const char *names) { device_extensions_ = names; }
 void ScriptedCl::set_luid(std::uint64_t luid) { luid_ = luid; }
 void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }
 void ScriptedCl::offer_no_svm() { svm_capabilities_ = 0u; }
@@ -254,6 +256,7 @@ std::int32_t ScriptedCl::device_text(void *device, std::uint32_t name, char *int
         misuses_++;
         return refused;
     }
+    if (name == device_extensions) return answer_text(device_extensions_, into, room, bytes);
     if (name != device_name) return refused;
     return answer_text(device_name_, into, room, bytes);
 }

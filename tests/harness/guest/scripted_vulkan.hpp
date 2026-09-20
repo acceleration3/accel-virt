@@ -188,9 +188,6 @@ public:
      * probe must read as a failed step rather than a passed one. */
     void     allocate_nothing();
     void     hand_out_no_handle();
-    /* And a map that answers success and no pointer, which a probe that wrote
-     * through it would write to address zero. */
-    void     map_nothing();
     /* The NTSTATUS the driver reports after the free, which a release that
      * went wrong leaves non-zero. */
     void     refuse_the_release(std::uint32_t code);
@@ -250,6 +247,8 @@ public:
     void     cmd_draw(VkCommandBuffer command_buffer, std::uint32_t vertices) override;
     void     cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkImage image, VkImageLayout layout,
                                       VkBuffer buffer, const VkBufferImageCopy *region) override;
+    void     cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size,
+                             uint32_t value) override;
 
     VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) override;
 
@@ -293,6 +292,10 @@ private:
         bool          in_render_pass;
         bool          drew;
         std::uint64_t copied_to;
+        /* The buffer a fill names and the word it writes over it, which the
+         * run puts into the memory that buffer is bound to. */
+        std::uint64_t filled;
+        std::uint32_t fill_value;
     };
 
     /* The scripted failure for this use of `call`, or VK_SUCCESS. */
@@ -335,7 +338,6 @@ private:
     VkResult      extension_second_;
     bool          allocate_nothing_;
     bool          no_handle_;
-    bool          map_nothing_;
     std::uint32_t release_code_;
     std::uint32_t kernel_status_;
     Allocation    allocations_[max_allocations];

@@ -33,9 +33,9 @@ namespace {
 const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                       AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
-/* What the probe writes into the exportable allocation before it exports it,
+/* What the probe fills the exportable allocation with before it exports it,
  * which is what its OpenCL read is judged against. */
-constexpr std::uint32_t first_word = 0xABCD0000u;
+constexpr std::uint32_t filled_word = 0xABCD0000u;
 void *const             minted_handle = reinterpret_cast<void *>(0x8000000000000004ull);
 
 class Rig {
@@ -45,6 +45,9 @@ public:
         kmt_.add_adapter(rvk, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
         vulkan_.set_luid(0u, adapter_luid, true);
+        /* A driver that reports the extension, which is what lets an
+         * application name a Win32 handle at all. */
+        cl_.set_device_extensions("cl_khr_icd cl_khr_external_memory_win32 cl_khr_fp16");
     }
 
     MockKmt        &kmt() { return kmt_; }
@@ -54,15 +57,15 @@ public:
     /* A process with no OpenCL beside it, which is what the probe runs as
      * where the loader was not pushed: the Vulkan steps run alone. */
     void            without_opencl() { with_cl_ = false; }
-    /* The memory the minted handle names, as OpenCL will find it: words
-     * counting up from `first`. With the word the probe writes, an OpenCL that
-     * opened the very memory Vulkan exported; with any other, one that opened
-     * a copy of it - which is the failure the read step exists to catch. */
-    void            cl_reads_from(std::uint32_t first)
+    /* The memory the minted handle names, as OpenCL will find it: every word
+     * `word`, which is what a fill leaves. With the word the probe fills with,
+     * an OpenCL that opened the very memory Vulkan wrote; with any other, one
+     * that opened a copy - the failure the read step exists to catch. */
+    void            cl_reads_word(std::uint32_t word)
     {
         std::uint32_t words[av::ScriptedCl::max_shared_words] = {};
         for (std::uint32_t index = 0u; index < av::ScriptedCl::max_shared_words; index++)
-            words[index] = first + index;
+            words[index] = word;
         cl_.memory_behind(minted_handle, words, av::ScriptedCl::max_shared_words);
     }
     void            cl_reads(const std::uint32_t *words, std::uint32_t count)
@@ -112,7 +115,7 @@ TEST(shared_object_probe, a_host_with_no_external_objects_stops_at_the_question)
 TEST(shared_object_probe, an_exportable_allocation_is_minted_handled_and_released)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.run();
   CHECK(rig.holds("ok shared.reported"));
   CHECK(rig.holds("ok shared.exportable"));
@@ -128,7 +131,7 @@ TEST(shared_object_probe, an_exportable_allocation_is_minted_handled_and_release
 TEST(shared_object_probe, opencl_opens_the_handle_vulkan_exported_and_reads_what_it_wrote)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.run();
   CHECK(rig.holds("ok shared.cl_platform_found"));
   CHECK(rig.holds("ok shared.cl_device_found"));
@@ -139,6 +142,42 @@ TEST(shared_object_probe, opencl_opens_the_handle_vulkan_exported_and_reads_what
   CHECK_EQ(rig.report().failed(), 0u);
   CHECK_EQ(rig.cl().live_objects(), 0u);
   CHECK_EQ(rig.cl().misuses(), 0u); }
+
+/* A driver that does not report the external memory extension: the half that
+ * would open a handle does not run, and says why rather than failing. Nothing
+ * an application is allowed to ask for is being refused here - the extension
+ * is what allows the ask. */
+TEST(shared_object_probe, a_driver_reporting_no_external_memory_stops_the_opencl_half_and_does_not_fail)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.cl_reads_word(filled_word);
+  rig.cl().set_device_extensions("cl_khr_icd cl_khr_fp16");
+  rig.run();
+  CHECK(rig.holds("note shared.cl_external_memory"));
+  CHECK(!rig.holds("shared.cl_context"));
+  CHECK_EQ(rig.report().failed(), 0u); }
+
+/* A name that merely contains the extension's is not the extension. */
+TEST(shared_object_probe, an_extension_whose_name_only_starts_the_right_way_is_not_the_right_one)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.cl_reads_word(filled_word);
+  rig.cl().set_device_extensions("cl_khr_external_memory_win32_and_more cl_khr_external_memory");
+  rig.run();
+  CHECK(rig.holds("note shared.cl_external_memory"));
+  CHECK(!rig.holds("shared.cl_context")); }
+
+/* A driver that will not say what it reports: the step fails where it asked,
+ * because that is this driver refusing a query every application makes. */
+TEST(shared_object_probe, a_driver_that_will_not_list_its_extensions_fails_the_step_it_asked_at)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.cl_reads_word(filled_word);
+  rig.cl().fail_at(av::ScriptedCl::Call::device_text, 1u, av::ScriptedCl::refused);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.cl_extensions"));
+  CHECK(!rig.holds("shared.cl_external_memory"));
+  CHECK(rig.report().failed() != 0u); }
 
 /* A process with no OpenCL beside it: the Vulkan half is the whole run and
  * says nothing about the other, rather than failing for a loader that was
@@ -152,28 +191,63 @@ TEST(shared_object_probe, no_opencl_beside_the_process_runs_the_vulkan_half_alon
   CHECK(!rig.holds("shared.cl_"));
   CHECK_EQ(rig.report().failed(), 0u); }
 
-/* Memory nothing could write to: the fill fails, and the read that would have
- * judged it is not run at all - a read against bytes nobody wrote would pass
- * or fail on whatever happened to be there. */
+/* Memory the buffer cannot be bound to: the fill fails, and the read that
+ * would have judged it is not run at all - a read against bytes nobody wrote
+ * would pass or fail on whatever happened to be there. The handle is still
+ * minted, because that is a question about the kernel and not about the
+ * bytes. */
 TEST(shared_object_probe, a_fill_that_could_not_happen_stops_the_opencl_half)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.vulkan().map_nothing();
-  rig.cl_reads_from(first_word);
+  rig.vulkan().fail(ScriptedVulkan::Call::bind_buffer_memory, 1u, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+  rig.cl_reads_word(filled_word);
   rig.run();
   CHECK(rig.holds("FAIL shared.filled"));
   CHECK(rig.holds("ok shared.handle"));
   CHECK(!rig.holds("shared.cl_")); }
 
-/* The same when the map is refused outright rather than answering nothing. */
-TEST(shared_object_probe, a_map_the_host_refuses_is_a_failed_fill)
+/* A command buffer the host will not record into, and work it never
+ * completes: each is a fill that did not happen. */
+TEST(shared_object_probe, a_command_buffer_that_cannot_be_recorded_is_a_failed_fill)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.vulkan().fail(ScriptedVulkan::Call::map_memory, 1u, VK_ERROR_MEMORY_MAP_FAILED);
-  rig.cl_reads_from(first_word);
+  rig.vulkan().fail(ScriptedVulkan::Call::create_command_pool, 1u, VK_ERROR_OUT_OF_HOST_MEMORY);
+  rig.cl_reads_word(filled_word);
   rig.run();
   CHECK(rig.holds("FAIL shared.filled"));
   CHECK(!rig.holds("shared.cl_")); }
+
+TEST(shared_object_probe, a_fill_the_queue_never_finishes_is_a_failed_fill)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().fail(ScriptedVulkan::Call::wait_for_fence, 1u, VK_TIMEOUT);
+  rig.cl_reads_word(filled_word);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.filled"));
+  CHECK(!rig.holds("shared.cl_")); }
+
+/* The buffer the fill writes onto is made before the memory is, because the
+ * types it can be bound to are what the allocation must come from: a host
+ * that will not make it stops the run there. */
+TEST(shared_object_probe, a_buffer_the_host_will_not_make_stops_before_the_allocation)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().fail(ScriptedVulkan::Call::create_buffer, 1u, VK_ERROR_OUT_OF_HOST_MEMORY);
+  rig.run();
+  CHECK(rig.holds("FAIL shared.target"));
+  CHECK(!rig.holds("shared.exportable")); }
+
+/* And memory of no type that buffer takes is memory nothing could write: the
+ * allocation is refused rather than made from a type the binding would
+ * reject. */
+TEST(shared_object_probe, no_memory_type_the_buffer_takes_is_a_refused_export)
+{ Rig rig;
+  rig.vulkan().report_external_objects(minted_handle);
+  rig.vulkan().set_allowed_types(0u, 0u);
+  rig.run();
+  CHECK(rig.holds("ok shared.target"));
+  CHECK(rig.holds("FAIL shared.exportable"));
+  CHECK(!rig.holds("shared.handle")); }
 
 /* A loader with no ICD registered: the step says so and the run stops there,
  * carrying the platform count rather than a later failure that would be
@@ -181,7 +255,7 @@ TEST(shared_object_probe, a_map_the_host_refuses_is_a_failed_fill)
 TEST(shared_object_probe, a_loader_listing_no_platforms_stops_the_opencl_half_at_the_first_step)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().list_no_platforms();
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_platform_found"));
@@ -192,7 +266,7 @@ TEST(shared_object_probe, a_loader_listing_no_platforms_stops_the_opencl_half_at
 TEST(shared_object_probe, a_loader_that_refuses_to_list_platforms_fails_the_step_it_asked_at)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().fail_at(av::ScriptedCl::Call::platforms, 1u, av::ScriptedCl::refused);
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_platform"));
@@ -202,7 +276,7 @@ TEST(shared_object_probe, a_loader_that_refuses_to_list_platforms_fails_the_step
 TEST(shared_object_probe, a_platform_with_no_device_stops_before_a_context_is_made)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().set_device_count(0u);
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_device_found"));
@@ -211,7 +285,7 @@ TEST(shared_object_probe, a_platform_with_no_device_stops_before_a_context_is_ma
 TEST(shared_object_probe, a_platform_that_refuses_to_list_devices_fails_the_step_it_asked_at)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().fail_at(av::ScriptedCl::Call::devices, 1u, av::ScriptedCl::refused);
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_device"));
@@ -222,7 +296,7 @@ TEST(shared_object_probe, a_platform_that_refuses_to_list_devices_fails_the_step
 TEST(shared_object_probe, a_context_the_device_refuses_stops_the_opencl_half)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().fail_at(av::ScriptedCl::Call::create_context, 1u, av::ScriptedCl::refused);
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_context"));
@@ -231,7 +305,7 @@ TEST(shared_object_probe, a_context_the_device_refuses_stops_the_opencl_half)
 TEST(shared_object_probe, a_queue_the_device_refuses_stops_the_opencl_half)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().fail_at(av::ScriptedCl::Call::create_queue, 1u, av::ScriptedCl::refused);
   rig.run();
   CHECK(rig.holds("FAIL shared.cl_queue"));
@@ -256,17 +330,17 @@ TEST(shared_object_probe, a_handle_opencl_cannot_open_is_a_failed_open_and_no_re
 TEST(shared_object_probe, memory_that_reads_back_other_bytes_is_not_the_memory_vulkan_wrote)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(0u);
+  rig.cl_reads_word(0u);
   rig.run();
   CHECK(rig.holds("ok shared.cl_opened"));
   CHECK(rig.holds("FAIL shared.cl_read"));
   CHECK(rig.report().failed() != 0u); }
 
-/* And the second word is judged too: memory holding the right first word and
- * nothing else of the run is memory that was written once by something else. */
+/* And the last word read is judged too: memory holding the fill's word at its
+ * start and nothing of it after is memory something else wrote a word into. */
 TEST(shared_object_probe, memory_holding_only_the_first_word_is_still_not_the_right_memory)
 { Rig rig;
-  const std::uint32_t words[] = {first_word, 0u, 0u, 0u};
+  const std::uint32_t words[] = {filled_word, 0u, 0u, 0u};
   rig.vulkan().report_external_objects(minted_handle);
   rig.cl_reads(words, 4u);
   rig.run();
@@ -277,7 +351,7 @@ TEST(shared_object_probe, memory_holding_only_the_first_word_is_still_not_the_ri
 TEST(shared_object_probe, a_read_the_device_refuses_carries_the_devices_error)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.cl().fail_at(av::ScriptedCl::Call::read_buffer, 1u, av::ScriptedCl::refused);
   rig.run();
   CHECK(rig.holds("ok shared.cl_opened"));
@@ -343,7 +417,7 @@ TEST(shared_object_probe, a_refusal_carries_the_drivers_ntstatus_and_not_the_pro
 TEST(shared_object_probe, a_step_that_passes_carries_no_status_at_all)
 { Rig rig;
   rig.vulkan().report_external_objects(minted_handle);
-  rig.cl_reads_from(first_word);
+  rig.cl_reads_word(filled_word);
   rig.run();
   CHECK(rig.holds("ok shared.exportable"));
   CHECK(!rig.holds("code=0xC000000D"));

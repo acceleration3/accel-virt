@@ -8,6 +8,7 @@
 #include "device/shim/gl_shared_buffer.hpp"
 #include "device/shim/opencl_device.hpp"
 
+#include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/cl_event_registration.hpp"
@@ -30,6 +31,10 @@ namespace {
  * so it is the one value with bits past these that is not a mistake. */
 constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU |
                                          CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
+
+/* What a host says when its OpenCL can name an OpenGL object, which is the
+ * only way a shared object reaches OpenCL on the hosts this runs on. */
+constexpr const char *gl_sharing = "cl_khr_gl_sharing";
 
 }  // namespace
 
@@ -64,8 +69,82 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     const GlContextAttributes plain(nullptr);
     if (!vehicle_.open(*display, plain, nullptr)) return true;
     display_ = display;
+    /* Asked before anything is claimed: a host that will not make the context
+     * shares nothing, and this context then runs everything else exactly as a
+     * host with no display does. */
+    if (!shares_with_gl()) {
+        AV_UNTESTABLE("no OpenCL beside a test here refuses a GL-sharing context; one inside QEMU does");
+        display_ = nullptr;
+        vehicle_.close();
+        return true;
+    }
     import_.configure(vehicle_);
     buffers_.configure(vehicle_);
+    return true;
+}
+
+cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name,
+                                         size_t param_value_size, void *param_value,
+                                         size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clGetDeviceInfo");
+    const cl_int answered = RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size,
+                                                             param_value, param_value_size_ret);
+    if (param_name != CL_DEVICE_EXTENSIONS || answered != CL_SUCCESS || param_value == nullptr ||
+        sharing())
+        return answered;
+    const size_t left = without(static_cast<char *>(param_value), param_value_size, gl_sharing);
+    /* A caller asking with no room is told the host's own size, which is never
+     * smaller than this: a list may need less room than it was promised, and
+     * one that has been read is told what it got. */
+    if (param_value_size_ret != nullptr) *param_value_size_ret = left;
+    return answered;
+}
+
+bool OpenClBackend::names(const char *text, size_t length, const char *name) const
+{
+    AV_SCOPE("OpenClBackend::names");
+    size_t letter = 0u;
+    while (letter < length && name[letter] != '\0' && text[letter] == name[letter]) letter++;
+    return letter == length && name[letter] == '\0';
+}
+
+size_t OpenClBackend::without(char *text, size_t bytes, const char *name) const
+{
+    AV_SCOPE("OpenClBackend::without");
+    size_t length = 0u;
+    while (length < bytes && text[length] != '\0') length++;
+    size_t written = 0u;
+    size_t at = 0u;
+    while (at < length) {
+        while (at < length && text[at] == ' ') at++;
+        size_t end = at;
+        while (end < length && text[end] != ' ') end++;
+        /* Written back over what has already been read, and never past it: a
+         * word that stays moves up by however many were dropped before it. */
+        if (end != at && !names(&text[at], end - at, name)) {
+            if (written != 0u) text[written++] = ' ';
+            for (size_t letter = at; letter < end; letter++) text[written++] = text[letter];
+        }
+        at = end;
+    }
+    text[written] = '\0';
+    return written + 1u;
+}
+
+bool OpenClBackend::shares_with_gl() const
+{
+    AV_SCOPE("OpenClBackend::shares_with_gl");
+    const cl_context_properties named[] = {
+        CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(bound_->platform()),
+        CL_GL_CONTEXT_KHR,   reinterpret_cast<cl_context_properties>(vehicle_.handle()),
+        CL_EGL_DISPLAY_KHR,  reinterpret_cast<cl_context_properties>(display_->handle()),
+        0};
+    cl_device_id const one = static_cast<cl_device_id>(bound_->device());
+    cl_int             made = CL_SUCCESS;
+    cl_context const   asked = ::clCreateContext(named, 1u, &one, nullptr, nullptr, &made);
+    if (asked == nullptr) return false;
+    static_cast<void>(::clReleaseContext(asked));
     return true;
 }
 

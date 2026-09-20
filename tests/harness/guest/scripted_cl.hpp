@@ -105,6 +105,10 @@ public:
     void          list_no_platforms();
     void          set_device_count(std::uint32_t count);
     void          set_device_name(const char *name);
+    /* What the device answers CL_DEVICE_EXTENSIONS with: nothing until a test
+     * says otherwise, which is what a driver reporting no extension row
+     * answers. */
+    void          set_device_extensions(const char *names);
     void          set_luid(std::uint64_t luid);
     void          set_vendor(std::uint64_t vendor);
     /* A device with no shared virtual memory, which is a device rather than a
@@ -244,6 +248,7 @@ private:
     bool          overstating_;
     std::uint32_t devices_;
     const char   *device_name_;
+    const char   *device_extensions_;
     const char   *build_log_;
     const char   *asked_devices_of_;
     std::uint64_t luid_;

@@ -9,7 +9,9 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "guest/suite/probe_commands.hpp"
 #include "guest/suite/probe_device.hpp"
+#include "guest/suite/probe_outcome.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -28,9 +30,13 @@ constexpr const char *scenario = "shared";
  * numbers (feature 053, T019). */
 constexpr uint64_t external_memory_win32 = 0x2061u;
 constexpr uint64_t cl_read_write = 1u;
+/* CL_DEVICE_EXTENSIONS, and the extension that says a Win32 handle can be
+ * opened on this device at all. */
+constexpr uint32_t cl_device_extensions = 0x1030u;
+constexpr const char *cl_external_memory = "cl_khr_external_memory_win32";
 /* What the exportable allocation is filled with before it is shared, and what
  * OpenCL must read back out of it. */
-constexpr uint32_t first_word = 0xABCD0000u;
+constexpr uint32_t filled_word = 0xABCD0000u;
 constexpr const char *win32_memory = "VK_KHR_external_memory_win32";
 
 /* A VkResult read as a Status, so a step's report carries the NTSTATUS of the
@@ -41,6 +47,23 @@ Status answered(VkResult result)
 {
     AV_SCOPE("answered");
     return result == VK_SUCCESS ? Status::ok : Status::invalid_state;
+}
+
+/* Whether `listed` - OpenCL's one space-separated string - has `name` as a
+ * whole word rather than as part of a longer one. */
+bool offers(const char *listed, const char *name)
+{
+    AV_SCOPE("offers");
+    for (uint32_t at = 0u; listed[at] != '\0';) {
+        while (listed[at] == ' ') at++;
+        uint32_t end = at;
+        while (listed[end] != '\0' && listed[end] != ' ') end++;
+        uint32_t letter = 0u;
+        while (at + letter < end && name[letter] != '\0' && listed[at + letter] == name[letter]) letter++;
+        if (at + letter == end && name[letter] == '\0') return true;
+        at = end;
+    }
+    return false;
 }
 
 /* `wanted` is this file's own literal and terminates well inside the array the
@@ -59,7 +82,8 @@ bool names(const VkExtensionProperties &listed, const char *wanted)
 }  // namespace
 
 SharedObjectProbe::SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ClEntry *cl)
-    : kmt_(kmt), vulkan_(vulkan), cl_(cl), filled_(false), steps_(kmt, report, scenario)
+    : kmt_(kmt), vulkan_(vulkan), cl_(cl), target_(VK_NULL_HANDLE), target_types_(0u), filled_(false),
+      steps_(kmt, report, scenario)
 {
     AV_SCOPE("SharedObjectProbe::SharedObjectProbe");
 }
@@ -82,6 +106,22 @@ void SharedObjectProbe::opencl_steps(void *handle)
     if (steps_.check_result("cl_device", cl_->devices(platforms[0], devices, 4u, written)) != Status::ok)
         return;
     if (steps_.check("cl_device_found", written != 0u ? Status::ok : Status::not_found) != Status::ok) return;
+    /* What this driver says it can do, asked rather than assumed. The
+     * extension is what tells an application a Win32 handle may be named in a
+     * property list, and a probe that named one without it would be proving
+     * something no application is allowed to do. A driver that does not report
+     * it says so here and the rest do not run - as the Vulkan half does for a
+     * host with no external memory (feature 053, T019; research.md §21). */
+    char   listed[cl_extension_bytes] = {};
+    size_t needed = 0u;
+    if (steps_.check_result("cl_extensions",
+                            cl_->device_text(devices[0], cl_device_extensions, listed, sizeof listed, needed)) !=
+        Status::ok)
+        return;
+    if (!offers(listed, cl_external_memory)) {
+        steps_.note("cl_external_memory", "this driver reports none: nothing here may name a handle");
+        return;
+    }
     int32_t     error = 0;
     void *const context = cl_->create_context(devices[0], error);
     if (steps_.check_result("cl_context", context != nullptr ? 0 : error) != Status::ok) return;
@@ -107,7 +147,7 @@ void SharedObjectProbe::opencl_steps(void *handle)
      * failure this step exists to catch. */
     uint32_t read[8] = {};
     const int32_t taken = cl_->read_buffer(queue, shared, sizeof read, read);
-    const bool    same = taken == 0 && read[0] == first_word && read[1] == first_word + 1u;
+    const bool    same = taken == 0 && read[0] == filled_word && read[7] == filled_word;
     steps_.check_result("cl_read", same ? 0 : (taken != 0 ? taken : -1));
 }
 
@@ -125,17 +165,30 @@ bool SharedObjectProbe::reported_step(ProbeDevice &device)
     return false;
 }
 
+bool SharedObjectProbe::target_step(ProbeDevice &device)
+{
+    AV_SCOPE("SharedObjectProbe::target_step");
+    VkBufferCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    info.size = bytes;
+    info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (steps_.check("target", answered(vulkan_.create_buffer(device.device(), &info, &target_))) != Status::ok)
+        return false;
+    VkMemoryRequirements wanted = {};
+    vulkan_.buffer_memory_requirements(device.device(), target_, &wanted);
+    target_types_ = wanted.memoryTypeBits;
+    return true;
+}
+
 bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &memory)
 {
     AV_SCOPE("SharedObjectProbe::exportable_step");
-    /* Host visible, so the probe can put known bytes in it: what proves the
-     * sharing is that OpenCL reads *these* bytes back, and a type no CPU can
-     * write is one nothing could check (feature 053, T019). */
+    /* A type the buffer can be bound to: the fill is a transfer onto that
+     * buffer, so memory of a type it refuses is memory nothing could write
+     * (feature 053, T019). */
     uint32_t type = 0u;
-    if (!device.memory_type(~uint32_t{0},
-                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                            type) &&
-        !device.memory_type(~uint32_t{0}, 0u, type)) {
+    if (!device.memory_type(target_types_, 0u, type)) {
         steps_.check("exportable", Status::not_supported);
         return false;
     }
@@ -164,25 +217,24 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
            Status::ok;
 }
 
-/* The bytes the other API must read back. A host-visible allocation is filled
- * here; one that is not leaves `filled_` false and the OpenCL read is skipped
- * rather than compared against memory nobody wrote. */
+/* The bytes the other API must read back, written by the GPU rather than by
+ * this process: memory that is shared is the host's own and never a chunk of
+ * the guest's RAM, so vkMapMemory refuses it and a transfer is the only way
+ * known bytes get in (research.md §21). A fill that did not happen leaves
+ * `filled_` false and the OpenCL read is skipped rather than compared against
+ * memory nobody wrote. */
 void SharedObjectProbe::fill_step(ProbeDevice &device, VkDeviceMemory memory)
 {
     AV_SCOPE("SharedObjectProbe::fill_step");
-    void          *mapped = nullptr;
-    const VkResult opened = vulkan_.map_memory(device.device(), memory, &mapped);
-    if (opened != VK_SUCCESS || mapped == nullptr) {
-        steps_.check("filled", Status::not_supported);
-        return;
-    }
-    auto *const words = static_cast<uint32_t *>(mapped);
-    for (uint32_t index = 0u; index < bytes / sizeof(uint32_t); index++) words[index] = first_word + index;
-    /* Left mapped: the memory is host coherent, so the writes are visible
-     * without one, and vkFreeMemory unmaps what it frees. The probe's seam has
-     * no unmap because nothing else here needed one. */
+    ProbeOutcome outcome;
+    ScopeExit    reporting([&] { outcome.report(steps_, "filled"); });
+    if (!outcome.accept(vulkan_.bind_buffer_memory(device.device(), target_, memory))) return;
+    ProbeCommands commands(device);
+    if (!commands.begin(outcome)) return;
+    vulkan_.cmd_fill_buffer(commands.buffer(), target_, bytes, filled_word);
+    if (!commands.run(outcome)) return;
     filled_ = true;
-    steps_.check("filled", Status::ok);
+    outcome.measure(1u, 1u);
 }
 
 bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, void *&handle)
@@ -198,7 +250,9 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
     AV_SCOPE("SharedObjectProbe::released_step");
     /* Freeing the memory releases the object on the device, closes the NT
      * handle and destroys the carrier allocation the identity was minted into.
-     * What says it worked is that the kernel refused none of it. */
+     * What says it worked is that the kernel refused none of it. The buffer
+     * bound to it goes first, as Vulkan demands of anything naming memory. */
+    vulkan_.destroy_buffer(device.device(), target_);
     vulkan_.free_memory(device.device(), memory);
     const uint32_t refused = vulkan_.last_kernel_status(device.instance(), device.physical_device());
     steps_.check_kernel("released", refused == 0u ? Status::ok : Status::invalid_state, refused);
@@ -349,6 +403,7 @@ void SharedObjectProbe::run()
     const char *const shared_extensions[] = {win32_memory};
     if (steps_.check("device", answered(device.make_device(shared_extensions, 1u))) != Status::ok) return;
     VkDeviceMemory memory = VK_NULL_HANDLE;
+    if (!target_step(device)) return;
     if (!exportable_step(device, memory)) return;
     fill_step(device, memory);
     void *handle = nullptr;

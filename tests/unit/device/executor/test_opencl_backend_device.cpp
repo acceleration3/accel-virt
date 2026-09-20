@@ -295,6 +295,33 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
       written.fill(0xABCD0000u);
   } }
 
+/* A host that really can share says so where the guest's ICD reads it: the
+ * ability is measured when the context binds, and the name stays in the
+ * device's extensions only because a context was made against the vehicle and
+ * released again. */
+TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_device_s_extensions)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  cl_device_id const device = static_cast<cl_device_id>(hosts.device(0u)->device());
+  char   host_list[4096] = {};
+  size_t host_bytes = 0u;
+  CHECK_EQ(::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host_list, host_list, &host_bytes),
+           CL_SUCCESS);
+  char   answered[4096] = {};
+  size_t bytes = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, &bytes),
+           CL_SUCCESS);
+  /* Untouched: what the host said is what the guest is told. */
+  CHECK_EQ(bytes, host_bytes);
+  CHECK(std::strcmp(answered, host_list) == 0);
+  /* And it is there only if the host has it at all - this says which of the
+   * two the run proved. */
+  if (std::strstr(host_list, "cl_khr_gl_sharing") == nullptr)
+      std::fprintf(stderr, "this host's OpenCL lists no cl_khr_gl_sharing\n");
+  backend.shut_down(); }
+
 /* What is refused before any host object is made, which is every question the
  * wire's answer depends on: a kind this API cannot import, a descriptor of the
  * wrong kind, no descriptor, and no size. */

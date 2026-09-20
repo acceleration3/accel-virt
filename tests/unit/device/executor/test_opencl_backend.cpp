@@ -326,6 +326,50 @@ TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 0u, devices, &count), CL_INVALID_VALUE);
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 1u, nullptr, nullptr), CL_INVALID_VALUE); }
 
+/* A context that cannot share tells the guest so, in the one word the guest's
+ * ICD reads it from: with no display there is no vehicle, and a host that
+ * lists cl_khr_gl_sharing is answered without it. Everything else in the list
+ * is still there, in order. */
+TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_device_s_extensions)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device(), nullptr));
+  cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
+
+  char   host_list[4096] = {};
+  size_t host_bytes = 0u;
+  CHECK_EQ(::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host_list, host_list, &host_bytes),
+           CL_SUCCESS);
+  if (std::strstr(host_list, "cl_khr_gl_sharing") == nullptr) return;
+
+  char   answered[4096] = {};
+  size_t bytes = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, &bytes),
+           CL_SUCCESS);
+  CHECK(std::strstr(answered, "cl_khr_gl_sharing") == nullptr);
+  /* The word is gone and nothing else is: every other name the host listed is
+   * still answered, and the size is the string's own. */
+  CHECK_EQ(bytes, std::strlen(answered) + 1u);
+  CHECK(bytes < host_bytes);
+  CHECK(std::strstr(answered, "cl_khr_byte_addressable_store") != nullptr ||
+        std::strstr(host_list, "cl_khr_byte_addressable_store") == nullptr);
+  /* A word that merely contains the name is not the name. */
+  CHECK(std::strstr(answered, "  ") == nullptr);
+
+  /* Every other query is the host's own, and so is a size asked with no room:
+   * a caller may be promised more than it needs. */
+  size_t room = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &room), CL_SUCCESS);
+  CHECK_EQ(room, host_bytes);
+  cl_uint units = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof units, &units, nullptr),
+           CL_SUCCESS);
+  CHECK(units != 0u);
+  /* And a query the host refuses is refused, with nothing struck out of
+   * anything. */
+  CHECK(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 1u, answered, nullptr) != CL_SUCCESS); }
+
 /* Bound, a context is shown its GPU's platform and device and nothing else,
  * whatever else the host has - this host has three platforms and a CPU runtime
  * beside two GPUs. The device it is shown is the GPU, by its own UUID. */

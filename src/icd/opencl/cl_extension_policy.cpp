@@ -34,14 +34,19 @@ bool same_word(const char *text, const char *name, size_t length)
  * application enables, and this ICD answers its two queries without claiming
  * the extension.
  *
- * `cl_khr_external_memory_win32` is built in the guest and refused by the
- * host: `ClExternalMemory` turns a Win32 handle into the object behind it and
- * opens that on the device, and `clCreateBufferWithProperties` carries it -
- * but the device's OpenCL backend cannot import a shared object at all (053's
- * T019, waiting for a host whose OpenCL lists `cl_khr_external_memory_dma_buf`
- * to prove it against). Reporting a row whose every use the device refuses is
- * exactly what constitution VI forbids, so the machinery ships unreported and
- * the row lands with the import.
+ * `cl_khr_external_memory_win32` is built on both sides and reported by
+ * neither. `ClExternalMemory` turns a Win32 handle into the object behind it
+ * and opens that on the device; the device's OpenCL backend really does import
+ * one, through the host's `cl_khr_gl_sharing`, and
+ * `opencl_backend_device.a_descriptor_another_api_wrote_is_read_back_through_a_cl_mem`
+ * proves the bytes are the same bytes on a real host. What is missing is the
+ * row's condition and the gate that would accept it: the row is answered over
+ * the host's `cl_khr_gl_sharing`, which needs `report` to honour `Row::host_`,
+ * and `tools/check_extension_policy.py` needs a generated list of the OpenCL
+ * extensions this build carries before any OpenCL row passes it. Inside QEMU
+ * the condition is false anyway - that host refuses every GL-sharing context,
+ * and the device strikes the name out of what the guest is shown, so a row
+ * would report nothing there (research.md §21).
  *
  * `cl_khr_gl_sharing` needs something this design does not have yet: the
  * *host's* CL context must be created against the *host's* GL context, and the
