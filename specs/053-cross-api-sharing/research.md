@@ -220,3 +220,34 @@ any test on this machine, and the coverage gate is the floor, not the goal. A
 host whose OpenCL carries `cl_khr_external_memory_dma_buf` is what T019 waits
 for; until then a guest opening a shared object on an OpenCL context is
 answered status 4, which is the same answer it gets for an export.
+
+## §11 — What an extension row promises, found while building T034-T036
+
+Written down because two other features asked for it and a report is not the
+tree. The normative table is in `contracts/wire_additions.md`, "Extension
+reporting"; this is why it reads the way it does.
+
+**A host extension is a condition, not a row.** `GL_EXT_memory_object_fd` and
+`GL_EXT_semaphore_fd` are the *host's* names and are never reported to a guest:
+a guest has no file descriptors, which is the whole reason the Win32 spelling
+exists. What a guest is told about is six names - the four GL ones and the two
+OpenCL ones - beside the two Vulkan ones 047 already reported. Reading the
+right-hand column of that table as a list of extensions is the mistake this
+paragraph exists to stop.
+
+**A row promises every command in its extension, and four of them do not keep
+that promise yet.** `GL_EXT_memory_object` has 19 commands in the registry and
+053 answers 4; `GL_EXT_semaphore` has 9 and 053 answers 4. `opengl.toml`
+already records this trap for sparse textures - "an extension may be claimed
+only when every command it needs is generated, so a command left out here is an
+extension the guest is told it does not have however much the card can do" -
+and 053 is the second feature to meet it. The difference is that the generator
+enforces its own rule for what it *generates*, while `GlExtensionPolicy` is a
+hand-kept table that will happily report a name whose commands are absent.
+
+T037 settles it: either the profile takes the remaining 15 and 5 commands, or
+the policy reports something narrower than the base extensions. Until it does,
+a conformance subset should carry `cl_khr_gl_sharing` and the two `_win32` rows
+and leave the two base rows alone, or it will enforce a promise 053 has not yet
+made good - `glTexStorageMem3DEXT`, `glIsMemoryObjectEXT` and a dozen others
+resolve to null today.

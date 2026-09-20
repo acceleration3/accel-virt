@@ -116,3 +116,41 @@ only the guest kernel resolves.
 | `GL_EXT_semaphore` / `GL_EXT_semaphore_win32` | the context's host lists `GL_EXT_semaphore_fd` |
 | `cl_khr_external_memory_win32` | the host device lists `cl_khr_external_memory_dma_buf` |
 | `cl_khr_gl_sharing` | the context's device has a GL executor to share with |
+
+**A host extension in the right-hand column is never a row of its own.** The
+`_fd` names are the *host's*, and they are the condition a guest row is
+reported under - a guest has no file descriptors, which is the whole reason the
+Win32 spelling exists. Six rows are reported to a guest and no more:
+`GL_EXT_memory_object`, `GL_EXT_memory_object_win32`, `GL_EXT_semaphore`,
+`GL_EXT_semaphore_win32`, `cl_khr_external_memory_win32` and
+`cl_khr_gl_sharing`, beside the two Vulkan ones 047 already reported. Anything
+reading this table to build a conformance subset wants those names and not the
+conditions beside them.
+
+### What each row promises, and what 053 answers
+
+Reporting an extension promises every command in it. These do not all keep that
+promise yet, and a suite that enforces the base rows before T037 settles it
+will call entry points that resolve to null - the trap `tools/codegen/profiles/opengl.toml`
+already records for sparse textures ("an extension may be claimed only when
+every command it needs is generated"), met again here for real.
+
+| Row | Commands in the registry | Answered after T036 |
+|---|--:|--:|
+| `GL_EXT_memory_object` | 19 | 4 |
+| `GL_EXT_memory_object_win32` | 2 | 1 |
+| `GL_EXT_semaphore` | 9 | 4 |
+| `GL_EXT_semaphore_win32` | 2 | 1 |
+
+The four answered of `GL_EXT_memory_object` are `glCreateMemoryObjectsEXT`,
+`glDeleteMemoryObjectsEXT`, `glBufferStorageMemEXT` and
+`glTextureStorageMem2DEXT`; of `GL_EXT_semaphore`, `glGenSemaphoresEXT`,
+`glDeleteSemaphoresEXT`, `glSignalSemaphoreEXT` and `glWaitSemaphoreEXT`. The
+one missing from each `_win32` row is its `glImport*Win32NameEXT`, which is
+refused on purpose: a named section is what another process opens *by name*,
+and this path shares by handle.
+
+T037 decides it one way or the other - the profile takes the remaining 15 and
+5, or the policy reports something narrower than the base extensions. Until
+then a conformance subset should carry `cl_khr_gl_sharing` and the two `_win32`
+rows and leave the two base rows out.
