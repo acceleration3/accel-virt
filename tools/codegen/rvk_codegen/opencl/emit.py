@@ -108,9 +108,25 @@ CONTEXT_PROPERTY_SCALARS = ("CL_CONTEXT_INTEROP_USER_SYNC",)
 # not included here, so it is spelled as its value.
 MEM_PROPERTY_REFUSED = (("0x2051", "CL_MEM_DEVICE_HANDLE_LIST_KHR"),)
 
+# Commands whose whole point is the callback the lowering drops, so
+# forwarding them to the host's OpenCL with a null one cannot work:
+# clSetEventCallback refuses a null pfn_notify outright. RealDispatch leaves
+# these pure, and the server that derives from it has to answer them with a
+# callback of its own and tell the guest some other way (feature 052).
+#
+# clCreateContext is not one of them: a null notify is legal there, and the
+# host simply reports its errors nowhere.
+CALLBACK_COMMANDS = ("clSetEventCallback",)
+
 # clSetKernelExecInfo names that pass an array of SVM or USM pointers.
-# This wire carries no allocation of either, so any such pointer is one
-# the guest invented.
+#
+# The wire does carry SVM allocations (feature 052), but this value is an
+# untyped blob of addresses rather than a parameter the profile can give a
+# role: nothing tells the decoder how many pointers are in it but its byte
+# count, and each would have to be resolved and rewritten in place. Until a
+# role says so, the refusal stands - and it is a refusal, not a silent pass:
+# a kernel told nothing about its indirect allocations is a kernel that
+# reads the wrong memory. USM is not carried at all.
 EXEC_INFO_POINTERS = (("CL_KERNEL_EXEC_INFO_SVM_PTRS", ""),
                       ("0x40B8", "CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM"),
                       ("0x4203", "CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL"))
@@ -471,9 +487,31 @@ SIZE_HELPERS = [
 ]
 
 
+def _resolve_addresses(cmd: Command) -> list[str]:
+    """Turn each address the guest sent into a pointer, or refuse the command.
+
+    Zero stays null: a null SVM pointer is the API's own error and the host
+    answers it, exactly as it does for a null handle. Anything else has to lie
+    inside something this server handed out, together with whatever the
+    command says it will read or write from there - so an address one byte
+    inside a live allocation with a size that runs past its end is refused
+    here, before the host's OpenCL is given a pointer at all."""
+    out: list[str] = []
+    for p in cmd.params:
+        if p.role != Role.SVM_POINTER:
+            continue
+        extent = f"static_cast<uint64_t>({p.len_param})" if p.len_param else "0u"
+        out.append(f"    if ({p.name}_wire != 0) {{")
+        out.append(f"        {p.name} = static_cast<{p.type.cpp()}>("
+                   f"s.svm_for({p.name}_wire, {extent}));")
+        out.append(f"        if ({p.name} == nullptr) return false;")
+        out.append("    }")
+    return out
+
+
 def _succeeded(cmd: Command) -> str:
     """Whether the call worked, in the decoder's scope after it."""
-    if cmd.returns_handle:
+    if cmd.returns_handle or cmd.returns_address:
         return "ret != nullptr"
     if cmd.return_type.base == "cl_int" and cmd.return_type.pointer_depth == 0:
         return "ret == CL_SUCCESS"
@@ -497,7 +535,7 @@ def _client_param_decl(reg: Registry, p: Param) -> list[str]:
     t = p.type
     if p.role == Role.IGNORED:
         return [f"{t.cpp()} {p.name}"]
-    if p.role == Role.HANDLE:
+    if p.role in (Role.HANDLE, Role.SVM_POINTER):
         return [f"{HANDLE_T} {p.name}"]
     if p.role in (Role.HANDLE_ARRAY,):
         return [f"const {HANDLE_T}* {p.name}"]
@@ -541,7 +579,7 @@ def _server_param_decl(reg: Registry, p: Param) -> str:
 
 
 def _client_signature(reg: Registry, cmd: Command) -> str:
-    ret = HANDLE_T if cmd.returns_handle else \
+    ret = HANDLE_T if (cmd.returns_handle or cmd.returns_address) else \
         ("void" if cmd.returns_void else cmd.return_type.cpp())
     params = ["::av::ClientTransport& t"]
     for p in cmd.params:
@@ -572,7 +610,7 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         return
     if p.role == Role.SCALAR:
         out.append(f"    b.write_varint(static_cast<uint64_t>({n}));")
-    elif p.role == Role.HANDLE:
+    elif p.role in (Role.HANDLE, Role.SVM_POINTER):
         out.append(f"    b.write_pod<{HANDLE_T}>({n});")
     elif p.role == Role.HANDLE_ARRAY:
         count = p.len_param
@@ -665,7 +703,7 @@ def _client_failure(cmd: Command) -> str:
     """What a call the client could not complete returns: a send that failed,
     and a reply that is short or answers more than the caller had room for,
     which is the same failure seen from the caller."""
-    if cmd.returns_handle:
+    if cmd.returns_handle or cmd.returns_address:
         return "return 0;"
     if cmd.returns_void:
         return "return;"
@@ -688,7 +726,7 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
     caller's buffer holds what the caller said it does: an answer larger
     than that is refused before anything is written into it."""
     fail = _client_failure(cmd)
-    if cmd.returns_handle:
+    if cmd.returns_handle or cmd.returns_address:
         out.append("    " + HANDLE_T + " ret = 0;")
         out.append(f"    if (!r.read_pod(ret)) {fail}")
     elif not cmd.returns_void:
@@ -815,6 +853,11 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
                    f"s.handle_for(HandleKind::{_kind(p.type.base)}, wire_handle));")
         out.append(f"          if ({n} == nullptr) return false;")
         out.append("      } }")
+    elif p.role == Role.SVM_POINTER:
+        # Read only. What bounds it may be a parameter still to come -
+        # clEnqueueSVMMemcpy names its size after both of its addresses - so
+        # the address is turned into a pointer after the whole command is in.
+        out.append(f"    if (!r.read_pod({n}_wire)) return false;")
     elif p.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY):
         elem = p.element if p.role == Role.HANDLE_ARRAY else p.type.base
         out.append("    {")
@@ -1080,7 +1123,13 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    // A successful retain or release of one. After its last release",
           "    // the number names nothing.",
           "    virtual void retained(HandleKind kind, void* object) = 0;",
-          "    virtual void released(HandleKind kind, void* object) = 0;", ""]
+          "    virtual void released(HandleKind kind, void* object) = 0;",
+          "    // The address a guest names, as a pointer, or null for one that",
+          "    // does not lie - with the `bytes` the command will read or write",
+          "    // from it - inside a range this server handed out. Unlike a",
+          "    // handle it need not name the start of one: a kernel argument",
+          "    // may point into the middle of an allocation.",
+          "    virtual void* svm_for(uint64_t address, uint64_t bytes) const = 0;", ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
          "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"',
@@ -1110,6 +1159,9 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {p.type.base} {p.name}{{}};")
             elif p.role == Role.HANDLE:
                 c.append(f"    {p.type.base} {p.name} = nullptr;")
+            elif p.role == Role.SVM_POINTER:
+                c.append(f"    {p.type.cpp()} {p.name} = nullptr;")
+                c.append(f"    {HANDLE_T} {p.name}_wire = 0;")
             elif p.role == Role.HANDLE_ARRAY:
                 c.append(f"    const {p.element}* {p.name} = nullptr;")
                 c.append(f"    uint64_t {p.name}_count = 0;")
@@ -1138,6 +1190,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         for p in cmd.params:
             _decode_param(reg, cmd, p, c)
         c.extend(_refusals(cmd))
+        c.extend(_resolve_addresses(cmd))
 
         # Storage for whatever the caller asked for.
         for p in cmd.out_params:
@@ -1193,6 +1246,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         # Reply: the return value, then what was asked for.
         if cmd.returns_handle:
             c.append(f"    if ({succeeded}) s.made(HandleKind::{_kind(cmd.return_type.base)}, ret);")
+            c.append("    reply.write_pod<" + HANDLE_T +
+                     ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
+        elif cmd.returns_address:
+            # Not an object, so nothing is told to `made`: what the guest may
+            # do with this number is hand it back, and svm_for is what judges
+            # it when it does.
             c.append("    reply.write_pod<" + HANDLE_T +
                      ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
         elif not cmd.returns_void:
@@ -1332,6 +1391,9 @@ def _default_body(reg: Registry, cmd: Command) -> list[str]:
     if cmd.returns_handle:
         body.append(f"        return static_cast<{cmd.return_type.base}>("
                     f"produce(HandleKind::{_kind(cmd.return_type.base)}));")
+    elif cmd.returns_address:
+        # A fake with no OpenCL behind it allocates nothing and maps nothing.
+        body.append("        return nullptr;")
     elif cmd.return_type.base == "cl_int":
         body.append("        return CL_SUCCESS;")
     elif not cmd.returns_void:
@@ -1384,6 +1446,13 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         decls = _server_params(reg, cmd)
         sig = _server_signature2(reg, cmd)
+        if cmd.name in CALLBACK_COMMANDS:
+            # Not forwarded: the host would be handed the null callback the
+            # lowering left behind and answer CL_INVALID_VALUE. Left pure, so
+            # a server that carries this command has to say how it tells the
+            # guest, and one that does not carry it does not compile.
+            out.append(f"    {sig} override = 0;")
+            continue
         args = []
         for p in cmd.params:
             if p.role == Role.IGNORED:

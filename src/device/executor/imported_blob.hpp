@@ -28,10 +28,10 @@ public:
 
     /* Takes `handle` for `blob_id`. invalid_parameter for a handle that breaks
      * any of the ABI's rules - no kind or two, a size that is not whole pages,
-     * a pointer or a descriptor where the kind says there should be none, a
-     * dma-buf with a reserved field - and invalid_state for a slot already
-     * holding one. A host pointer's reserved field is the memory type it asks
-     * to be imported into, which only the backend can judge. */
+     * a pointer or a descriptor where the kind says there should be none - and
+     * invalid_state for a slot already holding one. The reserved field is the
+     * memory type it asks to be imported into, which only the backend can
+     * judge. */
     [[nodiscard]] Status take(uint64_t blob_id, const RvkBlobHandle &handle);
     /* Gives the slot back. Safe on one that holds nothing. */
     void                 give_back();

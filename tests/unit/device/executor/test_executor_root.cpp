@@ -7,6 +7,7 @@
 #include "device/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "harness/executor/executor_root_probe.hpp"
+#include "harness/executor/root_under_test.hpp"
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
@@ -17,6 +18,7 @@
 
 using av::ContextSession;
 using av::ExecutorRoot;
+using av::RootUnderTest;
 using av::ExecutorRootProbe;
 using av::HostGpuProbe;
 using av::HostGpuSetProbe;
@@ -58,7 +60,8 @@ TEST(executor_root, offers_what_the_host_runs_and_imports_what_each_gpu_can)
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL,
                RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF, 0u, RVK_BLOB_DMA_BUF);
   apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.sub_apis(), RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL);
 
@@ -72,7 +75,8 @@ TEST(executor_root, offers_what_the_host_runs_and_imports_what_each_gpu_can)
  * which is what stops the device describing a capset it cannot honour. */
 TEST(executor_root, a_host_with_no_gpu_offers_nothing)
 { MockHostApis apis;
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.sub_apis(), 0u);
   CHECK_EQ(root.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN, intel), 0u);
@@ -81,14 +85,16 @@ TEST(executor_root, a_host_with_no_gpu_offers_nothing)
 TEST(executor_root, a_gpu_nobody_has_imports_nothing)
 { MockHostApis apis;
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN, absent), 0u);
   CHECK_EQ(root.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN, nullptr), 0u); }
 
 /* Before it has asked, it offers nothing rather than guessing. */
 TEST(executor_root, answers_nothing_until_it_has_asked)
-{ ExecutorRoot root;
+{ RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_EQ(root.sub_apis(), 0u);
   CHECK_EQ(root.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN, intel), 0u);
   CHECK(root.invariants_hold()); }
@@ -98,7 +104,8 @@ TEST(executor_root, answers_nothing_until_it_has_asked)
 TEST(executor_root, asks_the_host_once)
 { MockHostApis apis;
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_STATUS(root.initialize(apis), Status::invalid_state);
   CHECK_EQ(root.sub_apis(), std::uint32_t{RVK_EXECUTOR_SUB_API_VULKAN}); }
@@ -112,7 +119,8 @@ TEST(executor_root, a_host_with_more_gpus_than_it_holds_still_answers)
       uuid[0] = static_cast<std::uint8_t>(i + 1u);
       apis.add_gpu(uuid, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
   }
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK_EQ(root.sub_apis(), std::uint32_t{RVK_EXECUTOR_SUB_API_VULKAN});
   CHECK(root.invariants_hold()); }
@@ -129,14 +137,15 @@ public:
         apis_.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL,
                       RVK_BLOB_HOST_POINTER, 0u, 0u);
         apis_.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
-        status_ = root_.initialize(apis_);
+        status_ = held_->initialize(apis_);
     }
     Status              status() const { return status_; }
-    ExecutorRoot       &root() { return root_; }
+    ExecutorRoot       &root() { return *held_; }
 
 private:
     MockHostApis       apis_;
-    ExecutorRoot       root_;
+    /* Not by value: the root is eight megabytes and this rig is a local. */
+    RootUnderTest      held_;
     Status             status_ = Status::ok;
 };
 
@@ -256,7 +265,8 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
 
 /* Nothing is handed out before the host has been asked. */
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
-{ ExecutorRoot root;
+{ RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK(root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
 
 /* The root answers the capset from its GPUs, so one broken GPU is a broken
@@ -292,7 +302,8 @@ TEST(executor_root_open, a_value_naming_two_sub_apis_at_once_gets_no_session)
 TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_back)
 { MockHostApis apis;
   apis.add_gpu(absent, RVK_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   CHECK(root.open(RVK_EXECUTOR_SUB_API_OPENGL, absent) == nullptr);
   CHECK_EQ(root.live(), 0u);
@@ -306,7 +317,8 @@ TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_bac
 TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
 { av::LoaderHostApis host;
   host.open();
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(host), Status::ok);
   constexpr std::uint32_t apis[] = {RVK_EXECUTOR_SUB_API_VULKAN, RVK_EXECUTOR_SUB_API_OPENCL,
                                     RVK_EXECUTOR_SUB_API_OPENGL};
@@ -363,7 +375,8 @@ TEST(executor_root_open, options_or_a_share_for_another_api_get_no_session)
 TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
 { av::LoaderHostApis host;
   host.open();
-  ExecutorRoot root;
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(host), Status::ok);
   ContextSession *previous = nullptr;
   const RvkContextOptions core = {4u, 3u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
@@ -387,3 +400,18 @@ TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
   if (previous != nullptr) root.close(previous);
   CHECK_EQ(root.live(), 0u);
   host.close(); }
+
+/* A session this root never handed out is one it binds nothing to.
+ *
+ * The signal is routed by finding the session in the root's own array, so a
+ * stranger's - another root's, or one on the stack - must fall off the end
+ * rather than be matched to whatever sits at the same index. */
+TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothing)
+{ Opened opened;
+  CHECK_STATUS(opened.status(), Status::ok);
+  ContextSession stranger;
+  /* It simply returns: there is nothing to bind and nothing to report, and
+   * the root is untouched. */
+  opened.root().set_signal(&stranger, nullptr, nullptr);
+  CHECK_EQ(opened.root().live(), 0u);
+  CHECK(opened.root().invariants_hold()); }

@@ -217,13 +217,71 @@ TEST(fence_reporter_fault, an_unprepared_reporter_writes_nothing_and_preparing_s
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   CHECK(!fixture.page().faulted()); }
 
+/* Feature 052: a host OpenCL event completes on a thread the device never gave
+ * the host, so the worker reports it with nothing claimed finished - progress
+ * moves, the completion stays where it was, and the guest is interrupted. That
+ * is the only shape an out-of-band wake may take (FenceProgress::observe). */
+TEST(fence_reporter_nudge, raises_on_progress_alone_with_the_completion_where_it_was)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.complete(7u);
+      reporter.signal();
+      reporter.nudge();
+      reporter.nudge();
+      reporter.signal();
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.page().completed_fence(), 7u);
+  CHECK_EQ(fixture.page().progress(), 3u);
+  CHECK(!fixture.page().faulted());
+  CHECK_EQ(fixture.reporter().completed(), 7u);
+  CHECK_EQ(fixture.reporter().progress(), 3u);
+  /* One for the batch, one for everything nudged since - and not one more. */
+  CHECK_EQ(fixture.host().raised(line), 2u); }
+
+/* The wake a context gets before it has ever completed anything: the guest
+ * reads a page whose completed fence is still zero. */
+TEST(fence_reporter_nudge, wakes_a_context_that_has_completed_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.nudge();
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  CHECK_EQ(fixture.page().progress(), 1u);
+  CHECK_EQ(fixture.host().raised(line), 1u); }
+
+TEST(fence_reporter_nudge, an_unprepared_or_faulted_reporter_writes_and_raises_nothing)
+{ Fixture fixture;
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.nudge();
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.bytes()[0], 0xEEu);
+  CHECK_EQ(fixture.host().raised(line), 0u);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.nudge();
+      reporter.fault(FaultCode::device_lost);
+      reporter.signal();
+      reporter.nudge();
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.page().progress(), 1u);
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::device_lost));
+  CHECK_EQ(fixture.reporter().progress(), 1u);
+  CHECK_EQ(fixture.host().raised(line), 1u); }
+
 TEST(fence_reporter, prepares_on_the_main_loop_and_reports_on_a_worker)
 { Fixture fixture;
   fixture.reporter().complete(1u);
   fixture.reporter().signal();
   fixture.reporter().heartbeat();
+  fixture.reporter().nudge();
   fixture.reporter().fault(FaultCode::ring_header);
-  for (int count = 0; count < 4; count++) CHECK(fixture.host().claim(HostViolation::worker_required));
+  for (int count = 0; count < 5; count++) CHECK(fixture.host().claim(HostViolation::worker_required));
   fixture.on_worker([](FenceReporter &reporter) {
       reporter.withdraw();
   });

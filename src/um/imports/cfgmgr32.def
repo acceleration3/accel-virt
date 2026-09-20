@@ -1,0 +1,14 @@
+; The Khronos OpenCL loader's SetupAPI discovery path (feature 052,
+; loader/windows/icd_windows_hkr.c): walk the display and software-component
+; device classes and open each node's software key.
+LIBRARY cfgmgr32.dll
+EXPORTS
+CM_Get_Child
+CM_Get_DevNode_Registry_PropertyW
+CM_Get_DevNode_Status
+CM_Get_Device_IDW
+CM_Get_Device_ID_ListW
+CM_Get_Device_ID_List_SizeW
+CM_Get_Sibling
+CM_Locate_DevNodeW
+CM_Open_DevNode_Key

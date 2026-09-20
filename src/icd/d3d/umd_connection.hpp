@@ -6,6 +6,14 @@
  * open is live - one open of the kernel's adapter, however many the runtimes
  * make of the driver's.
  *
+ * It is not icd::IcdConnection, which the Khronos ICDs share: that one makes a
+ * D3DKMT device and paging queue per link and tracks their loss, because a
+ * context is made on one. Nothing is submitted here until feature 056 gives
+ * the device functions something to submit, so this holds the adapter and
+ * nothing else, and does not open state it cannot yet be right about. When 056
+ * needs a device, IcdConnection is what it should reach for - it would want an
+ * accessor for the adapter handle AdapterIdentity::learn takes.
+ *
  * What is deliberately not here yet is the rvk context: nothing is submitted
  * until feature 056 gives the device functions something to submit, and the
  * transport this will carry is the one feature 053 makes shareable with the

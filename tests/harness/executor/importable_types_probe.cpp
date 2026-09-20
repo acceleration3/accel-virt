@@ -6,4 +6,6 @@ ImportableTypesProbe::ImportableTypesProbe(ImportableTypes &target) : types(targ
 
 void ImportableTypesProbe::set_mask(uint32_t mask) { types.mask_ = mask; }
 
+void ImportableTypesProbe::set_kind(uint32_t kind) { types.kind_ = kind; }
+
 }  // namespace av

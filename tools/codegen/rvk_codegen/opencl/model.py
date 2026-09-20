@@ -35,6 +35,15 @@ class Role(str, Enum):
     INFO_VALUE = "info_value"
     STRUCT_IN = "struct_in"
     STRUCT_OUT = "struct_out"
+    # An address in the host's own address space, which the guest learnt
+    # from a previous call and may not dereference: a mapped range, or a
+    # shared-virtual-memory allocation. It crosses as a number, and the
+    # server turns it back into a pointer only after satisfying itself that
+    # the address and its extent lie inside something it handed out
+    # (ServerDispatch::svm_for). Unlike a handle it need not name the start
+    # of that something: a kernel argument may point into the middle of an
+    # allocation.
+    SVM_POINTER = "svm_pointer"
     # A zero-terminated key/value list, some of whose values are handles.
     PROPERTIES = "properties"
     # A zero-terminated flat list. Device partition properties are this
@@ -91,6 +100,15 @@ class Command:
             self.return_type.base.startswith("cl_") and \
             self.return_type.base not in ("cl_int", "cl_uint", "cl_ulong",
                                           "cl_bool")
+
+    @property
+    def returns_address(self) -> bool:
+        """A raw host address, as clSVMAlloc and clEnqueueMapBuffer answer.
+
+        It is neither a handle nor void, and it crosses as a number for the
+        reason SVM_POINTER does: the guest may hold it and hand it back, and
+        may not dereference it."""
+        return self.return_type.base == "void" and self.return_type.pointer_depth == 1
 
     @property
     def returns_void(self) -> bool:

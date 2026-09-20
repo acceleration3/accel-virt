@@ -3279,4 +3279,284 @@ uint64_t rvk_clCreateProgramWithBuiltInKernels(::av::ClientTransport& t, uint64_
     return ret;
 }
 
+uint64_t rvk_clEnqueueMapBuffer(::av::ClientTransport& t, uint64_t command_queue, uint64_t buffer, cl_bool blocking_map, cl_map_flags map_flags, size_t offset, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event, cl_int* errcode_ret) {
+    AV_SCOPE("rvk_clEnqueueMapBuffer");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_pod<uint64_t>(buffer);
+    b.write_varint(static_cast<uint64_t>(blocking_map));
+    b.write_varint(static_cast<uint64_t>(map_flags));
+    b.write_varint(static_cast<uint64_t>(offset));
+    b.write_varint(static_cast<uint64_t>(size));
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueMapBuffer, b, r) !=
+        ::av::TransportResult::ok) {
+        return 0;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    uint64_t ret = 0;
+    if (!r.read_pod(ret)) return 0;
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return 0;
+    }
+    if (errcode_ret != nullptr) {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return 0;
+        *errcode_ret = static_cast<cl_int>(wire_value);
+    }
+    return ret;
+}
+
+cl_int rvk_clEnqueueUnmapMemObject(::av::ClientTransport& t, uint64_t command_queue, uint64_t memobj, uint64_t mapped_ptr, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueUnmapMemObject");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_pod<uint64_t>(memobj);
+    b.write_pod<uint64_t>(mapped_ptr);
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueUnmapMemObject, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
+    }
+    return ret;
+}
+
+uint64_t rvk_clSVMAlloc(::av::ClientTransport& t, uint64_t context, cl_svm_mem_flags flags, size_t size, cl_uint alignment) {
+    AV_SCOPE("rvk_clSVMAlloc");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(context);
+    b.write_varint(static_cast<uint64_t>(flags));
+    b.write_varint(static_cast<uint64_t>(size));
+    b.write_varint(static_cast<uint64_t>(alignment));
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clSVMAlloc, b, r) !=
+        ::av::TransportResult::ok) {
+        return 0;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    uint64_t ret = 0;
+    if (!r.read_pod(ret)) return 0;
+    return ret;
+}
+
+void rvk_clSVMFree(::av::ClientTransport& t, uint64_t context, uint64_t svm_pointer) {
+    AV_SCOPE("rvk_clSVMFree");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(context);
+    b.write_pod<uint64_t>(svm_pointer);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clSVMFree, b, r) !=
+        ::av::TransportResult::ok) {
+        return;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+}
+
+cl_int rvk_clEnqueueSVMMap(::av::ClientTransport& t, uint64_t command_queue, cl_bool blocking_map, cl_map_flags flags, uint64_t svm_ptr, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueSVMMap");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_varint(static_cast<uint64_t>(blocking_map));
+    b.write_varint(static_cast<uint64_t>(flags));
+    b.write_pod<uint64_t>(svm_ptr);
+    b.write_varint(static_cast<uint64_t>(size));
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueSVMMap, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
+    }
+    return ret;
+}
+
+cl_int rvk_clEnqueueSVMUnmap(::av::ClientTransport& t, uint64_t command_queue, uint64_t svm_ptr, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueSVMUnmap");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_pod<uint64_t>(svm_ptr);
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueSVMUnmap, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
+    }
+    return ret;
+}
+
+cl_int rvk_clEnqueueSVMMemcpy(::av::ClientTransport& t, uint64_t command_queue, cl_bool blocking_copy, uint64_t dst_ptr, uint64_t src_ptr, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueSVMMemcpy");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_varint(static_cast<uint64_t>(blocking_copy));
+    b.write_pod<uint64_t>(dst_ptr);
+    b.write_pod<uint64_t>(src_ptr);
+    b.write_varint(static_cast<uint64_t>(size));
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueSVMMemcpy, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
+    }
+    return ret;
+}
+
+cl_int rvk_clEnqueueSVMMemFill(::av::ClientTransport& t, uint64_t command_queue, uint64_t svm_ptr, const void* pattern, size_t pattern_size, size_t size, cl_uint num_events_in_wait_list, const uint64_t* event_wait_list, uint64_t* event) {
+    AV_SCOPE("rvk_clEnqueueSVMMemFill");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(command_queue);
+    b.write_pod<uint64_t>(svm_ptr);
+    b.write_pod<uint8_t>(pattern != nullptr ? 1 : 0);
+    if (pattern != nullptr) {
+        b.write_varint(static_cast<uint64_t>(pattern_size));
+        b.write(pattern, static_cast<size_t>(pattern_size));
+    }
+    b.write_varint(static_cast<uint64_t>(pattern_size));
+    b.write_varint(static_cast<uint64_t>(size));
+    b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+    b.write_pod<uint8_t>(event_wait_list != nullptr ? 1 : 0);
+    if (event_wait_list != nullptr) {
+        b.write_varint(static_cast<uint64_t>(num_events_in_wait_list));
+        for (uint64_t i = 0; i < static_cast<uint64_t>(num_events_in_wait_list); ++i) {
+            b.write_pod<uint64_t>(event_wait_list[i]);
+        }
+    }
+    b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clEnqueueSVMMemFill, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    if (event != nullptr) {
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
+    }
+    return ret;
+}
+
+cl_int rvk_clSetKernelArgSVMPointer(::av::ClientTransport& t, uint64_t kernel, cl_uint arg_index, uint64_t arg_value) {
+    AV_SCOPE("rvk_clSetKernelArgSVMPointer");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(kernel);
+    b.write_varint(static_cast<uint64_t>(arg_index));
+    b.write_pod<uint64_t>(arg_value);
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clSetKernelArgSVMPointer, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    return ret;
+}
+
+cl_int rvk_clSetEventCallback(::av::ClientTransport& t, uint64_t event, cl_int command_exec_callback_type) {
+    AV_SCOPE("rvk_clSetEventCallback");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(event);
+    b.write_varint(static_cast<uint64_t>(command_exec_callback_type));
+    const ::av::SyncCallScope rvk_call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_clSetEventCallback, b, r) !=
+        ::av::TransportResult::ok) {
+        return CL_OUT_OF_RESOURCES;
+    }
+    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
+    cl_int ret{};
+    int64_t ret_wire = 0;
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
+    ret = static_cast<cl_int>(ret_wire);
+    return ret;
+}
+
 }  // namespace av::clproto

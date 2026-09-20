@@ -8,6 +8,7 @@
 
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
+#include "device/context/context_signal.hpp"
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/batch_staging.hpp"
@@ -66,7 +67,9 @@ private:
     BatchStaging    staging_;
     BatchExecutor   batches_;
     RingConsumer    ring_;
-    Worker         worker_;
+    /* Before the worker: the worker drains it, and is stopped before it goes. */
+    ContextSignal   signal_;
+    Worker          worker_;
 
     friend struct DeviceContextProbe;
 };

@@ -214,7 +214,8 @@ TEST(blob_table_initialize, nothing_is_created_before_the_lock_exists_and_it_is_
     CHECK_STATUS(table.create_guest(1u, 0x1000u, request, 24u, 1u), Status::invalid_state);
     CHECK_STATUS(table.create_host(2u, 0x1000u), Status::invalid_state);
     const av::GuestPageAlias *alias = nullptr;
-    CHECK_STATUS(table.hold_alias(1u, alias), Status::not_found);
+    av::BlobWindow            pages;
+    CHECK_STATUS(table.hold_alias(1u, alias, pages), Status::not_found);
     table.release_alias(1u);
     table.release_all();
     CHECK_EQ(table.live(), 0u);
@@ -237,16 +238,18 @@ TEST(blob_table_hold_alias, shares_one_alias_of_a_guest_blob_and_keeps_the_blob_
   MockRequest mock(bytes.bytes(), bytes.size());
   ControlRequest request(fixture.host(), &mock);
   const av::GuestPageAlias *alias = nullptr;
-  CHECK_STATUS(fixture.table().hold_alias(1u, alias), Status::not_found);
+  av::BlobWindow            pages;
+  CHECK_STATUS(fixture.table().hold_alias(1u, alias, pages), Status::not_found);
   CHECK_STATUS(fixture.table().create_guest(1u, 0x1000u, request, 24u, 1u), Status::ok);
   CHECK_STATUS(fixture.table().create_host(2u, 0x1000u), Status::ok);
-  CHECK_STATUS(fixture.table().hold_alias(2u, alias), Status::invalid_parameter);
+  CHECK_STATUS(fixture.table().hold_alias(2u, alias, pages), Status::invalid_parameter);
   CHECK(alias == nullptr);
   fixture.host().guest_ram(ram + 0x3008u)[0] = 0x5Bu;
-  CHECK_STATUS(fixture.table().hold_alias(1u, alias), Status::ok);
+  CHECK_STATUS(fixture.table().hold_alias(1u, alias, pages), Status::ok);
   CHECK_EQ(static_cast<std::uint8_t *>(alias->base())[8], 0x5Bu);
+  CHECK_EQ(pages.length(), 0x1000u);
   const av::GuestPageAlias *again = nullptr;
-  CHECK_STATUS(fixture.table().hold_alias(1u, again), Status::ok);
+  CHECK_STATUS(fixture.table().hold_alias(1u, again, pages), Status::ok);
   CHECK(again == alias);
   CHECK_EQ(fixture.host().live_ranges(), 1u);
   CHECK_STATUS(fixture.table().release(1u), Status::invalid_state);   /* a host API has its pages */
@@ -267,7 +270,8 @@ TEST(blob_table_hold_alias, reset_releases_an_aliased_blob_and_its_alias)
   ControlRequest request(fixture.host(), &mock);
   CHECK_STATUS(fixture.table().create_guest(1u, 0x1000u, request, 24u, 1u), Status::ok);
   const av::GuestPageAlias *alias = nullptr;
-  CHECK_STATUS(fixture.table().hold_alias(1u, alias), Status::ok);
+  av::BlobWindow            pages;
+  CHECK_STATUS(fixture.table().hold_alias(1u, alias, pages), Status::ok);
   fixture.table().release_all();
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK_EQ(fixture.host().live_ranges(), 0u);
@@ -290,7 +294,8 @@ TEST(blob_table_hold_alias, a_worker_holds_aliases_while_the_main_loop_creates_a
                        auto *const c = static_cast<Call *>(context);
                        for (int round = 0; round < 2000; round++) {
                            const av::GuestPageAlias *alias = nullptr;
-                           if (c->table->hold_alias(1u, alias) != Status::ok) continue;
+                           av::BlobWindow            pages;
+                           if (c->table->hold_alias(1u, alias, pages) != Status::ok) continue;
                            c->made += alias->length() == 0x1000u ? 1u : 0u;
                            c->table->release_alias(1u);
                        }

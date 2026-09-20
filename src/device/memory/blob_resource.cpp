@@ -112,7 +112,7 @@ BlobWindow BlobResource::window() const
     return block_.created() ? block_.window() : guest_.window();
 }
 
-Status BlobResource::hold_alias(const GuestPageAlias *&alias)
+Status BlobResource::hold_alias(const GuestPageAlias *&alias, BlobWindow &pages)
 {
     AV_SCOPE("BlobResource::hold_alias");
     alias = nullptr;
@@ -121,6 +121,7 @@ Status BlobResource::hold_alias(const GuestPageAlias *&alias)
     if (status != Status::ok) return status;
     alias_holds_++;
     alias = &alias_;
+    pages = guest_.window();
     return Status::ok;
 }
 

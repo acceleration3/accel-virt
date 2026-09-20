@@ -56,6 +56,9 @@ public:
     Status   reserve_range(std::uint64_t bytes, void *&base) override;
     Status   alias_guest_run(void *run, std::uint64_t bytes, void *at) override;
     void     release_range(void *base, std::uint64_t bytes) override;
+    Status   dmabuf_over_guest(void *const *runs, const std::uint64_t *sizes, std::uint32_t count,
+                               int &fd) override;
+    void     close_dmabuf(int fd) override;
     void    *create_host_memory(std::uint64_t size, void *&pointer) override;
     void     destroy_host_memory(void *memory) override;
     std::uint64_t hostmem_size() override;
@@ -120,6 +123,14 @@ public:
     /* The Nth range reservation, or alias of a guest run, from now is refused. */
     void fail_reserve_at(std::uint32_t nth);
     void fail_alias_at(std::uint32_t nth);
+    /* The nth dma-buf is refused, as a host with no udmabuf refuses them all. */
+    void fail_dmabuf_at(std::uint32_t nth);
+    /* Every dma-buf refused from here on, as a kernel with no udmabuf refuses
+     * them: the caller then imports a host pointer, which is the path that has
+     * to keep working on such a host. */
+    void refuse_dmabufs();
+    /* Dma-bufs made and not yet closed, so a test can say none leaked. */
+    std::uint32_t live_dmabufs() const;
 
     /* Guest memory another harness owns (the guest's MockPlatform in the
      * loopback suite): `translate` answers the host pointer of `length` bytes
@@ -211,6 +222,11 @@ private:
     static constexpr std::uint32_t max_resources = 64u;
     static constexpr std::uint32_t max_ranges = 128u;
     static constexpr std::uint64_t page = 4096u;
+
+    /* Runs one dma-buf may cover. A chunk scattered page by page is bounded
+     * by GuestPageAlias::max_runs; this is the harness's own smaller bound,
+     * since no test aliases more. */
+    static constexpr std::uint32_t max_dmabuf_runs = 256u;
 
     struct GuestRegion {
         std::uint64_t base;
@@ -311,6 +327,9 @@ private:
     Range           ranges_[max_ranges];
     std::uint32_t   fail_reserve_;
     std::uint32_t   fail_alias_;
+    std::uint32_t   fail_dmabuf_;
+    bool            no_dmabufs_;
+    std::uint32_t   dmabufs_;
 };
 
 }  // namespace av

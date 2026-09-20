@@ -1048,3 +1048,77 @@ derived from: when the guest disagrees with the harness, one of them is wrong
 and the citation says where to look. It happened once: the fake accepted
 `DMA_FAULTED`, and dxgmms2.sys bugchecks 0x119/0xD on it (see
 `docs/kb/05-scheduling.md`).
+
+## When the host GPU stops importing guest memory
+
+Feature 047's host-visible import hands the host GPU a pointer into guest
+memory and asks it to make a `VkDeviceMemory` over it, through
+`VK_EXT_external_memory_host`. That guest memory is a **memfd mapped
+`MAP_SHARED`** — in the L4 rig (`MockHost`) and in real QEMU alike, because
+that is what a guest's RAM is.
+
+On kernel 7.2.6 `amdgpu` refuses to pin a userptr whose pages are file-backed.
+`vkGetMemoryHostPointerPropertiesEXT` still answers a memory-type mask, so the
+pointer looks importable; `vkAllocateMemory` then fails with
+`VK_ERROR_INVALID_EXTERNAL_HANDLE` (-1000072003). The guest sees blob import
+status 5, `executor_refused`, and every scenario that imports fails.
+
+`tools/re/probe_host_pointer_import.c` is the ten-second check, and it needs
+none of this repository:
+
+```
+clang -O0 -D_GNU_SOURCE -I third_party/khronos/include \
+      tools/re/probe_host_pointer_import.c -lvulkan -o /tmp/probe && /tmp/probe
+```
+
+It imports anonymous memory at four sizes and memfd-backed shared memory at
+one. If the anonymous imports succeed and the memfd one answers
+-1000072003, the host kernel is refusing file-backed userptr and the four
+import tests cannot pass on it — `test_fullstack_rvk`,
+`test_fullstack_vulkan_icd`, `test_fullstack_external_objects` and
+`test_opengl_backend_device`. Nothing in the driver is wrong; the capability
+the feature is built on is not there.
+
+Two things this rules out, both of which looked likely first:
+
+- **It is not the Mesa version.** The same Mesa passes when the memory is
+  anonymous.
+- **It is not memlock.** The import works at 8 MiB against a `RLIMIT_MEMLOCK`
+  of 8 MiB when the pages are anonymous.
+
+A kernel that has this behaviour is reported by `uname -r`; the one before it
+did not, which is why a checkout that was green before a reboot can fail
+after one with nothing changed in it.
+
+### What the device does about it
+
+It hands the same pages over as a **dma-buf** instead, which such a driver
+takes. `GuestDmaBuf` turns a blob's extents into one descriptor through
+udmabuf (`/dev/udmabuf`, `UDMABUF_CREATE_LIST`), so the host GPU sees one
+contiguous range and no byte is copied — the same thing `GuestPageAlias` does
+for a pointer, one layer down. The guest RAM memfd must be sealed against
+shrinking; udmabuf takes no other kind, and `MockHost::add_guest_ram` seals
+its own for the same reason.
+
+Which of the two a device uses is **one decision per device, not one per
+blob**: a buffer or an image is made for a single external handle type, and
+the memory types the two kinds land in are not the same either - on this host
+a userptr reaches 0x20 and a dma-buf 0x20, on another they differ. So
+`VulkanBackend` measures both when the guest first asks anything about
+importing, `ImportableTypes` holds the kind that won along with that kind's
+mask, and everything downstream reads it: the memory types the guest is shown,
+the handle type named on every buffer and image, and the kind `adopt` will
+take. A guest that names no `VkExternalMemoryBufferCreateInfo` of its own gets
+the right one; a guest that names one is not second-guessed.
+
+The device still offers both kinds through `import_kinds` and tries the
+dma-buf first, because a library that takes no descriptor - OpenCL's, whose
+import is `CL_MEM_USE_HOST_PTR` - and a host with no udmabuf both have to keep
+working. Both attempts are one import and carry one blob id: the refused one
+left the library holding nothing.
+
+A host where this matters can be told apart in one line:
+
+```
+ls /dev/udmabuf && vulkaninfo 2>/dev/null | grep -c VK_EXT_external_memory_dma_buf
+```

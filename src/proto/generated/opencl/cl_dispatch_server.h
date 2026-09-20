@@ -55,6 +55,12 @@ public:
     // the number names nothing.
     virtual void retained(HandleKind kind, void* object) = 0;
     virtual void released(HandleKind kind, void* object) = 0;
+    // The address a guest names, as a pointer, or null for one that
+    // does not lie - with the `bytes` the command will read or write
+    // from it - inside a range this server handed out. Unlike a
+    // handle it need not name the start of one: a kernel argument
+    // may point into the middle of an allocation.
+    virtual void* svm_for(uint64_t address, uint64_t bytes) const = 0;
 
     virtual cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) = 0;
     virtual cl_int on_clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) = 0;
@@ -161,6 +167,16 @@ public:
     virtual cl_mem on_clCreatePipe(cl_context context, cl_mem_flags flags, cl_uint pipe_packet_size, cl_uint pipe_max_packets, const cl_pipe_properties* properties, cl_int* errcode_ret) = 0;
     virtual cl_int on_clGetPipeInfo(cl_mem pipe, cl_pipe_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) = 0;
     virtual cl_program on_clCreateProgramWithBuiltInKernels(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const char* kernel_names, cl_int* errcode_ret) = 0;
+    virtual void* on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map, cl_map_flags map_flags, size_t offset, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event, cl_int* errcode_ret) = 0;
+    virtual cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void* mapped_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
+    virtual void* on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size, cl_uint alignment) = 0;
+    virtual void on_clSVMFree(cl_context context, void* svm_pointer) = 0;
+    virtual cl_int on_clEnqueueSVMMap(cl_command_queue command_queue, cl_bool blocking_map, cl_map_flags flags, void* svm_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
+    virtual cl_int on_clEnqueueSVMUnmap(cl_command_queue command_queue, void* svm_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
+    virtual cl_int on_clEnqueueSVMMemcpy(cl_command_queue command_queue, cl_bool blocking_copy, void* dst_ptr, const void* src_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
+    virtual cl_int on_clEnqueueSVMMemFill(cl_command_queue command_queue, void* svm_ptr, const void* pattern, size_t pattern_size, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
+    virtual cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void* arg_value) = 0;
+    virtual cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) = 0;
 };
 
 // `arena` is where everything a decoded command points at lives,

@@ -18,7 +18,7 @@ namespace av {
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id)
     : id_(id), binding_(host, blobs), fences_(host, interrupts), imports_(host, blobs, executor_),
-      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), worker_(host, ring_)
+      executor_(host, library, shares, id), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), signal_(host, worker_, fences_), worker_(host, ring_)
       {
           AV_SCOPE("DeviceContext::DeviceContext");
       }
@@ -26,6 +26,7 @@ DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &inte
 Status DeviceContext::start()
 {
     AV_SCOPE("DeviceContext::start");
+    worker_.connect_signal(signal_);
     return worker_.start();
 }
 
@@ -58,6 +59,10 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = staging_.allocate(uint64_t{1} << setup.ring_order(), answer_bytes);
     if (status != Status::ok) return status;
     executor_.configure(setup.sub_api(), capset.gpu().uuid(), setup.options());
+    /* And what a host thread's completion reaches this context through: the
+     * landing pad the worker drains. Given here, on the main loop, because
+     * the executor is made on the worker and has to have it by then. */
+    executor_.signals_through(signal_);
     imports_.configure(setup.ring_resource());
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());

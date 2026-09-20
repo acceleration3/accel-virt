@@ -6676,6 +6676,618 @@ static bool decode_clCreateProgramWithBuiltInKernels(ServerDispatch& s, ::av::Wi
     return true;
 }
 
+static bool decode_clEnqueueMapBuffer(ServerDispatch& s, ::av::WireReader& r,
+                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueMapBuffer");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    cl_mem buffer = nullptr;
+    cl_bool blocking_map{};
+    cl_map_flags map_flags{};
+    size_t offset{};
+    size_t size{};
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    bool errcode_ret_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          buffer = static_cast<cl_mem>(s.handle_for(HandleKind::mem, wire_handle));
+          if (buffer == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        blocking_map = static_cast<cl_bool>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        map_flags = static_cast<cl_map_flags>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        offset = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        errcode_ret_wanted = wire_wanted != 0;
+    }
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    cl_int errcode_ret_storage{};
+    cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
+    const void* ret = s.on_clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size, num_events_in_wait_list, event_wait_list, event, errcode_ret);
+    reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
+    if (event_wanted) {
+        if (!(ret != nullptr)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    if (errcode_ret_wanted) {
+        reply.write_varint(static_cast<uint64_t>(errcode_ret_storage));
+    }
+    return true;
+}
+
+static bool decode_clEnqueueUnmapMemObject(ServerDispatch& s, ::av::WireReader& r,
+                                          ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueUnmapMemObject");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    cl_mem memobj = nullptr;
+    void* mapped_ptr = nullptr;
+    uint64_t mapped_ptr_wire = 0;
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          memobj = static_cast<cl_mem>(s.handle_for(HandleKind::mem, wire_handle));
+          if (memobj == nullptr) return false;
+      } }
+    if (!r.read_pod(mapped_ptr_wire)) return false;
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    if (mapped_ptr_wire != 0) {
+        mapped_ptr = static_cast<void*>(s.svm_for(mapped_ptr_wire, 0u));
+        if (mapped_ptr == nullptr) return false;
+    }
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    const cl_int ret = s.on_clEnqueueUnmapMemObject(command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    if (event_wanted) {
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    return true;
+}
+
+static bool decode_clSVMAlloc(ServerDispatch& s, ::av::WireReader& r,
+                             ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSVMAlloc");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_context context = nullptr;
+    cl_svm_mem_flags flags{};
+    size_t size{};
+    cl_uint alignment{};
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          context = static_cast<cl_context>(s.handle_for(HandleKind::context, wire_handle));
+          if (context == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        flags = static_cast<cl_svm_mem_flags>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        alignment = static_cast<cl_uint>(wire_value);
+    }
+    const void* ret = s.on_clSVMAlloc(context, flags, size, alignment);
+    reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
+    return true;
+}
+
+static bool decode_clSVMFree(ServerDispatch& s, ::av::WireReader& r,
+                            ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSVMFree");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_context context = nullptr;
+    void* svm_pointer = nullptr;
+    uint64_t svm_pointer_wire = 0;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          context = static_cast<cl_context>(s.handle_for(HandleKind::context, wire_handle));
+          if (context == nullptr) return false;
+      } }
+    if (!r.read_pod(svm_pointer_wire)) return false;
+    if (svm_pointer_wire != 0) {
+        svm_pointer = static_cast<void*>(s.svm_for(svm_pointer_wire, 0u));
+        if (svm_pointer == nullptr) return false;
+    }
+    s.on_clSVMFree(context, svm_pointer);
+    return true;
+}
+
+static bool decode_clEnqueueSVMMap(ServerDispatch& s, ::av::WireReader& r,
+                                  ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueSVMMap");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    cl_bool blocking_map{};
+    cl_map_flags flags{};
+    void* svm_ptr = nullptr;
+    uint64_t svm_ptr_wire = 0;
+    size_t size{};
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        blocking_map = static_cast<cl_bool>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        flags = static_cast<cl_map_flags>(wire_value);
+    }
+    if (!r.read_pod(svm_ptr_wire)) return false;
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    if (svm_ptr_wire != 0) {
+        svm_ptr = static_cast<void*>(s.svm_for(svm_ptr_wire, static_cast<uint64_t>(size)));
+        if (svm_ptr == nullptr) return false;
+    }
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    const cl_int ret = s.on_clEnqueueSVMMap(command_queue, blocking_map, flags, svm_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    if (event_wanted) {
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    return true;
+}
+
+static bool decode_clEnqueueSVMUnmap(ServerDispatch& s, ::av::WireReader& r,
+                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueSVMUnmap");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    void* svm_ptr = nullptr;
+    uint64_t svm_ptr_wire = 0;
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    if (!r.read_pod(svm_ptr_wire)) return false;
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    if (svm_ptr_wire != 0) {
+        svm_ptr = static_cast<void*>(s.svm_for(svm_ptr_wire, 0u));
+        if (svm_ptr == nullptr) return false;
+    }
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    const cl_int ret = s.on_clEnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list, event_wait_list, event);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    if (event_wanted) {
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    return true;
+}
+
+static bool decode_clEnqueueSVMMemcpy(ServerDispatch& s, ::av::WireReader& r,
+                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueSVMMemcpy");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    cl_bool blocking_copy{};
+    void* dst_ptr = nullptr;
+    uint64_t dst_ptr_wire = 0;
+    const void* src_ptr = nullptr;
+    uint64_t src_ptr_wire = 0;
+    size_t size{};
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        blocking_copy = static_cast<cl_bool>(wire_value);
+    }
+    if (!r.read_pod(dst_ptr_wire)) return false;
+    if (!r.read_pod(src_ptr_wire)) return false;
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    if (dst_ptr_wire != 0) {
+        dst_ptr = static_cast<void*>(s.svm_for(dst_ptr_wire, static_cast<uint64_t>(size)));
+        if (dst_ptr == nullptr) return false;
+    }
+    if (src_ptr_wire != 0) {
+        src_ptr = static_cast<const void*>(s.svm_for(src_ptr_wire, static_cast<uint64_t>(size)));
+        if (src_ptr == nullptr) return false;
+    }
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    const cl_int ret = s.on_clEnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    if (event_wanted) {
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    return true;
+}
+
+static bool decode_clEnqueueSVMMemFill(ServerDispatch& s, ::av::WireReader& r,
+                                      ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clEnqueueSVMMemFill");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_command_queue command_queue = nullptr;
+    void* svm_ptr = nullptr;
+    uint64_t svm_ptr_wire = 0;
+    const void* pattern = nullptr;
+    uint64_t pattern_count = 0;
+    size_t pattern_size{};
+    size_t size{};
+    cl_uint num_events_in_wait_list{};
+    const cl_event* event_wait_list = nullptr;
+    uint64_t event_wait_list_count = 0;
+    bool event_wanted = false;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          command_queue = static_cast<cl_command_queue>(s.handle_for(HandleKind::command_queue, wire_handle));
+          if (command_queue == nullptr) return false;
+      } }
+    if (!r.read_pod(svm_ptr_wire)) return false;
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_bytes = arena.allocate<uint8_t>(static_cast<size_t>(wire_count) + 1);
+            if (wire_bytes == nullptr) return false;
+            if (wire_count != 0 && !r.read(wire_bytes, static_cast<size_t>(wire_count))) return false;
+            pattern = reinterpret_cast<const void*>(wire_bytes);
+            pattern_count = wire_count;
+        }
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        pattern_size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        size = static_cast<size_t>(wire_value);
+    }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        num_events_in_wait_list = static_cast<cl_uint>(wire_value);
+    }
+    {
+        uint8_t wire_present = 0;
+        if (!r.read_pod(wire_present)) return false;
+        if (wire_present != 0) {
+            uint64_t wire_count = 0;
+            if (!r.read_varint(wire_count)) return false;
+            auto* wire_items = arena.allocate<cl_event>(static_cast<size_t>(wire_count) + 1);
+            if (wire_items == nullptr) return false;
+            for (uint64_t i = 0; i < wire_count; ++i) {
+                uint64_t wire_handle = 0;
+                if (!r.read_pod(wire_handle)) return false;
+                wire_items[i] = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+                if (wire_items[i] == nullptr) return false;
+            }
+            event_wait_list = wire_items;
+            event_wait_list_count = wire_count;
+        }
+    }
+    {
+        uint8_t wire_wanted = 0;
+        if (!r.read_pod(wire_wanted)) return false;
+        event_wanted = wire_wanted != 0;
+    }
+    if (pattern != nullptr && pattern_count < static_cast<uint64_t>(pattern_size)) return false;
+    if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
+    if (svm_ptr_wire != 0) {
+        svm_ptr = static_cast<void*>(s.svm_for(svm_ptr_wire, static_cast<uint64_t>(size)));
+        if (svm_ptr == nullptr) return false;
+    }
+    cl_event event_storage = nullptr;
+    cl_event* event = event_wanted ? &event_storage : nullptr;
+    const cl_int ret = s.on_clEnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    if (event_wanted) {
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
+    }
+    return true;
+}
+
+static bool decode_clSetKernelArgSVMPointer(ServerDispatch& s, ::av::WireReader& r,
+                                           ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetKernelArgSVMPointer");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_kernel kernel = nullptr;
+    cl_uint arg_index{};
+    const void* arg_value = nullptr;
+    uint64_t arg_value_wire = 0;
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          kernel = static_cast<cl_kernel>(s.handle_for(HandleKind::kernel, wire_handle));
+          if (kernel == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        arg_index = static_cast<cl_uint>(wire_value);
+    }
+    if (!r.read_pod(arg_value_wire)) return false;
+    if (arg_value_wire != 0) {
+        arg_value = static_cast<const void*>(s.svm_for(arg_value_wire, 0u));
+        if (arg_value == nullptr) return false;
+    }
+    const cl_int ret = s.on_clSetKernelArgSVMPointer(kernel, arg_index, arg_value);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    return true;
+}
+
+static bool decode_clSetEventCallback(ServerDispatch& s, ::av::WireReader& r,
+                                     ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:clSetEventCallback");
+    (void)r;
+    (void)reply;
+    (void)arena;
+    cl_event event = nullptr;
+    cl_int command_exec_callback_type{};
+    { uint64_t wire_handle = 0;
+      if (!r.read_pod(wire_handle)) return false;
+      if (wire_handle != 0) {
+          event = static_cast<cl_event>(s.handle_for(HandleKind::event, wire_handle));
+          if (event == nullptr) return false;
+      } }
+    {
+        uint64_t wire_value = 0;
+        if (!r.read_varint(wire_value)) return false;
+        command_exec_callback_type = static_cast<cl_int>(wire_value);
+    }
+    const cl_int ret = s.on_clSetEventCallback(event, command_exec_callback_type);
+    reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
+    return true;
+}
+
 bool dispatch_command(ServerDispatch& s, uint32_t cmd_id,
                       ::av::WireReader& r, ::av::WireWriter& reply,
                       ::av::WireArena& arena) {
@@ -6785,6 +7397,16 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id,
         case kCmd_clCreatePipe: return decode_clCreatePipe(s, r, reply, arena);
         case kCmd_clGetPipeInfo: return decode_clGetPipeInfo(s, r, reply, arena);
         case kCmd_clCreateProgramWithBuiltInKernels: return decode_clCreateProgramWithBuiltInKernels(s, r, reply, arena);
+        case kCmd_clEnqueueMapBuffer: return decode_clEnqueueMapBuffer(s, r, reply, arena);
+        case kCmd_clEnqueueUnmapMemObject: return decode_clEnqueueUnmapMemObject(s, r, reply, arena);
+        case kCmd_clSVMAlloc: return decode_clSVMAlloc(s, r, reply, arena);
+        case kCmd_clSVMFree: return decode_clSVMFree(s, r, reply, arena);
+        case kCmd_clEnqueueSVMMap: return decode_clEnqueueSVMMap(s, r, reply, arena);
+        case kCmd_clEnqueueSVMUnmap: return decode_clEnqueueSVMUnmap(s, r, reply, arena);
+        case kCmd_clEnqueueSVMMemcpy: return decode_clEnqueueSVMMemcpy(s, r, reply, arena);
+        case kCmd_clEnqueueSVMMemFill: return decode_clEnqueueSVMMemFill(s, r, reply, arena);
+        case kCmd_clSetKernelArgSVMPointer: return decode_clSetKernelArgSVMPointer(s, r, reply, arena);
+        case kCmd_clSetEventCallback: return decode_clSetEventCallback(s, r, reply, arena);
         default: return false;
     }
 }

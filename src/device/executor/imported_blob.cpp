@@ -22,8 +22,7 @@ Status ImportedBlob::take(uint64_t blob_id, const RvkBlobHandle &handle)
     if (handle.kind == RVK_BLOB_HOST_POINTER) {
         if (handle.pointer == nullptr || handle.fd != -1) return Status::invalid_parameter;
     } else if (handle.kind == RVK_BLOB_DMA_BUF) {
-        if (handle.fd < 0 || handle.pointer != nullptr || handle.reserved != 0u)
-            return Status::invalid_parameter;
+        if (handle.fd < 0 || handle.pointer != nullptr) return Status::invalid_parameter;
     } else {
         return Status::invalid_parameter;
     }
@@ -122,7 +121,7 @@ bool ImportedBlob::invariants_hold() const
     if (size_ == 0u || size_ % page_bytes != 0u) return false;
     if (wire_handle_ != 0u && object_ == 0u) return false;
     if (kind_ == RVK_BLOB_HOST_POINTER) return pointer_ != nullptr && descriptor_ == -1;
-    if (kind_ == RVK_BLOB_DMA_BUF) return pointer_ == nullptr && descriptor_ >= 0 && memory_type_ == 0u;
+    if (kind_ == RVK_BLOB_DMA_BUF) return pointer_ == nullptr && descriptor_ >= 0;
     return false;
 }
 

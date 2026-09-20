@@ -14,12 +14,14 @@
 #define AV_BLOB_IMPORTS_HPP
 
 #include "core/support/status.hpp"
+#include "device/abi/rvk_executor.h"
 
 #include <stdint.h>
 
 namespace av {
 
 class BlobTable;
+class BlobWindow;
 class ContextExecutor;
 class GuestPageAlias;
 class Host;
@@ -62,9 +64,23 @@ private:
     uint32_t             slot_of(uint64_t device_memory) const;
     /* The table, allocated by the first import: no_space when the host has none. */
     [[nodiscard]] Status reserve();
-    /* `size` bytes at `offset` of the held alias handed to the executor. */
-    [[nodiscard]] Status hand_over(const GuestPageAlias &alias, uint64_t offset, uint64_t size,
-                                   uint32_t memory_type, uint32_t slot);
+    /* `size` bytes at `offset` of the blob handed to the executor under
+     * `blob_id`: as a dma-buf where the host and the library both take one,
+     * and as a host pointer into the held alias otherwise. The dma-buf is
+     * tried first because a host GPU that refuses a userptr over file-backed
+     * pages - and guest RAM is always file-backed - takes only that one. Both
+     * attempts are the same import and so carry the same id; the refused one
+     * left the library holding nothing under it. */
+    [[nodiscard]] Status hand_over(const BlobWindow &pages, const GuestPageAlias &alias,
+                                   uint64_t offset, uint64_t size, uint32_t memory_type,
+                                   uint64_t blob_id, uint32_t slot);
+    [[nodiscard]] Status hand_over_dmabuf(const BlobWindow &pages, uint64_t offset, uint64_t size,
+                                          uint32_t memory_type, uint64_t blob_id, uint32_t slot);
+    [[nodiscard]] Status hand_over_pointer(const GuestPageAlias &alias, uint64_t offset,
+                                           uint64_t size, uint32_t memory_type, uint64_t blob_id,
+                                           uint32_t slot);
+    /* The executor given one handle under `blob_id`, with what it made kept. */
+    [[nodiscard]] Status offer(const RvkBlobHandle &handle, uint64_t blob_id, uint32_t slot);
 
     Host            &host_;
     BlobTable       &blobs_;

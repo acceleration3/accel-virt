@@ -3,13 +3,14 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/entry_points.hpp"
+#include "device/context/context_signal.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_consumer.hpp"
 
 namespace av {
 
 Worker::Worker(Host &host, RingConsumer &ring)
-    : host_(host), ring_(ring), doorbell_(host), thread_(nullptr), wake_(nullptr), lock_(nullptr), queue_{}, head_(0u), count_(0u),
+    : host_(host), ring_(ring), signal_(nullptr), doorbell_(host), thread_(nullptr), wake_(nullptr), lock_(nullptr), queue_{}, head_(0u), count_(0u),
       stopping_(false)
       {
           AV_SCOPE("Worker::Worker");
@@ -54,6 +55,23 @@ Status Worker::connect_doorbell(uint32_t index)
     host_.require_main_loop("Worker::connect_doorbell");
     if (thread_ == nullptr) return Status::invalid_state;
     return doorbell_.connect(wake_, index);
+}
+
+void Worker::connect_signal(ContextSignal &signal)
+{
+    AV_SCOPE("Worker::connect_signal");
+    host_.require_main_loop("Worker::connect_signal");
+    signal_ = &signal;
+}
+
+/* A wake that outlived the worker would signal an event that is gone. Nothing
+ * raises after teardown because the registration a foreign thread reaches this
+ * through is made stale first, on the worker (ClEventSignals). */
+void Worker::wake()
+{
+    AV_SCOPE("Worker::wake");
+    if (wake_ == nullptr) return;
+    host_.signal_event(wake_);
 }
 
 void Worker::disconnect_doorbell()
@@ -164,6 +182,7 @@ void Worker::run()
             item.run();
             item.complete_on(host_);
         }
+        if (signal_ != nullptr) signal_->drain();
         ring_.service();
     }
 }

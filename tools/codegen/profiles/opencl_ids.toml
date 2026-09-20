@@ -109,3 +109,13 @@
 "clGetPipeInfo" = 131175
 "clCreateProgramWithBuiltInKernels" = 131176
 "clGetKernelSuggestedLocalWorkSize" = 131177
+"clEnqueueMapBuffer" = 131178
+"clEnqueueUnmapMemObject" = 131179
+"clSVMAlloc" = 131180
+"clSVMFree" = 131181
+"clEnqueueSVMMap" = 131182
+"clEnqueueSVMUnmap" = 131183
+"clEnqueueSVMMemcpy" = 131184
+"clEnqueueSVMMemFill" = 131185
+"clSetKernelArgSVMPointer" = 131186
+"clSetEventCallback" = 131187

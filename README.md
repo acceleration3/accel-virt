@@ -89,7 +89,7 @@ tools/gate.sh                   # the full verdict, four configurations
 | default | `build/` | unit tests under ASan+UBSan, `design_rules`, `symbol_tests`, `driver_image`, `self_contained`, and one `tools_<module>` per `tests/tools` module (label `tools`; the guest runner's in 12 shards) - `ctest -LE tools` is the fast loop |
 | coverage | `build-coverage/` | the unit tests again for their profiles, plus `coverage_gate`: 100% branches of `src/core`, `src/device`, `src/proto`, and the `AV_UNTESTABLE` ratchet |
 | fuzz | `build-fuzz/` | the gate runs only `fuzz_<target>_smoke` (label `fuzz`): 60 s per target (`AV_FUZZ_SECONDS`) |
-| guest | `build-guest/` | `run_guest_suite.py` in a real Windows guest when `AV_GUEST_IMAGE` names a prepared image: the package installed under Driver Verifier, the adapter started on `rvkgpu`, and `rvktest.exe`'s 23 scenarios on the echo executor; then one more boot, `build-guest-real/`, on the real executor for `--rvk --vulkan --opengl`. Required before a merge (feature 037) |
+| guest | `build-guest/` | `run_guest_suite.py` in a real Windows guest when `AV_GUEST_IMAGE` names a prepared image: the package installed under Driver Verifier, the adapter started on `rvkgpu`, and `rvktest.exe`'s 23 scenarios on the echo executor; then one more boot, `build-guest-real/`, on the real executor for `--rvk --opengl`, with `--vulkan` and `--opencl` added when their pinned runtime and loader have been fetched. Required before a merge (feature 037) |
 | qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), `qemu_smoke` (the PCI function a guest sees, the realize failures) and `qemu_virtio_gpu` (the virtio-gpu suites, stock and rvk side by side) |
 
 ### Running the device
@@ -153,13 +153,14 @@ src/km/                           Windows kernel shim — translation only; buil
 src/guest/                        the in-guest D3DKMT suite — portable, tested on Linux over MockKmt
   kmt/  suite/  transport/          the D3DKMT contract and PCI identity; scenarios, the Vulkan probe, report; KmtTransport, chunks, imports
 src/icd/                          guest user-mode ICDs' decisions — portable, tested on Linux over MockKmt
-  common/                           what both ICDs share: extension policy, locks, the locked transport, sliced waits, the log seam
+  common/                           what the ICDs share: extension policy, locks, the locked transport, sliced waits, the log and thread seams
   vulkan/                           rvkvk.dll: loader entry points, connections, command batches, memory types
   opengl/                           rvkgl.dll: the Drv* interface, pixel formats, contexts, presentation
+  opencl/                           rvkcl.dll: the platform, objects and dispatch table, maps and SVM, the event watcher
   d3d/                              rvkumd.dll: the D3D UMD DDI - adapters, devices, the DXGI seam; ddi/ mirrors the runtimes' structures
-src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, the ICDs and their probes
-  icd/                              the seams both ICDs are built over: the process heap, SRW locks, the file log
-  vulkan/  opengl/  d3d/           rvkvk.dll's, rvkgl.dll's and rvkumd.dll's exports and roots
+src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, the drivers and their probes
+  icd/                              the seams the user-mode drivers are built over: the process heap, SRW locks, the file log, the service thread
+  vulkan/  opengl/  opencl/  d3d/   rvkvk.dll's, rvkgl.dll's, rvkcl.dll's and rvkumd.dll's exports and roots
   probe/  imports/                  the probes' entries; import-library .def files
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points

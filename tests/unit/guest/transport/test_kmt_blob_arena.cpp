@@ -344,3 +344,13 @@ TEST(kmt_blob_arena, abandon_lets_the_chunk_go_without_a_host_call)
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
   CHECK_STATUS(rig.arena().abandon(), Status::invalid_state);
   rig.check_nothing_is_held(); }
+
+/* An arena that is lending nothing has no memory to name. The OpenCL ICD
+ * asks for this view to carve its buffers out of, and a context whose device
+ * would not import one must get null rather than a pointer into whatever the
+ * chunk last held. */
+TEST(kmt_blob_arena, an_arena_that_lends_nothing_has_no_view)
+{ Rig rig;
+  CHECK(rig.arena().view() == nullptr);
+  CHECK_EQ(rig.arena().bytes(), 0u);
+  CHECK(rig.arena().invariants_hold()); }

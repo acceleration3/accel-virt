@@ -1,5 +1,7 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 
+#include "device/abi/rvk_executor.h"
+
 namespace av {
 
 VulkanBackendProbe::VulkanBackendProbe(VulkanBackend &target) : backend(target) {}
@@ -31,6 +33,18 @@ VkResult VulkanBackendProbe::export_answered(VkResult answered, int &fd)
 void VulkanBackendProbe::name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made)
 {
     target.templates_.name(made);
+}
+
+uint32_t VulkanBackendProbe::decide_import(VkPhysicalDevice physical)
+{
+    backend.importable_.learn(0u, 0u, 0u);
+    backend.decide_import(physical);
+    return backend.importable_.kind();
+}
+
+void VulkanBackendProbe::import_as_pointer(VkPhysicalDevice physical)
+{
+    backend.importable_.learn(reinterpret_cast<uint64_t>(physical), 0u, backend.import_.probe_types(physical));
 }
 
 }  // namespace av

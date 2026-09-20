@@ -12,7 +12,7 @@ INF = ROOT / "src" / "km" / "rvkgpu.inf"
 DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-rvk.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
 MANIFEST = ROOT / "src" / "um" / "vulkan" / "rvkvk.json"
-PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkumd.dll")
+PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkcl.dll", "rvkumd.dll")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 
@@ -107,6 +107,29 @@ class DriverPackage(unittest.TestCase):
         files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         self.assertIn("rvkgl.dll", files.split())
 
+    def test_registers_the_opencl_icd_as_a_single_string_through_the_adapter(self):
+        """Feature 052, contracts/icd_interface.md: the loader's first discovery
+        path (khrIcdOsVendorsEnumerateDXGK) asks D3DKMTQueryAdapterInfo for
+        OpenCLDriverName with value_type = REG_SZ and returns nothing for a
+        value of another type; only the slower SetupAPI path tolerates a
+        multi-string. So this value is 0x00000000 where VulkanDriverName and
+        OpenGLDriverName are 0x00010000 - written multi-string the ICD would be
+        found on one path and silently missed on the other. OpenCLDriverNameWow
+        waits for a 32-bit ICD (061), and the global Khronos vendors key is the
+        path FR-001 forbids."""
+        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+        values = {match.group(1): (match.group(2), match.group(3))
+                  for match in re.finditer(r"^HKR,,\s*(OpenCL\w*),\s*(0x[0-9A-Fa-f]{8}),\s*(.+?)\s*$",
+                                           section, re.M)}
+        self.assertEqual(values, {"OpenCLDriverName": ("0x00000000", '"%13%\\rvkcl.dll"')})
+        self.assertNotEqual(values["OpenCLDriverName"][0], "0x00010000")
+        self.assertNotIn("OpenCLDriverNameWow", self.text)
+        self.assertNotIn("Khronos", self.text)
+        self.assertIn("rvkcl.dll = 1", self.text)
+        files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+        self.assertIn("rvkcl.dll", files.split())
+
     def test_the_manifest_names_the_icd_beside_it(self):
         """A relative library_path is joined to the manifest's directory only
         when it holds a backslash (Vulkan-Loader loader.c:2460)."""
@@ -158,7 +181,8 @@ class Provisioning(unittest.TestCase):
                  if "=" in line and not line.lstrip().startswith(";")}
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
         staged = set(re.findall(r'PACKAGE_DIRECTORY \+ "\\\\([\w.]+)"', runner))
-        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkumd.dll"})
+        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll", "rvkcl.dll",
+                                 "rvkumd.dll"})
         self.assertEqual(staged, named | {"rvkgpu.inf"})
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
         self.assertIn("New-FileCatalog -Path $Package ", script)

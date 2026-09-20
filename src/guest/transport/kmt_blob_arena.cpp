@@ -81,6 +81,13 @@ uint64_t KmtBlobArena::bytes() const
     return bytes_;
 }
 
+uint8_t *KmtBlobArena::view() const
+{
+    AV_SCOPE("KmtBlobArena::view");
+    if (bytes_ == 0u) return nullptr;
+    return const_cast<uint8_t *>(chunk_.view());
+}
+
 bool KmtBlobArena::invariants_hold() const
 {
     AV_SCOPE("KmtBlobArena::invariants_hold");

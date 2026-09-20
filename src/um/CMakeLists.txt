@@ -2,7 +2,7 @@
 # an external project with cmake/windows_user_toolchain.cmake. The suite is
 # src/guest; this directory translates it to Windows.
 cmake_minimum_required(VERSION 3.24)
-project(rvktest CXX)
+project(rvktest C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,7 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The ICDs' shims, rvkvkprobe.exe's and rvkinspect.exe's are their own
 # targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|d3d|probe|inspect)/")
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|opencl|d3d|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -157,6 +157,46 @@ target_link_options(rvkgl PRIVATE /ENTRY:rvkgl_entry /DEF:${CMAKE_CURRENT_SOURCE
 set_property(TARGET rvkgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
 target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS} ${USER32_IMPORT})
 
+# rvkcl.dll, the OpenCL ICD (feature 052): the ICD's decisions in src/icd over
+# the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
+# own in opencl/. gdi32, kernel32 and ntdll are the whole import list - this ICD
+# makes no window, so no user32.
+file(GLOB_RECURSE RVKCL_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opencl/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/opencl/*.cpp)
+# The recursive proto glob above sweeps the generated tree, the host's server
+# dispatch included; only the OpenCL client belongs in a guest DLL. The window
+# surface goes too: it is the one thing in icd/ that calls user32, and an
+# OpenCL ICD presents nothing.
+list(REMOVE_ITEM RVKCL_SOURCES ${RVKTEST_GENERATED}
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/gdi_window_surface.cpp)
+list(APPEND RVKCL_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp
+  ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
+add_library(rvkcl SHARED ${RVKCL_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
+add_dependencies(rvkcl rvktest_imports)
+set_target_properties(rvkcl PROPERTIES PREFIX "")
+# compat/ first: it answers the <type_traits> the generated ICD stubs include,
+# which a build with no C++ standard library has nothing else to resolve.
+target_include_directories(rvkcl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/opencl/compat
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include
+  ${RVKTEST_GENERATED_DIR}/opencl
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/opencl)
+target_link_options(rvkcl PRIVATE /ENTRY:rvkcl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opencl/rvkcl.def)
+set_property(TARGET rvkcl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opencl/rvkcl.def)
+target_link_libraries(rvkcl PRIVATE ${RVKTEST_IMPORTS})
+
 # rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
 add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp
@@ -164,6 +204,27 @@ add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/prob
 add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
+
+# rvkclprobe.exe, feature 052's proof through the Khronos loader (T030). The
+# import library is named apart from the loader target's below: both would
+# otherwise be OpenCL.lib in this directory, and the probe must build whether
+# or not the pinned loader tree is there.
+set(RVKCLPROBE_IMPORTS "")
+foreach(module OpenCL)
+  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}_import.lib)
+  add_custom_command(OUTPUT ${library}
+    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+  list(APPEND RVKCLPROBE_IMPORTS ${library})
+endforeach()
+add_custom_target(rvkclprobe_imports DEPENDS ${RVKCLPROBE_IMPORTS})
+
+file(GLOB RVKCLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/cl/*.cpp)
+add_executable(rvkclprobe ${RVKCLPROBE_SOURCES})
+add_dependencies(rvkclprobe rvkclprobe_imports)
+target_compile_definitions(rvkclprobe PRIVATE CL_TARGET_OPENCL_VERSION=300)
+target_link_options(rvkclprobe PRIVATE /ENTRY:rvkclprobe_entry)
+target_link_libraries(rvkclprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKCLPROBE_IMPORTS})
 
 # The three D3D probes (feature 047): DXVK's d3d9.dll and d3d11.dll and
 # vkd3d-proton's d3d12.dll are what they call, which is the whole point of the
@@ -200,6 +261,56 @@ add_dependencies(rvkvk rvkglprobe_imports)
 target_link_libraries(rvkvk PRIVATE ${USER32_IMPORT})
 add_dependencies(rvkvkprobe rvkglprobe_imports)
 target_link_libraries(rvkvkprobe PRIVATE ${USER32_IMPORT})
+
+# OpenCL.dll, the Khronos ICD loader, cross-built from the source
+# tools/fetch_opencl_loader.py pins (feature 052, research §2). It is a guest
+# *test* artifact: the runner pushes it beside rvkclprobe.exe so the proof runs
+# through the real loader's own discovery of OpenCLDriverName, and the driver
+# package ships no loader. Built only when the pinned tree is there.
+set(OPENCL_LOADER_TREE ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/opencl-loader)
+if(EXISTS ${OPENCL_LOADER_TREE}/loader/icd.c)
+  # cfgmgr32 is the SetupAPI discovery path; the app-package path reaches
+  # kernel32 through GetProcAddress and needs no import library of its own.
+  set(OPENCL_LOADER_IMPORTS "")
+  foreach(module cfgmgr32 advapi32 ole32)
+    set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
+    add_custom_command(OUTPUT ${library}
+      COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+    list(APPEND OPENCL_LOADER_IMPORTS ${library})
+  endforeach()
+  add_custom_target(opencl_loader_imports DEPENDS ${OPENCL_LOADER_IMPORTS})
+
+  add_library(OpenCL SHARED
+    ${OPENCL_LOADER_TREE}/loader/icd.c
+    ${OPENCL_LOADER_TREE}/loader/icd_dispatch.c
+    ${OPENCL_LOADER_TREE}/loader/icd_dispatch_generated.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_apppackage.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_dxgk.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_envvars.c
+    ${OPENCL_LOADER_TREE}/loader/windows/icd_windows_hkr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencl_loader/loader_crt.c)
+  add_dependencies(OpenCL rvktest_imports opencl_loader_imports)
+  set_target_properties(OpenCL PROPERTIES PREFIX "")
+  # compat/ first: it answers the handful of C library names the loader calls,
+  # which the guest build has no runtime for.
+  target_include_directories(OpenCL PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencl_loader/compat
+    ${OPENCL_LOADER_TREE}/loader
+    ${OPENCL_LOADER_TREE}/loader/windows
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
+  target_compile_definitions(OpenCL PRIVATE CL_TARGET_OPENCL_VERSION=300 UNICODE _UNICODE)
+  # Forced: the loader's sources call malloc and the string functions without
+  # including the headers that declare them, which a build with a C runtime
+  # gets away with and this one does not.
+  target_compile_options(OpenCL PRIVATE /FIwindows.h /FIav_loader_prelude.h /FIstdlib.h /FIstring.h /FIstdio.h)
+  target_link_options(OpenCL PRIVATE /NODEFAULTLIB /ENTRY:av_opencl_loader_entry
+    /DEF:${OPENCL_LOADER_TREE}/loader/windows/OpenCL.def)
+  target_link_libraries(OpenCL PRIVATE ${RVKTEST_IMPORTS} ${OPENCL_LOADER_IMPORTS})
+else()
+  message(STATUS "OpenCL loader: skipped, no pinned tree; run tools/fetch_opencl_loader.py")
+endif()
 
 # rvkumd.dll, the Direct3D user-mode driver (feature 055): the driver's
 # decisions in src/icd/d3d over the transport, D3DKMT through gdi32, and the

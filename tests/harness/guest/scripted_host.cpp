@@ -255,6 +255,15 @@ void ScriptedHost::cl_handle(std::uint64_t handle, std::int32_t error)
     queue(writer);
 }
 
+void ScriptedHost::cl_mapped(std::uint64_t address, std::uint64_t event, std::int32_t error)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod(address);
+    writer.write_pod(event);
+    writer.write_varint(static_cast<std::int64_t>(error));
+    queue(writer);
+}
+
 void ScriptedHost::cl_ids(std::int32_t result, const std::uint64_t *ids, std::uint32_t sent, std::uint32_t total)
 {
     WireWriter writer(answer_, sizeof answer_);
@@ -262,6 +271,34 @@ void ScriptedHost::cl_ids(std::int32_t result, const std::uint64_t *ids, std::ui
     writer.write_varint(sent);
     for (std::uint32_t index = 0u; index < sent; index++) writer.write_pod(ids[index]);
     writer.write_varint(total);
+    queue(writer);
+}
+
+void ScriptedHost::cl_bytes(std::int32_t result, const void *values, std::uint32_t count)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(count);
+    writer.write(values, count);
+    queue(writer);
+}
+
+void ScriptedHost::cl_bytes_for(std::int32_t result, const void *values, std::uint32_t count,
+                                std::uint64_t event)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(count);
+    writer.write(values, count);
+    writer.write_pod(event);
+    queue(writer);
+}
+
+void ScriptedHost::cl_enqueued(std::int32_t result, std::uint64_t event)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_pod(event);
     queue(writer);
 }
 

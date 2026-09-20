@@ -22,6 +22,14 @@ using av::Status;
 using av::glicd::GlIcdRoot;
 using Root = GlIcdRoot;
 
+namespace av::icd {
+
+struct IcdConnectionProbe {
+    static void set_users(IcdConnection &connection, uint32_t users) { connection.users_[0] = users; }
+};
+
+}  // namespace av::icd
+
 namespace av::glicd {
 
 struct GlIcdRootProbe {
@@ -39,7 +47,7 @@ struct GlIcdRootProbe {
     static GlExtensionPolicy &extensions(GlIcdRoot &root) { return root.extensions_; }
     static PixelFormatTable &formats(GlIcdRoot &root) { return root.formats_; }
     static WindowTable      &windows(GlIcdRoot &root) { return root.windows_; }
-    static GlConnection     &connection(GlIcdRoot &root) { return root.connection_; }
+    static av::icd::IcdConnection     &connection(GlIcdRoot &root) { return root.connection_; }
     static GlContextTable   &contexts(GlIcdRoot &root) { return root.contexts_; }
 };
 
@@ -53,10 +61,6 @@ struct PixelFormatTableProbe {
 
 struct WindowTableProbe {
     static void overfill(WindowTable &table) { table.count_ = WindowTable::max_windows + 1u; }
-};
-
-struct GlConnectionProbe {
-    static void set_users(GlConnection &connection, uint32_t users) { connection.users_[0] = users; }
 };
 
 struct GlContextTableProbe {
@@ -903,9 +907,9 @@ TEST(gl_icd_root_invariants, fail_when_a_part_it_owns_is_broken)
   av::glicd::WindowTableProbe::overfill(GlIcdRootProbe::windows(windows.root()));
   CHECK(!windows.root().invariants_hold());
   GlIcdRig connection;
-  av::glicd::GlConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 1u);
+  av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 1u);
   CHECK(!connection.root().invariants_hold());
-  av::glicd::GlConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 0u);
+  av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 0u);
   GlIcdRig contexts;
   av::glicd::GlContextTableProbe::zero_generation(GlIcdRootProbe::contexts(contexts.root()));
   CHECK(!contexts.root().invariants_hold()); }

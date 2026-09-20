@@ -224,6 +224,10 @@ void *hold_current(void *context)
     const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(*holder.backend);
     gl.glGenTextures(1, &holder.texture);
     gl.glBindTexture(gl_texture_2d, holder.texture);
+    /* A shared object another context may name only after the context that
+     * made it has flushed - GL 4.6 section 5.3.2. Without this the texture is
+     * there on some drivers and not on others. */
+    gl.glFlush();
     advance(holder, 1);
     await(holder, 2);
     CHECK(eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) == EGL_TRUE);

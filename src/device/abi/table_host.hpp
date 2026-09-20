@@ -36,6 +36,9 @@ public:
     Status   reserve_range(uint64_t bytes, void *&base) override;
     Status   alias_guest_run(void *run, uint64_t bytes, void *at) override;
     void     release_range(void *base, uint64_t bytes) override;
+    Status   dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count,
+                               int &fd) override;
+    void     close_dmabuf(int fd) override;
     void    *create_host_memory(uint64_t size, void *&pointer) override;
     void     destroy_host_memory(void *memory) override;
     uint64_t hostmem_size() override;

@@ -977,3 +977,164 @@ TEST(opencl_dispatch, a_failed_read_answers_no_bytes_and_no_event)
   CHECK_EQ(event, 0u);
   CHECK_EQ(reply.remaining(), 0u);
   CHECK_EQ(dispatch.handles().count(), held); }
+
+/* ---- addresses (feature 052) ---------------------------------------------
+ *
+ * The ten commands that name shared virtual memory or a mapped range. What is
+ * asserted is the rule the handles already follow, applied to an address: only
+ * one the host allocated resolves, and the extent the command will touch is
+ * part of the question - so an address one byte inside a live allocation with
+ * a size that runs past its end never reaches the ICD.
+ */
+
+TEST(opencl_dispatch, an_svm_address_the_host_never_allocated_is_refused)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint32_t before = session.dispatch().calls();
+
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(context);
+  /* clSVMFree(context, svm_pointer): an address the guest made up. */
+  frame.write_pod<std::uint64_t>(0x7F0000001000u);
+  CHECK(!session.run(av::clproto::kCmd_clSVMFree, frame, bytes));
+  CHECK_EQ(session.dispatch().calls(), before);
+  /* Refused at the decoder, so no call was handed the address at all: a
+   * stranger is one that got through. */
+  CHECK_EQ(session.dispatch().strangers(), 0u); }
+
+TEST(opencl_dispatch, an_svm_address_the_host_allocated_resolves)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t allocated = session.dispatch().make_svm(256u);
+  CHECK(allocated != 0u);
+  const std::uint32_t before = session.dispatch().calls();
+  const std::uint32_t strangers = session.dispatch().strangers();
+
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(context);
+  frame.write_pod<std::uint64_t>(allocated);
+  CHECK(session.run(av::clproto::kCmd_clSVMFree, frame, bytes));
+  CHECK_EQ(session.dispatch().calls(), before + 1u);
+  CHECK_EQ(session.dispatch().strangers(), strangers); }
+
+TEST(opencl_dispatch, an_svm_extent_that_leaves_its_allocation_is_refused)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t allocated = session.dispatch().make_svm(256u);
+  CHECK(allocated != 0u);
+
+  /* clEnqueueSVMMap(queue, blocking, flags, svm_ptr, size, events..., event).
+   * The address is inside the allocation; the size is not. */
+  struct Case { std::uint64_t offset; std::uint64_t size; bool runs; };
+  constexpr Case cases[] = {{0u, 256u, true}, {128u, 128u, true}, {255u, 1u, true},
+                            {0u, 257u, false}, {128u, 129u, false}, {255u, 2u, false},
+                            {256u, 0u, false}};
+  for (const Case &item : cases) {
+      const std::uint32_t before = session.dispatch().calls();
+      std::uint8_t bytes[frame_bytes];
+      WireWriter frame(bytes, sizeof bytes);
+      frame.write_pod<std::uint64_t>(queue);
+      frame.write_varint(1u);                       /* blocking_map */
+      frame.write_varint(1u);                       /* map_flags */
+      frame.write_pod<std::uint64_t>(allocated + item.offset);
+      frame.write_varint(item.size);
+      frame.write_varint(0u);                       /* num_events_in_wait_list */
+      frame.write_pod<std::uint8_t>(0u);            /* event_wait_list */
+      frame.write_pod<std::uint8_t>(0u);            /* event */
+      CHECK_EQ(session.run(av::clproto::kCmd_clEnqueueSVMMap, frame, bytes), item.runs);
+      CHECK_EQ(session.dispatch().calls(), before + (item.runs ? 1u : 0u));
+  } }
+
+TEST(opencl_dispatch, a_copy_judges_both_of_its_addresses)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t source = session.dispatch().make_svm(128u);
+  const std::uint64_t destination = session.dispatch().make_svm(128u);
+  CHECK(source != 0u);
+  CHECK(destination != 0u);
+
+  /* clEnqueueSVMMemcpy(queue, blocking, dst, src, size, events..., event). */
+  struct Case { std::uint64_t destination_offset; std::uint64_t source_offset; std::uint64_t size; bool runs; };
+  const Case cases[] = {{0u, 0u, 128u, true}, {0u, 0u, 129u, false}, {1u, 0u, 128u, false},
+                        {0u, 1u, 128u, false}, {64u, 64u, 64u, true}};
+  for (const Case &item : cases) {
+      const std::uint32_t before = session.dispatch().calls();
+      std::uint8_t bytes[frame_bytes];
+      WireWriter frame(bytes, sizeof bytes);
+      frame.write_pod<std::uint64_t>(queue);
+      frame.write_varint(1u);
+      frame.write_pod<std::uint64_t>(destination + item.destination_offset);
+      frame.write_pod<std::uint64_t>(source + item.source_offset);
+      frame.write_varint(item.size);
+      frame.write_varint(0u);
+      frame.write_pod<std::uint8_t>(0u);
+      frame.write_pod<std::uint8_t>(0u);
+      CHECK_EQ(session.run(av::clproto::kCmd_clEnqueueSVMMemcpy, frame, bytes), item.runs);
+      CHECK_EQ(session.dispatch().calls(), before + (item.runs ? 1u : 0u));
+  } }
+
+TEST(opencl_dispatch, a_kernel_argument_may_point_into_the_middle_of_an_allocation)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t allocated = session.dispatch().make_svm(64u);
+  CHECK(allocated != 0u);
+
+  /* clSetKernelArgSVMPointer(kernel, arg_index, arg_value): no extent at all,
+   * and an address that need not be the allocation's base. */
+  struct Case { std::uint64_t address; bool runs; };
+  const Case cases[] = {{allocated, true}, {allocated + 32u, true}, {allocated + 63u, true},
+                        {allocated + 64u, false}, {allocated - 1u, false}};
+  for (const Case &item : cases) {
+      const std::uint32_t before = session.dispatch().calls();
+      std::uint8_t bytes[frame_bytes];
+      WireWriter frame(bytes, sizeof bytes);
+      frame.write_pod<std::uint64_t>(0u);   /* kernel: null is the API's own error */
+      frame.write_varint(0u);
+      frame.write_pod<std::uint64_t>(item.address);
+      CHECK_EQ(session.run(av::clproto::kCmd_clSetKernelArgSVMPointer, frame, bytes), item.runs);
+      CHECK_EQ(session.dispatch().calls(), before + (item.runs ? 1u : 0u));
+  } }
+
+TEST(opencl_dispatch, a_null_svm_address_is_the_apis_own_error_and_not_a_refusal)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint32_t before = session.dispatch().calls();
+  const std::uint32_t strangers = session.dispatch().strangers();
+
+  /* As for a null handle: the command decodes and the host answers
+   * CL_INVALID_VALUE. Refusing the frame would fault the context over an
+   * application's mistake. */
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(0u);
+  frame.write_pod<std::uint64_t>(0u);
+  CHECK(session.run(av::clproto::kCmd_clSVMFree, frame, bytes));
+  CHECK_EQ(session.dispatch().calls(), before + 1u);
+  CHECK_EQ(session.dispatch().strangers(), strangers); }
+
+TEST(opencl_dispatch, an_address_returning_command_answers_a_wire_word)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+
+  /* clSVMAlloc(context, flags, size, alignment). The fake allocates nothing,
+   * so the answer is zero - and it is eight bytes of answer, not a varint. */
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(context);
+  frame.write_varint(1u);
+  frame.write_varint(64u);
+  frame.write_varint(0u);
+  CHECK(session.run(av::clproto::kCmd_clSVMAlloc, frame, bytes));
+  WireReader answer = session.answer();
+  std::uint64_t address = 1u;
+  CHECK(answer.read_pod(address));
+  CHECK_EQ(address, 0u); }

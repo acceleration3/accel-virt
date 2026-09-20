@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <sys/mman.h>
 
 using av::BlobImports;
 using av::ContextResources;
@@ -52,6 +53,33 @@ namespace {
 
 constexpr std::uint64_t page = ImportRig::page;
 
+/* The bytes behind a handle the executor was given, whichever kind it is: a
+ * dma-buf mapped for as long as this lives, a host pointer as it stands. What
+ * the host GPU would see, which is what every byte assertion here is about. */
+class Handed {
+public:
+    explicit Handed(const RvkBlobHandle &handle)
+        : bytes_(nullptr), length_(handle.size), mapped_(handle.kind == RVK_BLOB_DMA_BUF)
+    {
+        if (!mapped_) {
+            bytes_ = static_cast<std::uint8_t *>(handle.pointer);
+            return;
+        }
+        void *const at = mmap(nullptr, length_, PROT_READ | PROT_WRITE, MAP_SHARED, handle.fd, 0);
+        bytes_ = at == MAP_FAILED ? nullptr : static_cast<std::uint8_t *>(at);
+    }
+    ~Handed() { if (mapped_ && bytes_ != nullptr) munmap(bytes_, length_); }
+    Handed(const Handed &) = delete;
+    Handed &operator=(const Handed &) = delete;
+
+    std::uint8_t *bytes() const { return bytes_; }
+
+private:
+    std::uint8_t *bytes_;
+    std::uint64_t length_;
+    bool          mapped_;
+};
+
 /* An import on the worker: its status, with the handle in `device_memory`. */
 Status import(ImportRig &rig, std::uint32_t resource, std::uint64_t offset, std::uint64_t size,
               std::uint32_t memory_type, std::uint64_t &device_memory)
@@ -84,17 +112,49 @@ TEST(blob_imports_import, a_chunk_is_aliased_and_the_executor_is_handed_the_rang
   CHECK_STATUS(rig.blobs().release(rig.chunk(0u)), Status::invalid_state);   /* the executor has its pages */
   RvkBlobHandle handed = {};
   CHECK(rig.ops().import_of(1u, handed));
-  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  /* A dma-buf, because the host makes one: the guest's pages reach a GPU that
+   * refuses a file-backed userptr only that way. */
+  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_DMA_BUF});
   CHECK_EQ(handed.reserved, 5u);
-  CHECK_EQ(handed.fd, -1);
+  CHECK(handed.fd >= 0);
+  CHECK(handed.pointer == nullptr);
   CHECK_EQ(handed.size, 2u * page);
-  auto *const pointer = static_cast<std::uint8_t *>(handed.pointer);
+  Handed shared(handed);
+  auto *const pointer = shared.bytes();
+  CHECK(pointer != nullptr);
   CHECK(std::memcmp(pointer, rig.guest_page(3u), page) == 0);
   CHECK(std::memcmp(pointer + page, rig.guest_page(4u), page) == 0);
   pointer[page + 7u] = 0xD4u;   /* what the host GPU writes is what the guest reads */
   CHECK_EQ(rig.guest_page(4u)[7], 0xD4u);
   rig.guest_page(3u)[0] = 0x3Cu;
   CHECK_EQ(pointer[0], 0x3Cu);
+  CHECK_EQ(rig.ops().misuses(), 0u); }
+
+/* The same import on a host that makes no dma-buf - no udmabuf in its kernel -
+ * which is the path every host took before there was another one. */
+TEST(blob_imports_import, a_host_that_makes_no_dma_buf_hands_a_pointer_into_the_alias)
+{ ImportRig rig;
+  rig.host().refuse_dmabufs();
+  const std::uint32_t pages[] = {9u, 3u, 4u, 20u};
+  CHECK_STATUS(rig.create_guest_blob(rig.chunk(0u), pages, 4u), Status::ok);
+  std::uint64_t device_memory = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(0u), page, 2u * page, 5u, device_memory), Status::ok);
+  CHECK_EQ(rig.host().live_dmabufs(), 0u);
+  RvkBlobHandle handed = {};
+  CHECK(rig.ops().import_of(1u, handed));
+  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.reserved, 5u);
+  CHECK_EQ(handed.fd, -1);
+  CHECK_EQ(handed.size, 2u * page);
+  auto *const pointer = static_cast<std::uint8_t *>(handed.pointer);
+  CHECK(std::memcmp(pointer, rig.guest_page(3u), page) == 0);
+  pointer[page + 7u] = 0xD4u;
+  CHECK_EQ(rig.guest_page(4u)[7], 0xD4u);
+  /* Both attempts were the one import, so the id it was made under is the
+   * first the context hands out and the next import gets the second. */
+  std::uint64_t second = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(0u), 0u, page, 5u, second), Status::ok);
+  CHECK(rig.ops().import_of(2u, handed));
   CHECK_EQ(rig.ops().misuses(), 0u); }
 
 TEST(blob_imports_import, imports_through_one_chunk_share_its_alias_until_the_last_is_released)
@@ -111,7 +171,13 @@ TEST(blob_imports_import, imports_through_one_chunk_share_its_alias_until_the_la
   RvkBlobHandle one = {};
   RvkBlobHandle two = {};
   CHECK(rig.ops().import_of(1u, one) && rig.ops().import_of(2u, two));
-  CHECK(static_cast<std::uint8_t *>(two.pointer) == static_cast<std::uint8_t *>(one.pointer) + page);
+  /* One alias, two dma-bufs: each names its own page of the same blob. */
+  CHECK(one.fd != two.fd);
+  { Handed lower(one);
+    Handed upper(two);
+    CHECK(lower.bytes() != nullptr && upper.bytes() != nullptr);
+    CHECK(std::memcmp(lower.bytes(), rig.guest_page(30u), page) == 0);
+    CHECK(std::memcmp(upper.bytes(), rig.guest_page(31u), page) == 0); }
   release(rig, first);
   CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_EQ(rig.host().live_ranges(), 1u);
@@ -176,8 +242,29 @@ TEST(blob_imports_import, pages_the_host_cannot_alias_are_no_memory_and_leave_no
   CHECK_EQ(rig.ops().imported(), 0u);
   CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::ok); }
 
+/* A library that takes no dma-buf - OpenCL's, whose import is a host pointer -
+ * is handed the pointer instead, under the same id: the refusal left it
+ * holding nothing. */
+TEST(blob_imports_import, a_library_that_refuses_the_dma_buf_is_handed_the_pointer_under_the_same_id)
+{ ImportRig rig;
+  const std::uint32_t pages[] = {61u};
+  CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
+  std::uint64_t device_memory = 0u;
+  rig.ops().refuse_import_at(1u);
+  CHECK_STATUS(import(rig, rig.chunk(4u), 0u, page, 3u, device_memory), Status::ok);
+  CHECK_EQ(rig.imports().imports(), 1u);
+  CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the one it refused was closed */
+  RvkBlobHandle handed = {};
+  CHECK(rig.ops().import_of(1u, handed));
+  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.reserved, 3u);
+  CHECK(handed.pointer != nullptr);
+  CHECK_EQ(rig.ops().live_imports(), 1u); }
+
 TEST(blob_imports_import, an_executor_that_refuses_names_nothing_or_names_two_imports_alike_is_not_supported)
 { ImportRig rig;
+  /* One attempt per import, so a refusal is the whole answer. */
+  rig.host().refuse_dmabufs();
   const std::uint32_t pages[] = {60u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(4u), pages, 1u), Status::ok);
   std::uint64_t device_memory = 0u;
@@ -258,7 +345,9 @@ TEST(blob_imports_import, a_held_chunk_is_not_released_and_its_successor_is_impo
   CHECK_STATUS(import(rig, rig.chunk(6u), 0u, page, 0u, device_memory), Status::ok);
   RvkBlobHandle handed = {};
   CHECK(rig.ops().import_of(2u, handed));
-  CHECK_EQ(static_cast<std::uint8_t *>(handed.pointer)[0], static_cast<std::uint8_t>(0x10u + 81u)); }
+  Handed successor(handed);
+  CHECK(successor.bytes() != nullptr);
+  CHECK_EQ(successor.bytes()[0], static_cast<std::uint8_t>(0x10u + 81u)); }
 
 TEST(blob_imports_release, a_handle_this_context_never_made_releases_nothing)
 { ImportRig rig;

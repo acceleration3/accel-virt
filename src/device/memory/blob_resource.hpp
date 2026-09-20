@@ -48,10 +48,11 @@ public:
     /* The blob's memory for a worker: valid while pinned. */
     BlobWindow window() const;
     /* Any thread, while nothing can release it: its guest pages as one host
-     * range, made for the first holder and shared by the rest. invalid_parameter
-     * for a blob the host backs; the alias's answer when it cannot be made,
-     * holding nothing. */
-    [[nodiscard]] Status hold_alias(const GuestPageAlias *&alias);
+     * range, made for the first holder and shared by the rest, and as the
+     * extents they are - a holder needs both, and only the hold keeps either
+     * valid. invalid_parameter for a blob the host backs; the alias's answer
+     * when it cannot be made, holding nothing. */
+    [[nodiscard]] Status hold_alias(const GuestPageAlias *&alias, BlobWindow &pages);
     /* Any thread, under the same rule. One hold let go; the range goes with
      * the last, and a blob no one holds is left as it is. */
     void                 release_alias();

@@ -335,7 +335,7 @@ TEST(vulkan_backend_lifetime, every_destroy_and_free_of_a_device_s_object_ends_i
   constexpr std::uint64_t device = 0x1000u, object = 0x2000u, neighbour = 0x3000u;
   for (const std::uint32_t command : commands) {
       GuestContext guest;
-      guest.backend().made(device);
+      guest.backend().made(device, av::HandleKind::device);
       guest.backend().made(object);
       guest.backend().made(neighbour);
       CHECK(guest.end(command, device, object));
@@ -352,7 +352,8 @@ TEST(vulkan_backend_lifetime, destroying_an_instance_or_a_device_ends_it)
   constexpr std::uint64_t root = 0x1000u, neighbour = 0x3000u;
   for (const std::uint32_t command : commands) {
       GuestContext guest;
-      guest.backend().made(root);
+      guest.backend().made(root, command == vkproto::kCmd_vkDestroyInstance ? av::HandleKind::instance
+                                                                            : av::HandleKind::device);
       guest.backend().made(neighbour);
       CHECK(guest.end(command, root));
       CHECK(!guest.knows(root));

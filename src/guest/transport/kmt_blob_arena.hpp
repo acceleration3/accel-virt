@@ -46,6 +46,11 @@ public:
     bool                 lending() const;
     /* The chunk's size; 0 unless lending. */
     uint64_t             bytes() const;
+    /* The process's view of the chunk, or null unless lending. The device
+     * holds the same memory as one import, so an offset of this names the
+     * same bytes on both sides - which is what lets a buffer be made over it
+     * (feature 052, T033). */
+    uint8_t             *view() const;
 
     bool invariants_hold() const;
 

@@ -106,6 +106,10 @@ private:
 TEST(blob_import_command_run, an_import_of_a_guest_chunk_answers_status_0_and_the_executors_handle)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
+  /* Over a host that makes no dma-buf, so the range handed over is a pointer
+   * this test can read; which kind a host with udmabuf picks is
+   * BlobImports' subject, not the command's. */
+  rig.host().refuse_dmabufs();
   const Run run = import(rig, ImportBody(rig.chunk(0u), page, 2u * page, 6u));
   CHECK_STATUS(run.status(), Status::ok);
   CHECK_EQ(run.produced(), BlobImportAnswer::encoded_size);
@@ -153,6 +157,8 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
   }
   rig.host().fail_alias_at(1u);
   CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::unmappable_pages);
+  /* One attempt per import, so one refusal is the executor's whole answer. */
+  rig.host().refuse_dmabufs();
   rig.ops().refuse_import_at(1u);
   CHECK_EQ(import(rig, ImportBody(rig.chunk(0u), 0u, page, 0u)).answer().status(), BlobImportAnswer::executor_refused);
   CHECK_EQ(rig.imports().imports(), 0u);

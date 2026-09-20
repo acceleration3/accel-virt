@@ -158,7 +158,7 @@ bool BlobTable::contains(uint32_t id)
 
 /* The lookup takes the lock too: a creation on the main loop writes the slot a
  * worker would otherwise be reading. */
-Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias)
+Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias, BlobWindow &pages)
 {
     AV_SCOPE("BlobTable::hold_alias");
     alias = nullptr;
@@ -166,7 +166,7 @@ Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias)
     host_.lock_mutex(lock_);
     ScopeExit                          unlock([this] { host_.unlock_mutex(lock_); });
     ObjectStorage<BlobResource> *const slot = slot_of(id);
-    return slot != nullptr ? slot->object().hold_alias(alias) : Status::not_found;
+    return slot != nullptr ? slot->object().hold_alias(alias, pages) : Status::not_found;
 }
 
 void BlobTable::release_alias(uint32_t id)

@@ -140,3 +140,51 @@ TEST(fence_progress, what_user_mode_submitted_is_completed_without_the_driver_ha
   CHECK_STATUS(second.record_submission(8u), Status::ok);
   CHECK_STATUS(second.observe(FencePage(9u, 4u)), Status::invalid_state);
   CHECK_STATUS(second.observe(FencePage(8u, 4u)), Status::ok); }
+
+/* Feature 052: a host event completes on a thread the device did not give the
+ * host, and the device reports it by moving progress alone
+ * (FenceReporter::nudge). If the guest failed its context over that, the whole
+ * out-of-band completion channel would be illegal. */
+TEST(fence_progress_observe, progress_advancing_with_nothing_completed_is_accepted)
+{ FenceProgress progress;
+  CHECK_STATUS(progress.record_submission(4u), Status::ok);
+  CHECK_STATUS(progress.observe(FencePage(4u, 1u)), Status::ok);
+  for (std::uint64_t moved = 2u; moved <= 6u; moved++) {
+      CHECK_STATUS(progress.observe(FencePage(4u, moved)), Status::ok);
+      CHECK(progress.completed_fence() == 4u);
+      CHECK(progress.progress() == moved);
+      CHECK(!progress.faulted());
+  }
+  /* The same page read twice is not a counter going backwards. */
+  CHECK_STATUS(progress.observe(FencePage(4u, 6u)), Status::ok);
+  CHECK(progress.progress() == 6u);
+  CHECK(progress.invariants_hold());
+  /* And before anything has completed at all, which is the wake a context gets
+   * for its first host event. */
+  FenceProgress fresh;
+  CHECK_STATUS(fresh.observe(FencePage(0u, 1u)), Status::ok);
+  CHECK(fresh.completed_fence() == 0u);
+  CHECK(fresh.progress() == 1u);
+  CHECK(fresh.invariants_hold()); }
+
+/* Everything else the guest judges still holds around that shape: the wake
+ * buys the device no licence to claim a batch finished, to walk either counter
+ * back, or to recover from a fault. */
+TEST(fence_progress_observe, an_out_of_band_wake_excuses_nothing_else)
+{ FenceProgress progress;
+  CHECK_STATUS(progress.record_submission(2u), Status::ok);
+  CHECK_STATUS(progress.observe(FencePage(2u, 5u)), Status::ok);
+  CHECK_STATUS(progress.observe(FencePage(2u, 6u)), Status::ok);
+  CHECK_STATUS(progress.observe(FencePage(3u, 7u)), Status::invalid_state);
+  CHECK_STATUS(progress.observe(FencePage(1u, 7u)), Status::invalid_state);
+  CHECK_STATUS(progress.observe(FencePage(2u, 5u)), Status::invalid_state);
+  /* A page the guest refused changed nothing it remembers. */
+  CHECK(progress.completed_fence() == 2u);
+  CHECK(progress.progress() == 6u);
+  CHECK(!progress.faulted());
+  CHECK(progress.invariants_hold());
+  CHECK_STATUS(progress.observe(FencePage(2u, 7u, 3u)), Status::ok);
+  CHECK(progress.faulted());
+  CHECK_STATUS(progress.observe(FencePage(2u, 8u)), Status::invalid_state);
+  CHECK(progress.faulted());
+  CHECK(progress.progress() == 7u); }

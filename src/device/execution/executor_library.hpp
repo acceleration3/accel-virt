@@ -32,6 +32,15 @@ public:
                                 RvkExecutor *share = nullptr) const;
     /* Whether the library makes a context with options (version 4). */
     bool                 names_options() const;
+    /* Whether the library can be given something to call when a host API
+     * finishes work on a thread of its own: version 5 onwards. A version 4
+     * library signals nothing, and a guest on one waits for its events at a
+     * synchronising call instead. */
+    bool                 names_events() const;
+    /* Gives `executor` that something, or takes it back with a null. Nothing
+     * for a library that names no events. */
+    void                 set_signal(RvkExecutor *executor, void (*signal)(void *context),
+                                    void *context) const;
     void                 destroy(RvkExecutor *executor) const;
     uint32_t             execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &reply_size) const;

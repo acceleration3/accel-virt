@@ -9,6 +9,9 @@ GEN_SPECS = ROOT / "tools" / "gen_specs.py"
 PLACEHOLDER = "| | object / system | | |"
 FILLED = "| Foo | object | `a_` | Owns one foo |"
 CLASS_NOTE = "No other class: the adapter answers from state it owns."
+# What a plan writes between the heading and the table to say where the classes
+# live, as feature 052's spec does. It is inside the generated block too.
+CLASS_LEAD = "Guest user mode, `src/icd/opencl/` (namespace `av::clicd`):"
 
 
 class GenSpecsPreservesClassDecisions(unittest.TestCase):
@@ -42,6 +45,20 @@ class GenSpecsPreservesClassDecisions(unittest.TestCase):
         text = self.filled.read_text()
         self.assertIn(FILLED + "\n\n" + CLASS_NOTE + "\n\n### Test requirements", text)
         self.assertEqual(text.count(CLASS_NOTE), 1)
+
+    def test_a_line_written_above_the_table_survives_regeneration(self):
+        """Where a plan says its classes live. It sits between the heading and
+        the table header, which is inside the generated block, so regeneration
+        has to carry it over with the rows - feature 052 lost exactly this
+        line, and the rows it named came through."""
+        heading = "### Classes this feature introduces"
+        text = self.filled.read_text()
+        self.filled.write_text(text.replace(heading + "\n\n", heading + "\n\n" + CLASS_LEAD + "\n\n", 1))
+        self.regenerate()
+        after = self.filled.read_text()
+        self.assertIn(heading + "\n\n" + CLASS_LEAD + "\n", after)
+        self.assertEqual(after.count(CLASS_LEAD), 1)
+        self.assertIn(FILLED, after)
 
     def test_an_unfilled_table_keeps_only_the_placeholder(self):
         self.regenerate()

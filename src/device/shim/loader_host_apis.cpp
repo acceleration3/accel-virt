@@ -68,7 +68,16 @@ void LoaderHostApis::enumerate()
         sub_apis_[i] = RVK_EXECUTOR_SUB_API_VULKAN;
         vulkan_kinds_[i] = kinds_of(devices[i]);
         opencl_kinds_[i] = 0u;
-        if (opencl_devices_[i].find(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+        if (opencl_devices_[i].find(uuids_[i])) {
+            sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+            /* A host pointer, on every device that runs OpenCL at all:
+             * CL_MEM_USE_HOST_PTR is core rather than an extension, so a
+             * buffer can always be made over the context's blob arena
+             * (feature 052, T033). A dma-buf is still not offered - that
+             * would be clCreateBufferWithProperties with an fd, which each
+             * platform answers differently. */
+            opencl_kinds_[i] = RVK_BLOB_HOST_POINTER;
+        }
         if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENGL;
     }
     count_ = found;
@@ -89,11 +98,19 @@ uint32_t LoaderHostApis::kinds_of(void *device)
     if (vkEnumerateDeviceExtensionProperties(physical, nullptr, &available, extensions_) < 0)
         return 0u;
     if (available > max_extensions) available = max_extensions;
+    uint32_t kinds = 0u;
     for (uint32_t n = 0u; n < available; n++) {
         if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
-            return RVK_BLOB_HOST_POINTER;
+            kinds |= RVK_BLOB_HOST_POINTER;
+        /* Both are offered where both are there, because which one works is
+         * not a property of the extension list: a driver may advertise the
+         * host-pointer import and still refuse every userptr whose pages are
+         * file-backed, which guest RAM always is. The device tries the
+         * dma-buf first and falls back (docs/testing.md). */
+        if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0)
+            kinds |= RVK_BLOB_DMA_BUF;
     }
-    return 0u;
+    return kinds;
 }
 
 void LoaderHostApis::close()

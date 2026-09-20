@@ -296,6 +296,11 @@ std::uint64_t imported_handle(void *, RvkExecutor *handle, std::uint64_t blob_id
     return import_named(executor_of(handle), blob_id | handle_bit) != nullptr ? blob_id | handle_bit : 0u;
 }
 
+/* An echo executor completes everything on the thread that asked, so there is
+ * nothing to signal about: it takes the callback and never calls it, which is
+ * what the device must be able to cope with. */
+void set_signal(void *, RvkExecutor *, void (*)(void *), void *) {}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -306,7 +311,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               import_blob,
                               release_blob,
                               imported_handle,
-                              create_with_options};
+                              create_with_options,
+                              set_signal};
 
 /* Version 3: default contexts only (feature 050). */
 const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
@@ -319,6 +325,7 @@ const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
                                         import_blob,
                                         release_blob,
                                         imported_handle,
+                                        nullptr,
                                         nullptr};
 
 /* Version 1, carrying none of the memory operations: the device must keep
@@ -330,6 +337,7 @@ const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
                                         create,
                                         destroy,
                                         execute,
+                                        nullptr,
                                         nullptr,
                                         nullptr,
                                         nullptr,

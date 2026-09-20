@@ -20,7 +20,7 @@ ScriptedHost        &GlContextRig::host() { return host_; }
 LockTrace           &GlContextRig::trace() { return trace_; }
 RecordingThreadLock &GlContextRig::send_lock() { return send_lock_; }
 RecordingLog        &GlContextRig::log() { return log_; }
-glicd::GlConnection &GlContextRig::connection() { return connection_; }
+av::icd::IcdConnection &GlContextRig::connection() { return connection_; }
 const glicd::GlExtensionPolicy &GlContextRig::extensions() const { return extensions_; }
 
 }  // namespace av

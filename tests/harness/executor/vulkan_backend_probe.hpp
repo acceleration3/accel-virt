@@ -32,6 +32,13 @@ struct VulkanBackendProbe {
     [[nodiscard]] Status  reserve_template(VkDevice device, const VkDescriptorUpdateTemplateEntry *entry);
     /* The reserved slot's handle, as a create does once the driver answered. */
     static void           name_template(VulkanBackend &target, VkDescriptorUpdateTemplate made);
+    /* The kind the backend decides this device imports, decided afresh, and
+     * the memory types it takes that kind into learnt with it. */
+    uint32_t              decide_import(VkPhysicalDevice physical);
+    /* Decides the host pointer instead of probing, as a host with no udmabuf
+     * leaves the backend deciding: the kernel this runs on may make dma-bufs,
+     * and the pointer path has to be testable on one that does. */
+    void                  import_as_pointer(VkPhysicalDevice physical);
     /* Whether the backend still holds `fd` as one it exported: what says
      * whether an import took it (feature 047, US3). */
     bool                  holds_fd(int fd) const;

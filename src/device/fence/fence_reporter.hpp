@@ -35,6 +35,10 @@ public:
     void                 complete(uint64_t fence);
     /* Worker: progress moves on, with no interrupt. */
     void                 heartbeat();
+    /* Worker: progress moves on and the guest is interrupted, with nothing
+     * claimed completed - what a host event finishing on a thread the device
+     * never gave the host reports (feature 052). */
+    void                 nudge();
     /* Worker: the page reads faulted with `code`; nothing is reported after. */
     void                 fault(FaultCode code);
     /* Worker: one interrupt when anything completed or faulted since the last. */

@@ -180,6 +180,23 @@ void TableHost::release_range(void *base, uint64_t bytes)
     ops_.release_range(ops_.opaque, base, bytes);
 }
 
+Status TableHost::dmabuf_over_guest(void *const *runs, const uint64_t *sizes, uint32_t count,
+                                    int &fd)
+{
+    AV_SCOPE("TableHost::dmabuf_over_guest");
+    /* A table from before this op has nothing there; the caller imports a
+     * host pointer instead, as it did before the op existed. */
+    if (ops_.dmabuf_over_guest == nullptr) return Status::not_supported;
+    return ops_.dmabuf_over_guest(ops_.opaque, runs, sizes, count, &fd) == 0 ? Status::ok
+                                                                            : Status::not_supported;
+}
+
+void TableHost::close_dmabuf(int fd)
+{
+    AV_SCOPE("TableHost::close_dmabuf");
+    if (ops_.close_dmabuf != nullptr) ops_.close_dmabuf(ops_.opaque, fd);
+}
+
 void *TableHost::create_host_memory(uint64_t size, void *&pointer)
 {
     AV_SCOPE("TableHost::create_host_memory");

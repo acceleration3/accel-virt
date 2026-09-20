@@ -32,7 +32,7 @@ struct GuestGlContextProbe {
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
     static void connect(GuestGlContext &context, bool connected)
     {
-        context.link_ = connected ? 0u : GlConnection::no_link;
+        context.link_ = connected ? 0u : av::icd::IcdConnection::no_link;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
     static void drop_lock(GuestGlContext &context) { context.locked_.destroy(); }

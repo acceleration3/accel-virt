@@ -9,10 +9,12 @@ CreateFileW
 CreateThread
 CreateToolhelp32Snapshot
 ExitProcess
+FreeLibrary
 GetCommandLineW
 GetCurrentProcess
 GetCurrentProcessId
 GetCurrentThreadId
+GetEnvironmentVariableA
 GetLastError
 GetModuleFileNameW
 GetModuleHandleExW
@@ -22,9 +24,14 @@ GetProcessHeap
 GetStdHandle
 HeapAlloc
 HeapFree
+InitOnceExecuteOnce
+IsWow64Process
 K32EnumProcessModules
 K32GetModuleBaseNameW
+LoadLibraryA
+LoadLibraryExA
 MapViewOfFile
+MultiByteToWideChar
 OpenEventW
 OpenFileMappingW
 OpenProcess
@@ -47,4 +54,5 @@ TryAcquireSRWLockExclusive
 UnmapViewOfFile
 VirtualQuery
 WaitForSingleObject
+WideCharToMultiByte
 WriteFile

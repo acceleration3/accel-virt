@@ -1,6 +1,7 @@
 #include "device/shim/vulkan_host_import.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/shim/probe_dma_buf.hpp"
 
 #include <sys/mman.h>
 
@@ -53,6 +54,31 @@ uint32_t VulkanHostImport::probe_types(VkPhysicalDevice physical)
     return mask;
 }
 
+uint32_t VulkanHostImport::probe_dmabuf_types(VkPhysicalDevice physical)
+{
+    AV_SCOPE("VulkanHostImport::probe_dmabuf_types");
+    ProbeDmaBuf shared;
+    if (!shared.make()) return 0u;
+    static constexpr const char *const extensions[] = {"VK_KHR_external_memory", "VK_KHR_external_memory_fd",
+                                                       "VK_EXT_external_memory_dma_buf"};
+    float                              priority = 1.0f;
+    VkDeviceQueueCreateInfo            queue = {};
+    queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue.queueCount = 1u;
+    queue.pQueuePriorities = &priority;
+    VkDeviceCreateInfo create = {};
+    create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    create.queueCreateInfoCount = 1u;
+    create.pQueueCreateInfos = &queue;
+    create.enabledExtensionCount = 3u;
+    create.ppEnabledExtensionNames = extensions;
+    VkDevice device = VK_NULL_HANDLE;
+    if (::vkCreateDevice(physical, &create, nullptr, &device) != VK_SUCCESS) return 0u;
+    const uint32_t mask = dmabuf_types(device, shared.handle());
+    ::vkDestroyDevice(device, nullptr);
+    return mask;
+}
+
 bool VulkanHostImport::imports(VkDevice device)
 {
     AV_SCOPE("VulkanHostImport::imports");
@@ -81,6 +107,43 @@ bool VulkanHostImport::import(VkDevice device, void *pointer, uint64_t size, uin
     return true;
 }
 
+uint32_t VulkanHostImport::dmabuf_types(VkDevice device, int fd)
+{
+    AV_SCOPE("VulkanHostImport::dmabuf_types");
+    auto *const properties = reinterpret_cast<PFN_vkGetMemoryFdPropertiesKHR>(
+        ::vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR"));
+    if (properties == nullptr || fd < 0) return 0u;
+    VkMemoryFdPropertiesKHR answered = {};
+    answered.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+    if (properties(device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd, &answered) !=
+        VK_SUCCESS)
+        return 0u;
+    return answered.memoryTypeBits;
+}
+
+bool VulkanHostImport::import_dmabuf(VkDevice device, int fd, uint64_t size, uint32_t memory_type,
+                                     uint64_t &memory)
+{
+    AV_SCOPE("VulkanHostImport::import_dmabuf");
+    if (fd < 0) return false;
+    VkImportMemoryFdInfoKHR imported = {};
+    imported.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+    imported.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    imported.fd = fd;
+
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &imported;
+    allocate.allocationSize = size;
+    allocate.memoryTypeIndex = memory_type;
+
+    VkDeviceMemory made = VK_NULL_HANDLE;
+    if (::vkAllocateMemory(device, &allocate, nullptr, &made) != VK_SUCCESS) return false;
+    memory = reinterpret_cast<uint64_t>(made);
+    held_++;
+    return true;
+}
+
 void VulkanHostImport::release(VkDevice device, uint64_t memory)
 {
     AV_SCOPE("VulkanHostImport::release");
@@ -89,7 +152,8 @@ void VulkanHostImport::release(VkDevice device, uint64_t memory)
 }
 
 VkExternalMemoryHandleTypeFlags VulkanHostImport::buffer_host_types(VkPhysicalDevice physical,
-                                                                   const VkBufferCreateInfo &create)
+                                                                   const VkBufferCreateInfo &create,
+                                                                   VkExternalMemoryHandleTypeFlagBits type)
 {
     AV_SCOPE("VulkanHostImport::buffer_host_types");
     if (physical == VK_NULL_HANDLE) return 0u;
@@ -97,23 +161,24 @@ VkExternalMemoryHandleTypeFlags VulkanHostImport::buffer_host_types(VkPhysicalDe
     buffer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO;
     buffer.flags = create.flags;
     buffer.usage = create.usage;
-    buffer.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    buffer.handleType = type;
     VkExternalBufferProperties answer = {};
     answer.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
     ::vkGetPhysicalDeviceExternalBufferProperties(physical, &buffer, &answer);
     return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u
-               ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT
+               ? static_cast<VkExternalMemoryHandleTypeFlags>(type)
                : 0u;
 }
 
 VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDevice physical,
-                                                                  const VkImageCreateInfo &create)
+                                                                  const VkImageCreateInfo &create,
+                                                                  VkExternalMemoryHandleTypeFlagBits type)
 {
     AV_SCOPE("VulkanHostImport::image_host_types");
     if (physical == VK_NULL_HANDLE) return 0u;
     VkPhysicalDeviceExternalImageFormatInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
-    external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    external.handleType = type;
     VkPhysicalDeviceImageFormatInfo2 format = {};
     format.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
     format.pNext = &external;
@@ -129,7 +194,7 @@ VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDev
     properties.pNext = &answer;
     if (::vkGetPhysicalDeviceImageFormatProperties2(physical, &format, &properties) != VK_SUCCESS) return 0u;
     return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u
-               ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT
+               ? static_cast<VkExternalMemoryHandleTypeFlags>(type)
                : 0u;
 }
 

@@ -122,9 +122,10 @@ public:
     VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
 
-    /* Imports a host pointer into the guest's device as the memory type the
-     * blob asks for - refused for a type the driver will not import that
-     * pointer into - and makes the memory a handle the guest may name. */
+    /* Imports the guest's pages into the guest's device as the memory type
+     * the blob asks for - refused for a kind this device does not import, and
+     * for a type the driver will not import that handle into - and makes the
+     * memory a handle the guest may name. */
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
@@ -141,7 +142,7 @@ public:
      * whatever the command being decoded named with made_through. A registry
      * with no room left loses the device rather than hand out one it would
      * refuse when the guest sent it back. */
-    void     made(uint64_t raw);
+    void     made(uint64_t raw, HandleKind kind = HandleKind::other);
     /* The object the command being decoded makes its handles through - its
      * device, its pool - so that they end when it does. Nothing between
      * commands: every run forgets it when the decode returns. */
@@ -154,6 +155,9 @@ public:
     /* Whether this backend made the handle a guest just named. What the
      * generated decoder asks through wire_to_handle. */
     bool     knows_handle(uint64_t raw) const;
+    /* And that it made it as this kind, which is what the five handles the
+     * loader dispatches on are judged by. */
+    bool     knows_handle(uint64_t raw, HandleKind kind) const;
     /* The backend whose handles the decoder is inside. One context runs on one
      * worker and one call at a time - the ABI says so - so the answer is the
      * thread's, which is the only shape a hook with no user pointer can take. */
@@ -201,11 +205,28 @@ private:
     /* Whether the driver imports the blob's pointer into the type it asks
      * for on the guest's device. */
     bool importable(const ImportedBlob &blob);
+    /* The blob as device memory of the guest's device, with `memory` what it
+     * became: refused for a type the driver will not import that handle into,
+     * and for a handle it will not take. */
+    [[nodiscard]] bool adopt_dmabuf(const ImportedBlob &blob, uint64_t &memory);
+    [[nodiscard]] bool adopt_pointer(const ImportedBlob &blob, uint64_t &memory);
     /* Narrows `properties` of `physical` to what imports, learning the mask
      * the first time `physical` is asked about. */
     void restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties);
+    /* Measures what `physical` imports, once: the kind and the memory types
+     * it takes that kind into are decided together, because a guest shown the
+     * types of one kind and handed memory of the other would bind neither.
+     * Nothing where it is already known. */
+    void             decide_import(VkPhysicalDevice physical);
+    /* The handle type the decided kind is imported from, which is what a
+     * buffer or an image must be made with to be bound to it. */
+    VkExternalMemoryHandleTypeFlagBits external_type(VkPhysicalDevice physical);
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
+
+    /* VK_API_VERSION_1_0, spelled out: the macro is full of C casts this
+     * build refuses. Nothing below it is a version at all. */
+    static constexpr uint32_t lowest_api_version = 1u << 22;
 
     /* Every Vulkan command id has this in its top 16 bits; the device filters
      * by API before calling, so anything else is the device disagreeing with

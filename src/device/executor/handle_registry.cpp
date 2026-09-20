@@ -4,14 +4,14 @@
 
 namespace av {
 
-HandleRegistry::HandleRegistry() : handles_{}, parents_{}, end_(0u), count_(0u)
+HandleRegistry::HandleRegistry() : handles_{}, parents_{}, kinds_{}, end_(0u), count_(0u)
 {
     AV_SCOPE("HandleRegistry::HandleRegistry");
     static_assert(max_handles < no_parent);
     for (uint16_t &parent : parents_) parent = no_parent;
 }
 
-bool HandleRegistry::remember(uint64_t handle, uint64_t parent)
+bool HandleRegistry::remember(uint64_t handle, uint64_t parent, HandleKind kind)
 {
     AV_SCOPE("HandleRegistry::remember");
     /* The null handle is the API's own and is never anybody's to own. */
@@ -22,6 +22,7 @@ bool HandleRegistry::remember(uint64_t handle, uint64_t parent)
     if (slot == max_handles) return false;
     const uint32_t parent_slot = parent != 0u ? slot_of(parent) : end_;
     handles_[slot] = handle;
+    kinds_[slot] = kind;
     parents_[slot] = parent_slot != end_ ? static_cast<uint16_t>(parent_slot) : no_parent;
     if (slot == end_) end_++;
     count_++;
@@ -33,6 +34,14 @@ bool HandleRegistry::knows(uint64_t handle) const
     AV_SCOPE("HandleRegistry::knows");
     if (handle == 0u) return true;
     return slot_of(handle) != end_;
+}
+
+bool HandleRegistry::knows(uint64_t handle, HandleKind kind) const
+{
+    AV_SCOPE("HandleRegistry::knows");
+    if (handle == 0u) return true;
+    const uint32_t slot = slot_of(handle);
+    return slot != end_ && kinds_[slot] == kind;
 }
 
 void HandleRegistry::forget(uint64_t handle)

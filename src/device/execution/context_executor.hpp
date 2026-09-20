@@ -19,6 +19,8 @@ class ExecutorShares;
 class Host;
 struct ContextExecutorProbe;
 
+class ContextSignal;
+
 class ContextExecutor {
 public:
     static constexpr size_t uuid_bytes = 16u;
@@ -37,6 +39,11 @@ public:
     /* Whether the library can make a context with `options`: the defaults
      * always, anything else only from version 4. */
     bool                 accepts(const GlContextOptions &options) const;
+    /* Main loop, before create: what the library is to call when a host API
+     * finishes work on a thread of its own. A library older than version 5 is
+     * given nothing, and a guest on one waits at a synchronising call
+     * instead. */
+    void                 signals_through(ContextSignal &signal);
     /* Worker. invalid_state when created or not configured, or for an OpenGL
      * executor that cannot be published, which is given back; no_memory when
      * the library makes none, or there is no executor to share with. */
@@ -72,6 +79,9 @@ private:
 
     Host                  &host_;
     const ExecutorLibrary &library_;
+    /* The landing pad a host thread's completion reaches this context
+     * through; null for a context nothing signals. */
+    ContextSignal         *signal_;
     ExecutorShares        &shares_;
     uint32_t               id_;
     RvkExecutor           *executor_;

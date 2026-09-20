@@ -103,6 +103,11 @@ public:
      * is taken; the device's refusal otherwise. Nothing is bound on failure. */
     [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
+    /* DISPATCH. Whether the table still holds `context`. Destroying an
+     * allocation a context runs on unbinds it there and then, so a context
+     * whose memory went first is already gone from here by the time dxgkrnl
+     * destroys it - which is the order a process exit uses. */
+    bool                 holds(const void *context) const;
     /* DISPATCH. The doorbell page `context` was bound to, or max_contexts for
      * a context that is not bound: what a doorbell of that context's hardware
      * queue names (feature 049). */

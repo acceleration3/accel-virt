@@ -72,6 +72,11 @@ public:
      * never handed out - a null included - because the device's pointer is
      * the only thing the ABI gives to tell them apart. */
     uint64_t        imported_handle(ContextSession *session, uint64_t blob_id);
+    /* What the device gives an OpenCL context to call when the host finishes
+     * work on a thread of its own (executor ABI version 5). Nothing for a
+     * session of another API: neither Vulkan nor OpenGL completes anything
+     * except on the thread that asked. */
+    void            set_signal(ContextSession *session, void (*signal)(void *context), void *context);
     uint32_t        live() const;
     /* The library's state dump (docs/trace.md): the GPUs asked about and each
      * live session's API and GPU. Takes no lock: everything it reads is a

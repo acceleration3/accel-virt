@@ -354,6 +354,34 @@ public:
     cl_program on_clCreateProgramWithBuiltInKernels(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const char* kernel_names, cl_int* errcode_ret) override {
         return ::clCreateProgramWithBuiltInKernels(context, num_devices, device_list, kernel_names, errcode_ret);
     }
+    void* on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map, cl_map_flags map_flags, size_t offset, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event, cl_int* errcode_ret) override {
+        return ::clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size, num_events_in_wait_list, event_wait_list, event, errcode_ret);
+    }
+    cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void* mapped_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        return ::clEnqueueUnmapMemObject(command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event);
+    }
+    void* on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, size_t size, cl_uint alignment) override {
+        return ::clSVMAlloc(context, flags, size, alignment);
+    }
+    void on_clSVMFree(cl_context context, void* svm_pointer) override {
+        ::clSVMFree(context, svm_pointer);
+    }
+    cl_int on_clEnqueueSVMMap(cl_command_queue command_queue, cl_bool blocking_map, cl_map_flags flags, void* svm_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        return ::clEnqueueSVMMap(command_queue, blocking_map, flags, svm_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    }
+    cl_int on_clEnqueueSVMUnmap(cl_command_queue command_queue, void* svm_ptr, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        return ::clEnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list, event_wait_list, event);
+    }
+    cl_int on_clEnqueueSVMMemcpy(cl_command_queue command_queue, cl_bool blocking_copy, void* dst_ptr, const void* src_ptr, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        return ::clEnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    }
+    cl_int on_clEnqueueSVMMemFill(cl_command_queue command_queue, void* svm_ptr, const void* pattern, size_t pattern_size, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
+        return ::clEnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event);
+    }
+    cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void* arg_value) override {
+        return ::clSetKernelArgSVMPointer(kernel, arg_index, arg_value);
+    }
+    cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) override = 0;
 
 private:
     clGetGLContextInfoKHR_fn pfn_clGetGLContextInfoKHR_ = nullptr;

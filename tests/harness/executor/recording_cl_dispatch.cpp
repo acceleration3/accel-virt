@@ -43,7 +43,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 }  // namespace
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
-    : block_(block), arena_(arena), handles_(), objects_{}, produced_(0u), calls_(0u),
+    : block_(block), arena_(arena), handles_(), svm_(), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
       answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
@@ -119,6 +119,91 @@ cl_int RecordingClDispatch::on_clEnqueueReadBuffer(cl_command_queue command_queu
 void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wire) const
 {
     return handles_.resolve(kind, wire);
+}
+
+void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) const
+{
+    /* A refusal, not a stranger: the decoder reads null as "the guest named
+     * an address it was never given" and never makes the call. */
+    return svm_.resolve(address, bytes);
+}
+
+void RecordingClDispatch::from_svm(const void *pointer, std::uint64_t bytes) const
+{
+    if (pointer == nullptr) return;
+    if (svm_.resolve(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pointer)), bytes) == nullptr)
+        ++strangers_;
+}
+
+cl_int RecordingClDispatch::on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj,
+                                                       void *mapped_ptr, cl_uint num_events_in_wait_list,
+                                                       const cl_event *event_wait_list, cl_event *event)
+{
+    from_svm(mapped_ptr, 0u);
+    return DefaultDispatch::on_clEnqueueUnmapMemObject(command_queue, memobj, mapped_ptr,
+                                                       num_events_in_wait_list, event_wait_list, event);
+}
+
+void RecordingClDispatch::on_clSVMFree(cl_context context, void *svm_pointer)
+{
+    from_svm(svm_pointer, 0u);
+    DefaultDispatch::on_clSVMFree(context, svm_pointer);
+}
+
+cl_int RecordingClDispatch::on_clEnqueueSVMMap(cl_command_queue command_queue, cl_bool blocking_map,
+                                               cl_map_flags flags, void *svm_ptr, std::size_t size,
+                                               cl_uint num_events_in_wait_list,
+                                               const cl_event *event_wait_list, cl_event *event)
+{
+    from_svm(svm_ptr, static_cast<std::uint64_t>(size));
+    return DefaultDispatch::on_clEnqueueSVMMap(command_queue, blocking_map, flags, svm_ptr, size,
+                                               num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int RecordingClDispatch::on_clEnqueueSVMUnmap(cl_command_queue command_queue, void *svm_ptr,
+                                                 cl_uint num_events_in_wait_list,
+                                                 const cl_event *event_wait_list, cl_event *event)
+{
+    from_svm(svm_ptr, 0u);
+    return DefaultDispatch::on_clEnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list,
+                                                 event_wait_list, event);
+}
+
+cl_int RecordingClDispatch::on_clEnqueueSVMMemcpy(cl_command_queue command_queue, cl_bool blocking_copy,
+                                                  void *dst_ptr, const void *src_ptr, std::size_t size,
+                                                  cl_uint num_events_in_wait_list,
+                                                  const cl_event *event_wait_list, cl_event *event)
+{
+    from_svm(dst_ptr, static_cast<std::uint64_t>(size));
+    from_svm(src_ptr, static_cast<std::uint64_t>(size));
+    return DefaultDispatch::on_clEnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr, size,
+                                                  num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int RecordingClDispatch::on_clEnqueueSVMMemFill(cl_command_queue command_queue, void *svm_ptr,
+                                                   const void *pattern, std::size_t pattern_size,
+                                                   std::size_t size, cl_uint num_events_in_wait_list,
+                                                   const cl_event *event_wait_list, cl_event *event)
+{
+    from_svm(svm_ptr, static_cast<std::uint64_t>(size));
+    return DefaultDispatch::on_clEnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size, size,
+                                                   num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int RecordingClDispatch::on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index,
+                                                        const void *arg_value)
+{
+    from_svm(arg_value, 0u);
+    return DefaultDispatch::on_clSetKernelArgSVMPointer(kernel, arg_index, arg_value);
+}
+
+std::uint64_t RecordingClDispatch::make_svm(std::size_t bytes)
+{
+    if (bytes == 0u || bytes > max_shared - shared_used_) return 0u;
+    unsigned char *const allocated = &shared_[shared_used_];
+    if (!svm_.remember(allocated, static_cast<std::uint64_t>(bytes))) return 0u;
+    shared_used_ += bytes;
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(allocated));
 }
 
 cl_int RecordingClDispatch::on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_index,

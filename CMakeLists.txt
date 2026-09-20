@@ -29,7 +29,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-2 umddi-4")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3 umddi-4")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
@@ -308,6 +308,26 @@ if(AV_GENERATED)
     ${CMAKE_SOURCE_DIR}/src/icd/opengl)
   target_compile_options(av_gl_icd PRIVATE ${AV_TEST_FLAGS})
   target_link_options(av_gl_icd PUBLIC ${AV_TEST_FLAGS})
+
+  # The OpenCL client, built against the ICD's own hooks for the reason the
+  # OpenGL pair above gives (feature 052).
+  add_library(av_cl_generated OBJECT
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
+  target_link_libraries(av_cl_generated PRIVATE av_core)
+  target_include_directories(av_cl_generated PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl
+    ${CMAKE_SOURCE_DIR}/src/icd/opencl)
+  target_compile_options(av_cl_generated PRIVATE ${AV_TEST_FLAGS})
+
+  # The OpenCL ICD's portable core. Its own archive, for the reason the other
+  # two have theirs: each defines strong hooks that replace the generated
+  # defaults every other binary relies on.
+  file(GLOB_RECURSE AV_CL_ICD_SOURCES CONFIGURE_DEPENDS src/icd/common/*.cpp src/icd/opencl/*.cpp)
+  add_library(av_cl_icd STATIC ${AV_CL_ICD_SOURCES} $<TARGET_OBJECTS:av_cl_generated>)
+  target_link_libraries(av_cl_icd PUBLIC av_core)
+  target_include_directories(av_cl_icd PUBLIC ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl
+    ${CMAKE_SOURCE_DIR}/src/icd/opencl)
+  target_compile_options(av_cl_icd PRIVATE ${AV_TEST_FLAGS})
+  target_link_options(av_cl_icd PUBLIC ${AV_TEST_FLAGS})
 endif()
 
 # The Direct3D user-mode driver's portable core (feature 055): src/icd/d3d over
@@ -341,8 +361,14 @@ foreach(src ${AV_UNIT_TESTS})
   target_link_libraries(${name} PRIVATE av_harness)
   target_compile_options(${name} PRIVATE ${AV_TEST_FLAGS})
   add_test(NAME ${name} COMMAND ${name})
+  # MESA_SHADER_CACHE_DISABLE: a warm Mesa shader cache has the driver spawn a
+  # thread that allocates out of anonymous memory, which LeakSanitizer reports
+  # as `<unknown module>` and no `leak:` suppression can name. Whether it
+  # happens depends on what the machine compiled before, so the same test
+  # passes or fails on one box depending on its cache - and the cache buys
+  # these tests nothing, since none of them measures compile time.
   set_tests_properties(${name} PROPERTIES
-    ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw")
+    ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw;MESA_SHADER_CACHE_DISABLE=true")
   # Two tests name the generated clients' headers by the names the generator
   # includes them by; the clients themselves are in av_core.
   # The full-stack rig's rvk run links the executor library's own entry point:
@@ -354,7 +380,9 @@ foreach(src ${AV_UNIT_TESTS})
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader
   # seam is tested through the ICD's own entry point, so it links it too.
-  if(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
+  if(src MATCHES "/tests/unit/icd/opencl/" OR name MATCHES "^test_(cl_seams|fake_cl_loader|fullstack_opencl_icd)$")
+      target_link_libraries(${name} PRIVATE av_cl_icd)
+    elseif(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
     target_link_libraries(${name} PRIVATE av_gl_icd)
   elseif(src MATCHES "/tests/unit/icd/d3d/" OR name MATCHES "^test_(umd_rig|fake_d3d_runtime|fullstack_umd)$")
     target_link_libraries(${name} PRIVATE av_d3d_umd)
@@ -370,6 +398,23 @@ foreach(src ${AV_UNIT_TESTS})
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
     # The probe's renders, as bitmaps a person can open (docs/testing.md).
     target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
+  endif()
+  # The OpenCL ICD through the same stack (feature 052, T031): the ICD's hooks
+  # and the executor's cannot share a binary, so the executor is the library
+  # file QEMU loads, its symbols its own. The event watcher's callbacks are
+  # delivered on a thread the test steps, so no thread library is needed
+  # beyond the one the deadlock scenarios' single setter thread uses.
+  if(name STREQUAL "test_fullstack_opencl_icd")
+    find_package(Threads REQUIRED)
+    target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The executor library opens every host API when it loads, Vulkan among
+    # them, so this test carries the Vulkan loader whether or not it asks
+    # anything of it - and a loader that unloads a driver reports its leaks
+    # from a module no suppression can name. Its three siblings pin this for
+    # the same reason.
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   # The descriptor template proof through the same stack (feature 047): the
   # guest sizes a blob from the template it remembers and the device refuses a
@@ -458,10 +503,12 @@ ExternalProject_Add(rvktest
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkumd.dll)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
-  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags_c.cmake)
 add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
@@ -509,6 +556,36 @@ add_test(NAME rvkumd_image
                  ${CMAKE_BINARY_DIR}/guest/rvkumd.dll --dll --only-exports
                  --require-export OpenAdapter10_2 --require-export OpenAdapter12)
 
+# The OpenCL ICD exports exactly the two names the Khronos loader may resolve
+# (feature 052, research §1); it presents nothing, so it wants no user32.
+add_test(NAME rvkcl_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkcl.dll --dll --only-exports
+                 --require-export clGetExtensionFunctionAddress
+                 --require-export clIcdGetPlatformIDsKHR)
+
+# The OpenCL probe binds to the Khronos loader beside it and nothing else
+# (feature 052, T030); it opens no window, so it wants no user32.
+add_test(NAME rvkclprobe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
+                 --allow-import OpenCL.dll --require-import clGetPlatformIDs)
+
+# The Khronos loader, cross-built beside the probe (feature 052, T005). It is
+# somebody else's source, but it is linked by this build against a kit closure
+# with no C runtime, and that is this repository's to get right: the check's
+# relocated-pointer rule is what catches a C library call the link turned into
+# an __imp_ pointer to nothing, which crashes on the first call rather than at
+# the link. The guest build is a project of its own, so the condition is the
+# one src/um/CMakeLists.txt builds the loader under, not its target.
+if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/opencl-loader/loader/icd.c)
+  add_test(NAME opencl_loader_image
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                   ${CMAKE_BINARY_DIR}/guest/OpenCL.dll --dll
+                   --allow-import cfgmgr32.dll --allow-import advapi32.dll --allow-import ole32.dll
+                   --require-export clGetPlatformIDs --require-import CM_Get_Device_ID_ListW)
+endif()
+
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
 add_test(NAME rvkglprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
@@ -544,7 +621,11 @@ add_test(NAME rvkd3d12probe_image
 # registers them.
 if(NOT AV_COVERAGE AND NOT AV_FUZZ)
   set(AV_TOOLS_SHARDED test_run_guest_suite)
-  set(AV_TOOLS_SHARDS 12)
+  # 24 on a 32-core machine: the run is bound by its slowest shard, not by how
+  # many run at once, and at 12 one shard took as long as the whole rest of
+  # the suite. run_test_shard.py fails a shard that selects nothing, so this
+  # cannot be raised past the module's test count without saying so.
+  set(AV_TOOLS_SHARDS 24)
   file(GLOB AV_TOOLS_TESTS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/tests/tools/test_*.py)
   foreach(module_file ${AV_TOOLS_TESTS})
     get_filename_component(module ${module_file} NAME_WE)
@@ -660,6 +741,10 @@ if(AV_FUZZ)
     if(name STREQUAL "fuzz_context_attributes" OR name STREQUAL "fuzz_pixel_format_query")
       target_link_libraries(${name} PRIVATE av_gl_icd)
     endif()
+    if(name STREQUAL "fuzz_cl_property_list" OR name STREQUAL "fuzz_cl_info_query" OR
+       name STREQUAL "fuzz_cl_host_reply")
+      target_link_libraries(${name} PRIVATE av_cl_icd)
+    endif()
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
     # New units land in the build tree; the committed seed corpus is read only.
@@ -671,5 +756,12 @@ if(AV_FUZZ)
                      -artifact_prefix=${CMAKE_BINARY_DIR}/corpus/${name}-)
     # The fuzz configuration's own work; its unit tests are the default one's.
     set_tests_properties(${name}_smoke PROPERTIES LABELS fuzz)
+    # A target that reaches a real driver loads it with the host's own loader,
+    # and what that brings in is not this repository's to fix: Mesa's shader
+    # cache leaves allocations nothing can attribute, and the LLVM inside radv
+    # frees an aligned operator new with free() from a static initialiser.
+    # Neither is reachable from the bytes being fuzzed.
+    set_tests_properties(${name}_smoke PROPERTIES
+      ENVIRONMENT "MESA_SHADER_CACHE_DISABLE=true;ASAN_OPTIONS=alloc_dealloc_mismatch=0")
   endforeach()
 endif()
