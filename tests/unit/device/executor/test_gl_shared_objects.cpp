@@ -150,3 +150,20 @@ TEST(gl_shared_objects_invariants, refuse_a_row_with_no_name_an_unknown_kind_or_
   CHECK(objects.invariants_hold());
   av::GlSharedObjectsProbe::set_count(objects, GlSharedObjects::max_objects + 1u);
   CHECK(!objects.invariants_hold()); }
+
+/* The three things a forget refuses before it looks for a row: a kind with no
+ * namespace, a name of zero, and a wire handle no GL name fits in. Each of
+ * them would otherwise match whatever the table happens to hold at that
+ * number, which is another context's object (feature 053). */
+TEST(gl_shared_objects_forget, refuses_a_kind_a_name_and_a_handle_no_row_could_have)
+{ GlSharedObjects objects;
+  CHECK(objects.remember(RVK_SHARED_MEMORY, 7u));
+  std::uint32_t name = 0u;
+  CHECK(!objects.forget(RVK_SHARED_NATIVE_FENCE + 1u, 7u, name));
+  CHECK(!objects.forget(RVK_SHARED_MEMORY, 0u, name));
+  CHECK(!objects.forget(RVK_SHARED_MEMORY, 0x1'0000'0007ull, name));
+  CHECK_EQ(name, 0u);
+  /* And the row is still there, which it would not be had any of them found
+   * it. */
+  CHECK(objects.forget(RVK_SHARED_MEMORY, 7u, name));
+  CHECK_EQ(name, 7u); }

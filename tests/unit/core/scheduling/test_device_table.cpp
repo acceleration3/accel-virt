@@ -179,6 +179,30 @@ public:
         return record;
     }
 
+    /* Allocation `i` created again as a context's ring, which is published to
+     * the host as a blob over the pages the aperture gives it - so it belongs
+     * to the one device that opened it and a second device may not have it. */
+    void make_blob(std::uint32_t i)
+    {
+        av::DxgkargDestroyAllocationRecord destroy = {};
+        void *const list[] = {infos_[i].hAllocation};
+        destroy.NumAllocations = 1u;
+        destroy.pAllocationList = const_cast<void **>(list);
+        CHECK_STATUS(allocations_.destroy(destroy), Status::ok);
+        const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u,
+                                        ScanoutTarget());
+        CHECK_STATUS(ring.encode(descriptors_[i], AllocationDescriptor::encoded_size), Status::ok);
+        std::memset(&infos_[i], 0, sizeof infos_[i]);
+        infos_[i].pPrivateDriverData = descriptors_[i];
+        infos_[i].PrivateDriverDataSize = AllocationDescriptor::encoded_size;
+        DxgkargCreateAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationInfo = &infos_[i];
+        CHECK_STATUS(allocations_.create(request), Status::ok);
+        kernel_handles_.remove(handles_[i]);
+        handles_[i] = kernel_handles_.insert(infos_[i].hAllocation);
+    }
+
     /* What dxgkrnl hands the opening process: the creator's own private data. */
     void hand_over_creator_data(std::uint32_t i)
     {
@@ -610,3 +634,25 @@ TEST(device_table_open, unwinds_the_object_of_a_shared_open_when_a_later_open_ca
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
+
+/* A context's ring belongs to the device that opened it: the host reads it over
+ * the pages that device's aperture mapping gave, so a second device opening the
+ * same blob would be reading another context's ring. The open is refused, and
+ * the refusal has to unwind what it had already recorded. */
+TEST(device_table_open, a_blob_another_device_already_holds_is_refused_and_unwound)
+{ Fixture fixture;
+  fixture.make_blob(0u);
+  void *const first = fixture.create_device();
+  DxgkargOpenAllocationRecord mine = fixture.open_request(1u);
+  CHECK_STATUS(fixture.devices().open(first, mine), Status::ok);
+  CHECK_EQ(fixture.allocation(0u)->opens(), 1u);
+
+  void *const other = fixture.create_device();
+  DxgkargOpenAllocationRecord theirs = fixture.open_request(1u);
+  CHECK_STATUS(fixture.devices().open(other, theirs), Status::invalid_parameter);
+  CHECK(theirs.pOpenAllocation[0].hDeviceSpecificAllocation == nullptr);
+  /* The first device still has it, and exactly once. */
+  CHECK_EQ(fixture.allocation(0u)->opens(), 1u);
+  CHECK_EQ(fixture.devices().opens(), 1u);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK(fixture.shared().invariants_hold()); }

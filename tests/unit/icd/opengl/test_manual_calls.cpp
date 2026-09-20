@@ -1000,6 +1000,11 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
   CHECK(rig.kmt().commands() > before);
 
   before = rig.kmt().commands();
+  calls.texture_storage_mem_2d(1u, 1, 0x8058u, 16, 16, memory, 0u);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK(rig.kmt().commands() > before);
+
+  before = rig.kmt().commands();
   calls.wait_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
   CHECK_EQ(context.take_error(), 0u);
   CHECK(rig.kmt().commands() > before);

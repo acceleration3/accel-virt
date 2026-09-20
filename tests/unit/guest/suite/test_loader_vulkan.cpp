@@ -57,6 +57,66 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_fault(VkInstance instance, cons
 
 std::uint32_t last_command(const av::MockKmt &kmt) { return kmt.command_id(kmt.commands() - 1u); }
 
+/* The structure the wrapper builds and hands on. Declared and not defined: the
+ * stub below only has to have the same signature as the entry point the loader
+ * resolves, and UBSan compares that signature exactly. */
+}  // namespace
+
+namespace av {
+struct MemoryGetWin32HandleInfo;
+}  // namespace av
+
+namespace {
+
+/* Feature 053. The three entry points the sharing steps resolve are driver
+ * private or extension entries, so a loader may or may not have them, and the
+ * probe has to survive both. Stubs here rather than the real ICD because what
+ * is being judged is the wrapper - whether it calls through a null, and what it
+ * makes of an answer that is not VK_SUCCESS. */
+std::uint32_t stub_calls = 0u;
+
+VKAPI_ATTR VkResult VKAPI_CALL refusing_status(VkPhysicalDevice, std::uint32_t *status)
+{
+    stub_calls++;
+    *status = 0xDEADBEEFu;   /* written and then not to be believed */
+    return VK_ERROR_INITIALIZATION_FAILED;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL stub_enumerate(VkPhysicalDevice, const char *, std::uint32_t *count,
+                                              VkExtensionProperties *)
+{
+    stub_calls++;
+    *count = 3u;
+    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL stub_memory_handle(VkDevice, const av::MemoryGetWin32HandleInfo *,
+                                                  void **handle)
+{
+    stub_calls++;
+    *handle = reinterpret_cast<void *>(0x5150u);
+    return VK_SUCCESS;
+}
+
+/* A loader that has every one of them. */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL with_sharing(VkInstance instance, const char *name)
+{
+    if (std::strcmp(name, "vkRvkLastKernelStatus") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&refusing_status);
+    if (std::strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&stub_enumerate);
+    if (std::strcmp(name, "vkGetMemoryWin32HandleKHR") == 0)
+        return reinterpret_cast<PFN_vkVoidFunction>(&stub_memory_handle);
+    return av::bound_icd_instance_proc_addr(instance, name);
+}
+
+/* And one that has none of them. */
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL without_sharing(VkInstance instance, const char *name)
+{
+    if (std::strcmp(name, "vkRvkLastKernelStatus") == 0) return nullptr;
+    return av::bound_icd_instance_proc_addr(instance, name);
+}
+
 VkInstanceCreateInfo instance_info()
 {
     VkInstanceCreateInfo info = {};
@@ -501,4 +561,53 @@ TEST(loader_vulkan, the_win32_memory_handle_is_found_through_the_loader_or_refus
   CHECK_EQ(bare.last_kernel_status(instance, physical), 0u);
   LoaderVulkan icd(&av::bound_icd_instance_proc_addr);
   CHECK_EQ(icd.last_kernel_status(instance, physical), rig.kmt().last_code());
+  rig.destroy_instance(instance); }
+
+/* The sharing steps' three entry points through a loader that has them and one
+ * that does not. A driver's NTSTATUS is the thing a guest report turns on, so a
+ * loader that answers no such function and one whose function fails must both
+ * read as zero rather than as whatever was left in the caller's variable
+ * (feature 053). */
+TEST(loader_vulkan, the_sharing_entry_points_are_answered_or_absent_and_never_called_through_null)
+{ IcdRig rig;
+  const VkInstance           instance = rig.create_instance();
+  const VkPhysicalDevice     physical = rig.physical_device(instance);
+  const VkInstanceCreateInfo info = instance_info();
+
+  /* No such function: zero, and nothing called. */
+  stub_calls = 0u;
+  LoaderVulkan absent(&without_sharing);
+  VkInstance   bare_instance = VK_NULL_HANDLE;
+  rig.host().vk_handle(0, ScriptedHost::vk_instance);
+  CHECK_EQ(absent.create_instance(&info, &bare_instance), VK_SUCCESS);
+  CHECK_EQ(absent.last_kernel_status(bare_instance, physical), 0u);
+  CHECK_EQ(stub_calls, 0u);
+  absent.destroy_instance(bare_instance);
+
+  /* A function that fails: still zero, because a status the call refused to
+   * stand behind is not one a report may carry. The create is what resolves
+   * the table the two calls below go through. */
+  LoaderVulkan present(&with_sharing);
+  VkInstance   own = VK_NULL_HANDLE;
+  rig.host().vk_handle(0, ScriptedHost::vk_instance);
+  CHECK_EQ(present.create_instance(&info, &own), VK_SUCCESS);
+  CHECK_EQ(present.last_kernel_status(own, physical), 0u);
+  CHECK_EQ(stub_calls, 1u);
+
+  /* And the two the probe resolves by name, which the wrapper must call rather
+   * than answer EXTENSION_NOT_PRESENT for. */
+  const std::uint32_t sent = rig.kmt().commands();
+  std::uint32_t       count = 0u;
+  CHECK_EQ(present.enumerate_device_extensions(physical, &count, nullptr), VK_SUCCESS);
+  CHECK_EQ(count, 3u);
+  CHECK_EQ(stub_calls, 2u);
+  void *handle = nullptr;
+  CHECK_EQ(present.memory_win32_handle(reinterpret_cast<VkDevice>(0x1u),
+                                       reinterpret_cast<VkDeviceMemory>(0x2u), &handle),
+           VK_SUCCESS);
+  CHECK(handle == reinterpret_cast<void *>(0x5150u));
+  CHECK_EQ(stub_calls, 3u);
+  /* Neither stub went near the kernel. */
+  CHECK_EQ(rig.kmt().commands(), sent);
+  present.destroy_instance(own);
   rig.destroy_instance(instance); }

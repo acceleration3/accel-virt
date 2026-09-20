@@ -217,3 +217,26 @@ TEST(probe_device, the_window_system_extensions_are_enabled_on_the_instance_and_
   CHECK(vulkan.device_enabled("VK_KHR_swapchain"));
   CHECK(!vulkan.device_enabled("VK_KHR_win32_surface"));
   CHECK_EQ(vulkan.misuses(), 0u); }
+
+/* More extensions than the array holds: refused rather than written past, and
+ * nothing is asked of the host. A probe is the one program in this tree with
+ * no test harness underneath it in the guest, so its own bounds are the only
+ * thing between a caller's list and its stack (feature 053). */
+TEST(probe_device_make_device, more_extensions_than_there_is_room_for_are_refused)
+{ ScriptedVulkan vulkan;
+  ProbeDevice    device(vulkan);
+  CHECK_EQ(device.make_instance(), VK_SUCCESS);
+  CHECK_EQ(device.list_physical_devices(), VK_SUCCESS);
+  CHECK(device.choose(1u));
+  CHECK(device.choose_family());
+  const char *const wanted[ProbeDevice::max_device_extensions] = {};
+  const std::uint32_t before = vulkan.calls(ScriptedVulkan::Call::create_device);
+  CHECK_EQ(device.make_device(wanted, ProbeDevice::max_device_extensions),
+           VK_ERROR_EXTENSION_NOT_PRESENT);
+  CHECK_EQ(vulkan.calls(ScriptedVulkan::Call::create_device), before);
+  /* One fewer is exactly the room there is, and goes through. */
+  const char *const fits[ProbeDevice::max_device_extensions - ProbeDevice::device_extension_count] = {
+      "VK_KHR_external_memory_win32"};
+  CHECK_EQ(device.make_device(fits, ProbeDevice::max_device_extensions - ProbeDevice::device_extension_count),
+           VK_SUCCESS);
+  CHECK(vulkan.device_enabled("VK_KHR_external_memory_win32")); }

@@ -37,13 +37,16 @@ namespace {
 constexpr const char *dma_buf_extension = "VK_EXT_external_memory_dma_buf";
 constexpr const char *win32_memory_extension = "VK_KHR_external_memory_win32";
 
-/* Whether `count` names hold `wanted`. */
+/* Whether `count` names hold `wanted`. Every name is known to be there: the one
+ * caller has already put the list through first_refused and HostExtensionList,
+ * either of which answers a null before this runs, so a check for one here
+ * would be a branch nothing can take. */
 bool names_hold(const char *const *names, uint32_t count, const char *wanted)
 {
     AV_SCOPE("names_hold");
     if (names == nullptr) return false;
     for (uint32_t index = 0u; index < count; index++)
-        if (names[index] != nullptr && __builtin_strcmp(names[index], wanted) == 0) return true;
+        if (__builtin_strcmp(names[index], wanted) == 0) return true;
     return false;
 }
 
@@ -503,6 +506,9 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
          * what a shared allocation is exported as has to be settled before the
          * device is made, and an application may never ask for the list. */
         learn_host_sharing(*made, physical_device);
+        /* The add cannot run out: `take` above accepts only names this driver
+         * reports, and it reports far fewer than the list holds. Kept because
+         * the list's bound is not this function's to know. */
         if (made->connection()->host_has_dma_buf() && !asked.add(dma_buf_extension)) {
             log_.write("rvkvk: vkCreateDevice: no room to ask the host for its dma-buf extension");
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -676,6 +682,13 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         static_cast<void>(call.release(minted.object_id(), kind, size));
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
+    /* Not reachable while the two tables are the same size, and kept anyway.
+     * Every row here is one an NT handle was minted for a moment ago, so the
+     * handle table fills first and answers no_space before this can; dropping
+     * the rollback to please a coverage number would leave a published object
+     * held by a process that cannot name it the day the sizes differ. */
+    static_assert(ExternalObjects::max_objects <= SharedHandles::max_handles,
+                  "an externals row always follows a handle row, so the handle table must fill first");
     if (!externals_.remember(device, memory, semaphore, minted.object_id(), size, handle, carrier)) {
         shared_handles_.forget(handle);
         static_cast<void>(call.release(minted.object_id(), kind, size));
@@ -1025,6 +1038,8 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
      * non-zero one is a copy of the same width. A branch nothing can take is
      * one no test can judge. */
     static_cast<void>(vkproto::wire_to_handle(opened, memory));
+    /* As in publish: the handle was adopted before this, so the handle table
+     * is the one that runs out. The rollback stays for the same reason. */
     if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
                              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
         static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));

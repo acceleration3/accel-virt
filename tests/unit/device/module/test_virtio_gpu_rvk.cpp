@@ -459,6 +459,19 @@ TEST(virtio_gpu_rvk_invariants, a_context_on_an_unrealized_device_or_a_broken_ta
   av::VirtioGpuRvkProbe::duplicate_blob(broken_blobs, 9u);
   CHECK(!broken_blobs.invariants_hold());
   broken_blobs.reset();
+  /* Feature 053: the device's invariant folds in its shared table's, so a
+   * publish the table half-forgot is one the device reports as broken too. */
+  VirtioGpuRvk broken_shared(host);
+  TextBuffer   shared_message(bytes, sizeof bytes);
+  CHECK_STATUS(broken_shared.realize("auto", false, nullptr, nullptr, shared_message), Status::ok);
+  CHECK_STATUS(av::VirtioGpuRvkProbe::publish_shared(broken_shared, 5), Status::ok);
+  CHECK(broken_shared.invariants_hold());
+  const std::uint64_t forgotten = av::VirtioGpuRvkProbe::break_shared(broken_shared);
+  CHECK(!broken_shared.invariants_hold());
+  av::VirtioGpuRvkProbe::repair_shared(broken_shared, forgotten);
+  CHECK(broken_shared.invariants_hold());
+  broken_shared.reset();
+
   VirtioGpuRvk broken_interrupts(host);
   av::VirtioGpuRvkProbe::break_interrupts(broken_interrupts);
   CHECK(!broken_interrupts.invariants_hold());

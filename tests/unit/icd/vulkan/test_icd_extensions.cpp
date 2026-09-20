@@ -382,3 +382,44 @@ TEST(icd_extensions, the_applications_own_enumeration_notes_the_hosts_dma_buf)
       CHECK(std::strcmp(properties[index].extensionName, "VK_EXT_external_memory_dma_buf") != 0);
       CHECK(std::strcmp(properties[index].extensionName, "VK_KHR_external_memory_fd") != 0);
   } }
+
+/* The device create reads the application's own extension list to decide
+ * whether sharing is in play, and an application may hand it a list with a
+ * hole in it, or one with no room left for the name the host needs
+ * (feature 053, T031). */
+TEST(icd_extensions, an_extension_list_with_a_hole_in_it_is_refused_before_anything_reads_it)
+{
+  { /* A null among the names is refused before anything reads it, which is
+     * why nothing further down has to check for one. */
+    ExtensionRig      rig;
+    const char *const names[] = {nullptr, "VK_KHR_external_memory_win32"};
+    VkDevice          device = VK_NULL_HANDLE;
+    CHECK_EQ(rig.create(names, 2u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
+    CHECK(device == VK_NULL_HANDLE); }
+
+}
+
+
+/* The host's list is read into memory this ICD asks for, and there may be none.
+ * What a shared allocation is exported as then stays what it was - the opaque
+ * fd - because a host that could not be read is not a host known to share by
+ * dma-buf (feature 053, T031). */
+TEST(icd_extensions, no_memory_to_read_the_hosts_list_into_leaves_the_device_made_and_sharing_as_it_was)
+{ const char *const host_listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
+  const char *const names[] = {"VK_KHR_external_memory_win32"};
+  std::uint32_t     made = 0u;
+  for (std::uint32_t nth = 1u; nth <= 4u; nth++) {
+      ExtensionRig rig;
+      rig.answer_count(VK_SUCCESS, 2u);
+      rig.answer_list(VK_SUCCESS, 2u, host_listed, 2u);
+      rig.rig().host().vk_handle(0, av::ScriptedHost::vk_device);
+      rig.rig().platform().fail_allocation_at(nth);
+      VkDevice device = VK_NULL_HANDLE;
+      if (rig.create(names, 1u, &device) != VK_SUCCESS) continue;
+      made++;
+      CHECK(device != VK_NULL_HANDLE);
+      CHECK(rig.rig().root().invariants_hold());
+  }
+  /* At least one of those allocations is the host list's, and the device was
+   * still made without it. */
+  CHECK(made != 0u); }

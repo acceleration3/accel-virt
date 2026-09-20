@@ -13,6 +13,7 @@
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
 #include "icd/vulkan/external_objects.hpp"
+#include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/memory_win32_handle_record.hpp"
 #include "icd/vulkan/semaphore_win32_handle_record.hpp"
@@ -1109,3 +1110,95 @@ TEST(icd_external_handles, a_memory_import_of_a_semaphores_handle_goes_to_the_de
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK(memory == VK_NULL_HANDLE);
   CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id); }
+
+/* A host that will not allocate the memory an exportable request names: the
+ * identity is never asked for, because there is nothing for it to name. */
+TEST(icd_external_handles, a_host_that_refuses_an_exportable_allocation_mints_no_identity)
+{ SharingRig rig;
+  VkExportMemoryAllocateInfo exporting = {};
+  exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+  exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &exporting;
+  allocate.allocationSize = shared_size;
+  const std::uint32_t objects = rig.rig().kmt().open_objects();
+  rig.rig().host().vk_handle(VK_ERROR_OUT_OF_DEVICE_MEMORY, 0u);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+           VK_ERROR_OUT_OF_DEVICE_MEMORY);
+  CHECK(memory == VK_NULL_HANDLE);
+  CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+
+/* A semaphore is published the first time its handle is asked for, so that ask
+ * is where a lost device and a refused publish both surface - and each has to
+ * say which it was, because an application that gets DEVICE_LOST will recreate
+ * everything and one that gets TOO_MANY_OBJECTS will not (feature 053). */
+TEST(icd_external_handles, a_semaphore_export_says_a_lost_device_and_a_refused_publish_apart)
+{ SemaphoreGetWin32HandleRecord request = {};
+  request.type_ = av::icd::semaphore_get_win32_handle_info;
+  request.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
+  request.handle_type_ = av::icd::opaque_win32_semaphore;
+
+  { /* The kernel will not make the carrier the identity is minted into. */
+    SharingRig rig;
+    rig.rig().kmt().fail_at(MockKmt::Call::create_shared_allocation, 1u, 0xC000009Au);
+    void *handle = nullptr;
+    CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &request, &handle),
+             VK_ERROR_TOO_MANY_OBJECTS);
+    CHECK(handle == nullptr); }
+
+  { /* The device went with the connection before the ask. */
+    SharingRig rig;
+    rig.rig().kmt().withhold_answer_at(1u);
+    using GetFenceStatus = VkResult (*)(VkDevice, VkFence);
+    CHECK_EQ(rig.entry<GetFenceStatus>("vkGetFenceStatus")(rig.device(), reinterpret_cast<VkFence>(0x99u)),
+             VK_ERROR_DEVICE_LOST);
+    const std::uint32_t before = rig.rig().kmt().commands();
+    void               *handle = nullptr;
+    CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &request, &handle),
+             VK_ERROR_DEVICE_LOST);
+    CHECK(handle == nullptr);
+    /* Nothing was asked of a device that is gone. */
+    CHECK_EQ(rig.rig().kmt().commands(), before); } }
+
+/* Importing memory this process already holds is 047's path - a fresh fd of it,
+ * because a driver takes ownership of one it imports - and it has two ways to
+ * fail that the cross-process path does not: the host refusing the fd, and a
+ * chain this driver cannot carry whole (feature 053, T031). */
+TEST(icd_external_handles, an_in_process_import_refuses_a_host_that_will_not_give_an_fd_or_a_chain_it_cannot_send)
+{ { SharingRig rig;
+    ImportMemoryWin32HandleRecord importing = {};
+    importing.type_ = av::icd::import_memory_win32_handle_info;
+    importing.handle_type_ = av::icd::opaque_win32_memory;
+    importing.handle_ = rig.exported_memory();
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &importing;
+    allocate.allocationSize = shared_size;
+    /* The host will not export an fd of the memory it made. */
+    rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_TOO_MANY_OBJECTS);
+    CHECK(memory == VK_NULL_HANDLE); }
+
+  { SharingRig rig;
+    ImportMemoryWin32HandleRecord importing = {};
+    importing.type_ = av::icd::import_memory_win32_handle_info;
+    importing.handle_type_ = av::icd::opaque_win32_memory;
+    importing.handle_ = rig.exported_memory();
+    /* A node past the marker that this driver does not carry: the chain cannot
+     * be sent whole, and half of it is not the application's request. */
+    VkMemoryOpaqueCaptureAddressAllocateInfo captured = {};
+    captured.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
+    importing.next_ = &captured;
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.pNext = &importing;
+    allocate.allocationSize = shared_size;
+    rig.rig().host().vk_fd(0, shared_fd);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+             VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    CHECK(memory == VK_NULL_HANDLE); } }
