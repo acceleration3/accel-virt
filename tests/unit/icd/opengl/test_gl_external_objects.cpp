@@ -127,6 +127,13 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t at)
     return value;
 }
 
+std::uint32_t u32_at(const std::uint8_t *bytes, std::size_t at)
+{
+    std::uint32_t value = 0u;
+    std::memcpy(&value, bytes + at, sizeof value);
+    return value;
+}
+
 }  // namespace
 
 TEST(gl_external_objects, a_new_table_names_nothing)
@@ -400,3 +407,79 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   CHECK(one.objects().invariants_hold());
   GlExternalObjectsProbe::set_live(one.objects(), GlExternalObjects::max_objects + 1u);
   CHECK(!one.objects().invariants_hold()); }
+
+/* The three kinds the wire has, and the two it does not. A native fence is a
+ * semaphore here exactly as a monitored one is - the guest tells them apart and
+ * the host holds one timeline semaphore for both - and a kind from neither list
+ * names nothing this table could make or destroy (feature 053). */
+TEST(gl_external_objects, a_native_fence_is_a_semaphore_and_an_unknown_kind_is_neither)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::native_fence, 1, &name), GlExternalObjects::gl_no_error);
+  CHECK(name != 0u);
+  const Answer opened(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::native_fence, name, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
+  /* Asked for with no size, as both fence kinds are. */
+  CHECK_EQ(u64_at(one.wire().last_payload(), 24u), 0u);
+  CHECK_EQ(one.objects().made(SharedObjectKind::native_fence, name), host_name);
+  /* And a monitored fence's name is the same namespace: one table, two. */
+  CHECK_EQ(one.objects().made(SharedObjectKind::monitored_fence, name), host_name);
+
+  /* A kind the wire does not have, on each call that takes one. */
+  const std::uint32_t unknown = SharedObjectKind::native_fence + 1u;
+  std::uint32_t       refused = 0u;
+  CHECK_EQ(one.objects().create(unknown, 1, &refused), GlExternalObjects::gl_invalid_value);
+  CHECK_EQ(refused, 0u);
+  CHECK_EQ(one.objects().destroy(one.wire(), unknown, 1, &name), GlExternalObjects::gl_invalid_value);
+  /* Nothing was given back, so it is still held. */
+  CHECK_EQ(one.objects().made(SharedObjectKind::native_fence, name), host_name);
+  CHECK(one.objects().invariants_hold());
+
+  /* Destroying it for real releases it as a semaphore, which is the kind the
+   * device was told - a fence released as memory is one the device would look
+   * for in the wrong table. */
+  const std::uint32_t sends = one.wire().sends();
+  CHECK_EQ(one.objects().destroy(one.wire(), SharedObjectKind::native_fence, 1, &name),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.wire().sends(), sends + 1u);
+  CHECK_EQ(u32_at(one.wire().last_payload(), 8u), SharedObjectKind::monitored_fence);
+  CHECK_EQ(one.objects().made(SharedObjectKind::native_fence, name), 0u);
+  CHECK(one.objects().invariants_hold()); }
+
+/* Name zero is not a name. GL never generates it and an application that hands
+ * it back is naming nothing, so every lookup answers nothing rather than the
+ * first row it happens to hold. */
+TEST(gl_external_objects, the_zero_name_belongs_to_no_row)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, 0u), 0u);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, 0u, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_invalid_value);
+  /* And destroying it is the same silence as destroying any name it never
+   * made: no send, no refusal. */
+  const std::uint32_t zero = 0u;
+  CHECK_EQ(one.objects().destroy(one.wire(), SharedObjectKind::memory, 1, &zero),
+           GlExternalObjects::gl_no_error);
+  CHECK_EQ(one.wire().sends(), 0u);
+  CHECK_EQ(one.objects().live(), 1u);
+  CHECK(one.objects().invariants_hold()); }
+
+/* A device that answers a number whose low 32 bits are zero: not a GL name,
+ * even though the wire accepted it as a handle, and the object is given back
+ * rather than left held under a name nothing can use. */
+TEST(gl_external_objects_import, a_device_that_answers_a_name_of_zero_in_32_bits_gives_it_back)
+{ Process       one;
+  std::uint32_t name = 0u;
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 1, &name), GlExternalObjects::gl_no_error);
+  const Answer truncating(SharedObjectAnswer::done, 0x1'0000'0000ull);
+  one.wire().set_reply(truncating.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), SharedObjectKind::memory, name, object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_out_of_memory);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u);
+  CHECK(one.objects().invariants_hold()); }

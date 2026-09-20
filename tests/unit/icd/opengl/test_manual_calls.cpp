@@ -17,6 +17,7 @@
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
+#include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/gl_error_query.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/manual_calls.hpp"
@@ -925,3 +926,118 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
   /* Released, the name names nothing again. */
   calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation}); }
+
+namespace {
+
+/* A Win32 handle this process may open: an allocation the kernel minted an
+ * identity into, shared, and adopted into the ICD's own table - the same three
+ * steps a second process's handle arrives through. */
+void *openable_handle(av::GlContextRig &rig)
+{
+    std::uint32_t adapter = 0u;
+    std::uint32_t found = 0u;
+    CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), av::Status::ok);
+    std::uint32_t device = 0u;
+    CHECK_STATUS(rig.kmt().create_device(adapter, device), av::Status::ok);
+    const av::AllocationDescriptor descriptor(av::AllocationKind::client, true, av::SurfaceLayout(),
+                                              av::SharedObjectRecord::page_size, av::ScanoutTarget());
+    std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+    CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), av::Status::ok);
+    const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4096u);
+    CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                               av::SharedObjectRecord::encoded_size),
+                 av::Status::ok);
+    std::uint32_t allocation = 0u;
+    CHECK_STATUS(rig.kmt().create_shared_allocation(device, bytes, sizeof bytes, allocation), av::Status::ok);
+    std::uint64_t named = 0u;
+    CHECK_STATUS(rig.kmt().share_object(device, allocation, named), av::Status::ok);
+    std::uint64_t id = 0u;
+    CHECK_STATUS(rig.handles().adopt(device, named, id), av::Status::ok);
+    return reinterpret_cast<void *>(static_cast<std::uintptr_t>(named));
+}
+
+}  // namespace
+
+/* Feature 053, T036. The other half of the substitution: a name that *was*
+ * imported names a host object, and every command carrying it must carry the
+ * host's number instead of this ICD's. The refusals are tested above; this is
+ * what happens when there is nothing to refuse. */
+TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  constexpr std::uint32_t host_memory = 0x4200u;
+  constexpr std::uint32_t host_semaphore = 0x4300u;
+  constexpr std::uint32_t opaque_win32 = av::glicd::GlExternalObjects::opaque_win32;
+
+  GLuint memory = 0u;
+  calls.create_memory_objects(1, &memory);
+  CHECK(memory != 0u);
+  rig.host().shared_object(0u, host_memory);
+  calls.import_memory_win32(memory, 4096u, opaque_win32, openable_handle(rig));
+  CHECK_EQ(context.take_error(), 0u);
+
+  GLuint semaphore = 0u;
+  calls.gen_semaphores(1, &semaphore);
+  CHECK(semaphore != 0u);
+  rig.host().shared_object(0u, host_semaphore);
+  calls.import_semaphore_win32(semaphore, opaque_win32, openable_handle(rig));
+  CHECK_EQ(context.take_error(), 0u);
+
+  /* Each of the three commands that names one goes out with the host's number,
+   * which is the first argument of each. */
+  std::uint32_t before = rig.kmt().commands();
+  calls.buffer_storage_mem(array_buffer, 4096, memory, 0u);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK(rig.kmt().commands() > before);
+
+  before = rig.kmt().commands();
+  calls.wait_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK(rig.kmt().commands() > before);
+
+  before = rig.kmt().commands();
+  calls.signal_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
+  CHECK_EQ(context.take_error(), 0u);
+  CHECK(rig.kmt().commands() > before); }
+
+/* An argument no GL call can have, on each of the four entries that takes a
+ * count: the table refuses it and the context keeps the error, because these
+ * entries answer nothing and glGetError is the only way an application hears
+ * about it. */
+TEST(manual_calls, a_count_no_call_can_have_is_kept_as_an_error_on_each_entry)
+{ av::GlContextRig rig;
+  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  av::ScriptedThreadSlot slot;
+  av::glicd::CurrentContexts currents(slot);
+  ManualCalls calls(currents);
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
+                                    rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_make("host gpu", "4.6");
+  CHECK_STATUS(context.make(), av::Status::ok);
+  CHECK(currents.make_current(context));
+
+  const std::uint32_t quiet = rig.kmt().commands();
+  GLuint              names[1] = {};
+  calls.create_memory_objects(-1, names);
+  CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
+  calls.gen_semaphores(-1, names);
+  CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
+  calls.delete_memory_objects(-1, names);
+  CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
+  calls.delete_semaphores(-1, names);
+  CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
+  /* And a semaphore import of a handle this process never held, which is the
+   * one refusal that entry has of its own. */
+  calls.import_semaphore_win32(1u, av::glicd::GlExternalObjects::opaque_win32,
+                               reinterpret_cast<void *>(0xDEADu));
+  CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
+  CHECK_EQ(rig.kmt().commands(), quiet); }

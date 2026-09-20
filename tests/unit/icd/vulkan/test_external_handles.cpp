@@ -1017,6 +1017,7 @@ TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_t
       {0, 0u, true, 0},                                  /* claims none */
       {0, max_host_extensions + 1u, true, 0},            /* claims more than there is room for */
       {0, 2u, true, VK_ERROR_OUT_OF_HOST_MEMORY},        /* counted, and will not be named */
+      {0, 2u, false, VK_INCOMPLETE},                     /* named only in part, and not a dma-buf host */
   };
   for (const SharingRig::HostExtensions &host : cases) {
       SharingRig rig(host);
@@ -1071,3 +1072,40 @@ TEST(icd_external_handles, a_malformed_memory_import_is_refused_on_each_of_its_p
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK(memory == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before); }
+
+/* Three refusals that cost nothing and are each their own: an export with
+ * nowhere to put the answer, a device extension list with a hole in it, and a
+ * host list the ICD was given only part of. */
+TEST(icd_external_handles, an_export_with_nowhere_to_answer_is_refused_before_anything_else)
+{ SharingRig rig;
+  av::icd::IcdRoot &root = rig.rig().root();
+  MemoryGetWin32HandleRecord memory = {};
+  memory.type_ = av::icd::memory_get_win32_handle_info;
+  memory.memory_ = reinterpret_cast<VkDeviceMemory>(host_memory);
+  memory.handle_type_ = av::icd::opaque_win32_memory;
+  CHECK_EQ(root.export_memory_handle(rig.device(), &memory, nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  SemaphoreGetWin32HandleRecord semaphore = {};
+  semaphore.type_ = av::icd::semaphore_get_win32_handle_info;
+  semaphore.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
+  semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
+  CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
+
+/* A handle that names a semaphore cannot be allocated as memory. The row is
+ * there and holds no memory, so the ICD asks the device rather than handing
+ * back the semaphore, and the device is the one that says no. */
+TEST(icd_external_handles, a_memory_import_of_a_semaphores_handle_goes_to_the_device_and_is_refused)
+{ SharingRig rig;
+  ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = rig.exported_semaphore();
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &importing;
+  allocate.allocationSize = shared_size;
+  rig.rig().host().shared_object(1u, 0u);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK(memory == VK_NULL_HANDLE);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id); }
