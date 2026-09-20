@@ -34,12 +34,13 @@ public:
     Status   create_device(uint32_t adapter, uint32_t &device) override;
     Status   destroy_device(uint32_t device) override;
     Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
-                               uint32_t &allocation) override;
+                               uint32_t &resource) override;
     Status   destroy_allocation(uint32_t device, uint32_t allocation) override;
     Status   create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
-                                      uint32_t &allocation) override;
-    Status   share_object(uint32_t device, uint32_t allocation, uint64_t &handle) override;
-    Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+                                      uint32_t &resource) override;
+    Status   share_object(uint32_t device, uint32_t resource, uint64_t &handle) override;
+    Status   destroy_shared_allocation(uint32_t device, uint32_t resource) override;
+    Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &resource,
                                 uint8_t *private_data, uint32_t capacity, uint32_t &written) override;
     Status   close_shared_object(uint64_t handle) override;
     Status   lock(uint32_t device, uint32_t allocation, void *&view) override;

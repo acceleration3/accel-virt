@@ -57,6 +57,7 @@ public:
         destroy_device,
         create_allocation,
         create_shared_allocation,
+        destroy_shared_allocation,
         destroy_allocation,
         share_object,
         open_shared_object,
@@ -157,9 +158,10 @@ public:
                                     std::uint32_t &allocation) override;
     Status        destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
     Status        create_shared_allocation(std::uint32_t device, std::uint8_t *private_data,
-                                            std::uint32_t size, std::uint32_t &allocation) override;
-    Status        share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle) override;
-    Status        open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                            std::uint32_t size, std::uint32_t &resource) override;
+    Status        share_object(std::uint32_t device, std::uint32_t resource, std::uint64_t &handle) override;
+    Status        destroy_shared_allocation(std::uint32_t device, std::uint32_t resource) override;
+    Status        open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &resource,
                                      std::uint8_t *private_data, std::uint32_t capacity,
                                      std::uint32_t &written) override;
     Status        close_shared_object(std::uint64_t handle) override;
@@ -264,6 +266,11 @@ public:
      * an identity that is not there (feature 053). */
     void          keep_the_next_record();
     void          hand_back_a_short_record();
+    /* The next share carries these bytes rather than the carrier's own: what
+     * the *creating* process's kernel wrote is the only thing that crosses to
+     * an opener, and an opener may not assume it was written by a driver of
+     * this version, or by one at all (constitution V, feature 053). */
+    void          carry_at_the_next_share(const std::uint8_t *bytes, std::uint32_t size);
     /* How far the clock moves at each vertical blank; the default is the
      * committed mode's 60 Hz. */
     void          set_blank_period(std::uint64_t ticks);
@@ -396,6 +403,11 @@ private:
          * so the only thing a shared object's name travels on (feature 053). */
         std::uint8_t  created_with[max_allocation_private];
         std::uint32_t created_size;
+        /* Asked for as a resource, which only a carrier is: dxgkrnl names a
+         * resource and the allocations in it by handles of different types and
+         * refuses each in the other's place, so this mock's one number stands
+         * for both and remembers which it is (feature 053, research.md §17). */
+        bool          resource;
     };
     /* One NT handle this mock minted: what it names, and the creator's bytes
      * as they were when it was minted. */
@@ -477,6 +489,9 @@ private:
     bool          scribble_record_;
     bool          keep_record_;
     bool          short_record_;
+    std::uint8_t  carried_next_[max_allocation_private];
+    std::uint32_t carried_next_size_;
+    bool          carry_next_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

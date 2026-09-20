@@ -38,10 +38,10 @@ struct SharedHandleSlot {
     uint64_t object_id_;
     /* The device the handle was minted on or adopted into. */
     uint32_t device_;
-    /* What an adopt opened, which this table destroys because nothing else
-     * knows it exists; 0 for a handle this process minted, whose allocation is
-     * the application's. */
-    uint32_t allocation_;
+    /* The resource an adopt opened, which this table destroys because nothing
+     * else knows it exists; 0 for a handle this process minted, whose carrier
+     * is the application's. */
+    uint32_t resource_;
 };
 
 class SharedHandles {
@@ -57,13 +57,13 @@ public:
     SharedHandles(const SharedHandles &) = delete;
     SharedHandles &operator=(const SharedHandles &) = delete;
 
-    /* An NT handle for `allocation` of `device`, which already carries
-     * `object_id` - the id this process's own create was handed back.
+    /* An NT handle for the resource `carrier` of `device`, which already
+     * carries `object_id` - the id this process's own create was handed back.
      * The same object minted twice answers the same handle, as Windows does
      * for a handle to one object. invalid_parameter for an id of 0; no_space
      * when every row is taken; whatever the kernel answered when it would not
      * share. 0 unless ok. */
-    [[nodiscard]] Status mint(uint32_t device, uint32_t allocation, uint64_t object_id, uint64_t &handle);
+    [[nodiscard]] Status mint(uint32_t device, uint32_t carrier, uint64_t object_id, uint64_t &handle);
     /* A handle another process sent, opened on `device`, with the id read out
      * of the creating process's own bytes. A handle already held answers its
      * id and opens nothing again. invalid_parameter for a handle of 0 or bytes
@@ -92,8 +92,8 @@ private:
     const SharedHandleSlot *row_of(uint64_t handle) const;
     /* The row `object_id` is in, or null. The caller holds the lock. */
     SharedHandleSlot       *row_for(uint64_t object_id);
-    /* The row dropped, its handle closed and anything an adopt opened for it
-     * destroyed. The caller holds the lock. */
+    /* The row dropped, its handle closed and the resource an adopt opened for
+     * it destroyed. The caller holds the lock. */
     void                    give_back(SharedHandleSlot &row);
 
     Kmt              &kmt_;

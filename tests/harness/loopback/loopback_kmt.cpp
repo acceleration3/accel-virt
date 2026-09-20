@@ -304,9 +304,9 @@ Status LoopbackKmt::notify_work_submission(std::uint32_t)
  * guest asking for one is told so rather than handed a number that names
  * nothing. */
 Status LoopbackKmt::create_shared_allocation(std::uint32_t, std::uint8_t *, std::uint32_t,
-                                             std::uint32_t &allocation)
+                                             std::uint32_t &resource)
 {
-    allocation = 0u;
+    resource = 0u;
     return Status::not_supported;
 }
 
@@ -316,10 +316,15 @@ Status LoopbackKmt::share_object(std::uint32_t, std::uint32_t, std::uint64_t &ha
     return Status::not_supported;
 }
 
-Status LoopbackKmt::open_shared_object(std::uint32_t, std::uint64_t, std::uint32_t &allocation, std::uint8_t *,
+Status LoopbackKmt::destroy_shared_allocation(std::uint32_t, std::uint32_t)
+{
+    return Status::not_supported;
+}
+
+Status LoopbackKmt::open_shared_object(std::uint32_t, std::uint64_t, std::uint32_t &resource, std::uint8_t *,
                                  std::uint32_t, std::uint32_t &written)
 {
-    allocation = 0u;
+    resource = 0u;
     written = 0u;
     return Status::not_supported;
 }

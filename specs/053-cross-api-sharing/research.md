@@ -652,3 +652,47 @@ The carrier has to become a shared resource, which is a change on both sides:
 This is a data-model change rather than a patch, and it is the last one this
 feature needs: the record, the identity and the wire are all working, and what
 is left is the kernel object the handle is minted over.
+
+## §17 — A resource and an allocation are handles of different types, and a destroy checks
+
+§16 made the carrier a resource, which settles what `D3DKMTShareObjects` takes.
+It also changes what every *other* call that names the carrier takes, and the
+kernel is not quiet about the difference: it checks the handle's type and
+refuses the mismatch.
+
+`ValidateDestroyAllocation` at `1403f7528` in `dxgkrnl.sys` runs one of two
+paths, decided by whether `hResource` is 0:
+
+| `hResource` | what is walked | the type it must be | the refusal |
+|---|---|---|---|
+| 0 | every handle in `pAllocationList` | 5 (allocation) | `DxgkLogTriageEvent(..., L"Handle type mismatch")`, then `0xC000000D` |
+| non-zero | `hResource` alone | 4 (resource) | the same message, then `0xC000000D` |
+
+Type 4 is the type `DxgkShareObjectsInternal` demands (§16), so the two agree:
+4 is a resource and 5 is an allocation, and neither call takes the other's
+handle. The list path has two further rules worth recording, because they say
+what a caller may and may not do with a resource's allocations: every handle in
+one list must belong to the *same* resource, and a resource whose first
+pointer-sized field has bit 32 set refuses the call with `0xC000000D` before
+anything is destroyed. What that bit marks was not read out; what matters here
+is that destroying a resource's allocations one at a time is a path the kernel
+guards, and naming the resource is not.
+
+**What this feature had wrong.** `create_shared_allocation` answers the
+resource, and three callers then handed that number to `destroy_allocation`,
+which builds an allocation list: the Vulkan ICD's unwind when a publish fails
+and its `release_shared` when the application frees exported memory, and the
+in-guest probe's release of the carrier it made. Each would have been refused
+with `0xC000000D` in a guest, leaving the carrier and its resource for the life
+of the process - a leak the host never sees, so nothing would have reported it.
+`SharedHandles::adopt` had the same shape from the other end:
+`D3DKMTOpenResourceFromNtHandle` answers `hResource` as well as the allocation,
+and the opener must give the *resource* back, or the resource outlives every
+handle that named it.
+
+**What it takes.** `open_shared_object` answers the resource rather than the
+allocation in it, `SharedHandles` destroys that, and every carrier is released
+with `destroy_shared_allocation`. The rigs are where this is proven: `MockKmt`
+and `DdiKmt` now remember whether an object was asked for as a resource and
+refuse each call the handle's type does not fit, so a caller that names the
+wrong one fails in a Linux unit test rather than in a boot.

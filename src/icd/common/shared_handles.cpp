@@ -63,7 +63,7 @@ SharedHandleSlot *SharedHandles::row_for(uint64_t object_id)
     return nullptr;
 }
 
-Status SharedHandles::mint(uint32_t device, uint32_t allocation, uint64_t object_id, uint64_t &handle)
+Status SharedHandles::mint(uint32_t device, uint32_t carrier, uint64_t object_id, uint64_t &handle)
 {
     AV_SCOPE("SharedHandles::mint");
     handle = 0u;
@@ -76,7 +76,7 @@ Status SharedHandles::mint(uint32_t device, uint32_t allocation, uint64_t object
     }
     if (live_ == max_handles) return Status::no_space;
     uint64_t     made = 0u;
-    const Status shared = kmt_.share_object(device, allocation, made);
+    const Status shared = kmt_.share_object(device, carrier, made);
     if (shared != Status::ok) return shared;
     slots_[live_] = SharedHandleSlot{made, object_id, device, 0u};
     live_++;
@@ -98,8 +98,8 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
     if (live_ == max_handles) return Status::no_space;
     uint8_t      carried[max_private] = {};
     uint32_t     written = 0u;
-    uint32_t     allocation = 0u;
-    const Status opened = kmt_.open_shared_object(device, handle, allocation, carried, max_private, written);
+    uint32_t     resource = 0u;
+    const Status opened = kmt_.open_shared_object(device, handle, resource, carried, max_private, written);
     if (opened != Status::ok) return opened;
     /* What came back is the creating process's bytes, which this process did
      * not write: a record that is not there, or one with no id minted into it,
@@ -111,10 +111,10 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
             Status::ok &&
         record.assigned();
     if (!carries) {
-        static_cast<void>(kmt_.destroy_allocation(device, allocation));
+        static_cast<void>(kmt_.destroy_shared_allocation(device, resource));
         return Status::invalid_parameter;
     }
-    slots_[live_] = SharedHandleSlot{handle, record.object_id(), device, allocation};
+    slots_[live_] = SharedHandleSlot{handle, record.object_id(), device, resource};
     live_++;
     object_id = record.object_id();
     return Status::ok;
@@ -134,9 +134,10 @@ void SharedHandles::give_back(SharedHandleSlot &row)
 {
     AV_SCOPE("SharedHandles::give_back");
     static_cast<void>(kmt_.close_shared_object(row.handle_));
-    /* Only what an adopt opened: a minted handle's allocation is the
+    /* Only what an adopt opened: a minted handle's carrier is the
      * application's, and destroying it would take away what it is using. */
-    if (row.allocation_ != 0u) static_cast<void>(kmt_.destroy_allocation(row.device_, row.allocation_));
+    if (row.resource_ != 0u)
+        static_cast<void>(kmt_.destroy_shared_allocation(row.device_, row.resource_));
     live_--;
     row = slots_[live_];
 }

@@ -84,9 +84,10 @@ public:
                                std::uint32_t &allocation) override;
     Status   destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
     Status   create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
-                                      std::uint32_t &allocation) override;
-    Status   share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle) override;
-    Status   open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                      std::uint32_t &resource) override;
+    Status   share_object(std::uint32_t device, std::uint32_t resource, std::uint64_t &handle) override;
+    Status   destroy_shared_allocation(std::uint32_t device, std::uint32_t resource) override;
+    Status   open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &resource,
                                 std::uint8_t *private_data, std::uint32_t capacity,
                                 std::uint32_t &written) override;
     Status   close_shared_object(std::uint64_t handle) override;
@@ -187,6 +188,10 @@ private:
         std::uint64_t *frames;
         /* The guest-RAM address of a chunk's pages; 0 for platform memory. */
         std::uint64_t  guest_ram;
+        /* The resource the create made, for one asked for as a carrier; null
+         * otherwise. D3DKMTShareObjects names this and not the allocation
+         * (research.md §16). */
+        void         *resource;
         std::uint8_t  private_data[max_private_data];
         /* How much of it the create carried, which is what an open must name:
          * the miniport reads 48 bytes or 88 and refuses every other length. */
@@ -250,6 +255,13 @@ private:
 
     /* The rest of create_allocation once the driver has answered: pages, a
      * handle and the open, or everything undone. */
+    /* `flags` is the DXGK_CREATEALLOCATIONFLAGS Value: a carrier asks for
+     * Resource, and every other create asks for nothing. */
+    Status create_with(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
+                       std::uint32_t flags, std::uint32_t &allocation);
+    /* The destroy both public ones do, naming `resource` where a carrier is
+     * being taken and nothing where an ordinary allocation is. */
+    Status destroy_slot(std::uint32_t device, std::uint32_t allocation, void *resource);
     Status admit(Allocation &slot, std::uint32_t device, void *driver_device);
     Status back(Allocation &slot);
     Status open_on(Allocation &slot, void *driver_device);

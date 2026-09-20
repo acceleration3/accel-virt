@@ -304,31 +304,38 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
     CHECK_EQ(id, 0u);
     CHECK_EQ(handles.live(), 0u);
     CHECK(handles.invariants_hold());
-    /* And the allocation the open made was destroyed rather than left behind. */
-    CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_allocation), 1u); }
+    /* And the resource the open made was destroyed rather than left behind:
+     * named as the resource it is, which is the only call that takes one. */
+    CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u);
+    CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_allocation), 0u); }
 
-  { /* The right length, and no record decodes from it. */
+  { /* The right length, and no record decodes from it. The bytes are the
+     * creating process's, so they are scripted onto the share rather than
+     * created here: nothing this kernel would make looks like this. */
     Kernel        kernel;
     SharedHandles handles(kernel.kmt(), kernel.lock());
+    std::uint64_t minted = 0u;
+    const std::uint32_t carrier = kernel.create(minted);
     std::uint8_t  bytes[whole] = {};
     CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
     for (std::uint32_t index = av::AllocationDescriptor::encoded_size; index < whole; index++)
         bytes[index] = 0xA5u;
-    std::uint32_t allocation = 0u;
-    CHECK_STATUS(kernel.kmt().create_allocation(kernel.device(), bytes, whole, allocation), Status::ok);
+    kernel.kmt().carry_at_the_next_share(bytes, whole);
     std::uint64_t handle = 0u;
-    CHECK_STATUS(kernel.kmt().share_object(kernel.device(), allocation, handle), Status::ok);
+    CHECK_STATUS(kernel.kmt().share_object(kernel.device(), carrier, handle), Status::ok);
     std::uint64_t id = 7u;
     CHECK_STATUS(handles.adopt(kernel.device(), handle, id), Status::invalid_parameter);
     CHECK_EQ(id, 0u);
     CHECK_EQ(handles.live(), 0u);
-    CHECK(handles.invariants_hold()); }
+    CHECK(handles.invariants_hold());
+    CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u); }
 
-  { /* A record that decodes and names nothing: the creator asked and the
-     * kernel never answered. */
+  { /* A record that decodes and names nothing: the creating process asked and
+     * its kernel never answered. */
     Kernel        kernel;
     SharedHandles handles(kernel.kmt(), kernel.lock());
-    kernel.kmt().keep_the_next_record();
+    std::uint64_t minted = 0u;
+    const std::uint32_t carrier = kernel.create(minted);
     std::uint8_t  bytes[whole] = {};
     CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
     const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u,
@@ -336,12 +343,12 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
     CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
                                av::SharedObjectRecord::encoded_size),
                  Status::ok);
-    std::uint32_t allocation = 0u;
-    CHECK_STATUS(kernel.kmt().create_allocation(kernel.device(), bytes, whole, allocation), Status::ok);
+    kernel.kmt().carry_at_the_next_share(bytes, whole);
     std::uint64_t handle = 0u;
-    CHECK_STATUS(kernel.kmt().share_object(kernel.device(), allocation, handle), Status::ok);
+    CHECK_STATUS(kernel.kmt().share_object(kernel.device(), carrier, handle), Status::ok);
     std::uint64_t id = 7u;
     CHECK_STATUS(handles.adopt(kernel.device(), handle, id), Status::invalid_parameter);
     CHECK_EQ(id, 0u);
     CHECK_EQ(handles.live(), 0u);
-    CHECK(handles.invariants_hold()); } }
+    CHECK(handles.invariants_hold());
+    CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u); } }

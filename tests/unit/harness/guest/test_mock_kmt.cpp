@@ -1045,10 +1045,11 @@ TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the
   CHECK_STATUS(kmt.open_shared_object(creator, handle, again, carried, sizeof carried, written), Status::ok);
   CHECK(again != opened);
   CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
-  /* Closing the handle leaves what it named: an allocation and a handle have
-   * separate lifetimes. */
-  CHECK_STATUS(kmt.destroy_allocation(opener, opened), Status::ok);
-  CHECK_STATUS(kmt.destroy_allocation(creator, again), Status::ok);
+  /* Closing the handle leaves what it named: a resource and a handle have
+   * separate lifetimes. Each open made a resource of its own process, and
+   * each is given back as one. */
+  CHECK_STATUS(kmt.destroy_shared_allocation(opener, opened), Status::ok);
+  CHECK_STATUS(kmt.destroy_shared_allocation(creator, again), Status::ok);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 TEST(mock_kmt_share_object, a_handle_it_never_minted_opens_nothing_and_closes_nothing)
@@ -1094,7 +1095,7 @@ TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
   std::uint32_t unshared = 0u;
   CHECK_STATUS(kmt.create_allocation(device, plain_bytes, sizeof plain_bytes, unshared), Status::ok);
   std::uint64_t handle = 9u;
-  CHECK_STATUS(kmt.share_object(device, unshared, handle), Status::not_supported);
+  CHECK_STATUS(kmt.share_object(device, unshared, handle), Status::invalid_parameter);
   CHECK_EQ(handle, 0u);
 
   std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
@@ -1281,3 +1282,106 @@ TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back
   CHECK_STATUS(kmt.create_allocation(device, bytes, av::AllocationDescriptor::encoded_size + 1u, refused),
                Status::not_supported);
   CHECK_EQ(refused, 0u); }
+
+/* dxgkrnl names a resource and the allocations in it by different handles and
+ * checks the type of each: D3DKMTDestroyAllocation2's list must hold handles of
+ * type 5 and its hResource one of type 4, and either named in the other's place
+ * falls through to STATUS_INVALID_PARAMETER with nothing destroyed
+ * (ValidateDestroyAllocation at dxgkrnl.sys 1403f7528, research.md §17). A
+ * carrier is a resource, so only destroy_shared_allocation takes one. */
+TEST(mock_kmt_destroy_shared_allocation, takes_a_carrier_that_destroy_allocation_refuses)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
+  std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  std::uint64_t       minted = 0u;
+  const std::uint32_t carrier = shareable_allocation(kmt, device, minted, bytes);
+
+  CHECK_STATUS(kmt.destroy_allocation(device, carrier), Status::invalid_parameter);
+  /* Refused having done nothing: the carrier still shares. */
+  std::uint64_t handle = 0u;
+  CHECK_STATUS(kmt.share_object(device, carrier, handle), Status::ok);
+  CHECK(handle != 0u);
+  CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
+
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, carrier), Status::ok);
+  /* And it is gone: the number names nothing to share. */
+  CHECK_STATUS(kmt.share_object(device, carrier, handle), Status::invalid_parameter);
+  CHECK_EQ(handle, 0u);
+  CHECK_EQ(kmt.misuses(), 1u); }
+
+/* The mismatch the other way, and the ordinary allocation it must not touch. */
+TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_resource)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
+  const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
+                                            av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
+                                            av::ScanoutTarget());
+  /* Both lengths the one-way create takes: neither asked for a resource, so
+   * neither is one, whatever record the longer one carries. */
+  std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
+  const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
+  CHECK_STATUS(asking.encode(bytes + av::AllocationDescriptor::encoded_size,
+                             av::SharedObjectRecord::encoded_size),
+               Status::ok);
+  std::uint32_t plain = 0u;
+  std::uint32_t carried = 0u;
+  CHECK_STATUS(kmt.create_allocation(device, bytes, av::AllocationDescriptor::encoded_size, plain),
+               Status::ok);
+  CHECK_STATUS(kmt.create_allocation(device, bytes, sizeof bytes, carried), Status::ok);
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, plain), Status::invalid_parameter);
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, carried), Status::invalid_parameter);
+  CHECK_STATUS(kmt.destroy_allocation(device, plain), Status::ok);
+  CHECK_STATUS(kmt.destroy_allocation(device, carried), Status::ok);
+
+  /* A resource of 0, and one this mock never gave: the first is refused
+   * without looking, the second is a call with a handle it never handed out. */
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, 0u), Status::invalid_parameter);
+  CHECK_EQ(kmt.misuses(), 0u);
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, plain), Status::invalid_parameter);
+  CHECK_EQ(kmt.misuses(), 1u);
+  /* And it is scriptable, as every other call is. */
+  std::uint8_t        shareable[sizeof bytes] = {};
+  std::uint64_t       minted = 0u;
+  const std::uint32_t carrier = shareable_allocation(kmt, device, minted, shareable);
+  kmt.fail_at(MockKmt::Call::destroy_shared_allocation, 1u, refused_code);
+  CHECK(kmt.destroy_shared_allocation(device, carrier) != Status::ok);
+  CHECK_STATUS(kmt.destroy_shared_allocation(device, carrier), Status::ok); }
+
+/* What an open makes is a resource too: D3DKMTOpenResourceFromNtHandle answers
+ * one, and it is what the opening process must give back. */
+TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint32_t creator = 0u;
+  std::uint32_t opener = 0u;
+  CHECK_STATUS(kmt.create_device(adapter, creator), Status::ok);
+  CHECK_STATUS(kmt.create_device(adapter, opener), Status::ok);
+  std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
+  std::uint64_t       minted = 0u;
+  const std::uint32_t carrier = shareable_allocation(kmt, creator, minted, bytes);
+  std::uint64_t       handle = 0u;
+  CHECK_STATUS(kmt.share_object(creator, carrier, handle), Status::ok);
+
+  std::uint8_t  carried[128] = {};
+  std::uint32_t written = 0u;
+  std::uint32_t opened = 0u;
+  CHECK_STATUS(kmt.open_shared_object(opener, handle, opened, carried, sizeof carried, written), Status::ok);
+  CHECK_STATUS(kmt.destroy_allocation(opener, opened), Status::invalid_parameter);
+  CHECK_STATUS(kmt.destroy_shared_allocation(opener, opened), Status::ok);
+  CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
+  CHECK_STATUS(kmt.destroy_shared_allocation(creator, carrier), Status::ok);
+  CHECK_EQ(kmt.misuses(), 0u); }

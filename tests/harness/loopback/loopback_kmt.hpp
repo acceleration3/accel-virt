@@ -42,9 +42,10 @@ public:
                                std::uint32_t &allocation) override;
     Status   destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
     Status   create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
-                                      std::uint32_t &allocation) override;
-    Status   share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle) override;
-    Status   open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+                                      std::uint32_t &resource) override;
+    Status   share_object(std::uint32_t device, std::uint32_t resource, std::uint64_t &handle) override;
+    Status   destroy_shared_allocation(std::uint32_t device, std::uint32_t resource) override;
+    Status   open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &resource,
                                 std::uint8_t *private_data, std::uint32_t capacity,
                                 std::uint32_t &written) override;
     Status   close_shared_object(std::uint64_t handle) override;

@@ -40,6 +40,13 @@
 namespace av {
 
 namespace {
+/* DXGK_CREATEALLOCATIONFLAGS::Resource, and DXGK_DESTROYALLOCATIONFLAGS::
+ * DestroyResource: each is bit 0 of its own Value. */
+constexpr std::uint32_t resource_flag = 1u;
+constexpr std::uint32_t destroy_resource_flag = 1u;
+}  // namespace
+
+namespace {
 
 constexpr std::int32_t  map_aperture_segment = 5;     /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
 constexpr std::int32_t  unmap_aperture_segment = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
@@ -272,6 +279,12 @@ Status DdiKmt::destroy_device(std::uint32_t device)
 Status DdiKmt::create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
                                  std::uint32_t &allocation)
 {
+    return create_with(device, descriptor, size, 0u, allocation);
+}
+
+Status DdiKmt::create_with(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
+                           std::uint32_t flags, std::uint32_t &allocation)
+{
     allocation = 0u;
     Device *const owner = find_device(device);
     if (owner == nullptr || descriptor == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
@@ -285,9 +298,16 @@ Status DdiKmt::create_allocation(std::uint32_t device, const std::uint8_t *descr
         DxgkargCreateAllocationRecord request = {};
         request.NumAllocations = 1u;
         request.pAllocationInfo = &info;
+        request.Flags = flags;
         const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateAllocationRecord *)>(
             DdiSlot::DxgkDdiCreateAllocation)(fdo_.context(), &request));
         if (created != Status::ok) return created;
+        slot.resource = request.hResource;
+        /* What dxgkrnl does before the open it runs inside every create: the
+         * caller's own bytes, back over whatever the driver wrote. A rig that
+         * skips this passes a driver that writes the record at create time,
+         * which no caller would ever read (research.md §15). */
+        std::memcpy(slot.private_data, descriptor, size);
         slot.driver = info.hAllocation;
         slot.bytes = info.Size;
         slot.aperture = info.PreferredSegment == ApertureSegment::segment_id && (info.Flags & accessed_physically) != 0u;
@@ -415,6 +435,16 @@ Status DdiKmt::page(Allocation &slot, std::int32_t operation)
 
 Status DdiKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation)
 {
+    const Allocation *const named = find_allocation(allocation);
+    /* The list D3DKMTDestroyAllocation2 walks holds allocation handles: a
+     * resource named in it is a handle type mismatch, and the caller wanted
+     * destroy_shared_allocation (research.md §17). */
+    if (named != nullptr && named->resource != nullptr) return refuse(Status::invalid_parameter);
+    return destroy_slot(device, allocation, nullptr);
+}
+
+Status DdiKmt::destroy_slot(std::uint32_t device, std::uint32_t allocation, void *resource)
+{
     Allocation *const found = find_allocation(allocation);
     Device *const     owner = find_device(device);
     if (found == nullptr || owner == nullptr || found->device != device) return refuse(Status::invalid_parameter);
@@ -442,6 +472,10 @@ Status DdiKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation
     DxgkargDestroyAllocationRecord request = {};
     request.NumAllocations = 1u;
     request.pAllocationList = list;
+    /* A resource is taken by naming it, with every allocation in it listed:
+     * the driver refuses one that would leave the resource behind. */
+    request.hResource = resource;
+    request.Flags = resource != nullptr ? destroy_resource_flag : 0u;
     const Status destroyed = answer(routine<std::int32_t (*)(void *, const DxgkargDestroyAllocationRecord *)>(
         DdiSlot::DxgkDdiDestroyAllocation)(fdo_.context(), &request));
     if (destroyed != Status::ok) return destroyed;
@@ -979,18 +1013,32 @@ DoorbellFabric &DdiKmt::fabric()
  * miniport's half is faked: an open here really calls the driver with the
  * creating device's own bytes, which is the whole thing under test. */
 Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
-                                        std::uint32_t &allocation)
+                                        std::uint32_t &resource)
 {
-    allocation = 0u;
+    resource = 0u;
     if (private_data == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
-    const Status created = create_allocation(device, private_data, size, allocation);
+    /* Asked for as a resource, because that is the only thing a share will
+     * name (research.md §16). */
+    std::uint32_t allocation = 0u;
+    const Status  created = create_with(device, private_data, size, resource_flag, allocation);
     if (created != Status::ok) return created;
-    /* The driver wrote the minted id into the slot's copy; the caller keeps
-     * the bytes an opening process would be given. */
+    /* The open dxgkrnl ran inside the create wrote the minted id into the
+     * slot's copy; the caller keeps the bytes an opening process would be
+     * given (research.md §15). */
     const Allocation *const slot = find_allocation(allocation);
-    if (slot == nullptr) return refuse(Status::invalid_state);
+    if (slot == nullptr || slot->resource == nullptr) return refuse(Status::invalid_state);
     std::memcpy(private_data, slot->private_data, size);
+    resource = allocation;
     return refuse(Status::ok);
+}
+
+Status DdiKmt::destroy_shared_allocation(std::uint32_t device, std::uint32_t resource)
+{
+    /* One carrier is one resource holding one allocation, so this rig names
+     * them by the same number; what reaches the driver names the resource. */
+    const Allocation *const slot = find_allocation(resource);
+    if (slot == nullptr || slot->resource == nullptr) return refuse(Status::invalid_parameter);
+    return destroy_slot(device, resource, slot->resource);
 }
 
 DdiKmt::SharedHandle *DdiKmt::find_shared(std::uint64_t handle)
@@ -1001,13 +1049,15 @@ DdiKmt::SharedHandle *DdiKmt::find_shared(std::uint64_t handle)
     return nullptr;
 }
 
-Status DdiKmt::share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle)
+Status DdiKmt::share_object(std::uint32_t device, std::uint32_t resource, std::uint64_t &handle)
 {
     handle = 0u;
+    const std::uint32_t     allocation = resource;
     const Allocation *const slot = find_allocation(allocation);
     if (slot == nullptr || slot->device != device) return refuse(Status::invalid_parameter);
-    /* An allocation created without asking for an identity carries no record,
-     * and dxgkrnl has nothing to share it by. */
+    /* dxgkrnl's handle-table type check: an allocation that is not a resource
+     * is refused, and refused with no message (research.md §16). */
+    if (slot->resource == nullptr) return refuse(Status::not_supported);
     if (slot->private_size != AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size)
         return refuse(Status::not_supported);
     for (SharedHandle &row : shared_) {
@@ -1021,10 +1071,10 @@ Status DdiKmt::share_object(std::uint32_t device, std::uint32_t allocation, std:
     return refuse(Status::no_space);
 }
 
-Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &resource,
                                   std::uint8_t *private_data, std::uint32_t capacity, std::uint32_t &written)
 {
-    allocation = 0u;
+    resource = 0u;
     written = 0u;
     const SharedHandle *const row = find_shared(handle);
     if (row == nullptr || private_data == nullptr) return refuse(Status::invalid_parameter);
@@ -1056,7 +1106,10 @@ Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, st
         }
         std::memcpy(private_data, created->private_data, created->private_size);
         written = created->private_size;
-        allocation = slot.handle;
+        /* An open answers a resource of the opening process, as the kernel's
+         * does; this rig names it by the same number as the allocation in it. */
+        slot.resource = created->resource;
+        resource = slot.handle;
         return refuse(Status::ok);
     }
     return refuse(Status::no_space);

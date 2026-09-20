@@ -42,7 +42,12 @@ public:
      * followed by an unassigned SharedObjectRecord, and comes back with the id
      * and the adapter number the miniport minted into it - which is the only
      * thing an opening process is ever given, so the caller keeps exactly
-     * these bytes and shares the allocation by them.
+     * these bytes and shares the resource by them.
+     *
+     * What comes back is the *resource*, not the allocation in it:
+     * D3DKMTShareObjects mints an NT handle over a resource and refuses
+     * anything else, with no message at all (research.md §16), so the carrier
+     * is created as one and the allocation inside it lives and dies with it.
      *
      * Separate from create_allocation because the buffer is two-way. Every
      * other create hands the driver bytes and reads none back, and widening
@@ -50,31 +55,38 @@ public:
      * every allocation in the guest takes. invalid_parameter for a length that
      * is not a descriptor and a record; nothing is created unless ok. */
     virtual Status   create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
-                                              uint32_t &allocation) = 0;
-    /* D3DKMTShareObjects over one allocation of `device`: an NT handle this
+                                              uint32_t &resource) = 0;
+    /* D3DKMTShareObjects over one resource of `device`: an NT handle this
      * process may duplicate into another, which opens it with
      * open_shared_object. The handle is this process's and must be closed with
      * close_shared_object. 0 unless ok. invalid_parameter for an allocation of
      * 0; not_supported where the OS will not share what this names - an
-     * allocation created without asking for an identity is one (feature 053). */
-    virtual Status   share_object(uint32_t device, uint32_t allocation, uint64_t &handle) = 0;
+     * allocation, rather than the resource holding it, is one (feature 053). */
+    virtual Status   share_object(uint32_t device, uint32_t resource, uint64_t &handle) = 0;
+    /* The resource a create_shared_allocation made, and the allocation in it.
+     * Destroying by resource is how dxgkrnl takes both, and the only way to
+     * take the resource at all. invalid_parameter for a resource of 0. */
+    virtual Status   destroy_shared_allocation(uint32_t device, uint32_t resource) = 0;
     /* D3DKMTOpenResourceFromNtHandle: what `handle` names, opened on `device`
-     * as an allocation of this process, with the *creating* process's
-     * allocation private driver data written into `private_data` and its
-     * length in `written`.
+     * as a resource of this process, with the *creating* process's allocation
+     * private driver data written into `private_data` and its length in
+     * `written`.
      *
      * The private data is what the call is for. dxgkrnl carries the creator's
      * bytes to the opener and reads none of them (docs/kb/04-memory.md), which
      * is the only channel a shared object's name crosses a process boundary
      * on: the opening ICD reads the id out of them and names it on the wire.
-     * invalid_parameter for a handle of 0 or a buffer the private data does
-     * not fit in; not_found for a handle this process may not open. Nothing is
-     * opened unless ok. */
-    virtual Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+     * What the open answers is the resource it made, because that is what the
+     * opener must give back: the allocation inside it goes with it, and an
+     * allocation handle is not what a destroy of a resource takes
+     * (research.md §17). invalid_parameter for a handle of 0 or a buffer the
+     * private data does not fit in; not_found for a handle this process may
+     * not open. Nothing is opened unless ok. */
+    virtual Status   open_shared_object(uint32_t device, uint64_t handle, uint32_t &resource,
                                         uint8_t *private_data, uint32_t capacity, uint32_t &written) = 0;
     /* CloseHandle on what share_object or open_shared_object was given. The
-     * allocation an open made is destroyed with destroy_allocation, as any
-     * other is: the handle and what it named have separate lifetimes.
+     * resource an open made is destroyed with destroy_shared_allocation: the
+     * handle and what it named have separate lifetimes.
      * invalid_parameter for a handle of 0. */
     virtual Status   close_shared_object(uint64_t handle) = 0;
     /* The process's CPU view of an allocation, in `view`: for one in a

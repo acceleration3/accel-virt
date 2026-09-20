@@ -232,6 +232,18 @@ Status GdiKmt::create_allocation(uint32_t device, const uint8_t *descriptor, uin
     return status;
 }
 
+Status GdiKmt::destroy_shared_allocation(uint32_t device, uint32_t resource)
+{
+    AV_SCOPE("GdiKmt::destroy_shared_allocation");
+    if (resource == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    /* Named by the resource and by no allocation: dxgkrnl builds the list of
+     * everything in it, which is the only call that takes the resource too. */
+    D3DKMT_DESTROYALLOCATION2 request = {};
+    request.hDevice = device;
+    request.hResource = resource;
+    return answer(D3DKMTDestroyAllocation2(&request));
+}
+
 Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
 {
     AV_SCOPE("GdiKmt::destroy_allocation");
@@ -244,10 +256,10 @@ Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
 }
 
 Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, uint32_t size,
-                                        uint32_t &allocation)
+                                        uint32_t &resource)
 {
     AV_SCOPE("GdiKmt::create_shared_allocation");
-    allocation = 0u;
+    resource = 0u;
     /* Answered as too_large rather than invalid_parameter so that last_code()
      * tells a refusal of this file's own apart from one dxgkrnl made: both
      * would otherwise be STATUS_INVALID_PARAMETER, and a guest report saying
@@ -267,26 +279,33 @@ Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, 
     request.hDevice = device;
     request.NumAllocations = 1u;
     request.pAllocationInfo2 = &info;
+    /* Created as a resource, shared, and shared by NT handle rather than by
+     * the old global one. D3DKMTShareObjects mints a handle over a resource
+     * and refuses anything else, silently, so a carrier that is only an
+     * allocation can never be shared at all (research.md §16). */
+    request.Flags.CreateResource = 1u;
+    request.Flags.CreateShared = 1u;
+    request.Flags.NtSecuritySharing = 1u;
     /* A refusal is left legible by last_code(): this file is translation only,
      * and the ICD writes the line naming which call refused and with what
      * (feature 053). */
     const Status status = answer(D3DKMTCreateAllocation2(&request));
     if (status != Status::ok) return status;
-    allocation = info.hAllocation;
+    resource = request.hResource;
     return Status::ok;
 }
 
-Status GdiKmt::share_object(uint32_t device, uint32_t allocation, uint64_t &handle)
+Status GdiKmt::share_object(uint32_t device, uint32_t resource, uint64_t &handle)
 {
     AV_SCOPE("GdiKmt::share_object");
     handle = 0u;
-    if (allocation == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
+    if (resource == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
     /* No name and no security descriptor: a handle nothing can open by name is
      * a handle only a process this one duplicated it into can open, which is
      * what a shared object is for (feature 053, spec Edge Cases). */
     ShareAttributes     attributes = {};
     attributes.length = sizeof attributes;
-    const D3DKMT_HANDLE shared = allocation;
+    const D3DKMT_HANDLE shared = resource;
     HANDLE              made = nullptr;
     const Status        status = answer(D3DKMTShareObjects(
         1u, &shared, reinterpret_cast<POBJECT_ATTRIBUTES>(&attributes), STANDARD_RIGHTS_ALL | GENERIC_ALL,
@@ -294,16 +313,16 @@ Status GdiKmt::share_object(uint32_t device, uint32_t allocation, uint64_t &hand
     if (status != Status::ok) return status;
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(made));
     /* The device is not named by D3DKMTShareObjects: what is shared is the
-     * allocation, which the kernel already knows the device of. */
+     * resource, which the kernel already knows the device of. */
     static_cast<void>(device);
     return Status::ok;
 }
 
-Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &allocation,
+Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &resource,
                                   uint8_t *private_data, uint32_t capacity, uint32_t &written)
 {
     AV_SCOPE("GdiKmt::open_shared_object");
-    allocation = 0u;
+    resource = 0u;
     written = 0u;
     if (handle == 0u || private_data == nullptr)
         return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
@@ -337,7 +356,10 @@ Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &al
     open.TotalPrivateDriverDataBufferSize = capacity;
     const Status opened = answer(D3DKMTOpenResourceFromNtHandle(&open));
     if (opened != Status::ok) return opened;
-    allocation = info.hAllocation;
+    /* The resource, not `info.hAllocation`: destroying names the resource and
+     * takes the allocation in it, and the two handles are of types dxgkrnl
+     * refuses in each other's place (research.md §17). */
+    resource = open.hResource;
     written = open.TotalPrivateDriverDataBufferSize;
     return Status::ok;
 }

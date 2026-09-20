@@ -326,6 +326,23 @@ TEST(icd_external_handles, a_handle_exported_is_opened_by_the_device_on_import)
       rig.device(), imported, nullptr);
   CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); }
 
+/* The carrier an export minted is a resource, and a resource is given back by
+ * being named as one: dxgkrnl walks a destroy's allocation list checking the
+ * type of every handle in it, so a carrier named there is refused and left
+ * behind for the life of the process (research.md §17). */
+TEST(icd_external_handles, freeing_an_exported_allocation_gives_the_carrier_back_as_a_resource)
+{ SharingRig           rig;
+  const std::uint32_t  objects = rig.rig().kmt().open_objects();
+  const VkDeviceMemory shared = rig.allocate_shared();
+  CHECK(rig.handle_of(shared) != nullptr);
+  CHECK(rig.rig().kmt().open_objects() > objects);
+  rig.rig().host().shared_object(0u, 0u);
+  rig.entry<void (*)(VkDevice, VkDeviceMemory, const VkAllocationCallbacks *)>("vkFreeMemory")(
+      rig.device(), shared, nullptr);
+  CHECK_EQ(rig.rig().kmt().open_objects(), objects);
+  CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u);
+  CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_allocation), 0u); }
+
 /* A semaphore's handle is imported the same way, through the host's own
  * vkImportSemaphoreFdKHR, and a semaphore destroyed takes the handle that
  * named it with it. */

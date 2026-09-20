@@ -35,7 +35,8 @@ MockKmt::MockKmt()
       bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
       next_shared_handle_(first_shared_handle),
-      next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), next_handle_(first_handle),
+      next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), carried_next_(),
+      carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), clock_step_(0u), clock_reader_(nullptr),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
@@ -270,7 +271,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false, false, {}, 0u};
+        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false, false, {}, 0u, false};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -443,9 +444,13 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
 /* The miniport's half, as MockKmt plays it: a create that carries an unassigned
  * record has an id and an adapter number minted into the caller's own bytes,
  * which is what the opening process is later handed (feature 053). */
+/* The carrier is one object standing for a resource and the single allocation
+ * in it, because nothing here ever needs them apart: what a create answers, a
+ * share names and a destroy takes is the same number (research.md §16). */
 Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
-                                         std::uint32_t &allocation)
+                                         std::uint32_t &resource)
 {
+    std::uint32_t &allocation = resource;
     allocation = 0u;
     if (!begin(Call::create_shared_allocation)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
@@ -480,6 +485,7 @@ Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *pri
         return refuse(invalid_parameter);
     created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
     created->created_size = size;
+    created->resource = true;
     for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = private_data[index];
     return succeed();
 }
@@ -492,35 +498,50 @@ MockKmt::SharedHandle *MockKmt::shared_row(std::uint64_t handle)
     return nullptr;
 }
 
-Status MockKmt::share_object(std::uint32_t device, std::uint32_t allocation, std::uint64_t &handle)
+Status MockKmt::share_object(std::uint32_t device, std::uint32_t resource, std::uint64_t &handle)
 {
     handle = 0u;
     if (!begin(Call::share_object)) return refuse(last_code_);
+    const std::uint32_t allocation = resource;
     const Object *const object = find(Kind::allocation, allocation);
     if (object == nullptr || object->owner != device) return misuse();
-    /* An allocation created without asking for an identity carries no record,
-     * and the kernel has nothing to share it by. */
-    if (object->created_size !=
-        AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size))
-        return refuse(not_supported);
+    /* An allocation created without asking for an identity is not a resource,
+     * and D3DKMTShareObjects takes nothing else: the handle type check falls
+     * through to STATUS_INVALID_PARAMETER with no message at all
+     * (research.md §16). */
+    if (!object->resource) return refuse(invalid_parameter);
     for (SharedHandle &row : shared_) {
         if (row.handle != 0u) continue;
         row.handle = next_shared_handle_;
         next_shared_handle_ += 4u;
         row.allocation = allocation;
-        row.carried_size = object->created_size;
+        row.carried_size = carry_next_ ? carried_next_size_ : object->created_size;
         for (std::uint32_t index = 0u; index < row.carried_size; index++)
-            row.carried[index] = object->created_with[index];
+            row.carried[index] = carry_next_ ? carried_next_[index] : object->created_with[index];
+        carry_next_ = false;
         handle = row.handle;
         return succeed();
     }
     return refuse(invalid_parameter);
 }
 
-Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &allocation,
+Status MockKmt::destroy_shared_allocation(std::uint32_t device, std::uint32_t resource)
+{
+    if (!begin(Call::destroy_shared_allocation)) return refuse(last_code_);
+    if (resource == 0u) return refuse(invalid_parameter);
+    const Object *const object = find(Kind::allocation, resource);
+    if (object == nullptr || object->owner != device) return misuse();
+    /* hResource takes a handle of the resource type and nothing else: an
+     * ordinary allocation named here is the same mismatch the other way, and
+     * is refused having destroyed nothing (research.md §17). */
+    if (!object->resource) return refuse(invalid_parameter);
+    return close(Kind::allocation, resource);
+}
+
+Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, std::uint32_t &resource,
                                    std::uint8_t *private_data, std::uint32_t capacity, std::uint32_t &written)
 {
-    allocation = 0u;
+    resource = 0u;
     written = 0u;
     if (!begin(Call::open_shared_object)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
@@ -538,6 +559,9 @@ Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, s
     Object *const made = find(Kind::allocation, opened);
     made->allocation_kind = kind;
     made->created_size = row->carried_size;
+    /* D3DKMTOpenResourceFromNtHandle answers a resource of this process, which
+     * is what the opener gives back. */
+    made->resource = true;
     for (std::uint32_t index = 0u; index < row->carried_size; index++) {
         made->created_with[index] = row->carried[index];
         private_data[index] = row->carried[index];
@@ -547,7 +571,7 @@ Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, s
         short_record_ = false;
         written = AllocationDescriptor::encoded_size;
     }
-    allocation = opened;
+    resource = opened;
     return succeed();
 }
 
@@ -565,6 +589,11 @@ Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocatio
     if (!begin(Call::destroy_allocation)) return refuse(last_code_);
     const Object *const object = find(Kind::allocation, allocation);
     if (object == nullptr || object->owner != device || is_locked(allocation)) return misuse();
+    /* The list D3DKMTDestroyAllocation2 walks holds allocation handles: a
+     * resource named in it is a handle type mismatch, refused with nothing
+     * destroyed, and the caller wanted destroy_shared_allocation
+     * (research.md §17). */
+    if (object->resource) return refuse(invalid_parameter);
     for (const Object &mapping : objects_)
         if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
     for (std::uint32_t slot = 0u; slot < max_bindings; slot++) {
@@ -1088,6 +1117,13 @@ void MockKmt::scribble_the_next_record() { scribble_record_ = true; }
 void MockKmt::keep_the_next_record() { keep_record_ = true; }
 
 void MockKmt::hand_back_a_short_record() { short_record_ = true; }
+
+void MockKmt::carry_at_the_next_share(const std::uint8_t *bytes, std::uint32_t size)
+{
+    carried_next_size_ = size < max_allocation_private ? size : max_allocation_private;
+    for (std::uint32_t index = 0u; index < carried_next_size_; index++) carried_next_[index] = bytes[index];
+    carry_next_ = true;
+}
 
 void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = true; }
 

@@ -657,7 +657,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         note("vkAllocateMemory: the carrier's private driver data was bytes", sizeof carrier_data);
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
-    ScopeExit             unwind([&] { static_cast<void>(kmt_.destroy_allocation(guest_device, carrier)); });
+    ScopeExit unwind([&] { static_cast<void>(kmt_.destroy_shared_allocation(guest_device, carrier)); });
     SharedObjectRecord    minted;
     if (minted.decode(carrier_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
             Status::ok ||
@@ -726,7 +726,7 @@ void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
      * somebody else's allocation, and SharedHandles destroyed the one its own
      * open created. */
     if (row.carrier_ != 0u)
-        static_cast<void>(kmt_.destroy_allocation(made.connection()->device(), row.carrier_));
+        static_cast<void>(kmt_.destroy_shared_allocation(made.connection()->device(), row.carrier_));
 }
 
 /* Nothing is asked of the host or the kernel here. The identity and the NT

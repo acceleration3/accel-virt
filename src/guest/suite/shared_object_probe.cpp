@@ -222,7 +222,9 @@ void SharedObjectProbe::carrier_steps()
                                                  SharedObjectRecord::encoded_size);
         steps_.check("carrier_minted", decoded == Status::ok && read.assigned() ? Status::ok
                                                                                : Status::invalid_state);
-        static_cast<void>(kmt_.destroy_allocation(device, shared));
+        /* A carrier is a resource, and only a destroy that names it as one
+         * takes it (research.md §17). */
+        static_cast<void>(kmt_.destroy_shared_allocation(device, shared));
     }
     static_cast<void>(kmt_.destroy_device(device));
 }
