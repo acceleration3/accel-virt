@@ -189,7 +189,17 @@ TEST(recording_header_decode, survives_the_hostile_sweep)
   sweep.run();
   /* Every truncation, every bit flipped, and the all-zero and all-ones cases:
    * a sweep that quietly stopped short would still be a passing sweep. */
-  CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u); }
+  CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u);
+  /* The format constrains the magic, the major it was written by and the
+   * reserved word; everything else a reader takes as written. The minor, both
+   * wire versions, the kinds mask, the start time, the wrap count, the two PCI
+   * ids and the UUID are 46 free bytes, 368 acceptable bits, and the 64 bits of
+   * the ceiling are acceptable too: clearing the only set bit of 1 MiB leaves
+   * "no ceiling" and every other flip leaves a ceiling above the header. Each
+   * shorter input is short of 64 bytes, all-zero and all-ones carry no magic,
+   * and the untouched input is the one acceptance left. */
+  const std::uint32_t acceptable = 368u + 64u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(recording_header_invariants, catch_a_major_this_writer_never_wrote)
 { RecordingHeader header = a_header();
