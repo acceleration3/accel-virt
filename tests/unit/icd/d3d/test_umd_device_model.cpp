@@ -114,6 +114,25 @@ TEST(umd_device_model, a_created_device_records_the_runtimes_handles_and_both_ca
   CHECK(fixture.rig().root().device_of(fixture.block()) == nullptr);
   CHECK(fixture.rig().root().invariants_hold()); }
 
+/* The count the adapter guards its close with is the table's, so the two must
+ * not be able to disagree. */
+TEST(umd_device_model, the_tables_count_follows_every_device_made_and_destroyed)
+{ Fixture fixture;
+  DeviceTable table(fixture.rig().platform(), fixture.rig().log());
+  CHECK_EQ(table.live_devices(), 0u);
+  CHECK(table.invariants_hold());
+
+  UmdDevice *device = nullptr;
+  CHECK_EQ(UmdRootProbe::adopt(fixture.rig().root(), fixture.runtime().adapter(), fixture.create(), device), hr_ok);
+  if (device == nullptr) return;
+  UmdAdapter &adapter = device->adapter();
+  CHECK_EQ(adapter.devices(), 1u);
+  UmdRootProbe::release(fixture.rig().root(), fixture.block());
+  CHECK_EQ(adapter.devices(), 0u);
+  /* A table of its own stays empty throughout: the root's is the one counting. */
+  CHECK_EQ(table.live_devices(), 0u);
+  CHECK(table.invariants_hold()); }
+
 TEST(umd_device_model, a_block_the_driver_did_not_write_names_no_device)
 { Fixture fixture;
   UmdDevice *device = nullptr;

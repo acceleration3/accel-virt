@@ -180,6 +180,21 @@ TEST(dxgi_seam, an_interface_this_driver_does_not_serve_publishes_nothing)
   for (std::uint32_t slot = 0u; slot < DxgiBaseTable::wddm_3_2_slots; slot++) CHECK(slots[slot] == nullptr);
   CHECK(device.rig().root().invariants_hold()); }
 
+/* DxgiBaseTable::until_later is what all fifteen of them are, so the one that
+ * says so is checked directly too: a slot's refusal must not depend on the
+ * thunk that reached it. */
+TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  if (device.device() == nullptr) return;
+  DxgiDdiArgRecord args = {};
+  args.hDevice = device.block();
+  CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_not_impl);
+  CHECK_EQ(device.device()->dxgi().until_later(nullptr, "pfnBlt"), hr_invalid_arg);
+  device.device()->removal().remove(hr_dxgi_device_removed);
+  CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_dxgi_device_removed);
+  CHECK_EQ(device.rig().log().holding("device removed, pfnBlt answers 0x887A0005"), 1u); }
+
 TEST(dxgi_seam, every_slot_a_later_feature_fills_answers_not_implemented)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);

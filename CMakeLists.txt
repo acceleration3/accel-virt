@@ -29,7 +29,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-2 umddi-1")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-2 umddi-4")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
@@ -457,7 +457,8 @@ ExternalProject_Add(rvktest
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe)
+                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
@@ -499,6 +500,14 @@ add_test(NAME rvkgl_image
                  --require-export DrvShareLists --require-export DrvGetProcAddress
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
+
+# The Direct3D user-mode driver exports exactly the two names the runtimes
+# resolve (feature 055, contracts/umd_interface.md). No user32: nothing in it
+# touches a window, and the DXGI seam presents through the KMD, not GDI.
+add_test(NAME rvkumd_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkumd.dll --dll --only-exports
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
 
 # The OpenGL probe calls the system opengl32.dll and makes a window (050).
 add_test(NAME rvkglprobe_image

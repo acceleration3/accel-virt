@@ -40,11 +40,19 @@ AddReg       = Rvkgpu_SoftwareSettings
 ; dxgkrnl refuses the adapter outright without this value. DXGADAPTER::Initialize
 ; returns STATUS_OBJECT_NAME_NOT_FOUND when DpiGetAdapterInfo could not read
 ; UserModeDriverName from the software key - the key HKR reaches from here, not
-; from .HW - and the adapter does not claim to be compute only. Nothing loads the
-; DLL at adapter start; only the string is read, so this names rvkumd.dll before
-; feature 055 builds it.
+; from .HW - and the adapter does not claim to be compute only. Nothing loads
+; the DLL at adapter start; only the string is read.
+;
+; A REG_MULTI_SZ of four names indexed by KMTUMDVERSION (d3dkmthk.h: DX9, DX10,
+; DX11, DX12): the runtime asks the kernel which file to load for the Direct3D
+; it is, with D3DKMTQueryAdapterInfo(KMTQAITYPE_UMDRIVERNAME). One DLL serves
+; all four - one translation core - and D3D9's entry is named from feature 055
+; so that feature 064 is a DLL change and not an INF one. Bare file names, not
+; %13% paths: dxgkrnl's PostProcessUMDFileName turns them into the path the
+; runtime loads, and that translation is what makes a UMD work inside a VM
+; container. No UserModeDriverNameWow: the 32-bit arm is feature 061's.
 [Rvkgpu_SoftwareSettings]
-HKR,, UserModeDriverName, 0x00010000, "rvkumd.dll"
+HKR,, UserModeDriverName, 0x00010000, "rvkumd.dll", "rvkumd.dll", "rvkumd.dll", "rvkumd.dll"
 ; The Vulkan ICD, found by the loader through this adapter alone (feature 045):
 ; it reads the value with D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY) as
 ; REG_MULTI_SZ or REG_SZ - never REG_EXPAND_SZ - and takes it as an absolute path.
@@ -72,6 +80,7 @@ rvkgpu.sys
 rvkvk.dll
 rvkvk.json
 rvkgl.dll
+rvkumd.dll
 
 ; One message for each of the device's own sources - control, cursor and
 ; configuration changes - and eight the rvk contexts' fence queues share
