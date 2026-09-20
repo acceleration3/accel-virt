@@ -250,6 +250,8 @@ def arguments():
                         help="the OpenGL ICD the package names (feature 050)")
     parser.add_argument("--cl-icd", default=str(ROOT / "build" / "guest" / "rvkcl.dll"),
                         help="the OpenCL ICD the package names (feature 052)")
+    parser.add_argument("--umd", default=str(ROOT / "build" / "guest" / "rvkumd.dll"),
+                        help="the Direct3D user-mode driver the package names (feature 055)")
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
@@ -898,6 +900,7 @@ class GuestRun:
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
                       (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
                       (self.args.cl_icd, PACKAGE_DIRECTORY + "\\rvkcl.dll"),
+                      (self.args.umd, PACKAGE_DIRECTORY + "\\rvkumd.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:

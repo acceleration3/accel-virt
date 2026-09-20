@@ -13,6 +13,10 @@ public:
     PciIdentity(uint32_t vendor, uint32_t device, uint32_t subsystem_vendor, uint32_t subsystem);
 
     bool same_as(const PciIdentity &other) const;
+    /* What DXGI and DXCore report as the adapter's VendorId and DeviceId
+     * (feature 055): the same two values the identity was matched on. */
+    uint32_t vendor() const;
+    uint32_t device() const;
 
 private:
     uint32_t vendor_;

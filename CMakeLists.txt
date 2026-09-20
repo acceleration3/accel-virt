@@ -29,7 +29,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3 umddi-4")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
@@ -350,6 +350,21 @@ if(AV_GENERATED)
   target_link_options(av_cl_icd PUBLIC ${AV_TEST_FLAGS})
 endif()
 
+# The Direct3D user-mode driver's portable core (feature 055): src/icd/d3d over
+# the pieces all three user-mode drivers share. Its own archive, apart from the
+# two ICDs', as the three DLLs are apart - and unlike them it needs no
+# generated tree, because the D3D DDI is the WDK's shape, not a registry's.
+# ExtensionPolicy is the one piece of src/icd/common a Direct3D driver has no
+# use for - it reports Khronos extensions - and it is the one that needs the
+# Vulkan headers, so this archive names what it takes rather than globbing.
+file(GLOB_RECURSE AV_D3D_UMD_SOURCES CONFIGURE_DEPENDS src/icd/d3d/*.cpp)
+add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
+  ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/sliced_wait.cpp)
+target_link_libraries(av_d3d_umd PUBLIC av_core)
+target_compile_options(av_d3d_umd PRIVATE ${AV_TEST_FLAGS})
+target_link_options(av_d3d_umd PUBLIC ${AV_TEST_FLAGS})
+
 # ---- unit tests: one binary per module, so a crash isolates -----------------
 enable_testing()
 if(AV_COVERAGE)
@@ -389,6 +404,8 @@ foreach(src ${AV_UNIT_TESTS})
       target_link_libraries(${name} PRIVATE av_cl_icd)
     elseif(src MATCHES "/tests/unit/icd/opengl/" OR name MATCHES "^test_(gl_seams|fake_opengl32|fullstack_opengl_icd)$")
     target_link_libraries(${name} PRIVATE av_gl_icd)
+  elseif(src MATCHES "/tests/unit/icd/d3d/" OR name MATCHES "^test_(umd_rig|fake_d3d_runtime|fullstack_umd)$")
+    target_link_libraries(${name} PRIVATE av_d3d_umd)
   elseif(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
@@ -506,7 +523,8 @@ ExternalProject_Add(rvktest
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe)
+                   ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
@@ -549,6 +567,14 @@ add_test(NAME rvkgl_image
                  --require-export DrvShareLists --require-export DrvGetProcAddress
                  --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
                  --require-export DrvSwapBuffers)
+
+# The Direct3D user-mode driver exports exactly the two names the runtimes
+# resolve (feature 055, contracts/umd_interface.md). No user32: nothing in it
+# touches a window, and the DXGI seam presents through the KMD, not GDI.
+add_test(NAME rvkumd_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkumd.dll --dll --only-exports
+                 --require-export OpenAdapter10_2 --require-export OpenAdapter12)
 
 # The OpenCL ICD exports exactly the two names the Khronos loader may resolve
 # (feature 052, research §1); it presents nothing, so it wants no user32.

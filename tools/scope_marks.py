@@ -41,6 +41,7 @@ FNV_PRIME = 16777619
 # tripled the time a bound device took to decode a command.
 EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/")
 EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp",
+                  "src/um/d3d/umd_record_layout.cpp",
                   "src/um/trace/interrupt_clock.cpp",
                   "src/proto/wire/wire_reader.cpp", "src/proto/wire/wire_reader.hpp",
                   "src/proto/wire/wire_writer.cpp", "src/proto/wire/wire_writer.hpp",

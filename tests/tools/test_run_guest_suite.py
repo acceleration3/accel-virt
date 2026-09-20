@@ -115,7 +115,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
                      "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "rvkcl.dll", "rvkclprobe.exe",
-                     "OpenCL.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
+                     "OpenCL.dll", "rvkumd.dll", "rvkd3d9probe.exe", "rvkd3d11probe.exe",
                      "rvkd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
@@ -140,6 +140,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll", "--cl-icd", self.scratch / "rvkcl.dll",
+                     "--umd", self.scratch / "rvkumd.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -178,7 +179,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 9)
+        self.assertEqual(events.count("file"), 10)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -188,6 +189,9 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
         # The OpenGL ICD is in the package too, which names it (feature 050).
         self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
+        # And the Direct3D user-mode driver, which the software key names four
+        # times over (feature 055).
+        self.assertIn("file C:\\rvk\\package\\rvkumd.dll 1000", lines)
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
@@ -1732,6 +1736,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--gl-icd", self.scratch / "rvkgl.dll",
+                     "--umd", self.scratch / "rvkumd.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,

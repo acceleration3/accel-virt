@@ -22,4 +22,16 @@ bool PciIdentity::same_as(const PciIdentity &other) const
            subsystem_ == other.subsystem_;
 }
 
+uint32_t PciIdentity::vendor() const
+{
+    AV_SCOPE("PciIdentity::vendor");
+    return vendor_;
+}
+
+uint32_t PciIdentity::device() const
+{
+    AV_SCOPE("PciIdentity::device");
+    return device_;
+}
+
 }  // namespace av

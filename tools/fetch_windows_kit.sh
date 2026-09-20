@@ -35,13 +35,21 @@ UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h d
 # What the Khronos OpenCL loader reaches for its SetupAPI discovery path
 # (feature 052): its own closure - cfg.h, devpropdef.h, guiddef.h - is in
 # shared/, which is taken whole.
-            cfgmgr32.h)
+            cfgmgr32.h
+# The DXGI DDI rvkumd.dll fills at CreateDevice (feature 055). dxgitype.h and
+# dxgiformat.h, which it names, are in shared/, which is taken whole.
+            dxgiddi.h dxmini.h)
+# What rvkumd.dll is written against (feature 055): the Direct3D user-mode
+# driver DDI. These are the WDK's um/ directory, not the SDK's, and are named
+# one by one for the same reason - that directory is 120 MB and these are 1.6.
+WDK_UM_HEADERS=(d3d10umddi.h d3d12umddi.h d3dumddi.h d3d10TokenizedProgramFormat.hpp
+                d3d11TokenizedProgramFormat.hpp d3d12TokenizedProgramFormat.hpp)
 
 KIT=third_party/windows-kit
 CACHE=third_party/.cache
 PINNED="$WDK_ID $WDK_VERSION
 $SDK_ID $SDK_VERSION
-headers km shared um-closure-3"
+headers km shared um-closure-3 umddi-4"
 
 if [ -f "$KIT/VERSION" ] && [ "$(cat "$KIT/VERSION")" = "$PINNED" ]; then
     echo "windows kit: $KIT already at pinned versions"
@@ -80,7 +88,7 @@ staging=$(mktemp -d third_party/.windows-kit.XXXXXX)
 trap 'rm -rf "$staging"' EXIT
 
 unzip -q "$wdk" "$KIT_INCLUDE/km/*" "$KIT_INCLUDE/shared/*" LICENSE.txt \
-      "${LIBRARIES[@]/#/$KIT_LIB/}" -d "$staging/wdk"
+      "${LIBRARIES[@]/#/$KIT_LIB/}" "${WDK_UM_HEADERS[@]/#/$KIT_INCLUDE/um/}" -d "$staging/wdk"
 unzip -q "$sdk" "$KIT_INCLUDE/shared/*" "${UM_HEADERS[@]/#/$KIT_INCLUDE/um/}" -d "$staging/sdk"
 
 mkdir -p "$staging/kit/include" "$staging/kit/lib"
@@ -88,6 +96,9 @@ mv "$staging/wdk/$KIT_INCLUDE/km"     "$staging/kit/include/km"
 mv "$staging/wdk/$KIT_INCLUDE/shared" "$staging/kit/include/wdk-shared"
 mv "$staging/sdk/$KIT_INCLUDE/shared" "$staging/kit/include/sdk-shared"
 mv "$staging/sdk/$KIT_INCLUDE/um"     "$staging/kit/include/um"
+# The WDK's UMD DDI headers sit beside the SDK's um/ headers: d3d10umddi.h
+# includes dxgiddi.h by that name, so one directory has to hold both.
+mv "$staging/wdk/$KIT_INCLUDE/um/"* "$staging/kit/include/um/"
 mv "$staging/wdk/$KIT_LIB"            "$staging/kit/lib/x64"
 mv "$staging/wdk/LICENSE.txt"         "$staging/kit/LICENSE.txt"
 python3 -B tools/windows_kit_overlay.py "$staging/kit"

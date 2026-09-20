@@ -10,6 +10,10 @@ they share and holds no table) with exactly one `reported_extensions`: an array 
 ExtensionPolicy::Row, or a null pointer while nothing is reported. Anything in
 the array that is not a row this can read fails, so a row cannot hide from it.
 
+An API with no extension mechanism has no table and is named in NO_EXTENSIONS:
+Direct3D reports capabilities through the DDI's own GetCaps, which is held to
+constitution VI by its own tests, not by a policy table.
+
   check_extension_policy.py [repository root]
 """
 import os
@@ -18,6 +22,10 @@ import sys
 
 TABLE_DIRECTORY = "src/icd"
 SHARED_DIRECTORY = "common"
+# APIs whose drivers live under src/icd but report no extensions, because the
+# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's
+# (specs/055-umd-foundation/contracts/umd_interface.md).
+NO_EXTENSIONS = ("d3d",)
 # Where each API's generator lists what it implemented, and the array naming it.
 IMPLEMENTED_LISTS = {
     "vulkan": ("src/proto/generated/vulkan/vk_supported_extensions.h", "kImplementedDeviceExtensions"),
@@ -162,6 +170,8 @@ class PolicyCheck:
         return violations
 
     def icd_violations(self, api, tests):
+        if api in NO_EXTENSIONS:
+            return []
         directory = f"{TABLE_DIRECTORY}/{api}"
         tables = self.tables(directory)
         if len(tables) != 1:
