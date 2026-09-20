@@ -35,7 +35,7 @@ feature, and a third when feature 064 arrives:
 |---|---|---|
 | `OpenAdapter10_2` | `d3d11.dll` (the D3D10/10.1/11 runtime) | `HRESULT APIENTRY (D3D10DDIARG_OPENADAPTER *)` |
 | `OpenAdapter12` | `D3D12Core.dll` | `HRESULT APIENTRY (D3D12DDIARG_OPENADAPTER *)` |
-| `OpenAdapter9` | `d3d9.dll` - **feature 064** | `HRESULT APIENTRY (D3DDDIARG_OPENADAPTER *)` |
+| `OpenAdapter` | `d3d9.dll` - **feature 064** | `HRESULT APIENTRY (D3DDDIARG_OPENADAPTER *)` |
 
 **Rationale.**
 - `strings d3d11.dll` (pinned above) holds the exact literals `OpenAdapter10`,
@@ -407,7 +407,7 @@ in 056 and 057. This is recorded as a deliberate narrowing of FR-006.
   size-checked on x86 too (pointer-sized fields change every offset), the
   function-table thunks become genuinely `__stdcall` and the exports genuinely
   decorated, and `check_guest_image.py` needs an i386 machine mode.
-- **Direct3D 9 (`OpenAdapter9`, `D3DDDIARG_OPENADAPTER`, the D3D9 device
+- **Direct3D 9 (`OpenAdapter`, `D3DDDIARG_OPENADAPTER`, the D3D9 device
   funcs)** is feature 064's, on the adapter/device/DXGI foundation this feature
   lays. The fourth entry of the `UserModeDriverName` list names `rvkumd.dll`
   from 055 onwards so that 064 is a DLL change and not an INF change.
