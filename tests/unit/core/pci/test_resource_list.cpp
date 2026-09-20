@@ -198,7 +198,22 @@ TEST(resource_list_hostile, survives_every_mutation_of_a_real_list)
 { const FakeResourceList bytes = qemu_virtio_gpu();
   const av::HostileSweep sweep(rejects, bytes.bytes(), bytes.size());
   sweep.run();
-  CHECK(sweep.cases_run() > 100u); }
+  CHECK(sweep.cases_run() > 100u);
+  /* The list is sized by its own counts, so a truncation always cuts a
+   * descriptor the counts promised and every one is refused, as are the
+   * all-zero list (no partial descriptor at all) and the all-ones one (more
+   * full descriptors than any list may hold). Of the flips: the 12 bytes of
+   * each full descriptor the reader skips are free (96 bits); two flips of the
+   * partial count leave a count whose descriptors are still there; each of the
+   * two memory descriptors accepts 158 - seven type flips naming a type the
+   * reader ignores, the skipped byte, the 16 flag bits a plain memory
+   * descriptor does not use, all 64 start bits, which cannot make 4 KiB wrap,
+   * 31 of the 32 length bits, the exception clearing the length to nothing, and
+   * the 32 trailing skipped bits; and each of the three interrupts accepts 159,
+   * everything but the type flip that turns it into a memory range of no
+   * length. The untouched list is the last acceptance. */
+  const std::uint32_t acceptable = 96u + 2u + 2u * 158u + 3u * 159u + 1u;
+  CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(resource_list_invariants, a_count_past_the_ranges_or_a_wrapping_range_is_detected)
 { MockPlatform platform; ResourceList list(platform);

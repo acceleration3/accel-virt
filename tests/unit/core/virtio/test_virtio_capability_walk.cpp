@@ -284,4 +284,17 @@ TEST(virtio_capability_walk, survives_the_hostile_sweep_of_a_real_config_space)
 { const FixtureFile fixture("virtio_gpu_gl_pci_hostmem_config.bin");
   const av::HostileSweep sweep(rejects, fixture.bytes(), fixture.size());
   sweep.run();
-  CHECK(sweep.cases_run() > 2000u); }
+  CHECK(sweep.cases_run() > 2000u);
+  /* Most of a config space is bytes the walk never reads - ids, BARs, the
+   * subsystem - so most flips are acceptable and the honest floor is what the
+   * format settles on its own. The walk needs the whole 256 bytes, so every
+   * shorter input is refused (256); an all-zero space has no capability bit and
+   * an all-ones one is a chain that points at itself (2); and each of the four
+   * required structures appears exactly once, so every flip of one of their
+   * four type bytes loses that structure and is refused (32). What is left is
+   * the chain itself - a re-pointed next byte, a length, a multiplier - where
+   * the answer depends on what this device happens to have at the byte the
+   * chain lands on, not on the format, so those are bounded as acceptable and
+   * the real refusal count is well above this floor. */
+  const std::uint32_t refuses_at_least = 256u + 2u + 32u;
+  CHECK(sweep.rejections() >= refuses_at_least); }
