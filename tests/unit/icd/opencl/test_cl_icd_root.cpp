@@ -126,6 +126,59 @@ TEST(cl_icd_root, the_device_answers_the_adapters_identity_and_the_hosts_everyth
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_NAME, sizeof name, name, nullptr), CL_SUCCESS);
   CHECK_EQ(std::strcmp(name, "a host gpu"), 0); }
 
+/* CL_DEVICE_EXTENSIONS is the one query that is neither the report's answer
+ * nor the host's: the host says what the GPU has, a policy row says what this
+ * ICD carries, and an application is shown the two intersected. The policy
+ * ships empty on purpose - nothing is carried, tested or reported - so the
+ * answer today is the empty string, whatever the host lists. Forwarding the
+ * host's would offer an application every extension rusticl implements over a
+ * wire that carries none of them (constitution VI). */
+TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_the_host_s_own)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+
+  /* A host naming extensions this ICD has no row for, including one whose
+   * name is a prefix of another so a match on anything but a whole word
+   * shows. */
+  static const char listed[] = "cl_khr_fp64 cl_khr_il_program cl_khr_il cl_khr_gl_sharing";
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  char   reported[128];
+  std::memset(reported, 'x', sizeof reported);
+  std::size_t answered = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
+                                    &answered),
+           CL_SUCCESS);
+  /* Nothing of the host's reached the application, and what it got is a
+   * terminated empty string rather than untouched room. */
+  CHECK_EQ(answered, 1u);
+  CHECK_EQ(reported[0], '\0');
+  CHECK(std::strstr(listed, "cl_khr_fp64") != nullptr);
+  CHECK_EQ(std::strcmp(reported, ""), 0);
+
+  /* The size query, which an application makes first: the same length, and
+   * the host is asked again because the answer is the host's to change. */
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  std::size_t wanted = 0u;
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &wanted),
+           CL_SUCCESS);
+  CHECK_EQ(wanted, 1u);
+
+  /* Room the answer does not fit is the API's own refusal, not a truncation. */
+  rig.host().cl_info(CL_SUCCESS, listed, sizeof listed);
+  char cramped[1] = {'x'};
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, 0u, cramped, nullptr),
+           CL_INVALID_VALUE);
+  CHECK_EQ(cramped[0], 'x');
+
+  /* And a host that will not answer is the host's status, not an empty list:
+   * an ICD that reported "no extensions" for a device it could not ask would
+   * be answering for a device it has lost. */
+  rig.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
+                                    nullptr),
+           CL_OUT_OF_RESOURCES); }
+
 TEST(cl_icd_root, a_device_pointer_the_icd_never_made_is_an_invalid_device)
 { ClIcdRig rig;
   CHECK(opened_device(rig) != nullptr);

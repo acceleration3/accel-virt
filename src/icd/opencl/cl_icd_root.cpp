@@ -233,10 +233,38 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
     /* The four this ICD decides name the rvkgpu adapter rather than the host
      * GPU, or cap what it implements; everything else is the host's own. */
     if (device_.decides(name)) return device_.info(name, value_bytes, value, size_ret);
+    /* Except the extensions, which are neither: the host's list is what the
+     * GPU has and the policy is what this ICD carries, and passing the host's
+     * through would offer an application every extension rusticl implements
+     * over a wire that carries none of them. */
+    if (name == CL_DEVICE_EXTENSIONS) return device_extensions(*object, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;
     return av::clproto::rvk_clGetDeviceInfo(*wire, object->wire(), name, value_bytes, value,
                                             size_ret);
+}
+
+cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::device_extensions");
+    ClientTransport *const wire = wire_of(device);
+    if (wire == nullptr) return CL_INVALID_DEVICE;
+    char         host[host_extensions_bytes] = {};
+    size_t       answered = 0u;
+    const cl_int asked = av::clproto::rvk_clGetDeviceInfo(
+        *wire, device.wire(), CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
+    if (asked != CL_SUCCESS) return asked;
+    if (answered > sizeof host) answered = sizeof host;
+    /* Measured, then written: the policy writes nothing into room its answer
+     * does not fit, which is what lets the size query and the fetch be the
+     * same call twice. */
+    const size_t needed = extensions_.report(host, answered, nullptr, 0u);
+    if (size_ret != nullptr) *size_ret = needed;
+    if (value == nullptr) return CL_SUCCESS;
+    if (value_bytes < needed) return CL_INVALID_VALUE;
+    static_cast<void>(extensions_.report(host, answered, static_cast<char *>(value), value_bytes));
+    return CL_SUCCESS;
 }
 
 ClObject *ClIcdRoot::judged(const void *pointer, ClObject::Kind kind)
