@@ -286,6 +286,53 @@ TEST(cl_enqueue_paths, a_non_blocking_read_the_marker_fails_for_never_becomes_a_
            CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold()); }
 
+/* A blocking read is three commands the host may refuse - the marker that
+ * drains the queue, the wait on it, and the read itself - and each has to
+ * answer with its own error and stop there. They are one test each rather
+ * than one test with three scripts, because a single refusal scripted once
+ * lands on whichever command happens to go first, and a test that does not
+ * say which one it refused stops meaning anything the moment the order
+ * changes. This one did: it scripted one refusal, the reordering put the
+ * marker in front of the read, and it went on passing while testing the
+ * marker under a name that says read. */
+TEST(cl_enqueue_paths, a_blocking_read_whose_drain_marker_the_host_refuses_answers_its_error)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
+                                   nullptr),
+           CL_OUT_OF_RESOURCES);
+  /* The marker alone: there is nothing to wait for and nothing to read from a
+   * queue the host would not mark. */
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_enqueue_paths, a_blocking_read_whose_drain_the_host_will_not_flush_answers_its_error)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  unsigned char into[8] = {};
+
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);   /* the marker */
+  rig.host().cl_result(CL_OUT_OF_RESOURCES);        /* which the host will not flush */
+  rig.host().cl_result(CL_SUCCESS);                 /* the marker is given back anyway */
+  CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
+                                   nullptr),
+           CL_OUT_OF_RESOURCES);
+  /* Marker, flush, release - and no read: the queue never drained, so reading
+   * it would answer bytes from before the work the application waited for. */
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  CHECK_EQ(rig.kmt().command_id(sent + 2u), av::clproto::kCmd_clReleaseEvent);
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(cl_enqueue_paths, a_blocking_read_the_host_refuses_answers_its_error)
 { ClIcdRig rig;
   Running  run(rig);
@@ -293,13 +340,21 @@ TEST(cl_enqueue_paths, a_blocking_read_the_host_refuses_answers_its_error)
   if (!run.made()) return;
   unsigned char into[8] = {};
 
-  /* A blocking read is sent as a read the ICD waits for itself, so a host
-   * that refuses the enqueue ends it there - before the flush and before
-   * anything is waited on. */
-  rig.host().cl_bytes_for(CL_OUT_OF_RESOURCES, nullptr, 0u, 0u);
+  const std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);   /* the marker */
+  rig.host().cl_result(CL_SUCCESS);                 /* the queue flushed */
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);                 /* the marker released */
+  /* The queue drained, and the read of it refused. */
+  rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    nullptr),
            CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBuffer);
+  /* And nothing was written into what the application gave. */
+  for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
   CHECK(rig.root().invariants_hold()); }
 
 /* ---- events, and the delivery a status query triggers -------------------- */

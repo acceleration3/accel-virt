@@ -392,6 +392,12 @@ foreach(src ${AV_UNIT_TESTS})
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
     add_dependencies(${name} rvk_executor)
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The executor library opens every host API when it loads, Vulkan among
+    # them, so this test carries the Vulkan loader whether or not it asks
+    # anything of it - and a loader that unloads a driver reports its leaks
+    # from a module no suppression can name. Its three siblings pin this for
+    # the same reason.
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
   endif()
   # The descriptor template proof through the same stack (feature 047): the
   # guest sizes a blob from the template it remembers and the device refuses a

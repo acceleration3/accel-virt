@@ -255,7 +255,9 @@ cl_int ClIcdRoot::device_extensions(ClObject &device, size_t value_bytes, void *
     const cl_int asked = av::clproto::rvk_clGetDeviceInfo(
         *wire, device.wire(), CL_DEVICE_EXTENSIONS, sizeof host, host, &answered);
     if (asked != CL_SUCCESS) return asked;
-    if (answered > sizeof host) answered = sizeof host;
+    /* `answered` needs no clamp of its own: the generated client refuses a
+     * size the device reports past the room it was given, so a device that
+     * answered CL_SUCCESS answered a length this buffer holds. */
     /* Measured, then written: the policy writes nothing into room its answer
      * does not fit, which is what lets the size query and the fetch be the
      * same call twice. */

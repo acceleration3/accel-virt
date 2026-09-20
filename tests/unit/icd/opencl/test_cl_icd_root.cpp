@@ -1324,10 +1324,14 @@ TEST(cl_icd_root, every_entry_refuses_an_object_whose_context_is_gone)
   CHECK_EQ(rig.root().watch_event(as_event, CL_COMPLETE, nullptr, nullptr), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().set_user_event_status(as_event, CL_COMPLETE), CL_OUT_OF_RESOURCES);
 
-  /* And a device query the host would own. */
+  /* And the device queries the host would own: the ones forwarded whole, and
+   * the extensions, which are the host's list intersected with the policy and
+   * so need the host as much as a forwarded query does. */
   char        name[8] = {};
   std::size_t answered = 0u;
   CHECK_EQ(rig.root().device_info(as_device, CL_DEVICE_NAME, sizeof name, name, &answered),
+           CL_INVALID_DEVICE);
+  CHECK_EQ(rig.root().device_info(as_device, CL_DEVICE_EXTENSIONS, sizeof name, name, &answered),
            CL_INVALID_DEVICE);
 
   /* Not one of them reached the driver. */
