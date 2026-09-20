@@ -375,6 +375,15 @@ def arguments():
                              "(tools/mcp/rvk_inspect.py)")
     parser.add_argument("--gdb", type=int, metavar="PORT", help="QEMU's gdbstub on 127.0.0.1:PORT")
     parser.add_argument("--vnc", type=int, metavar="DISPLAY", help="the guest's display on 127.0.0.1:5900+DISPLAY")
+    # A console's GL context comes from the display backend and never from the
+    # device, so -display none is a host on which the device offers no dma-buf
+    # scanout at all and the guest keeps the 2D path (feature 058,
+    # docs/kb/06-display.md). egl-headless is the backend that gives one and
+    # still answers screendump: it imports the dma-buf, blits it and reads it
+    # back into the console's surface.
+    parser.add_argument("--display", default="none", choices=("none", "egl-headless"),
+                        help="the QEMU display backend (default: none). egl-headless gives the console a GL "
+                             "context, which is what lets the device scan out a dma-buf")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
                         help="enable QEMU trace events matching PATTERN into qemu.log, e.g. 'virtio_gpu_*'")
     parser.add_argument("--no-verifier", action="store_true",
@@ -432,7 +441,7 @@ def qemu_command(args, work, disk, rescue):
         "-qmp", f"unix:{work / 'qmp.sock'},server=on,wait=off",
         "-action", f"panic={'pause' if args.on_panic == 'pause' else 'none'}",
         "-msg", "timestamp=on", "-d", "guest_errors",
-        "-vga", "none", "-display", "none", "-nic", "none",
+        "-vga", "none", "-display", args.display, "-nic", "none",
     ]
     if args.vnc is not None:
         command += ["-vnc", f"127.0.0.1:{args.vnc}"]

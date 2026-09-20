@@ -761,6 +761,8 @@ static void rvk_close_recording(void *opaque, void *file)
 {
     (void)opaque;
     qemu_close((int)(intptr_t)file - 1);
+}
+
 /* The console of head `head`, or NULL past the heads this device has. */
 static QemuConsole *rvk_head_console(VirtIOGPURvk *r, uint32_t head)
 {
