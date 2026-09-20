@@ -326,12 +326,23 @@ MUTATE(fixture, fixture.space().map(reserved, kPage, 7u, 0u), Status::ok);
 ```
 
 `HostileSweep` is an object, not per-test boilerplate: given a parser and one
-valid input it feeds empty, every truncation, oversized length, all-zero,
-all-ones and a bit-flip sweep. `GuardedBuffer` surrounds the destination with
+valid input it feeds empty, every truncation, the valid input, a bit-flip sweep
+over it, all-zero and all-ones. `GuardedBuffer` surrounds the destination with
 poisoned bands so a write past the end is caught.
 
 Each case asserts the same contract: an error is returned, nothing outside the
 destination is written, the call terminates, and ASan/UBSan stay quiet.
+
+Surviving is half the contract. `cases_run()` says how many inputs were fed and
+`rejections()` how many the parser refused, and every sweep asserts a floor on
+the second: the cases fed, less the acceptances the format itself explains - a
+field it leaves free, a flip that lands on another value the format defines -
+with the subtraction written out in a comment a reader can check against the
+format. A decoder that stopped enforcing a magic, a reserved word or a range
+then fails its own sweep, where before it would have passed by not crashing.
+Where the accepted set cannot be derived from the format alone - a chain whose
+framing moves when a length changes - the comment says so and the floor is the
+weakest true one, rather than a number read off the implementation.
 
 ---
 
