@@ -32,14 +32,21 @@ bool ClExternalMemory::names_handle(const ClPropertyList &list, uint64_t &handle
     AV_SCOPE("ClExternalMemory::names_handle");
     handle = 0u;
     taken = false;
+    uint32_t found = 0u;
     for (const uint64_t property : handle_properties) {
         uint64_t value = 0u;
         if (!list.names(property, value)) continue;
-        handle = value;
-        taken = property == handle_properties[0];
-        return true;
+        if (found == 0u) {
+            handle = value;
+            taken = property == handle_properties[0];
+        }
+        found++;
     }
-    return false;
+    /* Two handle types name two different objects, and there is one buffer:
+     * a list that asks for both is refused rather than answered with whichever
+     * this loop met first. */
+    if (found > 1u) taken = false;
+    return found != 0u;
 }
 
 bool ClExternalMemory::asked_for(const ClPropertyList &list) const
@@ -76,7 +83,7 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
     bool     taken = false;
     if (!names_handle(list, named, taken)) return CL_INVALID_VALUE;
     if (!taken) {
-        log_.write("rvkcl: an external memory handle type this driver does not take");
+        log_.write("rvkcl: an external memory handle type this driver does not take, or two at once");
         return CL_INVALID_PROPERTY;
     }
     if (named == 0u) return CL_INVALID_VALUE;

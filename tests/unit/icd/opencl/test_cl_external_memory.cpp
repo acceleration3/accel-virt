@@ -142,13 +142,16 @@ public:
     Properties() : pairs_{}, list_() { CHECK(list_.read(pairs_)); }
     Properties(std::uint64_t name, std::uint64_t value) : pairs_{name, value, 0u, 0u}, list_()
     { CHECK(list_.read(pairs_)); }
+    Properties(std::uint64_t name, std::uint64_t value, std::uint64_t second, std::uint64_t second_value)
+        : pairs_{name, value, second, second_value}, list_()
+    { CHECK(list_.read(pairs_)); }
     Properties(const Properties &) = delete;
     Properties &operator=(const Properties &) = delete;
 
     const ClPropertyList &list() const { return list_; }
 
 private:
-    std::uint64_t  pairs_[4];
+    std::uint64_t  pairs_[6];
     ClPropertyList list_;
 };
 
@@ -275,6 +278,20 @@ TEST(cl_external_memory, each_way_an_open_is_refused_leaves_no_row)
                  CL_INVALID_PROPERTY);
         CHECK_EQ(made, 0u);
     }
+    CHECK_EQ(process.memory().live(), 0u);
+    CHECK_EQ(process.wire().sends(), 0u); }
+
+  { /* Two handle types at once: two objects named for one buffer, which is a
+     * list to refuse rather than to answer with whichever came first. */
+    Process             process;
+    const std::uint64_t named = process.handle();
+    const Properties    both(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, named,
+                             CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR, 3u);
+    CHECK(process.memory().asked_for(both.list()));
+    std::uint64_t made = 9u;
+    CHECK_EQ(process.memory().open(process.wire(), process.device(), both.list(), object_bytes, made),
+             CL_INVALID_PROPERTY);
+    CHECK_EQ(made, 0u);
     CHECK_EQ(process.memory().live(), 0u);
     CHECK_EQ(process.wire().sends(), 0u); }
 

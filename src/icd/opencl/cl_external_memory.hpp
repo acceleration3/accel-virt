@@ -122,8 +122,10 @@ public:
 private:
     friend struct ClExternalMemoryProbe;
 
-    /* The handle `list` names and whether this path takes its type; false when
-     * the list names no external handle at all. */
+    /* The handle `list` names and whether this path takes its type - which a
+     * list naming two handle types never is, since they name two objects and
+     * there is one buffer. False when the list names no external handle at
+     * all. */
     bool                names_handle(const ClPropertyList &list, uint64_t &handle, bool &taken) const;
     ClImportedMemoryRow *row_of(uint64_t made);
     /* Whether this context already holds the object `object_id` names. */
