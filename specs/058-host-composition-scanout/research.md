@@ -234,8 +234,9 @@ this before taking the dmabuf path (`hw/display/virtio-gpu.c:691-709`:
 virtio_gpu_update_dmabuf ... } data = res->blob; }`). So the rvk device asks
 the same question, once, and FR-004's capset bit is the answer.
 
-**egl-headless reads the frame back, and that is why `screendump` still
-works.** `egl_scanout_dmabuf` imports the fd as a texture
+**egl-headless reads the frame back - and `screendump` still cannot see it.**
+*Measured, and this paragraph's original claim was wrong (§9's first question,
+now answered).* `egl_scanout_dmabuf` imports the fd as a texture
 (`egl_dmabuf_import_texture`, EGL's `EGL_EXT_image_dma_buf_import`, compiled
 only with `CONFIG_GBM`) and `egl_scanout_flush` blits it and then calls
 `egl_fb_read(edpy->ds, &edpy->blit_fb)` into the console's `DisplaySurface`
@@ -244,6 +245,17 @@ per flush**, and it is the price of being able to assert anything in an
 automated run. `gtk,gl=on` does not pay it. It also asserts
 `surface_format(edpy->ds) == PIXMAN_x8r8g8b8`, which constrains what the
 scanout's fourcc may be.
+
+What the readback does *not* give is a screendump. `qmp_screendump` asks
+`qemu_console_surface(con)`, and that answers the console's surface only while
+`con->scanout.kind == SCANOUT_SURFACE` (`ui/console.c`); the moment
+`qemu_console_gl_scanout_dmabuf` runs it is `SCANOUT_DMABUF`, and every
+screendump of that console answers *"no surface"* - ours, and stock
+virtio-gpu-gl's alike. `egl_fb_read` writes into `edpy->ds`, which is the
+surface the console *had*, and nothing reads it back out through QMP. So an
+automated run cannot assert a picture of a dma-buf scanout at all on this
+QEMU; what it can assert is the device's own account of what each head shows,
+which is what `tools/guest/run_guest_suite.py`'s scanout scenario does.
 
 **What QEMU cannot do.** It cannot take a Vulkan image handle, a GL texture id
 from another process, or an opaque fd: `egl_dmabuf_import_texture` builds an
@@ -392,11 +404,14 @@ framebuffer, and no way to log the decision once (FR-006).
 Each of these is one question with the one line that settles it. None of them
 gate the device-side work.
 
-1. **Does `egl-headless` change what `screendump` sees?** Run the suite's
-   display scenario with `-display egl-headless` instead of `-display none`
-   and compare `screen0.ppm`: same size, same single colour, no placeholder
-   grey. Settles whether §4's readback claim holds on this host, and whether
-   the runner can adopt the flag unconditionally.
+1. ~~**Does `egl-headless` change what `screendump` sees?**~~ **Answered: it
+   ends it.** With `--display egl-headless` the run reaches the device's
+   "the display shows dma-bufs" line, the guest scans its primary out as a
+   blob, and every `screendump` of that console answers "no surface" - because
+   a console showing a dma-buf has none (§4). The flag is therefore *not*
+   adopted unconditionally: the default stays `-display none`, where the 2D
+   path and every screendump-based display scenario are exactly what they
+   were, and the scanout scenario is what runs under the flag.
 2. **Does this host have the pieces at all?**
    `ls /dev/udmabuf && qemu-system-x86_64 -display help | grep egl` and
    `ls /usr/lib/libgbm.so*`. If `CONFIG_GBM` was off when QEMU was built,

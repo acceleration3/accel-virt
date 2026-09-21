@@ -1043,12 +1043,17 @@ tools/guest/run_guest_suite.py --trace 'virtio_gpu_*' --trace 'virtio_queue_*'  
 context - it is the backend that calls `qemu_console_set_display_gl_ctx`, not
 the device - so `qemu_console_has_gl` is false and the device offers no dma-buf
 scanout at all (feature 058, `docs/kb/06-display.md`). `-display egl-headless`
-is what gives it one, and it keeps QMP `screendump` working: `egl-headless`
-imports the dma-buf as a texture, blits it and reads it back into the console's
-surface (`ui/egl-headless.c`, `egl_scanout_flush`), which is a host-side copy
-per flush that a `gtk,gl=on` run does not pay. It also needs QEMU built with
-GBM; without it `egl_scanout_dmabuf` is compiled out and a scanout the device
-hands over is dropped in silence.
+is what gives it one. It needs QEMU built with GBM; without it
+`egl_scanout_dmabuf` is compiled out and a scanout the device hands over is
+dropped in silence.
+
+What it does **not** give is a picture: `qmp_screendump` asks
+`qemu_console_surface`, which answers nothing while the console's scanout is a
+dma-buf (`ui/console.c`), so every screendump of such a console - ours or stock
+virtio-gpu-gl's - answers "no surface". A run with the flag therefore checks
+the device's own account of what its heads show instead of a PPM, and the
+display scenarios that read a PPM run on the default `-display none`, where the
+guest keeps the 2D path.
 
 A held guest is reached with `tools/guest/guest_shell.py`, over the agent
 socket the runner lets go of:

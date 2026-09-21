@@ -62,6 +62,16 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         exit 1
     fi
     echo "gate: guest passed after $((SECONDS - started)) s"
+    # The zero-copy scanout needs a console with a GL context, which only a
+    # display backend gives (feature 058): its own boot, on the echo executor,
+    # because what it proves is the display path and not any guest work.
+    echo "== gate: guest scanout (egl-headless)"
+    if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-scanout \
+            --display egl-headless; then
+        echo "gate: guest scanout failed" >&2
+        exit 1
+    fi
+    echo "gate: guest scanout passed after $((SECONDS - started)) s"
     # The rvk scenarios and the three ICDs need the real executor on a host GPU, and
     # the suite's timeout scenario the echo library's stall, so they are a
     # second boot - one for all three, since each is a process of its own that
