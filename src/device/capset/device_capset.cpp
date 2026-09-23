@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/context/device_context_table.hpp"
+#include "device/gpu/adapter_name.hpp"
 #include "device/host/host.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -16,7 +17,8 @@ DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false)
 }
 
 /* A device type Vulkan does not define is reported as other, so the capset
- * stays decodable. */
+ * stays decodable. The name is the one the guest shows for the adapter, not
+ * the driver's own (AdapterName). */
 void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features)
 {
     AV_SCOPE("DeviceCapset::describe");
@@ -28,7 +30,7 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
                        sub_apis, DeviceContextTable::max_contexts,
                        RingHeader::lowest_order, RingHeader::highest_order, features,
                        GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), gpu.local_memory(),
-                                   gpu.shared_memory(), gpu.name()));
+                                   gpu.shared_memory(), AdapterName(gpu.name()).text()));
     described_ = true;
 }
 

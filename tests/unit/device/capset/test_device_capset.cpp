@@ -186,3 +186,14 @@ TEST(device_capset_resolve_display, a_capset_nobody_described_announces_nothing)
   CHECK(capset.display_resolved());
   CHECK(!capset.described());
   CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout)); }
+
+/* The guest names its adapter from this field, so it carries the product and
+ * not the host driver Mesa appends to it. */
+TEST(device_capset_describe, names_the_gpu_without_the_host_driver_suffix)
+{ MockHost host;
+  host.add_gpu(GpuIdentity(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, first, 16ull << 30, 0u,
+                           "AMD Radeon RX 9070 XT (RADV GFX1201)"));
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK(std::strcmp(capset.info().gpu().name(), "AMD Radeon RX 9070 XT") == 0);
+  CHECK_EQ(capset.info().gpu().local_memory(), 16ull << 30); }
