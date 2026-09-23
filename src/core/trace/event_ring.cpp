@@ -39,6 +39,11 @@ Status EventRing::initialize(uint8_t *region, size_t bytes, uint32_t slots, uint
     return Status::ok;
 }
 
+void EventRing::describe_clock(uint64_t ticks_per_second)
+{
+    if (region_ != nullptr) put64(region_ + 16u, ticks_per_second);
+}
+
 bool EventRing::recording() const
 {
     return region_ != nullptr;
@@ -46,7 +51,8 @@ bool EventRing::recording() const
 
 void EventRing::record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thread, bool begin)
 {
-    if (region_ == nullptr || slot >= slots_) return;
+    /* Header byte 24 set by a reader freezes the ring while it is copied. */
+    if (region_ == nullptr || slot >= slots_ || __atomic_load_n(region_ + 24u, __ATOMIC_RELAXED) != 0u) return;
     uint8_t *const base = region_ + header_bytes + static_cast<size_t>(slot) * (slot_header_bytes +
                                                                               static_cast<size_t>(events_per_slot_) * event_bytes);
     uint64_t written = 0u;

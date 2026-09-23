@@ -19,7 +19,11 @@ of every QEMU thread and the scopes it ran sit on one timeline:
     tools/perfetto_trace.py <qemu pid> --merge sys.pftrace -o merged.pftrace --seconds 5
 """
 import argparse
+import io
 import json
+import re
+import subprocess
+import gzip
 import mmap
 import time as clock
 import pathlib
@@ -65,13 +69,10 @@ def read_ring(path, since=0):
         yield slot, events
 
 
-def collect(pid, seconds, names):
+def collect(pid, seconds, names, now):
     trace = []
     newest = 0
     rings = {}
-    # Taken before reading: walking the rings takes seconds, and the window
-    # is the seconds before the capture was asked for.
-    now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     for module in MODULES:
         path = pathlib.Path(f"/dev/shm/rvk-events-{module}-{pid}")
         if path.exists():
@@ -155,16 +156,22 @@ def protobuf(pid, trace):
     tracks = {}
     first = True
     for event in trace:
+        if event["ph"] == "M" and event["name"] == "process_name":
+            owner = pid if event["pid"] < GUEST_PID_BASE else event["pid"]
+            process = field_varint(1, owner) + field_bytes(6, event["args"]["name"].encode())
+            out += packet(field_bytes(60, field_varint(1, owner << 32) + field_bytes(3, process)))
+    for event in trace:
         if event["ph"] == "M":
             continue
         tid = event["tid"]
-        if tid not in tracks:
-            uuid = (pid << 32) | tid
-            tracks[tid] = uuid
-            thread = field_varint(1, pid) + field_varint(2, tid)
+        owner = pid if event["pid"] < GUEST_PID_BASE else event["pid"]
+        if (owner, tid) not in tracks:
+            uuid = (owner << 32) | tid
+            tracks[(owner, tid)] = uuid
+            thread = field_varint(1, owner) + field_varint(2, tid)
             descriptor = field_varint(1, uuid) + field_bytes(4, thread)
             out += packet(field_bytes(60, descriptor))
-        track_event = field_varint(9, TYPE_BEGIN if event["ph"] == "B" else TYPE_END) + field_varint(11, tracks[tid])
+        track_event = field_varint(9, TYPE_BEGIN if event["ph"] == "B" else TYPE_END) + field_varint(11, tracks[(owner, tid)])
         if event["ph"] == "B":
             track_event += field_bytes(23, event["name"].encode())
         body = field_varint(8, int(event["ts"] * 1000)) + field_varint(58, CLOCK_MONOTONIC) + field_bytes(11, track_event)
@@ -175,15 +182,119 @@ def protobuf(pid, trace):
     return bytes(out)
 
 
+GUEST_PID_BASE = 0x40000000   # guest processes' track pids, clear of the host's
+CLOCK_PAIR = re.compile(r"rvk-clock host=(\d+) guest=(\d+)")
+
+
+def guest_shell(work, *arguments):
+    command = ["python3", "-B", str(ROOT / "tools" / "guest" / "guest_shell.py"), "--work", str(work), *arguments]
+    return subprocess.run(command, capture_output=True, text=True, timeout=600).stdout
+
+
+def guest_offset(work):
+    """Host clock minus guest clock, both 100 ns: the smallest difference a
+    batch's guest stamp and the host's clock as it ran it show."""
+    pairs = CLOCK_PAIR.findall((pathlib.Path(work) / "qemu.log").read_text(errors="replace"))
+    if not pairs:
+        raise SystemExit(f"no clock pairs in {work}/qemu.log: was QEMU started with RVK_PERFETTO=1?")
+    return min(int(host) - int(guest) for host, guest in pairs[-2000:])
+
+
+def freeze_guest(work, frozen=True):
+    """Sets the freeze byte of every guest event file: its process stops
+    recording, so what the files hold is the time before this. Cleared again
+    once they are copied."""
+    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { "
+                            "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
+                            f"$f.Seek(24, 'Begin') | Out-Null; $f.WriteByte({1 if frozen else 0}); $f.Close() }}")
+
+
+def guest_rings(work, scratch):
+    """Every guest process's event file, zipped in the guest (they are mostly
+    zeroes) and pulled."""
+    listing = guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { $_.Name }")
+    for name in listing.split():
+        if not name.endswith(".bin"):
+            continue
+        remote = f"C:\\ProgramData\\rvk\\{name}"
+        # The process still has it open for writing: read it with write sharing.
+        guest_shell(work, "ps", f"$in = [IO.File]::Open('{remote}', 'Open', 'Read', 'ReadWrite'); "
+                                f"$out = [IO.File]::Create('{remote}.gz'); "
+                                "$zip = New-Object IO.Compression.GZipStream($out, [IO.Compression.CompressionMode]::Compress); "
+                                "$in.CopyTo($zip); $zip.Close(); $in.Close()")
+        local = scratch / f"{name}.gz"
+        guest_shell(work, "pull", f"{remote}.gz", str(local))
+        if not local.exists():
+            continue
+        (scratch / name).write_bytes(gzip.decompress(local.read_bytes()))
+        yield name, scratch / name
+
+
+def collect_guest(work, seconds, names, scratch):
+    """The guest processes' events in the `seconds` before the newest of them,
+    on the host's clock, and where that window ends."""
+    offset = guest_offset(work)
+    rings = []
+    latest = []
+    for name, path in guest_rings(work, scratch):
+        slots = list(read_ring(path, 0))
+        latest.append(max((events[-1][0] for _, events in slots if events), default=0))
+        rings.append((name, slots))
+    # The freeze reaches the files one at a time, hundreds of milliseconds
+    # apart: the window ends where the first of the live processes stopped.
+    live_within = 2 * 1_000_000 * TICKS_PER_US
+    newest = min(stamp for stamp in latest if stamp >= max(latest) - live_within)
+    end = newest + offset
+    since = newest - int(seconds * 1_000_000 * TICKS_PER_US)
+    trace = []
+    for name, slots in rings:
+        stem = name[len("events-"):-len(".bin")]
+        module, _, pid_text = stem.rpartition("-")
+        pid = GUEST_PID_BASE | int(pid_text)
+        trace.append({"ph": "M", "name": "process_name", "pid": pid, "args": {"name": f"guest {module} {pid_text}"}})
+        named = set()
+        for _, events in slots:
+            depth = {}
+            for time, scope, thread, begin in events:
+                if time < since or time > newest:
+                    continue
+                at = time + offset
+                if thread not in named:
+                    named.add(thread)
+                    trace.append({"ph": "M", "name": "thread_name", "pid": pid, "tid": thread,
+                                  "args": {"name": f"{module} {thread}"}})
+                if begin:
+                    depth[thread] = depth.get(thread, 0) + 1
+                    trace.append({"ph": "B", "pid": pid, "tid": thread, "ts": at / TICKS_PER_US,
+                                  "name": names.get(scope, f"#{scope:08x}")})
+                elif depth.get(thread, 0) > 0:
+                    depth[thread] -= 1
+                    trace.append({"ph": "E", "pid": pid, "tid": thread, "ts": at / TICKS_PER_US})
+    return trace, end
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pid", type=int, help="the QEMU process")
     parser.add_argument("-o", "--output", type=pathlib.Path, default=pathlib.Path("rvk-trace.json"))
     parser.add_argument("--seconds", type=float, default=2.0, help="how much of the newest history to keep")
     parser.add_argument("--merge", type=pathlib.Path, help="a tracebox .pftrace to append the scopes to")
+    parser.add_argument("--guest", type=pathlib.Path, metavar="WORK",
+                        help="the run's work directory: add the guest processes' timelines too (they record while "
+                             "C:\\ProgramData\\rvk\\perfetto exists when they start)")
     args = parser.parse_args()
     names = rvk_inspect.ScopeNames().load()
-    trace = collect(args.pid, args.seconds, names)
+    now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
+    guest = []
+    if args.guest is not None:
+        # The guest is frozen first and its window ends where it stopped; the
+        # host's rings are far larger and still hold that stretch.
+        freeze_guest(args.guest)
+        scratch = args.output.parent / "guest-events"
+        scratch.mkdir(parents=True, exist_ok=True)
+        guest, now = collect_guest(args.guest, args.seconds, names, scratch)
+        freeze_guest(args.guest, frozen=False)
+    trace = collect(args.pid, args.seconds, names, now) + guest
     if args.output.suffix == ".pftrace" or args.merge is not None:
         system = args.merge.read_bytes() if args.merge is not None else b""
         args.output.write_bytes(system + protobuf(args.pid, trace))

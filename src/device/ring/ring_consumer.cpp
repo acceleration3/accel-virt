@@ -11,10 +11,14 @@
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_header.hpp"
 
+#include <stdio.h>
+extern "C" char *getenv(const char *name);   /* freestanding: libc's own */
+#include <time.h>
+
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("RVK_PERFETTO") != nullptr), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -108,6 +112,7 @@ Status RingConsumer::consume_next()
     }
     if (published < batch.span()) return Status::no_space;
     if (ordering_ != nullptr) ordering_->wait_before(*this, batch.published_at());
+    note_clock(batch.published_at());
     const Status ran = executor_.run(ring_, head_, batch);
     if (ran != Status::ok) {
         fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
@@ -142,6 +147,21 @@ uint64_t RingConsumer::earliest_pending() const
      * waited for: the kernel may be holding it until the waiting stream's own
      * packet completes, and the two would wait on each other. */
     return UINT64_MAX;
+}
+
+/* While Perfetto records, now and then the host's clock beside the guest's
+ * stamp on a batch it is about to run: tools/perfetto_trace.py takes the
+ * smallest difference as the offset between the guest's timeline and ours. */
+void RingConsumer::note_clock(uint64_t published_at)
+{
+    AV_SCOPE("RingConsumer::note_clock");
+    constexpr uint64_t every = 16u;
+    if (!clock_pairs_ || published_at == 0u || batches_ % every != 0u) return;
+    timespec now = {};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    const uint64_t host = (static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec)) / 100u;
+    fprintf(stderr, "rvk-clock host=%llu guest=%llu\n", static_cast<unsigned long long>(host),
+            static_cast<unsigned long long>(published_at));
 }
 
 void RingConsumer::order_with(D3dOrdering &ordering)

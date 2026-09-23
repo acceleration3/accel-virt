@@ -63,6 +63,9 @@ public:
     /* The object in `slot` and its id and kind; null for an empty slot. */
     /* The first slot at or after `from` holding an object; capacity for none. */
     uint32_t           next_used(uint32_t from) const;
+    /* The slots holding views, so a swap chain's rotation looks at those alone. */
+    uint32_t           views() const;
+    uint32_t           view_slot(uint32_t index) const;
     /* The resource a view slot was last noted to see; null until noted. */
     IUnknown          *viewed(uint32_t slot) const;
     void               note_viewed(uint32_t slot, IUnknown *resource);
@@ -89,6 +92,9 @@ private:
     /* What a view slot's view sees, once asked: a view holds its resource,
      * so the pointer lives as long as the view. Cleared when the slot changes. */
     IUnknown     *viewed_[capacity];
+    uint32_t      view_slots_[capacity];
+    uint32_t      view_at_[capacity];
+    uint32_t      views_;
     uint32_t      count_;
 };
 

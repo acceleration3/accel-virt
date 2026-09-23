@@ -29,6 +29,8 @@ public:
     /* The region must hold bytes_for(slots, events_per_slot). */
     [[nodiscard]] Status initialize(uint8_t *region, size_t bytes, uint32_t slots, uint32_t events_per_slot);
     bool                 recording() const;
+    /* The stamps' unit, in the header's bytes 16..23, for a reader. */
+    void                 describe_clock(uint64_t ticks_per_second);
     /* `time` in 100 ns units, the trace host's clock. */
     void                 record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thread, bool begin);
 

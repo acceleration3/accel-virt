@@ -229,6 +229,18 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     return publish_batch(staging_, command_size, fence);
 }
 
+/* The performance counter in 100 ns, the unit the trace timeline keeps: the
+ * device orders batches by it, and Perfetto aligns guest and host by it. */
+uint64_t KmtTransport::published_now() const
+{
+    AV_SCOPE("KmtTransport::published_now");
+    constexpr uint64_t hundred_ns = 10000000u;
+    uint64_t       frequency = 0u;
+    const uint64_t ticks = connection_.kmt().performance_counter(frequency);
+    if (frequency == 0u) return ticks;
+    return ticks / frequency * hundred_ns + ticks % frequency * hundred_ns / frequency;
+}
+
 bool KmtTransport::drain()
 {
     AV_SCOPE("KmtTransport::drain");
@@ -257,12 +269,11 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     if (next == 0u) return TransportResult::failed;
     uint64_t begin = 0u;
     uint64_t end = 0u;
-    uint64_t frequency = 0u;
-    Status   written = ring_.write_batch(batch, length, next, connection_.kmt().performance_counter(frequency), begin, end);
+    Status   written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     if (written == Status::no_space) {
         if (!drain()) return TransportResult::failed;
         next = fences_.peek();
-        written = ring_.write_batch(batch, length, next, connection_.kmt().performance_counter(frequency), begin, end);
+        written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     }
     if (written != Status::ok) return TransportResult::failed;
     fence = fences_.open();

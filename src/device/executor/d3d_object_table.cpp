@@ -13,7 +13,7 @@ constexpr uint32_t golden_ratio = 2654435769u;
 
 }  // namespace
 
-D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, viewed_{}, count_(0u)
+D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, viewed_{}, view_slots_{}, view_at_{}, views_(0u), count_(0u)
 {
     AV_SCOPE("D3dObjectTable::D3dObjectTable");
 }
@@ -36,9 +36,30 @@ uint32_t D3dObjectTable::slot_of(uint32_t id) const
     return capacity;
 }
 
+namespace {
+
+bool view_kind(D3dObjectKind kind)
+{
+    return kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::render_target_view ||
+           kind == D3dObjectKind::depth_stencil_view || kind == D3dObjectKind::unordered_access_view;
+}
+
+}  // namespace
+
 void D3dObjectTable::set(uint32_t slot, uint32_t id, D3dObjectKind kind, bool tombstone, IUnknown *object)
 {
     AV_SCOPE("D3dObjectTable::set");
+    const bool was_view = view_kind(kinds_[slot]);
+    const bool is_view = view_kind(kind);
+    if (was_view && !is_view) {
+        const uint32_t at = view_at_[slot];
+        view_slots_[at] = view_slots_[--views_];
+        view_at_[view_slots_[at]] = at;
+    }
+    if (!was_view && is_view) {
+        view_at_[slot] = views_;
+        view_slots_[views_++] = slot;
+    }
     ids_[slot] = id;
     kinds_[slot] = kind;
     tombstones_[slot] = tombstone;
@@ -85,6 +106,18 @@ IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *ob
     objects_[slot] = object;
     viewed_[slot] = nullptr;
     return old;
+}
+
+uint32_t D3dObjectTable::views() const
+{
+    AV_SCOPE("D3dObjectTable::views");
+    return views_;
+}
+
+uint32_t D3dObjectTable::view_slot(uint32_t index) const
+{
+    AV_SCOPE("D3dObjectTable::view_slot");
+    return index < views_ ? view_slots_[index] : capacity;
 }
 
 uint32_t D3dObjectTable::next_used(uint32_t from) const

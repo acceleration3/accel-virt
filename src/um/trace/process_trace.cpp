@@ -8,9 +8,26 @@
 namespace av {
 
 ProcessTrace::ProcessTrace()
-    : host_(), security_(), section_(), table_(host_), service_(), crash_(), module_(""), previous_(nullptr)
+    : host_(), security_(), section_(), table_(host_), events_file_(), events_(), service_(), crash_(), module_(""), previous_(nullptr)
 {
     AV_SCOPE("ProcessTrace::ProcessTrace");
+}
+
+/* A timeline of this process for Perfetto, when one is being recorded: every
+ * scope an event in a file the host pulls, stamped by the performance
+ * counter the host's batches carry too. */
+void ProcessTrace::record_events(const char *module, uint32_t pid)
+{
+    AV_SCOPE("ProcessTrace::record_events");
+    constexpr uint32_t events_per_slot = 65536u;
+    constexpr uint64_t hundred_ns = 10000000u;
+    if (!events_file_.wanted()) return;
+    const size_t bytes = EventRing::bytes_for(TraceSection::slots, events_per_slot);
+    if (events_file_.open(module, pid, bytes) != Status::ok) return;
+    if (events_.initialize(events_file_.region(), bytes, TraceSection::slots, events_per_slot) != Status::ok) return;
+    host_.precise();
+    events_.describe_clock(hundred_ns);
+    table_.record_events(events_);
 }
 
 Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter filter)
@@ -23,6 +40,7 @@ Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter f
     status = table_.initialize(section_.region(), section_.bytes(), module, pid);
     if (status != Status::ok) return status;
     scope_binding.bind(table_);
+    record_events(module, pid);
     HMODULE     pinned = nullptr;
     const DWORD pin = GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;
     if (!GetModuleHandleExW(pin, reinterpret_cast<LPCWSTR>(this), &pinned)) return Status::invalid_state;

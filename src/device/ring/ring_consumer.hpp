@@ -67,6 +67,7 @@ private:
      * anything else has faulted the context. */
     void                 serve();
     [[nodiscard]] Status consume_next();
+    void                 note_clock(uint64_t published_at);
     void                 fault(FaultCode code, const char *reason, uint64_t value);
 
     Host          &host_;
@@ -78,6 +79,7 @@ private:
     uint64_t     last_fence_;
     uint64_t     batches_;
     D3dOrdering *ordering_;
+    bool         clock_pairs_;
     bool         prepared_;
     bool         attached_;
     bool         faulted_;

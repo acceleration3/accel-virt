@@ -379,7 +379,8 @@ bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
 void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
 {
     AV_SCOPE("D3dBackend::remake_views");
-    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity; slot = objects_.next_used(slot + 1u)) {
+    for (uint32_t view = 0u; view < objects_.views(); view++) {
+        const uint32_t slot = objects_.view_slot(view);
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
         IUnknown *const object = objects_.at(slot, id, kind);

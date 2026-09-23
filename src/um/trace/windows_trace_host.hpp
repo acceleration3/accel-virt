@@ -21,9 +21,13 @@ public:
     uint64_t clock() const override;
     uint16_t level() const override;
     bool     exchange(uint64_t &word, uint64_t expected, uint64_t desired) override;
+    /* The performance counter, in 100 ns, from now on: what a timeline needs,
+     * and what the host's batches are stamped with (Perfetto recording). */
+    void     precise();
 
 private:
     InterruptClock clock_;
+    uint64_t       frequency_;
 };
 
 }  // namespace av

@@ -4,7 +4,7 @@
 
 namespace av {
 
-WindowsTraceHost::WindowsTraceHost() : clock_() {}
+WindowsTraceHost::WindowsTraceHost() : clock_(), frequency_(0u) {}
 
 uint64_t WindowsTraceHost::thread_key() const
 {
@@ -18,7 +18,19 @@ uint32_t WindowsTraceHost::thread_number() const
 
 uint64_t WindowsTraceHost::clock() const
 {
-    return clock_.now();
+    if (frequency_ == 0u) return clock_.now();
+    LARGE_INTEGER counter = {};
+    QueryPerformanceCounter(&counter);
+    const uint64_t ticks = static_cast<uint64_t>(counter.QuadPart);
+    constexpr uint64_t hundred_ns = 10000000u;
+    return ticks / frequency_ * hundred_ns + ticks % frequency_ * hundred_ns / frequency_;
+}
+
+void WindowsTraceHost::precise()
+{
+    LARGE_INTEGER frequency = {};
+    QueryPerformanceFrequency(&frequency);
+    frequency_ = static_cast<uint64_t>(frequency.QuadPart);
 }
 
 uint16_t WindowsTraceHost::level() const
