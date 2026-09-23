@@ -47,6 +47,7 @@ RtlVirtualUnwind
 SetEvent
 SetLastError
 SetUnhandledExceptionFilter
+Sleep
 TlsAlloc
 TlsFree
 TlsGetValue

@@ -3,9 +3,13 @@ EXPORTS
 CreateWindowExW
 DefWindowProcW
 DestroyWindow
+DispatchMessageW
 GetClientRect
 GetDC
+PeekMessageW
 RegisterClassExW
 ReleaseDC
 SetWindowPos
+ShowWindow
+TranslateMessage
 WindowFromDC

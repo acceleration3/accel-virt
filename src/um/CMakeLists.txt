@@ -262,6 +262,13 @@ foreach(probe d3d9 d3d11 d3d12)
     ${USER32_IMPORT})
 endforeach()
 
+# A D3D11 sample application run on the guest's desktop: the D3D11 runtime
+# and our user-mode driver, not a layer beside it.
+add_executable(rvkd3d11sample ${CMAKE_CURRENT_SOURCE_DIR}/sample/rvkd3d11sample.cpp)
+add_dependencies(rvkd3d11sample rvkd3dprobe_imports rvkglprobe_imports)
+target_link_options(rvkd3d11sample PRIVATE /ENTRY:rvkd3d11sample_entry)
+target_link_libraries(rvkd3d11sample PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS} ${USER32_IMPORT})
+
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
 # (feature 046), and rvkvkprobe.exe makes that window and reads it back;
 # their import library is made with the GL probe's above.
