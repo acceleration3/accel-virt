@@ -921,6 +921,98 @@ static void rvk_hide_scanout(void *opaque, uint32_t head)
     }
 }
 
+/* The PCI revision the host's kernel reports, or -1. */
+static int rvk_pci_revision(const RvkGpuProperties *gpu)
+{
+    g_autofree char *path = g_strdup_printf("/sys/bus/pci/devices/%04x:%02x:%02x.%x/revision", gpu->pci_domain,
+                                            gpu->pci_bus, gpu->pci_device, gpu->pci_function);
+    g_autofree char *text = NULL;
+
+    if (!gpu->on_pci || !g_file_get_contents(path, &text, NULL, NULL)) {
+        return -1;
+    }
+    return (int)g_ascii_strtoll(text, NULL, 16);
+}
+
+/* libdrm's table of AMD product names by device and revision - what AMD's
+ * own driver names the adapter - or false where it has no entry. */
+static bool rvk_amdgpu_name(const RvkGpuProperties *gpu, int revision, char *name, size_t size)
+{
+    g_autofree char *table = NULL;
+    g_auto(GStrv) lines = NULL;
+
+    if (gpu->vendor_id != 0x1002 || revision < 0 ||
+        !g_file_get_contents("/usr/share/libdrm/amdgpu.ids", &table, NULL, NULL)) {
+        return false;
+    }
+    lines = g_strsplit(table, "\n", -1);
+    for (char **line = lines; *line; line++) {
+        g_auto(GStrv) fields = g_strsplit(*line, ",", 3);
+        if (g_strv_length(fields) == 3 && g_ascii_strtoull(fields[0], NULL, 16) == gpu->device_id &&
+            g_ascii_strtoull(g_strstrip(fields[1]), NULL, 16) == (guint64)revision) {
+            g_strlcpy(name, g_strstrip(fields[2]), size);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The PCI ID database's name for the device, its bracketed product name when
+ * it has one ("Granite Ridge [Radeon Graphics]"), after the vendor's. */
+static bool rvk_pci_ids_name(const RvkGpuProperties *gpu, char *name, size_t size)
+{
+    static const char *const databases[] = {"/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids"};
+    g_autofree char *vendor_line = g_strdup_printf("%04x  ", gpu->vendor_id);
+    g_autofree char *device_line = g_strdup_printf("\t%04x  ", gpu->device_id);
+    const char *vendor = gpu->vendor_id == 0x1002 ? "AMD" : gpu->vendor_id == 0x8086 ? "Intel(R)"
+                       : gpu->vendor_id == 0x10de ? "NVIDIA" : NULL;
+
+    for (size_t d = 0; d < G_N_ELEMENTS(databases) && vendor; d++) {
+        g_autofree char *text = NULL;
+        g_auto(GStrv) lines = NULL;
+        bool in_vendor = false;
+
+        if (!g_file_get_contents(databases[d], &text, NULL, NULL)) {
+            continue;
+        }
+        lines = g_strsplit(text, "\n", -1);
+        for (char **line = lines; *line; line++) {
+            if ((*line)[0] != '\t' && (*line)[0] != '#' && (*line)[0] != '\0') {
+                in_vendor = g_str_has_prefix(*line, vendor_line);
+                continue;
+            }
+            if (!in_vendor || !g_str_has_prefix(*line, device_line)) {
+                continue;
+            }
+            const char *product = *line + strlen(device_line);
+            const char *open = strrchr(product, '[');
+            const char *close = open ? strchr(open, ']') : NULL;
+            g_autofree char *picked = open && close ? g_strndup(open + 1, (gsize)(close - open - 1))
+                                                    : g_strdup(product);
+            g_autofree char *full = g_strdup_printf("%s %s", vendor, picked);
+            g_strlcpy(name, full, size);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The name Windows would give the adapter. Vulkan's deviceName is the
+ * driver's: RADV names an integrated GPU after its processor, "AMD Ryzen 9
+ * 9950X3D 16-Core Processor (RADV RAPHAEL_MENDOCINO)", which is no GPU's name
+ * and runs past what the capset carries. AMD's own table comes first, then,
+ * for an integrated GPU, the PCI ID database's; otherwise Vulkan's stands. */
+static void rvk_marketing_name(RvkGpuProperties *gpu)
+{
+    char name[sizeof(gpu->name)] = {0};
+    const int revision = rvk_pci_revision(gpu);
+
+    if (rvk_amdgpu_name(gpu, revision, name, sizeof(name)) ||
+        (gpu->device_type == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && rvk_pci_ids_name(gpu, name, sizeof(name)))) {
+        g_strlcpy(gpu->name, name, sizeof(gpu->name));
+    }
+}
+
 static bool rvk_has_device_extension(VkPhysicalDevice device, const char *name)
 {
     g_autofree VkExtensionProperties *extensions = NULL;
@@ -1009,6 +1101,7 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
         };
         memcpy(gpu->uuid, id.deviceUUID, sizeof(gpu->uuid));
         g_strlcpy(gpu->name, properties.properties.deviceName, sizeof(gpu->name));
+        rvk_marketing_name(gpu);
         for (uint32_t heap = 0; heap < memory.memoryHeapCount; heap++) {
             if (memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
                 gpu->local_memory += memory.memoryHeaps[heap].size;

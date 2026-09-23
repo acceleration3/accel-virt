@@ -1092,7 +1092,10 @@ class GuestRun:
         monitors = re.search(r"monitors=(\d+)", output)
         if monitors is None:
             raise StepFailed("check", "the check stage did not count the guest's monitors")
-        devices = max(len(self.host_gpus), 1)
+        # A window's run gives every GPU but the first display=off: those
+        # render and drive no monitor (qemu_command).
+        windowed = self.args.display in ("gtk", "sdl")
+        devices = 1 if windowed else max(len(self.host_gpus), 1)
         if int(monitors.group(1)) != self.args.outputs * devices:
             raise StepFailed("check", f"the guest has {monitors.group(1)} monitors, not "
                                       f"{self.args.outputs * devices}")

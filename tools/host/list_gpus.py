@@ -18,6 +18,7 @@ identity the function presents (src/device/gpu/host_pci_identity.hpp), which
 tools/guest/run_guest_suite.py --all-gpus checks Windows against.
 """
 import argparse
+import pathlib
 import re
 import subprocess
 import sys
@@ -69,8 +70,16 @@ class Gpu:
     def device_argument(self):
         return f"virtio-gpu-rvk-pci,host-gpu={self.uuid},max_outputs=1"
 
-    def adapter_name(self):
-        return adapter_name(self.name)
+    def adapter_name(self, sysfs=SYSFS_PCI):
+        """What Windows would call the adapter: AMD's own product table first,
+        then, for an integrated GPU (which RADV names after its processor),
+        the PCI ID database's product name; else the Vulkan name, trimmed.
+        The same choice the device makes (virtio-gpu-rvk-host.c)."""
+        vendor, device, revision = self.pci_identity(sysfs)
+        name = amdgpu_name(vendor, device, revision)
+        if name is None and self.kind == "integrated":
+            name = pci_ids_name(vendor, device)
+        return adapter_name(name if name is not None else self.name)
 
     def pci_identity(self, sysfs=SYSFS_PCI):
         """(vendor, device, revision) the device's PCI function presents: its
@@ -93,6 +102,47 @@ def sysfs_number(sysfs, address, attribute):
     if not text.lower().startswith("0x"):
         raise ValueError(f"{address}/{attribute}: {text!r} is not hex")
     return int(text, 16)
+
+
+AMDGPU_IDS = "/usr/share/libdrm/amdgpu.ids"
+PCI_IDS = ("/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids")
+VENDOR_NAMES = {0x1002: "AMD", 0x8086: "Intel(R)", 0x10DE: "NVIDIA"}
+
+
+def amdgpu_name(vendor, device, revision, table=AMDGPU_IDS):
+    if vendor != 0x1002:
+        return None
+    try:
+        lines = pathlib.Path(table).read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        fields = [field.strip() for field in line.split(",", 2)]
+        try:
+            if len(fields) == 3 and int(fields[0], 16) == device and int(fields[1], 16) == revision:
+                return fields[2]
+        except ValueError:
+            continue
+    return None
+
+
+def pci_ids_name(vendor, device, databases=PCI_IDS):
+    prefix = VENDOR_NAMES.get(vendor)
+    for database in databases if prefix else ():
+        try:
+            lines = pathlib.Path(database).read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        in_vendor = False
+        for line in lines:
+            if line and not line.startswith(("\t", "#")):
+                in_vendor = line.startswith(f"{vendor:04x}  ")
+                continue
+            if in_vendor and line.startswith(f"\t{device:04x}  "):
+                product = line[len(f"\t{device:04x}  "):]
+                bracketed = re.search(r"\[([^\]]+)\][^\[]*$", product)
+                return f"{prefix} {bracketed.group(1) if bracketed else product}"
+    return None
 
 
 def adapter_name(vulkan_name):
