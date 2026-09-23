@@ -57,7 +57,9 @@
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
+#include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
@@ -1205,11 +1207,16 @@ int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressReco
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->hAllocation == nullptr)
         return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0, nullptr)).value();
-    if (request->PrimarySegment != ApertureSegment::segment_id && request->PrimarySegment != system_memory_driver_segment)
+    return show_primary(request->VidPnSourceId, request->PrimarySegment, request->PrimaryAddress, request->hAllocation);
+}
+
+int32_t Adapter::show_primary(uint32_t source, uint32_t segment, int64_t address, void *allocation)
+{
+    AV_SCOPE("Adapter::show_primary");
+    if (segment != ApertureSegment::segment_id && segment != system_memory_driver_segment)
         return NtStatus(Status::invalid_parameter).value();
-    log_scanout(*request);
-    return NtStatus(sources_.set_scanout(request->VidPnSourceId, request->PrimaryAddress, request->hAllocation))
-        .value();
+    log_scanout(source, segment, address);
+    return NtStatus(sources_.set_scanout(source, address, allocation)).value();
 }
 
 /* Which source dxgkrnl showed or hid, and not only that it asked: a display the
@@ -1229,18 +1236,18 @@ void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &reques
     platform_.log(message.text());
 }
 
-void Adapter::log_scanout(const DxgkargSetVidPnSourceAddressRecord &request)
+void Adapter::log_scanout(uint32_t source, uint32_t segment, int64_t address)
 {
     AV_SCOPE("Adapter::log_scanout");
     if (platform_.current_irql() >= Irql::dispatch || !budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
     message.append("rvkgpu: SetVidPnSourceAddress source ");
-    message.append_decimal(request.VidPnSourceId);
+    message.append_decimal(source);
     message.append(" segment ");
-    message.append_decimal(request.PrimarySegment);
+    message.append_decimal(segment);
     message.append(" address 0x");
-    message.append_hex(static_cast<uint64_t>(request.PrimaryAddress), 16u);
+    message.append_hex(static_cast<uint64_t>(address), 16u);
     platform_.log(message.text());
 }
 
@@ -1544,11 +1551,27 @@ int32_t Adapter::power_runtime_control_request(const void *, const void *, size_
     return NtStatus(Status::not_supported).value();
 }
 
-int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const void *)
+/* dxgkrnl flips through this instead of SetVidPnSourceAddress once the
+ * compositor has flipped a multiplane present, and a failure here is a 0x119
+ * bugcheck (FAILED_SETVIDPNSOURCEMPO_COMMAND), not a refused flip. This
+ * adapter scans out one plane, the base one: it is shown as SetVidPnSourceAddress
+ * shows a primary, a disabled base plane shows nothing, and an overlay plane
+ * above it is not composed. */
+int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request)
 {
     AV_SCOPE("Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay");
-    return NtStatus(Status::not_supported).value();
+    if (request == nullptr || (request->PlaneCount != 0u && request->pPlanes == nullptr))
+        return NtStatus(Status::invalid_parameter).value();
+    for (uint32_t index = 0u; index < request->PlaneCount; index++) {
+        const DxgkMultiplaneOverlayPlaneRecord &plane = request->pPlanes[index];
+        if (plane.LayerIndex != 0u) continue;
+        if (plane.Enabled == 0u || plane.hAllocation == nullptr)
+            return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0, nullptr)).value();
+        return show_primary(request->VidPnSourceId, plane.AllocationSegment, plane.AllocationAddress,
+                            plane.hAllocation);
+    }
+    return NtStatus(Status::ok).value();
 }
 
 int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)

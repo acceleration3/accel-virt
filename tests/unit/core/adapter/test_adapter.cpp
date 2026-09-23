@@ -69,6 +69,7 @@
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
@@ -1297,6 +1298,50 @@ TEST(adapter_set_vidpn_source_address, another_segment_or_source_is_invalid)
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(nullptr)), invalid_parameter); }
 
+/* A multiplane flip shows its base plane as SetVidPnSourceAddress shows a
+ * primary, whatever overlay planes come with it; a disabled base plane shows
+ * nothing, a flip with no base plane changes nothing, and one in another
+ * segment is refused. dxgkrnl flips through this once the compositor has
+ * flipped a multiplane present, and bugchecks 0x119/0xB on any failure. */
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_plane_as_the_primary)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  int primary = 0, overlay = 0;
+  av::DxgkMultiplaneOverlayPlaneRecord planes[2] = {};
+  planes[0].LayerIndex = 1u;
+  planes[0].Enabled = 1u;
+  planes[0].AllocationSegment = 1u;
+  planes[0].AllocationAddress = 0x9000000000ll;
+  planes[0].hAllocation = &overlay;
+  planes[1].LayerIndex = 0u;
+  planes[1].Enabled = 1u;
+  planes[1].AllocationSegment = 1u;
+  planes[1].AllocationAddress = 0x6000000000ll;
+  planes[1].hAllocation = &primary;
+  av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord request = {};
+  request.PlaneCount = 2u;
+  request.pPlanes = planes;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x60u);
+  request.PlaneCount = 1u;   /* the overlay alone: the base stays */
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument3, 0x60u);
+  request.PlaneCount = 2u;
+  planes[1].Enabled = 0u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).Argument3, 0u);
+  planes[1].Enabled = 1u;
+  planes[1].AllocationSegment = 2u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), invalid_parameter);
+  request.pPlanes = nullptr;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), invalid_parameter); }
+
 TEST(adapter_set_vidpn_source_visibility, records_it_for_the_source)
 { Fixture fixture;
   av::DxgkargSetVidPnSourceVisibilityRecord request = {0u, 1u, {}};
@@ -1948,7 +1993,7 @@ TEST(adapter, system_display_power_components_and_overlays_decline)
   CHECK_EQ(nt(fixture.adapter().power_runtime_control_request(nullptr, nullptr, 0u, nullptr, 0u, nullptr)),
            not_supported);
   fixture.platform().set_irql(Irql::isr);
-  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(nullptr)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(nullptr)), invalid_parameter);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.platform().unclaimed_violations(), 0u); }
 

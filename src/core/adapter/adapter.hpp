@@ -88,6 +88,7 @@ struct DxgkargPresentRecord;
 struct DxgkargSetPointerPositionRecord;
 struct DxgkargSetPointerShapeRecord;
 struct DxgkargSetVidPnSourceAddressRecord;
+struct DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord;
 struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
 struct DxgkargQueryVidPnHwCapabilityRecord;
@@ -222,7 +223,7 @@ public:
     int32_t set_power_component_fstate(uint32_t component, uint32_t fstate);
     int32_t power_runtime_control_request(const void *control_code, const void *input, size_t input_size,
                                           void *output, size_t output_size, size_t *returned);
-    int32_t set_vidpn_source_address_with_multi_plane_overlay(const void *request);
+    int32_t set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request);
     /* One 3D node named 3DNode00, as basicrender.sys names it, with a GPU MMU. */
     int32_t get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata);
     int32_t set_power_pstate(uint32_t component, uint32_t pstate);
@@ -376,7 +377,10 @@ private:
      * look for a frame. Skipped at device IRQL, where the budget's lock is
      * illegal; dxgkrnl only calls there for an MMIO flip on vsync, which this
      * driver does not report. */
-    void                 log_scanout(const DxgkargSetVidPnSourceAddressRecord &request);
+    /* A primary shown on `source`: what SetVidPnSourceAddress and a multiplane
+     * flip's base plane both come to. */
+    int32_t              show_primary(uint32_t source, uint32_t segment, int64_t address, void *allocation);
+    void                 log_scanout(uint32_t source, uint32_t segment, int64_t address);
     /* A step whose answer is only meaningful next to the handle it was given -
      * DxgkDdiCreateDevice receives the runtime's handle and answers with the
      * driver's, and a guest that ends up with neither needs both in the log. */

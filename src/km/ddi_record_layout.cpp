@@ -87,7 +87,9 @@
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
+#include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_record.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
@@ -658,6 +660,30 @@ AV_SAME_SIZE(DxgkPrimaryDataRecord, DXGK_PRIMARYDATA);
 AV_SAME_OFFSET(DxgkPrimaryDataRecord, hAllocation, DXGK_PRIMARYDATA, hAllocation);
 AV_SAME_OFFSET(DxgkPrimaryDataRecord, SegmentId, DXGK_PRIMARYDATA, SegmentId);
 AV_SAME_OFFSET(DxgkPrimaryDataRecord, SegmentAddress, DXGK_PRIMARYDATA, SegmentAddress);
+
+AV_SAME_SIZE(DxgkMultiplaneOverlayPlaneRecord, DXGK_MULTIPLANE_OVERLAY_PLANE);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, LayerIndex, DXGK_MULTIPLANE_OVERLAY_PLANE, LayerIndex);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, Enabled, DXGK_MULTIPLANE_OVERLAY_PLANE, Enabled);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, AllocationSegment, DXGK_MULTIPLANE_OVERLAY_PLANE, AllocationSegment);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, AllocationAddress, DXGK_MULTIPLANE_OVERLAY_PLANE, AllocationAddress);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, hAllocation, DXGK_MULTIPLANE_OVERLAY_PLANE, hAllocation);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, PlaneAttributes, DXGK_MULTIPLANE_OVERLAY_PLANE, PlaneAttributes);
+
+AV_SAME_SIZE(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, ContextCount,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, ContextCount);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, Context,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, Context);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, Flags,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, Flags);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, VidPnSourceId,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, PlaneCount,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, PlaneCount);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, pPlanes,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, pPlanes);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, Duration,
+               DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY, Duration);
 
 AV_SAME_SIZE(DxgkargSetVidPnSourceAddressRecord, DXGKARG_SETVIDPNSOURCEADDRESS);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, VidPnSourceId, DXGKARG_SETVIDPNSOURCEADDRESS, VidPnSourceId);
