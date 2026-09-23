@@ -271,7 +271,7 @@ target_link_libraries(rvkd3d11sample PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IM
 
 # The D3D11 samples (samples/d3d11): the report's guest side. Relaxed warnings:
 # the samples are ports of other code, not this driver's.
-file(GLOB RVKD3D11SAMPLES_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/d3d11/*.cpp)
+file(GLOB RVKD3D11SAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/d3d11/*.cpp)
 list(FILTER RVKD3D11SAMPLES_SOURCES EXCLUDE REGEX "host_platform\\.cpp$")
 add_executable(rvkd3d11samples ${RVKD3D11SAMPLES_SOURCES})
 add_dependencies(rvkd3d11samples rvkd3dprobe_imports rvkglprobe_imports)
