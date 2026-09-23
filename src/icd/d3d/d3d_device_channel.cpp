@@ -20,6 +20,17 @@ uint32_t D3dDeviceChannel::device() const
     return device_;
 }
 
+bool D3dDeviceChannel::open(uint32_t feature_level, uint32_t &hresult, uint32_t &level)
+{
+    AV_SCOPE("D3dDeviceChannel::open");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    hresult = 1u;
+    if (!d3dproto::rvk_d3d_CreateDevice11(stream_, device_, feature_level, 0u, &hresult, &level)) return false;
+    if (hresult == 0u) stream_.selected(device_);
+    return true;
+}
+
 Status D3dDeviceChannel::flush()
 {
     AV_SCOPE("D3dDeviceChannel::flush");

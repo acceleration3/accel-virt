@@ -63,8 +63,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     if (FAILED(joined)) return joined;
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
-    if (!d3dproto::rvk_d3d_CreateDevice11(wire(), channel_.object().device(), feature_level_, 0u, &hresult, &made) ||
-        hresult != 0u) {
+    if (!channel_.object().open(feature_level_, hresult, made) || hresult != 0u) {
         log_.write("rvkumd: the host made no Direct3D 11 device");
         channel_.destroy();
         session_.leave();

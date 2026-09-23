@@ -54,6 +54,8 @@ public:
     /* Commands recorded after this run on `device`. False when the selection
      * could not be sent, which fails the stream. */
     [[nodiscard]] bool   speak_as(uint32_t device);
+    /* The host selected `device` itself, as CreateDevice11 does. */
+    void                 selected(uint32_t device);
     /* `device` is gone on the host, so it is no longer the one selected. */
     void                 forget(uint32_t device);
     /* A device-side failure latched: every later send fails. */

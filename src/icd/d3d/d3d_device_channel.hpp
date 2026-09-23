@@ -33,6 +33,10 @@ public:
     D3dDeviceChannel &operator=(const D3dDeviceChannel &) = delete;
 
     uint32_t device() const;
+    /* Makes the device on the host (CreateDevice11), which selects it there.
+     * Sent without a selection first: the host knows no device by this id
+     * until the command runs, and refuses selecting one it does not know. */
+    [[nodiscard]] bool   open(uint32_t feature_level, uint32_t &hresult, uint32_t &level);
     /* The stream's flush and make_room_for, under the lock. */
     [[nodiscard]] Status flush();
     [[nodiscard]] bool   make_room_for(size_t bytes);

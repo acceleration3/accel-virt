@@ -191,3 +191,58 @@ TEST(d3d_device_channel, a_failed_stream_fails_the_command_and_keeps_no_lock)
   CHECK(!rvk_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK(!fixture.b().close());
   CHECK(!fixture.lock().held()); }
+
+namespace {
+
+/* The host's answer to the first batch that asks for one: an hresult and a level. */
+void answer_create(Fixture &fixture, std::uint32_t hresult)
+{
+    std::uint8_t *reply = fixture.kmt().view_of(KmtTransportProbe::reply(fixture.transport()));
+    CHECK(reply != nullptr);
+    static_cast<void>(av::ReplyHeader(1u, 8u).encode(reply, av::ReplyHeader::encoded_size));
+    const std::uint32_t words[2] = {hresult, 0xb100u};
+    std::memcpy(reply + av::ReplyHeader::encoded_size, words, sizeof words);
+}
+
+}  // namespace
+
+/* CreateDevice11 selects the device on the host: sent after a selection of an
+ * id the host does not know yet, the selection would be refused and the
+ * session lost. So opening sends no selection, and the device's next command
+ * needs none. */
+TEST(d3d_device_channel, opening_selects_the_device_without_a_selection_sent_first)
+{ Fixture fixture;
+  answer_create(fixture, 0u);
+  std::uint32_t hresult = 1u, level = 0u;
+  CHECK(fixture.a().open(0xb100u, hresult, level));
+  CHECK_EQ(hresult, 0u);
+  CHECK_EQ(level, 0xb100u);
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
+  CHECK_EQ(ids[0], kCmd_CreateDevice11);
+  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 1u);
+  CHECK_EQ(ids[0], kCmd_Draw);
+  CHECK(!fixture.lock().held()); }
+
+/* A device the host would not make is not the one it has selected. */
+TEST(d3d_device_channel, a_refused_open_leaves_the_next_command_to_select)
+{ Fixture fixture;
+  answer_create(fixture, 0x80004005u);
+  std::uint32_t hresult = 0u, level = 0u;
+  CHECK(fixture.a().open(0xb100u, hresult, level));
+  CHECK_EQ(hresult, 0x80004005u);
+  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  std::uint32_t ids[4] = {}, selected[4] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
+  CHECK_EQ(ids[0], kCmd_SelectDevice11);
+  CHECK(!fixture.lock().held()); }
+
+TEST(d3d_device_channel, an_open_that_cannot_be_sent_fails_and_keeps_no_lock)
+{ Fixture fixture;
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  std::uint32_t hresult = 0u, level = 0u;
+  CHECK(!fixture.a().open(0xb100u, hresult, level));
+  CHECK(!fixture.lock().held()); }

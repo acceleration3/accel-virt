@@ -58,6 +58,12 @@ bool D3dCommandStream::speak_as(uint32_t device)
     return true;
 }
 
+void D3dCommandStream::selected(uint32_t device)
+{
+    AV_SCOPE("D3dCommandStream::selected");
+    speaking_ = device;
+}
+
 void D3dCommandStream::forget(uint32_t device)
 {
     AV_SCOPE("D3dCommandStream::forget");
