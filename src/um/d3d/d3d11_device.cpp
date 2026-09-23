@@ -227,14 +227,6 @@ BOOL D3d11Device::flush(UINT, UINT)
     return TRUE;
 }
 
-VOID D3d11Device::destroy_device()
-{
-    AV_SCOPE("D3d11Device::destroy_device");
-    /* The runtime calls this and then its adapter table's DestroyDevice, which
-     * is where the root gives the device back (D3d11Driver::tear_down). */
-    static_cast<void>(wire().flush());
-}
-
 VOID D3d11Device::relocate_device_funcs(struct D3DWDDM2_6DDI_DEVICEFUNCS *)
 {
     AV_SCOPE("D3d11Device::relocate_device_funcs");

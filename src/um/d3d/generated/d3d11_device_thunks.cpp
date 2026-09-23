@@ -4,6 +4,8 @@
  * handle it was given and nothing else, so each thunk is one line into the
  * device the handle's block names. */
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/umd_binding.hpp"
+#include "icd/d3d/umd_root.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
@@ -311,7 +313,7 @@ extern "C" VOID APIENTRY rvkumd_d3d11_CheckCounter(D3D10DDI_HDEVICE device, D3D1
 { DeviceHandle(device.pDrvPrivate).device().check_counter(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDevice(D3D10DDI_HDEVICE device)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_device(); }
+{ d3d::umd_binding.root().destroy_device(device.pDrvPrivate); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetTextFilterSize(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().set_text_filter_size(a1, a2); }

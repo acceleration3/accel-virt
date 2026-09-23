@@ -196,6 +196,12 @@ bool D3dBackend::ready() const
     return selected_ != nullptr;
 }
 
+bool D3dBackend::has_device() const
+{
+    AV_SCOPE("D3dBackend::has_device");
+    return states_.count() != 0u;
+}
+
 bool D3dBackend::extent_of(ID3D11Resource *resource, uint32_t subresource, uint32_t &width, uint32_t &height,
                            uint32_t &depth, uint32_t &format) const
 {
@@ -339,7 +345,7 @@ bool D3dBackend::on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64
 bool D3dBackend::on_Flush11()
 {
     AV_SCOPE("D3dBackend::on_Flush11");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     device11_->context()->Flush();
     return true;
 }
@@ -347,7 +353,7 @@ bool D3dBackend::on_Flush11()
 bool D3dBackend::on_Finish11(uint32_t &hresult)
 {
     AV_SCOPE("D3dBackend::on_Finish11");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_QUERY_DESC description = {D3D11_QUERY_EVENT, 0u};
     ID3D11Query *event = nullptr;
     if (SUCCEEDED(device11_->device()->CreateQuery(&description, &event))) {
@@ -379,7 +385,7 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
 bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &desc, uint64_t shared_key)
 {
     AV_SCOPE("D3dBackend::on_CreateResource");
-    if (!ready() || desc.format > max_format || (desc.bind_flags & ~known_bind_flags) != 0u) return false;
+    if (!has_device() || desc.format > max_format || (desc.bind_flags & ~known_bind_flags) != 0u) return false;
     if (desc.width == 0u || desc.mip_levels > 16u) return false;
     const uint32_t misc = desc.misc_flags & kept_misc_flags;
     ID3D11Device5 *const device = device11_->device();
@@ -440,7 +446,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     AV_SCOPE("D3dBackend::on_OpenResource");
     found = 0u;
     desc = d3dproto::ResourceDesc{};
-    if (!ready()) return false;
+    if (!has_device()) return false;
     IUnknown *const shared = device11_->shared().find(shared_key);
     if (shared == nullptr) return true;
     ID3D11Resource *resource = nullptr;
@@ -551,7 +557,7 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
 {
     AV_SCOPE("D3dBackend::on_CreateShader");
     const D3dObjectKind kind = shader_kind(stage);
-    if (!ready() || kind == D3dObjectKind::none || code == nullptr) return false;
+    if (!has_device() || kind == D3dObjectKind::none || code == nullptr) return false;
     /* The container is the code and three signatures: as big as the code plus
      * what the signatures' tables and names can take. */
     const size_t capacity = static_cast<size_t>(code_size) + container_slack;
@@ -639,7 +645,7 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
 bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const d3dproto::InputElement *elements)
 {
     AV_SCOPE("D3dBackend::on_CreateInputLayout");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_INPUT_ELEMENT_DESC descs[32] = {};
     uint32_t registers[32] = {};
     uint32_t distinct = 0u;
@@ -671,7 +677,7 @@ bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const
 bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateBlendState");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_BLEND_DESC1 blend = {};
     blend.AlphaToCoverageEnable = desc.alpha_to_coverage != 0u;
     blend.IndependentBlendEnable = desc.independent_blend != 0u;
@@ -697,7 +703,7 @@ bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &des
 bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthStencilDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateDepthStencilState");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_DEPTH_STENCIL_DESC state = {};
     state.DepthEnable = desc.depth_enable != 0u;
     state.DepthWriteMask = static_cast<D3D11_DEPTH_WRITE_MASK>(desc.depth_write_mask);
@@ -721,7 +727,7 @@ bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthSt
 bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::RasterizerDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateRasterizerState");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_RASTERIZER_DESC2 state = {};
     state.FillMode = static_cast<D3D11_FILL_MODE>(desc.fill_mode);
     state.CullMode = static_cast<D3D11_CULL_MODE>(desc.cull_mode);
@@ -743,7 +749,7 @@ bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::Rasterize
 bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc)
 {
     AV_SCOPE("D3dBackend::on_CreateSampler");
-    if (!ready()) return false;
+    if (!has_device()) return false;
     D3D11_SAMPLER_DESC sampler = {};
     sampler.Filter = static_cast<D3D11_FILTER>(desc.filter);
     sampler.AddressU = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(desc.address_u);
@@ -763,7 +769,7 @@ bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc
 bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
 {
     AV_SCOPE("D3dBackend::on_CreateQuery");
-    if (!ready() || type > D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM3) return false;
+    if (!has_device() || type > D3D11_QUERY_SO_OVERFLOW_PREDICATE_STREAM3) return false;
     const D3D11_QUERY_DESC query = {static_cast<D3D11_QUERY>(type), misc_flags & D3D11_QUERY_MISC_PREDICATEHINT};
     ID3D11Query *made = nullptr;
     if (FAILED(device11_->device()->CreateQuery(&query, &made))) return true;

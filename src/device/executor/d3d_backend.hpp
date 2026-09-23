@@ -153,7 +153,12 @@ private:
     /* Whether every id in `ids` names nothing (0) or an object of `kind`. */
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
     [[nodiscard]] bool       keep(uint32_t id, D3dObjectKind kind, IUnknown *object);
+    /* A device is selected: what a command on the immediate context needs,
+     * since without one it would run on another session's pipeline state. */
     bool                     ready() const;
+    /* The session made a device: what creating an object, flushing and
+     * finishing need, none of which touch pipeline state. */
+    bool                     has_device() const;
     /* The kind of object a shader of `stage` is; none for no stage. */
     D3dObjectKind            shader_kind(uint32_t stage) const;
     /* One subresource's size in texels (bytes for a buffer) and its format;

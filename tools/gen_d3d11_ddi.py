@@ -102,19 +102,29 @@ def entries(fields):
     return out
 
 
+# Slots the root answers rather than the device. The runtime destroys a Direct3D
+# 11 device through its device table, not its adapter table, and the device
+# cannot give itself back: the root tears it down and forgets its block.
+ROOT_SLOTS = {"pfnDestroyDevice": "destroy_device"}
+
+
 def ret_type(ret):
     return {"void": "VOID", "int": "BOOL"}.get(ret, ret)
 
 
 def thunks(table):
     lines = [HEADER, "/* The ABI boundary C requires: the runtime calls each slot with the device", " * handle it was given and nothing else, so each thunk is one line into the", " * device the handle's block names. */",
-             '#include "core/trace/function_scope.hpp"', '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/d3d11_dxgi_thunks.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
+             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/umd_binding.hpp"', '#include "icd/d3d/umd_root.hpp"', '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/d3d11_dxgi_thunks.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
     for name, _pfn, ret, parameters in table:
         names = ["device"] + [f"a{index}" for index in range(1, len(parameters))]
         declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
         arguments = ", ".join(names[1:])
         keyword = "" if ret == "void" else "return "
         lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY rvkumd_d3d11_{name[3:]}({declared})")
+        if name in ROOT_SLOTS:
+            lines.append(f"{{ {keyword}d3d::umd_binding.root().{ROOT_SLOTS[name]}(device.pDrvPrivate); }}")
+            lines.append("")
+            continue
         lines.append(f"{{ {keyword}DeviceHandle(device.pDrvPrivate).device().{snake(name)}({arguments}); }}")
         lines.append("")
     lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs");']
@@ -127,6 +137,8 @@ def thunks(table):
 def methods(table):
     lines = [HEADER, "// Included inside class D3d11Device: one method per device-table slot.", ""]
     for name, _pfn, ret, parameters in table:
+        if name in ROOT_SLOTS:
+            continue
         declared = ", ".join(parameters[1:])
         lines.append(f"{ret_type(ret)} {snake(name)}({declared});")
     return "\n".join(lines) + "\n"

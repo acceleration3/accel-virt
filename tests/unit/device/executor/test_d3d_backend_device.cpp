@@ -228,6 +228,23 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK(rvk_d3d_DestroyDevice11(wire, 1u));
     CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
     CHECK_EQ(wire.refused(), 4u);
+    /* With no device selected nothing touches pipeline state, but the
+     * session still finishes, and a device it still has makes objects. */
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d_CreateDevice11(wire, 3u, 0u, 0u, &hresult, &level));
+    CHECK(rvk_d3d_DestroyDevice11(wire, 3u));
+    CHECK(rvk_d3d_CreateDevice11(wire, 4u, 0u, 0u, &hresult, &level));
+    CHECK(rvk_d3d_CreateDevice11(wire, 5u, 0u, 0u, &hresult, &level));
+    CHECK(rvk_d3d_DestroyDevice11(wire, 5u));
+    CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    ResourceDesc buffer = {};
+    buffer.dimension = 1u;
+    buffer.width = 64u;
+    buffer.bind_flags = bind_vertex;
+    CHECK(rvk_d3d_CreateResource(wire, 20u, buffer, 0u));
+    CHECK_EQ(wire.refused(), 5u);
     CHECK(backend.invariants_hold());
     backend.shut_down();
     CHECK(backend.invariants_hold());

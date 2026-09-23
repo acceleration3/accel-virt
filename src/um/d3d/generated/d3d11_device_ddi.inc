@@ -101,7 +101,6 @@ VOID check_format_support(DXGI_FORMAT, UINT *);
 VOID check_multisample_quality_levels(DXGI_FORMAT, UINT, UINT, UINT *);
 VOID check_counter_info(D3D10DDI_COUNTER_INFO *);
 VOID check_counter(D3D10DDI_QUERY, D3D10DDI_COUNTER_TYPE *, UINT *, LPSTR, UINT *, LPSTR, UINT *, LPSTR, UINT *);
-VOID destroy_device();
 VOID set_text_filter_size(UINT, UINT);
 VOID resource_convert(D3D10DDI_HRESOURCE, D3D10DDI_HRESOURCE);
 VOID resource_convert_region(D3D10DDI_HRESOURCE, UINT, UINT, UINT, UINT, D3D10DDI_HRESOURCE, UINT, const D3D10_DDI_BOX *, UINT);
