@@ -790,6 +790,36 @@ TEST(kmt_transport_send_batch, a_batch_asking_for_no_answer_does_not_wait)
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u); }
 
+/* A batch the host answered has shown it read every lease taken before it, as
+ * a synchronous command does: ending the call retires them. One asking for no
+ * answer shows nothing, and ending after it keeps them. Without this the
+ * Direct3D stream's arena, which only ever answers through batches, filled
+ * once and refused every large upload after. */
+TEST(kmt_transport_send_batch, an_answered_batch_retires_the_blob_leases_at_the_end_of_its_call)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  CHECK(transport.blobs().take(16u).taken());
+  Framer quiet;
+  quiet.add(0x10001u, 4u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_batch(quiet.bytes(), quiet.length(), reply) == TransportResult::ok);
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 16u);
+  Framer asking;
+  asking.add(0x10001u, 4u).add(0x10002u, 0u, CommandHeader::generate_reply);
+  const std::uint8_t nothing = 0u;
+  fixture.kmt().queue_answer(&nothing, 0u);
+  CHECK(transport.send_batch(asking.bytes(), asking.length(), reply) == TransportResult::ok);
+  CHECK_EQ(transport.blobs().used(), 16u);
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 0u);
+  CHECK(transport.invariants_hold()); }
+
 /* A batch that does not frame exactly is refused before anything is written or
  * submitted, and the context is not lost for it. */
 TEST(kmt_transport_send_batch, a_malformed_batch_is_refused_before_publishing)

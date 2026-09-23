@@ -296,7 +296,9 @@ TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, W
     uint64_t              fence = 0u;
     const TransportResult sent = publish_batch(framed, static_cast<uint32_t>(length), fence);
     if (sent != TransportResult::ok || !replying) return sent;
-    return await(fence, reply);
+    const TransportResult answered = await(fence, reply);
+    answered_ = answered == TransportResult::ok;
+    return answered;
 }
 
 TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)

@@ -90,7 +90,9 @@ public:
      * the whole batch is judged before anything is written, and one that does
      * not frame exactly is refused without faulting the context. When any
      * command asks for an answer the call waits, and `reply` is the answer the
-     * device kept - the last such command's; otherwise it is empty. */
+     * device kept - the last such command's; otherwise it is empty. An
+     * answered batch ends its call as a synchronous command does: end_call
+     * retires every blob lease. */
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;
