@@ -65,6 +65,25 @@ Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
     return report();
 }
 
+/* CrtcVsyncWithMultiPlaneOverlay: the target, the physical adapter mask and
+ * the layer count as the first three UINTs, then the layers' address at the
+ * next 8-byte boundary. */
+Status InterruptNotification::report_multiplane_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfoRecord *layers,
+                                                      uint32_t count)
+{
+    AV_SCOPE("InterruptNotification::report_multiplane_vsync");
+    platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_multiplane_vsync");
+    data_ = DxgkargcbNotifyInterruptDataRecord{};
+    data_.InterruptType = crtc_vsync_with_multiplane_overlay;
+    data_.FenceId = target;
+    data_.Argument1 = physical_adapter_mask;
+    data_.Argument2 = layers != nullptr ? count : 0u;
+    const auto address = reinterpret_cast<uintptr_t>(layers);
+    data_.UnionRemainder[0] = static_cast<uint32_t>(address);
+    data_.UnionRemainder[1] = static_cast<uint32_t>(static_cast<uint64_t>(address) >> 32u);
+    return report();
+}
+
 uint8_t InterruptNotification::notify()
 {
     AV_SCOPE("InterruptNotification::notify");

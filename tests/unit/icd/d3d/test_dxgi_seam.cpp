@@ -65,11 +65,12 @@ enum Slot : std::uint32_t {
     reclaim_resources1 = 21u,
 };
 
-/* The eleven slots a later feature fills. */
-constexpr std::uint32_t later_slots[] = {present,          set_display_mode, resource_residency, rotate_identities,
-                                         blt,              resolve_shared,   blt1,               offer_resources1,
-                                         reclaim_resources, reserved1,       present_overlay,    reserved2,
-                                         present1,         present_overlay1, reclaim_resources1};
+/* The slots a later feature fills: the presents and copies the device's own
+ * driver answers, and the multiplane presents and reserved slots, which the
+ * runtime never calls on an adapter reporting one plane. */
+constexpr std::uint32_t later_slots[] = {present,   set_display_mode, resource_residency, rotate_identities,
+                                         blt,       resolve_shared,   blt1,               reserved1,
+                                         present_overlay, reserved2,  present1,           present_overlay1};
 
 class Device {
 public:
@@ -180,7 +181,7 @@ TEST(dxgi_seam, an_interface_this_driver_does_not_serve_publishes_nothing)
   for (std::uint32_t slot = 0u; slot < DxgiBaseTable::wddm_3_2_slots; slot++) CHECK(slots[slot] == nullptr);
   CHECK(device.rig().root().invariants_hold()); }
 
-/* DxgiBaseTable::until_later is what all fifteen of them are, so the one that
+/* DxgiBaseTable::until_later is what all twelve of them are, so the one that
  * says so is checked directly too: a slot's refusal must not depend on the
  * thunk that reached it. */
 TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
@@ -194,6 +195,25 @@ TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
   device.device()->removal().remove(hr_dxgi_device_removed);
   CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_dxgi_device_removed);
   CHECK_EQ(device.rig().log().holding("device removed, pfnBlt answers 0x887A0005"), 1u); }
+
+/* The residency answers, asked of the table directly: a removed device
+ * answers its removal before anything is judged, as every slot does. */
+TEST(dxgi_seam, offer_resources_accepts_and_a_removed_device_answers_its_removal)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  if (device.device() == nullptr) return;
+  DxgiDdiArgRecord args = {};
+  args.hDevice = device.block();
+  CHECK_EQ(device.device()->dxgi().offer_resources(&args), hr_ok);
+  CHECK_EQ(device.device()->dxgi().offer_resources(nullptr), hr_invalid_arg);
+  device.device()->removal().remove(hr_dxgi_device_removed);
+  CHECK_EQ(device.device()->dxgi().offer_resources(&args), hr_dxgi_device_removed);
+  DxgiDdiArgReclaimResourcesRecord reclaim = {};
+  reclaim.hDevice = device.block();
+  CHECK_EQ(device.device()->dxgi().reclaim_resources(&reclaim), hr_dxgi_device_removed);
+  DxgiDdiArgReclaimResources1Record reclaim1 = {};
+  reclaim1.hDevice = device.block();
+  CHECK_EQ(device.device()->dxgi().reclaim_resources1(&reclaim1), hr_dxgi_device_removed); }
 
 TEST(dxgi_seam, every_slot_a_later_feature_fills_answers_not_implemented)
 { Device device;
@@ -282,6 +302,49 @@ TEST(dxgi_seam, the_advisory_slots_accept_and_do_nothing)
   args.hDevice = device.block();
   CHECK_EQ(device.call(Slot::resource_priority, &args), hr_ok);
   CHECK_EQ(device.call(Slot::trim_residency, &args), hr_ok); }
+
+/* An offered resource keeps its contents, so reclaiming one never reports it
+ * discarded. Answered E_NOTIMPL, an offer removed the device, and explorer
+ * made a new one some two hundred times a second. */
+TEST(dxgi_seam, offered_resources_are_reclaimed_with_their_contents)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  int handles[2] = {};
+  DxgiDdiArgRecord offer = {};
+  offer.hDevice = device.block();
+  CHECK_EQ(device.call(Slot::offer_resources1, &offer), hr_ok);
+  std::int32_t discarded[2] = {1, 1};
+  DxgiDdiArgReclaimResourcesRecord reclaim = {};
+  reclaim.hDevice = device.block();
+  reclaim.pResources = handles;
+  reclaim.pDiscarded = discarded;
+  reclaim.Resources = 2u;
+  CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_ok);
+  CHECK_EQ(discarded[0], 0);
+  CHECK_EQ(discarded[1], 0);
+  reclaim.pDiscarded = nullptr;   /* optional */
+  CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_ok);
+  reclaim.pResources = nullptr;
+  CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_invalid_arg);
+  std::uint32_t results[2] = {2u, 1u};
+  DxgiDdiArgReclaimResources1Record reclaim1 = {};
+  reclaim1.hDevice = device.block();
+  reclaim1.pResources = handles;
+  reclaim1.pResults = results;
+  reclaim1.Resources = 2u;
+  CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_ok);
+  CHECK_EQ(results[0], 0u);
+  CHECK_EQ(results[1], 0u);
+  reclaim1.pResults = nullptr;
+  CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_invalid_arg);
+  reclaim1.Resources = 0u;
+  CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_ok);
+  offer.hDevice = nullptr;
+  CHECK_EQ(device.call(Slot::offer_resources1, &offer), hr_invalid_arg);
+  reclaim.hDevice = nullptr;
+  CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_invalid_arg);
+  reclaim1.hDevice = nullptr;
+  CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_invalid_arg); }
 
 /* A slot reached with a device handle this driver never wrote names nothing,
  * and must not be followed. */

@@ -12,6 +12,13 @@
 
 namespace av::d3d {
 
+namespace {
+
+/* D3DDDI_RECLAIM_RESULT_OK: reclaimed with its contents. */
+constexpr uint32_t reclaim_ok = 0u;
+
+}  // namespace
+
 DxgiBaseTable::DxgiBaseTable(UmdDevice &device) : device_(device), revision_(Revision::none), callbacks_(nullptr)
 {
     AV_SCOPE("DxgiBaseTable::DxgiBaseTable");
@@ -131,6 +138,33 @@ Hresult DxgiBaseTable::trim_residency(DxgiDdiArgRecord *args)
     /* Residency is the KMD's here, so there is nothing of the driver's to
      * trim; the runtime asks and is told it happened. */
     return usable(args, "pfnTrimResidencySet");
+}
+
+Hresult DxgiBaseTable::offer_resources(DxgiDdiArgRecord *args)
+{
+    AV_SCOPE("DxgiBaseTable::offer_resources");
+    return usable(args, "pfnOfferResources1");
+}
+
+Hresult DxgiBaseTable::reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
+{
+    AV_SCOPE("DxgiBaseTable::reclaim_resources");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnReclaimResources");
+    if (refused != hr_ok) return refused;
+    if (args->Resources != 0u && args->pResources == nullptr) return hr_invalid_arg;
+    if (args->pDiscarded != nullptr)
+        for (uint32_t index = 0u; index < args->Resources; index++) args->pDiscarded[index] = 0;
+    return hr_ok;
+}
+
+Hresult DxgiBaseTable::reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
+{
+    AV_SCOPE("DxgiBaseTable::reclaim_resources1");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnReclaimResources1");
+    if (refused != hr_ok) return refused;
+    if (args->Resources != 0u && (args->pResources == nullptr || args->pResults == nullptr)) return hr_invalid_arg;
+    for (uint32_t index = 0u; index < args->Resources; index++) args->pResults[index] = reclaim_ok;
+    return hr_ok;
 }
 
 Hresult DxgiBaseTable::until_later(DxgiDdiArgRecord *args, const char *entry)

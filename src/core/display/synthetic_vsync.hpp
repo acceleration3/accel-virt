@@ -14,6 +14,7 @@
 #ifndef AV_SYNTHETIC_VSYNC_HPP
 #define AV_SYNTHETIC_VSYNC_HPP
 
+#include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "core/display/display_mode.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/platform/periodic_timer.hpp"
@@ -68,6 +69,8 @@ private:
      * left 60 Hz). */
     static constexpr uint32_t ticks_per_report = 120u;
 
+    /* What this vsync tells dxgkrnl the target shows. */
+    [[nodiscard]] Status report();
     void                 report_rate();
 
     Platform              &platform_;
@@ -80,6 +83,9 @@ private:
     /* What reporting_ was when power went away, to put back on the way up. */
     bool                   suspended_reporting_;
     /* Timer periods since the window opened. */
+    /* The layer a multiplane vsync reports, kept here because dxgkrnl reads
+     * it through the interrupt's pointer. */
+    DxgkMultiplaneOverlayVsyncInfoRecord layer_;
     uint32_t               ticks_;
     uint32_t               reported_;
     uint32_t               enables_;

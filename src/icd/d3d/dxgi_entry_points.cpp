@@ -36,14 +36,11 @@ AV_DXGI_LATER(rvkumd_dxgi_rotate_resource_identities, "pfnRotateResourceIdentiti
 AV_DXGI_LATER(rvkumd_dxgi_blt, "pfnBlt")
 AV_DXGI_LATER(rvkumd_dxgi_resolve_shared_resource, "pfnResolveSharedResource")
 AV_DXGI_LATER(rvkumd_dxgi_blt1, "pfnBlt1")
-AV_DXGI_LATER(rvkumd_dxgi_offer_resources1, "pfnOfferResources1")
-AV_DXGI_LATER(rvkumd_dxgi_reclaim_resources, "pfnReclaimResources")
 AV_DXGI_LATER(rvkumd_dxgi_reserved1, "pfnReserved1")
 AV_DXGI_LATER(rvkumd_dxgi_present_multiplane_overlay, "pfnPresentMultiplaneOverlay")
 AV_DXGI_LATER(rvkumd_dxgi_reserved2, "pfnReserved2")
 AV_DXGI_LATER(rvkumd_dxgi_present1, "pfnPresent1")
 AV_DXGI_LATER(rvkumd_dxgi_present_multiplane_overlay1, "pfnPresentMultiplaneOverlay1")
-AV_DXGI_LATER(rvkumd_dxgi_reclaim_resources1, "pfnReclaimResources1")
 
 #undef AV_DXGI_LATER
 
@@ -75,6 +72,24 @@ extern "C" Hresult rvkumd_dxgi_check_present_duration_support(DxgiDdiArgCheckPre
 {
     UmdDevice *const device = device_behind(args);
     return device == nullptr ? hr_invalid_arg : device->dxgi().present_duration(args);
+}
+
+extern "C" Hresult rvkumd_dxgi_offer_resources1(DxgiDdiArgRecord *args)
+{
+    UmdDevice *const device = device_behind(args);
+    return device == nullptr ? hr_invalid_arg : device->dxgi().offer_resources(args);
+}
+
+extern "C" Hresult rvkumd_dxgi_reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
+{
+    UmdDevice *const device = device_behind(args);
+    return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources(args);
+}
+
+extern "C" Hresult rvkumd_dxgi_reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
+{
+    UmdDevice *const device = device_behind(args);
+    return device == nullptr ? hr_invalid_arg : device->dxgi().reclaim_resources1(args);
 }
 
 extern "C" Hresult rvkumd_dxgi_trim_residency_set(DxgiDdiArgRecord *args)

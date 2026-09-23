@@ -88,6 +88,7 @@
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_address_with_multi_plane_overlay_record.hpp"
 #include "core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
@@ -668,6 +669,26 @@ AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, AllocationSegment, DXGK_MULTIPL
 AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, AllocationAddress, DXGK_MULTIPLANE_OVERLAY_PLANE, AllocationAddress);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, hAllocation, DXGK_MULTIPLANE_OVERLAY_PLANE, hAllocation);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayPlaneRecord, PlaneAttributes, DXGK_MULTIPLANE_OVERLAY_PLANE, PlaneAttributes);
+
+AV_SAME_SIZE(DxgkMultiplaneOverlayVsyncInfoRecord, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, LayerIndex, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO, LayerIndex);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, Enabled, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO, Enabled);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, PhysicalAddress, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO,
+               PhysicalAddress);
+AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, PlaneAttributes, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO,
+               PlaneAttributes);
+/* CrtcVsyncWithMultiPlaneOverlay overlays the union as InterruptNotification
+ * writes it: the target, the adapter mask and the count in the first three
+ * UINTs, the layers' address at the start of the remainder. */
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.VidPnTargetId) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.PhysicalAdapterMask) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument1));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.MultiPlaneOverlayVsyncInfoCount) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2));
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.pMultiPlaneOverlayVsyncInfo) ==
+              offsetof(av::DxgkargcbNotifyInterruptDataRecord, UnionRemainder));
+static_assert(DXGK_INTERRUPT_CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY == 7);
 
 AV_SAME_SIZE(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord, ContextCount,

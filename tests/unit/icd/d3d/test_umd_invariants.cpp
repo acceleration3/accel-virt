@@ -303,7 +303,7 @@ private:
 };
 
 /* The fifteen slots whose thunk takes the plain argument view. */
-constexpr std::uint32_t plain_slots[] = {0u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 13u, 14u, 15u, 16u, 18u, 20u, 21u};
+constexpr std::uint32_t plain_slots[] = {0u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 13u, 14u, 15u, 16u, 18u, 20u};
 
 }  // namespace
 
@@ -374,6 +374,12 @@ TEST(dxgi_seam, every_slot_refuses_a_device_handle_this_driver_never_gave)
   DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord space = {};
   space.hDevice = foreign;
   CHECK_EQ(adopted.call(19u, &space), hr_invalid_arg);
+  DxgiDdiArgReclaimResourcesRecord reclaim = {};
+  reclaim.hDevice = foreign;
+  CHECK_EQ(adopted.call(10u, &reclaim), hr_invalid_arg);
+  DxgiDdiArgReclaimResources1Record reclaim1 = {};
+  reclaim1.hDevice = foreign;
+  CHECK_EQ(adopted.call(21u, &reclaim1), hr_invalid_arg);
 
   /* And a null argument, which is what a thunk sees if the runtime is the one
    * that is broken. */
@@ -386,7 +392,9 @@ TEST(dxgi_seam, every_slot_refuses_a_device_handle_this_driver_never_gave)
   CHECK_EQ(adopted.call(17u, static_cast<DxgiDdiArgCheckPresentDurationSupportRecord *>(nullptr)), hr_invalid_arg);
   CHECK_EQ(adopted.call(18u, static_cast<DxgiDdiArgRecord *>(nullptr)), hr_invalid_arg);
   CHECK_EQ(adopted.call(19u, static_cast<DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord *>(nullptr)),
-           hr_invalid_arg); }
+           hr_invalid_arg);
+  CHECK_EQ(adopted.call(10u, static_cast<DxgiDdiArgReclaimResourcesRecord *>(nullptr)), hr_invalid_arg);
+  CHECK_EQ(adopted.call(21u, static_cast<DxgiDdiArgReclaimResources1Record *>(nullptr)), hr_invalid_arg); }
 
 /* Each capability slot on a device that is gone, because each answers the
  * removal before it writes anything into the runtime's buffer. */

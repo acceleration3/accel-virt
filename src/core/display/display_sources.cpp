@@ -1,5 +1,7 @@
 #include "core/display/display_sources.hpp"
 
+#include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "core/display/display_mode.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -8,7 +10,7 @@ namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_addresses_{}, primaries_{}, visible_{}
+      scanout_addresses_{}, primaries_{}, visible_{}, flips_{}, base_attributes_{}
 {
     AV_SCOPE("DisplaySources::DisplaySources");
 }
@@ -82,7 +84,45 @@ Status DisplaySources::set_scanout(uint32_t source, int64_t address, void *prima
     if (source >= count_) return Status::invalid_parameter;
     platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(primary));
     platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(address));
+    platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::address));
     return Status::ok;
+}
+
+Status DisplaySources::set_multiplane_scanout(uint32_t source, const DxgkMultiplaneOverlayPlaneRecord *base)
+{
+    AV_SCOPE("DisplaySources::set_multiplane_scanout");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::set_multiplane_scanout");
+    if (source >= count_) return Status::invalid_parameter;
+    if (base == nullptr) {
+        platform_.store_atomic(primaries_[source], 0u);
+        platform_.store_atomic(scanout_addresses_[source], 0u);
+        platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::planes_disabled));
+        return Status::ok;
+    }
+    for (uint32_t word = 0u; word < multiplane_overlay_attribute_words; word++) base_attributes_[source][word] = base->PlaneAttributes[word];
+    platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(base->hAllocation));
+    platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(base->AllocationAddress));
+    platform_.store_atomic(flips_[source], static_cast<uint64_t>(Flip::base_plane));
+    return Status::ok;
+}
+
+DisplaySources::Flip DisplaySources::flip(uint32_t source)
+{
+    AV_SCOPE("DisplaySources::flip");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::flip");
+    if (source >= count_) return Flip::address;
+    return static_cast<Flip>(platform_.load_atomic(flips_[source]));
+}
+
+void DisplaySources::base_layer(uint32_t source, DxgkMultiplaneOverlayVsyncInfoRecord &layer)
+{
+    AV_SCOPE("DisplaySources::base_layer");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::base_layer");
+    layer = DxgkMultiplaneOverlayVsyncInfoRecord{};
+    if (source >= count_) return;
+    layer.Enabled = 1u;
+    layer.PhysicalAddress = static_cast<int64_t>(platform_.load_atomic(scanout_addresses_[source]));
+    for (uint32_t word = 0u; word < multiplane_overlay_attribute_words; word++) layer.PlaneAttributes[word] = base_attributes_[source][word];
 }
 
 void *DisplaySources::primary(uint32_t source)
@@ -140,6 +180,7 @@ void DisplaySources::report(StateWriter &writer)
         writer.number("height", committed_[source] != nullptr ? committed_[source]->height() : 0u);
         writer.hex("scanout", platform_.load_atomic(scanout_addresses_[source]));
         writer.hex("primary", platform_.load_atomic(primaries_[source]));
+        writer.number("flip", platform_.load_atomic(flips_[source]));
         writer.flag("visible", platform_.load_atomic(visible_[source]) != 0u);
         writer.close();
     }

@@ -11,7 +11,7 @@ namespace av {
 SyntheticVsync::SyntheticVsync(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), dxgkrnl_(dxgkrnl), sources_(sources), notification_(platform, dxgkrnl),
       timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), suspended_reporting_(false),
-      ticks_(0u), reported_(0u), enables_(0u), window_start_(0u)
+      layer_(), ticks_(0u), reported_(0u), enables_(0u), window_start_(0u)
       {
           AV_SCOPE("SyntheticVsync::SyntheticVsync");
       }
@@ -84,7 +84,7 @@ void SyntheticVsync::tick()
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::tick");
     ticks_++;
     if (reporting_) {
-        if (notification_.report_vsync(target, sources_.scanout_address(target)) == Status::ok) {
+        if (report() == Status::ok) {
             reported_++;
             dxgkrnl_.notify_dpc();
         } else {
@@ -92,6 +92,24 @@ void SyntheticVsync::tick()
         }
     }
     if (ticks_ == ticks_per_report) report_rate();
+}
+
+/* Each flip kind is retired by one report only (VidSchiIsExpectedVSyncCookie,
+ * dxgmms2.sys @14003a0d4): a CRTC_VSYNC naming the address for a
+ * SetVidPnSourceAddress, and a CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY for a
+ * multiplane flip - no layers for dxgmms2's disable-planes flip, which a
+ * CRTC_VSYNC can never retire and whose queue then stalls. */
+Status SyntheticVsync::report()
+{
+    AV_SCOPE("SyntheticVsync::report");
+    switch (sources_.flip(target)) {
+    case DisplaySources::Flip::planes_disabled: return notification_.report_multiplane_vsync(target, nullptr, 0u);
+    case DisplaySources::Flip::base_plane:
+        sources_.base_layer(target, layer_);
+        return notification_.report_multiplane_vsync(target, &layer_, 1u);
+    case DisplaySources::Flip::address: break;
+    }
+    return notification_.report_vsync(target, sources_.scanout_address(target));
 }
 
 uint32_t SyntheticVsync::reported() const

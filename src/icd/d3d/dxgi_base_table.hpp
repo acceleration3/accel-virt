@@ -33,6 +33,8 @@ struct DxgiDdiArgCheckPresentDurationSupportRecord;
 struct DxgiDdiArgGetGammaControlCapsRecord;
 struct DxgiDdiArgGetMultiplaneOverlayCapsRecord;
 struct DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord;
+struct DxgiDdiArgReclaimResourcesRecord;
+struct DxgiDdiArgReclaimResources1Record;
 struct DxgiDdiBaseArgsRecord;
 struct DxgiDdiBaseCallbacksRecord;
 
@@ -72,6 +74,13 @@ public:
     Hresult present_duration(DxgiDdiArgCheckPresentDurationSupportRecord *args);
     Hresult overlay_color_space(DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord *args);
     Hresult trim_residency(DxgiDdiArgRecord *args);
+    /* Offered resources are never discarded: their memory is the host's, and
+     * the guest has nothing to gain by letting it go. The runtime offers when
+     * an application calls OfferResources, and removed the device when this
+     * answered E_NOTIMPL - explorer then made a new one, 200 times a second. */
+    Hresult offer_resources(DxgiDdiArgRecord *args);
+    Hresult reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args);
+    Hresult reclaim_resources1(DxgiDdiArgReclaimResources1Record *args);
     /* Every slot a later feature fills: hr_not_impl, or the removal code on a
      * device that is gone. `entry` names the slot in the log. */
     Hresult until_later(DxgiDdiArgRecord *args, const char *entry);

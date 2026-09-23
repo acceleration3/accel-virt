@@ -157,6 +157,15 @@ AV_SAME_OFFSET(DxgiDdiArgCheckPresentDurationSupportRecord, ClosestLargerDuratio
                DXGI_DDI_ARG_CHECKPRESENTDURATIONSUPPORT, ClosestLargerDuration);
 AV_SAME_OFFSET(DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord, Supported,
                DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT, Supported);
+AV_SAME_SIZE(DxgiDdiArgReclaimResourcesRecord, DXGI_DDI_ARG_RECLAIMRESOURCES);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResourcesRecord, pResources, DXGI_DDI_ARG_RECLAIMRESOURCES, pResources);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResourcesRecord, pDiscarded, DXGI_DDI_ARG_RECLAIMRESOURCES, pDiscarded);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResourcesRecord, Resources, DXGI_DDI_ARG_RECLAIMRESOURCES, Resources);
+AV_SAME_SIZE(DxgiDdiArgReclaimResources1Record, DXGI_DDI_ARG_RECLAIMRESOURCES1);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResources1Record, pResources, DXGI_DDI_ARG_RECLAIMRESOURCES1, pResources);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResources1Record, pResults, DXGI_DDI_ARG_RECLAIMRESOURCES1, pResults);
+AV_SAME_OFFSET(DxgiDdiArgReclaimResources1Record, Resources, DXGI_DDI_ARG_RECLAIMRESOURCES1, Resources);
+static_assert(sizeof(D3DDDI_RECLAIM_RESULT) == sizeof(uint32_t) && D3DDDI_RECLAIM_RESULT_OK == 0);
 
 /* Every slot 055 fills answers an HRESULT, except the two the WDK declares
  * otherwise. This matters because BOOL and HRESULT both mirror to int32_t, so

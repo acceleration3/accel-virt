@@ -1555,23 +1555,27 @@ int32_t Adapter::power_runtime_control_request(const void *, const void *, size_
  * compositor has flipped a multiplane present, and a failure here is a 0x119
  * bugcheck (FAILED_SETVIDPNSOURCEMPO_COMMAND), not a refused flip. This
  * adapter scans out one plane, the base one: it is shown as SetVidPnSourceAddress
- * shows a primary, a disabled base plane shows nothing, and an overlay plane
- * above it is not composed. */
+ * shows a primary, and a flip with no enabled base plane - dxgmms2's
+ * disable-planes flip when the primary's device goes away
+ * (VidSchiSubmitDisablePlanesFlip) - shows nothing. An overlay plane above
+ * the base is not composed. The vsync that follows reports the flip as
+ * multiplane, the only report that retires it. */
 int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request)
 {
     AV_SCOPE("Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     if (request == nullptr || (request->PlaneCount != 0u && request->pPlanes == nullptr))
         return NtStatus(Status::invalid_parameter).value();
+    const DxgkMultiplaneOverlayPlaneRecord *base = nullptr;
     for (uint32_t index = 0u; index < request->PlaneCount; index++) {
         const DxgkMultiplaneOverlayPlaneRecord &plane = request->pPlanes[index];
-        if (plane.LayerIndex != 0u) continue;
-        if (plane.Enabled == 0u || plane.hAllocation == nullptr)
-            return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0, nullptr)).value();
-        return show_primary(request->VidPnSourceId, plane.AllocationSegment, plane.AllocationAddress,
-                            plane.hAllocation);
+        if (plane.LayerIndex == 0u && plane.Enabled != 0u && plane.hAllocation != nullptr) base = &plane;
     }
-    return NtStatus(Status::ok).value();
+    if (base != nullptr && base->AllocationSegment != ApertureSegment::segment_id &&
+        base->AllocationSegment != system_memory_driver_segment)
+        return NtStatus(Status::invalid_parameter).value();
+    if (base != nullptr) log_scanout(request->VidPnSourceId, base->AllocationSegment, base->AllocationAddress);
+    return NtStatus(sources_.set_multiplane_scanout(request->VidPnSourceId, base)).value();
 }
 
 int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)

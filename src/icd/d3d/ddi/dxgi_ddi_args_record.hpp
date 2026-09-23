@@ -76,6 +76,24 @@ struct DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord {
     int32_t  Supported;
 };
 
+/* DXGI_DDI_ARG_RECLAIMRESOURCES (dxgiddi.h:292): the optional out array says
+ * which offered resources lost their contents. */
+struct DxgiDdiArgReclaimResourcesRecord {
+    void       *hDevice;
+    const void *pResources;
+    int32_t    *pDiscarded;
+    uint32_t    Resources;
+};
+
+/* DXGI_DDI_ARG_RECLAIMRESOURCES1 (dxgiddi.h:609): one D3DDDI_RECLAIM_RESULT
+ * per resource. */
+struct DxgiDdiArgReclaimResources1Record {
+    void       *hDevice;
+    const void *pResources;
+    uint32_t   *pResults;
+    uint32_t    Resources;
+};
+
 }  // namespace av::d3d
 
 #endif  // AV_D3D_DXGI_DDI_ARGS_RECORD_HPP

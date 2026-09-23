@@ -135,8 +135,9 @@ dma-buf (`export_object` already exists for Vulkan objects) and shown through
 - after a multiplane flip with the base plane enabled: type 7 with layer 0
   enabled at that address.
 
-A `FlipCompletion` object keeps the kind and address of the last programmed
-flip for the vsync to report. MPO stays unreported in the caps; the only
+`DisplaySources`, which already keeps each source's primary and address
+atomically for the vsync, keeps the kind of the last programmed flip (and a
+base plane's attributes, which dxgmms2 compares) beside them. MPO stays unreported in the caps; the only
 multiplane flips are the ones dxgmms2 makes on its own.
 
 ### 3.5 GDI surfaces DWM opens
@@ -183,7 +184,6 @@ arena-sized pieces rather than failing.
 
 | Class | Kind | Where | State | Responsibility |
 |---|---|---|---|---|
-| `FlipCompletion` | object | `src/core/display/` | kind and address of the last programmed flip per source | says what the next vsync reports |
 | `HostImageScanout` | object | `src/core/display/` | the key shown and whether a frame waits | shows a keyed primary through `SET_SCANOUT_IMAGE` |
 | `ImageScanout` | system | `src/device/display/` | each head's key and its surface | keeps each head's console surface showing its image |
 | `D3dHostImages` | system | `src/device/executor/` | a staging texture per size | reads a keyed image into memory the device gives |
@@ -191,8 +191,8 @@ arena-sized pieces rather than failing.
 | `StandardAllocationBlob` | object | `src/proto/resources/` | the fields of the KMD's standard blob | encodes and decodes it for the KMD and the UMD |
 
 Extended: `D3dBackend` (`PresentImage11`, removal), `D3dChannel`/`D3d11Device`
-(present, error path), `DisplayScanout` (third backing), `SyntheticVsync`
-(report kind), the executor ABI (`read_image`, version 7), the D3D wire
+(present, error path), `DisplayScanout` (third backing), `DisplaySources`
+(the kind of the last flip), `SyntheticVsync` (report kind), the executor ABI (`read_image`, version 7), the D3D wire
 (`PresentImage11`, removal reasons in replies), the DXGI table.
 
 ## 5. Order of work

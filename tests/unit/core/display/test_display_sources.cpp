@@ -1,3 +1,5 @@
+#include "core/ddi/dxgk_multiplane_overlay_plane_record.hpp"
+#include "core/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "core/display/display_mode.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/support/status.hpp"
@@ -63,6 +65,45 @@ TEST(display_sources_set_scanout, remembers_the_primary_address_and_allocation_u
   CHECK_STATUS(sources.set_scanout(0u, 0, nullptr), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0u);
   CHECK(sources.primary(0u) == nullptr); }
+
+/* A multiplane flip's base plane is the primary, and the source remembers the
+ * flip was multiplane so the vsync reports it as one; a flip with no base
+ * plane shows nothing. SetVidPnSourceAddress makes it a plain flip again. The
+ * layer handed back carries the flip's address and attributes, and every call
+ * is usable at device IRQL, where dxgkrnl makes them. */
+TEST(display_sources_set_multiplane_scanout, remembers_the_base_plane_and_that_the_flip_was_multiplane)
+{ MockPlatform platform; DisplaySources sources(platform);
+  CHECK(sources.flip(0u) == DisplaySources::Flip::address);
+  std::uint32_t allocation = 0u;
+  av::DxgkMultiplaneOverlayPlaneRecord base = {};
+  base.Enabled = 1u;
+  base.AllocationAddress = 0x4000ll;
+  base.hAllocation = &allocation;
+  base.PlaneAttributes[0] = 5u;
+  base.PlaneAttributes[av::multiplane_overlay_attribute_words - 1u] = 9u;
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.set_multiplane_scanout(0u, &base), Status::ok);
+  CHECK(sources.flip(0u) == DisplaySources::Flip::base_plane);
+  CHECK_EQ(sources.scanout_address(0u), 0x4000u);
+  av::DxgkMultiplaneOverlayVsyncInfoRecord layer = {};
+  layer.LayerIndex = 3u;
+  sources.base_layer(0u, layer);
+  CHECK_EQ(layer.LayerIndex, 0u);
+  CHECK_EQ(layer.Enabled, 1u);
+  CHECK_EQ(layer.PhysicalAddress, 0x4000ll);
+  CHECK_EQ(layer.PlaneAttributes[0], 5u);
+  CHECK_EQ(layer.PlaneAttributes[av::multiplane_overlay_attribute_words - 1u], 9u);
+  CHECK_STATUS(sources.set_multiplane_scanout(0u, nullptr), Status::ok);
+  CHECK(sources.flip(0u) == DisplaySources::Flip::planes_disabled);
+  CHECK_EQ(sources.scanout_address(0u), 0u);
+  CHECK_STATUS(sources.set_scanout(0u, 0x8000ll, &allocation), Status::ok);
+  CHECK(sources.flip(0u) == DisplaySources::Flip::address);
+  CHECK_STATUS(sources.set_multiplane_scanout(1u, &base), Status::invalid_parameter);
+  CHECK(sources.flip(1u) == DisplaySources::Flip::address);
+  sources.base_layer(1u, layer);
+  CHECK_EQ(layer.Enabled, 0u);
+  platform.set_irql(Irql::passive);
+  CHECK(sources.invariants_hold()); }
 
 TEST(display_sources_set_scanout, a_source_the_adapter_does_not_have_is_invalid)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -186,8 +227,8 @@ TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibi
   std::snprintf(expected, sizeof expected,
                 "display_sources/0 count=2 vsync=true\n"
                 "display_sources/0/source/0 format=21 width=1280 height=800 scanout=0x0000000000007000"
-                " primary=0x%016llX visible=false\n"
+                " primary=0x%016llX flip=0 visible=false\n"
                 "display_sources/0/source/1 format=0 width=0 height=0 scanout=0x0000000000000000"
-                " primary=0x0000000000000000 visible=true",
+                " primary=0x0000000000000000 flip=0 visible=true",
                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&primary)));
   CHECK(std::strcmp(writer.dump(), expected) == 0); }

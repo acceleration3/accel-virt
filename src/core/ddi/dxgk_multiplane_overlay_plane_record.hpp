@@ -9,6 +9,10 @@
 
 namespace av {
 
+/* DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES as 32-bit words: its flags, three
+ * rectangles and eight enumerations. */
+constexpr uint32_t multiplane_overlay_attribute_words = 22u;
+
 struct DxgkMultiplaneOverlayPlaneRecord {
     uint32_t LayerIndex;
     uint32_t Enabled;
@@ -16,7 +20,7 @@ struct DxgkMultiplaneOverlayPlaneRecord {
     uint32_t AllocationSegmentPadding;
     int64_t  AllocationAddress;
     void    *hAllocation;
-    uint32_t PlaneAttributes[22];
+    uint32_t PlaneAttributes[multiplane_overlay_attribute_words];
 };
 
 }  // namespace av
