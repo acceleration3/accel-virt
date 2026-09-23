@@ -85,11 +85,16 @@ bool ExecutionNode::take(uint32_t &fence)
     return true;
 }
 
+/* The host cannot give back a batch it was handed, so nothing queued is ever
+ * preempted: the request is answered once the queue has run dry, naming the
+ * last packet as completed. Answered earlier, VidSch would take the queued
+ * packets as preempted and move its last completed fence to the preemption
+ * fence, and their completions would then bugcheck 0x119/1. */
 bool ExecutionNode::take_preemption(uint32_t &fence, uint32_t &last_completed)
 {
     AV_SCOPE("ExecutionNode::take_preemption");
     SpinLockGuard lock(lock_);
-    if (!preemption_requested_) return false;
+    if (!preemption_requested_ || count_ != 0u) return false;
     preemption_requested_ = false;
     fence = preemption_fence_;
     last_completed = last_completed_;

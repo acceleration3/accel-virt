@@ -3,7 +3,8 @@
  * at DISPATCH with monotonically increasing fences, and the DPC at DISPATCH.
  * Every notification the driver raises is checked against what was submitted:
  * completions in increasing order, never past the last submission, and a
- * preemption naming the last completed fence. A breach fails the test. */
+ * preemption naming the last completed fence, after which nothing it
+ * preempted may complete. A breach fails the test. */
 #ifndef AV_FAKE_VIDSCH_HPP
 #define AV_FAKE_VIDSCH_HPP
 
@@ -87,6 +88,7 @@ private:
     std::uint32_t                  submitted_;
     std::uint32_t                  completed_;
     std::uint32_t                  preemption_fence_;
+    std::uint32_t                  preempted_through_;
     std::uint32_t                  preemptions_;
     std::uint32_t                  seen_;
     std::uint32_t                  fence_signals_;

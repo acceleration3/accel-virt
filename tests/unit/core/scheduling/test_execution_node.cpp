@@ -207,6 +207,27 @@ TEST(execution_node_preempt, the_next_completion_reports_the_preemption_after_th
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u); }
 
+/* A packet the host is still running cannot be taken back, so the preemption
+ * waits for it: answered early, VidSch would call it preempted, move its last
+ * completed fence to the preemption fence and bugcheck 0x119/1 on the
+ * packet's completion. */
+TEST(execution_node_preempt, waits_for_a_packet_the_host_is_still_running)
+{ Fixture fixture;
+  int owner = 0;
+  CHECK_STATUS(fixture.node().submit(9u, &owner, 4u), Status::ok);
+  CHECK_STATUS(fixture.node().preempt(10u), Status::ok);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.node().finish(&owner, 4u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 1);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 9u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, 2);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 10u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument1, 9u);
+  CHECK(fixture.node().invariants_hold()); }
+
 TEST(execution_node_complete, stops_at_the_first_refused_report)
 { Fixture fixture;
   CHECK_STATUS(fixture.node().submit(1u), Status::ok);

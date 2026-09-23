@@ -36,10 +36,10 @@ public:
     [[nodiscard]] Status submit(uint32_t fence, void *owner, uint64_t awaited);
     /* `owner`'s host has completed every fence up to `completed`. */
     void                 finish(const void *owner, uint64_t completed);
-    /* The latest request wins; reported at the next completion. */
+    /* The latest request wins; reported once nothing is queued. */
     [[nodiscard]] Status preempt(uint32_t fence);
-    /* Completes and reports every queued fence, then any preemption; stops at
-     * the first report dxgkrnl refuses. */
+    /* Completes and reports every queued fence that is done, then a preemption
+     * if none is left; stops at the first report dxgkrnl refuses. */
     [[nodiscard]] Status complete(InterruptNotification &notification);
     uint32_t             current_fence();
     uint32_t             pending();

@@ -29,7 +29,7 @@ FakeVidSch::FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrn
     : platform_(platform), table_(table), dxgkrnl_(dxgkrnl), adapter_(adapter), device_(nullptr), context_(nullptr),
       dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, present_allocations_{}, present_patches_{}, present_virtual_{},
       submitted_(0u), completed_(0u),
-      preemption_fence_(0x80000000u), preemptions_(0u), seen_(dxgkrnl.interrupts()), fence_signals_(0u) {}
+      preemption_fence_(0u), preempted_through_(0u), preemptions_(0u), seen_(dxgkrnl.interrupts()), fence_signals_(0u) {}
 
 FakeVidSch::~FakeVidSch()
 {
@@ -186,8 +186,11 @@ std::int32_t FakeVidSch::submit_virtual(std::uint64_t dma_address)
 
 std::int32_t FakeVidSch::preempt()
 {
+    /* VidSch draws the preemption fence from the node's own sequence, after
+     * every packet it submitted. */
     DxgkargPreemptCommandRecord preempt = {};
-    preempt.PreemptionFenceId = ++preemption_fence_;
+    preemption_fence_ = ++submitted_;
+    preempt.PreemptionFenceId = preemption_fence_;
     platform_.set_irql(Irql::dispatch);
     const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, const DxgkargPreemptCommandRecord *)>(
         table_.routine(DdiSlot::DxgkDdiPreemptCommand))(adapter_, &preempt);
@@ -198,7 +201,7 @@ std::int32_t FakeVidSch::preempt()
 void FakeVidSch::check_notification(const DxgkargcbNotifyInterruptDataRecord &data)
 {
     if (data.InterruptType == dma_completed) {
-        if (data.FenceId <= completed_ || data.FenceId > submitted_)
+        if (data.FenceId <= completed_ || data.FenceId <= preempted_through_ || data.FenceId > submitted_)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "completion of fence %u out of order (%u..%u)",
                                                     data.FenceId, completed_, submitted_);
         completed_ = data.FenceId;
@@ -208,6 +211,11 @@ void FakeVidSch::check_notification(const DxgkargcbNotifyInterruptDataRecord &da
         if (data.FenceId != preemption_fence_ || data.Argument1 != completed_)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "preemption %u after %u, expected %u after %u",
                                                     data.FenceId, data.Argument1, preemption_fence_, completed_);
+        /* VidSchiProcessIsrPreemptedPacket (dxgmms2.sys @1400357a4) retires
+         * every packet still queued as preempted, to be resubmitted under new
+         * fences; VidSchiProcessIsrCompletedPacket bugchecks 0x119/1 when one
+         * of them is reported completed afterwards. */
+        preempted_through_ = preemption_fence_;
         preemptions_++;
         return;
     }
