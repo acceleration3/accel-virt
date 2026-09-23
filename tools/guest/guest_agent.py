@@ -14,8 +14,9 @@ import threading
 import time
 
 CHUNK = 48 * 1024
-# A crash dump is gigabytes; the agent caps one read at 48 MiB.
-PULL_CHUNK = 8 * 1024 * 1024
+# The agent caps one read at 48 MiB, but the Windows agent never answers a
+# read of 4 MiB (2 MiB still does): the reply is lost, not refused.
+PULL_CHUNK = 1024 * 1024
 RECEIVE = 1024 * 1024
 # One connection attempt while the guest boots: its agent may not listen yet.
 ATTEMPT = 5.0

@@ -80,7 +80,9 @@ foreach ($f in (Get-ChildItem {GUEST_DIR}\\out, {GUEST_DIR}\\shaders -File)) {{
 }}
 $writer.Close()""")
     local = out / "guest-bundle.gz"
-    guest_shell(work, "pull", bundle, str(local))
+    pulled = guest_shell(work, "pull", bundle, str(local))
+    if not local.exists() or local.stat().st_size == 0:
+        sys.exit(f"could not bring the guest's results back: {pulled.strip()}")
     data = gzip.decompress(local.read_bytes())
     at = 0
     while at < len(data):
@@ -98,7 +100,8 @@ $writer.Close()""")
 
 def run_host(args, out):
     print("host: rendering", flush=True)
-    (out / "host").mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(out / "host", ignore_errors=True)
+    (out / "host").mkdir(parents=True)
     environment = dict(os.environ, RVK_D3D_PATH=str(ROOT / "build-d3d" / "lib"))
     done = subprocess.run([str(ROOT / "build" / "rvkd3d11samples_host"), "--out", str(out / "host"),
                            "--shaders", str(out / "shaders"), "--frames", str(args.frames),
