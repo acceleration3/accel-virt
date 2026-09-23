@@ -10,6 +10,7 @@
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-rvk.c.
  */
 #include "qemu/osdep.h"
+#include <sys/prctl.h>
 #include "qapi/error.h"
 #include "qemu/main-loop.h"
 #include "qemu/module.h"
@@ -70,6 +71,12 @@ static const GraphicHwOps virtio_gpu_rvk_console_ops = {
 
 static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
 {
+    /* A profiling run (RVK_PERFETTO) lets any process of the user read this
+     * one's stacks: tools/perfetto_trace.py's sampler, under Yama's scope 1. */
+    const char *profiled = getenv("RVK_PERFETTO");
+    if (profiled != NULL && profiled[0] == '1') {
+        prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
+    }
     ERRP_GUARD();
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(qdev);
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(qdev);

@@ -112,6 +112,8 @@ private:
                                           bool do_lock, uint8_t *&view, uint64_t &address);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
+    /* Waits for everything sent so far, and retires its fences. */
+    [[nodiscard]] bool drain();
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
     /* Waits for the context and points `reply` at the answer for `fence`. */
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);

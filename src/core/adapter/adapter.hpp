@@ -450,6 +450,8 @@ private:
     uint64_t                       presents_made_;
     uint64_t                       presents_shown_;
     uint32_t                       refreshes_owed_;
+    uint64_t                       refreshed_at_;
+    bool                           refresh_waiting_;
     /* Rows of pixels this miniport moved for a present nothing executes - the
      * desktop's (feature 046, FR-004) - and presents it could not move. */
     uint64_t                       present_rows_;

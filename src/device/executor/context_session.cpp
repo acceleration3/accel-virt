@@ -53,6 +53,12 @@ bool ContextSession::live() const
     return backend_ != nullptr;
 }
 
+void ContextSession::end_batch()
+{
+    AV_SCOPE("ContextSession::end_batch");
+    if (backend_ != nullptr) backend_->end_batch();
+}
+
 uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &answer)
 {

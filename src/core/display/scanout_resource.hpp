@@ -53,6 +53,7 @@ public:
      * the only time the primary's pages are needed. Dispatch at most: it is
      * what keeps the DPC from looking them up every idle frame. */
     bool                 needs_pages(uint64_t address) const;
+    bool                 scanning_out() const;
     /* Pages of the frame the committed mode needs. Dispatch at most: it is
      * what the DPC asks the primary's allocation for. */
     uint32_t             page_count() const;

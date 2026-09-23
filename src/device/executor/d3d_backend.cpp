@@ -60,7 +60,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(),
+    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(),
       lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -106,11 +106,12 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
 {
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
-    device11_->lock(selected_);
+    if (!held_) device11_->lock(selected_);
+    else device11_->select(selected_);
+    held_ = true;
     arena_ = &arena;
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
-    device11_->unlock();
     /* A command the host refuses removes the device that sent it, not the
      * session: the session is every device of a guest process, the whole of
      * the desktop's composition in DWM's case. The guest learns the reason at
@@ -120,6 +121,14 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     if (ran || selected_device_ == 0u) return ran;
     states_.mark_removed(selected_device_, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
+}
+
+void D3dBackend::end_batch()
+{
+    AV_SCOPE("D3dBackend::end_batch");
+    if (!held_) return;
+    held_ = false;
+    device11_->unlock();
 }
 
 bool D3dBackend::lost() const
@@ -390,8 +399,81 @@ void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
         IUnknown *const made = remake_view(kind, object, static_cast<ID3D11Resource *>(textures[(found + 1u) % count]));
         if (made == nullptr) continue;
         IUnknown *const old = objects_.exchange(id, kind, made);
-        if (old != nullptr) old->Release();
+        if (old == nullptr) continue;
+        if (remade_ < max_remade) {
+            remade_old_[remade_] = old;
+            remade_new_[remade_++] = made;
+        } else {
+            old->Release();
+        }
     }
+    rebind_remade();
+}
+
+/* What was bound of a remade view is bound as its replacement, here on the
+ * host, so the guest need not have the runtime re-send every slot of every
+ * stage after each present. */
+void D3dBackend::rebind_remade()
+{
+    AV_SCOPE("D3dBackend::rebind_remade");
+    constexpr UINT srv_slots = D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
+    constexpr UINT uav_slots = D3D11_1_UAV_SLOT_COUNT;
+    ID3D11DeviceContext *const context = device11_->context();
+    ID3D11ShaderResourceView *srvs[srv_slots] = {};
+    using GetSrv = void (STDMETHODCALLTYPE ID3D11DeviceContext::*)(UINT, UINT, ID3D11ShaderResourceView **);
+    using SetSrv = void (STDMETHODCALLTYPE ID3D11DeviceContext::*)(UINT, UINT, ID3D11ShaderResourceView *const *);
+    const GetSrv gets[] = {&ID3D11DeviceContext::VSGetShaderResources, &ID3D11DeviceContext::HSGetShaderResources,
+                           &ID3D11DeviceContext::DSGetShaderResources, &ID3D11DeviceContext::GSGetShaderResources,
+                           &ID3D11DeviceContext::PSGetShaderResources, &ID3D11DeviceContext::CSGetShaderResources};
+    const SetSrv sets[] = {&ID3D11DeviceContext::VSSetShaderResources, &ID3D11DeviceContext::HSSetShaderResources,
+                           &ID3D11DeviceContext::DSSetShaderResources, &ID3D11DeviceContext::GSSetShaderResources,
+                           &ID3D11DeviceContext::PSSetShaderResources, &ID3D11DeviceContext::CSSetShaderResources};
+    for (uint32_t stage = 0u; stage < 6u; stage++) {
+        (context->*gets[stage])(0u, srv_slots, srvs);
+        if (swap_remade(reinterpret_cast<IUnknown **>(srvs), srv_slots)) (context->*sets[stage])(0u, srv_slots, srvs);
+        release_all(reinterpret_cast<IUnknown **>(srvs), srv_slots);
+    }
+    ID3D11UnorderedAccessView *uavs[uav_slots] = {};
+    context->CSGetUnorderedAccessViews(0u, uav_slots, uavs);
+    if (swap_remade(reinterpret_cast<IUnknown **>(uavs), uav_slots)) context->CSSetUnorderedAccessViews(0u, uav_slots, uavs, nullptr);
+    release_all(reinterpret_cast<IUnknown **>(uavs), uav_slots);
+    ID3D11RenderTargetView *rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+    ID3D11DepthStencilView *dsv = nullptr;
+    context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
+    const bool targets = swap_remade(reinterpret_cast<IUnknown **>(rtvs), D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
+    const bool depth = swap_remade(reinterpret_cast<IUnknown **>(&dsv), 1u);
+    if (targets || depth) context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv);
+    release_all(reinterpret_cast<IUnknown **>(rtvs), D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
+    release_all(reinterpret_cast<IUnknown **>(&dsv), 1u);
+    for (uint32_t index = 0u; index < remade_; index++) remade_old_[index]->Release();
+    remade_ = 0u;
+}
+
+/* Each bound remade view in `bound` becomes its replacement, the reference
+ * the Get gave moving with it. */
+bool D3dBackend::swap_remade(IUnknown **bound, uint32_t count) const
+{
+    AV_SCOPE("D3dBackend::swap_remade");
+    bool swapped = false;
+    for (uint32_t slot = 0u; slot < count; slot++) {
+        if (bound[slot] == nullptr) continue;
+        for (uint32_t index = 0u; index < remade_; index++) {
+            if (bound[slot] != remade_old_[index]) continue;
+            bound[slot]->Release();
+            bound[slot] = remade_new_[index];
+            bound[slot]->AddRef();
+            swapped = true;
+            break;
+        }
+    }
+    return swapped;
+}
+
+void D3dBackend::release_all(IUnknown **held, uint32_t count) const
+{
+    AV_SCOPE("D3dBackend::release_all");
+    for (uint32_t slot = 0u; slot < count; slot++)
+        if (held[slot] != nullptr) held[slot]->Release();
 }
 
 bool D3dBackend::is_view(D3dObjectKind kind) const

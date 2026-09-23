@@ -123,7 +123,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), present_rows_(0u), presents_unmoved_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -434,8 +434,19 @@ void Adapter::dpc_routine()
     }
     const bool presented = completed_any && refreshes_owed_ != 0u;
     if (presented) refreshes_owed_--;
-    if (harvest && scanout_.refresh(sources_, presented) != Status::ok && budget_.allows())
-        platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
+    /* Once a display period at most: an application flipping thousands of
+     * times a second would otherwise have the host read every frame back.
+     * What arrives between is shown at the next vsync tick's DPC. */
+    constexpr uint64_t refresh_period = 10000000u / DisplayMode::refresh_hz - 10000u;   /* 100 ns, a ms early */
+    const uint64_t     now = platform_.interrupt_time();
+    refresh_waiting_ = refresh_waiting_ || presented;
+    if (harvest && now - refreshed_at_ >= refresh_period) {
+        refreshed_at_ = now;
+        const bool shown = refresh_waiting_;
+        refresh_waiting_ = false;
+        if (scanout_.refresh(sources_, shown) != Status::ok && budget_.allows())
+            platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
+    }
     dxgkrnl_.notify_dpc();
 }
 
@@ -1712,7 +1723,9 @@ int32_t Adapter::create_process(DxgkargCreateProcessRecord *request)
     AV_SCOPE("Adapter::create_process");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_process");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    request->hKmdProcess = nullptr;
+    /* dxgkrnl's own handle, unique per process: what tells a present which
+     * process's command streams it follows (Adapter::submit_command_virtual). */
+    request->hKmdProcess = request->hDxgkProcess;
     return NtStatus(Status::ok).value();
 }
 

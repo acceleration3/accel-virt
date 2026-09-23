@@ -125,7 +125,10 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
     /* The first request the guest sends arrives long after QEMU has started
      * its display, which is the earliest the display's answer is worth
      * anything (DeviceCapset::resolve_display). */
-    if (!capset_.display_resolved()) capset_.resolve_display(heads_.takes_dmabuf());
+    /* The scanout shows host images by key (SCANOUT_IMAGE), which a blob's
+     * dma-buf cannot carry, so the guest keeps the 2D path even where the
+     * display could take a dma-buf - a GL window, which then only draws. */
+    if (!capset_.display_resolved()) capset_.resolve_display(false);
     ControlRequest control(host_, request);
     return ContextCommands(host_, contexts_, capset_).answer(control, type) ||
            BlobCommands(host_, blobs_, recorder_).answer(control, type) ||
@@ -190,6 +193,7 @@ bool VirtioGpuRvk::read_image(uint64_t key, void *pixels, uint32_t stride, uint3
 {
     AV_SCOPE("VirtioGpuRvk::read_image");
     if (!realized()) return false;
+    contexts_.settle_d3d();
     return library_.read_image(capset_.info().gpu().uuid(), key, pixels, stride, width, height);
 }
 

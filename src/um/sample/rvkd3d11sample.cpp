@@ -55,7 +55,7 @@ public:
             QueryPerformanceCounter(&after);
             in_draw += after.QuadPart - before.QuadPart;
             before = after;
-            last = swapchain_->Present(1u, 0u);
+            last = uncapped_ ? swapchain_->Present(0u, DXGI_PRESENT_ALLOW_TEARING) : swapchain_->Present(1u, 0u);
             QueryPerformanceCounter(&after);
             const int64_t took = after.QuadPart - before.QuadPart;
             in_present += took;
@@ -107,6 +107,9 @@ private:
         described.OutputWindow = window_;
         described.Windowed = TRUE;
         described.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        wchar_t flag[4] = {};
+        uncapped_ = GetEnvironmentVariableW(L"RVK_SAMPLE_UNCAPPED", flag, 4u) != 0u && flag[0] == L'1';
+        if (uncapped_) described.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
         D3D_FEATURE_LEVEL made = D3D_FEATURE_LEVEL_11_0;
         if (FAILED(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0u, nullptr, 0u,
                                                  D3D11_SDK_VERSION, &described, &swapchain_, &device_, &made,
@@ -254,6 +257,7 @@ private:
     ID3D11Buffer           *vertices_ = nullptr;
     ID3D11Buffer           *constants_ = nullptr;
     UINT                    width_ = 0u, height_ = 0u;
+    bool                    uncapped_ = false;
     uint32_t                centre_ = 0u, corner_ = 0u;
 };
 

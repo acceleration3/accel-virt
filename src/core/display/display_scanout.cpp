@@ -95,8 +95,10 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
         uint64_t key = 0u;
         if (resources_[source].needs_pages(address)) {
             auto *const primary = static_cast<Allocation *>(sources.primary(source));
-            if (primary != nullptr) pages = primary->pages_at(address, resources_[source].page_count());
             if (primary != nullptr) key = primary->descriptor().host_key();
+            /* A keyed image already shown never reads the pages (ScanoutResource::refresh). */
+            if (primary != nullptr && (key == 0u || !resources_[source].scanning_out()))
+                pages = primary->pages_at(address, resources_[source].page_count());
         }
         carried = resources_[source].refresh(address, pages, presented, key);
     }

@@ -6,14 +6,26 @@
 
 namespace av {
 
-BatchHeader::BatchHeader() : length_(0u), fence_id_(0u)
+BatchHeader::BatchHeader() : length_(0u), fence_id_(0u), published_at_(0u)
 {
     AV_SCOPE("BatchHeader::BatchHeader");
 }
 
-BatchHeader::BatchHeader(uint32_t length, uint64_t fence_id) : length_(length), fence_id_(fence_id)
+BatchHeader::BatchHeader(uint32_t length, uint64_t fence_id) : BatchHeader(length, fence_id, 0u)
 {
     AV_SCOPE("BatchHeader::BatchHeader");
+}
+
+BatchHeader::BatchHeader(uint32_t length, uint64_t fence_id, uint64_t published_at)
+    : length_(length), fence_id_(fence_id), published_at_(published_at)
+{
+    AV_SCOPE("BatchHeader::BatchHeader");
+}
+
+uint64_t BatchHeader::published_at() const
+{
+    AV_SCOPE("BatchHeader::published_at");
+    return published_at_;
 }
 
 uint32_t BatchHeader::length() const
@@ -48,6 +60,8 @@ Status BatchHeader::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(magic);
     writer.write_u32(length_);
     writer.write_u64(fence_id_);
+    writer.write_u64(published_at_);
+    writer.write_zeros(8u);
     return writer.status();
 }
 
@@ -58,9 +72,11 @@ Status BatchHeader::decode(const uint8_t *bytes, size_t length)
     const uint32_t found_magic = reader.read_u32();
     const uint32_t payload = reader.read_u32();
     const uint64_t fence_id = reader.read_u64();
+    const uint64_t published_at = reader.read_u64();
+    reader.expect_zero(8u);
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || fence_id == 0u) return Status::malformed;
-    *this = BatchHeader(payload, fence_id);
+    *this = BatchHeader(payload, fence_id, published_at);
     return Status::ok;
 }
 

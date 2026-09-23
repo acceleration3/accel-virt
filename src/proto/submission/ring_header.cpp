@@ -61,7 +61,7 @@ Status RingHeader::decode(const uint8_t *bytes, size_t length)
     reader.expect_zero(3u);
     const uint64_t tail = reader.read_u64();
     const uint64_t head = reader.read_u64();
-    reader.expect_zero(8u);
+    static_cast<void>(reader.read_u64());   /* the fence the guest last published, the miniport's to read */
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || order < lowest_order || order > highest_order)
         return Status::malformed;

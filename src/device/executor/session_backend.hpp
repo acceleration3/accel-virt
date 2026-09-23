@@ -37,6 +37,8 @@ public:
     /* Whether the host API has lost the device this backend runs on. Asked
      * after every command, because nothing else would notice. */
     virtual bool lost() const = 0;
+    /* The batch's last command has run: what was held across it goes. */
+    virtual void end_batch() = 0;
 
     /* Turns a checked handle into whatever this API holds memory as, recording
      * it on the blob. False for a handle this API cannot take - which is not a

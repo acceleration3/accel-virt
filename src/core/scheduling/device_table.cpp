@@ -36,7 +36,7 @@ Status DeviceTable::create(Adapter &adapter, DxgkargCreateDeviceRecord &request)
     MutexGuard lock(mutex_);
     InvariantScope<DeviceTable> guard(platform_, *this, "create");
     Device *device = nullptr;
-    const Status status = devices_.create(device, platform_, adapter, request.hDevice, request.Flags);
+    const Status status = devices_.create(device, platform_, adapter, request.hDevice, request.Flags, request.hKmdProcess);
     if (status == Status::ok) request.hDevice = device;
     return status;
 }

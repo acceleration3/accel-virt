@@ -21,6 +21,8 @@
 
 namespace av {
 
+class D3dOrdering;
+
 class BatchExecutor;
 class FenceReporter;
 class Host;
@@ -50,6 +52,11 @@ public:
     bool     attached() const;
     bool     faulted() const;
     uint64_t head() const;
+    /* From another worker: when the guest published the oldest batch this ring
+     * holds and has not run, or UINT64_MAX for none. */
+    uint64_t earliest_pending() const;
+    /* The Direct3D streams whose batches this one's follow. */
+    void     order_with(D3dOrdering &ordering);
     uint64_t last_fence() const;
     uint64_t batches() const;
 
@@ -70,6 +77,7 @@ private:
     uint64_t     head_;
     uint64_t     last_fence_;
     uint64_t     batches_;
+    D3dOrdering *ordering_;
     bool         prepared_;
     bool         attached_;
     bool         faulted_;

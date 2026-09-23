@@ -15,7 +15,7 @@ class Adapter;
 
 class Device {
 public:
-    Device(Platform &platform, Adapter &adapter, void *runtime_handle, uint32_t flags);
+    Device(Platform &platform, Adapter &adapter, void *runtime_handle, uint32_t flags, void *process);
     Device(const Device &) = delete;
     Device &operator=(const Device &) = delete;
 
@@ -24,12 +24,15 @@ public:
     void    *runtime_handle() const;
     /* DXGK_CREATEDEVICEFLAGS: SystemDevice, GdiDevice. */
     uint32_t flags() const;
+    /* The hKmdProcess CreateProcess answered for the device's process. */
+    void    *process() const;
 
 private:
     Platform &platform_;
     Adapter  &adapter_;
     void     *runtime_handle_;
     uint32_t  flags_;
+    void     *process_;
 };
 
 }  // namespace av

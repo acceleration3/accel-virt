@@ -1,5 +1,7 @@
 #include "device/execution/batch_executor.hpp"
 
+#include "core/support/scope_exit.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "proto/submission/command_stream.hpp"
@@ -59,6 +61,12 @@ bool BatchExecutor::started() const
     return executor_.created();
 }
 
+bool BatchExecutor::ready() const
+{
+    AV_SCOPE("BatchExecutor::ready");
+    return executor_.created();
+}
+
 /* The copy is taken once; the ring's bytes are not read again for this batch. */
 Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch)
 {
@@ -83,6 +91,7 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     bool                answered = false;
     size_t              answer = 0u;
     Status              status = Status::ok;
+    ScopeExit           ended([this] { executor_.end_batch(); });
     while ((status = stream.next(header, payload)) == Status::ok) {
         status = run_command(header, payload, answered, answer);
         if (status != Status::ok) return failed(batch.fence_id(), status);

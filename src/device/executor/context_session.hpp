@@ -38,6 +38,7 @@ public:
      * every command that did not ask for an answer; `answer` is then the
      * length the answer would have been, which is what lets the device tell
      * the guest what to allocate and ask again. */
+    void     end_batch();
     uint32_t execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                      size_t reply_capacity, size_t &answer);
 

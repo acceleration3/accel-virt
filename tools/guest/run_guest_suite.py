@@ -478,7 +478,11 @@ def qemu_command(args, work, disk, rescue, gpus=()):
         "-qmp", f"unix:{work / 'qmp.sock'},server=on,wait=off",
         "-action", f"panic={'pause' if args.on_panic == 'pause' else 'none'}",
         "-msg", "timestamp=on", "-d", "guest_errors",
-        "-vga", "none", "-display", args.display, "-nic", "none",
+        # Without GL, gtk scales the guest's frame to a HiDPI window in
+        # software - bilinear, in cairo, on QEMU's main loop, on every redraw -
+        # which the device's work shares; with it the GPU draws the window.
+        "-vga", "none", "-display", "gtk,gl=on" if args.display == "gtk" else args.display,
+        "-nic", "none",
     ]
     if args.vnc is not None:
         command += ["-vnc", f"127.0.0.1:{args.vnc}"]

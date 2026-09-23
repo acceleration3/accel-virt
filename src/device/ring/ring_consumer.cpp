@@ -1,5 +1,7 @@
 #include "device/ring/ring_consumer.hpp"
 
+#include "device/context/d3d_ordering.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "device/execution/batch_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -12,7 +14,7 @@
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -105,12 +107,13 @@ Status RingConsumer::consume_next()
         return Status::malformed;
     }
     if (published < batch.span()) return Status::no_space;
+    if (ordering_ != nullptr) ordering_->wait_before(*this, batch.published_at());
     const Status ran = executor_.run(ring_, head_, batch);
     if (ran != Status::ok) {
         fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
         return ran;
     }
-    head_ += batch.span();
+    __atomic_store_n(&head_, head_ + batch.span(), __ATOMIC_RELEASE);
     last_fence_ = batch.fence_id();
     batches_++;
     /* The header was just read, so its head field is inside the blob. */
@@ -121,6 +124,32 @@ Status RingConsumer::consume_next()
 
 /* The executor goes at once: the host API's objects are the device's to free,
  * the context's binding the guest's. */
+uint64_t RingConsumer::earliest_pending() const
+{
+    AV_SCOPE("RingConsumer::earliest_pending");
+    if (!attached_ || faulted_ || !executor_.ready()) return UINT64_MAX;
+    const uint64_t head = __atomic_load_n(&head_, __ATOMIC_ACQUIRE);
+    RingHeader     header;
+    if (ring_.snapshot(header) == Status::ok && header.tail() - head >= BatchHeader::encoded_size) {
+        uint8_t     bytes[BatchHeader::encoded_size] = {};
+        BatchHeader batch;
+        /* A header torn by the owner moving on is read as due now. */
+        if (ring_.copy(head, bytes, sizeof bytes) != Status::ok || batch.decode(bytes, sizeof bytes) != Status::ok)
+            return 0u;
+        return batch.published_at();
+    }
+    /* A batch the guest announced but its kernel has not handed over is not
+     * waited for: the kernel may be holding it until the waiting stream's own
+     * packet completes, and the two would wait on each other. */
+    return UINT64_MAX;
+}
+
+void RingConsumer::order_with(D3dOrdering &ordering)
+{
+    AV_SCOPE("RingConsumer::order_with");
+    ordering_ = &ordering;
+}
+
 void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
 {
     AV_SCOPE("RingConsumer::fault");

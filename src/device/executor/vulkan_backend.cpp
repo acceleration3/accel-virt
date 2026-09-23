@@ -627,6 +627,11 @@ void VulkanBackend::abandon(ImportedBlob &blob)
     blob.record(0u, 0u);
 }
 
+void VulkanBackend::end_batch()
+{
+    AV_SCOPE("VulkanBackend::end_batch");
+}
+
 bool VulkanBackend::lost() const
 {
     AV_SCOPE("VulkanBackend::lost");

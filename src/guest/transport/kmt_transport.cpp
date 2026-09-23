@@ -229,14 +229,41 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     return publish_batch(staging_, command_size, fence);
 }
 
+bool KmtTransport::drain()
+{
+    AV_SCOPE("KmtTransport::drain");
+    const uint64_t newest = fences_.completed() + fences_.outstanding();
+    if (fences_.outstanding() == 0u) return true;
+    const Status waited = doorbell_.queue() != 0u
+                              ? connection_.kmt().wait_for_hw_queue(connection_.device(),
+                                                                    doorbell_.progress_fence(), newest)
+                              : connection_.kmt().wait_for_context(connection_.device(), context_);
+    if (waited != Status::ok) {
+        faulted_ = true;
+        return false;
+    }
+    fences_.close(newest);
+    return true;
+}
+
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
     AV_SCOPE("KmtTransport::publish_batch");
-    const uint64_t next = fences_.peek();
+    /* Asynchronous batches open fences nobody waits on: a sender faster than
+     * the host fills the fence window or the ring, and then waits for the
+     * host to catch up rather than failing. */
+    if (fences_.full() && !drain()) return TransportResult::failed;
+    uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
-    uint64_t     begin = 0u;
-    uint64_t     end = 0u;
-    const Status written = ring_.write_batch(batch, length, next, begin, end);
+    uint64_t begin = 0u;
+    uint64_t end = 0u;
+    uint64_t frequency = 0u;
+    Status   written = ring_.write_batch(batch, length, next, connection_.kmt().performance_counter(frequency), begin, end);
+    if (written == Status::no_space) {
+        if (!drain()) return TransportResult::failed;
+        next = fences_.peek();
+        written = ring_.write_batch(batch, length, next, connection_.kmt().performance_counter(frequency), begin, end);
+    }
     if (written != Status::ok) return TransportResult::failed;
     fence = fences_.open();
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};

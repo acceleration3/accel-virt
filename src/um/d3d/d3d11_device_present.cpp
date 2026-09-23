@@ -136,10 +136,10 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
      * scanout's SCANOUT_IMAGE, and DWM opening it by key), so nothing is read
      * back: the host only has to have finished drawing it before the flip. */
     if (source.shared_key != 0u) {
-        /* The stream reaches the host through its own queue, which the kernel
-         * does not order against this present: the round trip is what puts
-         * the frame's commands ahead of DWM composing it. */
-        if (removed_on_host()) {
+        /* A flush, not a round trip: the miniport holds this present's packet
+         * until the host has run the batch the flush published (its fence is
+         * in the ring's header), and DWM and the scanout wait on the present. */
+        if (wire().flush() != Status::ok) {
             set_error(D3DDDIERR_DEVICEREMOVED);
             return DXGI_ERROR_DEVICE_REMOVED;
         }
@@ -245,24 +245,9 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.primary = from.primary;
         to.vidpn_source = from.vidpn_source;
     }
-    rebind_state();
+    /* The host rebinds what was bound of the views it remade
+     * (D3dBackend::rebind_remade): nothing is re-sent from here. */
     return S_OK;
-}
-
-void D3d11Device::rebind_state()
-{
-    AV_SCOPE("D3d11Device::rebind_state");
-    if (core_ == nullptr) return;
-    constexpr UINT srvs = D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
-    constexpr UINT uavs = 64u;   /* D3D11_1_UAV_SLOT_COUNT */
-    core_->pfnStateVsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStateGsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStatePsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStateHsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStateDsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStateCsSrvCb(core_layer_, 0u, srvs);
-    core_->pfnStateCsUavCb(core_layer_, 0u, uavs);
-    core_->pfnStateOmRenderTargetsCb(core_layer_);
 }
 
 HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *)

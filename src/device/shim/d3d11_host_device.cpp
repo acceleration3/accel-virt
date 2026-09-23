@@ -166,6 +166,12 @@ void D3d11HostDevice::lock(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::lock");
     pthread_mutex_lock(&mutex_);
+    select(state);
+}
+
+void D3d11HostDevice::select(ID3DDeviceContextState *state)
+{
+    AV_SCOPE("D3d11HostDevice::select");
     if (state == nullptr || state == active_) return;
     context_->SwapDeviceContextState(state, nullptr);
     active_ = state;

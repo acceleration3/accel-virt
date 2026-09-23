@@ -49,6 +49,8 @@ public:
     /* Held around every command a session runs. `state` is the session's
      * own: swapped in when it is not the one in force. */
     void lock(ID3DDeviceContextState *state);
+    /* Under the lock already held: `state` becomes the context's, if it is not. */
+    void select(ID3DDeviceContextState *state);
     void unlock();
     /* A context state of the device's own, for a new session; null when the
      * device refuses one. The caller owns the reference. */

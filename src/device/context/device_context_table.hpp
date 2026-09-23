@@ -7,6 +7,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "device/context/d3d_ordering.hpp"
 #include "device/context/device_context.hpp"
 #include "device/execution/executor_shares.hpp"
 
@@ -37,6 +38,8 @@ public:
     /* The lock the contexts share executors under: invalid_state once made,
      * no_memory when the host has none. */
     [[nodiscard]] Status initialize();
+    /* Before the scanout reads an image: every Direct3D stream has run what it published. */
+    void                 settle_d3d();
     /* invalid_parameter for id 0, conflict for a live id, no_space when full,
      * or the worker's failure, leaving no context behind. */
     [[nodiscard]] Status create(uint32_t id);
@@ -66,6 +69,7 @@ private:
     WireRecorder                &recorder_;
     /* Before the contexts, whose executors are withdrawn from it as they go. */
     ExecutorShares               shares_;
+    D3dOrdering                  ordering_;
     ObjectStorage<DeviceContext> slots_[max_contexts];
 
     friend struct DeviceContextTableProbe;

@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 7u
+#define RVK_EXECUTOR_ABI_VERSION 8u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -56,6 +56,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_EVENTS 5u
 #define RVK_EXECUTOR_ABI_VERSION_SHARING 6u
 #define RVK_EXECUTOR_ABI_VERSION_IMAGES 7u
+#define RVK_EXECUTOR_ABI_VERSION_BATCHES 8u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -242,6 +243,11 @@ typedef struct RvkExecutorOps {
      * has the image. */
     uint32_t (*read_image)(void *opaque, const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                            uint32_t width, uint32_t height);
+
+    /* ABI 8: the last command of a batch has run. An executor may hold what
+     * every command of the batch needs - a host device's lock - across the
+     * batch rather than taking it per command. */
+    void (*end_batch)(void *opaque, RvkExecutor *executor);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

@@ -170,6 +170,13 @@ void ExecutorLibrary::destroy(RvkExecutor *executor) const
     ops_->destroy(ops_->opaque, executor);
 }
 
+void ExecutorLibrary::end_batch(RvkExecutor *executor) const
+{
+    AV_SCOPE("ExecutorLibrary::end_batch");
+    if (ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_BATCHES && ops_->end_batch != nullptr)
+        ops_->end_batch(ops_->opaque, executor);
+}
+
 uint32_t ExecutorLibrary::execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                   uint8_t *reply, size_t reply_capacity, size_t &reply_size) const
 {

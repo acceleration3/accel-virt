@@ -96,6 +96,12 @@ void ContextExecutor::destroy()
     executor_ = nullptr;
 }
 
+void ContextExecutor::end_batch()
+{
+    AV_SCOPE("ContextExecutor::end_batch");
+    if (executor_ != nullptr) library_.end_batch(executor_);
+}
+
 Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                                 size_t reply_capacity, size_t &reply_size)
 {

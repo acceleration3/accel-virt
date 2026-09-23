@@ -32,8 +32,11 @@ public:
      * `end` are the tail counters before and after, for the submission that
      * carries them. invalid_state unbound; invalid_parameter for fence 0 or a
      * batch too large for the ring; no_space until the device consumes enough. */
+    /* `published_at`, the guest's performance counter, goes in the batch's
+     * header: the device runs a Direct3D batch only after every other
+     * stream's batches it can see that were published before it. */
     [[nodiscard]] Status write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id,
-                                     uint64_t &begin, uint64_t &end);
+                                     uint64_t published_at, uint64_t &begin, uint64_t &end);
 
     /* Writes the tail this ring has reached into the header, which the device
      * reads to know how far the process has produced.

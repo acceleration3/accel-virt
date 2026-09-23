@@ -33,6 +33,12 @@ bool ScanoutResource::needs_pages(uint64_t address) const
     return created_ && address != 0u && device_.constructed();
 }
 
+bool ScanoutResource::scanning_out() const
+{
+    AV_SCOPE("ScanoutResource::scanning_out");
+    return scanning_out_;
+}
+
 uint32_t ScanoutResource::page_count() const
 {
     AV_SCOPE("ScanoutResource::page_count");
@@ -245,6 +251,13 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
     }
     VirtioGpuDevice &device = device_.object();
     key_ = key;
+    /* A keyed image is read from the host's own copy, never the pages: once
+     * shown, a flip between keyed images is a new key and a flush, not a
+     * detach and attach of a thousand pages on QEMU's main loop. */
+    if (key != 0u && scanning_out_) {
+        attached_address_ = address;
+        return flush(device);
+    }
     const uint64_t   fingerprint = pages.fingerprint();
     const bool       moved = pages.count() != 0u && fingerprint != attached_pages_;
     if (address != attached_address_ || moved) {

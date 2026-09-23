@@ -28,13 +28,13 @@ Status TransportRing::initialize(uint8_t *ring, uint8_t order)
     return Status::ok;
 }
 
-Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id, uint64_t &begin,
-                                  uint64_t &end)
+Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id,
+                                  uint64_t published_at, uint64_t &begin, uint64_t &end)
 {
     AV_SCOPE("TransportRing::write_batch");
     if (ring_ == nullptr) return Status::invalid_state;
     if (fence_id == 0u || payload == nullptr) return Status::invalid_parameter;
-    const BatchHeader header(length, fence_id);
+    const BatchHeader header(length, fence_id, published_at);
     if (!header.fits(capacity())) return Status::invalid_parameter;
     const uint64_t span = header.span();
     if (span > free_space()) return Status::no_space;

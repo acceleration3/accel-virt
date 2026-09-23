@@ -18,7 +18,7 @@ namespace av {
 
 class HostTrace {
 public:
-    static constexpr uint32_t slots = 128u;
+    static constexpr uint32_t slots = 512u;
 
     HostTrace();
     HostTrace(const HostTrace &) = delete;

@@ -39,8 +39,9 @@ MODULES = ("device", "executor")
 TICKS_PER_US = 10  # the trace host's clock counts 100 ns
 
 
-def read_ring(path):
-    """Per slot, its events oldest first, as (time, name, thread, begin)."""
+def read_ring(path, since=0):
+    """Per slot, its events at or after `since` oldest first, as (time, name, thread, begin).
+    Walked from the newest back, so a full ring costs only its window."""
     with open(path, "rb") as handle:
         data = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
     magic, version, slots, per_slot = struct.unpack_from("<IIII", data, 0)
@@ -52,13 +53,15 @@ def read_ring(path):
         (written,) = struct.unpack_from("<Q", data, base)
         if written == 0:
             continue
-        kept = min(written, per_slot)
-        first = written - kept
+        first = written - min(written, per_slot)
         events = []
-        for index in range(first, written):
+        for index in range(written - 1, first - 1, -1):
             at = base + SLOT_HEADER + (index % per_slot) * EVENT
             time, name, word = struct.unpack_from("<QII", data, at)
+            if time < since:
+                break
             events.append((time, name, word & ~BEGIN, bool(word & BEGIN)))
+        events.reverse()
         yield slot, events
 
 
@@ -66,16 +69,18 @@ def collect(pid, seconds, names):
     trace = []
     newest = 0
     rings = {}
+    # Taken before reading: walking the rings takes seconds, and the window
+    # is the seconds before the capture was asked for.
+    now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     for module in MODULES:
         path = pathlib.Path(f"/dev/shm/rvk-events-{module}-{pid}")
         if path.exists():
-            rings[module] = list(read_ring(path))
+            rings[module] = list(read_ring(path, now - int(seconds * 1_000_000 * TICKS_PER_US)))
             for _, events in rings[module]:
                 if events:
                     newest = max(newest, events[-1][0])
     # A slot a thread is writing while this reads can hand back a torn event;
     # the window ends at the host's clock now, which no real event passes.
-    now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     newest = min(newest, now)
     if not rings:
         raise SystemExit(f"no /dev/shm/rvk-events-*-{pid}: was QEMU started with RVK_PERFETTO=1?")

@@ -67,7 +67,7 @@ Status HostTrace::start(const char *module)
     scope_binding.bind(table_);
     /* A ring per slot the size of a busy thread's second or so; the file is
      * sparse, so only the slots threads use take memory. */
-    constexpr uint32_t events_per_slot = 1u << 20u;
+    constexpr uint32_t events_per_slot = 1u << 18u;
     const char *const  wanted = getenv("RVK_PERFETTO");
     if (wanted != nullptr && wanted[0] == '1' &&
         events_region_.open("/rvk-events-", module, EventRing::bytes_for(slots, events_per_slot)) == Status::ok &&

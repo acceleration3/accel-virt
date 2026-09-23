@@ -114,6 +114,11 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     return true;
 }
 
+void OpenGlBackend::end_batch()
+{
+    AV_SCOPE("OpenGlBackend::end_batch");
+}
+
 bool OpenGlBackend::lost() const
 {
     AV_SCOPE("OpenGlBackend::lost");

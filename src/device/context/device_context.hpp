@@ -22,6 +22,8 @@
 
 namespace av {
 
+class D3dOrdering;
+
 class BlobTable;
 class CapsetInfo;
 class ExecutorLibrary;
@@ -38,7 +40,8 @@ struct DeviceContextProbe;
 class DeviceContext {
 public:
     DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared, FenceInterrupts &interrupts,
-                  const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, uint32_t id);
+                  const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id);
+    ~DeviceContext();
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
@@ -61,6 +64,7 @@ public:
     void                 report(StateWriter &writer);
 
 private:
+    D3dOrdering          &ordering_;
     WireRecorder  &recorder_;
     uint32_t       id_;
     ContextBinding binding_;

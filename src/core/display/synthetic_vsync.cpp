@@ -87,6 +87,9 @@ void SyntheticVsync::tick()
         if (report() == Status::ok) {
             reported_++;
             dxgkrnl_.notify_dpc();
+            /* The adapter's DPC shows the newest image once a period: a flip
+             * faster than the display waits for this tick to be shown. */
+            static_cast<void>(dxgkrnl_.queue_dpc());
         } else {
             platform_.log("rvkgpu: a vsync was refused");
         }

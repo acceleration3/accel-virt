@@ -46,6 +46,7 @@ public:
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    void end_batch() override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
     /* Direct3D shares through the device's own table (D3dSharedResources),
@@ -165,6 +166,9 @@ private:
      * finishing need, none of which touch pipeline state. */
     bool                     has_device() const;
     void                     remake_views(IUnknown *const *textures, uint32_t count);
+    void rebind_remade();
+    bool swap_remade(IUnknown **bound, uint32_t count) const;
+    void release_all(IUnknown **held, uint32_t count) const;
     bool                     is_view(D3dObjectKind kind) const;
     /* A view like `view`, of `kind`, on `texture`; null when the host refuses one. */
     IUnknown                *remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture);
@@ -180,6 +184,13 @@ private:
                                          uint32_t height, uint32_t depth, uint32_t format);
 
     D3d11HostDevice        *device11_;
+    /* The device lock, taken at a batch's first command and held to its end. */
+    bool                    held_;
+    /* The views a rotation remade, the old ones held until what bound them is rebound. */
+    static constexpr uint32_t max_remade = 64u;
+    IUnknown               *remade_old_[max_remade];
+    IUnknown               *remade_new_[max_remade];
+    uint32_t                remade_;
     D3dContextStates        states_;
     /* The selected device's state, which commands run on; null when none is. */
     ID3DDeviceContextState *selected_;

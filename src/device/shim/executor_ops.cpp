@@ -214,6 +214,13 @@ uint32_t read_image(void *, const uint8_t *gpu_uuid, uint64_t key, void *pixels,
     return library.root().read_image(gpu_uuid, key, pixels, stride, width, height) ? RVK_EXECUTED : RVK_UNKNOWN;
 }
 
+void end_batch(void *, RvkExecutor *executor)
+{
+    AV_SCOPE("end_batch");
+    av::ContextSession *const session = session_of(executor);
+    if (session != nullptr) session->end_batch();
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -229,7 +236,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               export_object,
                               import_object,
                               release_object,
-                              read_image};
+                              read_image,
+                              end_batch};
 
 }  // namespace
 

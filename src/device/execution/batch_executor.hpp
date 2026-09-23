@@ -50,6 +50,9 @@ public:
      * command ran or was skipped; malformed for commands no producer could
      * frame, an answer asked for with no reply slot, or a payload the
      * executor cannot decode; invalid_state for a lost device or no executor. */
+    /* It has a host executor to run batches on: a context whose executor never
+     * opened holds batches that will not run, and nothing waits on them. */
+    bool                 ready() const;
     [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);
 
     /* Batches run, whether or not they completed. */

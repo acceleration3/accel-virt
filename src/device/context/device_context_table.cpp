@@ -12,7 +12,7 @@ DeviceContextTable::DeviceContextTable(Host &host, BlobTable &blobs, HostSharedO
                                        FenceInterrupts &interrupts, const ExecutorLibrary &library,
                                        WireRecorder &recorder)
     : host_(host), blobs_(blobs), shared_(shared), interrupts_(interrupts), library_(library),
-      recorder_(recorder), shares_(host, library), slots_{}
+      recorder_(recorder), shares_(host, library), ordering_(host), slots_{}
     {
         AV_SCOPE("DeviceContextTable::DeviceContextTable");
     }
@@ -27,7 +27,14 @@ Status DeviceContextTable::initialize()
 {
     AV_SCOPE("DeviceContextTable::initialize");
     host_.require_main_loop("DeviceContextTable::initialize");
-    return shares_.initialize();
+    const Status ordered = ordering_.initialize();
+    return ordered != Status::ok ? ordered : shares_.initialize();
+}
+
+void DeviceContextTable::settle_d3d()
+{
+    AV_SCOPE("DeviceContextTable::settle_d3d");
+    ordering_.settle();
 }
 
 bool DeviceContextTable::can_share(uint32_t asking, uint32_t share)
@@ -53,7 +60,7 @@ Status DeviceContextTable::create(uint32_t id)
     if (id == 0u) return Status::invalid_parameter;
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
-        if (slot.construct(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, id) != Status::ok)
+        if (slot.construct(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, ordering_, id) != Status::ok)
             continue;   /* occupied */
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();

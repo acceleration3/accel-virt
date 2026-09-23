@@ -1,5 +1,7 @@
 #include "device/context/device_context.hpp"
 
+#include "device/context/d3d_ordering.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/support/text_buffer.hpp"
@@ -20,8 +22,8 @@ namespace av {
 
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared,
                              FenceInterrupts &interrupts, const ExecutorLibrary &library,
-                             ExecutorShares &shares, WireRecorder &recorder, uint32_t id)
-    : recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
+                             ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering, uint32_t id)
+    : ordering_(ordering), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
       imports_(host, blobs, executor_, recorder, id), shared_(shared, executor_),
       executor_(host, library, shares, id), staging_(host),
       batches_(host, executor_, imports_, shared_, staging_, fences_, recorder, id),
@@ -29,6 +31,14 @@ DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &sh
       {
           AV_SCOPE("DeviceContext::DeviceContext");
       }
+
+/* Out of the order before the worker and the ring go, so no other stream
+ * looks at a ring that is no longer there. */
+DeviceContext::~DeviceContext()
+{
+    AV_SCOPE("DeviceContext::~DeviceContext");
+    ordering_.remove(ring_);
+}
 
 Status DeviceContext::start()
 {
@@ -88,6 +98,10 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     disconnect.dismiss();
     withdraw.dismiss();
     unbind.dismiss();
+    if (setup.sub_api() == SubApi::d3d) {
+        ring_.order_with(ordering_);
+        ordering_.add(ring_);
+    }
     recorder_.record_context_setup(id_, setup);
     return Status::ok;
 }
