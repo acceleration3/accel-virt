@@ -113,8 +113,8 @@ Status RvkContextTable::bind(void *context, const RvkContextRecord &record, Virt
 {
     AV_SCOPE("RvkContextTable::bind");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::bind");
-    InvariantScope<RvkContextTable> guard(platform_, *this, "bind");
     WaitMutexGuard                  sequence(requests_);
+    InvariantScope<RvkContextTable> guard(platform_, *this, "bind");
     if (context == nullptr) return Status::invalid_state;
     bool           duplicate = false;
     const uint32_t slot = claim(context, duplicate);
@@ -174,8 +174,8 @@ Status RvkContextTable::unbind(void *context, VirtioGpuDevice *device)
 {
     AV_SCOPE("RvkContextTable::unbind");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::unbind");
-    InvariantScope<RvkContextTable> guard(platform_, *this, "unbind");
     WaitMutexGuard                  sequence(requests_);
+    InvariantScope<RvkContextTable> guard(platform_, *this, "unbind");
     uint32_t slot = no_slot;
     {
         SpinLockGuard locked(lock_);
@@ -228,8 +228,8 @@ Status RvkContextTable::bind_chunk(void *context, HostVisibleBindRecord &record,
 {
     AV_SCOPE("RvkContextTable::bind_chunk");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::bind_chunk");
-    InvariantScope<RvkContextTable> guard(platform_, *this, "bind_chunk");
     WaitMutexGuard                  sequence(requests_);
+    InvariantScope<RvkContextTable> guard(platform_, *this, "bind_chunk");
     uint32_t                        slot = no_slot;
     {
         SpinLockGuard locked(lock_);
@@ -322,6 +322,7 @@ void RvkContextTable::abandon_all()
 {
     AV_SCOPE("RvkContextTable::abandon_all");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::abandon_all");
+    WaitMutexGuard                  sequence(requests_);
     InvariantScope<RvkContextTable> guard(platform_, *this, "abandon_all");
     for (uint32_t slot = 0u; slot < max_contexts; slot++) {
         {

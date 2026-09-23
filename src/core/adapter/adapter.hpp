@@ -22,6 +22,7 @@
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/miniport/interrupt_notification.hpp"
+#include "core/platform/spin_lock.hpp"
 #include "core/pci/bar_mappings.hpp"
 #include "core/pci/resource_list.hpp"
 #include "core/platform/log_budget.hpp"
@@ -425,6 +426,9 @@ private:
     PowerTransition                transition_;
     DeviceIdentity                 identity_;
     InterruptNotification          notification_;
+    /* Held across the DPC: notification_'s record and presented_fence_ are
+     * one per adapter, and fences are reported in the order they were taken. */
+    SpinLock                       dpc_lock_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;
     DisplayScanout                 scanout_;

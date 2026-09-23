@@ -25,6 +25,7 @@
 #include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/entry_points.hpp"
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
+#include "core/platform/spin_lock_guard.hpp"
 #include "core/scheduling/hw_queue.hpp"
 #include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
 #include "core/ddi/dxgkarg_create_process_record.hpp"
@@ -116,7 +117,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
-      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
@@ -389,6 +390,7 @@ void Adapter::dpc_routine()
 {
     AV_SCOPE("Adapter::dpc_routine");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
+    SpinLockGuard serialized(dpc_lock_);
     uint32_t completed = 0u;
     const bool harvest = device_.constructed() && present_ && device_.object().running();
     /* A device that fails every harvest would otherwise log on every DPC, so
