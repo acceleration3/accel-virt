@@ -204,7 +204,7 @@ BLACK_SCREEN_LIVEDUMP = 0x1A8
 TIMEOUT_LIVEDUMPS = (0x117, 0x141)
 MEMORY_DUMP = "MEMORY.DMP"
 # What an --all-gpus run tells provision.ps1 each host GPU is called, one
-# "<vendor>\t<device>\t<name>" line each (feature: host GPU identity).
+# "<vendor>\t<device>\t<name>" line each, hex in lowercase.
 ADAPTER_NAMES = GUEST_DIRECTORY + "\\adapters.txt"
 # virtio-gpu-rvk-pci's subsystem, 5256 by 1af4: DXGI's SubSysId, and the part of
 # a PNPDeviceID the device always keeps.
