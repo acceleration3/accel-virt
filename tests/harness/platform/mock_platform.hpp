@@ -87,6 +87,27 @@ public:
     void     report_broken_invariant(const char *what, const char *function) override;
     std::int32_t register_miniport(void *driver_object, void *registry_path,
                                    const DdiTable &table) override;
+    Status   set_device_description(void *physical_device_object, const std::uint16_t *text,
+                                    std::uint32_t bytes) override;
+    Status   write_driver_text(void *physical_device_object, const char *name, const std::uint16_t *text,
+                               std::uint32_t bytes) override;
+    Status   write_driver_u32(void *physical_device_object, const char *name, std::uint32_t value) override;
+    Status   write_driver_u64(void *physical_device_object, const char *name, std::uint64_t value) override;
+
+    /* The Nth device property or driver-key write from now (1-based) is
+     * refused with not_supported, as the PnP manager refuses one; 0 disables. */
+    void          refuse_device_write_at(std::uint32_t nth);
+    /* The device whose description was last set, and whether it is `ascii`
+     * exactly (UTF-16, NUL-terminated, `bytes` counting the NUL). */
+    void         *described_device() const;
+    bool          device_description_is(const char *ascii) const;
+    std::uint32_t device_writes() const;
+    /* The driver-key value `name` as last written: a REG_SZ equal to `ascii`,
+     * or a number of either width, and its REG_ type (1, 4 or 11; 0 when never
+     * written). */
+    bool          driver_text_is(const char *name, const char *ascii) const;
+    std::uint64_t driver_number(const char *name) const;
+    std::uint32_t driver_value_type(const char *name) const;
 
     /* Fail the Nth allocation from now (1-based); 0 disables. This is how
      * out-of-memory paths reach full branch coverage instead of being assumed
@@ -255,6 +276,33 @@ private:
     std::uint32_t  page_frame_count_;
     AttachedWindow register_windows_[max_register_windows];
     std::uint32_t  register_window_count_;
+
+    static constexpr std::uint32_t max_driver_values = 16u;
+    static constexpr std::size_t   max_value_name = 64u;
+    static constexpr std::size_t   max_value_units = 128u;
+    static constexpr std::uint32_t registry_text = 1u;     /* REG_SZ */
+    static constexpr std::uint32_t registry_u32 = 4u;      /* REG_DWORD */
+    static constexpr std::uint32_t registry_u64 = 11u;     /* REG_QWORD */
+    struct DriverValue {
+        char          name[max_value_name];
+        std::uint32_t type;
+        std::uint16_t text[max_value_units];
+        std::uint64_t number;
+    };
+    /* Whether this write is the one refuse_device_write_at named; records a
+     * write above PASSIVE. */
+    bool         device_write_refused(const char *function);
+    DriverValue *driver_value(const char *name, bool create);
+    const DriverValue *find_driver_value(const char *name) const;
+    bool         units_are(const std::uint16_t *units, const char *ascii) const;
+
+    std::uint32_t  device_write_sequence_ = 0u;
+    std::uint32_t  refuse_device_write_ = 0u;
+    std::uint32_t  device_writes_ = 0u;
+    void          *described_device_ = nullptr;
+    std::uint16_t  description_[max_value_units] = {};
+    DriverValue    driver_values_[max_driver_values] = {};
+    std::uint32_t  driver_value_count_ = 0u;
 };
 
 }  // namespace av

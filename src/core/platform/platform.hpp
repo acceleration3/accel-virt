@@ -131,6 +131,21 @@ public:
     /* Of the registration made; nothing without one. PASSIVE. */
     virtual void deregister_bugcheck() = 0;
 
+    /* The device's DEVPKEY_Device_DeviceDesc, kept across boots: `text` is
+     * UTF-16 and `bytes` counts its NUL. PASSIVE. */
+    [[nodiscard]] virtual Status set_device_description(void *physical_device_object, const uint16_t *text,
+                                                        uint32_t bytes) = 0;
+    /* A REG_SZ value `name` in the device's driver (software) key: `text` is
+     * UTF-16 and `bytes` counts its NUL. PASSIVE. */
+    [[nodiscard]] virtual Status write_driver_text(void *physical_device_object, const char *name,
+                                                   const uint16_t *text, uint32_t bytes) = 0;
+    /* A REG_DWORD value there. PASSIVE. */
+    [[nodiscard]] virtual Status write_driver_u32(void *physical_device_object, const char *name,
+                                                  uint32_t value) = 0;
+    /* A REG_QWORD value there. PASSIVE. */
+    [[nodiscard]] virtual Status write_driver_u64(void *physical_device_object, const char *name,
+                                                  uint64_t value) = 0;
+
     /* DxgkInitialize: hands the table to dxgkrnl; answers an NTSTATUS. */
     virtual int32_t register_miniport(void *driver_object, void *registry_path,
                                       const DdiTable &table) = 0;

@@ -89,6 +89,13 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   CHECK(rig.platform().logged_line("rvkgpu: StartDevice"));
   /* The capset came from the device core, not from a scripted answer. */
   CHECK(rig.platform().logged_line("rvkgpu: device capset status 0x00000000"));
+  /* The host GPU's name and memory, from that capset, are where Device
+   * Manager, WMI and DXGI read an adapter's. */
+  CHECK(rig.platform().logged_line("rvkgpu: adapter description status 0x00000000"));
+  CHECK(rig.platform().described_device() != nullptr);
+  CHECK(rig.platform().device_description_is("mock gpu"));
+  CHECK(rig.platform().driver_text_is("HardwareInformation.AdapterString", "mock gpu"));
+  CHECK_EQ(rig.platform().driver_number("HardwareInformation.qwMemorySize"), 24ull << 30);
   /* The host-visible region is one blob the device core made and placed. */
   CHECK(rig.platform().logged_line("rvkgpu: host-visible region status 0x00000000"));
   CHECK_EQ(rig.device().device().blobs(), 1u);

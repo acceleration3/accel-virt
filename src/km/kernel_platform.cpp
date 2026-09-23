@@ -7,6 +7,10 @@ extern "C" {
 #include <dispmprt.h>
 }
 
+/* DEVPKEY_Device_DeviceDesc is defined, not only declared, in this one unit. */
+#include <initguid.h>
+#include <devpkey.h>
+
 #include "core/miniport/ddi_table.hpp"
 #include "core/platform/mutex.hpp"
 #include "core/platform/wait_mutex.hpp"
@@ -366,6 +370,53 @@ int32_t KernelPlatform::register_miniport(void *driver_object, void *registry_pa
     return DxgkInitialize(static_cast<PDRIVER_OBJECT>(driver_object),
                           static_cast<PUNICODE_STRING>(registry_path),
                           reinterpret_cast<PDRIVER_INITIALIZATION_DATA>(const_cast<DdiTable *>(&table)));
+}
+
+Status KernelPlatform::set_device_description(void *physical_device_object, const uint16_t *text, uint32_t bytes)
+{
+    AV_SCOPE("KernelPlatform::set_device_description");
+    const NTSTATUS status = IoSetDevicePropertyData(static_cast<PDEVICE_OBJECT>(physical_device_object),
+                                                    &DEVPKEY_Device_DeviceDesc, LOCALE_NEUTRAL,
+                                                    PLUGPLAY_PROPERTY_PERSISTENT, DEVPROP_TYPE_STRING, bytes,
+                                                    const_cast<uint16_t *>(text));
+    return NT_SUCCESS(status) ? Status::ok : Status::not_supported;
+}
+
+Status KernelPlatform::write_driver_value(void *physical_device_object, const char *name, ULONG type,
+                                          const void *bytes, ULONG size)
+{
+    AV_SCOPE("KernelPlatform::write_driver_value");
+    WCHAR  wide[value_name_chars] = {};
+    size_t length = 0u;
+    for (; name[length] != '\0' && length + 1u < value_name_chars; length++)
+        wide[length] = static_cast<WCHAR>(name[length]);
+    UNICODE_STRING value_name = {static_cast<USHORT>(length * sizeof(WCHAR)), static_cast<USHORT>(sizeof wide), wide};
+    HANDLE key = nullptr;
+    if (!NT_SUCCESS(IoOpenDeviceRegistryKey(static_cast<PDEVICE_OBJECT>(physical_device_object),
+                                            PLUGPLAY_REGKEY_DRIVER, KEY_SET_VALUE, &key)))
+        return Status::not_found;
+    const NTSTATUS written = ZwSetValueKey(key, &value_name, 0u, type, const_cast<void *>(bytes), size);
+    ZwClose(key);
+    return NT_SUCCESS(written) ? Status::ok : Status::not_supported;
+}
+
+Status KernelPlatform::write_driver_text(void *physical_device_object, const char *name, const uint16_t *text,
+                                         uint32_t bytes)
+{
+    AV_SCOPE("KernelPlatform::write_driver_text");
+    return write_driver_value(physical_device_object, name, REG_SZ, text, bytes);
+}
+
+Status KernelPlatform::write_driver_u32(void *physical_device_object, const char *name, uint32_t value)
+{
+    AV_SCOPE("KernelPlatform::write_driver_u32");
+    return write_driver_value(physical_device_object, name, REG_DWORD, &value, sizeof value);
+}
+
+Status KernelPlatform::write_driver_u64(void *physical_device_object, const char *name, uint64_t value)
+{
+    AV_SCOPE("KernelPlatform::write_driver_u64");
+    return write_driver_value(physical_device_object, name, REG_QWORD, &value, sizeof value);
 }
 
 /* Broken invariants mean corrupted state; the kernel's own response to that is
