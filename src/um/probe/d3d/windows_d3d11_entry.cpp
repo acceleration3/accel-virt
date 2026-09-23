@@ -30,7 +30,7 @@ int32_t WindowsD3d11Entry::create_device(void *window, uint32_t width, uint32_t 
     DXGI_SWAP_CHAIN_DESC described = {};
     described.BufferDesc.Width = width;
     described.BufferDesc.Height = height;
-    described.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    described.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     described.SampleDesc.Count = 1u;
     described.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     described.BufferCount = 1u;
@@ -79,7 +79,7 @@ int32_t WindowsD3d11Entry::create_render_target()
     described.Height = height_;
     described.MipLevels = 1u;
     described.ArraySize = 1u;
-    described.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    described.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     described.SampleDesc.Count = 1u;
     described.Usage = D3D11_USAGE_STAGING;
     described.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -110,10 +110,24 @@ int32_t WindowsD3d11Entry::read_back(uint8_t *pixels, uint32_t bytes)
     return asked;
 }
 
+/* RVK_PROBE_HOLD=<frames> keeps the window presenting, a colour a frame at
+ * vsync, so the frames can be watched on the guest's screen. */
 int32_t WindowsD3d11Entry::present()
 {
     AV_SCOPE("WindowsD3d11Entry::present");
-    return swapchain_->Present(0u, 0u);
+    const HRESULT first = swapchain_->Present(0u, 0u);
+    wchar_t value[16] = {};
+    const DWORD length = GetEnvironmentVariableW(L"RVK_PROBE_HOLD", value, 16u);
+    uint32_t frames = 0u;
+    for (DWORD index = 0u; index < length && value[index] >= L'0' && value[index] <= L'9'; index++)
+        frames = frames * 10u + static_cast<uint32_t>(value[index] - L'0');
+    for (uint32_t frame = 0u; frame < frames; frame++) {
+        const float phase = static_cast<float>(frame % 120u) / 120.0F;
+        const float cycling[channels] = {phase, 1.0F - phase, 0.5F, 1.0F};
+        context_->ClearRenderTargetView(target_, cycling);
+        static_cast<void>(swapchain_->Present(1u, 0u));
+    }
+    return first;
 }
 
 void WindowsD3d11Entry::release()

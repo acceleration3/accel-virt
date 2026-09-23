@@ -15,6 +15,7 @@ GetCurrentProcess
 GetCurrentProcessId
 GetCurrentThreadId
 GetEnvironmentVariableA
+GetEnvironmentVariableW
 GetLastError
 GetModuleFileNameW
 GetModuleHandleExW
