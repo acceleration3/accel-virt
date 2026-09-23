@@ -121,6 +121,15 @@ private:
     uint32_t kernel_format(uint32_t format) const;
     /* The host's pixels of `resource` into its allocation, for the kernel. */
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
+    /* A surface GDI draws into from the guest's CPU (a window's redirection
+     * surface), which no host session made: DWM opens it to compose the
+     * window. It gets a host texture of its own, refreshed from the guest's
+     * pages at each present wherever they changed. */
+    bool open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
+    void refresh_guest_surfaces();
+    void refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count);
+    void refresh_guest_surface(ResourceRecord &resource);
+    void forget_guest_surface(const ResourceRecord &resource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
     HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context);
@@ -149,7 +158,12 @@ private:
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
     HANDLE    present_context_;
     uint32_t  feature_level_;
-    uint64_t  shared_keys_;
+    static constexpr uint32_t max_guest_surfaces = 256u;
+    ResourceRecord *guest_surfaces_[max_guest_surfaces];
+    uint32_t        guest_surface_count_;
+    bool            guest_lock_refused_;
+    /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
+    uint32_t        frame_;
 };
 
 }  // namespace av::d3d11

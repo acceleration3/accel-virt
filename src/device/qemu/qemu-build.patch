@@ -69,3 +69,21 @@ index a07cb47..d2efd43 100644
  option('png', type : 'feature', value : 'auto',
         description: 'PNG support with libpng')
  option('vnc', type : 'feature', value : 'auto',
+diff --git a/ui/gtk.c b/ui/gtk.c
+--- a/ui/gtk.c
++++ b/ui/gtk.c
+@@ -483,7 +483,13 @@
+         return;
+     }
+ 
+-    pixbuf = gdk_pixbuf_new_from_data((guchar *)(c->data),
++    /* A QEMUCursor is ARGB words, B, G, R, A in memory; a pixbuf is R, G, B, A. */
++    g_autofree uint32_t *rgba = g_new(uint32_t, c->width * c->height);
++    for (int i = 0; i < c->width * c->height; i++) {
++        uint32_t p = c->data[i];
++        rgba[i] = (p & 0xff00ff00) | ((p >> 16) & 0xff) | ((p & 0xff) << 16);
++    }
++    pixbuf = gdk_pixbuf_new_from_data((guchar *)rgba,
+                                       GDK_COLORSPACE_RGB, true, 8,
+                                       c->width, c->height, c->width * 4,
+                                       NULL, NULL);

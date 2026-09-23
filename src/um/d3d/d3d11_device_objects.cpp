@@ -1,11 +1,13 @@
 /* The creation slots: every object the runtime makes is made on the host under
  * an id this device hands out, and its record kept in the runtime's block. */
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d11_session.hpp"
 
 namespace av::d3d11 {
 
@@ -106,7 +108,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
      * (docs/d3d-desktop.md §3.1). */
     const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
                                 (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
-    if (kernel_visible) resource.shared_key = (static_cast<uint64_t>(GetCurrentProcessId()) << 32u) | ++shared_keys_;
+    if (kernel_visible) resource.shared_key = (static_cast<uint64_t>(GetCurrentProcessId()) << 32u) | session_.next_id();
     if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
         set_error(E_OUTOFMEMORY);
         return;
@@ -143,6 +145,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (kernel_visible) {
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
+        /* Another process - DWM - may open the key as soon as the kernel
+         * hands it the handle, on its own stream: the host must have made the
+         * resource by then, contents included. */
+        if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
     }
 }
 
@@ -164,8 +170,33 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     }
     uint32_t found = 0u;
     d3dproto::ResourceDesc desc = {};
-    if (key == 0u || !d3dproto::rvk_d3d_OpenResource(wire(), resource.id, key, &found, &desc) || found == 0u) {
-        log_.write("rvkumd: a shared resource no Direct3D session on the host made");
+    if (key == 0u && open_guest_surface(resource, *args)) return;
+    /* The creator's stream is another queue on the host: a key it has just
+     * shared can still be on its way there, so a miss is asked again. */
+    constexpr uint32_t open_attempts = 64u;
+    bool sent = key != 0u;
+    for (uint32_t attempt = 0u; sent && found == 0u && attempt < open_attempts; attempt++)
+        sent = d3dproto::rvk_d3d_OpenResource(wire(), resource.id, key, &found, &desc);
+    if (!sent || found == 0u) {
+        char line[160] = {};
+        TextBuffer text(line, sizeof(line));
+        text.append("rvkumd: a shared resource no Direct3D session on the host made: key 0x");
+        text.append_hex(static_cast<uint32_t>(key >> 32u), 8u);
+        text.append_hex(static_cast<uint32_t>(key), 8u);
+        text.append(" allocations 0x");
+        text.append_hex(args->NumAllocations, 2u);
+        text.append(" resource data 0x");
+        text.append_hex(args->PrivateDriverDataSize, 4u);
+        text.append(" allocation data 0x");
+        text.append_hex(args->NumAllocations != 0u ? args->pOpenAllocationInfo2[0].PrivateDriverDataSize : 0u, 4u);
+        if (args->NumAllocations != 0u && args->pOpenAllocationInfo2[0].PrivateDriverDataSize >= 8u) {
+            text.append(" head 0x");
+            uint32_t head[2] = {};
+            __builtin_memcpy(head, args->pOpenAllocationInfo2[0].pPrivateDriverData, sizeof(head));
+            text.append_hex(head[0], 8u);
+            text.append_hex(head[1], 8u);
+        }
+        log_.write(text.text());
         set_error(E_INVALIDARG);
         return;
     }
@@ -185,6 +216,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d11Device::destroy_resource");
     ResourceRecord &resource = record(handle);
+    forget_guest_surface(resource);
     destroy_object(resource.id);
     if (resource.shadow != nullptr) memory_.release(resource.shadow);
     if (resource.allocation != 0u && resource.shared_key == 0u) {

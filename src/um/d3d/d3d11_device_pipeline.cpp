@@ -55,6 +55,7 @@ void D3d11Device::set_shader_resources(uint32_t stage, UINT start, UINT count, c
     uint32_t bound[max_views] = {};
     const UINT used = count > max_views ? max_views : count;
     for (UINT index = 0u; index < used; index++) bound[index] = views == nullptr ? 0u : id_of(views[index].pDrvPrivate);
+    refresh_bound_guest_surfaces(views, used);
     static_cast<void>(d3dproto::rvk_d3d_SetShaderResources(wire(), stage, start, used, bound));
 }
 

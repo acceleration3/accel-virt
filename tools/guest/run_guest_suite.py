@@ -474,6 +474,10 @@ def qemu_command(args, work, disk, rescue, gpus=()):
     ]
     if args.vnc is not None:
         command += ["-vnc", f"127.0.0.1:{args.vnc}"]
+    # A window someone uses: an absolute pointer, so the guest's cursor is
+    # where the host's is rather than a grabbed relative mouse.
+    if args.display in ("gtk", "sdl"):
+        command += ["-device", "qemu-xhci", "-device", "usb-tablet"]
     if args.gdb is not None:
         command += ["-gdb", f"tcp:127.0.0.1:{args.gdb}"]
     for pattern in args.trace:

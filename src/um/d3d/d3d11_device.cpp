@@ -33,7 +33,8 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
-      core_(nullptr), dxgi_(nullptr), channel_(), present_context_(nullptr), feature_level_(0u), shared_keys_(0u)
+      core_(nullptr), dxgi_(nullptr), channel_(), present_context_(nullptr), feature_level_(0u),
+      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
