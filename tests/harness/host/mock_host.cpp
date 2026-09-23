@@ -3,6 +3,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_request.hpp"
 #include "device/display/scanout_framebuffer.hpp"
+#include "device/gpu/pci_address.hpp"
 
 #include <cerrno>
 #include <cstdlib>
@@ -38,7 +39,7 @@ private:
 
 MockHost::MockHost()
     : main_loop_(pthread_self()), violations_{}, logged_(0u), last_log_{}, threads_{}, events_{}, mutexes_{}, gpus_{},
-      gpu_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
+      gpu_count_(0u), gpu_buses_{}, gpu_on_pci_{}, files_{}, file_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
@@ -579,6 +580,63 @@ GpuIdentity MockHost::gpu_identity(std::uint32_t index)
         return GpuIdentity();
     }
     return gpus_[index];
+}
+
+Status MockHost::gpu_pci_address(std::uint32_t index, PciAddress &address)
+{
+    require_main_loop("MockHost::gpu_pci_address");
+    if (index >= gpu_count()) {
+        record(HostViolation::unknown_handle, "MockHost::gpu_pci_address");
+        return Status::not_found;
+    }
+    PciBus bus = {};
+    if (!gpu_bus(index, bus)) return Status::not_found;
+    address = PciAddress(bus.domain, bus.bus, bus.device, bus.function);
+    return Status::ok;
+}
+
+bool MockHost::gpu_bus(std::uint32_t index, PciBus &bus)
+{
+    StateLock lock(state_);
+    if (index >= gpu_count_ || !gpu_on_pci_[index]) return false;
+    bus = gpu_buses_[index];
+    return true;
+}
+
+Status MockHost::read_file(const char *path, char *buffer, std::size_t capacity, std::size_t &length)
+{
+    require_main_loop("MockHost::read_file");
+    length = 0u;
+    for (std::uint32_t index = 0u; index < file_count_; index++) {
+        if (std::strcmp(files_[index].path, path) != 0) continue;
+        length = files_[index].length < capacity ? files_[index].length : capacity;
+        std::memcpy(buffer, files_[index].text, length);
+        return Status::ok;
+    }
+    return Status::not_found;
+}
+
+void MockHost::place_gpu_on_pci(std::uint32_t index, const PciBus &bus)
+{
+    StateLock lock(state_);
+    if (index >= max_gpus) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "no such GPU slot");
+        return;
+    }
+    gpu_buses_[index] = bus;
+    gpu_on_pci_[index] = true;
+}
+
+void MockHost::add_file(const char *path, const char *text, std::size_t length)
+{
+    if (file_count_ == max_files || std::strlen(path) >= max_path || length > max_file_bytes) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "the mock holds no such file");
+        return;
+    }
+    HostFile &file = files_[file_count_++];
+    std::memcpy(file.path, path, std::strlen(path) + 1u);
+    std::memcpy(file.text, text, length);
+    file.length = length;
 }
 
 void MockHost::add_gpu(const std::uint8_t *uuid)

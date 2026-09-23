@@ -19,10 +19,14 @@ public:
     void        append_decimal(uint64_t value);
     /* The low `digits` hexadecimal digits of `value`, uppercase, at most 16. */
     void        append_hex(uint64_t value, uint32_t digits);
+    /* The same in lowercase, which is how Linux spells a PCI address. */
+    void        append_lower_hex(uint64_t value, uint32_t digits);
     const char *text() const;
     size_t      length() const;
 
 private:
+    void append_digits(uint64_t value, uint32_t digits, const char *symbols);
+
     char  *destination_;
     size_t capacity_;
     size_t length_;

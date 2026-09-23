@@ -17,6 +17,7 @@
 namespace av {
 
 class GpuIdentity;
+class PciAddress;
 class ScanoutFramebuffer;
 
 using HostRoutine = void (*)(void *context);
@@ -51,6 +52,13 @@ public:
     /* The host's Vulkan physical devices, in enumeration order. */
     virtual uint32_t    gpu_count() = 0;
     virtual GpuIdentity gpu_identity(uint32_t index) = 0;
+    /* Main loop. Where host GPU `index` sits on the host's PCI buses:
+     * not_found for a GPU with no PCI function (llvmpipe) or one whose driver
+     * does not say (no VK_EXT_pci_bus_info). */
+    [[nodiscard]] virtual Status gpu_pci_address(uint32_t index, PciAddress &address) = 0;
+    /* Main loop. Up to `capacity` bytes of the file at `path`, their count in
+     * `length`: not_found when the host cannot read it. */
+    [[nodiscard]] virtual Status read_file(const char *path, char *buffer, size_t capacity, size_t &length) = 0;
 
     /* Any thread: a monotonic count of nanoseconds, for measuring what the
      * device did rather than for telling the time. */

@@ -61,7 +61,22 @@ virtio-gpu capset id **0x72**, capset version 1, returned by
 | 48 | u8[16] | device_uuid | `VkPhysicalDeviceIDProperties::deviceUUID` |
 | 64 | u64 | local_memory | bytes in device-local heaps |
 | 72 | u64 | shared_memory | bytes in host-visible, non-device-local heaps |
-| 80 | u8[48] | name | UTF-8, NUL-terminated inside the field, every byte after the first NUL zero |
+| 80 | u8[48] | name | UTF-8, NUL-terminated inside the field, every byte after the first NUL zero: the adapter's name (below) |
+
+`name` is what the guest calls the adapter in Device Manager, WMI and DXGI:
+`VkPhysicalDeviceProperties::deviceName` without a trailing parenthesised
+group set off by a space, which Mesa's drivers append to name themselves
+("AMD Radeon RX 9070 XT (RADV GFX1201)" is sent as "AMD Radeon RX 9070 XT"),
+cut to fit at a UTF-8 character boundary (`src/device/gpu/adapter_name.hpp`).
+The PCI database's name is not used: pci.ids names the silicon ("Navi 48
+[Radeon RX 9070/9070 XT/9070 GRE]"), not the product.
+
+The PCI function carries the rest of the host GPU's identity. When the bound
+GPU reports `VK_EXT_pci_bus_info` and sysfs describes its function,
+virtio-gpu-rvk-pci presents that function's vendor, device and revision as its
+own (`src/device/gpu/host_pci_identity.hpp`); the subsystem stays `1af4:5256`,
+which is how the driver package and the guest's programs recognise the device.
+A GPU with no PCI function (llvmpipe) leaves virtio-gpu's `1af4:1050`.
 
 Each feature bit is something the host **proved**, not something it hopes for
 (`src/device/probe/host_feasibility.cpp`):

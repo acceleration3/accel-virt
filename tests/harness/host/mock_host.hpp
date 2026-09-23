@@ -51,6 +51,8 @@ public:
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     std::uint32_t gpu_count() override;
     GpuIdentity gpu_identity(std::uint32_t index) override;
+    Status   gpu_pci_address(std::uint32_t index, PciAddress &address) override;
+    Status   read_file(const char *path, char *buffer, std::size_t capacity, std::size_t &length) override;
     void    *allocate(std::size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(std::uint64_t address, std::uint64_t &length, bool &direct) override;
@@ -123,6 +125,19 @@ public:
     /* A discrete GPU named "mock gpu" with this UUID. */
     void add_gpu(const std::uint8_t *uuid);
     void add_gpu(const GpuIdentity &identity);
+    /* What VK_EXT_pci_bus_info reports for a GPU. */
+    struct PciBus {
+        std::uint32_t domain;
+        std::uint32_t bus;
+        std::uint32_t device;
+        std::uint32_t function;
+    };
+    /* GPU `index` reports VK_EXT_pci_bus_info at `bus`. */
+    void place_gpu_on_pci(std::uint32_t index, const PciBus &bus);
+    /* What the C table's gpu_properties carries: false for a GPU not on PCI. */
+    bool gpu_bus(std::uint32_t index, PciBus &bus);
+    /* A file read_file answers with `length` bytes of `text`, as sysfs would. */
+    void add_file(const char *path, const char *text, std::size_t length);
     /* Fail the Nth call from now (1-based); 0 disables. */
     void fail_thread_start_at(std::uint32_t nth);
     void fail_event_at(std::uint32_t nth);
@@ -294,6 +309,8 @@ private:
     static constexpr std::uint32_t max_ranges = 128u;
     static constexpr std::uint32_t max_recordings = 4u;
     static constexpr std::size_t   max_path = 128u;
+    static constexpr std::uint32_t max_files = 16u;
+    static constexpr std::size_t   max_file_bytes = 32u;
     /* What one recording may hold in the mock: larger than any test writes,
      * so a test that overruns it is a test that meant something else. */
     static constexpr std::size_t   recording_capacity = 4u << 20;
@@ -334,6 +351,11 @@ private:
         std::uint64_t size;
         bool          live;
     };
+    struct HostFile {
+        char        path[max_path];
+        char        text[max_file_bytes];
+        std::size_t length;
+    };
     struct RecordingFile {
         char          path[max_path];
         std::uint8_t *bytes;
@@ -368,6 +390,10 @@ private:
     Mutex           mutexes_[max_mutexes];
     GpuIdentity     gpus_[max_gpus];
     std::uint32_t   gpu_count_;
+    PciBus          gpu_buses_[max_gpus];
+    bool            gpu_on_pci_[max_gpus];
+    HostFile        files_[max_files];
+    std::uint32_t   file_count_;
     MainLoopWork    work_[max_main_loop_work];
     std::uint32_t   work_count_;
     std::uint32_t   fail_thread_;

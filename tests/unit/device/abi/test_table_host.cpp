@@ -6,7 +6,9 @@
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_table.hpp"
+#include "core/support/text_buffer.hpp"
 #include "device/abi/table_host.hpp"
+#include "device/gpu/pci_address.hpp"
 #include "device/display/scanout_format.hpp"
 #include "device/display/scanout_framebuffer.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -76,6 +78,48 @@ TEST(table_host, forwards_the_catalog_and_the_log)
   CHECK_EQ(std::strlen(identity.name()), GpuIdentity::name_bytes - 1u);
   host.log("hello");
   CHECK_EQ(mock.logged(), 1u); }
+
+TEST(table_host, forwards_where_a_gpu_sits_on_pci_and_the_files_the_host_reads)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {5};
+  mock.add_gpu(uuid);
+  mock.add_gpu(uuid);
+  mock.place_gpu_on_pci(1u, MockHost::PciBus{0x1u, 0x7Bu, 0x2u, 0x3u});
+  av::PciAddress address;
+  CHECK_STATUS(host.gpu_pci_address(0u, address), Status::not_found);
+  CHECK_STATUS(host.gpu_pci_address(1u, address), Status::ok);
+  char           spelled[16] = {};
+  av::TextBuffer text(spelled, sizeof spelled);
+  address.append_to(text);
+  CHECK(std::strcmp(text.text(), "0001:7b:02.3") == 0);
+  mock.add_file("/sys/x", "0x1002\n", 7u);
+  char        bytes[4] = {};
+  std::size_t length = 99u;
+  CHECK_STATUS(host.read_file("/sys/x", bytes, sizeof bytes, length), Status::ok);
+  CHECK_EQ(length, 4u);   /* cut at the buffer */
+  CHECK(std::memcmp(bytes, "0x10", 4u) == 0);
+  CHECK_STATUS(host.read_file("/sys/absent", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u); }
+
+/* A glue with no file reader, and one claiming more than it was given room for,
+ * are both a host that read nothing. */
+TEST(table_host, a_missing_or_overlong_file_reader_reads_nothing)
+{ MockHost mock; MockHostOps ops(mock);
+  RvkHostOps table = ops.table();
+  table.read_file = nullptr;
+  TableHost without(table);
+  char        bytes[8] = {};
+  std::size_t length = 99u;
+  CHECK_STATUS(without.read_file("/sys/x", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u);
+  table.read_file = [](void *, const char *, char *, std::size_t size, std::size_t *read) {
+      *read = size + 1u;
+      return 0;
+  };
+  TableHost overlong(table);
+  length = 99u;
+  CHECK_STATUS(overlong.read_file("/sys/x", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u); }
 
 TEST(table_host, a_null_answer_from_the_table_is_no_memory)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());

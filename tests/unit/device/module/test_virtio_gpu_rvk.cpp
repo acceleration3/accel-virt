@@ -161,6 +161,31 @@ TEST(virtio_gpu_rvk_realize, binds_once_and_contexts_follow)
   CHECK_EQ(device.contexts(), 0u);
   CHECK_EQ(host.live_threads(), 0u); }
 
+/* The PCI identity is the GPU the device bound, not the first one listed. */
+TEST(virtio_gpu_rvk_realize, pci_identity_is_the_bound_gpus_and_nothing_before_realize)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_gpu(second);
+  host.place_gpu_on_pci(0u, MockHost::PciBus{0u, 0x03u, 0u, 0u});
+  host.place_gpu_on_pci(1u, MockHost::PciBus{0u, 0x7Bu, 0u, 0u});
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/vendor", "0x1002\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/device", "0x7550\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/revision", "0xc0\n", 5u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/vendor", "0x1002\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/device", "0x13c0\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/revision", "0xc9\n", 5u);
+  VirtioGpuRvk device(host);
+  RvkPciIdentity identity = {};
+  CHECK(!device.pci_identity(identity));
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, message), Status::ok);
+  CHECK(device.pci_identity(identity));
+  CHECK_EQ(identity.vendor_id, 0x1002u);
+  CHECK_EQ(identity.device_id, 0x13C0u);
+  CHECK_EQ(identity.revision, 0xC9u);
+  device.reset(); }
+
 TEST(virtio_gpu_rvk_realize, a_binding_failure_leaves_it_unrealized)
 { MockHost host;
   VirtioGpuRvk device(host);

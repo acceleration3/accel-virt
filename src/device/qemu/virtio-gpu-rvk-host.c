@@ -851,6 +851,40 @@ static void rvk_hide_scanout(void *opaque, uint32_t head)
     }
 }
 
+static bool rvk_has_device_extension(VkPhysicalDevice device, const char *name)
+{
+    g_autofree VkExtensionProperties *extensions = NULL;
+    uint32_t count = 0;
+
+    if (vkEnumerateDeviceExtensionProperties(device, NULL, &count, NULL) != VK_SUCCESS) {
+        return false;
+    }
+    extensions = g_new0(VkExtensionProperties, count);
+    if (vkEnumerateDeviceExtensionProperties(device, NULL, &count, extensions) < 0) {
+        return false;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (strcmp(extensions[i].extensionName, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The file at `path`, whole or cut at `size`; the core reads sysfs through it. */
+static int rvk_read_file(void *opaque, const char *path, char *buffer, size_t size, size_t *length)
+{
+    g_autofree char *contents = NULL;
+    gsize read = 0;
+
+    if (!g_file_get_contents(path, &contents, &read, NULL)) {
+        return 1;
+    }
+    *length = MIN(read, size);
+    memcpy(buffer, contents, *length);
+    return 0;
+}
+
 /* No loader or no device leaves the catalog empty; the core names the failure. */
 static void rvk_read_gpus(VirtIOGPURvk *r)
 {
@@ -876,7 +910,14 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
         count = 0;
     }
     for (uint32_t i = 0; i < count; i++) {
-        VkPhysicalDeviceIDProperties id = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES };
+        VkPhysicalDevicePCIBusInfoPropertiesEXT bus = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT,
+        };
+        const bool on_pci = rvk_has_device_extension(devices[i], VK_EXT_PCI_BUS_INFO_EXTENSION_NAME);
+        VkPhysicalDeviceIDProperties id = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES,
+            .pNext = on_pci ? &bus : NULL,
+        };
         VkPhysicalDeviceProperties2 properties = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
             .pNext = &id,
@@ -890,6 +931,11 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
             .vendor_id = properties.properties.vendorID,
             .device_id = properties.properties.deviceID,
             .device_type = properties.properties.deviceType,
+            .pci_domain = bus.pciDomain,
+            .pci_bus = bus.pciBus,
+            .pci_device = bus.pciDevice,
+            .pci_function = bus.pciFunction,
+            .on_pci = on_pci,
         };
         memcpy(gpu->uuid, id.deviceUUID, sizeof(gpu->uuid));
         g_strlcpy(gpu->name, properties.properties.deviceName, sizeof(gpu->name));
@@ -977,6 +1023,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .show_scanout = rvk_show_scanout,
         .update_scanout = rvk_update_scanout,
         .hide_scanout = rvk_hide_scanout,
+        .read_file = rvk_read_file,
     };
     rvk_read_gpus(r);
 }

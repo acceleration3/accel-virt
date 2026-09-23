@@ -33,8 +33,19 @@ void TextBuffer::append_decimal(uint64_t value)
 void TextBuffer::append_hex(uint64_t value, uint32_t digits)
 {
     AV_SCOPE("TextBuffer::append_hex");
+    append_digits(value, digits, "0123456789ABCDEF");
+}
+
+void TextBuffer::append_lower_hex(uint64_t value, uint32_t digits)
+{
+    AV_SCOPE("TextBuffer::append_lower_hex");
+    append_digits(value, digits, "0123456789abcdef");
+}
+
+void TextBuffer::append_digits(uint64_t value, uint32_t digits, const char *symbols)
+{
+    AV_SCOPE("TextBuffer::append_digits");
     constexpr uint32_t widest = 16u;
-    constexpr char     symbols[] = "0123456789ABCDEF";
     char               text[widest + 1u] = {};
     const uint32_t     width = digits < widest ? digits : widest;
     for (uint32_t index = width; index != 0u; index--) {

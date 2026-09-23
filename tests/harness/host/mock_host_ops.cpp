@@ -47,9 +47,19 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.gpu_properties = [](void *opaque, std::uint32_t index, RvkGpuProperties *properties) {
         const GpuIdentity identity = host_of(opaque).gpu_identity(index);
         *properties = RvkGpuProperties{identity.vendor_id(), identity.device_id(), identity.device_type(), {},
-                                       identity.local_memory(), identity.shared_memory(), {}};
+                                       identity.local_memory(), identity.shared_memory(), {}, 0u, 0u, 0u, 0u, 0u};
         std::memcpy(properties->uuid, identity.uuid(), sizeof properties->uuid);
         std::memcpy(properties->name, identity.name(), std::strlen(identity.name()) + 1u);
+        MockHost::PciBus bus = {};
+        if (!host_of(opaque).gpu_bus(index, bus)) return;
+        properties->pci_domain = bus.domain;
+        properties->pci_bus = static_cast<std::uint8_t>(bus.bus);
+        properties->pci_device = static_cast<std::uint8_t>(bus.device);
+        properties->pci_function = static_cast<std::uint8_t>(bus.function);
+        properties->on_pci = 1u;
+    };
+    table_.read_file = [](void *opaque, const char *path, char *buffer, std::size_t size, std::size_t *length) {
+        return host_of(opaque).read_file(path, buffer, size, *length) == Status::ok ? 0 : 1;
     };
     table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size); };
     table_.release = [](void *opaque, void *block) { host_of(opaque).release(block); };

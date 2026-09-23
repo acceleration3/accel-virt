@@ -16,7 +16,7 @@ namespace av {
 constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
+    : host_(host), binding_(host), pci_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
       blobs_(host), shared_(host), heads_(host, blobs_), interrupts_(host), status_(host, interrupts_),
       contexts_(host, blobs_, shared_, interrupts_, library_, recorder_)
       {
@@ -62,6 +62,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     }
     const Status status = binding_.bind(host_gpu, message);
     if (status != Status::ok) return status;
+    pci_.read(binding_.index());
     /* What this host can actually do, asked once, on the GPU just bound: a
      * probe that fails leaves its bit clear and the device starts anyway. */
     feasibility_.decide(guest_probe_address);
@@ -135,6 +136,13 @@ uint32_t VirtioGpuRvk::capsets() const
 {
     AV_SCOPE("VirtioGpuRvk::capsets");
     return capset_.described() ? 1u : 0u;
+}
+
+bool VirtioGpuRvk::pci_identity(RvkPciIdentity &identity) const
+{
+    AV_SCOPE("VirtioGpuRvk::pci_identity");
+    host_.require_main_loop("VirtioGpuRvk::pci_identity");
+    return pci_.presented(identity);
 }
 
 uint32_t VirtioGpuRvk::blobs() const

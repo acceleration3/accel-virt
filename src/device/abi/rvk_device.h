@@ -33,7 +33,22 @@ typedef struct RvkGpuProperties {
     uint64_t local_memory;  /* bytes in heaps with VK_MEMORY_HEAP_DEVICE_LOCAL_BIT */
     uint64_t shared_memory; /* bytes in the other heaps */
     char name[256];         /* ::deviceName */
+    /* VkPhysicalDevicePCIBusInfoPropertiesEXT, when on_pci is nonzero: the
+     * device reports VK_EXT_pci_bus_info. llvmpipe does not. */
+    uint32_t pci_domain;
+    uint8_t pci_bus;
+    uint8_t pci_device;
+    uint8_t pci_function;
+    uint8_t on_pci;
 } RvkGpuProperties;
+
+/* The vendor, device and revision the device's PCI function presents as its
+ * own: the bound host GPU's (rvk_device_pci_identity). */
+typedef struct RvkPciIdentity {
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint8_t revision;
+} RvkPciIdentity;
 
 /* One plane of one display head, as QEMU's qemu_dmabuf_new takes it. Every
  * field has already been checked against the blob the descriptor covers, and
@@ -171,6 +186,10 @@ typedef struct RvkHostOps {
     /* Main loop. Head `head` shows nothing, and the duplicate show_scanout
      * took is closed. Safe on a head showing nothing. */
     void (*hide_scanout)(void *opaque, uint32_t head);
+    /* Main loop. Up to `size` bytes of the file at `path` into `buffer`, their
+     * count in *length: nonzero when it cannot be read. NULL: the host reads
+     * no files, and the device keeps virtio-gpu's own PCI identity. */
+    int (*read_file)(void *opaque, const char *path, char *buffer, size_t size, size_t *length);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -210,6 +229,10 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
 /* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT
  * when there is one. Main loop. */
 uint32_t rvk_device_capsets(RvkDevice *device);
+/* Nonzero, with `identity` filled, when the function should present the
+ * bound host GPU's PCI identity instead of virtio-gpu's own; zero when that
+ * GPU has none the host could read. Main loop, after rvk_device_create. */
+int rvk_device_pci_identity(RvkDevice *device, RvkPciIdentity *identity);
 /* The status the driver wrote (virtio_set_status). Main loop. */
 void rvk_device_status(RvkDevice *device, uint8_t status);
 /* A virtio reset: every context is destroyed, the fence interrupts released,

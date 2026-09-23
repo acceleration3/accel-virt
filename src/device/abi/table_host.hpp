@@ -29,6 +29,8 @@ public:
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     uint32_t gpu_count() override;
     GpuIdentity gpu_identity(uint32_t index) override;
+    Status   gpu_pci_address(uint32_t index, PciAddress &address) override;
+    Status   read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
     void    *allocate(size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;

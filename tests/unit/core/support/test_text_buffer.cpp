@@ -72,3 +72,15 @@ TEST(text_buffer_append_hex, writes_a_fixed_width_of_uppercase_digits_and_trunca
   TextBuffer cut(small, sizeof small);
   cut.append_hex(0xBEEFu, 4u);
   CHECK(std::strcmp(cut.text(), "BEE") == 0); }
+
+TEST(text_buffer_append_lower_hex, writes_the_same_digits_in_lowercase)
+{ char bytes[48];
+  TextBuffer text(bytes, sizeof bytes);
+  text.append_lower_hex(0x7550u, 4u);
+  text.append(":");
+  text.append_lower_hex(0x3u, 2u);
+  text.append(" ");
+  text.append_lower_hex(0xABCDEFu, 2u);
+  text.append(" ");
+  text.append_lower_hex(0x0123456789ABCDEFull, 20u);
+  CHECK(std::strcmp(text.text(), "7550:03 ef 0123456789abcdef") == 0); }

@@ -7,12 +7,18 @@ realize failures a bad host-gpu property produces.
                 <this project's executor library>
 """
 import os
+import re
 import subprocess
 import sys
 
 SLOT = 5
 VIRTIO_GPU = 0x10501AF4          # device 1050, vendor 1af4
 RVK_SUBSYSTEM = 0x52561AF4       # subsystem 5256 ("RV"), vendor 1af4
+# What the device says when it takes the bound host GPU's PCI identity as its
+# own; without the line it kept virtio-gpu's.
+HOST_IDENTITY = re.compile(r"virtio-gpu-rvk: pci identity ([0-9a-f]{4}):([0-9a-f]{4}) rev ([0-9a-f]{2}), "
+                           r"the host's ([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7])")
+SYSFS_PCI = "/sys/bus/pci/devices"
 
 
 class Qemu:
@@ -68,7 +74,27 @@ def complaints(stderr):
     feasibility probe found (feature 039) whether it passed or not, so those
     lines are the device working, not the device complaining."""
     return "\n".join(line for line in stderr.splitlines()
-                     if "virtio-gpu-rvk" in line and ": probe " not in line)
+                     if "virtio-gpu-rvk" in line and ": probe " not in line and ": pci identity " not in line)
+
+
+def sysfs_value(address, attribute):
+    with open(os.path.join(SYSFS_PCI, address, attribute)) as value:
+        return int(value.read(), 16)
+
+
+def presented_identity(stderr):
+    """The vendor/device register the function must read as, and its revision:
+    the host GPU's when the device said it took them, which must be what sysfs
+    says that GPU is, and virtio-gpu's own otherwise."""
+    taken = HOST_IDENTITY.search(stderr)
+    if taken is None:
+        return VIRTIO_GPU, 1
+    vendor, device, revision = (int(group, 16) for group in taken.groups()[:3])
+    address = taken.group(4)
+    check((vendor, device, revision) == (sysfs_value(address, "vendor"), sysfs_value(address, "device"),
+                                         sysfs_value(address, "revision")),
+          f"the device took {vendor:04x}:{device:04x} rev {revision:02x}, which is not what sysfs says {address} is")
+    return device << 16 | vendor, revision
 
 
 def check(condition, message):
@@ -82,8 +108,10 @@ def main():
         sys.exit(__doc__)
     qemu = Qemu(sys.argv[1])
 
-    (identity, subsystem), stderr = qemu.config_registers("auto", (0x00, 0x2C))
-    check(identity == VIRTIO_GPU, f"vendor/device 0x{identity:08x}, want 0x{VIRTIO_GPU:08x}")
+    (identity, class_revision, subsystem), stderr = qemu.config_registers("auto", (0x00, 0x08, 0x2C))
+    expected, revision = presented_identity(stderr)
+    check(identity == expected, f"vendor/device 0x{identity:08x}, want 0x{expected:08x}")
+    check(class_revision & 0xFF == revision, f"revision 0x{class_revision & 0xFF:02x}, want 0x{revision:02x}")
     check(subsystem == RVK_SUBSYSTEM, f"subsystem 0x{subsystem:08x}, want 0x{RVK_SUBSYSTEM:08x}")
     check(not complaints(stderr), f"a device realized on auto logged: {stderr}")
     check(": probe exported memory: " in stderr and ": probe guest import: " in stderr,
@@ -104,13 +132,13 @@ def main():
         check(code != 0, f"executor={executor} realized")
         check(reason in stderr, f"executor={executor}: {stderr.strip()}")
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[2]}", (0x00, 0x2C))
-    check(identity == VIRTIO_GPU and not complaints(stderr), f"the echo executor: {stderr}")
+    check(identity == presented_identity(stderr)[0] and not complaints(stderr), f"the echo executor: {stderr}")
     # The library that answers for real, loaded into the real device: it has to
     # survive QEMU's own dlopen, answer version 2, and have its sub_apis reach a
     # capset - the first place the executor and the device meet outside a unit
     # test (feature 042).
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[4]}", (0x00, 0x2C))
-    check(identity == VIRTIO_GPU and not complaints(stderr), f"this project's executor: {stderr}")
+    check(identity == presented_identity(stderr)[0] and not complaints(stderr), f"this project's executor: {stderr}")
     print("qemu_smoke: ok")
 
 
