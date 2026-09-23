@@ -55,7 +55,7 @@ private:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
-    static constexpr uint64_t arena_bytes = uint64_t{64} << 20u;
+    static constexpr uint64_t arena_bytes = uint64_t{32} << 20u;
 
     HRESULT open(uint32_t adapter);
     void    close();

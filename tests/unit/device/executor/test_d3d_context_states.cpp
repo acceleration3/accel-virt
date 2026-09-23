@@ -78,17 +78,43 @@ namespace av {
 struct D3dContextStatesProbe {
     static void set_id(D3dContextStates &s, std::uint32_t slot, std::uint32_t id) { s.ids_[slot] = id; }
     static void set_count(D3dContextStates &s, std::uint32_t count) { s.count_ = count; }
+    static void set_removed(D3dContextStates &s, std::uint32_t slot, std::uint32_t reason) { s.removed_[slot] = reason; }
 };
 
 }  // namespace av
 
-TEST(d3d_context_states_invariants, detect_an_id_without_a_state_a_duplicate_and_a_wrong_count)
-{ for (int knob = 0; knob < 3; knob++) {
+TEST(d3d_context_states_invariants, detect_an_id_without_a_state_a_duplicate_a_wrong_count_and_a_stray_removal)
+{ for (int knob = 0; knob < 4; knob++) {
       D3dContextStates states;
       CHECK(states.add(1u, stand_in(0u)));
       CHECK(states.add(2u, stand_in(1u)));
       if (knob == 0) av::D3dContextStatesProbe::set_id(states, 5u, 3u);   /* an id with no state */
       if (knob == 1) av::D3dContextStatesProbe::set_id(states, 1u, 1u);   /* 1 kept twice */
       if (knob == 2) av::D3dContextStatesProbe::set_count(states, 3u);
+      if (knob == 3) av::D3dContextStatesProbe::set_removed(states, 7u, 1u);   /* a free slot removed */
       CHECK(!states.invariants_hold());
   } }
+
+/* A removal is kept against its device: the first reason stands, a device
+ * not kept or a zero reason records nothing, and the reason goes with the
+ * device, so an id used again starts clean. */
+TEST(d3d_context_states, keeps_the_first_reason_a_device_was_removed_for)
+{ D3dContextStates states;
+  CHECK(states.add(4u, stand_in(0u)));
+  CHECK(states.add(5u, stand_in(1u)));
+  CHECK_EQ(states.removed_reason(4u), 0u);
+  states.mark_removed(4u, 0x887A0020u);
+  states.mark_removed(4u, 0x887A0005u);
+  CHECK_EQ(states.removed_reason(4u), 0x887A0020u);
+  CHECK_EQ(states.removed_reason(5u), 0u);
+  states.mark_removed(5u, 0u);
+  states.mark_removed(9u, 0x887A0020u);
+  states.mark_removed(0u, 0x887A0020u);
+  CHECK_EQ(states.removed_reason(5u), 0u);
+  CHECK_EQ(states.removed_reason(9u), 0u);
+  CHECK_EQ(states.removed_reason(0u), 0u);
+  CHECK(states.invariants_hold());
+  CHECK(states.remove(4u) == stand_in(0u));
+  CHECK(states.invariants_hold());
+  CHECK(states.add(4u, stand_in(2u)));
+  CHECK_EQ(states.removed_reason(4u), 0u); }

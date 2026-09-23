@@ -50,6 +50,8 @@ constexpr std::uint32_t bind_render_target = 0x20u;
 constexpr std::uint32_t rtv_texture2d = 4u;
 constexpr std::uint32_t topology_triangles = 4u;
 constexpr std::uint32_t size = 64u;
+/* DXGI_ERROR_DRIVER_INTERNAL_ERROR: the reason a refused command removes its device for. */
+constexpr std::uint32_t driver_internal_error = 0x887A0020u;
 
 struct Vertex {
     float x, y;
@@ -175,10 +177,17 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK_EQ(pixel(pixels, size - 4u, size / 2u), 0xff0000ffu);
     CHECK_EQ(wire.refused(), 0u);
 
-    /* An id this session never made is a refused command, not a pointer. */
-    CHECK(!rvk_d3d_SetShader(wire, 4u, 99u));
-    CHECK(!rvk_d3d_SetShader(wire, 4u, 5u));
-    CHECK_EQ(wire.refused(), 2u);
+    /* An id this session never made is refused, never followed as a pointer:
+     * the device that named it is removed, not the session, and the next
+     * Finish11 says why. */
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK(rvk_d3d_SetShader(wire, 4u, 99u));
+    CHECK(rvk_d3d_SetShader(wire, 4u, 5u));
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, driver_internal_error);
+    CHECK_EQ(wire.refused(), 0u);
     CHECK(backend.invariants_hold());
     backend.shut_down();
 }
@@ -186,8 +195,12 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
 /* A process's devices share one session: objects are the session's, pipeline
  * state is each device's own. A second device starts with nothing bound, so
  * its draw leaves the first device's target as it was, and the first draws the
- * triangle when it is selected again. A device destroyed is no longer one to
- * select, and destroying the selected one leaves nothing to draw with. */
+ * triangle when it is selected again. A command a device gets refused removes
+ * that device alone: its later commands are dropped and Finish11 names the
+ * reason, while the other device goes on drawing. Selecting an id the host
+ * has no device for selects nothing and drops what follows, rather than
+ * removing the device selected before it. Creating objects and finishing
+ * need no device selected. */
 TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_state)
 {
     av::LoaderHostApis apis;
@@ -197,14 +210,13 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK(backend.initialize(device));
     av::D3dLoopback wire(backend);
 
-    std::uint32_t hresult = 1u, level = 0u;
+    std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     CHECK_EQ(hresult, 0u);
     make_triangle(wire);
     bind_triangle(wire);
     CHECK(rvk_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
     CHECK_EQ(hresult, 0u);
-    CHECK(!rvk_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
     CHECK(rvk_d3d_Draw(wire, 3u, 0u));
 
     static std::uint8_t pixels[size * size * 4u];
@@ -214,29 +226,40 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(pixel(pixels, 4u, size / 2u), 0xff0000ffu);
 
+    /* Device 2 names a shader nobody made: it is removed, and its draw of
+     * device 1's triangle - rebound on it - is dropped. */
+    CHECK(rvk_d3d_SetShader(wire, 4u, 77u));
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, driver_internal_error);
+    bind_triangle(wire);
+    CHECK(rvk_d3d_Draw(wire, 3u, 0u));
     CHECK(rvk_d3d_SelectDevice11(wire, 1u));
+    CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    CHECK_EQ(pixel(pixels, 4u, size / 2u), 0xff0000ffu);
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+
     CHECK(rvk_d3d_Draw(wire, 3u, 0u));
     CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     const std::uint32_t tinted = pixel(pixels, 4u, size / 2u);
     CHECK_EQ(tinted & 0xff00ffffu, 0xff000000u);
     CHECK((tinted >> 16u & 0xffu) >= 0x7fu && (tinted >> 16u & 0xffu) <= 0x80u);
-    CHECK_EQ(wire.refused(), 1u);
 
+    /* A device destroyed is gone: selecting it selects nothing, and what
+     * follows is dropped without touching device 1. */
     CHECK(rvk_d3d_DestroyDevice11(wire, 2u));
-    CHECK(!rvk_d3d_SelectDevice11(wire, 2u));
-    CHECK(!rvk_d3d_DestroyDevice11(wire, 2u));
-    CHECK(rvk_d3d_DestroyDevice11(wire, 1u));
-    CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
-    CHECK_EQ(wire.refused(), 4u);
+    CHECK(rvk_d3d_SelectDevice11(wire, 2u));
+    CHECK(rvk_d3d_ClearRenderTargetView(wire, 2u, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}));
+    CHECK(rvk_d3d_SelectDevice11(wire, 1u));
+    CHECK(rvk_d3d_Finish11(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    CHECK_EQ(pixel(pixels, size - 4u, size / 2u), 0xff0000ffu);
+
     /* With no device selected nothing touches pipeline state, but the
      * session still finishes, and a device it still has makes objects. */
-    std::uint32_t removed = 1u;
     CHECK(rvk_d3d_CreateDevice11(wire, 3u, 0u, 0u, &hresult, &level));
     CHECK(rvk_d3d_DestroyDevice11(wire, 3u));
-    CHECK(rvk_d3d_CreateDevice11(wire, 4u, 0u, 0u, &hresult, &level));
-    CHECK(rvk_d3d_CreateDevice11(wire, 5u, 0u, 0u, &hresult, &level));
-    CHECK(rvk_d3d_DestroyDevice11(wire, 5u));
-    CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
     CHECK(rvk_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, 0u);
     ResourceDesc buffer = {};
@@ -244,7 +267,10 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     buffer.width = 64u;
     buffer.bind_flags = bind_vertex;
     CHECK(rvk_d3d_CreateResource(wire, 20u, buffer, 0u));
-    CHECK_EQ(wire.refused(), 5u);
+    CHECK_EQ(wire.refused(), 0u);
+    /* A refusal with no device selected is the session's: nobody else to blame. */
+    CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
+    CHECK_EQ(wire.refused(), 1u);
     CHECK(backend.invariants_hold());
     backend.shut_down();
     CHECK(backend.invariants_hold());

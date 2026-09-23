@@ -131,6 +131,10 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
 {
     AV_SCOPE("D3d11Device::present_surface");
     const HRESULT published = publish(source, subresource);
+    if (FAILED(published) && removed_on_host()) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return DXGI_ERROR_DEVICE_REMOVED;
+    }
     if (FAILED(published)) {
         log_.write("rvkumd: a present whose surface could not be read back");
         return published;

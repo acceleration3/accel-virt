@@ -38,6 +38,12 @@ public:
      * How a closing session gives every state back. */
     ID3DDeviceContextState *remove_any();
     uint32_t                count() const;
+    /* The device is removed for `reason` (an HRESULT, non-zero); the first
+     * reason stands, since it is what went wrong and the rest follow from it.
+     * Nothing for a device not kept. */
+    void                    mark_removed(uint32_t device, uint32_t reason);
+    /* Why the device was removed; 0 while it was not, or for one not kept. */
+    uint32_t                removed_reason(uint32_t device) const;
 
     bool invariants_hold() const;
 
@@ -46,6 +52,7 @@ private:
 
     uint32_t                ids_[capacity];
     ID3DDeviceContextState *states_[capacity];
+    uint32_t                removed_[capacity];
     uint32_t                count_;
 
     friend struct D3dContextStatesProbe;

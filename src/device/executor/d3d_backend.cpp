@@ -60,7 +60,8 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), states_(), selected_(nullptr), arena_(nullptr), objects_(), region_(), lost_(false)
+    : device11_(nullptr), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(),
+      lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -90,6 +91,7 @@ void D3dBackend::shut_down()
         device11_->unlock();
     }
     selected_ = nullptr;
+    selected_device_ = 0u;
     device11_ = nullptr;
     region_.give_back();
 }
@@ -109,7 +111,15 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
     device11_->unlock();
-    return ran;
+    /* A command the host refuses removes the device that sent it, not the
+     * session: the session is every device of a guest process, the whole of
+     * the desktop's composition in DWM's case. The guest learns the reason at
+     * its next Finish11 and recreates the device, as it would after a TDR.
+     * With no device selected there is nobody to remove, and the session is
+     * what refused. */
+    if (ran || selected_device_ == 0u) return ran;
+    states_.mark_removed(selected_device_, static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
+    return true;
 }
 
 bool D3dBackend::lost() const
@@ -193,7 +203,7 @@ bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 bool D3dBackend::ready() const
 {
     AV_SCOPE("D3dBackend::ready");
-    return selected_ != nullptr;
+    return selected_ != nullptr && states_.removed_reason(selected_device_) == 0u;
 }
 
 bool D3dBackend::has_device() const
@@ -293,7 +303,10 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
     uint32_t made = 0u;
     ID3DDeviceContextState *const state = device11_->make_state(made);
     const bool kept = state != nullptr && states_.add(device, state);
-    if (kept) selected_ = state;
+    if (kept) {
+        selected_ = state;
+        selected_device_ = device;
+    }
     if (!kept && state != nullptr) state->Release();
     device11_->lock(selected_);
     if (!kept) return true;
@@ -303,13 +316,15 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
 }
 
 /* run holds the device's lock with the state that was selected when the
- * command began; taking it again swaps the new one in. */
+ * command began; taking it again swaps the new one in. An id the host has no
+ * device for selects nothing, and what follows until the next selection is
+ * dropped: refusing the selection would remove whichever device spoke before
+ * it, which did nothing wrong. */
 bool D3dBackend::on_SelectDevice11(uint32_t device)
 {
     AV_SCOPE("D3dBackend::on_SelectDevice11");
-    ID3DDeviceContextState *const state = states_.find(device);
-    if (state == nullptr) return false;
-    selected_ = state;
+    selected_ = states_.find(device);
+    selected_device_ = device;
     device11_->unlock();
     device11_->lock(selected_);
     return true;
@@ -320,7 +335,10 @@ bool D3dBackend::on_DestroyDevice11(uint32_t device)
     AV_SCOPE("D3dBackend::on_DestroyDevice11");
     ID3DDeviceContextState *const state = states_.remove(device);
     if (state == nullptr) return false;
-    if (state == selected_) selected_ = nullptr;
+    if (state == selected_) {
+        selected_ = nullptr;
+        selected_device_ = 0u;
+    }
     /* forget_state takes the device's lock itself, and run holds it. */
     device11_->unlock();
     device11_->forget_state(state);
@@ -365,7 +383,8 @@ bool D3dBackend::on_Finish11(uint32_t &hresult)
     }
     const HRESULT removed = device11_->device()->GetDeviceRemovedReason();
     lost_ = FAILED(removed);
-    hresult = static_cast<uint32_t>(removed);
+    const uint32_t own = states_.removed_reason(selected_device_);
+    hresult = own != 0u ? own : static_cast<uint32_t>(removed);
     return true;
 }
 
@@ -1378,7 +1397,7 @@ bool D3dBackend::invariants_hold() const
     AV_SCOPE("D3dBackend::invariants_hold");
     if (!objects_.invariants_hold()) return false;
     if (!states_.invariants_hold()) return false;
-    if (selected_ != nullptr && states_.count() == 0u) return false;
+    if (selected_ != nullptr && (selected_device_ == 0u || states_.find(selected_device_) != selected_)) return false;
     if (device11_ == nullptr) return states_.count() == 0u && objects_.count() == 0u;
     return true;
 }

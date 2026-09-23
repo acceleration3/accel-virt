@@ -75,6 +75,10 @@ private:
     /* An error the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
+    /* Whether the host removed this device, or the session is gone: asked
+     * with a round trip after a call failed, since a command the host refuses
+     * removes the device that sent it and says so only when asked. */
+    bool            removed_on_host();
     d3d::D3dDeviceChannel &wire();
 
     /* The subresource's size and its layout in the shadow. */
@@ -88,8 +92,14 @@ private:
 
     /* `bytes` of data for one subresource, as UpdateSubresource1 takes it,
      * crossing through the blob arena when it is large. */
-    void upload(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data, size_t bytes,
-                uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+    void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
+                size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+    /* An upload larger than a piece of the arena, crossing in pieces. */
+    void upload_buffer_pieces(uint32_t resource, const D3D10_DDI_BOX &region, const uint8_t *data, uint32_t copy_flags);
+    void upload_row_pieces(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX &region,
+                           const uint8_t *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
+    void upload_piece_of(uint32_t resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
+                         size_t bytes, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
     /* What the upload of `box` (or the whole subresource) reads at these
      * pitches. */
     size_t upload_bytes(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box,

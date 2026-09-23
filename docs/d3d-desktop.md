@@ -177,8 +177,12 @@ unit test walks the filled tables and fails on a null slot, or on an
 Measured at the desktop: 7 processes load `rvkumd.dll`; each holds one session
 (one doorbell of the adapter's 64), a 4 MiB ring and a 64 MiB blob arena. The
 arena is guest memory the host imports: 7 × 64 MiB is 448 MiB of a 4 GiB
-guest. The arena drops to 16 MiB, and an upload larger than it crosses in
-arena-sized pieces rather than failing.
+guest. The arena drops to 32 MiB, and an upload larger than half of it crosses
+in pieces (depth slices, then rows or block rows; a buffer by bytes) rather
+than failing. A read larger than the arena still fails, because
+`ReadSubresource` names no region to read in pieces; after step 2 the only
+large reads left are staging maps, and a region on `ReadSubresource` is what
+settles them.
 
 ## 4. Classes
 

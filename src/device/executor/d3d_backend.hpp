@@ -153,8 +153,9 @@ private:
     /* Whether every id in `ids` names nothing (0) or an object of `kind`. */
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
     [[nodiscard]] bool       keep(uint32_t id, D3dObjectKind kind, IUnknown *object);
-    /* A device is selected: what a command on the immediate context needs,
-     * since without one it would run on another session's pipeline state. */
+    /* A device is selected and not removed: what a command on the immediate
+     * context needs, since without one it would run on another session's
+     * pipeline state, and a removed device's commands are dropped. */
     bool                     ready() const;
     /* The session made a device: what creating an object, flushing and
      * finishing need, none of which touch pipeline state. */
@@ -174,6 +175,9 @@ private:
     D3dContextStates        states_;
     /* The selected device's state, which commands run on; null when none is. */
     ID3DDeviceContextState *selected_;
+    /* The guest's id of the selected device; 0 before any selection or after
+     * the selected device was destroyed. An id with no state selects nothing. */
+    uint32_t                selected_device_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */
     WireArena              *arena_;

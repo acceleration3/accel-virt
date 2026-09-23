@@ -118,7 +118,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) {
             const D3D10_DDIARG_SUBRESOURCE_UP &initial = args->pInitialDataUP[sub];
             const size_t bytes = upload_bytes(resource, sub, nullptr, initial.SysMemPitch, initial.SysMemSlicePitch);
-            upload(resource.id, sub, nullptr, initial.pSysMem, bytes, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
+            upload(resource, sub, nullptr, initial.pSysMem, bytes, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
             if (resource.shadow == nullptr) continue;
             /* The shadow is packed; the application's rows are at its pitch. */
             uint32_t width = 0u, height = 0u, depth = 0u;

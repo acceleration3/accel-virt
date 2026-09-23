@@ -57,7 +57,7 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
     const uint32_t line = row_bytes(resource, width);
-    upload(resource.id, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource),
+    upload(resource, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource),
            subresource_bytes(resource, subresource), line, line * rows(resource, height), resource.reserved);
 }
 
@@ -151,7 +151,7 @@ VOID D3d11Device::resource_update_subresource_up(D3D10DDI_HRESOURCE handle, UINT
 {
     AV_SCOPE("D3d11Device::resource_update_subresource_up");
     const ResourceRecord &resource = record(handle);
-    upload(resource.id, subresource, box, data, upload_bytes(resource, subresource, box, row_pitch, depth_pitch),
+    upload(resource, subresource, box, data, upload_bytes(resource, subresource, box, row_pitch, depth_pitch),
            row_pitch, depth_pitch, flags);
 }
 
