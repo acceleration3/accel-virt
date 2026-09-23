@@ -1,5 +1,7 @@
 #include "core/display/display_scanout.hpp"
 
+#include "core/support/text_buffer.hpp"
+
 #include "core/display/display_mode.hpp"
 #include "core/memory/allocation.hpp"
 #include "proto/context/capset_info.hpp"
@@ -96,6 +98,19 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
         if (resources_[source].needs_pages(address)) {
             auto *const primary = static_cast<Allocation *>(sources.primary(source));
             if (primary != nullptr) key = primary->descriptor().host_key();
+            if (key == 0u && resources_[source].keyed()) {
+                char       bytes[160];
+                TextBuffer line(bytes, sizeof bytes);
+                line.append("rvkgpu: unkeyed scanout address 0x");
+                line.append_hex(address, 16u);
+                line.append(" primary 0x");
+                line.append_hex(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(primary)), 16u);
+                line.append(" kind ");
+                line.append_decimal(primary != nullptr ? static_cast<uint32_t>(primary->descriptor().kind()) : 0u);
+                line.append(" flip ");
+                line.append_decimal(static_cast<uint32_t>(sources.flip(source)));
+                platform_.log(line.text());
+            }
             /* A keyed image already shown never reads the pages (ScanoutResource::refresh). */
             if (primary != nullptr && (key == 0u || !resources_[source].scanning_out()))
                 pages = primary->pages_at(address, resources_[source].page_count());

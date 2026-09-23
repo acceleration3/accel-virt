@@ -33,6 +33,12 @@ bool ScanoutResource::needs_pages(uint64_t address) const
     return created_ && address != 0u && device_.constructed();
 }
 
+bool ScanoutResource::keyed() const
+{
+    AV_SCOPE("ScanoutResource::keyed");
+    return key_ != 0u;
+}
+
 bool ScanoutResource::scanning_out() const
 {
     AV_SCOPE("ScanoutResource::scanning_out");

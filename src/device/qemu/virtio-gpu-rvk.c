@@ -195,7 +195,11 @@ struct virtio_gpu_rvk_scanout_image {
     uint64_t key;
 };
 
-/* The head scanning `resource_id` out; head 0 when none is. */
+#define VIRTIO_GPU_RVK_NO_HEAD UINT32_MAX
+
+/* The head scanning `resource_id` out, or VIRTIO_GPU_RVK_NO_HEAD: the cursor's
+ * image, for one, is on no head, and a transfer to it must leave every head
+ * as it is. */
 static uint32_t virtio_gpu_rvk_head_of(VirtIOGPU *g, uint32_t resource_id)
 {
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(g);
@@ -205,7 +209,7 @@ static uint32_t virtio_gpu_rvk_head_of(VirtIOGPU *g, uint32_t resource_id)
             return head;
         }
     }
-    return 0;
+    return VIRTIO_GPU_RVK_NO_HEAD;
 }
 
 static void virtio_gpu_rvk_scanout_image(VirtIOGPU *g, VirtIOGPURvk *r, struct virtio_gpu_ctrl_command *cmd)
@@ -248,7 +252,10 @@ static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comm
             struct virtio_gpu_transfer_to_host_2d transfer;
             /* Guest pixels for a resource: its head shows the 2D surface again. */
             if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &transfer, sizeof(transfer)) == sizeof(transfer)) {
-                virtio_gpu_rvk_show_surface(r, virtio_gpu_rvk_head_of(g, le32_to_cpu(transfer.resource_id)));
+                const uint32_t head = virtio_gpu_rvk_head_of(g, le32_to_cpu(transfer.resource_id));
+                if (head != VIRTIO_GPU_RVK_NO_HEAD) {
+                    virtio_gpu_rvk_show_surface(r, head);
+                }
             }
         }
         if (header.type == VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE) {
