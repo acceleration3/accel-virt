@@ -43,13 +43,30 @@ public:
         const uint32_t frames = frames_wanted();
         uint32_t presented = 0u, failures = 0u;
         HRESULT last = S_OK;
+        LARGE_INTEGER frequency = {}, start = {}, before = {}, after = {};
+        QueryPerformanceFrequency(&frequency);
+        QueryPerformanceCounter(&start);
+        int64_t in_present = 0, in_draw = 0, worst = 0;
         for (uint32_t frame = 0u; frame < frames; frame++) {
+            QueryPerformanceCounter(&before);
             pump();
             draw(static_cast<float>(frame) * 0.05F);
             if (frame == 30u) read_back();
+            QueryPerformanceCounter(&after);
+            in_draw += after.QuadPart - before.QuadPart;
+            before = after;
             last = swapchain_->Present(1u, 0u);
+            QueryPerformanceCounter(&after);
+            const int64_t took = after.QuadPart - before.QuadPart;
+            in_present += took;
+            if (took > worst) worst = took;
             if (last == S_OK) presented++; else failures++;
         }
+        const int64_t total = after.QuadPart - start.QuadPart, per_ms = frequency.QuadPart / 1000;
+        say("fps x10 "); number(static_cast<uint32_t>(static_cast<int64_t>(frames) * 10 * frequency.QuadPart / total));
+        say(" draw us/frame "); number(static_cast<uint32_t>(in_draw * 1000 / per_ms / frames));
+        say(" present us/frame "); number(static_cast<uint32_t>(in_present * 1000 / per_ms / frames));
+        say(" worst present ms "); number(static_cast<uint32_t>(worst / per_ms)); say("\n");
         say("frames "); number(frames); say(" presented "); number(presented); say(" failed "); number(failures);
         say(" last 0x"); hex(static_cast<uint32_t>(last)); say(" centre 0x"); hex(centre_); say(" corner 0x");
         hex(corner_); say("\n");

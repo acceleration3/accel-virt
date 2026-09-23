@@ -1,5 +1,7 @@
 #include "core/trace/trace_table.hpp"
 
+#include "core/trace/event_ring.hpp"
+
 #include "core/trace/scope_name.hpp"
 #include "core/trace/trace_host.hpp"
 
@@ -16,7 +18,7 @@ constexpr uint32_t mix_shift = 32u;
 
 }  // namespace
 
-TraceTable::TraceTable(TraceHost &host) : host_(host), region_(nullptr), layout_(0u), slots_(0u) {}
+TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), region_(nullptr), layout_(0u), slots_(0u) {}
 
 Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module, uint32_t process)
 {
@@ -63,7 +65,13 @@ uint32_t TraceTable::enter(const ScopeName &name)
         if (slot == no_slot) return no_slot;
     }
     push(slot, name);
+    if (events_ != nullptr) events_->record(slot, host_.clock(), name.id(), host_.thread_number(), true);
     return slot;
+}
+
+void TraceTable::record_events(EventRing &ring)
+{
+    events_ = &ring;
 }
 
 void TraceTable::leave(uint32_t slot)
@@ -74,6 +82,7 @@ void TraceTable::leave(uint32_t slot)
     if (owner_word(slot) != (key | TraceLayout::active)) return;
     /* An active slot holds at least the frame its enter pushed. */
     const uint32_t depth = read32(at + TraceLayout::depth_at);
+    if (events_ != nullptr) events_->record(slot, host_.clock(), 0u, host_.thread_number(), false);
     write32(at + TraceLayout::depth_at, depth - 1u);
     if (depth != 1u) return;
     write32(at + TraceLayout::last_left_at,

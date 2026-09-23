@@ -61,6 +61,11 @@ public:
      * caller's, otherwise. */
     IUnknown          *exchange(uint32_t id, D3dObjectKind kind, IUnknown *object);
     /* The object in `slot` and its id and kind; null for an empty slot. */
+    /* The first slot at or after `from` holding an object; capacity for none. */
+    uint32_t           next_used(uint32_t from) const;
+    /* The resource a view slot was last noted to see; null until noted. */
+    IUnknown          *viewed(uint32_t slot) const;
+    void               note_viewed(uint32_t slot, IUnknown *resource);
     IUnknown          *at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const;
     /* Removes `id` and gives its reference back; nothing for an unknown id. */
     void               remove(uint32_t id);
@@ -81,6 +86,9 @@ private:
     D3dObjectKind kinds_[capacity];
     bool          tombstones_[capacity];
     IUnknown     *objects_[capacity];
+    /* What a view slot's view sees, once asked: a view holds its resource,
+     * so the pointer lives as long as the view. Cleared when the slot changes. */
+    IUnknown     *viewed_[capacity];
     uint32_t      count_;
 };
 

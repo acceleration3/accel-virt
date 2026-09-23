@@ -24,6 +24,9 @@ public:
     /* `bytes` of zeroed shared memory named for `module` and this process.
      * invalid_state when open; the system's refusal as no_memory otherwise. */
     [[nodiscard]] Status open(const char *module, size_t bytes);
+    /* The same under /dev/shm/<prefix><module>-<pid>: rvk-events- is the
+     * timeline tools/perfetto_trace.py reads. */
+    [[nodiscard]] Status open(const char *prefix, const char *module, size_t bytes);
     uint8_t             *region() const;
     size_t               bytes() const;
     uint32_t             process() const;

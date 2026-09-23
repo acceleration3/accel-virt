@@ -160,6 +160,8 @@ private:
     uint8_t                         *ring_views_[max_contexts];
     uint8_t                         *fence_views_[max_contexts];
     uint8_t                          orders_[max_contexts];
+    /* Bindings each slot has had, so each takes fresh device ids. */
+    uint32_t                         generations_[max_contexts];
     bool                             live_[max_contexts];
     /* Lent to whichever binding is being set up or torn down: dxgkrnl creates
      * and destroys contexts one at a time under its adapter lock. */

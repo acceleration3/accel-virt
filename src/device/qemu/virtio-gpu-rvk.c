@@ -139,6 +139,10 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     for (uint32_t i = 0; i < b->conf.max_outputs; i++) {
         qemu_graphic_console_set_hwops(b->scanout[i].con, &virtio_gpu_rvk_console_ops, b);
     }
+    /* A GPU that renders but drives no monitor, as a second host GPU is. */
+    if (!r->display) {
+        b->enabled_output_bitmask = 0;
+    }
     for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
         r->fence_queues[i] = virtio_add_queue(VIRTIO_DEVICE(qdev), 2, virtio_gpu_rvk_fence_kick);
     }
@@ -276,6 +280,7 @@ static const Property virtio_gpu_rvk_properties[] = {
     DEFINE_PROP_UINT64("record-limit", VirtIOGPURvk, record_limit, 0),
     DEFINE_PROP_STRING("record-kinds", VirtIOGPURvk, record_kinds),
     DEFINE_PROP_BOOL("record-wrap", VirtIOGPURvk, record_wrap, false),
+    DEFINE_PROP_BOOL("display", VirtIOGPURvk, display, true),
 };
 
 static void virtio_gpu_rvk_class_init(ObjectClass *klass, const void *data)

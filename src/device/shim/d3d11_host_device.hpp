@@ -26,6 +26,7 @@
 struct ID3D11Device5;
 struct ID3D11DeviceContext4;
 struct ID3DDeviceContextState;
+struct D3D11_TEXTURE2D_DESC;
 struct ID3D11Texture2D;
 
 namespace av {
@@ -67,8 +68,11 @@ public:
     D3dSharedResources   &shared();
 
 private:
-    [[nodiscard]] bool copy_out(ID3D11Texture2D *texture, uint8_t *pixels, uint32_t stride, uint32_t width,
-                                uint32_t height);
+    /* The published texture copied into staging_, queued, under the lock. */
+    [[nodiscard]] bool stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted);
+    /* staging_ read once the GPU is done with it, taking the lock only to look. */
+    [[nodiscard]] bool drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
+                             uint32_t height);
 
     ID3D11Device5          *device_;
     ID3D11DeviceContext4   *context_;

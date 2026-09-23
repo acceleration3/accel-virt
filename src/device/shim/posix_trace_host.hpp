@@ -29,6 +29,13 @@ private:
      * the CLOCK_MONOTONIC a reader compares against, and fine enough for ages
      * judged in milliseconds. */
     static constexpr int monotonic_coarse = 6;
+    /* CLOCK_MONOTONIC: what a timeline needs (RVK_PERFETTO), where events
+     * microseconds apart must not share a stamp. */
+    static constexpr int monotonic = 1;
+public:
+    /* Stamps from the precise clock from now on. */
+    void precise();
+private:
 
     /* The clock every stamp comes from. */
     int clock_ = monotonic_coarse;

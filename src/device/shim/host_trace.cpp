@@ -6,6 +6,10 @@
 
 #include <link.h>
 
+
+/* Freestanding: the declaration <stdlib.h> would give, for libc's own. */
+extern "C" char *getenv(const char *name);
+
 namespace av {
 
 namespace {
@@ -42,7 +46,7 @@ int find_object(dl_phdr_info *info, size_t, void *context)
 
 }  // namespace
 
-HostTrace::HostTrace() : host_(), region_(), table_(host_), image_(0u, 0u)
+HostTrace::HostTrace() : host_(), region_(), table_(host_), events_region_(), events_(), image_(0u, 0u)
 {
     AV_SCOPE("HostTrace::HostTrace");
 }
@@ -61,6 +65,17 @@ Status HostTrace::start(const char *module)
     const Status laid = table_.initialize(region_.region(), region_.bytes(), module, region_.process());
     if (laid != Status::ok) return laid;
     scope_binding.bind(table_);
+    /* A ring per slot the size of a busy thread's second or so; the file is
+     * sparse, so only the slots threads use take memory. */
+    constexpr uint32_t events_per_slot = 1u << 20u;
+    const char *const  wanted = getenv("RVK_PERFETTO");
+    if (wanted != nullptr && wanted[0] == '1' &&
+        events_region_.open("/rvk-events-", module, EventRing::bytes_for(slots, events_per_slot)) == Status::ok &&
+        events_.initialize(events_region_.region(), events_region_.bytes(), slots, events_per_slot) == Status::ok)
+    {
+        host_.precise();
+        table_.record_events(events_);
+    }
     return Status::ok;
 }
 

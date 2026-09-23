@@ -111,4 +111,9 @@ bool PosixTraceHost::exchange(uint64_t &word, uint64_t expected, uint64_t desire
     return __atomic_compare_exchange_n(&word, &expected, desired, false, 5, 5);
 }
 
+void PosixTraceHost::precise()
+{
+    clock_ = monotonic;
+}
+
 }  // namespace av

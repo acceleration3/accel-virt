@@ -88,6 +88,7 @@ public:
 private:
     /* Opens the adapter, learns its identity and counts the open; the first
      * refusal, with everything it made given back. */
+    uint64_t adapter_luid(void *runtime_adapter, const void *callbacks);
     Hresult open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_adapter, const void *callbacks,
                  uint32_t interface_version, uint32_t runtime_version);
     /* The object model of one create, without the runtime's answer: the

@@ -30,6 +30,10 @@ public:
     /* invalid_state once found; the enumeration's failure; not_found when no
      * adapter matches. */
     [[nodiscard]] Status find(const PciIdentity &identity);
+    /* The matching adapter whose LUID is `luid`: the one a Direct3D runtime
+     * opened, where a guest has one rvkgpu adapter per host GPU. A `luid` of 0
+     * takes the first match. */
+    [[nodiscard]] Status find(const PciIdentity &identity, uint64_t luid);
     /* Closes the kept adapter, if any. */
     [[nodiscard]] Status close();
     bool                 found() const;
@@ -40,6 +44,7 @@ private:
 
     Kmt     &kmt_;
     uint32_t adapter_;
+    uint64_t luid_;
 };
 
 }  // namespace av

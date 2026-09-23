@@ -123,8 +123,8 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
-      display_changed_(0u), started_(false), present_(true)
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), present_rows_(0u), presents_unmoved_(0u),
+      display_changed_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
       }
@@ -301,13 +301,19 @@ Status Adapter::power_down()
     return status;
 }
 
-int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_interface, uint32_t *sources,
+int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dxgkrnl_interface, uint32_t *sources,
                               uint32_t *children)
 {
     AV_SCOPE("Adapter::start_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::start_device");
     InvariantScope<Adapter> guard(platform_, *this, "start_device");
     if (started_) return NtStatus(Status::invalid_state).value();
+    constexpr size_t start_info_luid_offset = 20u;   /* after RequiredDmaQueueEntry and AdapterGuid */
+    if (start_info != nullptr) {
+        uint32_t luid[2] = {};
+        __builtin_memcpy(luid, static_cast<const uint8_t *>(start_info) + start_info_luid_offset, sizeof(luid));
+        luid_ = static_cast<uint64_t>(luid[1]) << 32u | luid[0];
+    }
     if (dxgkrnl_interface == nullptr || sources == nullptr || children == nullptr)
         return NtStatus(Status::invalid_parameter).value();
     present_ = true;
@@ -417,9 +423,17 @@ void Adapter::dpc_routine()
     /* A frame is carried when a submission completed since the last DPC, never
      * because the control queue answered: our own scanout requests complete
      * there, and taking those for presents would flush forever. */
+    constexpr uint32_t refreshes_per_present = 2u;
     const uint32_t fence = node_.current_fence();
-    const bool     presented = fence != presented_fence_;
+    const bool     completed_any = fence != presented_fence_;
     presented_fence_ = fence;
+    const uint64_t made = platform_.load_atomic(presents_made_);
+    if (made != presents_shown_) {
+        presents_shown_ = made;
+        refreshes_owed_ = refreshes_per_present;
+    }
+    const bool presented = completed_any && refreshes_owed_ != 0u;
+    if (presented) refreshes_owed_--;
     if (harvest && scanout_.refresh(sources_, presented) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
     dxgkrnl_.notify_dpc();
@@ -455,7 +469,9 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
     if (status->Type == status_rotation) return NtStatus(Status::invalid_parameter).value();
     int32_t answered = NtStatus(Status::not_supported).value();
     if (status->Type == status_connection) {
-        status->HotPlugConnected = 1u;
+        /* A device with no display attached - a second host GPU, which
+         * renders but drives nothing - enables none of its scanouts. */
+        status->HotPlugConnected = display_info_.enabled(status->ChildUid) ? 1u : 0u;
         answered = NtStatus(Status::ok).value();
     }
     log_status("rvkgpu: QueryChildStatus", answered);
@@ -591,19 +607,6 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
     return NtStatus(Status::ok).value();
 }
 
-/* DpiAddDevice calls a registered LinkDevice after every AddDevice and fails
- * the device if it fails: answer a chain of one, led by this adapter. */
-int32_t Adapter::link_device(void *, LinkedDeviceRecord *linked)
-{
-    AV_SCOPE("Adapter::link_device");
-    platform_.require_irql_at_most(Irql::passive, "Adapter::link_device");
-    if (linked == nullptr) return NtStatus(Status::invalid_parameter).value();
-    linked->ChainUid = 0u;
-    linked->NumberOfLinksInChain = 1u;
-    linked->LeadLink = 1u;
-    return NtStatus(Status::ok).value();
-}
-
 int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
 {
     AV_SCOPE("Adapter::query_adapter_info");
@@ -612,6 +615,11 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     const AdapterInfoQuery request(platform_, *query);
     int32_t                answered = NtStatus(NtStatus::not_implemented).value();
     switch (request.type()) {
+    case query_umd_private: {
+        const uint64_t words[2] = {umd_private_tag, luid_};
+        answered = NtStatus(request.write_output(words, sizeof(words))).value();
+        break;
+    }
     case query_driver_caps:
         answered = NtStatus(capabilities_.report_driver_caps(request)).value();
         break;
@@ -1267,6 +1275,7 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     PresentRequest writing(platform_, *request);
+    platform_.store_atomic(presents_made_, platform_.load_atomic(presents_made_) + 1u);   /* a lost race still moves it */
     const uint32_t first = request->MultipassOffset;
     const int32_t  presented = writing.present().value();
     /* The DMA buffer this wrote is executed on the host only for a context of

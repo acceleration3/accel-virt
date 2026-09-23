@@ -14,6 +14,8 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/submission/reply_header.hpp"
 
+#include <stdio.h>
+
 namespace av {
 
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostSharedObjects &shared,
@@ -43,12 +45,20 @@ Status DeviceContext::post(const WorkItem &item)
 
 /* The attachment is posted last: once the worker may read the ring, nothing
  * here can fail. */
+/* Which step of a setup the device refused: the guest only learns that one was. */
+Status DeviceContext::refused(const char *step, Status status) const
+{
+    AV_SCOPE("DeviceContext::refused");
+    fprintf(stderr, "virtio-gpu-rvk: context %u setup refused at %s, status %d\n", id_, step, static_cast<int>(status));
+    return status;
+}
+
 Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
 {
     AV_SCOPE("DeviceContext::bind");
-    if (!executor_.accepts(setup.options())) return Status::invalid_parameter;
+    if (!executor_.accepts(setup.options())) return refused("options", Status::invalid_parameter);
     Status status = binding_.bind(setup, capset);
-    if (status != Status::ok) return status;
+    if (status != Status::ok) return refused("binding", status);
     ScopeExit unbind([this] { binding_.unbind(); });
     ScopeExit withdraw([this] {
         ring_.withdraw();
@@ -58,11 +68,11 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     });
     if (fences_.prepare(binding_.fence_window(), setup.doorbell()) != Status::ok ||
         ring_.prepare(binding_.ring_window()) != Status::ok)
-        return Status::invalid_parameter;
+        return refused("windows", Status::invalid_parameter);
     const BlobWindow reply = binding_.reply_window();
     const uint64_t   answer_bytes = reply.length() != 0u ? reply.length() - ReplyHeader::encoded_size : 0u;
     status = staging_.allocate(uint64_t{1} << setup.ring_order(), answer_bytes);
-    if (status != Status::ok) return status;
+    if (status != Status::ok) return refused("staging", status);
     executor_.configure(setup.sub_api(), capset.gpu().uuid(), setup.options());
     /* And what a host thread's completion reaches this context through: the
      * landing pad the worker drains. Given here, on the main loop, because
@@ -71,10 +81,10 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     imports_.configure(setup.ring_resource());
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());
-    if (status != Status::ok) return status;
+    if (status != Status::ok) return refused("doorbell", status);
     ScopeExit disconnect([this] { worker_.disconnect_doorbell(); });
     status = worker_.post(WorkItem(&RvkRingAttach, nullptr, &ring_));
-    if (status != Status::ok) return status;
+    if (status != Status::ok) return refused("attach", status);
     disconnect.dismiss();
     withdraw.dismiss();
     unbind.dismiss();

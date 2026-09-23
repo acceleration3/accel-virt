@@ -6,6 +6,7 @@
 #define AV_HOST_TRACE_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/event_ring.hpp"
 #include "core/trace/image_range.hpp"
 #include "core/trace/trace_table.hpp"
 #include "device/shim/posix_trace_host.hpp"
@@ -37,6 +38,9 @@ private:
     PosixTraceHost host_;
     ShmTraceRegion region_;
     TraceTable     table_;
+    /* RVK_PERFETTO=1 in the environment: every scope is also an event. */
+    ShmTraceRegion events_region_;
+    EventRing      events_;
     ImageRange     image_;
 };
 

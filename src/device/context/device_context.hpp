@@ -52,6 +52,7 @@ public:
      * or the ring handed over. Nothing stays pinned, connected or prepared
      * unless ok. */
     [[nodiscard]] Status  bind(const ContextSetup &setup, const CapsetInfo &capset);
+    Status                refused(const char *step, Status status) const;
     const ContextBinding &binding() const;
     uint32_t             id() const;
     bool                 running() const;

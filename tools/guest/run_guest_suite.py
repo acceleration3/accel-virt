@@ -404,6 +404,9 @@ def arguments():
                         help="the QEMU display backend (default: none). egl-headless gives the console a GL "
                              "context, which is what lets the device scan out a dma-buf; gtk and sdl open a "
                              "window on the host desktop, and closing it powers the guest off")
+    parser.add_argument("--perfetto", action="store_true",
+                        help="record every host scope as a timeline event (RVK_PERFETTO=1); "
+                             "tools/perfetto_trace.py <qemu pid> writes it for ui.perfetto.dev")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
                         help="enable QEMU trace events matching PATTERN into qemu.log, e.g. 'virtio_gpu_*'")
     parser.add_argument("--no-verifier", action="store_true",
@@ -438,6 +441,11 @@ def qemu_command(args, work, disk, rescue, gpus=()):
         # it is a run against an adapter that must fall back (feature 041, FR-001).
         if args.hostmem:
             properties.append(f"hostmem={args.hostmem}M")
+        # A desktop someone uses is on the first GPU; the rest render and drive
+        # no monitor, as a hybrid machine's second GPU does, so the desktop's
+        # GPU is DXGI's first adapter and no window is composed across GPUs.
+        if index > 0 and args.display in ("gtk", "sdl"):
+            properties.append("display=off")
         # What crossed the wire, written beside qemu.log so a run that rendered
         # wrong can be printed and replayed afterwards (feature 065, FR-001).
         # One file, the first device's: two devices cannot write one recording.
@@ -959,6 +967,8 @@ class GuestRun:
             environment["RVK_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
         # DXVK writes its logs to the working directory unless told otherwise.
         environment.setdefault("DXVK_LOG_PATH", str(self.work))
+        if self.args.perfetto:
+            environment["RVK_PERFETTO"] = "1"
         # What the test executor is told to do to the host's work: a stall
         # longer than TdrDelay is what dxgkrnl times out on (feature 040, US3).
         if self.args.stall_ms:

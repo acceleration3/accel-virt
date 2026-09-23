@@ -34,6 +34,7 @@ struct VirtIOGPURvk {
     uint64_t record_limit;
     char *record_kinds;
     bool record_wrap;
+    bool display;
     RvkHostOps host;
     uint32_t gpu_count;
     RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];

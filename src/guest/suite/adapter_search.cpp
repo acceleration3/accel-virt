@@ -6,7 +6,7 @@
 
 namespace av {
 
-AdapterSearch::AdapterSearch(Kmt &kmt) : kmt_(kmt), adapter_(0u)
+AdapterSearch::AdapterSearch(Kmt &kmt) : kmt_(kmt), adapter_(0u), luid_(0u)
 {
     AV_SCOPE("AdapterSearch::AdapterSearch");
 }
@@ -21,7 +21,14 @@ AdapterSearch::~AdapterSearch()
 Status AdapterSearch::find(const PciIdentity &identity)
 {
     AV_SCOPE("AdapterSearch::find");
+    return find(identity, 0u);
+}
+
+Status AdapterSearch::find(const PciIdentity &identity, uint64_t luid)
+{
+    AV_SCOPE("AdapterSearch::find");
     if (adapter_ != 0u) return Status::invalid_state;
+    luid_ = luid;
     uint32_t     adapters[max_adapters] = {};
     uint32_t     count = 0u;
     const Status enumerated = kmt_.enumerate_adapters(adapters, max_adapters, count);
@@ -36,7 +43,10 @@ void AdapterSearch::keep_or_close(uint32_t adapter, const PciIdentity &identity)
     AV_SCOPE("AdapterSearch::keep_or_close");
     if (adapter == 0u) return;
     PciIdentity reported;
-    if (adapter_ == 0u && kmt_.query_identity(adapter, reported) == Status::ok && reported.same_subsystem_as(identity)) {
+    uint64_t luid = 0u;
+    const bool wanted = luid_ == 0u || (kmt_.adapter_luid(adapter, luid) == Status::ok && luid == luid_);
+    if (adapter_ == 0u && wanted && kmt_.query_identity(adapter, reported) == Status::ok &&
+        reported.same_subsystem_as(identity)) {
         adapter_ = adapter;
         return;
     }

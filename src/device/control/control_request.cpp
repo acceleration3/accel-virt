@@ -4,6 +4,8 @@
 #include "device/host/host.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 
+#include <stdio.h>
+
 namespace av {
 
 ControlRequest::ControlRequest(Host &host, void *request) : host_(host), request_(request), responded_(false)
@@ -23,6 +25,13 @@ void ControlRequest::respond(const GpuResponse &response)
     AV_SCOPE("ControlRequest::respond");
     host_.require_main_loop("ControlRequest::respond");
     if (responded_) return;
+    constexpr uint32_t first_error = 0x1200u;   /* VIRTIO_GPU_RESP_ERR_UNSPEC */
+    if (response.type() >= first_error) {
+        uint8_t bytes[sizeof(uint32_t)] = {};
+        static_cast<void>(host_.read_request(request_, 0u, bytes, sizeof bytes));
+        const uint32_t command = static_cast<uint32_t>(bytes[0]) | static_cast<uint32_t>(bytes[1]) << 8u;
+        fprintf(stderr, "virtio-gpu-rvk: command 0x%04x answered 0x%04x\n", command, response.type());
+    }
     host_.respond(request_, response.bytes(), response.length());
     responded_ = true;
 }

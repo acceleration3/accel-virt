@@ -31,7 +31,7 @@ namespace av {
 RvkContextTable::RvkContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, AllocationTable &allocations)
     : platform_(platform), dxgkrnl_(dxgkrnl), allocations_(allocations),
       lock_(platform, LockRank::rvk_context_slots),
-      reader_(platform), bindings_(), contexts_{}, uses_{}, chunks_(), ring_views_{}, fence_views_{}, orders_{},
+      reader_(platform), bindings_(), contexts_{}, uses_{}, chunks_(), ring_views_{}, fence_views_{}, orders_{}, generations_{},
       live_{}, request_{}, requests_(platform, LockRank::rvk_control_requests)
       {
           AV_SCOPE("RvkContextTable::RvkContextTable");
@@ -158,7 +158,8 @@ Status RvkContextTable::set_up(uint32_t slot, const RvkContextRecord &record, Vi
     uint32_t message = 0u;
     Status   status = device.connect_fence_queue(slot, message);
     if (status == Status::ok)
-        status = bindings_[slot].construct(platform_, doorbells, record, slot, request_, sizeof request_);
+        status = bindings_[slot].construct(platform_, doorbells, record, slot, generations_[slot]++, request_,
+                                           sizeof request_);
     if (status == Status::ok)
         status = bindings_[slot].object().set_up(
             device, capset,

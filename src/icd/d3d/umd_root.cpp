@@ -1,5 +1,7 @@
 #include "icd/d3d/umd_root.hpp"
 
+#include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
+
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -51,6 +53,26 @@ void UmdRoot::note(const char *what, uint64_t value)
     log_.write(text.text());
 }
 
+/* The LUID rvkgpu.sys answers UMDRIVERPRIVATE with: which adapter the runtime
+ * opened. 0 - an older driver, or a refusal - takes the first rvkgpu adapter. */
+uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
+{
+    AV_SCOPE("UmdRoot::adapter_luid");
+    constexpr uint64_t umd_private_tag = 0x44494C554B5652ull;
+    struct QueryAdapterInfo {
+        void    *pPrivateDriverData;
+        uint32_t PrivateDriverDataSize;
+    };
+    using QueryAdapterInfoCb = int32_t(__stdcall *)(void *, QueryAdapterInfo *);
+    const auto query = reinterpret_cast<QueryAdapterInfoCb>(
+        static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks)->pfnQueryAdapterInfoCb);
+    uint64_t         words[2] = {};
+    QueryAdapterInfo info = {words, sizeof(words)};
+    if (query == nullptr || query(runtime_adapter, &info) < 0 || words[0] != umd_private_tag) return 0u;
+    note("adapter luid", words[1]);
+    return words[1];
+}
+
 Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_adapter, const void *callbacks,
                       uint32_t interface_version, uint32_t runtime_version)
 {
@@ -62,7 +84,7 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
         note("open refused, interface", interface_version);
         return hr_no_interface;
     }
-    const Status held = connection_.acquire();
+    const Status held = connection_.acquire(adapter_luid(runtime_adapter, callbacks));
     if (held != Status::ok) {
         note("no rvkgpu adapter, status", static_cast<uint64_t>(held));
         return hr_fail;

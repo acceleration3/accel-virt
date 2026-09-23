@@ -1,10 +1,14 @@
 #include "device/shim/d3d11_host_device.hpp"
 
+#include <time.h>
+
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "device/shim/d3d_runtime.hpp"
 
 namespace av {
+
+
 
 D3d11HostDevice::D3d11HostDevice()
     : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), staging_(nullptr), mutex_()
@@ -67,29 +71,30 @@ void D3d11HostDevice::close()
 /* Copying and mapping use no pipeline state, so whichever session's is in
  * force stays. The copy waits for everything the sessions submitted before it,
  * the frame the scanout names included. */
+/* The copy is queued under the lock and waited for outside it: the wait is
+ * the GPU finishing everything queued ahead, and every session's commands
+ * need the lock meanwhile. */
 bool D3d11HostDevice::read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
 {
     AV_SCOPE("D3d11HostDevice::read_image");
     if (device_ == nullptr || pixels == nullptr) return false;
     lock(nullptr);
-    ID3D11Texture2D *texture = nullptr;
-    IUnknown *const published = shared_.find(key);
-    const bool found = published != nullptr &&
-                       SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
-    bool read = false;
-    if (found) {
-        read = copy_out(texture, static_cast<uint8_t *>(pixels), stride, width, height);
-        texture->Release();
-    }
+    D3D11_TEXTURE2D_DESC wanted = {};
+    const bool staged = stage(key, wanted);
     unlock();
-    return read;
+    if (!staged) return false;
+    return drain(wanted, static_cast<uint8_t *>(pixels), stride, width, height);
 }
 
-bool D3d11HostDevice::copy_out(ID3D11Texture2D *texture, uint8_t *pixels, uint32_t stride, uint32_t width,
-                               uint32_t height)
+bool D3d11HostDevice::stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted)
 {
-    AV_SCOPE("D3d11HostDevice::copy_out");
-    D3D11_TEXTURE2D_DESC wanted = {};
+    AV_SCOPE("D3d11HostDevice::stage");
+    IUnknown *const published = shared_.find(key);
+    if (published == nullptr) return false;
+    ID3D11Texture2D *texture = nullptr;
+    const bool found = SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
+    published->Release();
+    if (!found) return false;
     texture->GetDesc(&wanted);
     D3D11_TEXTURE2D_DESC have = {};
     if (staging_ != nullptr) staging_->GetDesc(&have);
@@ -104,11 +109,32 @@ bool D3d11HostDevice::copy_out(ID3D11Texture2D *texture, uint8_t *pixels, uint32
         made.BindFlags = 0u;
         made.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         made.MiscFlags = 0u;
-        if (FAILED(device_->CreateTexture2D(&made, nullptr, &staging_))) return false;
+        if (FAILED(device_->CreateTexture2D(&made, nullptr, &staging_))) {
+            texture->Release();
+            return false;
+        }
     }
     context_->CopySubresourceRegion(staging_, 0u, 0u, 0u, 0u, texture, 0u, nullptr);
+    context_->Flush();
+    texture->Release();
+    return true;
+}
+
+bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels, uint32_t stride, uint32_t width,
+                            uint32_t height)
+{
+    AV_SCOPE("D3d11HostDevice::drain");
+    constexpr long poll_nanoseconds = 200000;
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    if (FAILED(context_->Map(staging_, 0u, D3D11_MAP_READ, 0u, &mapped))) return false;
+    for (;;) {
+        lock(nullptr);
+        const HRESULT result = context_->Map(staging_, 0u, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+        if (SUCCEEDED(result)) break;
+        unlock();
+        if (result != DXGI_ERROR_WAS_STILL_DRAWING) return false;
+        const timespec pause = {0, poll_nanoseconds};
+        nanosleep(&pause, nullptr);
+    }
     const uint32_t columns = wanted.Width < width ? wanted.Width : width;
     const uint32_t rows = wanted.Height < height ? wanted.Height : height;
     const bool swap = wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM || wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
@@ -125,6 +151,7 @@ bool D3d11HostDevice::copy_out(ID3D11Texture2D *texture, uint8_t *pixels, uint32
         }
     }
     context_->Unmap(staging_, 0u);
+    unlock();
     return true;
 }
 
@@ -133,6 +160,7 @@ bool D3d11HostDevice::opened() const
     AV_SCOPE("D3d11HostDevice::opened");
     return device_ != nullptr;
 }
+
 
 void D3d11HostDevice::lock(ID3DDeviceContextState *state)
 {

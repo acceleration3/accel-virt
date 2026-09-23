@@ -1,5 +1,7 @@
 #include "core/rvk/rvk_context_binding.hpp"
 
+#include "core/rvk/ring_submitter.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/capset_info.hpp"
@@ -12,10 +14,13 @@
 namespace av {
 
 RvkContextBinding::RvkContextBinding(Platform &platform, RegisterWindow &doorbells,
-                                     const RvkContextRecord &record, uint32_t slot, uint8_t *request,
-                                     size_t capacity)
-    : context_(platform, doorbells), record_(record), context_id_(slot + 1u), doorbell_(slot),
-      first_resource_id_(first_resource_id + resources_per_context * slot), request_(request), capacity_(capacity),
+                                     const RvkContextRecord &record, uint32_t slot, uint32_t generation,
+                                     uint8_t *request, size_t capacity)
+    : context_(platform, doorbells), record_(record),
+      context_id_(slot + RingSubmitter::doorbell_pages * (generation % generations) + 1u), doorbell_(slot),
+      first_resource_id_(first_resource_id +
+                         resources_per_context * (slot + RingSubmitter::doorbell_pages * (generation % generations))),
+      request_(request), capacity_(capacity),
       answer_{}
       {
           AV_SCOPE("RvkContextBinding::RvkContextBinding");

@@ -49,8 +49,13 @@ public:
      * one device. `request` is `capacity` bytes the setup and teardown write
      * their requests into, lent by the owner, which serializes them: a request
      * buffer per context would be tens of kilobytes each. */
+    /* `generation` counts the slot's earlier bindings: a teardown the device
+     * never finished leaves that binding's context and blobs behind, and the
+     * next binding of the slot takes ids of its own rather than colliding
+     * with them for good. */
     RvkContextBinding(Platform &platform, RegisterWindow &doorbells, const RvkContextRecord &record, uint32_t slot,
-                      uint8_t *request, size_t capacity);
+                      uint32_t generation, uint8_t *request, size_t capacity);
+    static constexpr uint32_t generations = 256u;
     RvkContextBinding(const RvkContextBinding &) = delete;
     RvkContextBinding &operator=(const RvkContextBinding &) = delete;
 

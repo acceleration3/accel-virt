@@ -102,7 +102,6 @@ void    AvDdiResetDevice(void *context);
 void    AvDdiUnload(void);
 int32_t AvDdiQueryInterface(void *context, void *query);
 void    AvDdiControlEtwLogging(uint8_t enable, uint32_t flags, uint8_t level);
-int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedDeviceRecord *linked);
 int32_t AvDdiQueryAdapterInfo(void *context, const av::DxgkargQueryAdapterInfoRecord *query);
 int32_t AvDdiEscape(void *context, const av::DxgkargEscapeRecord *escape);
 int32_t AvDdiCollectDbgInfo(void *context, const av::DxgkargCollectDbgInfoRecord *collect);

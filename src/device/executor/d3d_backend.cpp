@@ -370,17 +370,22 @@ bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
 void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
 {
     AV_SCOPE("D3dBackend::remake_views");
-    for (uint32_t slot = 0u; slot < D3dObjectTable::capacity; slot++) {
+    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity; slot = objects_.next_used(slot + 1u)) {
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
         IUnknown *const object = objects_.at(slot, id, kind);
         if (object == nullptr || !is_view(kind)) continue;
-        ID3D11Resource *viewed = nullptr;
-        static_cast<ID3D11View *>(object)->GetResource(&viewed);
+        IUnknown *viewed = objects_.viewed(slot);
+        if (viewed == nullptr) {
+            ID3D11Resource *resource = nullptr;
+            static_cast<ID3D11View *>(object)->GetResource(&resource);
+            viewed = resource;
+            if (resource != nullptr) resource->Release();
+            objects_.note_viewed(slot, viewed);
+        }
         uint32_t found = count;
         for (uint32_t index = 0u; index < count; index++)
-            if (static_cast<IUnknown *>(viewed) == textures[index]) found = index;
-        if (viewed != nullptr) viewed->Release();
+            if (viewed == textures[index]) found = index;
         if (found == count) continue;
         IUnknown *const made = remake_view(kind, object, static_cast<ID3D11Resource *>(textures[(found + 1u) % count]));
         if (made == nullptr) continue;
@@ -449,15 +454,12 @@ bool D3dBackend::on_Finish11(uint32_t &hresult)
 {
     AV_SCOPE("D3dBackend::on_Finish11");
     if (!has_device()) return false;
-    D3D11_QUERY_DESC description = {D3D11_QUERY_EVENT, 0u};
-    ID3D11Query *event = nullptr;
-    if (SUCCEEDED(device11_->device()->CreateQuery(&description, &event))) {
-        device11_->context()->End(event);
-        BOOL done = FALSE;
-        while (device11_->context()->GetData(event, &done, sizeof(done), 0u) == S_FALSE) {
-        }
-        event->Release();
-    }
+    /* Every session records into the one immediate context, so what the guest
+     * needs of a finish - its commands ahead of anything another session
+     * sends next, and the arena read - holds once they have run here. Waiting
+     * for the GPU as well, under the device lock, stalled every session and
+     * the scanout behind it: 7 to 50 ms a present. */
+    device11_->context()->Flush();
     const HRESULT removed = device11_->device()->GetDeviceRemovedReason();
     lost_ = FAILED(removed);
     const uint32_t own = states_.removed_reason(selected_device_);

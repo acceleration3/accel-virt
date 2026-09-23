@@ -13,7 +13,7 @@ constexpr uint32_t golden_ratio = 2654435769u;
 
 }  // namespace
 
-D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, count_(0u)
+D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, viewed_{}, count_(0u)
 {
     AV_SCOPE("D3dObjectTable::D3dObjectTable");
 }
@@ -43,6 +43,7 @@ void D3dObjectTable::set(uint32_t slot, uint32_t id, D3dObjectKind kind, bool to
     kinds_[slot] = kind;
     tombstones_[slot] = tombstone;
     objects_[slot] = object;
+    viewed_[slot] = nullptr;
 }
 
 bool D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
@@ -82,7 +83,28 @@ IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *ob
     if (slot == capacity || kinds_[slot] != kind) return nullptr;
     IUnknown *const old = objects_[slot];
     objects_[slot] = object;
+    viewed_[slot] = nullptr;
     return old;
+}
+
+uint32_t D3dObjectTable::next_used(uint32_t from) const
+{
+    AV_SCOPE("D3dObjectTable::next_used");
+    for (uint32_t slot = from; slot < capacity; slot++)
+        if (kinds_[slot] != D3dObjectKind::none) return slot;
+    return capacity;
+}
+
+IUnknown *D3dObjectTable::viewed(uint32_t slot) const
+{
+    AV_SCOPE("D3dObjectTable::viewed");
+    return slot < capacity ? viewed_[slot] : nullptr;
+}
+
+void D3dObjectTable::note_viewed(uint32_t slot, IUnknown *resource)
+{
+    AV_SCOPE("D3dObjectTable::note_viewed");
+    if (slot < capacity) viewed_[slot] = resource;
 }
 
 IUnknown *D3dObjectTable::at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const

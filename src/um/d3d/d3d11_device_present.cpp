@@ -6,6 +6,7 @@
  * (publish), then hands that allocation to dxgkrnl through DXGI's present
  * callback, on a context of the device's own. */
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
@@ -135,6 +136,9 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
      * scanout's SCANOUT_IMAGE, and DWM opening it by key), so nothing is read
      * back: the host only has to have finished drawing it before the flip. */
     if (source.shared_key != 0u) {
+        /* The stream reaches the host through its own queue, which the kernel
+         * does not order against this present: the round trip is what puts
+         * the frame's commands ahead of DWM composing it. */
         if (removed_on_host()) {
             set_error(D3DDDIERR_DEVICEREMOVED);
             return DXGI_ERROR_DEVICE_REMOVED;

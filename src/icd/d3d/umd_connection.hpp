@@ -47,7 +47,7 @@ public:
     /* Finds and holds the rvkgpu adapter if no open holds it yet, and counts
      * this one. not_supported when there is no such adapter; the search's own
      * failure otherwise. */
-    [[nodiscard]] Status acquire();
+    [[nodiscard]] Status acquire(uint64_t luid);
     /* Drops one open, closing the adapter with the last. invalid_state when
      * none is held, which would mean a close without an open. */
     [[nodiscard]] Status release();

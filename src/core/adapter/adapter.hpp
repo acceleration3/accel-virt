@@ -147,7 +147,6 @@ public:
      * answers for it, and a capability behind a disabled feature fails the
      * adapter start. */
     int32_t query_feature_support(DxgkargQueryFeatureSupportRecord *request);
-    int32_t link_device(void *physical_device_object, LinkedDeviceRecord *linked);
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
     /* A host-visible chunk binding (feature 045), or rvkinspect.exe's trace
@@ -286,8 +285,10 @@ private:
 
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
+    static constexpr uint64_t umd_private_tag = 0x44494C554B5652ull;   /* "RVKULID" */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t {   /* DXGKQAITYPE_* */
+        query_umd_private = 0,
         query_driver_caps = 1,
         query_segment4 = 11,
         query_gpu_mmu_caps = 13,
@@ -441,6 +442,14 @@ private:
     DisplayScanout                 scanout_;
     /* The node fence the host was last shown a frame for. */
     uint32_t                       presented_fence_;
+    /* Present DDIs so far, and as many as the DPC has shown. A present writes
+     * the primary without moving it, so the scanout is flushed on the next
+     * two completions after one - the DMA buffer it wrote is among them -
+     * and not on every completion, each of which cost the host a full-frame
+     * readback under the device lock every session's commands wait on. */
+    uint64_t                       presents_made_;
+    uint64_t                       presents_shown_;
+    uint32_t                       refreshes_owed_;
     /* Rows of pixels this miniport moved for a present nothing executes - the
      * desktop's (feature 046, FR-004) - and presents it could not move. */
     uint64_t                       present_rows_;
@@ -449,6 +458,10 @@ private:
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;
     bool                           started_;
+    /* DXGK_START_INFO.AdapterLuid, HighPart above LowPart: what the user-mode
+     * driver is told, through UMDRIVERPRIVATE, so it talks to this adapter
+     * and not the first rvkgpu D3DKMT enumerates. */
+    uint64_t                       luid_;
     bool                           present_;
 
     friend struct AdapterProbe;

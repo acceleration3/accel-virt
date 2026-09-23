@@ -15,6 +15,8 @@
 
 namespace av {
 
+class EventRing;
+
 class ScopeName;
 class TraceHost;
 struct TraceTableProbe;
@@ -50,6 +52,8 @@ public:
      * every later call writes nothing - including the leaves of scopes still
      * open when it was withdrawn. The region's bytes are left as they are. */
     void withdraw();
+    /* Every enter and leave from now on is also an event in `ring`. */
+    void record_events(EventRing &ring);
 
     /* Once, from the thread that crashed; a later call keeps the first. */
     void record_crash(uint32_t code, uint64_t address);
@@ -75,6 +79,7 @@ private:
     void     push(uint32_t slot, const ScopeName &name);
 
     TraceHost  &host_;
+    EventRing  *events_;
     uint8_t    *region_;
     TraceLayout layout_;
     /* layout_'s slot count, kept beside it for the scope path. */

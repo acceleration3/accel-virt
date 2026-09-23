@@ -17,7 +17,7 @@ UmdConnection::~UmdConnection()
     AV_SCOPE("UmdConnection::~UmdConnection");
 }
 
-Status UmdConnection::acquire()
+Status UmdConnection::acquire(uint64_t luid)
 {
     AV_SCOPE("UmdConnection::acquire");
     if (search_.found()) {
@@ -30,7 +30,7 @@ Status UmdConnection::acquire()
      * it, passed. */
     const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                              AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-    const Status found = search_.find(rvkgpu);
+    const Status found = search_.find(rvkgpu, luid);
     if (found != Status::ok) return found == Status::not_found ? Status::not_supported : found;
     opens_ = 1u;
     return Status::ok;

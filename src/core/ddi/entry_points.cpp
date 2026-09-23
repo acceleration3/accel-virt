@@ -61,9 +61,6 @@ int32_t AvDdiQueryInterface(void *context, void *query)
 void AvDdiControlEtwLogging(uint8_t, uint32_t, uint8_t)
 {}
 
-int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedDeviceRecord *linked)
-{ return static_cast<av::Adapter *>(context)->link_device(physical_device_object, linked); }
-
 int32_t AvDdiQueryAdapterInfo(void *context, const av::DxgkargQueryAdapterInfoRecord *query)
 { return static_cast<av::Adapter *>(context)->query_adapter_info(query); }
 
