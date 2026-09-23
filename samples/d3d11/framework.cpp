@@ -80,6 +80,15 @@ void push_vertex(Mesh &mesh, float3 p, float3 n, float2 uv, float3 color)
 
 void push_quad(Mesh &mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
+    // Front faces are clockwise as seen: every generator winds its quads to
+    // face the way its normals point, whatever order it listed them in.
+    const Vertex *v = mesh.vertices;
+    const float3 facing = cross(v[b].position - v[a].position, v[c].position - v[a].position);
+    if (dot(facing, v[a].normal + v[b].normal + v[c].normal + v[d].normal) < 0) {
+        const uint32_t swap = b;
+        b = d;
+        d = swap;
+    }
     uint32_t *i = mesh.indices + mesh.index_count;
     i[0] = a; i[1] = b; i[2] = c;
     i[3] = a; i[4] = c; i[5] = d;
