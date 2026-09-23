@@ -66,6 +66,8 @@ static bool decode_CreateDevice11(ServerDispatch& s, ::av::WireReader& r, ::av::
     (void)s;
     (void)reply;
     (void)arena;
+    uint32_t device{};
+    if (!r.read_pod(device)) return false;
     uint32_t feature_level{};
     if (!r.read_pod(feature_level)) return false;
     uint32_t flags{};
@@ -73,7 +75,7 @@ static bool decode_CreateDevice11(ServerDispatch& s, ::av::WireReader& r, ::av::
     uint32_t hresult{};
     uint32_t level{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateDevice11(feature_level, flags, hresult, level)) return false;
+    if (!s.on_CreateDevice11(device, feature_level, flags, hresult, level)) return false;
     reply.write_pod(hresult);
     reply.write_pod(level);
     return true;
@@ -128,6 +130,30 @@ static bool decode_DestroyObject(ServerDispatch& s, ::av::WireReader& r, ::av::W
     if (!r.read_pod(object)) return false;
     if (r.remaining() != 0u) return false;
     if (!s.on_DestroyObject(object)) return false;
+    return true;
+}
+
+static bool decode_SelectDevice11(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:SelectDevice11");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t device{};
+    if (!r.read_pod(device)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_SelectDevice11(device)) return false;
+    return true;
+}
+
+static bool decode_DestroyDevice11(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:DestroyDevice11");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t device{};
+    if (!r.read_pod(device)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_DestroyDevice11(device)) return false;
     return true;
 }
 
@@ -1140,6 +1166,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_Flush11:
         case kCmd_Finish11:
         case kCmd_DestroyObject:
+        case kCmd_SelectDevice11:
+        case kCmd_DestroyDevice11:
         case kCmd_CreateResource:
         case kCmd_OpenResource:
         case kCmd_CreateShaderResourceView:
@@ -1209,6 +1237,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_Flush11: return decode_Flush11(s, r, reply, arena);
         case kCmd_Finish11: return decode_Finish11(s, r, reply, arena);
         case kCmd_DestroyObject: return decode_DestroyObject(s, r, reply, arena);
+        case kCmd_SelectDevice11: return decode_SelectDevice11(s, r, reply, arena);
+        case kCmd_DestroyDevice11: return decode_DestroyDevice11(s, r, reply, arena);
         case kCmd_CreateResource: return decode_CreateResource(s, r, reply, arena);
         case kCmd_OpenResource: return decode_OpenResource(s, r, reply, arena);
         case kCmd_CreateShaderResourceView: return decode_CreateShaderResourceView(s, r, reply, arena);

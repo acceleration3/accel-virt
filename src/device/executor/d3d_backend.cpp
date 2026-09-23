@@ -60,8 +60,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), state_(nullptr), arena_(nullptr), feature_level_(0u), objects_(), region_(), topology_(0u),
-      lost_(false)
+    : device11_(nullptr), states_(), selected_(nullptr), arena_(nullptr), objects_(), region_(), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -79,16 +78,19 @@ void D3dBackend::shut_down()
 {
     AV_SCOPE("D3dBackend::shut_down");
     if (device11_ != nullptr) {
-        device11_->forget_state(state_);
+        /* forget_state takes the device's lock itself. */
+        for (ID3DDeviceContextState *state = states_.remove_any(); state != nullptr; state = states_.remove_any()) {
+            device11_->forget_state(state);
+            device11_->lock(nullptr);
+            state->Release();
+            device11_->unlock();
+        }
         device11_->lock(nullptr);
         objects_.clear();
-        if (state_ != nullptr) state_->Release();
         device11_->unlock();
     }
-    state_ = nullptr;
+    selected_ = nullptr;
     device11_ = nullptr;
-    feature_level_ = 0u;
-    topology_ = 0u;
     region_.give_back();
 }
 
@@ -102,7 +104,7 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
 {
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
-    device11_->lock(state_);
+    device11_->lock(selected_);
     arena_ = &arena;
     const bool ran = d3dproto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
@@ -191,7 +193,7 @@ bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 bool D3dBackend::ready() const
 {
     AV_SCOPE("D3dBackend::ready");
-    return state_ != nullptr;
+    return selected_ != nullptr;
 }
 
 bool D3dBackend::extent_of(ID3D11Resource *resource, uint32_t subresource, uint32_t &width, uint32_t &height,
@@ -273,21 +275,51 @@ ID3D11Resource *D3dBackend::staging_for(ID3D11Resource *resource, uint32_t, uint
 
 /* ---------------------------------------------------------------- device */
 
-bool D3dBackend::on_CreateDevice11(uint32_t feature_level, uint32_t, uint32_t &hresult, uint32_t &level)
+bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t, uint32_t &hresult,
+                                   uint32_t &level)
 {
     AV_SCOPE("D3dBackend::on_CreateDevice11");
     hresult = static_cast<uint32_t>(E_FAIL);
     level = 0u;
-    if (state_ != nullptr) return false;
+    if (device == 0u || states_.find(device) != nullptr) return false;
     /* make_state takes the device's lock itself, and run holds it. */
     device11_->unlock();
     uint32_t made = 0u;
-    state_ = device11_->make_state(made);
-    device11_->lock(state_);
-    if (state_ == nullptr) return true;
-    feature_level_ = feature_level != 0u && feature_level < made ? feature_level : made;
+    ID3DDeviceContextState *const state = device11_->make_state(made);
+    const bool kept = state != nullptr && states_.add(device, state);
+    if (kept) selected_ = state;
+    if (!kept && state != nullptr) state->Release();
+    device11_->lock(selected_);
+    if (!kept) return true;
     hresult = static_cast<uint32_t>(S_OK);
-    level = feature_level_;
+    level = feature_level != 0u && feature_level < made ? feature_level : made;
+    return true;
+}
+
+/* run holds the device's lock with the state that was selected when the
+ * command began; taking it again swaps the new one in. */
+bool D3dBackend::on_SelectDevice11(uint32_t device)
+{
+    AV_SCOPE("D3dBackend::on_SelectDevice11");
+    ID3DDeviceContextState *const state = states_.find(device);
+    if (state == nullptr) return false;
+    selected_ = state;
+    device11_->unlock();
+    device11_->lock(selected_);
+    return true;
+}
+
+bool D3dBackend::on_DestroyDevice11(uint32_t device)
+{
+    AV_SCOPE("D3dBackend::on_DestroyDevice11");
+    ID3DDeviceContextState *const state = states_.remove(device);
+    if (state == nullptr) return false;
+    if (state == selected_) selected_ = nullptr;
+    /* forget_state takes the device's lock itself, and run holds it. */
+    device11_->unlock();
+    device11_->forget_state(state);
+    device11_->lock(selected_);
+    state->Release();
     return true;
 }
 
@@ -910,7 +942,6 @@ bool D3dBackend::on_SetTopology(uint32_t topology)
 {
     AV_SCOPE("D3dBackend::on_SetTopology");
     if (!ready() || topology > D3D11_PRIMITIVE_TOPOLOGY_32_CONTROL_POINT_PATCHLIST) return false;
-    topology_ = topology;
     device11_->context()->IASetPrimitiveTopology(static_cast<D3D11_PRIMITIVE_TOPOLOGY>(topology));
     return true;
 }
@@ -1340,7 +1371,9 @@ bool D3dBackend::invariants_hold() const
 {
     AV_SCOPE("D3dBackend::invariants_hold");
     if (!objects_.invariants_hold()) return false;
-    if (device11_ == nullptr) return state_ == nullptr && objects_.count() == 0u;
+    if (!states_.invariants_hold()) return false;
+    if (selected_ != nullptr && states_.count() == 0u) return false;
+    if (device11_ == nullptr) return states_.count() == 0u && objects_.count() == 0u;
     return true;
 }
 

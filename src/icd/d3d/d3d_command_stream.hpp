@@ -1,4 +1,4 @@
-/* One Direct3D device's commands, batched until they must go.
+/* One process's Direct3D commands, batched until they must go.
  *
  * The generated D3D client encodes each command through this transport; an
  * asynchronous one is framed and appended to the batch, and nothing crosses to
@@ -11,7 +11,12 @@
  * Bulk data - a texture upload, a readback - crosses through the transport's
  * blob arena rather than the batch. A lease is only retired once the host
  * has answered a command sent after it, so when the arena runs short the
- * device asks for room (make_room_for), which answers a round trip. */
+ * device asks for room (make_room_for), which answers a round trip.
+ *
+ * Every device the process makes speaks on this one stream, so the doorbell
+ * and ring it costs are spent once per process: the stream remembers which
+ * device the host has selected and selects another only when the speaker
+ * changes (speak_as), which inside a batch is rare. */
 #ifndef AV_D3D_COMMAND_STREAM_HPP
 #define AV_D3D_COMMAND_STREAM_HPP
 
@@ -46,6 +51,11 @@ public:
     /* The blob arena has `bytes` free, retiring every lease with a round trip
      * when it has not. False when even an empty arena is too small. */
     [[nodiscard]] bool   make_room_for(size_t bytes);
+    /* Commands recorded after this run on `device`. False when the selection
+     * could not be sent, which fails the stream. */
+    [[nodiscard]] bool   speak_as(uint32_t device);
+    /* `device` is gone on the host, so it is no longer the one selected. */
+    void                 forget(uint32_t device);
     /* A device-side failure latched: every later send fails. */
     bool                 failed() const;
     /* Batches sent and bytes recorded since the device was made. */
@@ -69,6 +79,8 @@ private:
     size_t        used_;
     uint64_t      batches_;
     uint64_t      recorded_;
+    /* The device the host runs recorded commands on; 0 before any. */
+    uint32_t      speaking_;
     bool          failed_;
 };
 

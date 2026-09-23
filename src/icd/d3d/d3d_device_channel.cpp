@@ -1,0 +1,106 @@
+#include "icd/d3d/d3d_device_channel.hpp"
+
+#include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
+#include "icd/common/thread_lock.hpp"
+#include "icd/d3d/d3d_command_stream.hpp"
+#include "proto/generated/d3d/d3d_dispatch_client.h"
+
+namespace av::d3d {
+
+D3dDeviceChannel::D3dDeviceChannel(D3dCommandStream &stream, icd::ThreadLock &lock, uint32_t device)
+    : stream_(stream), lock_(lock), device_(device), phase_(Phase::idle)
+{
+    AV_SCOPE("D3dDeviceChannel::D3dDeviceChannel");
+}
+
+uint32_t D3dDeviceChannel::device() const
+{
+    AV_SCOPE("D3dDeviceChannel::device");
+    return device_;
+}
+
+Status D3dDeviceChannel::flush()
+{
+    AV_SCOPE("D3dDeviceChannel::flush");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    return stream_.flush();
+}
+
+bool D3dDeviceChannel::make_room_for(size_t bytes)
+{
+    AV_SCOPE("D3dDeviceChannel::make_room_for");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    return stream_.make_room_for(bytes);
+}
+
+bool D3dDeviceChannel::close()
+{
+    AV_SCOPE("D3dDeviceChannel::close");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    const bool sent = d3dproto::rvk_d3d_DestroyDevice11(stream_, device_);
+    stream_.forget(device_);
+    return sent;
+}
+
+/* A selection that could not be sent fails the stream, and the writer the
+ * stream lends then has no room, so the command fails where it is sent. */
+WireWriter D3dDeviceChannel::request_writer()
+{
+    AV_SCOPE("D3dDeviceChannel::request_writer");
+    lock_.acquire();
+    phase_ = Phase::writing;
+    static_cast<void>(stream_.speak_as(device_));
+    return stream_.request_writer();
+}
+
+TransportResult D3dDeviceChannel::send_async(uint32_t command_id, WireWriter &writer)
+{
+    AV_SCOPE("D3dDeviceChannel::send_async");
+    ScopeExit release([this] { let_go(); });
+    return stream_.send_async(command_id, writer);
+}
+
+TransportResult D3dDeviceChannel::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
+{
+    AV_SCOPE("D3dDeviceChannel::send_sync");
+    phase_ = Phase::answering;
+    return stream_.send_sync(command_id, writer, reply);
+}
+
+void D3dDeviceChannel::end_call()
+{
+    AV_SCOPE("D3dDeviceChannel::end_call");
+    stream_.end_call();
+    if (phase_ != Phase::idle) let_go();
+}
+
+void D3dDeviceChannel::let_go()
+{
+    AV_SCOPE("D3dDeviceChannel::let_go");
+    phase_ = Phase::idle;
+    lock_.release();
+}
+
+WireArena &D3dDeviceChannel::decode_arena()
+{
+    AV_SCOPE("D3dDeviceChannel::decode_arena");
+    return stream_.decode_arena();
+}
+
+ClientBlobArena &D3dDeviceChannel::blobs()
+{
+    AV_SCOPE("D3dDeviceChannel::blobs");
+    return stream_.blobs();
+}
+
+bool D3dDeviceChannel::invariants_hold() const
+{
+    AV_SCOPE("D3dDeviceChannel::invariants_hold");
+    return device_ != 0u;
+}
+
+}  // namespace av::d3d

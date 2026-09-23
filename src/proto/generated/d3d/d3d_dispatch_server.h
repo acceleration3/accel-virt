@@ -29,11 +29,13 @@ public:
     virtual const uint8_t* guest_bytes(uint64_t offset, uint64_t size) = 0;
     virtual uint8_t* guest_bytes_out(uint64_t offset, uint64_t size) = 0;
 
-    virtual bool on_CreateDevice11(uint32_t feature_level, uint32_t flags, uint32_t& hresult, uint32_t& level) = 0;
+    virtual bool on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t& hresult, uint32_t& level) = 0;
     virtual bool on_QueryCaps11(Caps11& caps, uint8_t* formats, uint64_t formats_capacity, uint64_t& formats_size) = 0;
     virtual bool on_Flush11() = 0;
     virtual bool on_Finish11(uint32_t& hresult) = 0;
     virtual bool on_DestroyObject(uint32_t object) = 0;
+    virtual bool on_SelectDevice11(uint32_t device) = 0;
+    virtual bool on_DestroyDevice11(uint32_t device) = 0;
     virtual bool on_CreateResource(uint32_t resource, const ResourceDesc& desc, uint64_t shared_key) = 0;
     virtual bool on_OpenResource(uint32_t resource, uint64_t shared_key, uint32_t& found, ResourceDesc& desc) = 0;
     virtual bool on_CreateShaderResourceView(uint32_t view, const ViewDesc& desc) = 0;

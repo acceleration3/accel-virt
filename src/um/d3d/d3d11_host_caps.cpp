@@ -32,12 +32,10 @@ bool D3d11HostCaps::learn(Kmt &kmt, uint32_t adapter)
     GuestConnection connection(kmt);
     if (connection.open(adapter) != Status::ok) return false;
     ScopeExit closed([&] { connection.close(); });
-    static uint8_t staging[staging_bytes];
+    uint8_t staging[staging_bytes];
     KmtTransport transport(connection, SubApi::d3d, ring_order, reply_bytes, staging, sizeof(staging));
     if (transport.initialize() != Status::ok) return false;
     ScopeExit torn([&] { transport.teardown(); });
-    uint32_t hresult = 1u, level = 0u;
-    if (!d3dproto::rvk_d3d_CreateDevice11(transport, 0u, 0u, &hresult, &level) || hresult != 0u) return false;
     uint64_t answered = 0u;
     if (!d3dproto::rvk_d3d_QueryCaps11(transport, &caps_, formats_, sizeof(formats_), &answered)) return false;
     learned_ = true;

@@ -1,8 +1,9 @@
 /* One Direct3D 11 device, run on the host: every slot of the runtime's device
  * table (D3DWDDM2_6DDI_DEVICEFUNCS) and the DXGI slots that present.
  *
- * The device speaks the Direct3D wire (tools/codegen/registry/d3d.toml) on an
- * rvk context of its own, batched by D3dCommandStream: the host makes the
+ * The device speaks the Direct3D wire (tools/codegen/registry/d3d.toml) on the
+ * process's session for its adapter (D3d11Session), as a host device of its
+ * own on the session's stream (D3dDeviceChannel): the host makes the
  * resources, compiles the shaders and draws, on its GPU's shared Direct3D 11
  * device (src/device/executor/d3d_backend.hpp). The guest keeps only what the
  * runtime must see - a kernel allocation for a resource that is presented,
@@ -19,10 +20,7 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "guest/transport/guest_connection.hpp"
-#include "guest/transport/kmt_blob_arena.hpp"
-#include "guest/transport/kmt_transport.hpp"
-#include "icd/d3d/d3d_command_stream.hpp"
+#include "icd/d3d/d3d_device_channel.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
 
@@ -30,7 +28,6 @@
 
 namespace av {
 class BlockSource;
-class Kmt;
 }  // namespace av
 
 namespace av::icd {
@@ -40,17 +37,19 @@ class LogSink;
 namespace av::d3d11 {
 
 class D3d11HostCaps;
+class D3d11Session;
 
 class D3d11Device {
 public:
-    D3d11Device(Kmt &kmt, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps);
+    D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
 
-    /* Opens the device's host session on `adapter` (a D3DKMT adapter handle)
-     * and keeps what the runtime handed over. The HRESULT the runtime is
-     * answered with: anything but S_OK leaves nothing open. */
+    /* Joins the session, opening it on `adapter` (a D3DKMT adapter handle)
+     * for a process's first device, makes the device on the host and keeps
+     * what the runtime handed over. The HRESULT the runtime is answered with:
+     * anything but S_OK leaves the device out of the session. */
     HRESULT initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE &create);
 
     /* DXGI's slots, over the table the root already published. */
@@ -66,11 +65,6 @@ public:
 #include "um/d3d/generated/d3d11_device_ddi.inc"
 
 private:
-    static constexpr uint8_t  ring_order = 22u;
-    static constexpr uint32_t reply_bytes = 64u * 1024u;
-    static constexpr size_t   staging_bytes = 512u * 1024u;
-    static constexpr size_t   batch_bytes = 1u << 20u;
-    static constexpr uint64_t arena_bytes = uint64_t{64} << 20u;
     static constexpr uint32_t stage_count = 6u;
 
     /* The record in a runtime handle's block. */
@@ -81,7 +75,7 @@ private:
     /* An error the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
-    d3d::D3dCommandStream &wire();
+    d3d::D3dDeviceChannel &wire();
 
     /* The subresource's size and its layout in the shadow. */
     void     extent(const ResourceRecord &resource, uint32_t subresource, uint32_t &width, uint32_t &height,
@@ -130,7 +124,7 @@ private:
                        const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT *stream_out);
     void destroy_object(uint32_t id);
 
-    Kmt                   &kmt_;
+    D3d11Session          &session_;
     BlockSource           &memory_;
     icd::LogSink          &log_;
     const D3d11HostCaps   &caps_;
@@ -139,14 +133,8 @@ private:
     const D3DDDI_DEVICECALLBACKS               *kernel_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
-    GuestConnection                      connection_;
-    ObjectStorage<KmtTransport>          transport_;
-    ObjectStorage<KmtBlobArena>          arena_;
-    ObjectStorage<d3d::D3dCommandStream> stream_;
-    uint8_t  *staging_;
-    uint8_t  *batch_;
+    ObjectStorage<d3d::D3dDeviceChannel> channel_;
     HANDLE    present_context_;
-    uint32_t  next_id_;
     uint32_t  feature_level_;
     uint64_t  shared_keys_;
 };

@@ -196,6 +196,13 @@ bool ask_bytes(::av::ClientTransport& t, ::av::WireWriter& b, void* data, uint64
     return true;
 }}
 
+/* A command given up before it was sent still ends its call: a transport
+   that lent the writer under a lock lets the lock go there. */
+bool abandon(::av::ClientTransport& t) {{
+    t.end_call();
+    return false;
+}}
+
 bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::ClientBlobLease& lease,
                 uint64_t* size) {{
     uint64_t answered = 0u;
@@ -215,9 +222,9 @@ bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::
 
 def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
     if p.type == "bytes":
-        lines.append(f"    if (!put_bytes(t, b, {p.name}, {p.name}_size)) return false;")
+        lines.append(f"    if (!put_bytes(t, b, {p.name}, {p.name}_size)) return abandon(t);")
     elif p.is_array:
-        lines.append(f"    if ({p.count} > {p.max}u || ({p.count} != 0u && {p.name} == nullptr)) return false;")
+        lines.append(f"    if ({p.count} > {p.max}u || ({p.count} != 0u && {p.name} == nullptr)) return abandon(t);")
         lines.append(f"    if ({p.count} != 0u) b.write({p.name}, sizeof(*{p.name}) * {p.count});")
     elif p.type in SCALARS:
         lines.append(f"    b.write_pod<{_ctype(reg, p.type)}>({p.name});")
@@ -240,7 +247,7 @@ def emit_client_cpp(reg: Registry) -> str:
         leases = [p for p in cmd.reply if p.type == "out_bytes"]
         for p in leases:
             lines.append(f"    ::av::ClientBlobLease {p.name}_lease;")
-            lines.append(f"    if (!ask_bytes(t, b, {p.name}, {p.name}_capacity, {p.name}_lease)) return false;")
+            lines.append(f"    if (!ask_bytes(t, b, {p.name}, {p.name}_capacity, {p.name}_lease)) return abandon(t);")
         if not cmd.sync:
             lines.append(f"    return t.send_async({_const(cmd)}, b) == ::av::TransportResult::ok;")
             lines += ["}", ""]

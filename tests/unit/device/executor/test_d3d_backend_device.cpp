@@ -75,22 +75,11 @@ std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y
     return value;
 }
 
-}  // namespace
-
-TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_was_drawn)
+/* The render target (1) and its view (2), a triangle's vertices (3), a tint
+ * (4), its shaders (5, 6) and input layout (7): one triangle over the left
+ * half and down the middle, red halved by the tint. */
+void make_triangle(av::D3dLoopback &wire)
 {
-    av::LoaderHostApis apis;
-    av::D3d11HostDevice *const device = host_device(apis);
-    if (device == nullptr) return;
-    av::D3dBackend backend;
-    CHECK(backend.initialize(device));
-    av::D3dLoopback wire(backend);
-
-    std::uint32_t hresult = 1u, level = 0u;
-    CHECK(rvk_d3d_CreateDevice11(wire, 0u, 0u, &hresult, &level));
-    CHECK_EQ(hresult, 0u);
-    CHECK(level >= 0xb000u);
-
     ResourceDesc target = {};
     target.dimension = 3u;
     target.width = size;
@@ -107,8 +96,6 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     rtv.dimension = rtv_texture2d;
     CHECK(rvk_d3d_CreateRenderTargetView(wire, 2u, rtv));
 
-    /* One triangle over the left half and down the middle: its colour is
-     * red, the tint halves it, and the clear is blue. */
     const Vertex vertices[3] = {{-1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {-1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
                                 {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f}};
@@ -132,8 +119,11 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
                                triangle_ps::tokens, sizeof(triangle_ps::tokens)));
     const InputElement elements[2] = {{0u, 0u, format_r32g32, 0u, 0u, 0u}, {0u, 8u, format_r32g32b32a32, 0u, 0u, 1u}};
     CHECK(rvk_d3d_CreateInputLayout(wire, 7u, 2u, elements));
-    CHECK_EQ(wire.refused(), 0u);
+}
 
+/* The triangle's pipeline bound on the selected device, the target cleared blue. */
+void bind_triangle(av::D3dLoopback &wire)
+{
     const std::uint32_t targets[1] = {2u};
     CHECK(rvk_d3d_SetRenderTargets(wire, 1u, targets, 0u, 1u, 0u, nullptr));
     CHECK(rvk_d3d_ClearRenderTargetView(wire, 2u, Float4{{0.0f, 0.0f, 1.0f, 1.0f}}));
@@ -147,6 +137,27 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK(rvk_d3d_SetShader(wire, 4u, 6u));
     const ConstantBufferBinding constants = {4u, 0u, 0u};
     CHECK(rvk_d3d_SetConstantBuffers(wire, 4u, 0u, 1u, &constants));
+}
+
+}  // namespace
+
+TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_was_drawn)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device));
+    av::D3dLoopback wire(backend);
+
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    CHECK_EQ(hresult, 0u);
+    CHECK(level >= 0xb000u);
+
+    make_triangle(wire);
+    CHECK_EQ(wire.refused(), 0u);
+    bind_triangle(wire);
     CHECK(rvk_d3d_Draw(wire, 3u, 0u));
 
     static std::uint8_t pixels[size * size * 4u];
@@ -170,4 +181,54 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK_EQ(wire.refused(), 2u);
     CHECK(backend.invariants_hold());
     backend.shut_down();
+}
+
+/* A process's devices share one session: objects are the session's, pipeline
+ * state is each device's own. A second device starts with nothing bound, so
+ * its draw leaves the first device's target as it was, and the first draws the
+ * triangle when it is selected again. A device destroyed is no longer one to
+ * select, and destroying the selected one leaves nothing to draw with. */
+TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_state)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device));
+    av::D3dLoopback wire(backend);
+
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(rvk_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    CHECK_EQ(hresult, 0u);
+    make_triangle(wire);
+    bind_triangle(wire);
+    CHECK(rvk_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
+    CHECK_EQ(hresult, 0u);
+    CHECK(!rvk_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
+    CHECK(rvk_d3d_Draw(wire, 3u, 0u));
+
+    static std::uint8_t pixels[size * size * 4u];
+    std::uint32_t row_pitch = 0u, depth_pitch = 0u;
+    std::uint64_t read = 0u;
+    CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    CHECK_EQ(hresult, 0u);
+    CHECK_EQ(pixel(pixels, 4u, size / 2u), 0xff0000ffu);
+
+    CHECK(rvk_d3d_SelectDevice11(wire, 1u));
+    CHECK(rvk_d3d_Draw(wire, 3u, 0u));
+    CHECK(rvk_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
+    const std::uint32_t tinted = pixel(pixels, 4u, size / 2u);
+    CHECK_EQ(tinted & 0xff00ffffu, 0xff000000u);
+    CHECK((tinted >> 16u & 0xffu) >= 0x7fu && (tinted >> 16u & 0xffu) <= 0x80u);
+    CHECK_EQ(wire.refused(), 1u);
+
+    CHECK(rvk_d3d_DestroyDevice11(wire, 2u));
+    CHECK(!rvk_d3d_SelectDevice11(wire, 2u));
+    CHECK(!rvk_d3d_DestroyDevice11(wire, 2u));
+    CHECK(rvk_d3d_DestroyDevice11(wire, 1u));
+    CHECK(!rvk_d3d_Draw(wire, 3u, 0u));
+    CHECK_EQ(wire.refused(), 4u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+    CHECK(backend.invariants_hold());
 }

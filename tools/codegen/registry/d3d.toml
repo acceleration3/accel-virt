@@ -145,10 +145,12 @@ fields = ["u32 support", "u32 support2", "u32 sample_counts", "u32 quality_level
 [[command]]
 name = "CreateDevice11"
 id = 0x0001
-doc = """The session's device: the host's shared Direct3D 11 device for this GPU, with a context state of the
-session's own. feature_level is the highest D3D_FEATURE_LEVEL the guest's runtime may use; the answer is
-what the device runs at, and an hresult that is not S_OK leaves the session without a device."""
-params = ["u32 feature_level", "u32 flags"]
+doc = """One of the session's devices: the host's shared Direct3D 11 device for this GPU, with a context
+state of its own, named by a non-zero id the guest chooses and in force until another is selected. A process
+runs all its devices on one session, so the doorbells and rings a session costs are spent once per process.
+feature_level is the highest D3D_FEATURE_LEVEL the guest's runtime may use; the answer is what the device
+runs at, and an hresult that is not S_OK makes no device."""
+params = ["u32 device", "u32 feature_level", "u32 flags"]
 reply = ["u32 hresult", "u32 level"]
 
 [[command]]
@@ -177,6 +179,20 @@ id = 0x0005
 doc = """Any object this session made, by id. Destroying an id that is bound leaves it bound on the host until
 it is unbound, as Direct3D does."""
 params = ["u32 object"]
+
+[[command]]
+name = "SelectDevice11"
+id = 0x0006
+doc = """The device every later command runs on, until the next selection. Objects belong to the session, not
+to a device: only pipeline state - what is bound, set and drawn with - is the device's own."""
+params = ["u32 device"]
+
+[[command]]
+name = "DestroyDevice11"
+id = 0x0007
+doc = """A device made by CreateDevice11, and its context state. Destroying the selected device leaves none
+selected; a command that needs one before the next selection loses the session."""
+params = ["u32 device"]
 
 # ---------------------------------------------------------------- creation
 

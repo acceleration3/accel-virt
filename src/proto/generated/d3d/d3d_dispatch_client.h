@@ -13,10 +13,12 @@ namespace av::d3dproto {
 // One wrapper per command: false when it could not be encoded or sent, or -
 // for a command with a reply - when the answer did not decode.
 
-// The session's device: the host's shared Direct3D 11 device for this GPU, with a context state of the
-// session's own. feature_level is the highest D3D_FEATURE_LEVEL the guest's runtime may use; the answer is
-// what the device runs at, and an hresult that is not S_OK leaves the session without a device.
-[[nodiscard]] bool rvk_d3d_CreateDevice11(::av::ClientTransport& t, uint32_t feature_level, uint32_t flags, uint32_t* hresult, uint32_t* level);
+// One of the session's devices: the host's shared Direct3D 11 device for this GPU, with a context
+// state of its own, named by a non-zero id the guest chooses and in force until another is selected. A process
+// runs all its devices on one session, so the doorbells and rings a session costs are spent once per process.
+// feature_level is the highest D3D_FEATURE_LEVEL the guest's runtime may use; the answer is what the device
+// runs at, and an hresult that is not S_OK makes no device.
+[[nodiscard]] bool rvk_d3d_CreateDevice11(::av::ClientTransport& t, uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t* hresult, uint32_t* level);
 // What the device can do: Caps11, and a FormatCaps for every DXGI_FORMAT from 0 up, as many as fit.
 [[nodiscard]] bool rvk_d3d_QueryCaps11(::av::ClientTransport& t, Caps11* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size);
 [[nodiscard]] bool rvk_d3d_Flush11(::av::ClientTransport& t);
@@ -26,6 +28,12 @@ namespace av::d3dproto {
 // Any object this session made, by id. Destroying an id that is bound leaves it bound on the host until
 // it is unbound, as Direct3D does.
 [[nodiscard]] bool rvk_d3d_DestroyObject(::av::ClientTransport& t, uint32_t object);
+// The device every later command runs on, until the next selection. Objects belong to the session, not
+// to a device: only pipeline state - what is bound, set and drawn with - is the device's own.
+[[nodiscard]] bool rvk_d3d_SelectDevice11(::av::ClientTransport& t, uint32_t device);
+// A device made by CreateDevice11, and its context state. Destroying the selected device leaves none
+// selected; a command that needs one before the next selection loses the session.
+[[nodiscard]] bool rvk_d3d_DestroyDevice11(::av::ClientTransport& t, uint32_t device);
 // A resource. shared_key is non-zero for one another session may open (its KMD shared-object id): the
 // host keeps it under that key until the last session holding it destroys it.
 [[nodiscard]] bool rvk_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key);

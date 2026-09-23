@@ -1,14 +1,17 @@
 /* The Direct3D 11 half of rvkumd.dll that needs the host: the devices the
- * runtime makes, each a D3d11Device in this pool, and each adapter's host
- * capabilities, asked once. One per process, beside the root in the library's
- * storage, and injected into it. */
+ * runtime makes, each a D3d11Device in this pool, and for each adapter its
+ * host capabilities, asked once, and the one session its devices share. One
+ * per process, beside the root in the library's storage, and injected into
+ * it; the root calls it under its own lock. */
 #ifndef AV_UM_D3D11_DRIVER_HPP
 #define AV_UM_D3D11_DRIVER_HPP
 
 #include "core/support/object_pool.hpp"
+#include "core/support/object_storage.hpp"
 #include "icd/d3d/umd_host_driver.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
+#include "um/d3d/d3d11_session.hpp"
 
 #include <stdint.h>
 
@@ -34,11 +37,11 @@ public:
     void         tear_down(void *block) override;
 
 private:
-    /* The host's answers for this kernel adapter, asked on first use; null
-     * when the adapter runs no Direct3D. */
-    const D3d11HostCaps *caps_of(uint32_t kmt_adapter);
-    /* One line of what the runtime asked and what it was answered. */
-    void                 note(const char *what, uint64_t first, uint64_t second);
+    /* The slot of this kernel adapter, its host capabilities asked on first
+     * use; max_adapters when the adapter runs no Direct3D or none is free. */
+    uint32_t             slot_of(uint32_t kmt_adapter);
+    /* The slot's session, made on first use. */
+    D3d11Session        &session(uint32_t slot);
 
     static constexpr uint32_t max_adapters = 8u;
 
@@ -47,6 +50,7 @@ private:
     icd::LogSink            &log_;
     ObjectPool<D3d11Device>  devices_;
     D3d11HostCaps            caps_[max_adapters];
+    ObjectStorage<D3d11Session> sessions_[max_adapters];
     uint32_t                 adapters_[max_adapters];
 };
 

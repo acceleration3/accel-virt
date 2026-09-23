@@ -3,6 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/d3d/d3d_command_stream.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
 

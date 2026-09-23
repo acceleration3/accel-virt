@@ -13,6 +13,7 @@
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
+#include "device/executor/d3d_context_states.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/session_backend.hpp"
@@ -55,8 +56,10 @@ public:
     const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
     uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
 
-    bool on_CreateDevice11(uint32_t feature_level, uint32_t flags, uint32_t &hresult,
+    bool on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t &hresult,
                            uint32_t &level) override;
+    bool on_SelectDevice11(uint32_t device) override;
+    bool on_DestroyDevice11(uint32_t device) override;
     bool on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64_t formats_capacity,
                         uint64_t &formats_size) override;
     bool on_Flush11() override;
@@ -163,14 +166,14 @@ private:
                                          uint32_t height, uint32_t depth, uint32_t format);
 
     D3d11HostDevice        *device11_;
-    ID3DDeviceContextState *state_;
+    D3dContextStates        states_;
+    /* The selected device's state, which commands run on; null when none is. */
+    ID3DDeviceContextState *selected_;
     /* The decode arena of the command running, which scratch - a shader's
      * container - is taken from; null between commands. */
     WireArena              *arena_;
-    uint32_t                feature_level_;
     D3dObjectTable          objects_;
     GuestRegion             region_;
-    uint32_t                topology_;
     bool                    lost_;
 };
 

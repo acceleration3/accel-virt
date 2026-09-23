@@ -9,6 +9,7 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_host_caps.hpp"
+#include "um/d3d/d3d11_session.hpp"
 
 namespace av::d3d11 {
 
@@ -25,10 +26,9 @@ constexpr size_t inline_limit = 32u * 1024u;
 
 }  // namespace
 
-D3d11Device::D3d11Device(Kmt &kmt, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
-    : kmt_(kmt), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr), core_(nullptr),
-      dxgi_(nullptr), connection_(kmt), transport_(), arena_(), stream_(), staging_(nullptr), batch_(nullptr),
-      present_context_(nullptr), next_id_(0u), feature_level_(0u), shared_keys_(0u)
+D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
+    : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
+      core_(nullptr), dxgi_(nullptr), channel_(), present_context_(nullptr), feature_level_(0u), shared_keys_(0u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
@@ -36,26 +36,17 @@ D3d11Device::D3d11Device(Kmt &kmt, BlockSource &memory, icd::LogSink &log, const
 D3d11Device::~D3d11Device()
 {
     AV_SCOPE("D3d11Device::~D3d11Device");
-    if (stream_.constructed()) {
-        static_cast<void>(stream_.object().flush());
-        stream_.destroy();
-    }
-    if (arena_.constructed()) {
-        static_cast<void>(arena_.object().close());
-        arena_.destroy();
-    }
-    if (transport_.constructed()) {
-        transport_.object().teardown();
-        transport_.destroy();
+    if (channel_.constructed()) {
+        static_cast<void>(channel_.object().close());
+        static_cast<void>(channel_.object().flush());
+        channel_.destroy();
+        session_.leave();
     }
     if (present_context_ != nullptr && kernel_ != nullptr) {
         D3DDDICB_DESTROYCONTEXT destroy = {};
         destroy.hContext = present_context_;
         kernel_->pfnDestroyContextCb(runtime_.handle, &destroy);
     }
-    connection_.close();
-    if (staging_ != nullptr) memory_.release(staging_);
-    if (batch_ != nullptr) memory_.release(batch_);
 }
 
 HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE &create)
@@ -68,25 +59,15 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     dxgi_ = create.DXGIBaseDDI.pDXGIBaseCallbacks;
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
     feature_level_ = level < sizeof(feature_levels) / sizeof(feature_levels[0]) ? feature_levels[level] : 0u;
-    staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes, Pool::paged));
-    batch_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
-    if (staging_ == nullptr || batch_ == nullptr) return E_OUTOFMEMORY;
-    if (connection_.open(adapter) != Status::ok) {
-        log_.write("rvkumd: no device on the adapter for a Direct3D 11 session");
-        return E_FAIL;
-    }
-    static_cast<void>(transport_.construct(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes));
-    if (transport_.object().initialize() != Status::ok) {
-        log_.write("rvkumd: the kernel refused the Direct3D 11 context");
-        return E_FAIL;
-    }
-    static_cast<void>(arena_.construct(connection_, transport_.object()));
-    if (arena_.object().open(arena_bytes) != Status::ok)
-        log_.write("rvkumd: no blob arena for the device; bulk data crosses inline");
-    static_cast<void>(stream_.construct(transport_.object(), batch_, batch_bytes));
+    const HRESULT joined = session_.join(adapter);
+    if (FAILED(joined)) return joined;
+    static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
-    if (!d3dproto::rvk_d3d_CreateDevice11(wire(), feature_level_, 0u, &hresult, &made) || hresult != 0u) {
+    if (!d3dproto::rvk_d3d_CreateDevice11(wire(), channel_.object().device(), feature_level_, 0u, &hresult, &made) ||
+        hresult != 0u) {
         log_.write("rvkumd: the host made no Direct3D 11 device");
+        channel_.destroy();
+        session_.leave();
         return E_FAIL;
     }
     return S_OK;
@@ -116,8 +97,7 @@ uint32_t D3d11Device::id_of(const void *object_block) const
 uint32_t D3d11Device::next_id()
 {
     AV_SCOPE("D3d11Device::next_id");
-    next_id_ = next_id_ == 0xffffffffu ? 1u : next_id_ + 1u;
-    return next_id_;
+    return session_.next_id();
 }
 
 void D3d11Device::set_error(HRESULT result)
@@ -131,10 +111,10 @@ void D3d11Device::set_error(HRESULT result)
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
 }
 
-d3d::D3dCommandStream &D3d11Device::wire()
+d3d::D3dDeviceChannel &D3d11Device::wire()
 {
     AV_SCOPE("D3d11Device::wire");
-    return stream_.object();
+    return channel_.object();
 }
 
 void D3d11Device::extent(const ResourceRecord &resource, uint32_t subresource, uint32_t &width, uint32_t &height,
@@ -265,13 +245,6 @@ VOID D3d11Device::check_format_support(DXGI_FORMAT format, UINT *support)
 {
     AV_SCOPE("D3d11Device::check_format_support");
     if (support != nullptr) *support = caps_.format_support(format);
-    char line[96] = {};
-    TextBuffer text(line, sizeof(line));
-    text.append("rvkumd: format ");
-    text.append_decimal(static_cast<uint32_t>(format));
-    text.append(" support 0x");
-    text.append_hex(support == nullptr ? 0u : *support, 8u);
-    log_.write(text.text());
 }
 
 VOID D3d11Device::check_multisample_quality_levels(DXGI_FORMAT format, UINT samples, UINT, UINT *levels)

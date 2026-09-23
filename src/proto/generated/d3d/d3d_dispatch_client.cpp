@@ -52,6 +52,13 @@ bool ask_bytes(::av::ClientTransport& t, ::av::WireWriter& b, void* data, uint64
     return true;
 }
 
+/* A command given up before it was sent still ends its call: a transport
+   that lent the writer under a lock lets the lock go there. */
+bool abandon(::av::ClientTransport& t) {
+    t.end_call();
+    return false;
+}
+
 bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::ClientBlobLease& lease,
                 uint64_t* size) {
     uint64_t answered = 0u;
@@ -67,9 +74,10 @@ bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::
 
 }  // namespace
 
-bool rvk_d3d_CreateDevice11(::av::ClientTransport& t, uint32_t feature_level, uint32_t flags, uint32_t* hresult, uint32_t* level) {
+bool rvk_d3d_CreateDevice11(::av::ClientTransport& t, uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t* hresult, uint32_t* level) {
     AV_SCOPE("rvk_d3d_CreateDevice11");
     ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(device);
     b.write_pod<uint32_t>(feature_level);
     b.write_pod<uint32_t>(flags);
     const ::av::SyncCallScope call{t};
@@ -88,7 +96,7 @@ bool rvk_d3d_QueryCaps11(::av::ClientTransport& t, Caps11* caps, void* formats, 
     AV_SCOPE("rvk_d3d_QueryCaps11");
     ::av::WireWriter b = t.request_writer();
     ::av::ClientBlobLease formats_lease;
-    if (!ask_bytes(t, b, formats, formats_capacity, formats_lease)) return false;
+    if (!ask_bytes(t, b, formats, formats_capacity, formats_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_QueryCaps11, b, r) != ::av::TransportResult::ok) return false;
@@ -122,6 +130,20 @@ bool rvk_d3d_DestroyObject(::av::ClientTransport& t, uint32_t object) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(object);
     return t.send_async(kCmd_DestroyObject, b) == ::av::TransportResult::ok;
+}
+
+bool rvk_d3d_SelectDevice11(::av::ClientTransport& t, uint32_t device) {
+    AV_SCOPE("rvk_d3d_SelectDevice11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(device);
+    return t.send_async(kCmd_SelectDevice11, b) == ::av::TransportResult::ok;
+}
+
+bool rvk_d3d_DestroyDevice11(::av::ClientTransport& t, uint32_t device) {
+    AV_SCOPE("rvk_d3d_DestroyDevice11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(device);
+    return t.send_async(kCmd_DestroyDevice11, b) == ::av::TransportResult::ok;
 }
 
 bool rvk_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key) {
@@ -188,22 +210,22 @@ bool rvk_d3d_CreateShader(::av::ClientTransport& t, uint32_t shader, uint32_t st
     b.write_pod<uint32_t>(shader);
     b.write_pod<uint32_t>(stage);
     b.write_pod<uint32_t>(input_count);
-    if (input_count > 128u || (input_count != 0u && inputs == nullptr)) return false;
+    if (input_count > 128u || (input_count != 0u && inputs == nullptr)) return abandon(t);
     if (input_count != 0u) b.write(inputs, sizeof(*inputs) * input_count);
     b.write_pod<uint32_t>(output_count);
-    if (output_count > 128u || (output_count != 0u && outputs == nullptr)) return false;
+    if (output_count > 128u || (output_count != 0u && outputs == nullptr)) return abandon(t);
     if (output_count != 0u) b.write(outputs, sizeof(*outputs) * output_count);
     b.write_pod<uint32_t>(patch_count);
-    if (patch_count > 128u || (patch_count != 0u && patch_constants == nullptr)) return false;
+    if (patch_count > 128u || (patch_count != 0u && patch_constants == nullptr)) return abandon(t);
     if (patch_count != 0u) b.write(patch_constants, sizeof(*patch_constants) * patch_count);
     b.write_pod<uint32_t>(stream_out_count);
-    if (stream_out_count > 128u || (stream_out_count != 0u && stream_out == nullptr)) return false;
+    if (stream_out_count > 128u || (stream_out_count != 0u && stream_out == nullptr)) return abandon(t);
     if (stream_out_count != 0u) b.write(stream_out, sizeof(*stream_out) * stream_out_count);
     b.write_pod<uint32_t>(stride_count);
-    if (stride_count > 4u || (stride_count != 0u && strides == nullptr)) return false;
+    if (stride_count > 4u || (stride_count != 0u && strides == nullptr)) return abandon(t);
     if (stride_count != 0u) b.write(strides, sizeof(*strides) * stride_count);
     b.write_pod<uint32_t>(rasterized_stream);
-    if (!put_bytes(t, b, code, code_size)) return false;
+    if (!put_bytes(t, b, code, code_size)) return abandon(t);
     return t.send_async(kCmd_CreateShader, b) == ::av::TransportResult::ok;
 }
 
@@ -212,7 +234,7 @@ bool rvk_d3d_CreateInputLayout(::av::ClientTransport& t, uint32_t layout, uint32
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(layout);
     b.write_pod<uint32_t>(element_count);
-    if (element_count > 32u || (element_count != 0u && elements == nullptr)) return false;
+    if (element_count > 32u || (element_count != 0u && elements == nullptr)) return abandon(t);
     if (element_count != 0u) b.write(elements, sizeof(*elements) * element_count);
     return t.send_async(kCmd_CreateInputLayout, b) == ::av::TransportResult::ok;
 }
@@ -272,7 +294,7 @@ bool rvk_d3d_SetConstantBuffers(::av::ClientTransport& t, uint32_t stage, uint32
     b.write_pod<uint32_t>(stage);
     b.write_pod<uint32_t>(start);
     b.write_pod<uint32_t>(count);
-    if (count > 14u || (count != 0u && buffers == nullptr)) return false;
+    if (count > 14u || (count != 0u && buffers == nullptr)) return abandon(t);
     if (count != 0u) b.write(buffers, sizeof(*buffers) * count);
     return t.send_async(kCmd_SetConstantBuffers, b) == ::av::TransportResult::ok;
 }
@@ -283,7 +305,7 @@ bool rvk_d3d_SetShaderResources(::av::ClientTransport& t, uint32_t stage, uint32
     b.write_pod<uint32_t>(stage);
     b.write_pod<uint32_t>(start);
     b.write_pod<uint32_t>(count);
-    if (count > 128u || (count != 0u && views == nullptr)) return false;
+    if (count > 128u || (count != 0u && views == nullptr)) return abandon(t);
     if (count != 0u) b.write(views, sizeof(*views) * count);
     return t.send_async(kCmd_SetShaderResources, b) == ::av::TransportResult::ok;
 }
@@ -294,7 +316,7 @@ bool rvk_d3d_SetSamplers(::av::ClientTransport& t, uint32_t stage, uint32_t star
     b.write_pod<uint32_t>(stage);
     b.write_pod<uint32_t>(start);
     b.write_pod<uint32_t>(count);
-    if (count > 16u || (count != 0u && samplers == nullptr)) return false;
+    if (count > 16u || (count != 0u && samplers == nullptr)) return abandon(t);
     if (count != 0u) b.write(samplers, sizeof(*samplers) * count);
     return t.send_async(kCmd_SetSamplers, b) == ::av::TransportResult::ok;
 }
@@ -304,7 +326,7 @@ bool rvk_d3d_SetComputeUnorderedAccessViews(::av::ClientTransport& t, uint32_t s
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(start);
     b.write_pod<uint32_t>(count);
-    if (count > 64u || (count != 0u && views == nullptr)) return false;
+    if (count > 64u || (count != 0u && views == nullptr)) return abandon(t);
     if (count != 0u) b.write(views, sizeof(*views) * count);
     return t.send_async(kCmd_SetComputeUnorderedAccessViews, b) == ::av::TransportResult::ok;
 }
@@ -313,12 +335,12 @@ bool rvk_d3d_SetRenderTargets(::av::ClientTransport& t, uint32_t rtv_count, cons
     AV_SCOPE("rvk_d3d_SetRenderTargets");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(rtv_count);
-    if (rtv_count > 8u || (rtv_count != 0u && rtvs == nullptr)) return false;
+    if (rtv_count > 8u || (rtv_count != 0u && rtvs == nullptr)) return abandon(t);
     if (rtv_count != 0u) b.write(rtvs, sizeof(*rtvs) * rtv_count);
     b.write_pod<uint32_t>(dsv);
     b.write_pod<uint32_t>(uav_start);
     b.write_pod<uint32_t>(uav_count);
-    if (uav_count > 64u || (uav_count != 0u && uavs == nullptr)) return false;
+    if (uav_count > 64u || (uav_count != 0u && uavs == nullptr)) return abandon(t);
     if (uav_count != 0u) b.write(uavs, sizeof(*uavs) * uav_count);
     return t.send_async(kCmd_SetRenderTargets, b) == ::av::TransportResult::ok;
 }
@@ -335,7 +357,7 @@ bool rvk_d3d_SetVertexBuffers(::av::ClientTransport& t, uint32_t start, uint32_t
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(start);
     b.write_pod<uint32_t>(count);
-    if (count > 32u || (count != 0u && buffers == nullptr)) return false;
+    if (count > 32u || (count != 0u && buffers == nullptr)) return abandon(t);
     if (count != 0u) b.write(buffers, sizeof(*buffers) * count);
     return t.send_async(kCmd_SetVertexBuffers, b) == ::av::TransportResult::ok;
 }
@@ -360,7 +382,7 @@ bool rvk_d3d_SetViewports(::av::ClientTransport& t, uint32_t count, const Viewpo
     AV_SCOPE("rvk_d3d_SetViewports");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(count);
-    if (count > 16u || (count != 0u && viewports == nullptr)) return false;
+    if (count > 16u || (count != 0u && viewports == nullptr)) return abandon(t);
     if (count != 0u) b.write(viewports, sizeof(*viewports) * count);
     return t.send_async(kCmd_SetViewports, b) == ::av::TransportResult::ok;
 }
@@ -369,7 +391,7 @@ bool rvk_d3d_SetScissorRects(::av::ClientTransport& t, uint32_t count, const Rec
     AV_SCOPE("rvk_d3d_SetScissorRects");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(count);
-    if (count > 16u || (count != 0u && rects == nullptr)) return false;
+    if (count > 16u || (count != 0u && rects == nullptr)) return abandon(t);
     if (count != 0u) b.write(rects, sizeof(*rects) * count);
     return t.send_async(kCmd_SetScissorRects, b) == ::av::TransportResult::ok;
 }
@@ -402,7 +424,7 @@ bool rvk_d3d_SetStreamOutTargets(::av::ClientTransport& t, uint32_t count, const
     AV_SCOPE("rvk_d3d_SetStreamOutTargets");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(count);
-    if (count > 4u || (count != 0u && targets == nullptr)) return false;
+    if (count > 4u || (count != 0u && targets == nullptr)) return abandon(t);
     if (count != 0u) b.write(targets, sizeof(*targets) * count);
     return t.send_async(kCmd_SetStreamOutTargets, b) == ::av::TransportResult::ok;
 }
@@ -540,7 +562,7 @@ bool rvk_d3d_ClearView(::av::ClientTransport& t, uint32_t view, const Float4& co
     b.write_pod<uint32_t>(view);
     b.write_pod(color);
     b.write_pod<uint32_t>(rect_count);
-    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return false;
+    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return abandon(t);
     if (rect_count != 0u) b.write(rects, sizeof(*rects) * rect_count);
     return t.send_async(kCmd_ClearView, b) == ::av::TransportResult::ok;
 }
@@ -550,7 +572,7 @@ bool rvk_d3d_Discard(::av::ClientTransport& t, uint32_t object, uint32_t rect_co
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(object);
     b.write_pod<uint32_t>(rect_count);
-    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return false;
+    if (rect_count > 16u || (rect_count != 0u && rects == nullptr)) return abandon(t);
     if (rect_count != 0u) b.write(rects, sizeof(*rects) * rect_count);
     return t.send_async(kCmd_Discard, b) == ::av::TransportResult::ok;
 }
@@ -616,7 +638,7 @@ bool rvk_d3d_UpdateSubresource(::av::ClientTransport& t, uint32_t resource, uint
     b.write_pod<uint32_t>(row_pitch);
     b.write_pod<uint32_t>(depth_pitch);
     b.write_pod<uint32_t>(copy_flags);
-    if (!put_bytes(t, b, data, data_size)) return false;
+    if (!put_bytes(t, b, data, data_size)) return abandon(t);
     return t.send_async(kCmd_UpdateSubresource, b) == ::av::TransportResult::ok;
 }
 
@@ -626,7 +648,7 @@ bool rvk_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(subresource);
     ::av::ClientBlobLease data_lease;
-    if (!ask_bytes(t, b, data, data_capacity, data_lease)) return false;
+    if (!ask_bytes(t, b, data, data_capacity, data_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_ReadSubresource, b, r) != ::av::TransportResult::ok) return false;
@@ -663,7 +685,7 @@ bool rvk_d3d_GetQueryData(::av::ClientTransport& t, uint32_t query, uint32_t fla
     b.write_pod<uint32_t>(query);
     b.write_pod<uint32_t>(flags);
     ::av::ClientBlobLease data_lease;
-    if (!ask_bytes(t, b, data, data_capacity, data_lease)) return false;
+    if (!ask_bytes(t, b, data, data_capacity, data_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_GetQueryData, b, r) != ::av::TransportResult::ok) return false;

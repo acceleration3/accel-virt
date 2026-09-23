@@ -14,6 +14,8 @@ const char* command_name(uint32_t id) {
         case kCmd_Flush11: return "Flush11";
         case kCmd_Finish11: return "Finish11";
         case kCmd_DestroyObject: return "DestroyObject";
+        case kCmd_SelectDevice11: return "SelectDevice11";
+        case kCmd_DestroyDevice11: return "DestroyDevice11";
         case kCmd_CreateResource: return "CreateResource";
         case kCmd_OpenResource: return "OpenResource";
         case kCmd_CreateShaderResourceView: return "CreateShaderResourceView";

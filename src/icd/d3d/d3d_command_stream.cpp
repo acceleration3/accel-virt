@@ -17,7 +17,7 @@ constexpr size_t header_bytes = CommandHeader::encoded_size;
 
 D3dCommandStream::D3dCommandStream(KmtTransport &transport, uint8_t *block, size_t capacity)
     : transport_(transport), block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u), batches_(0u),
-      recorded_(0u), failed_(false)
+      recorded_(0u), speaking_(0u), failed_(false)
 {
     AV_SCOPE("D3dCommandStream::D3dCommandStream");
 }
@@ -47,6 +47,21 @@ bool D3dCommandStream::make_room_for(size_t bytes)
     uint32_t removed = 0u;
     if (!d3dproto::rvk_d3d_Finish11(*this, &removed)) return false;
     return arena.room() >= bytes;
+}
+
+bool D3dCommandStream::speak_as(uint32_t device)
+{
+    AV_SCOPE("D3dCommandStream::speak_as");
+    if (device == speaking_) return !failed_;
+    if (!d3dproto::rvk_d3d_SelectDevice11(*this, device)) return false;
+    speaking_ = device;
+    return true;
+}
+
+void D3dCommandStream::forget(uint32_t device)
+{
+    AV_SCOPE("D3dCommandStream::forget");
+    if (device == speaking_) speaking_ = 0u;
 }
 
 bool D3dCommandStream::failed() const
@@ -118,6 +133,7 @@ void D3dCommandStream::report(StateWriter &writer) const
     writer.number("batches", batches_);
     writer.number("recorded", recorded_);
     writer.number("pending", used_);
+    writer.number("speaking", speaking_);
     writer.flag("failed", failed_);
 }
 
