@@ -951,6 +951,8 @@ class GuestRun:
         # without them runs every other sub-API (src/device/shim/d3d_runtime.hpp).
         if os.path.isdir(self.args.d3d_runtime) and "RVK_D3D_PATH" not in environment:
             environment["RVK_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
+        # DXVK writes its logs to the working directory unless told otherwise.
+        environment.setdefault("DXVK_LOG_PATH", str(self.work))
         # What the test executor is told to do to the host's work: a stall
         # longer than TdrDelay is what dxgkrnl times out on (feature 040, US3).
         if self.args.stall_ms:
