@@ -376,7 +376,7 @@ switch ($Stage) {
     }
     'check' {
         verifier /querysettings
-        $devices = RvkDevices
+        $devices = @(RvkDevices)
         if ($devices.Count -eq 0) { Write-Output 'device: absent'; exit 1 }
         # The desktop's compositor, and every driver bound to a display: feature
         # 038 asks for rvkgpu alone with dwm.exe composited on it.
