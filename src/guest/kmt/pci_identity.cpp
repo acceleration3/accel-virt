@@ -22,6 +22,12 @@ bool PciIdentity::same_as(const PciIdentity &other) const
            subsystem_ == other.subsystem_;
 }
 
+bool PciIdentity::same_subsystem_as(const PciIdentity &other) const
+{
+    AV_SCOPE("PciIdentity::same_subsystem_as");
+    return subsystem_vendor_ == other.subsystem_vendor_ && subsystem_ == other.subsystem_;
+}
+
 uint32_t PciIdentity::vendor() const
 {
     AV_SCOPE("PciIdentity::vendor");

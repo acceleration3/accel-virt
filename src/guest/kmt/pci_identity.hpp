@@ -13,6 +13,11 @@ public:
     PciIdentity(uint32_t vendor, uint32_t device, uint32_t subsystem_vendor, uint32_t subsystem);
 
     bool same_as(const PciIdentity &other) const;
+    /* Whether `other` carries the same subsystem pair, whatever its vendor and
+     * device. virtio-gpu-rvk-pci presents its host GPU's vendor and device,
+     * which differ from host to host, so its subsystem 1af4:5256 is what
+     * names it. */
+    bool same_subsystem_as(const PciIdentity &other) const;
     /* What DXGI and DXCore report as the adapter's VendorId and DeviceId
      * (feature 055): the same two values the identity was matched on. */
     uint32_t vendor() const;

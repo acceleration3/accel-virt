@@ -1,6 +1,11 @@
 /* Finds the adapter the suite tests among every adapter D3DKMT opens: the
- * first whose PCI identity matches is kept, every other handle is closed at
- * once. The kept adapter is closed by close() or the destructor. */
+ * first whose PCI subsystem matches is kept, every other handle is closed at
+ * once. The kept adapter is closed by close() or the destructor.
+ *
+ * Only the subsystem is compared: virtio-gpu-rvk-pci presents its host GPU's
+ * vendor and device (docs/protocol.md), so an rvkgpu adapter reads as
+ * 1002:7550 on one host and 10de:2684 on the next, and its subsystem
+ * 1af4:5256 is the one part of its identity that is always this device's. */
 #ifndef AV_ADAPTER_SEARCH_HPP
 #define AV_ADAPTER_SEARCH_HPP
 

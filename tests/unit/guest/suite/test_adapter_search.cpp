@@ -14,6 +14,11 @@ namespace {
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 const PciIdentity stock(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
+/* virtio-gpu-rvk-pci presenting the host's GPUs, and a real card of the same
+ * model passed through beside it. */
+const PciIdentity on_radeon(0x1002u, 0x7550u, 0x1AF4u, 0x5256u);
+const PciIdentity on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u);
+const PciIdentity real_radeon(0x1002u, 0x7550u, 0x1002u, 0x0E3Bu);
 
 }  // namespace
 
@@ -63,5 +68,26 @@ TEST(adapter_search, hostile_enumerations_claiming_too_many_or_a_zero_handle)
   CHECK_STATUS(search.close(), Status::ok);
   kmt.zero_next(MockKmt::Call::enumerate_adapters);
   CHECK_STATUS(search.find(stock), Status::not_found);   /* the zero handle was stock's slot */
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(adapter_search, finds_the_device_by_its_subsystem_whatever_gpu_it_presents)
+{ MockKmt kmt;
+  kmt.add_adapter(real_radeon, 3200u);
+  kmt.add_adapter(stock, 1300u);
+  kmt.add_adapter(on_radeon, 3200u);
+  kmt.add_adapter(on_raphael, 3200u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  CHECK_EQ(kmt.calls(MockKmt::Call::query_identity), 3u);   /* the card and stock were passed over */
+  CHECK_EQ(kmt.open_objects(), 1u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(adapter_search, a_real_card_of_the_same_model_is_not_the_device)
+{ MockKmt kmt;
+  kmt.add_adapter(real_radeon, 3200u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::not_found);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }

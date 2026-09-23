@@ -52,6 +52,9 @@ public:
     /* The subsystem ID in configuration space: virtio-gpu-rvk-pci's is 0x5256,
      * the captured virtio-gpu-pci's 0x1100. */
     void set_subsystem_id(std::uint16_t id);
+    /* The vendor, device and revision virtio-gpu-rvk-pci presents when its
+     * host GPU has a PCI function: that GPU's, in place of 1af4:1050. */
+    void present_host_gpu(std::uint16_t vendor, std::uint16_t device, std::uint8_t revision);
     /* Stores to the notify region, or to BAR 0's doorbell pages, reach `window`
      * instead of the recorders: a device that serves what the driver rings. */
     void serve_notify_with(RegisterWindow &window);
