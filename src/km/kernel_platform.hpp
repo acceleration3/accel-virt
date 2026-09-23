@@ -62,8 +62,21 @@ public:
     void     report_broken_invariant(const char *what, const char *function) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,
                                const DdiTable &table) override;
+    Status   set_device_description(void *physical_device_object, const uint16_t *text,
+                                    uint32_t bytes) override;
+    Status   write_driver_text(void *physical_device_object, const char *name, const uint16_t *text,
+                               uint32_t bytes) override;
+    Status   write_driver_u32(void *physical_device_object, const char *name, uint32_t value) override;
+    Status   write_driver_u64(void *physical_device_object, const char *name, uint64_t value) override;
 
 private:
+    /* The longest registry value name core writes, NUL included. */
+    static constexpr size_t value_name_chars = 64u;
+
+    /* ZwSetValueKey on the device's driver key, opened for the one write. */
+    Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,
+                              ULONG size);
+
     /* Indexed by Pool, so choosing a pool is a lookup rather than a branch. */
     static constexpr POOL_FLAGS pool_flags_[] = {POOL_FLAG_NON_PAGED, POOL_FLAG_PAGED};
     /* QEMU isa-debugcon (docs/kb/11-implementation-plan.md, M0): one byte per

@@ -74,6 +74,14 @@ void FakeVirtioGpuFunction::set_subsystem_id(std::uint16_t id)
     std::memcpy(config_ + subsystem_offset, &id, sizeof id);
 }
 
+void FakeVirtioGpuFunction::present_host_gpu(std::uint16_t vendor, std::uint16_t device, std::uint8_t revision)
+{
+    constexpr std::size_t revision_offset = 0x08u;
+    std::memcpy(config_, &vendor, sizeof vendor);
+    std::memcpy(config_ + sizeof vendor, &device, sizeof device);
+    config_[revision_offset] = revision;
+}
+
 void FakeVirtioGpuFunction::serve_notify_with(RegisterWindow &window) { notify_window_ = &window; }
 void FakeVirtioGpuFunction::serve_doorbells_with(RegisterWindow &window) { doorbell_window_ = &window; }
 

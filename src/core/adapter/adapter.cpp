@@ -117,7 +117,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
-      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
+      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), present_rows_(0u), presents_unmoved_(0u),
       display_changed_(0u), started_(false), present_(true)
       {
@@ -206,7 +206,12 @@ void Adapter::remember_device()
     if (read == Status::ok) {
         identity_.remember(capset);
         host_visible_.offer(capset);
+        scanout_.offer(capset);
         open_region();
+        /* A name that did not reach the registry is the INF's name standing,
+         * which is a working adapter: logged, never a failed start. */
+        log_status("rvkgpu: adapter description",
+                   NtStatus(description_.publish(physical_device_object_, capset.gpu())).value());
     }
     log_status("rvkgpu: device capset", NtStatus(read).value());
 }

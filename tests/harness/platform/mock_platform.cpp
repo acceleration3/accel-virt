@@ -525,6 +525,125 @@ void MockPlatform::deregister_bugcheck()
 
 void MockPlatform::refuse_bugcheck_registration() { refuse_bugcheck_ = true; }
 
+bool MockPlatform::device_write_refused(const char *function)
+{
+    if (irql_ != Irql::passive)
+        record(Violation::irql_ceiling, "%s at IRQL %u", function, static_cast<unsigned>(irql_));
+    device_write_sequence_++;
+    if (refuse_device_write_ == 0u || device_write_sequence_ != refuse_device_write_) return false;
+    refuse_device_write_ = 0u;
+    return true;
+}
+
+Status MockPlatform::set_device_description(void *physical_device_object, const std::uint16_t *text,
+                                            std::uint32_t bytes)
+{
+    if (device_write_refused("set_device_description")) return Status::not_supported;
+    const std::size_t units = bytes / sizeof(std::uint16_t);
+    if (physical_device_object == nullptr || units == 0u || units > max_value_units || text[units - 1u] != 0u) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "a description PnP would refuse");
+        return Status::invalid_parameter;
+    }
+    described_device_ = physical_device_object;
+    std::memset(description_, 0, sizeof description_);
+    std::memcpy(description_, text, bytes);
+    device_writes_++;
+    return Status::ok;
+}
+
+Status MockPlatform::write_driver_text(void *physical_device_object, const char *name, const std::uint16_t *text,
+                                       std::uint32_t bytes)
+{
+    if (device_write_refused("write_driver_text")) return Status::not_supported;
+    const std::size_t units = bytes / sizeof(std::uint16_t);
+    DriverValue *value = physical_device_object != nullptr ? driver_value(name, true) : nullptr;
+    if (value == nullptr || units == 0u || units > max_value_units || text[units - 1u] != 0u) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "a driver-key string the registry would refuse");
+        return Status::invalid_parameter;
+    }
+    value->type = registry_text;
+    std::memset(value->text, 0, sizeof value->text);
+    std::memcpy(value->text, text, bytes);
+    device_writes_++;
+    return Status::ok;
+}
+
+Status MockPlatform::write_driver_u32(void *physical_device_object, const char *name, std::uint32_t number)
+{
+    if (device_write_refused("write_driver_u32")) return Status::not_supported;
+    DriverValue *value = physical_device_object != nullptr ? driver_value(name, true) : nullptr;
+    if (value == nullptr) return Status::invalid_parameter;
+    value->type = registry_u32;
+    value->number = number;
+    device_writes_++;
+    return Status::ok;
+}
+
+Status MockPlatform::write_driver_u64(void *physical_device_object, const char *name, std::uint64_t number)
+{
+    if (device_write_refused("write_driver_u64")) return Status::not_supported;
+    DriverValue *value = physical_device_object != nullptr ? driver_value(name, true) : nullptr;
+    if (value == nullptr) return Status::invalid_parameter;
+    value->type = registry_u64;
+    value->number = number;
+    device_writes_++;
+    return Status::ok;
+}
+
+MockPlatform::DriverValue *MockPlatform::driver_value(const char *name, bool create)
+{
+    for (std::uint32_t index = 0u; index < driver_value_count_; index++)
+        if (std::strcmp(driver_values_[index].name, name) == 0) return &driver_values_[index];
+    if (!create || driver_value_count_ == max_driver_values || std::strlen(name) >= max_value_name) return nullptr;
+    DriverValue &value = driver_values_[driver_value_count_++];
+    std::memcpy(value.name, name, std::strlen(name) + 1u);
+    return &value;
+}
+
+const MockPlatform::DriverValue *MockPlatform::find_driver_value(const char *name) const
+{
+    for (std::uint32_t index = 0u; index < driver_value_count_; index++)
+        if (std::strcmp(driver_values_[index].name, name) == 0) return &driver_values_[index];
+    return nullptr;
+}
+
+bool MockPlatform::units_are(const std::uint16_t *units, const char *ascii) const
+{
+    std::size_t index = 0u;
+    for (; ascii[index] != '\0'; index++)
+        if (units[index] != static_cast<unsigned char>(ascii[index])) return false;
+    return units[index] == 0u;
+}
+
+void MockPlatform::refuse_device_write_at(std::uint32_t nth)
+{
+    refuse_device_write_ = nth == 0u ? 0u : device_write_sequence_ + nth;
+}
+
+void *MockPlatform::described_device() const { return described_device_; }
+
+bool MockPlatform::device_description_is(const char *ascii) const { return units_are(description_, ascii); }
+
+std::uint32_t MockPlatform::device_writes() const { return device_writes_; }
+
+bool MockPlatform::driver_text_is(const char *name, const char *ascii) const
+{
+    const DriverValue *value = find_driver_value(name);
+    return value != nullptr && value->type == registry_text && units_are(value->text, ascii);
+}
+
+std::uint64_t MockPlatform::driver_number(const char *name) const
+{
+    const DriverValue *value = find_driver_value(name);
+    return value != nullptr ? value->number : 0u;
+}
+
+std::uint32_t MockPlatform::driver_value_type(const char *name) const
+{
+    const DriverValue *value = find_driver_value(name);
+    return value != nullptr ? value->type : 0u;
+}
+
 bool MockPlatform::bugcheck()
 {
     if (bugcheck_routine_ == nullptr) return false;

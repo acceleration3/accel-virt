@@ -12,6 +12,7 @@
 #include "device/recording/record_kinds.hpp"
 #include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "harness/display/display_heads_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -19,6 +20,7 @@
 #include "harness/recording/recorded_file.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/ring_blob_writer.hpp"
+#include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
@@ -95,6 +97,10 @@ struct VirtioGpuRvkProbe {
     { HostSharedObjectProbe::restore_id(HostSharedObjectsProbe::first(device.shared_), id); }
     static Status publish_shared(VirtioGpuRvk &device, int descriptor)
     { return device.shared_.publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u, descriptor); }
+    /* A head that believes it is showing on a device whose display never
+     * agreed to show anything, which is what the heads' own invariant
+     * catches and the device's has to carry (feature 058). */
+    static av::DisplayHeads &heads(VirtioGpuRvk &device) { return device.heads_; }
     /* The ring header a guest writes before its setup. */
     static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
     {
@@ -154,6 +160,31 @@ TEST(virtio_gpu_rvk_realize, binds_once_and_contexts_follow)
   CHECK(device.invariants_hold());
   CHECK_EQ(device.contexts(), 0u);
   CHECK_EQ(host.live_threads(), 0u); }
+
+/* The PCI identity is the GPU the device bound, not the first one listed. */
+TEST(virtio_gpu_rvk_realize, pci_identity_is_the_bound_gpus_and_nothing_before_realize)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_gpu(second);
+  host.place_gpu_on_pci(0u, MockHost::PciBus{0u, 0x03u, 0u, 0u});
+  host.place_gpu_on_pci(1u, MockHost::PciBus{0u, 0x7Bu, 0u, 0u});
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/vendor", "0x1002\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/device", "0x7550\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/revision", "0xc0\n", 5u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/vendor", "0x1002\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/device", "0x13c0\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:7b:00.0/revision", "0xc9\n", 5u);
+  VirtioGpuRvk device(host);
+  RvkPciIdentity identity = {};
+  CHECK(!device.pci_identity(identity));
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, message), Status::ok);
+  CHECK(device.pci_identity(identity));
+  CHECK_EQ(identity.vendor_id, 0x1002u);
+  CHECK_EQ(identity.device_id, 0x13C0u);
+  CHECK_EQ(identity.revision, 0xC9u);
+  device.reset(); }
 
 TEST(virtio_gpu_rvk_realize, a_binding_failure_leaves_it_unrealized)
 { MockHost host;
@@ -299,12 +330,12 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 3u);
   device.report(writer);
-  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
                                     "device/3/shared/0 live=0\n"
                                     "device/3/contexts/0 live=1\n"
                                     "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
-                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 contexts=1 driver_ok=true\n"
+                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
                                  "device/3/shared/0 live=0\n"
                                  "device/3/contexts/0 live=1\n"
                                  "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
@@ -686,3 +717,138 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_shared_objects_refuses
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, again), Status::ok);
   CHECK(device.realized());
   device.reset(); }
+/* The whole sequence a guest desktop performs, on a device whose host has a
+ * GL display: a blob over its own pages, bound to head 0, flushed once per
+ * frame, rebound to a second blob, and let go. Nothing is transferred, which
+ * is the device-side form of SC-001 - the frame is never copied out of guest
+ * memory, because the display samples the guest's pages directly. */
+TEST(virtio_gpu_rvk_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_without_one_transfer)
+{ constexpr std::uint64_t ram = 0x40000000u;
+  constexpr std::uint32_t width = 64u, height = 16u;
+  constexpr std::uint64_t frame_bytes = 4096u;
+  MockHost host;
+  host.add_gpu(first);
+  host.add_guest_ram(ram, 0x40000u);
+  host.add_display_heads(1u);
+  av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuRvk        device(host);
+  char                bytes[96];
+  TextBuffer          message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, message), Status::ok);
+
+  const auto send = [&device, &host](const GpuRequestBuilder &builder) {
+      std::uint32_t type = 0u;
+      std::memcpy(&type, builder.bytes(), sizeof type);
+      MockRequest request(builder.bytes(), builder.size());
+      static_cast<void>(host);
+      return device.control(&request, type) ? request.response_type() : 0u;
+  };
+  const auto create_blob = [&send](std::uint32_t id, std::uint64_t address) {
+      GpuRequestBuilder create(0x010Cu);
+      create.u32(id).u32(1u).u32(0u).u32(1u).u64(0u).u64(frame_bytes);
+      create.u64(address).u32(static_cast<std::uint32_t>(frame_bytes)).u32(0u);
+      CHECK_EQ(send(create), 0x1100u);
+  };
+  const auto show = [&send](std::uint32_t head, std::uint32_t blob) {
+      GpuRequestBuilder scanout(0x010Du);
+      scanout.u32(0u).u32(0u).u32(width).u32(height);
+      scanout.u32(head).u32(blob).u32(width).u32(height).u32(1u).u32(0u);
+      scanout.u32(width * 4u).u32(0u).u32(0u).u32(0u);
+      scanout.u32(0u).u32(0u).u32(0u).u32(0u);
+      return send(scanout);
+  };
+  const auto flush = [&send](std::uint32_t blob) {
+      GpuRequestBuilder request(0x0104u);
+      request.u32(0u).u32(0u).u32(width).u32(height).u32(blob).u32(0u);
+      return send(request);
+  };
+
+  /* The capset the guest reads carries the scanout bit, because by the time it
+   * asks, QEMU has registered its display. The features are a u64 24 bytes
+   * into the capset, which is 24 bytes into the response. */
+  GpuRequestBuilder capset(0x0109u);
+  capset.u32(av::CapsetInfo::capset_id).u32(1u);
+  MockRequest read(capset.bytes(), capset.size());
+  CHECK(device.control(&read, 0x0109u));
+  CHECK_EQ(read.response_u32(48u) & av::CapsetInfo::feature_dmabuf_scanout,
+           av::CapsetInfo::feature_dmabuf_scanout);
+
+  create_blob(1u, ram);
+  create_blob(2u, ram + 0x10000u);
+  void *const         run = host.guest_ram(ram);
+  const std::uint64_t length = frame_bytes;
+  int                 probe = -1;
+  if (host.dmabuf_over_guest(&run, &length, 1u, probe) != Status::ok) return;
+  host.close_dmabuf(probe);
+
+  CHECK_EQ(show(0u, 1u), 0x1100u);
+  CHECK_EQ(device.scanouts(), 1u);
+  for (std::uint32_t frame = 0u; frame < 20u; frame++) CHECK_EQ(flush(1u), 0x1100u);
+  CHECK_EQ(host.head(0u).updates, 20u);
+  CHECK_EQ(host.head(0u).shows, 1u);
+  CHECK_EQ(host.head(0u).hides, 0u);
+
+  CHECK_EQ(show(0u, 2u), 0x1100u);
+  CHECK_EQ(host.head(0u).shows, 2u);
+  CHECK_EQ(host.head(0u).hides, 0u);
+  CHECK_EQ(host.live_dmabufs(), 1u);
+  /* The blob nobody shows any more is the guest's to release again; the one on
+   * screen is not. */
+  GpuRequestBuilder unref_first(0x0102u);
+  unref_first.u32(1u).u32(0u);
+  CHECK_EQ(send(unref_first), 0x1100u);
+  GpuRequestBuilder unref_shown(0x0102u);
+  unref_shown.u32(2u).u32(0u);
+  CHECK_EQ(send(unref_shown), 0x1205u);
+  CHECK(device.invariants_hold());
+
+  /* The device's invariant folds in its heads': a head still showing on a
+   * device whose display has withdrawn its answer is a state neither of them
+   * may report as sound. */
+  { av::DisplayHeadsProbe heads(av::VirtioGpuRvkProbe::heads(device));
+    heads.forget_the_display();
+    CHECK(!device.invariants_hold());
+    heads.remember_the_display();
+    CHECK(device.invariants_hold()); }
+
+  device.reset();
+  CHECK_EQ(device.scanouts(), 0u);
+  CHECK_EQ(device.blobs(), 0u);
+  CHECK_EQ(host.live_dmabufs(), 0u);
+  CHECK(device.invariants_hold()); }
+
+/* The same device on a host with no GL display: every scanout is refused, the
+ * guest keeps the 2D path of feature 038, and nothing is left behind. */
+TEST(virtio_gpu_rvk_scanout, a_host_with_no_gl_display_refuses_every_scanout_and_keeps_its_blobs)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_guest_ram(0x40000000u, 0x10000u);
+  VirtioGpuRvk device(host);
+  char         bytes[96];
+  TextBuffer   message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
+  GpuRequestBuilder create(0x010Cu);
+  create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(4096u);
+  create.u64(0x40000000u).u32(4096u).u32(0u);
+  MockRequest made(create.bytes(), create.size());
+  CHECK(device.control(&made, 0x010Cu));
+  CHECK_EQ(made.response_type(), 0x1100u);
+
+  GpuRequestBuilder scanout(0x010Du);
+  scanout.u32(0u).u32(0u).u32(64u).u32(16u);
+  scanout.u32(0u).u32(1u).u32(64u).u32(16u).u32(1u).u32(0u);
+  scanout.u32(256u).u32(0u).u32(0u).u32(0u);
+  scanout.u32(0u).u32(0u).u32(0u).u32(0u);
+  MockRequest shown(scanout.bytes(), scanout.size());
+  CHECK(device.control(&shown, 0x010Du));
+  CHECK_EQ(shown.response_type(), 0x1200u);
+  CHECK_EQ(device.scanouts(), 0u);
+  CHECK_EQ(host.live_dmabufs(), 0u);
+
+  GpuRequestBuilder unref(0x0102u);
+  unref.u32(1u).u32(0u);
+  MockRequest released(unref.bytes(), unref.size());
+  CHECK(device.control(&released, 0x0102u));
+  CHECK_EQ(released.response_type(), 0x1100u);
+  CHECK_EQ(device.blobs(), 0u);
+  CHECK(device.invariants_hold()); }

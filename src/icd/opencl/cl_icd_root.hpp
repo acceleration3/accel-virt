@@ -129,6 +129,15 @@ public:
                                    size_t offset, size_t bytes, const void *from, cl_event *event);
     cl_int           finish(cl_command_queue queue);
     cl_int           flush(cl_command_queue queue);
+    /* `cl_khr_external_memory`'s acquire and release, which are the same call
+     * here: the object was acquired on the host when the device opened it and
+     * stays acquired for its life, so what is left of their meaning is the
+     * argument checking and the event. Every named object must be one this
+     * context imported and must belong to the queue's context; the event, when
+     * one is asked for, is the queue's own place as a marker, as every other
+     * enqueue of this ICD answers one (feature 053, research.md §21). */
+    cl_int           enqueue_external(cl_command_queue queue, cl_uint count, const cl_mem *objects,
+                                      cl_event *event);
 
     /* ---- maps and shared virtual memory (US2) --------------------------- */
 
@@ -199,6 +208,14 @@ private:
      * but the two intersected: the host says the GPU has an extension and a
      * policy row says this ICD carries it, and an application is shown only
      * what both say. */
+    /* Whether `name` is exactly `wanted`, which is how the loader's by-name
+     * asks are answered without a string library. */
+    bool             spells(const char *name, const char *wanted) const;
+    /* CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR, answered from what
+     * this driver takes rather than from the host: the host's own types are
+     * file descriptors and a guest has none. */
+    cl_int           import_handle_types(ClObject &device, size_t value_bytes, void *value,
+                                         size_t *size_ret);
     cl_int           device_extensions(ClObject &device, size_t value_bytes, void *value,
                                        size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,

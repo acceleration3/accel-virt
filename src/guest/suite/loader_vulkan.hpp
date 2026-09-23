@@ -102,6 +102,8 @@ public:
     void     cmd_draw(VkCommandBuffer command_buffer, uint32_t vertices) override;
     void     cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkImage image, VkImageLayout layout,
                                       VkBuffer buffer, const VkBufferImageCopy *region) override;
+    void     cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size,
+                             uint32_t value) override;
 
     VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) override;
 
@@ -180,6 +182,7 @@ private:
         cmd_end_render_pass,
         cmd_draw,
         cmd_copy_image_to_buffer,
+        cmd_fill_buffer,
         queue_submit,
         create_win32_surface,
         destroy_surface,

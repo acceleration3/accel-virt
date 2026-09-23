@@ -1,8 +1,22 @@
 ; The driver package for rvkgpu.sys, the accel-virt WDDM 3.2 display miniport,
-; bound to virtio-gpu-rvk-pci: virtio-gpu 1af4:1050 with subsystem 1af4:5256,
-; so neither stock virtio-gpu-pci nor another virtio-gpu driver is claimed.
+; bound to virtio-gpu-rvk-pci: a virtio-gpu with subsystem 1af4:5256, so
+; neither stock virtio-gpu-pci nor another virtio-gpu driver is claimed.
 ; Test-signed in the guest by tools/guest/provision.ps1, which writes the
 ; catalog this file names.
+;
+; The device presents its host GPU's vendor, device and revision as its own
+; (docs/protocol.md), so that Device Manager, WMI and DXGI name the host's GPU:
+; PCI\VEN_1002&DEV_7550&SUBSYS_52561AF4 on a host with a Radeon RX 9070 XT.
+; Those IDs differ from host to host, and PnP matches no ID made of a subsystem
+; alone, so no static line can list them. provision.ps1's sign stage adds one
+; model line for each present PCI\VEN_xxxx&DEV_yyyy&SUBSYS_52561AF4, named with
+; the host GPU's name when the runner supplied it (C:\rvk\adapters.txt) and
+; with %DeviceName% otherwise, before it makes and signs the catalog; each
+; generated line ends with "; provision.ps1: a host GPU", and signing again
+; replaces them. The one static line is the device on a GPU with no PCI
+; function (llvmpipe), which keeps virtio-gpu's own 1af4:1050. rvkgpu.sys
+; writes the host GPU's name to the device's DeviceDesc at every start, so a
+; generically named model is the host's name from the next boot on.
 
 [Version]
 Signature   = "$Windows NT$"

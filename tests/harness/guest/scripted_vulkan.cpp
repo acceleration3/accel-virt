@@ -642,6 +642,13 @@ void ScriptedVulkan::cmd_copy_image_to_buffer(VkCommandBuffer, VkImage image, Vk
     recording_.copied_to = raw(buffer);
 }
 
+void ScriptedVulkan::cmd_fill_buffer(VkCommandBuffer, VkBuffer buffer, VkDeviceSize size, uint32_t value)
+{
+    if (size == 0u) misuses_++;
+    recording_.filled = raw(buffer);
+    recording_.fill_value = value;
+}
+
 VkResult ScriptedVulkan::queue_submit(VkQueue, const VkSubmitInfo *submit, VkFence fence)
 {
     const VkResult result = use(Call::queue_submit);
@@ -667,6 +674,14 @@ void ScriptedVulkan::run(const Recording &recording)
             value *= 2u;
             std::memcpy(target->bytes + index * element_bytes, &value, sizeof value);
         }
+    }
+    if (recording.filled != 0u) {
+        const Object *const buffer = find(Kind::buffer, recording.filled);
+        Allocation *const   target = buffer != nullptr ? allocation_of(buffer->link) : nullptr;
+        if (target == nullptr) return;
+        for (std::uint64_t at = 0u; at + sizeof recording.fill_value <= max_mapped_bytes;
+             at += sizeof recording.fill_value)
+            std::memcpy(target->bytes + at, &recording.fill_value, sizeof recording.fill_value);
     }
     if (recording.drew) drew_since_present_ = true;
     if (recording.drew && recording.copied_to != 0u) {

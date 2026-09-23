@@ -37,6 +37,11 @@ public:
     virtual void *create_context(void *device, int32_t &error) = 0;
     virtual void *create_queue(void *context, void *device, int32_t &error) = 0;
     virtual void *create_buffer(void *context, uint64_t flags, size_t bytes, int32_t &error) = 0;
+    /* clCreateBufferWithProperties, which is how a buffer is made over memory
+     * another API allocated: the Win32 handle travels in the property list
+     * (feature 053). `properties` is a terminated list of name/value pairs. */
+    virtual void *create_buffer_with_properties(void *context, const uint64_t *properties, uint64_t flags,
+                                                size_t bytes, int32_t &error) = 0;
     virtual void *create_program(void *context, const char *source, int32_t &error) = 0;
     virtual int32_t build_program(void *program, void *device, const char *options) = 0;
     virtual int32_t program_build_text(void *program, void *device, char *into, size_t room,

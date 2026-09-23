@@ -17,6 +17,8 @@
 namespace av {
 
 class GpuIdentity;
+class PciAddress;
+class ScanoutFramebuffer;
 
 using HostRoutine = void (*)(void *context);
 
@@ -50,6 +52,13 @@ public:
     /* The host's Vulkan physical devices, in enumeration order. */
     virtual uint32_t    gpu_count() = 0;
     virtual GpuIdentity gpu_identity(uint32_t index) = 0;
+    /* Main loop. Where host GPU `index` sits on the host's PCI buses:
+     * not_found for a GPU with no PCI function (llvmpipe) or one whose driver
+     * does not say (no VK_EXT_pci_bus_info). */
+    [[nodiscard]] virtual Status gpu_pci_address(uint32_t index, PciAddress &address) = 0;
+    /* Main loop. Up to `capacity` bytes of the file at `path`, their count in
+     * `length`: not_found when the host cannot read it. */
+    [[nodiscard]] virtual Status read_file(const char *path, char *buffer, size_t capacity, size_t &length) = 0;
 
     /* Any thread: a monotonic count of nanoseconds, for measuring what the
      * device did rather than for telling the time. */
@@ -159,6 +168,20 @@ public:
     /* Any thread. The recording back to empty, for a recording that wraps. */
     [[nodiscard]] virtual Status truncate_recording(void *file) = 0;
     virtual void                 close_recording(void *file) = 0;
+    /* Main loop. Whether display head `head` exists and its console can show a
+     * dma-buf. Asked once per device, when the guest first reads the capset,
+     * never at realize: QEMU registers its display backends after every device
+     * is realized, and it is the backend that gives a console its GL context,
+     * so a realize-time answer is no on every host. */
+    virtual bool   display_takes_dmabuf(uint32_t head) = 0;
+    /* Main loop. Head `head` shows `frame` out of `fd`. The host duplicates
+     * the descriptor; this side goes on owning its own. not_supported when the
+     * host would not take it, having changed nothing. */
+    [[nodiscard]] virtual Status show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) = 0;
+    /* Main loop. The rectangle of head `head` that changed. */
+    virtual void   update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) = 0;
+    /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
+    virtual void   hide_scanout(uint32_t head) = 0;
 
 protected:
     Host() = default;

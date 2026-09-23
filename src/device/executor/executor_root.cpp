@@ -120,7 +120,12 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
 {
     AV_SCOPE("ExecutorRoot::bind");
     switch (sub_api) {
-    case RVK_EXECUTOR_SUB_API_OPENCL: return opencl_[slot].initialize(apis_->opencl_device(gpu.index()));
+    /* The GPU's EGL display goes with its OpenCL device: on a host whose
+     * OpenCL cannot take a descriptor, OpenGL takes it and OpenCL names the
+     * GL object (feature 053, T019). A host with no display shares nothing
+     * and runs everything else. */
+    case RVK_EXECUTOR_SUB_API_OPENCL:
+        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()));
     case RVK_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
     case RVK_EXECUTOR_SUB_API_D3D: return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()));

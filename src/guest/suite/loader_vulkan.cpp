@@ -65,6 +65,7 @@ constexpr const char *const names[] = {
     "vkCmdEndRenderPass",
     "vkCmdDraw",
     "vkCmdCopyImageToBuffer",
+    "vkCmdFillBuffer",
     "vkQueueSubmit",
     "vkCreateWin32SurfaceKHR",
     "vkDestroySurfaceKHR",
@@ -479,6 +480,12 @@ void LoaderVulkan::cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkIm
 {
     AV_SCOPE("LoaderVulkan::cmd_copy_image_to_buffer");
     resolved<void (VKAPI_PTR *)(VkCommandBuffer, VkImage, VkImageLayout, VkBuffer, uint32_t, const VkBufferImageCopy *)>(Function::cmd_copy_image_to_buffer)(command_buffer, image, layout, buffer, 1u, region);
+}
+
+void LoaderVulkan::cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size, uint32_t value)
+{
+    AV_SCOPE("LoaderVulkan::cmd_fill_buffer");
+    resolved<void (VKAPI_PTR *)(VkCommandBuffer, VkBuffer, VkDeviceSize, VkDeviceSize, uint32_t)>(Function::cmd_fill_buffer)(command_buffer, buffer, 0u, size, value);
 }
 
 VkResult LoaderVulkan::queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence)

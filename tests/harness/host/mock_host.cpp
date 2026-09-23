@@ -2,6 +2,8 @@
 
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_request.hpp"
+#include "device/display/scanout_framebuffer.hpp"
+#include "device/gpu/pci_address.hpp"
 
 #include <cerrno>
 #include <cstdlib>
@@ -19,7 +21,8 @@ namespace av {
 namespace {
 
 const char *const violation_names[] = {"main_loop_required", "worker_required", "unknown_handle", "held_mutex",
-                                       "second_response", "overlapping_placement", "fence_misuse", "doorbell_misuse"};
+                                       "second_response", "overlapping_placement", "fence_misuse", "doorbell_misuse",
+                                       "scanout_misuse"};
 
 class StateLock {
 public:
@@ -36,7 +39,7 @@ private:
 
 MockHost::MockHost()
     : main_loop_(pthread_self()), violations_{}, logged_(0u), last_log_{}, threads_{}, events_{}, mutexes_{}, gpus_{},
-      gpu_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
+      gpu_count_(0u), gpu_buses_{}, gpu_on_pci_{}, files_{}, file_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
@@ -44,7 +47,8 @@ MockHost::MockHost()
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
       fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u),
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
-      fail_recording_truncate_(0u)
+      fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{},
+      update_rects_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -83,6 +87,8 @@ MockHost::~MockHost()
         registry.record_failure(__FILE__, __LINE__, "%u recording(s) never closed", live_recordings());
     for (RecordingFile &recording : recordings_)
         if (recording.bytes != nullptr) std::free(recording.bytes);
+    if (live_scanouts() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u display head(s) left showing something", live_scanouts());
     for (Range &range : ranges_)
         if (range.base != nullptr) munmap(range.base, range.bytes);
     for (void *block : allocations_) std::free(block);
@@ -576,6 +582,63 @@ GpuIdentity MockHost::gpu_identity(std::uint32_t index)
     return gpus_[index];
 }
 
+Status MockHost::gpu_pci_address(std::uint32_t index, PciAddress &address)
+{
+    require_main_loop("MockHost::gpu_pci_address");
+    if (index >= gpu_count()) {
+        record(HostViolation::unknown_handle, "MockHost::gpu_pci_address");
+        return Status::not_found;
+    }
+    PciBus bus = {};
+    if (!gpu_bus(index, bus)) return Status::not_found;
+    address = PciAddress(bus.domain, bus.bus, bus.device, bus.function);
+    return Status::ok;
+}
+
+bool MockHost::gpu_bus(std::uint32_t index, PciBus &bus)
+{
+    StateLock lock(state_);
+    if (index >= gpu_count_ || !gpu_on_pci_[index]) return false;
+    bus = gpu_buses_[index];
+    return true;
+}
+
+Status MockHost::read_file(const char *path, char *buffer, std::size_t capacity, std::size_t &length)
+{
+    require_main_loop("MockHost::read_file");
+    length = 0u;
+    for (std::uint32_t index = 0u; index < file_count_; index++) {
+        if (std::strcmp(files_[index].path, path) != 0) continue;
+        length = files_[index].length < capacity ? files_[index].length : capacity;
+        std::memcpy(buffer, files_[index].text, length);
+        return Status::ok;
+    }
+    return Status::not_found;
+}
+
+void MockHost::place_gpu_on_pci(std::uint32_t index, const PciBus &bus)
+{
+    StateLock lock(state_);
+    if (index >= max_gpus) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "no such GPU slot");
+        return;
+    }
+    gpu_buses_[index] = bus;
+    gpu_on_pci_[index] = true;
+}
+
+void MockHost::add_file(const char *path, const char *text, std::size_t length)
+{
+    if (file_count_ == max_files || std::strlen(path) >= max_path || length > max_file_bytes) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "the mock holds no such file");
+        return;
+    }
+    HostFile &file = files_[file_count_++];
+    std::memcpy(file.path, path, std::strlen(path) + 1u);
+    std::memcpy(file.text, text, length);
+    file.length = length;
+}
+
 void MockHost::add_gpu(const std::uint8_t *uuid)
 {
     add_gpu(GpuIdentity(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, uuid, 24ull << 30, 32ull << 30, "mock gpu"));
@@ -871,6 +934,110 @@ int MockHost::open_descriptor()
 bool MockHost::descriptor_open(int fd) const
 {
     return fd >= 0 && ::fcntl(fd, F_GETFD) != -1;
+}
+
+/* A host with no GL-capable display - which is what `-display none` gives, and
+ * the default here - has no head that can show a dma-buf at all. */
+bool MockHost::display_takes_dmabuf(std::uint32_t head)
+{
+    StateLock lock(state_);
+    return head < display_heads_;
+}
+
+Status MockHost::show_scanout(std::uint32_t head, int fd, const ScanoutFramebuffer &frame)
+{
+    const Plane plane = {frame.rect().width(), frame.rect().height(), frame.rect().x(),  frame.rect().y(),
+                         frame.width(),        frame.height(),        frame.stride(),    frame.offset(),
+                         frame.fourcc()};
+    return show_scanout_plane(head, fd, plane);
+}
+
+Status MockHost::show_scanout_plane(std::uint32_t head, int fd, const Plane &plane)
+{
+    StateLock lock(state_);
+    if (head >= display_heads_ || head >= max_scanout_heads) {
+        violations_[static_cast<std::uint32_t>(HostViolation::scanout_misuse)]++;
+        return Status::not_supported;
+    }
+    /* A descriptor the caller already closed would be shown as somebody else's
+     * file the moment the number is reused. */
+    if (fd < 0 || ::fcntl(fd, F_GETFD) < 0) {
+        violations_[static_cast<std::uint32_t>(HostViolation::scanout_misuse)]++;
+        return Status::not_supported;
+    }
+    if (fail_now(refuse_scanout_)) return Status::not_supported;
+    Scanout &scanout = scanouts_[head];
+    scanout.shown = true;
+    scanout.descriptor = fd;
+    scanout.plane = plane;
+    scanout.shows++;
+    return Status::ok;
+}
+
+void MockHost::update_scanout(std::uint32_t head, std::uint32_t x, std::uint32_t y, std::uint32_t width,
+                              std::uint32_t height)
+{
+    {
+        StateLock lock(state_);
+        if (head < max_scanout_heads && scanouts_[head].shown) {
+            scanouts_[head].updates++;
+            update_rects_[head][0] = x;
+            update_rects_[head][1] = y;
+            update_rects_[head][2] = width;
+            update_rects_[head][3] = height;
+            return;
+        }
+    }
+    record(HostViolation::scanout_misuse, "MockHost::update_scanout");
+}
+
+void MockHost::hide_scanout(std::uint32_t head)
+{
+    {
+        StateLock lock(state_);
+        if (head >= max_scanout_heads) {
+            record(HostViolation::scanout_misuse, "MockHost::hide_scanout");
+            return;
+        }
+        const std::uint32_t shows = scanouts_[head].shows;
+        const std::uint32_t updates = scanouts_[head].updates;
+        const std::uint32_t hides = scanouts_[head].hides;
+        scanouts_[head] = Scanout{};
+        scanouts_[head].shows = shows;
+        scanouts_[head].updates = updates;
+        scanouts_[head].hides = hides + 1u;
+    }
+}
+
+void MockHost::add_display_heads(std::uint32_t heads)
+{
+    StateLock lock(state_);
+    display_heads_ = heads < max_scanout_heads ? heads : max_scanout_heads;
+}
+
+void MockHost::refuse_scanout_at(std::uint32_t nth) { StateLock lock(state_); refuse_scanout_ = nth; }
+
+MockHost::Scanout MockHost::head(std::uint32_t head) const
+{
+    return head < max_scanout_heads ? scanouts_[head] : Scanout{};
+}
+
+std::uint32_t MockHost::live_scanouts() const
+{
+    std::uint32_t showing = 0u;
+    for (const Scanout &scanout : scanouts_)
+        if (scanout.shown) showing++;
+    return showing;
+}
+
+void MockHost::last_update(std::uint32_t head, std::uint32_t &x, std::uint32_t &y, std::uint32_t &width,
+                           std::uint32_t &height) const
+{
+    const std::uint32_t index = head < max_scanout_heads ? head : 0u;
+    x = update_rects_[index][0];
+    y = update_rects_[index][1];
+    width = update_rects_[index][2];
+    height = update_rects_[index][3];
 }
 
 std::uint32_t MockHost::live_ranges()

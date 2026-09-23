@@ -98,6 +98,15 @@ void *WindowsClEntry::create_buffer(void *context, uint64_t flags, size_t bytes,
     return clCreateBuffer(static_cast<cl_context>(context), flags, bytes, nullptr, &error);
 }
 
+void *WindowsClEntry::create_buffer_with_properties(void *context, const uint64_t *properties,
+                                                    uint64_t flags, size_t bytes, int32_t &error)
+{
+    AV_SCOPE("WindowsClEntry::create_buffer_with_properties");
+    return clCreateBufferWithProperties(static_cast<cl_context>(context),
+                                        reinterpret_cast<const cl_mem_properties *>(properties), flags,
+                                        bytes, nullptr, &error);
+}
+
 void *WindowsClEntry::create_program(void *context, const char *source, int32_t &error)
 {
     AV_SCOPE("WindowsClEntry::create_program");

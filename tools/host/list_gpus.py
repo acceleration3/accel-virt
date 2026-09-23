@@ -11,6 +11,11 @@ With no GPU, llvmpipe is listed as a CPU device, so there is always one.
   list_gpus.py --qemu              one -device argument pair per GPU, for a QEMU command line
   list_gpus.py --libvirt           a libvirt domain fragment passing the same arguments
   list_gpus.py --vulkaninfo FILE   read captured `vulkaninfo` output instead of running it
+
+What a guest will call each one is here too, by the device's own rules: the
+adapter name the capset carries (src/device/gpu/adapter_name.hpp) and the PCI
+identity the function presents (src/device/gpu/host_pci_identity.hpp), which
+tools/guest/run_guest_suite.py --all-gpus checks Windows against.
 """
 import argparse
 import re
@@ -26,7 +31,14 @@ DEVICE_TYPES = {
     "PHYSICAL_DEVICE_TYPE_OTHER": "other",
 }
 SECTION = re.compile(r"^GPU(\d+):$", re.M)
-FIELD = re.compile(r"^\s*(deviceName|vendorID|deviceID|deviceType|deviceUUID)\s*=\s*(.+?)\s*$", re.M)
+FIELD = re.compile(r"^\s*(deviceName|vendorID|deviceID|deviceType|deviceUUID|pciDomain|pciBus|pciDevice|pciFunction)"
+                   r"\s*=\s*(.+?)\s*$", re.M)
+PCI_FIELDS = ("pciDomain", "pciBus", "pciDevice", "pciFunction")
+SYSFS_PCI = "/sys/bus/pci/devices"
+# The capset's name field: 48 bytes, one of them the NUL (GpuIdentity::name_bytes).
+NAME_BYTES = 47
+# virtio-gpu's own identity, which the function keeps for a GPU with no PCI function.
+VIRTIO_GPU = (0x1AF4, 0x1050, 0x01)
 HEAP = re.compile(r"^\s*memoryHeaps\[\d+\]:\s*$")
 HEAP_SIZE = re.compile(r"^\s*size\s*=\s*(\d+)")
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -49,8 +61,62 @@ class Gpu:
         self.uuid = fields["deviceUUID"]
         self.local_memory = local_memory
 
+        self.pci_address = None
+        if all(name in fields for name in PCI_FIELDS):
+            domain, bus, device, function = (int(fields[name]) for name in PCI_FIELDS)
+            self.pci_address = f"{domain & 0xFFFF:04x}:{bus & 0xFF:02x}:{device & 0x1F:02x}.{function & 0x7:x}"
+
     def device_argument(self):
         return f"virtio-gpu-rvk-pci,host-gpu={self.uuid},max_outputs=1"
+
+    def adapter_name(self):
+        return adapter_name(self.name)
+
+    def pci_identity(self, sysfs=SYSFS_PCI):
+        """(vendor, device, revision) the device's PCI function presents: its
+        GPU's, read from sysfs, or virtio-gpu's own when the GPU has no PCI
+        function or sysfs does not describe it."""
+        if self.pci_address is None:
+            return VIRTIO_GPU
+        try:
+            read = [sysfs_number(sysfs, self.pci_address, name) for name in ("vendor", "device", "revision")]
+        except (OSError, ValueError):
+            return VIRTIO_GPU
+        if read[0] > 0xFFFF or read[1] > 0xFFFF or read[2] > 0xFF:
+            return VIRTIO_GPU
+        return tuple(read)
+
+
+def sysfs_number(sysfs, address, attribute):
+    with open(f"{sysfs}/{address}/{attribute}") as value:
+        text = value.read().strip()
+    if not text.lower().startswith("0x"):
+        raise ValueError(f"{address}/{attribute}: {text!r} is not hex")
+    return int(text, 16)
+
+
+def adapter_name(vulkan_name):
+    """The Vulkan deviceName without a trailing parenthesised group set off by
+    a space - the driver suffix Mesa appends - cut to the capset's field at a
+    UTF-8 character boundary: AdapterName's rule, byte for byte."""
+    name = vulkan_name.encode()
+    kept = len(name)
+    end = len(name.rstrip(b" "))
+    if end and name[end - 1:end] == b")":
+        depth, opening = 0, end
+        while True:
+            opening -= 1
+            depth += {b")": 1, b"(": -1}.get(name[opening:opening + 1], 0)
+            if depth == 0 or opening == 0:
+                break
+        before = len(name[:opening].rstrip(b" "))
+        if depth == 0 and before not in (0, opening):
+            kept = before
+    if kept > NAME_BYTES:
+        kept = NAME_BYTES
+        while kept and name[kept] & 0xC0 == 0x80:
+            kept -= 1
+    return name[:kept].decode()
 
 
 def local_memory(section):

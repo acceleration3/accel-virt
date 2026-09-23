@@ -9,16 +9,26 @@
 
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/cl_handle_registry.hpp"
+#include "device/executor/cl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/session_backend.hpp"
+#include "device/executor/gl_context_attributes.hpp"
+#include "device/shim/gl_context.hpp"
+#include "device/shim/gl_host_import.hpp"
+#include "device/shim/gl_shared_buffer.hpp"
 #include "proto/generated/opencl/cl_real_dispatch.h"
 
 #include <stdint.h>
 
 namespace av {
 
+class GlDisplay;
 class OpenClDevice;
+/* What the tests reach the extension-string surgery through: `without` is
+ * private because nothing but `on_clGetDeviceInfo` may call it, and its cases
+ * are strings no host answers. */
+struct OpenClBackendProbe;
 
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
 public:
@@ -27,8 +37,23 @@ public:
     /* Binds this context to the platform and device the host found for its
      * GPU, which must outlive it. False for a null device: a GPU the host
      * found no OpenCL for runs nothing, so the context is refused at setup
-     * rather than shown an empty platform list. */
-    [[nodiscard]] bool initialize(const OpenClDevice *device);
+     * rather than shown an empty platform list.
+     *
+     * `display` is the same GPU's EGL display, or null. It is what makes
+     * sharing possible at all on a host whose OpenCL has no
+     * `cl_khr_external_memory`: a GL context on it becomes the vehicle a
+     * descriptor is imported through, and the host `cl_context` is created
+     * naming that context, so `clCreateFromGLBuffer` can reach the same
+     * allocation (feature 053, T019; research.md §21). A null display leaves
+     * this importing nothing, which the device answers as a refusal.
+     *
+     * Whether that works is measured here and not assumed: a host whose
+     * OpenCL lists `cl_khr_gl_sharing` can still refuse every context made
+     * against a GL context of this one's - which is what happens inside QEMU
+     * on the machine this was written on, where the same calls succeed in an
+     * ordinary process (research.md §21). A context is made and released to
+     * find out, once, before the guest asks. */
+    [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -37,10 +62,10 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
-    /* This API exports no descriptor and imports none (feature 053,
-     * contracts/wire_additions.md): only Vulkan does, so a guest sharing
-     * through this API is refused by the device with a status rather than
-     * handed an object nothing made. */
+    /* This API exports no descriptor (feature 053,
+     * contracts/wire_additions.md): only Vulkan does, so a guest asking this
+     * one to export is refused by the device with a status rather than handed
+     * an object nothing made. Importing is another matter - see below. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      int &fd) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
@@ -71,8 +96,23 @@ public:
                                    cl_uint *num_platforms) override;
     cl_int     on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
                                  cl_device_id *devices, cl_uint *num_devices) override;
+    /* The host's answer, with `cl_khr_gl_sharing` struck out of the extension
+     * string when this context could not make a GL-sharing context. That name
+     * is what the guest's ICD reads as "a shared object can be opened into
+     * OpenCL here", so leaving it in on a host that refuses the context would
+     * have the ICD report an extension whose every use fails (constitution VI;
+     * feature 053, T019). Every other query is forwarded untouched. */
+    cl_int     on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name, size_t param_value_size,
+                                  void *param_value, size_t *param_value_size_ret) override;
     cl_context on_clCreateContextFromType(const cl_context_properties *properties, cl_device_type device_type,
                                           cl_int *errcode_ret) override;
+    /* The host's context is created naming this backend's GL context, so a
+     * buffer imported through OpenGL can become a `cl_mem` later. The guest
+     * never asks for that and never sees it: what it sent is forwarded with
+     * the two properties added, and a host that cannot share gets what the
+     * guest wrote (feature 053, T019). */
+    cl_context on_clCreateContext(const cl_context_properties *properties, cl_uint num_devices,
+                                  const cl_device_id *devices, cl_int *errcode_ret) override;
 
     /* The shared allocations, remembered so an address the guest hands back
      * can be judged; the host's own allocator answers the allocation itself. */
@@ -124,15 +164,57 @@ public:
     uint64_t ran() const;
 
 private:
+    friend struct OpenClBackendProbe;
+
     /* Every OpenCL command id carries this in its top 16 bits. */
     static constexpr uint32_t opencl_api = 2u;
+    /* A context property list this device will copy: OpenCL defines a handful
+     * and the decoder has already refused every name but one, so a list longer
+     * than this is a guest building one to overflow what copies it. Room for
+     * the two this device appends and the terminator is inside it. */
+    static constexpr uint32_t max_context_properties = 32u;
 
     /* CL_SUCCESS for a type the bound device is, which is always a GPU;
      * CL_INVALID_DEVICE_TYPE for no type or a bit OpenCL does not define;
      * CL_DEVICE_NOT_FOUND for any other. */
     cl_int answers_type(cl_device_type device_type) const;
 
+    /* The vehicle: a GL context on this GPU's display, the import that turns a
+     * descriptor into a memory object on it, and the buffer maker that puts
+     * storage OpenCL can name over that memory. Held only while the host has a
+     * display for this GPU. */
+    [[nodiscard]] bool sharing() const;
+    /* Whether this host will really make a context against `vehicle_`: one is
+     * made on the bound device and released again. What it answers is the
+     * whole of `sharing()`'s truth, since every import goes through such a
+     * context. */
+    [[nodiscard]] bool shares_with_gl() const;
+    /* `name` struck out of the space-separated list in `text`, which is read
+     * no further than `bytes`: the words that stay are written back over it,
+     * which never reaches past what has been read. Answers the bytes the list
+     * needs afterwards, terminator included. */
+    size_t             without(char *text, size_t bytes, const char *name) const;
+    /* Whether `length` letters at `text` are the whole of `name`. */
+    bool               names(const char *text, size_t length, const char *name) const;
+    /* The queue an acquire is enqueued on, made on the guest's context at the
+     * first import: the acquire is the device's own bookkeeping and no guest
+     * queue should carry it. Null when there is no context to make one on. */
+    void *acquire_queue();
+
     const OpenClDevice *bound_;
+    const GlDisplay    *display_;
+    /* Opened only when a display was given; a context nothing opened holds
+     * nothing and closes to nothing. */
+    GlContext      vehicle_;
+    GlHostImport   import_;
+    GlSharedBuffer buffers_;
+    ClSharedObjects    shared_;
+    /* The first context the guest made, which is the one a shared object is
+     * opened into. An OpenCL application makes one; a second is a context this
+     * cannot share with, and an open into it is refused rather than answered
+     * with a cl_mem of the wrong context. */
+    void              *context_;
+    void              *queue_;
     ClHandleRegistry handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;

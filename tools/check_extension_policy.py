@@ -30,6 +30,7 @@ NO_EXTENSIONS = ("d3d",)
 IMPLEMENTED_LISTS = {
     "vulkan": ("src/proto/generated/vulkan/vk_supported_extensions.h", "kImplementedDeviceExtensions"),
     "opengl": ("src/proto/generated/opengl/gl_tier.h", "kCarriedExtensions"),
+    "opencl": ("src/proto/generated/opencl/cl_supported_extensions.h", "kCarriedExtensions"),
 }
 # The OpenGL ICD also reports window-system extensions: its own WGL functions,
 # which no generator lists, held to a test each all the same (feature 050).

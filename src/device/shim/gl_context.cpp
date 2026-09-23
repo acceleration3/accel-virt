@@ -47,6 +47,12 @@ bool GlContext::make_current()
     return display_->make_current(context_);
 }
 
+void *GlContext::handle() const
+{
+    AV_SCOPE("GlContext::handle");
+    return context_;
+}
+
 void *GlContext::resolve(const char *name) const
 {
     AV_SCOPE("GlContext::resolve");

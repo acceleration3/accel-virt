@@ -156,6 +156,16 @@ bool BlobTable::contains(uint32_t id)
     return slot_of(id) != nullptr;
 }
 
+Status BlobTable::size(uint32_t id, uint64_t &size)
+{
+    AV_SCOPE("BlobTable::size");
+    host_.require_main_loop("BlobTable::size");
+    const ObjectStorage<BlobResource> *const slot = slot_of(id);
+    if (slot == nullptr) return Status::not_found;
+    size = slot->object().size();
+    return Status::ok;
+}
+
 /* The lookup takes the lock too: a creation on the main loop writes the slot a
  * worker would otherwise be reading. */
 Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias, BlobWindow &pages)

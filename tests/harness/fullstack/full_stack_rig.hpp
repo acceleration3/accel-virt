@@ -32,6 +32,11 @@ public:
      * fence queues share. */
     static constexpr std::uint32_t message_interrupts = 11u;
     static constexpr std::uint16_t rvk_subsystem = 0x5256u;
+    /* The function presents a host GPU's IDs, as it does on any host whose
+     * GPU sits on PCI: this project's RX 9070 XT. */
+    static constexpr std::uint16_t host_vendor = 0x1002u;
+    static constexpr std::uint16_t host_device = 0x7550u;
+    static constexpr std::uint8_t  host_revision = 0xC0u;
     /* virtio-gpu's VIRTIO_GPU_SHM_ID_HOST_VISIBLE, on a BAR of its own, sized
      * as the MockHost LoopbackDevice builds. */
     static constexpr std::uint8_t  hostmem_region = 1u;

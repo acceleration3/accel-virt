@@ -247,6 +247,8 @@ public:
     void     cmd_draw(VkCommandBuffer command_buffer, std::uint32_t vertices) override;
     void     cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkImage image, VkImageLayout layout,
                                       VkBuffer buffer, const VkBufferImageCopy *region) override;
+    void     cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size,
+                             uint32_t value) override;
 
     VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) override;
 
@@ -290,6 +292,10 @@ private:
         bool          in_render_pass;
         bool          drew;
         std::uint64_t copied_to;
+        /* The buffer a fill names and the word it writes over it, which the
+         * run puts into the memory that buffer is bound to. */
+        std::uint64_t filled;
+        std::uint32_t fill_value;
     };
 
     /* The scripted failure for this use of `call`, or VK_SUCCESS. */

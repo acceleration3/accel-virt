@@ -39,6 +39,10 @@ uint32_t rvk_device_capsets(RvkDevice *device)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().capsets(); }
 
 __attribute__((visibility("default")))
+int rvk_device_pci_identity(RvkDevice *device, RvkPciIdentity *identity)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().pci_identity(*identity) ? 1 : 0; }
+
+__attribute__((visibility("default")))
 void rvk_device_status(RvkDevice *device, uint8_t status)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().status(status); }
 

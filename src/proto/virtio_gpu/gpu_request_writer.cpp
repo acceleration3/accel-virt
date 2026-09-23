@@ -13,6 +13,7 @@ constexpr size_t attach_backing_size = 48u;
 constexpr size_t transfer_size = 56u;
 constexpr size_t resource_unref_size = 32u;
 constexpr size_t set_scanout_size = 48u;
+
 constexpr size_t resource_flush_size = 48u;
 
 }  // namespace
@@ -115,6 +116,29 @@ Status GpuRequestWriter::set_scanout(uint32_t scanout, uint32_t resource_id, uin
     writer.write_u32(height);
     writer.write_u32(scanout);
     writer.write_u32(resource_id);
+    return Status::ok;
+}
+
+/* The rectangle is the whole framebuffer, which is what a primary's scanout
+ * always shows; a blob of 0 is the disable and carries none of it. */
+Status GpuRequestWriter::set_scanout_blob(uint32_t scanout, uint32_t resource_id, uint32_t width,
+                                          uint32_t height, uint32_t stride)
+{
+    AV_SCOPE("GpuRequestWriter::set_scanout_blob");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, set_scanout_blob_type, scanout_blob_request_size)) return Status::too_large;
+    writer.write_zeros(8u);
+    writer.write_u32(width);
+    writer.write_u32(height);
+    writer.write_u32(scanout);
+    writer.write_u32(resource_id);
+    writer.write_u32(width);
+    writer.write_u32(height);
+    writer.write_u32(resource_id != 0u ? format_b8g8r8a8 : 0u);
+    writer.write_zeros(4u);
+    writer.write_u32(stride);
+    writer.write_zeros(12u);
+    writer.write_zeros(16u);
     return Status::ok;
 }
 

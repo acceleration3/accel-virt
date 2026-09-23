@@ -35,6 +35,7 @@ void FullStackRig::start()
     function_.add_shared_memory_region(hostmem_region, hostmem_bar, 0u, hostmem_bytes, hostmem_address);
     function_.add_doorbell_region();
     function_.set_subsystem_id(rvk_subsystem);
+    function_.present_host_gpu(host_vendor, host_device, host_revision);
     function_.serve_notify_with(bridge_);
     function_.serve_doorbells_with(device_.doorbells());
     added_ = fdo_.add_device();

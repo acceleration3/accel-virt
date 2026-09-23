@@ -47,9 +47,19 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.gpu_properties = [](void *opaque, std::uint32_t index, RvkGpuProperties *properties) {
         const GpuIdentity identity = host_of(opaque).gpu_identity(index);
         *properties = RvkGpuProperties{identity.vendor_id(), identity.device_id(), identity.device_type(), {},
-                                       identity.local_memory(), identity.shared_memory(), {}};
+                                       identity.local_memory(), identity.shared_memory(), {}, 0u, 0u, 0u, 0u, 0u};
         std::memcpy(properties->uuid, identity.uuid(), sizeof properties->uuid);
         std::memcpy(properties->name, identity.name(), std::strlen(identity.name()) + 1u);
+        MockHost::PciBus bus = {};
+        if (!host_of(opaque).gpu_bus(index, bus)) return;
+        properties->pci_domain = bus.domain;
+        properties->pci_bus = static_cast<std::uint8_t>(bus.bus);
+        properties->pci_device = static_cast<std::uint8_t>(bus.device);
+        properties->pci_function = static_cast<std::uint8_t>(bus.function);
+        properties->on_pci = 1u;
+    };
+    table_.read_file = [](void *opaque, const char *path, char *buffer, std::size_t size, std::size_t *length) {
+        return host_of(opaque).read_file(path, buffer, size, *length) == Status::ok ? 0 : 1;
     };
     table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size); };
     table_.release = [](void *opaque, void *block) { host_of(opaque).release(block); };
@@ -135,6 +145,23 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).truncate_recording(file) == Status::ok ? 0 : 1;
     };
     table_.close_recording = [](void *opaque, void *file) { host_of(opaque).close_recording(file); };
+    table_.display_takes_dmabuf = [](void *opaque, std::uint32_t head) {
+        return host_of(opaque).display_takes_dmabuf(head) ? 1 : 0;
+    };
+    table_.show_scanout = [](void *opaque, std::uint32_t head, int fd, const RvkScanoutFrame *frame) {
+        /* The modifier and the reserved word are the table's promise, not the
+         * mock's business; a plane that broke either is a caught ABI change. */
+        if (frame == nullptr || frame->reserved != 0u || frame->modifier != 0u) return 1;
+        const MockHost::Plane plane = {frame->width,          frame->height,  frame->x,      frame->y,
+                                       frame->backing_width,  frame->backing_height,
+                                       frame->stride,         frame->offset,  frame->fourcc};
+        return host_of(opaque).show_scanout_plane(head, fd, plane) == Status::ok ? 0 : 1;
+    };
+    table_.update_scanout = [](void *opaque, std::uint32_t head, std::uint32_t x, std::uint32_t y,
+                               std::uint32_t width, std::uint32_t height) {
+        host_of(opaque).update_scanout(head, x, y, width, height);
+    };
+    table_.hide_scanout = [](void *opaque, std::uint32_t head) { host_of(opaque).hide_scanout(head); };
 }
 
 const RvkHostOps &MockHostOps::table() const

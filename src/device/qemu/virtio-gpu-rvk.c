@@ -120,6 +120,11 @@ static void virtio_gpu_rvk_unrealize(DeviceState *qdev)
     virtio_gpu_rvk_parent_unrealize(qdev);
 }
 
+int virtio_gpu_rvk_pci_identity(VirtIOGPURvk *r, RvkPciIdentity *identity)
+{
+    return r->core && rvk_device_pci_identity(r->core, identity);
+}
+
 static int virtio_gpu_rvk_set_status(VirtIODevice *vdev, uint8_t status)
 {
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(vdev);

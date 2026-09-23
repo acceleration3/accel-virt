@@ -125,3 +125,5 @@ class Registry:
     commands: dict[str, Command] = field(default_factory=dict)
     handles: set[str] = field(default_factory=set)
     structs: dict[str, list[tuple[str, CType]]] = field(default_factory=dict)
+    # Every extension whose commands this build answers, in registry order.
+    carried_extensions: list[str] = field(default_factory=list)

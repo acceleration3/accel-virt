@@ -55,13 +55,18 @@ public:
 private:
     friend struct ClExtensionPolicyProbe;
 
+    /* Whether a host offering `host` answers `row`: its own name, or the host
+     * extension the row names instead. */
+    bool answered_by(const char *host, size_t host_bytes, const Row &row) const;
+
     const Row *rows_;
     uint32_t   count_;
 };
 
 /* What this ICD ships, read by tools/check_extension_policy.py and by the
- * root. Null while nothing is reported. */
-extern const ClExtensionPolicy::Row *reported_extensions;
+ * root. */
+extern const ClExtensionPolicy::Row reported_extensions[];
+extern const uint32_t                reported_extension_count;
 
 }  // namespace av::clicd
 

@@ -4,6 +4,7 @@
 #include "core/trace/state_writer.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
+#include "device/control/scanout_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
@@ -15,8 +16,8 @@ namespace av {
 constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
-      blobs_(host), shared_(host), interrupts_(host), status_(host, interrupts_),
+    : host_(host), binding_(host), pci_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
+      blobs_(host), shared_(host), heads_(host, blobs_), interrupts_(host), status_(host, interrupts_),
       contexts_(host, blobs_, shared_, interrupts_, library_, recorder_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
@@ -61,6 +62,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     }
     const Status status = binding_.bind(host_gpu, message);
     if (status != Status::ok) return status;
+    pci_.read(binding_.index());
     /* What this host can actually do, asked once, on the GPU just bound: a
      * probe that fails leaves its bit clear and the device starts anyway. */
     feasibility_.decide(guest_probe_address);
@@ -99,6 +101,9 @@ void VirtioGpuRvk::reset()
     /* After the contexts, which drop their references as they go: a reset
      * leaves no context to hold one, so whatever is left goes too. */
     shared_.release_all();
+    /* Before the blobs: a head holds a pin on the blob it shows, so every head
+     * lets go before the table it pinned from does. */
+    heads_.release_all();
     blobs_.release_all();
 }
 
@@ -117,9 +122,14 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
     AV_SCOPE("VirtioGpuRvk::control");
     host_.require_main_loop("VirtioGpuRvk::control");
     if (!binding_.bound()) return false;
+    /* The first request the guest sends arrives long after QEMU has started
+     * its display, which is the earliest the display's answer is worth
+     * anything (DeviceCapset::resolve_display). */
+    if (!capset_.display_resolved()) capset_.resolve_display(heads_.takes_dmabuf());
     ControlRequest control(host_, request);
     return ContextCommands(host_, contexts_, capset_).answer(control, type) ||
-           BlobCommands(host_, blobs_, recorder_).answer(control, type);
+           BlobCommands(host_, blobs_, recorder_).answer(control, type) ||
+           ScanoutCommands(host_, blobs_, heads_).answer(control, type);
 }
 
 uint32_t VirtioGpuRvk::capsets() const
@@ -128,10 +138,23 @@ uint32_t VirtioGpuRvk::capsets() const
     return capset_.described() ? 1u : 0u;
 }
 
+bool VirtioGpuRvk::pci_identity(RvkPciIdentity &identity) const
+{
+    AV_SCOPE("VirtioGpuRvk::pci_identity");
+    host_.require_main_loop("VirtioGpuRvk::pci_identity");
+    return pci_.presented(identity);
+}
+
 uint32_t VirtioGpuRvk::blobs() const
 {
     AV_SCOPE("VirtioGpuRvk::blobs");
     return blobs_.live();
+}
+
+uint32_t VirtioGpuRvk::scanouts() const
+{
+    AV_SCOPE("VirtioGpuRvk::scanouts");
+    return heads_.showing();
 }
 
 /* A context reports its fences by interrupt, so one created while nothing
@@ -177,10 +200,12 @@ void VirtioGpuRvk::report(StateWriter &writer)
         writer.number("gpu", gpu_index());
         writer.number("capsets", capsets());
         writer.number("blobs", blobs());
+        writer.number("scanouts", scanouts());
         writer.number("contexts", contexts());
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
     shared_.report(writer);
+    heads_.report(writer);
     contexts_.report(writer);
 }
 
@@ -189,7 +214,7 @@ bool VirtioGpuRvk::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuRvk::invariants_hold");
     return contexts_.invariants_hold() && blobs_.invariants_hold() && shared_.invariants_hold() &&
-           interrupts_.invariants_hold() &&
+           heads_.invariants_hold() && interrupts_.invariants_hold() &&
            status_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
 }
 

@@ -39,7 +39,19 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `ScanoutFormat` | object | one virtio-gpu pixel format id | answers a format's DRM fourcc and pixel width, or that it is not one this device scans out |
+| `ScanoutFramebuffer` | object | offset, stride, width, height, source rectangle, `ScanoutFormat`, the blob size it was checked against | holds one framebuffer's geometry inside a blob, refusing one that does not fit |
+| `ScanoutBinding` | object | head index, blob id, `ScanoutFramebuffer`, `GuestDmaBuf`, shown flag | owns what one display head shows |
+| `DisplayHeads` | system | `ScanoutBinding[16]`, `Host&`, `BlobTable&`, the display's resolved answer | keeps the host's display heads showing the blobs the guest bound to them |
+| `ScanoutCommands` | object | `Host&`, `BlobTable&`, `DisplayHeads&` | answers the control requests that choose what a display head shows |
+| `GpuRect` | object | x, y, width, height from the wire | says whether a virtio-gpu rectangle lies inside given bounds |
+| `SetScanoutBlobRequest` | object | head, resource, size, format, four strides, four offsets, `GpuRect` | decodes a `SET_SCANOUT_BLOB` request |
+| `FlushRequest` | object | resource, `GpuRect` | decodes a `RESOURCE_FLUSH` request |
+
+Extended rather than added: `Host` and `RvkHostOps` gain four display
+operations (`contracts/display_host_ops.md`), `CapsetInfo` gains
+`feature_dmabuf_scanout`, `DeviceCapset` gains `resolve_display()`, and
+`VirtioGpuRvk` gains a `DisplayHeads`.
 
 ### Test requirements
 

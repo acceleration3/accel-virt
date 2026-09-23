@@ -36,7 +36,7 @@ void AdapterSearch::keep_or_close(uint32_t adapter, const PciIdentity &identity)
     AV_SCOPE("AdapterSearch::keep_or_close");
     if (adapter == 0u) return;
     PciIdentity reported;
-    if (adapter_ == 0u && kmt_.query_identity(adapter, reported) == Status::ok && reported.same_as(identity)) {
+    if (adapter_ == 0u && kmt_.query_identity(adapter, reported) == Status::ok && reported.same_subsystem_as(identity)) {
         adapter_ = adapter;
         return;
     }

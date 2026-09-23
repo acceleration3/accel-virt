@@ -4,13 +4,15 @@
 
 #include "core/trace/function_scope.hpp"
 #include "guest/suite/vulkan_probe.hpp"
+#include "um/probe/cl/windows_cl_entry.hpp"
 
 #include <windows.h>
 
 namespace av {
 
 ProbeProgram::ProbeProgram()
-    : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), images_(), window_(), frames_()
+    : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), cl_(), images_(), window_(),
+      frames_()
 {
     AV_SCOPE("ProbeProgram::ProbeProgram");
 }
@@ -30,7 +32,11 @@ uint32_t ProbeProgram::run()
          * reaches. Its own instance and device, because the probe above
          * destroys everything it made and these steps need a device asked for
          * with the external-object extensions. */
-        SharedObjectProbe shared(kmt_, report_, vulkan_);
+        /* With the OpenCL loader beside this process, the probe runs the
+         * other half of the matrix too: OpenCL opens the handle Vulkan
+         * exported and reads what Vulkan wrote (feature 053, T019). Without
+         * one, the Vulkan steps run alone. */
+        SharedObjectProbe shared(kmt_, report_, vulkan_, &cl_);
         shared.run();
     } else {
         report_.check("program", "initialize", initialized, 0u);

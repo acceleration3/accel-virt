@@ -100,6 +100,12 @@ void *GlDisplay::create_context(const GlContextAttributes &attributes, void *sha
     return context == EGL_NO_CONTEXT ? nullptr : context;
 }
 
+void *GlDisplay::handle() const
+{
+    AV_SCOPE("GlDisplay::handle");
+    return display_;
+}
+
 bool GlDisplay::make_current(void *context) const
 {
     AV_SCOPE("GlDisplay::make_current");

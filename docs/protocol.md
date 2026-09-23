@@ -61,7 +61,22 @@ virtio-gpu capset id **0x72**, capset version 1, returned by
 | 48 | u8[16] | device_uuid | `VkPhysicalDeviceIDProperties::deviceUUID` |
 | 64 | u64 | local_memory | bytes in device-local heaps |
 | 72 | u64 | shared_memory | bytes in host-visible, non-device-local heaps |
-| 80 | u8[48] | name | UTF-8, NUL-terminated inside the field, every byte after the first NUL zero |
+| 80 | u8[48] | name | UTF-8, NUL-terminated inside the field, every byte after the first NUL zero: the adapter's name (below) |
+
+`name` is what the guest calls the adapter in Device Manager, WMI and DXGI:
+`VkPhysicalDeviceProperties::deviceName` without a trailing parenthesised
+group set off by a space, which Mesa's drivers append to name themselves
+("AMD Radeon RX 9070 XT (RADV GFX1201)" is sent as "AMD Radeon RX 9070 XT"),
+cut to fit at a UTF-8 character boundary (`src/device/gpu/adapter_name.hpp`).
+The PCI database's name is not used: pci.ids names the silicon ("Navi 48
+[Radeon RX 9070/9070 XT/9070 GRE]"), not the product.
+
+The PCI function carries the rest of the host GPU's identity. When the bound
+GPU reports `VK_EXT_pci_bus_info` and sysfs describes its function,
+virtio-gpu-rvk-pci presents that function's vendor, device and revision as its
+own (`src/device/gpu/host_pci_identity.hpp`); the subsystem stays `1af4:5256`,
+which is how the driver package and the guest's programs recognise the device.
+A GPU with no PCI function (llvmpipe) leaves virtio-gpu's `1af4:1050`.
 
 Each feature bit is something the host **proved**, not something it hopes for
 (`src/device/probe/host_feasibility.cpp`):
@@ -71,6 +86,14 @@ Each feature bit is something the host **proved**, not something it hopes for
 | 0 | `host_visible_memory` | the device has a host-visible region at all: `hostmem=` is non-zero, so there is a BAR to place blobs in |
 | 1 | `gpu_exported_memory` | memory allocated on the bound host GPU can be placed in that region and read back correctly through it (feature 039's `HostMemoryProbe`; on NVIDIA this works through dma-buf and not through an opaque fd) |
 | 2 | `guest_memory_import` | the host GPU can address guest pages directly, `VK_EXT_external_memory_host` (feature 039's `GuestImportProbe`, which refuses anything that is not a direct mapping) |
+| 3 | `dmabuf_scanout` | a display head's console can show a dma-buf, so a blob may be scanned out instead of transferred (feature 058) |
+
+Bit 3 is the one bit the device cannot decide when it describes the capset, and
+the reason is QEMU's own order: `qemu_init_displays()` runs after
+`qmp_x_exit_preconfig()` has realized every device, and it is the display
+backend - not the device - that gives a console its GL context. So it is
+decided when the guest first reads the capset, once, and the answer the guest
+was given is the one that stands for the life of the device.
 
 A guest driver reports a CPU-visible memory segment over the region only when
 bit 0 is set **and** it found shared memory region 1 in the device's PCI
@@ -753,9 +776,53 @@ offsets read as zero. `RESOURCE_UNREF` of a blob releases it, mapped or not.
 | a guest blob, a blob already mapped, a misaligned offset, one past the region, or an overlap | `ERR_INVALID_PARAMETER` |
 | `RESOURCE_UNMAP_BLOB` of an unknown id / an unmapped blob | `ERR_INVALID_RESOURCE_ID` / `ERR_INVALID_PARAMETER` |
 | `RESOURCE_CREATE_2D` over a blob id | `ERR_INVALID_RESOURCE_ID` |
-| `SET_SCANOUT_BLOB` | `ERR_INVALID_PARAMETER` |
+| `RESOURCE_UNREF` of a blob a display head is showing | `ERR_INVALID_PARAMETER` |
 
-A device reset releases every blob and mapping.
+A device reset releases every display head, then every blob and mapping.
+
+## Blob scanout (guest -> device)
+
+A display head shows a blob directly: the blob's guest pages become one
+dma-buf and the host's display samples them, so no frame is transferred. The
+guest may send `SET_SCANOUT_BLOB` only when the capset carries
+`feature_dmabuf_scanout`; without it the head keeps `SET_SCANOUT`,
+`TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` over a 2D resource, which is what
+every host started without a GL-capable display gives.
+
+**`SET_SCANOUT_BLOB`** (96 bytes; virtio 1.2 5.7.6.10) binds head `scanout_id`
+to blob `resource_id`, showing the rectangle `r` of a `width` x `height`
+framebuffer of `format` at `offsets[0]` with `strides[0]`. Only plane 0 is
+carried: a non-zero stride or offset on planes 1 to 3 is refused rather than
+dropped, because the display shows one plane. `resource_id` 0 hides the head,
+twice in a row without error. A head already showing something is not hidden
+first - the new descriptor is taken before the old one is let go, so nothing
+blank reaches the screen between two pictures.
+
+| Refusal | Answer |
+|---|---|
+| shorter than 96 bytes, a non-zero `padding`, or a second plane | `ERR_INVALID_PARAMETER` |
+| `scanout_id` at or beyond 16 | `ERR_INVALID_PARAMETER` |
+| a format outside the eight 32-bit colour formats, a zero `width` or `height`, a stride below `width` x 4 or above `INT32_MAX` | `ERR_INVALID_PARAMETER` |
+| a framebuffer whose last row runs past the blob | `ERR_INVALID_PARAMETER` |
+| `r` outside the framebuffer, or with a zero side | `ERR_INVALID_PARAMETER` |
+| `resource_id` naming no blob | `ERR_INVALID_RESOURCE_ID` |
+| a display that will not show a dma-buf, a head the host does not have, or a blob whose memory cannot become one | `ERR_UNSPEC` |
+
+The rule behind the table: `ERR_INVALID_PARAMETER` is the guest being wrong and
+`ERR_UNSPEC` is the host declining. A refusal changes nothing - the head goes on
+showing what it showed, and no descriptor is opened.
+
+**`RESOURCE_FLUSH`** naming a blob updates every head showing it, clipped to
+the part of the head's picture the rectangle covers; a rectangle inside the
+framebuffer but outside the picture updates nothing and answers `OK_NODATA`.
+`ERR_INVALID_PARAMETER` for a rectangle outside the framebuffer or a blob no
+head shows. A flush naming a 2D resource is the base class's, as it always was,
+and so is `SET_SCANOUT`: the base class already answers
+`ERR_INVALID_RESOURCE_ID` for a resource it does not hold, and a blob is not
+one of its resources.
+
+A blob a head is showing is pinned, so `RESOURCE_UNREF` of it is refused until
+the head is hidden.
 
 ## Fence page (device -> guest)
 

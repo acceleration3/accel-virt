@@ -897,6 +897,26 @@ TEST(cl_icd_root_refusals, a_context_the_guest_cannot_keep_gives_the_hosts_back)
  * A device the table holds but that no open produced is what gets there: the
  * root has never made a context of its own, so the pool it keeps them in has
  * no room yet and asking for one is what allocates. */
+/* An external acquire on a queue this root has no context for: the object it
+ * names would have nothing to be an object of. A queue the table holds but no
+ * context produced is what gets there, and it is refused before any object in
+ * the list is looked at. */
+TEST(cl_icd_root_refusals, an_external_acquire_on_a_queue_with_no_context_is_refused)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  ClObject *const queue =
+      av::clicd::ClIcdRootProbe::without_a_context(rig.root(), ClObject::Kind::command_queue,
+                                                   0x6500u);
+  CHECK(queue != nullptr);
+  if (queue == nullptr) return;
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_mem              named = nullptr;
+  CHECK_EQ(rig.root().enqueue_external(reinterpret_cast<cl_command_queue>(queue), 1u, &named,
+                                       nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(cl_icd_root_refusals, a_root_with_no_memory_for_its_first_context_makes_none)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);

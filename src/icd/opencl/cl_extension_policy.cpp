@@ -28,20 +28,24 @@ bool same_word(const char *text, const char *name, size_t length)
 /* The extensions this ICD reports, each with the test that proves it through
  * the ICD (tools/check_extension_policy.py).
  *
- * Still empty after feature 053, and for three separate reasons.
+ * Two rows, and two names deliberately absent.
+ *
+ * `cl_khr_external_memory` and `cl_khr_external_memory_win32` are how an
+ * application names memory another API made: the Win32 handle travels in
+ * `clCreateBufferWithProperties`' property list, `ClExternalMemory` turns it
+ * into the object behind it and opens that on the device, and the extension's
+ * acquire and release are answered by `ClIcdRoot::enqueue_external` - the
+ * object was acquired on the host when the device opened it and stays
+ * acquired for its life. Both are answered over the host's `cl_khr_gl_sharing`
+ * rather than over an external-memory extension of its own: no OpenCL on a
+ * Linux host has a Win32 handle to take, and the device reaches the descriptor
+ * through OpenGL instead (research.md §18 and §21). A host that cannot really
+ * make a GL-sharing context is a host whose device strikes that name out of
+ * what the guest is shown, so neither row is reported there.
  *
  * `cl_khr_icd` is the loader's own contract rather than something an
  * application enables, and this ICD answers its two queries without claiming
  * the extension.
- *
- * `cl_khr_external_memory_win32` is built in the guest and refused by the
- * host: `ClExternalMemory` turns a Win32 handle into the object behind it and
- * opens that on the device, and `clCreateBufferWithProperties` carries it -
- * but the device's OpenCL backend cannot import a shared object at all (053's
- * T019, waiting for a host whose OpenCL lists `cl_khr_external_memory_dma_buf`
- * to prove it against). Reporting a row whose every use the device refuses is
- * exactly what constitution VI forbids, so the machinery ships unreported and
- * the row lands with the import.
  *
  * `cl_khr_gl_sharing` needs something this design does not have yet: the
  * *host's* CL context must be created against the *host's* GL context, and the
@@ -49,7 +53,15 @@ bool same_word(const char *text, const char *name, size_t length)
  * in another DLL of the same process - which nothing on the wire names. That
  * is a wire and executor-ABI change rather than a table, and research.md §18
  * records what it would take. */
-const ClExtensionPolicy::Row *reported_extensions = nullptr;
+const ClExtensionPolicy::Row reported_extensions[] = {
+    {"cl_khr_external_memory", 1u,
+     "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver",
+     "cl_khr_gl_sharing"},
+    {"cl_khr_external_memory_win32", 1u,
+     "cl_buffer_paths.a_buffer_over_a_shared_object_is_opened_and_released_as_one",
+     "cl_khr_gl_sharing"},
+};
+const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 
 ClExtensionPolicy::ClExtensionPolicy(const Row *rows, uint32_t count)
     : rows_(rows), count_(rows != nullptr ? count : 0u)
@@ -74,6 +86,17 @@ bool ClExtensionPolicy::offered_by(const char *host, size_t host_bytes, const ch
     return false;
 }
 
+bool ClExtensionPolicy::answered_by(const char *host, size_t host_bytes, const Row &row) const
+{
+    AV_SCOPE("ClExtensionPolicy::answered_by");
+    /* The host extension the row is answered over, when it is not the host's
+     * own spelling of it: cl_khr_external_memory_win32 is answered over the
+     * host's cl_khr_gl_sharing, since no Linux OpenCL has a Win32 handle to
+     * take and the device opens the object through OpenGL instead
+     * (research.md §21). */
+    return offered_by(host, host_bytes, row.host_ != nullptr ? row.host_ : row.name_);
+}
+
 bool ClExtensionPolicy::reportable(const char *name) const
 {
     AV_SCOPE("ClExtensionPolicy::reportable");
@@ -96,7 +119,7 @@ size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into
      * as much as happened to fit. */
     size_t needed = 1u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (!offered_by(host, host_bytes, rows_[index].name_)) continue;
+        if (!answered_by(host, host_bytes, rows_[index])) continue;
         size_t length = 0u;
         while (rows_[index].name_[length] != '\0' && length < name_bytes) ++length;
         needed += length + (needed > 1u ? 1u : 0u);
@@ -105,7 +128,7 @@ size_t ClExtensionPolicy::report(const char *host, size_t host_bytes, char *into
 
     size_t at = 0u;
     for (uint32_t index = 0u; index < count_; ++index) {
-        if (!offered_by(host, host_bytes, rows_[index].name_)) continue;
+        if (!answered_by(host, host_bytes, rows_[index])) continue;
         if (at != 0u) into[at++] = ' ';
         for (size_t letter = 0u; rows_[index].name_[letter] != '\0' && letter < name_bytes; ++letter) {
             into[at++] = rows_[index].name_[letter];

@@ -6,7 +6,11 @@
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_table.hpp"
+#include "core/support/text_buffer.hpp"
 #include "device/abi/table_host.hpp"
+#include "device/gpu/pci_address.hpp"
+#include "device/display/scanout_format.hpp"
+#include "device/display/scanout_framebuffer.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -16,7 +20,10 @@
 #include "device/threading/work_item.hpp"
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/host/host_violation.hpp"
 #include "proto/context/gpu_identity.hpp"
+#include "proto/virtio_gpu/set_scanout_blob_request.hpp"
+#include "proto/wire/wire_reader.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_host_ops.hpp"
 #include "harness/host/mock_request.hpp"
@@ -30,6 +37,7 @@ using av::Host;
 using av::MockHost;
 using av::MockHostOps;
 using av::Status;
+
 using av::TableHost;
 using av::WorkItem;
 using av::Worker;
@@ -70,6 +78,48 @@ TEST(table_host, forwards_the_catalog_and_the_log)
   CHECK_EQ(std::strlen(identity.name()), GpuIdentity::name_bytes - 1u);
   host.log("hello");
   CHECK_EQ(mock.logged(), 1u); }
+
+TEST(table_host, forwards_where_a_gpu_sits_on_pci_and_the_files_the_host_reads)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {5};
+  mock.add_gpu(uuid);
+  mock.add_gpu(uuid);
+  mock.place_gpu_on_pci(1u, MockHost::PciBus{0x1u, 0x7Bu, 0x2u, 0x3u});
+  av::PciAddress address;
+  CHECK_STATUS(host.gpu_pci_address(0u, address), Status::not_found);
+  CHECK_STATUS(host.gpu_pci_address(1u, address), Status::ok);
+  char           spelled[16] = {};
+  av::TextBuffer text(spelled, sizeof spelled);
+  address.append_to(text);
+  CHECK(std::strcmp(text.text(), "0001:7b:02.3") == 0);
+  mock.add_file("/sys/x", "0x1002\n", 7u);
+  char        bytes[4] = {};
+  std::size_t length = 99u;
+  CHECK_STATUS(host.read_file("/sys/x", bytes, sizeof bytes, length), Status::ok);
+  CHECK_EQ(length, 4u);   /* cut at the buffer */
+  CHECK(std::memcmp(bytes, "0x10", 4u) == 0);
+  CHECK_STATUS(host.read_file("/sys/absent", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u); }
+
+/* A glue with no file reader, and one claiming more than it was given room for,
+ * are both a host that read nothing. */
+TEST(table_host, a_missing_or_overlong_file_reader_reads_nothing)
+{ MockHost mock; MockHostOps ops(mock);
+  RvkHostOps table = ops.table();
+  table.read_file = nullptr;
+  TableHost without(table);
+  char        bytes[8] = {};
+  std::size_t length = 99u;
+  CHECK_STATUS(without.read_file("/sys/x", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u);
+  table.read_file = [](void *, const char *, char *, std::size_t size, std::size_t *read) {
+      *read = size + 1u;
+      return 0;
+  };
+  TableHost overlong(table);
+  length = 99u;
+  CHECK_STATUS(overlong.read_file("/sys/x", bytes, sizeof bytes, length), Status::not_found);
+  CHECK_EQ(length, 0u); }
 
 TEST(table_host, a_null_answer_from_the_table_is_no_memory)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
@@ -360,3 +410,90 @@ TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
   void *refused = &mock;
   CHECK_STATUS(host.create_recording("again.rvk", refused), Status::no_memory);
   CHECK(refused == nullptr); }
+/* The four display operations, over the same C table. What the guest sends is
+ * geometry; what the glue is handed is one plane with a DRM fourcc and a
+ * modifier, and nothing left for it to decide. */
+TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_table)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  constexpr std::uint64_t ram = 0x40000000u;
+  constexpr std::uint32_t picture_width = 64u, picture_height = 16u;
+  constexpr std::uint64_t picture_bytes = 4096u;
+  mock.add_guest_ram(ram, 0x10000u);
+  mock.add_display_heads(1u);
+
+  CHECK(host.display_takes_dmabuf(0u));
+  CHECK(!host.display_takes_dmabuf(1u));
+
+  std::uint8_t bytes[av::SetScanoutBlobRequest::encoded_size] = {};
+  const auto put32 = [&bytes](std::size_t at, std::uint32_t value) { std::memcpy(bytes + at, &value, 4); };
+  put32(24u, 8u);                             /* the picture's origin in the framebuffer */
+  put32(28u, 4u);
+  put32(32u, 16u);
+  put32(36u, 8u);
+  put32(48u, picture_width);
+  put32(52u, picture_height);
+  put32(56u, av::ScanoutFormat::b8g8r8a8);
+  put32(64u, picture_width * 4u);
+  av::WireReader            reader(bytes, sizeof bytes);
+  av::SetScanoutBlobRequest request;
+  CHECK_STATUS(request.decode(reader), Status::ok);
+  av::ScanoutFramebuffer framebuffer;
+  CHECK_STATUS(framebuffer.adopt(request, picture_bytes), Status::ok);
+
+  void *const         run = mock.guest_ram(ram);
+  const std::uint64_t length = picture_bytes;
+  int                 descriptor = -1;
+  if (host.dmabuf_over_guest(&run, &length, 1u, descriptor) == Status::ok) {
+      CHECK_STATUS(host.show_scanout(0u, descriptor, framebuffer), Status::ok);
+      const MockHost::Scanout shown = mock.head(0u);
+      CHECK(shown.shown);
+      CHECK_EQ(shown.descriptor, descriptor);
+      CHECK_EQ(shown.plane.x, 8u);
+      CHECK_EQ(shown.plane.y, 4u);
+      CHECK_EQ(shown.plane.width, 16u);
+      CHECK_EQ(shown.plane.height, 8u);
+      CHECK_EQ(shown.plane.backing_width, picture_width);
+      CHECK_EQ(shown.plane.backing_height, picture_height);
+      CHECK_EQ(shown.plane.stride, picture_width * 4u);
+      CHECK_EQ(shown.plane.offset, 0u);
+      CHECK_EQ(shown.plane.fourcc, av::ScanoutFormat(av::ScanoutFormat::b8g8r8a8).fourcc());
+      host.update_scanout(0u, 1u, 2u, 3u, 4u);
+      std::uint32_t x = 0u, y = 0u, width = 0u, height = 0u;
+      mock.last_update(0u, x, y, width, height);
+      CHECK_EQ(x, 1u); CHECK_EQ(y, 2u); CHECK_EQ(width, 3u); CHECK_EQ(height, 4u);
+      host.hide_scanout(0u);
+      CHECK(!mock.head(0u).shown);
+      host.close_dmabuf(descriptor);
+  }
+
+  /* A table from before these four: the display shows nothing, which is the
+   * same answer a host with no GL display gives. */
+  RvkHostOps older = ops.table();
+  older.display_takes_dmabuf = nullptr;
+  older.show_scanout = nullptr;
+  older.update_scanout = nullptr;
+  older.hide_scanout = nullptr;
+  TableHost before(older);
+  CHECK(!before.display_takes_dmabuf(0u));
+  CHECK_STATUS(before.show_scanout(0u, 0, framebuffer), Status::not_supported);
+  before.update_scanout(0u, 0u, 0u, 1u, 1u);
+  before.hide_scanout(0u);
+  CHECK_EQ(mock.head(0u).updates, mock.head(0u).updates); }
+
+/* A display that will not import the descriptor: not the guest's fault, and
+ * the core is told so rather than being left to believe the head is showing. */
+TEST(table_host_scanout, a_display_that_refuses_the_descriptor_answers_not_supported)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_display_heads(1u);
+  av::ScanoutFramebuffer framebuffer;
+  mock.refuse_scanout_at(1u);
+  CHECK_STATUS(host.show_scanout(0u, 1, framebuffer), Status::not_supported);
+  CHECK(!mock.head(0u).shown);
+  /* A head the host does not have, and a descriptor that is not open: both are
+   * recorded contract breaks, not silent failures. */
+  CHECK_STATUS(host.show_scanout(1u, 1, framebuffer), Status::not_supported);
+  CHECK_STATUS(host.show_scanout(0u, -1, framebuffer), Status::not_supported);
+  host.update_scanout(0u, 0u, 0u, 1u, 1u);
+  CHECK(mock.claim(av::HostViolation::scanout_misuse));
+  CHECK(mock.claim(av::HostViolation::scanout_misuse));
+  CHECK(mock.claim(av::HostViolation::scanout_misuse)); }

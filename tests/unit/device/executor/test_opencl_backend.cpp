@@ -6,6 +6,7 @@
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/host_svm_ranges.hpp"
 #include "device/executor/opencl_backend.hpp"
+#include "device/shim/gl_display.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "device/shim/opencl_device.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -293,12 +294,81 @@ cl_platform_id other_platform() { return reinterpret_cast<cl_platform_id>(&host_
 
 }  // namespace
 
+namespace av {
+
+/* The extension-string surgery, reached from outside because the strings that
+ * exercise it are ones no host answers: a name that ends where the list's word
+ * does not, a word that is only the start of the name, a list that fills its
+ * room with no terminator, and one that ends in spaces. */
+struct OpenClBackendProbe {
+    OpenClBackend &backend;
+
+    std::size_t without(char *text, std::size_t bytes, const char *name) const
+    { return backend.without(text, bytes, name); }
+    bool names(const char *text, std::size_t length, const char *name) const
+    { return backend.names(text, length, name); }
+};
+
+}  // namespace av
+
+/* What is struck out, and what is not: only the whole word, wherever it is in
+ * the list, and the list stays a list. */
+TEST(opencl_backend, striking_a_name_out_of_a_list_takes_the_word_and_nothing_near_it)
+{ OpenClBackend      backend;
+  av::OpenClBackendProbe probe{backend};
+  char first[] = "cl_khr_gl_sharing cl_khr_fp16 cl_khr_icd";
+  CHECK_EQ(probe.without(first, sizeof first, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16 cl_khr_icd") + 1u);
+  CHECK(std::strcmp(first, "cl_khr_fp16 cl_khr_icd") == 0);
+  char last[] = "cl_khr_fp16 cl_khr_gl_sharing";
+  CHECK_EQ(probe.without(last, sizeof last, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
+  CHECK(std::strcmp(last, "cl_khr_fp16") == 0);
+  /* A word the name only starts, and a word that only starts the name: neither
+   * is the name. */
+  char longer[] = "cl_khr_gl_sharing_more cl_khr_gl";
+  CHECK_EQ(probe.without(longer, sizeof longer, "cl_khr_gl_sharing"), sizeof longer);
+  CHECK(std::strcmp(longer, "cl_khr_gl_sharing_more cl_khr_gl") == 0);
+  /* A list that ends in spaces, and one that fills its room with no
+   * terminator at all: both are read as far as they go and no further. */
+  char spaced[] = "cl_khr_fp16   ";
+  CHECK_EQ(probe.without(spaced, sizeof spaced, "cl_khr_gl_sharing"), std::strlen("cl_khr_fp16") + 1u);
+  CHECK(std::strcmp(spaced, "cl_khr_fp16") == 0);
+  char unterminated[11] = {'c', 'l', '_', 'k', 'h', 'r', '_', 'f', 'p', '1', '6'};
+  CHECK_EQ(probe.without(unterminated, 11u, "cl_khr_gl_sharing"), 12u);
+  /* An empty list stays empty. */
+  char empty[] = "";
+  CHECK_EQ(probe.without(empty, sizeof empty, "cl_khr_gl_sharing"), 1u);
+  CHECK_EQ(empty[0], '\0');
+  /* And the comparison itself, at the two ends nothing else reaches. */
+  CHECK(probe.names("cl_khr_fp16", 11u, "cl_khr_fp16"));
+  CHECK(!probe.names("cl_khr_fp16", 5u, "cl_khr_fp16"));
+  CHECK(!probe.names("cl_khr_fp16x", 12u, "cl_khr_fp16")); }
+
+/* A display that was never opened is no display: the context binds, shares
+ * nothing, and runs everything else. */
+TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_nothing)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  av::GlDisplay closed;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device(), &closed));
+  cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
+  /* Nothing is opened into it, and the extension it would have been opened
+   * through is not shown. */
+  std::uint64_t made = 9u;
+  CHECK(!backend.import_object(RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 0, 4096u, made));
+  CHECK_EQ(made, 0u);
+  char   answered[4096] = {};
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),
+           CL_SUCCESS);
+  CHECK(std::strstr(answered, "cl_khr_gl_sharing") == nullptr);
+  backend.shut_down(); }
+
 /* A context the host found no device for is not one: it is refused at setup,
  * and until it is bound it is shown no platform and no device, and makes no
  * context from any type. */
 TEST(opencl_backend, unbound_it_offers_no_platform_device_or_context)
 { OpenClBackend backend;
-  CHECK(!backend.initialize(nullptr));
+  CHECK(!backend.initialize(nullptr, nullptr));
   cl_platform_id platforms[2] = {other_platform(), other_platform()};
   cl_uint count = 7u;
   CHECK_EQ(backend.on_clGetPlatformIDs(2u, platforms, &count), CL_PLATFORM_NOT_FOUND_KHR);
@@ -326,6 +396,50 @@ TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 0u, devices, &count), CL_INVALID_VALUE);
   CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 1u, nullptr, nullptr), CL_INVALID_VALUE); }
 
+/* A context that cannot share tells the guest so, in the one word the guest's
+ * ICD reads it from: with no display there is no vehicle, and a host that
+ * lists cl_khr_gl_sharing is answered without it. Everything else in the list
+ * is still there, in order. */
+TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_device_s_extensions)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device(), nullptr));
+  cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
+
+  char   host_list[4096] = {};
+  size_t host_bytes = 0u;
+  CHECK_EQ(::clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof host_list, host_list, &host_bytes),
+           CL_SUCCESS);
+  if (std::strstr(host_list, "cl_khr_gl_sharing") == nullptr) return;
+
+  char   answered[4096] = {};
+  size_t bytes = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, &bytes),
+           CL_SUCCESS);
+  CHECK(std::strstr(answered, "cl_khr_gl_sharing") == nullptr);
+  /* The word is gone and nothing else is: every other name the host listed is
+   * still answered, and the size is the string's own. */
+  CHECK_EQ(bytes, std::strlen(answered) + 1u);
+  CHECK(bytes < host_bytes);
+  CHECK(std::strstr(answered, "cl_khr_byte_addressable_store") != nullptr ||
+        std::strstr(host_list, "cl_khr_byte_addressable_store") == nullptr);
+  /* A word that merely contains the name is not the name. */
+  CHECK(std::strstr(answered, "  ") == nullptr);
+
+  /* Every other query is the host's own, and so is a size asked with no room:
+   * a caller may be promised more than it needs. */
+  size_t room = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0u, nullptr, &room), CL_SUCCESS);
+  CHECK_EQ(room, host_bytes);
+  cl_uint units = 0u;
+  CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof units, &units, nullptr),
+           CL_SUCCESS);
+  CHECK(units != 0u);
+  /* And a query the host refuses is refused, with nothing struck out of
+   * anything. */
+  CHECK(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 1u, answered, nullptr) != CL_SUCCESS); }
+
 /* Bound, a context is shown its GPU's platform and device and nothing else,
  * whatever else the host has - this host has three platforms and a CPU runtime
  * beside two GPUs. The device it is shown is the GPU, by its own UUID. */
@@ -333,7 +447,7 @@ TEST(opencl_backend, bound_it_offers_its_gpu_s_platform_and_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device()));
+  CHECK(backend.initialize(host.device(), nullptr));
   const cl_platform_id platform = static_cast<cl_platform_id>(host.device()->platform());
   const cl_device_id   device = static_cast<cl_device_id>(host.device()->device());
 
@@ -390,7 +504,7 @@ TEST(opencl_backend, a_context_from_a_type_holds_the_bound_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device()));
+  CHECK(backend.initialize(host.device(), nullptr));
   cl_int error = CL_INVALID_VALUE;
   const cl_context context = backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, &error);
   CHECK_EQ(error, CL_SUCCESS);
@@ -416,7 +530,7 @@ TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device()));
+  CHECK(backend.initialize(host.device(), nullptr));
   std::uint8_t frame[16];
   WireWriter writer(frame, sizeof frame);
   writer.write_varint<std::uint32_t>(4u);
@@ -981,7 +1095,7 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
   if (context == nullptr) return;
 
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device()));
+  CHECK(backend.initialize(host.device(), nullptr));
   /* One reference for this test to hold past the shutdown, one for the ICD. */
   CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
   backend.made(av::clproto::HandleKind::context, context);

@@ -58,6 +58,9 @@ struct VirtIOGPURvk {
     MemoryRegion doorbells;
     /* Queue FIRST + n carries doorbell n's fence interrupts on its vector. */
     VirtQueue *fence_queues[RVK_DEVICE_DOORBELLS];
+    /* The dma-buf each head is showing, which QEMU's display holds an import
+     * of until it is told otherwise; NULL for a head showing nothing. */
+    QemuDmaBuf *scanouts[VIRTIO_GPU_MAX_SCANOUTS];
 };
 
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and
@@ -66,5 +69,8 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r);
 /* Releases the logical device and the Vulkan instance the catalog was read
  * with; safe on a device that never realized. */
 void virtio_gpu_rvk_host_finish(VirtIOGPURvk *r);
+/* rvk_device_pci_identity for the PCI wrapper, which is a module of its own
+ * and must not link a second copy of the core to ask it. */
+int virtio_gpu_rvk_pci_identity(VirtIOGPURvk *r, RvkPciIdentity *identity);
 
 #endif

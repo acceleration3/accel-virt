@@ -28,6 +28,8 @@ public:
     int32_t device_text(void *device, uint32_t name, char *into, size_t room,
                         size_t &bytes) override;
     int32_t device_number(void *device, uint32_t name, uint64_t &value) override;
+    void   *create_buffer_with_properties(void *context, const uint64_t *properties, uint64_t flags,
+                                          size_t bytes, int32_t &error) override;
 
     void   *create_context(void *device, int32_t &error) override;
     void   *create_queue(void *context, void *device, int32_t &error) override;

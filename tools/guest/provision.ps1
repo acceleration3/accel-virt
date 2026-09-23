@@ -6,13 +6,20 @@
 #            signing certificate and test signing, kernel crash dumps, verbose
 #            device-install logging, and nothing that interrupts a run - fast
 #            startup, sleep, automatic updates, maintenance, boot repair
-#   sign     trust a self-signed test certificate, catalog and sign the package,
-#            turn test signing on
+#   sign     name every present virtio-gpu-rvk-pci in the INF (below), trust a
+#            self-signed test certificate, catalog and sign the package, turn
+#            test signing on
 #   install  install the package on virtio-gpu-rvk-pci, Driver Verifier's
 #            standard checks on rvkgpu.sys - or, with -NoVerifier, without
 #            them, for a run measuring what the verifier itself changes
-#   check    the adapter started on rvkgpu with no problem code; the verifier's
-#            settings
+#   check    every rvkgpu adapter started on rvkgpu with no problem code; the
+#            verifier's settings
+#   adapters what Windows says each display adapter is, one line per adapter
+#            and source, '|'-separated: "wmi|<PNPDeviceID>|<AdapterRAM>|
+#            <AdapterCompatibility>|<VideoProcessor>|<Name>" from
+#            Win32_VideoController, and "dxgi|<VendorId>|<DeviceId>|<SubSysId>|
+#            <Revision>|<DedicatedVideoMemory>|<SharedSystemMemory>|<Flags>|
+#            <Description>" from IDXGIFactory1::EnumAdapters1, IDs in hex
 #   modes    every display mode the driver offers, one "mode: WxH" line each,
 #            and the one in force as "current: WxH"
 #   setmode  switch the display to -Width by -Height; "set: <result>", where 0
@@ -30,7 +37,7 @@
 #            "dump <path>" line per file for the runner to pull
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
+    [ValidateSet('prepare', 'sign', 'install', 'check', 'adapters', 'modes', 'setmode', 'extend', 'monitortimeout',
                  'sleepstates', 'hibernate', 'cycle', 'upgrade', 'timeouts', 'pageheap', 'heapchecks',
                  'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
@@ -45,7 +52,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $RebootRequired = 3010
 $Subject = 'CN=accel-virt test signing'
-$HardwareId = 'PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4'
+# virtio-gpu-rvk-pci presents its host GPU's vendor, device and revision
+# (docs/protocol.md), which differ from host to host; its subsystem, 1af4:5256,
+# is always this device's. virtio-gpu's own 1af4:1050 is what it keeps when its
+# GPU has no PCI function, and the one ID the INF names statically.
+$RvkHardwareId = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
+$StockHardwareId = 'PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4'
+# What the runner knows each host GPU is called: "<vendor>`t<device>`t<name>"
+# a line, hex in lowercase. Absent, a generated model is named as the static one.
+$AdapterNames = 'C:\rvk\adapters.txt'
+# The end of every INF line WriteModels wrote, so signing again replaces them.
+$GeneratedMark = '; provision.ps1: a host GPU'
 $Diagnostics = 'C:\rvk\diag'
 $KernelMemoryDump = 2
 $VerboseDeviceInstallLog = 0x2000FFFF
@@ -86,8 +103,62 @@ function SetDword($Path, $Name, $Value) {
     Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type DWord
 }
 
+function RvkDevices {
+    @(Get-PnpDevice -PresentOnly | Where-Object { @($_.HardwareID | Where-Object { $_ -match $RvkHardwareId }).Count })
+}
+
 function RvkDevice {
-    Get-PnpDevice -PresentOnly | Where-Object { $_.HardwareID -contains $HardwareId } | Select-Object -First 1
+    RvkDevices | Select-Object -First 1
+}
+
+# The four-part hardware ID of every present virtio-gpu-rvk-pci, once each.
+function RvkHardwareIds {
+    @(RvkDevices | ForEach-Object { $_.HardwareID } | Where-Object { $_ -match $RvkHardwareId } |
+        ForEach-Object { $_.ToUpperInvariant() } | Sort-Object -Unique)
+}
+
+function AdapterName($Vendor, $Device) {
+    if (-not (Test-Path $AdapterNames)) { return $null }
+    foreach ($line in Get-Content $AdapterNames -Encoding UTF8) {
+        $fields = $line -split "`t", 3
+        if ($fields.Count -eq 3 -and $fields[0] -eq $Vendor -and $fields[1] -eq $Device) { return $fields[2] }
+    }
+    return $null
+}
+
+# One model line in the INF for each present virtio-gpu-rvk-pci whose IDs are
+# its host GPU's: no static INF can list them, and PnP matches no ID made of a
+# subsystem alone. Written before the catalog, which is what signs the INF.
+# A host GPU the runner named gets its own DeviceDesc, which is what Device
+# Manager, WMI and DXGI show until rvkgpu.sys writes the same name at
+# StartDevice; the rest are named as the static model is.
+function WriteModels($Inf) {
+    $lines = [System.Collections.Generic.List[string]]@(Get-Content $Inf | Where-Object { -not $_.EndsWith($GeneratedMark) })
+    $models = @()
+    $strings = @()
+    foreach ($id in RvkHardwareIds) {
+        if ($id -eq $StockHardwareId -or -not ($id -match $RvkHardwareId)) { continue }
+        $vendor = $Matches[1]
+        $device = $Matches[2]
+        $key = "HostGpu_${vendor}_${device}"
+        $name = AdapterName $vendor.ToLowerInvariant() $device.ToLowerInvariant()
+        $description = '%DeviceName%'
+        if ($name) {
+            $description = "%$key%"
+            $strings += "$key = `"$($name.Replace('"', '""').Replace('%', '%%'))`" $GeneratedMark"
+        }
+        $models += "$description = Rvkgpu_Install, $id $GeneratedMark"
+        Write-Output "sign: $id named $(if ($name) { $name } else { 'as the static model' })"
+    }
+    $section = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Rvkgpu\.NTamd64\.10\.0\.\.\.26100\]' })
+    if ($section -lt 0) { throw "$Inf has no [Rvkgpu.NTamd64.10.0...26100] section" }
+    $lines.InsertRange($section + 1, [string[]]$models)
+    $stringsAt = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Strings\]' })
+    if ($stringsAt -lt 0) { throw "$Inf has no [Strings] section" }
+    $lines.InsertRange($stringsAt + 1, [string[]]$strings)
+    # UTF-16 with a byte order mark: an INF may be ANSI or Unicode, and a
+    # host GPU's name need not be ANSI.
+    Set-Content -Path $Inf -Value $lines -Encoding Unicode
 }
 
 function SaveEvents($Log, $Count, $Name) {
@@ -171,6 +242,72 @@ public class Display {
 }
 '@
 
+# IDXGIFactory1::EnumAdapters1 and IDXGIAdapter1::GetDesc1, what an
+# application listing adapters calls. Only the vtable slots before the two
+# methods called matter; the placeholders are never called.
+$DxgiApi = @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct DxgiAdapterDesc1 {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Description;
+    public uint VendorId, DeviceId, SubSysId, Revision;
+    public UIntPtr DedicatedVideoMemory, DedicatedSystemMemory, SharedSystemMemory;
+    public uint LuidLowPart;
+    public int LuidHighPart;
+    public uint Flags;
+}
+
+[ComImport, Guid("29038f61-3839-4626-91fd-086879011a05"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IDxgiAdapter1 {
+    void SetPrivateData(); void SetPrivateDataInterface(); void GetPrivateData(); void GetParent();
+    void EnumOutputs(); void GetDesc(); void CheckInterfaceSupport();
+    [PreserveSig] int GetDesc1(out DxgiAdapterDesc1 desc);
+}
+
+[ComImport, Guid("770aae78-f26f-4dba-a829-253c83d1b387"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IDxgiFactory1 {
+    void SetPrivateData(); void SetPrivateDataInterface(); void GetPrivateData(); void GetParent();
+    void EnumAdapters(); void MakeWindowAssociation(); void GetWindowAssociation(); void CreateSwapChain();
+    void CreateSoftwareAdapter();
+    [PreserveSig] int EnumAdapters1(uint index, out IDxgiAdapter1 adapter);
+}
+
+public static class Dxgi {
+    [DllImport("dxgi.dll")]
+    private static extern int CreateDXGIFactory1(ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IDxgiFactory1 factory);
+
+    public static string[] Adapters() {
+        List<string> lines = new List<string>();
+        Guid iid = typeof(IDxgiFactory1).GUID;
+        IDxgiFactory1 factory;
+        int created = CreateDXGIFactory1(ref iid, out factory);
+        if (created != 0) {
+            lines.Add("dxgi-error|CreateDXGIFactory1 0x" + created.ToString("X8"));
+            return lines.ToArray();
+        }
+        for (uint index = 0; ; index++) {
+            IDxgiAdapter1 adapter;
+            if (factory.EnumAdapters1(index, out adapter) != 0) break;
+            DxgiAdapterDesc1 desc;
+            int described = adapter.GetDesc1(out desc);
+            if (described == 0) {
+                lines.Add(string.Format("dxgi|{0:x4}|{1:x4}|{2:x8}|{3:x2}|{4}|{5}|{6}|{7}", desc.VendorId,
+                                        desc.DeviceId, desc.SubSysId, desc.Revision, desc.DedicatedVideoMemory,
+                                        desc.SharedSystemMemory, desc.Flags, desc.Description));
+            } else {
+                lines.Add("dxgi-error|GetDesc1 0x" + described.ToString("X8"));
+            }
+            Marshal.ReleaseComObject(adapter);
+        }
+        Marshal.ReleaseComObject(factory);
+        return lines.ToArray();
+    }
+}
+'@
+
 switch ($Stage) {
     'prepare' {
         SigningCertificate | Out-Null
@@ -203,6 +340,7 @@ switch ($Stage) {
         exit 0
     }
     'sign' {
+        WriteModels "$Package\rvkgpu.inf"
         $certificate = SigningCertificate
         Sign "$Package\rvkgpu.sys" $certificate
         Remove-Item "$Package\rvkgpu.cat" -ErrorAction SilentlyContinue
@@ -238,27 +376,41 @@ switch ($Stage) {
     }
     'check' {
         verifier /querysettings
-        $device = RvkDevice
-        if (-not $device) { Write-Output 'device: absent'; exit 1 }
-        $property = { param($Key) (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $Key).Data }
-        $problem = & $property DEVPKEY_Device_ProblemCode
-        $status = '0x{0:X8}' -f [uint32](& $property DEVPKEY_Device_ProblemStatus)
-        $service = & $property DEVPKEY_Device_Service
+        $devices = @(RvkDevices)
+        if ($devices.Count -eq 0) { Write-Output 'device: absent'; exit 1 }
         # The desktop's compositor, and every driver bound to a display: feature
         # 038 asks for rvkgpu alone with dwm.exe composited on it.
         $dwm = @(Get-Process -Name dwm -ErrorAction SilentlyContinue).Count
         $displays = (Get-PnpDevice -Class Display -Status OK -ErrorAction SilentlyContinue |
             ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Service).Data }) -join ','
-        # One monitor per output the device reports, which is what US4 asks.
-        # Only the ones this adapter is the parent of: an image that has run
-        # another display driver keeps its monitors.
+        # One monitor per output each adapter reports, which is what US4 asks.
+        # Only the ones an rvkgpu adapter is the parent of: an image that has
+        # run another display driver keeps its monitors.
+        $instances = @($devices | ForEach-Object { $_.InstanceId })
         $monitors = @(Get-PnpDevice -Class Monitor -Status OK -ErrorAction SilentlyContinue | Where-Object {
-            (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Parent).Data -eq
-                $device.InstanceId }).Count
-        Write-Output "display: dwm=$dwm services=$displays monitors=$monitors"
+            $instances -contains (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Parent).Data
+        }).Count
+        Write-Output "display: dwm=$dwm services=$displays monitors=$monitors adapters=$($devices.Count)"
         # Last, so a failure's tail - all the runner reports - names the problem.
-        Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
-        if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { exit 1 }
+        $failed = $false
+        foreach ($device in $devices) {
+            $property = { param($Key) (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $Key).Data }
+            $problem = & $property DEVPKEY_Device_ProblemCode
+            $status = '0x{0:X8}' -f [uint32](& $property DEVPKEY_Device_ProblemStatus)
+            $service = & $property DEVPKEY_Device_Service
+            Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
+            if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { $failed = $true }
+        }
+        if ($failed) { exit 1 }
+        exit 0
+    }
+    'adapters' {
+        foreach ($controller in @(Get-CimInstance Win32_VideoController)) {
+            Write-Output ("wmi|{0}|{1}|{2}|{3}|{4}" -f $controller.PNPDeviceID, $controller.AdapterRAM,
+                          $controller.AdapterCompatibility, $controller.VideoProcessor, $controller.Name)
+        }
+        Add-Type -TypeDefinition $DxgiApi -ErrorAction Stop
+        [Dxgi]::Adapters() | ForEach-Object { Write-Output $_ }
         exit 0
     }
     'modes' {

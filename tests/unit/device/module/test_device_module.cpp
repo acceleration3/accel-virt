@@ -66,9 +66,10 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   av::StateWriter one(dump, sizeof dump);
   root.report(one);
   CHECK(std::strcmp(one.dump(), "module/0 devices=1\n"
-                                "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 contexts=0 driver_ok=false\n"
+                                "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 scanouts=0 "
+                                "contexts=0 driver_ok=false\n"
                                 "module/0/device/1/shared/0 live=0\n"
-                       "module/0/device/1/contexts/0 live=0") == 0);
+                                "module/0/device/1/contexts/0 live=0") == 0);
   CHECK_STATUS(module.destroy(second), Status::ok); }
 
 TEST(device_module_destroy, finds_the_device_named_among_others)
@@ -124,6 +125,34 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK_EQ(rvk_device_destroy(device), 1);
   CHECK(rvk_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
+
+/* The glue writes what this answers into the function's configuration space,
+ * so a guest's Device Manager and DXGI see the host GPU's IDs. */
+TEST(rvk_device_abi, rvk_device_pci_identity_answers_the_bound_gpus_ids_or_nothing)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  host.add_gpu(gpu);
+  host.place_gpu_on_pci(0u, MockHost::PciBus{0u, 0x03u, 0u, 0u});
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/vendor", "0x1002\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/device", "0x7550\n", 7u);
+  host.add_file("/sys/bus/pci/devices/0000:03:00.0/revision", "0xc0\n", 5u);
+  char error[96] = {};
+  RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  RvkPciIdentity identity = {};
+  CHECK_EQ(rvk_device_pci_identity(device, &identity), 1);
+  CHECK_EQ(identity.vendor_id, 0x1002u);
+  CHECK_EQ(identity.device_id, 0x7550u);
+  CHECK_EQ(identity.revision, 0xC0u);
+  CHECK_EQ(rvk_device_destroy(device), 0);
+  /* Bound to a GPU the host cannot place on PCI: virtio-gpu's own IDs stay. */
+  MockHost bare; MockHostOps bare_ops(bare);
+  bare.add_gpu(gpu);
+  RvkDevice *const off_pci = rvk_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, error, sizeof error);
+  RvkPciIdentity untouched = {0xAAAAu, 0xBBBBu, 0xCCu};
+  CHECK_EQ(rvk_device_pci_identity(off_pci, &untouched), 0);
+  CHECK_EQ(untouched.vendor_id, 0xAAAAu);
+  CHECK_EQ(rvk_device_destroy(off_pci), 0); }
 
 TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class_and_rvk_device_capsets_offers_one)
 { MockHost host; MockHostOps ops(host);

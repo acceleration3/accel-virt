@@ -12,6 +12,7 @@ constexpr std::uint32_t none = ~std::uint32_t{0};
 constexpr std::uint32_t platform_name = 0x0902u;
 constexpr std::uint32_t platform_icd_suffix = 0x0920u;
 constexpr std::uint32_t device_name = 0x102Bu;
+constexpr std::uint32_t device_extensions = 0x1030u;
 constexpr std::uint32_t device_vendor_id = 0x1001u;
 constexpr std::uint32_t device_luid = 0x106Cu;
 constexpr std::uint32_t device_svm_capabilities = 0x1053u;
@@ -34,10 +35,10 @@ constexpr std::uintptr_t object_base = 0x5300u;
 
 ScriptedCl::ScriptedCl()
     : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
-      device_name_("scripted rvkgpu"), build_log_(""), asked_devices_of_(""), luid_(default_luid),
+      device_name_("scripted rvkgpu"), device_extensions_(""), build_log_(""), asked_devices_of_(""), luid_(default_luid),
       vendor_(default_vendor), svm_capabilities_(coarse_grain_buffer), wrong_(0u), stale_(0u),
       forgets_callbacks_(false), notifies_twice_(false), defers_callbacks_(false), deferred_(nullptr),
-      objects_{}, live_(0u), misuses_(0u),
+      objects_{}, live_(0u), misuses_(0u), exported_handle_(nullptr), exported_words_{},
       shared_{}, shared_live_(false), shared_argument_(nullptr)
 {
     suffixes_[0] = "RVK";
@@ -74,6 +75,8 @@ void ScriptedCl::set_platform_suffix(std::uint32_t index, const char *suffix)
 
 void ScriptedCl::overstate_platforms() { overstating_ = true; }
 
+void ScriptedCl::list_no_platforms() { platforms_ = 0u; }
+
 void ScriptedCl::add_platform(const char *suffix)
 {
     if (platforms_ == max_platforms) return;
@@ -87,6 +90,7 @@ void ScriptedCl::set_device_count(std::uint32_t count)
 }
 
 void ScriptedCl::set_device_name(const char *name) { device_name_ = name; }
+void ScriptedCl::set_device_extensions(const char *names) { device_extensions_ = names; }
 void ScriptedCl::set_luid(std::uint64_t luid) { luid_ = luid; }
 void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }
 void ScriptedCl::offer_no_svm() { svm_capabilities_ = 0u; }
@@ -252,6 +256,7 @@ std::int32_t ScriptedCl::device_text(void *device, std::uint32_t name, char *int
         misuses_++;
         return refused;
     }
+    if (name == device_extensions) return answer_text(device_extensions_, into, room, bytes);
     if (name != device_name) return refused;
     return answer_text(device_name_, into, room, bytes);
 }
@@ -296,6 +301,49 @@ void *ScriptedCl::create_queue(void *context, void *device, std::int32_t &error)
     void *const made = make(Kind::queue);
     if (made == nullptr) error = refused;
     return made;
+}
+
+/* A buffer over memory another API made: the property list is what carries
+ * the Win32 handle, and this answers the same buffer an ordinary create does
+ * once it has judged the list the way the ICD would (feature 053). */
+void *ScriptedCl::create_buffer_with_properties(void *context, const std::uint64_t *properties,
+                                                std::uint64_t flags, std::size_t bytes,
+                                                std::int32_t &error)
+{
+    if (answers_nothing(Call::create_buffer_with_properties, error)) return nullptr;
+    /* An external create names exactly one handle property and a handle that
+     * is not zero; anything else is a list the ICD would refuse. */
+    if (properties == nullptr || properties[0] == 0u || properties[1] == 0u || properties[2] != 0u) {
+        misuses_++;
+        error = refused;
+        return nullptr;
+    }
+    if (required(context, Kind::context) == nullptr || flags == 0u || bytes == 0u) {
+        error = refused;
+        return nullptr;
+    }
+    /* Neither the handle nor the size goes through create_buffer: the memory
+     * is the exporter's, so its size is not this object's own arena's and a
+     * handle nothing exported names nothing at all. */
+    const auto named = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(exported_handle_));
+    if (exported_handle_ == nullptr || properties[1] != named) {
+        error = refused;
+        return nullptr;
+    }
+    void *const opened = make(Kind::buffer);
+    if (opened == nullptr) {
+        error = refused;
+        return nullptr;
+    }
+    std::memcpy(required(opened, Kind::buffer)->values, exported_words_, sizeof exported_words_);
+    return opened;
+}
+
+void ScriptedCl::memory_behind(void *handle, const std::uint32_t *words, std::uint32_t count)
+{
+    exported_handle_ = handle;
+    const std::uint32_t taken = count < max_shared_words ? count : max_shared_words;
+    for (std::uint32_t index = 0u; index < taken; index++) exported_words_[index] = words[index];
 }
 
 void *ScriptedCl::create_buffer(void *context, std::uint64_t flags, std::size_t bytes,

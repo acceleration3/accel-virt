@@ -841,3 +841,107 @@ a check - a row answered over something nothing uses fails exactly as before.
 So the four rows are reported when the host lists `GL_EXT_memory_object_fd` and
 `GL_EXT_semaphore_fd`, which is the condition `contracts/wire_additions.md`
 always stated, and the conformance-subset advice above is withdrawn.
+## §21 — The OpenCL leg in the guest: what was proven, and the one thing QEMU refuses
+
+Two things were learnt building the guest's half of the OpenCL matrix, and one
+of them changed the design.
+
+**Shared memory cannot be mapped, so the guest cannot write the bytes.** The
+probe's first shape filled the exportable allocation with `vkMapMemory`. That
+answers `VK_ERROR_MEMORY_MAP_FAILED` for every shared allocation and always
+will: `IcdRoot::allocate_memory` sends an allocation that shares memory down
+`shared_allocation`, where the memory is the host's whole allocation rather
+than a chunk of this process's RAM (feature 047, US3), and `DeviceMemory::map`
+answers only for a chunk it placed. So the bytes a second API is judged against
+have to be written by the GPU: the probe now makes a `VK_BUFFER_USAGE_TRANSFER_DST_BIT`
+buffer *before* the allocation - its `memoryTypeBits` are what the allocation's
+type must come from - binds it to the shared memory, and fills it with
+`vkCmdFillBuffer` on the probe's own queue. `shared.target`, `shared.exportable`
+and `shared.filled` are those three steps, and all three pass in the guest.
+
+**On this host, inside QEMU, rusticl will not make a GL-sharing context.** The
+device's OpenCL backend reaches a shared object through `cl_khr_gl_sharing`
+(§18): the guest's `cl_context` is created naming a GL context of the device's
+own, and `clCreateFromGLBuffer` then names the imported dma-buf. That works.
+`tests/unit/device/executor/test_opencl_backend_device.cpp` does the whole
+chain against the real host - Vulkan exports a dma-buf, the backend imports it,
+and the bytes read back through the `cl_mem` are the bytes Vulkan wrote, in
+both directions - and it passes on this machine.
+
+The same code inside the QEMU process fails. `clCreateContext` with
+`CL_GL_CONTEXT_KHR` and `CL_EGL_DISPLAY_KHR` answers
+`CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR` (-1000) there, every time, and
+`clCreateFromGLBuffer` on the ordinary context that follows answers
+`CL_INVALID_CONTEXT`. What was measured, in the QEMU process, to find out why:
+
+| Asked | Answer |
+|---|---|
+| the GL renderer of the vehicle context, and the CL device's name | both `AMD Radeon RX 9070 XT (radeonsi, gfx1201, ACO)` - one GPU, one driver |
+| `eglGLInteropQueryDeviceInfoMESA(display, context, ...)`, which is what rusticl asks | `MESA_GLINTEROP_SUCCESS`, the same values as in a passing test process |
+| the vehicle context current on the calling thread, and not current | refused either way |
+| a GL context created on that thread rather than at bind time | refused |
+| every EGL device on the host, each with its own display and context | refused, on all three |
+| the property list without `CL_EGL_DISPLAY_KHR` | refused |
+| `dlsym(RTLD_DEFAULT, "eglGetProcAddress")`, and the executor loaded `RTLD_GLOBAL` | resolved in both processes; no change |
+| the device the guest named against the bound one | the same pointer, the same device |
+| `CL_DEVICE_EXTENSIONS` of that device | lists `cl_khr_gl_sharing` |
+
+So it is neither our display, nor our context, nor the thread, nor symbol
+visibility, nor the device: the identical calls succeed in an ordinary process
+on the same machine and fail inside QEMU's. The reason is somewhere in rusticl
+or in Mesa's EGL, and is not answered here.
+
+**What the code does about it.** Nothing claims an ability it has not
+exercised. `OpenClBackend::initialize` now *measures*: it creates a GL-sharing
+context on the bound device and releases it, and a host that refuses leaves the
+backend with no vehicle at all - the same state as a GPU with no EGL display.
+`OpenClBackend::on_clGetDeviceInfo` then strikes `cl_khr_gl_sharing` out of the
+device's extension string, because that name is what the guest's ICD is to read
+as "a shared object can be opened into OpenCL here"; every other query is
+forwarded untouched. The guest's probe asks its own driver for
+`cl_khr_external_memory_win32` before it names a handle, and writes
+`note shared.cl_external_memory` and stops when it is not reported - a note,
+not a verdict, because a driver that reports no extension is refusing nothing.
+
+**What the rows needed, and now have.** `cl_khr_external_memory` and
+`cl_khr_external_memory_win32` are reported, answered over the host's
+`cl_khr_gl_sharing`. Three things had to land with them. The extension's own
+two commands: reporting it promises `clEnqueueAcquireExternalMemObjectsKHR` and
+`clEnqueueReleaseExternalMemObjectsKHR`, which the driver answers itself - the
+object is acquired on the host when the device opens it and stays acquired for
+its life, so what is left is the argument checking and the event, and they are
+reached by name because `cl_icd_dispatch` predates the extension. A generated
+list to hold the rows to: the OpenCL generator now reads cl.xml's extensions
+and their `depends` and emits `cl_supported_extensions.h`, which
+`tools/check_extension_policy.py` holds every OpenCL row to. And `Row::host_`,
+which `ClExtensionPolicy::report` ignored.
+
+On this machine the rows report nothing, because the device strikes
+`cl_khr_gl_sharing` out of what the guest is shown - which is the measurement
+above doing its job. On a host that really shares, the guest's probe runs its
+`shared.cl_*` steps and the sharing is proven end to end from inside the
+guest.
+
+### The eight marks the OpenCL import adds, and why each is one
+
+`tests/untestable_baseline.txt` goes from 1 to 9. Every new mark is on the same
+kind of branch: a host driver refusing something it has never refused on any
+machine this runs on, inside a path that exists only for real hardware. They
+are, in the order they appear in `src/device/executor/opencl_backend.cpp`:
+
+| Branch | Why no test reaches it |
+|---|---|
+| `initialize`: the three abilities together | this host answers yes to all three; the one inside QEMU refuses the last, which is why it is measured at all |
+| `shares_with_gl`: the context refused | the same refusal, at the call that makes it |
+| `import_object`: no command queue | `clCreateCommandQueueWithProperties` on a context this driver just made |
+| `import_object`: the GL import refused | a descriptor this host's GL will not take. An ordinary file *is* taken by `glImportMemoryFdEXT` and then faults inside `si_resource_from_memobj`, so feeding one in tests a shape the device never produces |
+| `import_object`: no buffer storage | `glBufferStorageMemEXT` over a memory object this driver just imported |
+| `import_object`: no `cl_mem` | `clCreateFromGLBuffer` over a buffer this driver just made |
+| `import_object`: the acquire refused | `clEnqueueAcquireGLObjects` and `clFinish` on that object |
+| `import_object`: the row not kept | the acquire above, and a table sixty-four live imports would be needed to fill |
+
+Everything else the import path can answer is covered by a test: an unopened
+display, a context the guest has not made, a descriptor of the wrong kind or
+size, a property list too long to copy, a second context, and the extension
+string surgery in every shape a list can take - which is what found the one
+real bug here, a terminator written one past a list that filled its room.

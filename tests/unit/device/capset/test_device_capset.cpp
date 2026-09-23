@@ -146,3 +146,54 @@ TEST(device_capset_withdraw, withdrawing_from_a_capset_nobody_described_is_nothi
   DeviceCapset capset(host);
   capset.withdraw_guest_import();
   CHECK(!capset.described()); }
+
+/* The display's answer is not the device's to know at realize: QEMU registers
+ * its display backends in qemu_init_displays(), after qmp_x_exit_preconfig()
+ * has realized every device, and it is the backend that gives a console its GL
+ * context. So the bit is decided when the guest first reads the capset, once,
+ * and the answer it was given is kept. */
+TEST(device_capset_resolve_display, the_bit_follows_the_display_and_is_decided_once)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_display_heads(1u);
+  DeviceCapset capset(host);
+  capset.describe(0u, 1u, CapsetInfo::feature_host_visible_memory);
+  CHECK(!capset.display_resolved());
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout));
+
+  capset.resolve_display(true);
+  CHECK(capset.display_resolved());
+  CHECK(capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout));
+  CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory));
+  capset.resolve_display(false);
+  CHECK(capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout)); }
+
+TEST(device_capset_resolve_display, a_host_with_no_gl_display_carries_no_scanout_bit)
+{ MockHost host;
+  host.add_gpu(first);
+  DeviceCapset capset(host);
+  capset.describe(0u, 1u, 0u);
+  capset.resolve_display(false);
+  CHECK(capset.display_resolved());
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout));
+  capset.resolve_display(true);
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout)); }
+
+TEST(device_capset_resolve_display, a_capset_nobody_described_announces_nothing)
+{ MockHost host;
+  DeviceCapset capset(host);
+  capset.resolve_display(true);
+  CHECK(capset.display_resolved());
+  CHECK(!capset.described());
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout)); }
+
+/* The guest names its adapter from this field, so it carries the product and
+ * not the host driver Mesa appends to it. */
+TEST(device_capset_describe, names_the_gpu_without_the_host_driver_suffix)
+{ MockHost host;
+  host.add_gpu(GpuIdentity(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, first, 16ull << 30, 0u,
+                           "AMD Radeon RX 9070 XT (RADV GFX1201)"));
+  DeviceCapset capset(host);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK(std::strcmp(capset.info().gpu().name(), "AMD Radeon RX 9070 XT") == 0);
+  CHECK_EQ(capset.info().gpu().local_memory(), 16ull << 30); }

@@ -35,4 +35,5 @@ clSetKernelArgSVMPointer
 clSetUserEventStatus
 clSVMAlloc
 clSVMFree
+clCreateBufferWithProperties
 clWaitForEvents

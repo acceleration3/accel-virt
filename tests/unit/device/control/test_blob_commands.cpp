@@ -227,7 +227,9 @@ TEST(blob_commands, create_2d_on_a_blob_id_is_refused_and_everything_else_is_the
   GpuRequestBuilder other_2d(BlobCommands::resource_create_2d);
   other_2d.u32(3u).u32(1u).u32(64u).u32(64u);
   CHECK_EQ(fixture.send(other_2d), 0u);
-  CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::set_scanout_blob)), err_invalid_parameter);
+  /* SET_SCANOUT_BLOB moved to ScanoutCommands (feature 058); BlobCommands
+   * leaves it, and everything else it does not own, to the next answerer. */
+  CHECK_EQ(fixture.send_type(0x010Du, GpuRequestBuilder(0x010Du)), 0u);
   CHECK_EQ(fixture.send_type(0x0100u, GpuRequestBuilder(0x0100u)), 0u); }
 
 /* The chunk a guest process bound and imported: its pages are in a host API's

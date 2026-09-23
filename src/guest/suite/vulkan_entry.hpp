@@ -122,6 +122,11 @@ public:
     virtual void     cmd_draw(VkCommandBuffer command_buffer, uint32_t vertices) = 0;
     virtual void     cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkImage image, VkImageLayout layout,
                                               VkBuffer buffer, const VkBufferImageCopy *region) = 0;
+    /* `value` written over `size` bytes of `buffer` from its start. The one way
+     * a probe puts known bytes into memory it cannot map, which is what memory
+     * shared with another API is (feature 053). */
+    virtual void     cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size,
+                                     uint32_t value) = 0;
 
     virtual VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) = 0;
 

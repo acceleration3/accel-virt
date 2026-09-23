@@ -4,6 +4,7 @@
 #define AV_ADAPTER_HPP
 
 #include "proto/commands/present_operation.hpp"
+#include "core/adapter/adapter_description.hpp"
 #include "core/adapter/driver_capabilities.hpp"
 #include "core/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "core/display/display_info_response.hpp"
@@ -425,6 +426,7 @@ private:
     EngineProgress                 progress_;
     PowerTransition                transition_;
     DeviceIdentity                 identity_;
+    AdapterDescription             description_;
     InterruptNotification          notification_;
     /* Held across the DPC: notification_'s record and presented_fence_ are
      * one per adapter, and fences are reported in the order they were taken. */

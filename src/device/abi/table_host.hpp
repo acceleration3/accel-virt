@@ -29,6 +29,8 @@ public:
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     uint32_t gpu_count() override;
     GpuIdentity gpu_identity(uint32_t index) override;
+    Status   gpu_pci_address(uint32_t index, PciAddress &address) override;
+    Status   read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
     void    *allocate(size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;
@@ -64,6 +66,10 @@ public:
     Status   append_recording(void *file, const uint8_t *bytes, size_t size) override;
     Status   truncate_recording(void *file) override;
     void     close_recording(void *file) override;
+    bool     display_takes_dmabuf(uint32_t head) override;
+    Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
+    void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
+    void     hide_scanout(uint32_t head) override;
 
 private:
     void violated(const char *rule, const char *function);

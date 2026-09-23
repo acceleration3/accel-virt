@@ -544,8 +544,9 @@ src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
   platform's leak and violation checks run.
 - The PCI function is `FakeVirtioGpuFunction` set up the way
   `tools/guest/run_guest_suite.py` starts QEMU: subsystem `1af4:5256`, the
-  doorbell region on BAR 0, a hostmem region, 66 queues and eleven MSI-X
-  messages. Its notify region is `VirtioBridge` and its doorbell pages are
+  host GPU's vendor, device and revision (`1002:7550` rev `c0`, as the device
+  presents a host GPU with a PCI function), the doorbell region on BAR 0, a
+  hostmem region, 66 queues and eleven MSI-X messages. Its notify region is `VirtioBridge` and its doorbell pages are
   `LoopbackDoorbells`.
 - `VirtioBridge` follows the driver's status into the device core as
   virtio-pci does (`set_status`, and a reset on 0), and on each notify takes
@@ -720,10 +721,32 @@ Guest runs are driven from Linux over the QEMU guest agent, with a snapshot
 before every driver install, because a miniport that fails in `StartDevice`
 can leave the guest with no display.
 
+### Every host GPU, named as the host names it
+
+`run_guest_suite.py --all-gpus` starts one `virtio-gpu-rvk-pci` per host GPU
+that is not a CPU device (`tools/host/list_gpus.py`; `--vulkaninfo FILE` reads
+a capture instead of running `vulkaninfo`). Each device presents its GPU's PCI
+vendor, device and revision (sysfs, through `VK_EXT_pci_bus_info`) with the
+subsystem `1af4:5256` it always keeps, and names it in the capset: the Vulkan
+`deviceName` without the driver's parenthesised suffix (docs/protocol.md). The
+runner pushes `C:\rvk\adapters.txt` - vendor, device and name per GPU - and
+the sign stage writes one INF model line per present
+`PCI\VEN_xxxx&DEV_yyyy&SUBSYS_52561AF4`, named from that file, before the
+catalog is made; rvkgpu.sys writes the same name to the device's DeviceDesc
+and the `HardwareInformation` values at every StartDevice. After the check
+stage (which now wants `outputs` monitors per device and every device
+started), the `adapters` stage lists `Win32_VideoController` and DXGI's
+`EnumAdapters1`, and the run fails unless each host GPU appears in both with
+its name, `VEN_`/`DEV_`/`SUBSYS_52561AF4`/`REV_` and, for DXGI, VendorId,
+DeviceId, SubSysId `0x52561af4` and Revision. AdapterRAM and
+DedicatedVideoMemory are reported, not judged: DXGI counts the segments the
+driver reports, which is the hostmem region, not the host GPU's memory.
+
 ### As built
 
 - **The suite** is `src/guest/`: `GuestSuite` runs its scenarios - the adapter
-  (found by PCI identity `1af4:1050` subsystem `1af4:5256`, WDDM 3.2), an
+  (found by its PCI subsystem `1af4:5256`, whatever vendor and device its host
+  GPU gives it, WDDM 3.2), an
   allocation and a refused hostile descriptor, a GPU mapping through a paging
   queue, a submission awaited through a CPU notification, the vertical
   blank (`VsyncScenario` waits for a fixed number of blanks on source 0 and
@@ -1037,6 +1060,23 @@ tools/guest/run_guest_suite.py --on-panic pause   # stop at the bugcheck instead
 tools/guest/run_guest_suite.py --memory-dump      # also pull C:\Windows\MEMORY.DMP, in base64 through the agent
 tools/guest/run_guest_suite.py --trace 'virtio_gpu_*' --trace 'virtio_queue_*'   # QEMU trace events into qemu.log
 ```
+
+**The display the run gives QEMU decides what the device can do.** A run uses
+`-vga none -display none`, and a console with no display backend has no GL
+context - it is the backend that calls `qemu_console_set_display_gl_ctx`, not
+the device - so `qemu_console_has_gl` is false and the device offers no dma-buf
+scanout at all (feature 058, `docs/kb/06-display.md`). `-display egl-headless`
+is what gives it one. It needs QEMU built with GBM; without it
+`egl_scanout_dmabuf` is compiled out and a scanout the device hands over is
+dropped in silence.
+
+What it does **not** give is a picture: `qmp_screendump` asks
+`qemu_console_surface`, which answers nothing while the console's scanout is a
+dma-buf (`ui/console.c`), so every screendump of such a console - ours or stock
+virtio-gpu-gl's - answers "no surface". A run with the flag therefore checks
+the device's own account of what its heads show instead of a PPM, and the
+display scenarios that read a PPM run on the default `-display none`, where the
+guest keeps the 2D path.
 
 A held guest is reached with `tools/guest/guest_shell.py`, over the agent
 socket the runner lets go of:

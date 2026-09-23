@@ -158,9 +158,39 @@ class Provisioning(unittest.TestCase):
 
     def test_checks_the_hardware_id_the_package_installs_on(self):
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
-        hardware = re.search(r"\$HardwareId = '([^']+)'", script).group(1)
+        hardware = re.search(r"\$StockHardwareId = '([^']+)'", script).group(1)
         self.assertIn(f"= Rvkgpu_Install, {hardware}", INF.read_text())
         self.assertIn("service -ne 'rvkgpu'", script)
+
+    def test_recognises_the_device_by_its_subsystem_whatever_gpu_it_presents(self):
+        """virtio-gpu-rvk-pci presents its host GPU's vendor and device, so the
+        guest finds it - and names it in the INF - by the subsystem the device
+        keeps. The pattern is .NET's, which reads the way Python's re does here."""
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        pattern = re.compile(re.search(r"\$RvkHardwareId = '([^']+)'", script).group(1), re.I)
+        subsystem = int(re.search(r"#define VIRTIO_GPU_RVK_PCI_SUBSYSTEM_ID (0x[0-9A-Fa-f]+)",
+                                  DEVICE.read_text()).group(1), 16)
+        on_radeon = f"PCI\\VEN_1002&DEV_7550&SUBSYS_{subsystem:04X}{REDHAT_QUMRANET:04X}"
+        self.assertEqual(pattern.match(on_radeon).groups(), ("1002", "7550"))
+        self.assertIsNotNone(pattern.match(re.search(r"\$StockHardwareId = '([^']+)'", script).group(1)))
+        for other in ("PCI\\VEN_1AF4&DEV_1050&SUBSYS_11001AF4",         # stock virtio-gpu-pci
+                      "PCI\\VEN_1002&DEV_7550&SUBSYS_0E3B1002",         # the real card
+                      on_radeon + "&REV_C0",                             # the five-part ID
+                      "PCI\\VEN_1002&DEV_7550"):
+            self.assertIsNone(pattern.match(other), other)
+
+    def test_names_each_host_gpu_in_the_inf_before_signing_it(self):
+        """The sign stage writes the models the static INF cannot hold, then
+        catalogs: a model written after the catalog is an INF the signature
+        does not cover. The INF says so, and names the marker signing again
+        replaces."""
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        sign = script[script.index("'sign' {"):]
+        self.assertLess(sign.index('WriteModels "$Package\\rvkgpu.inf"'), sign.index("New-FileCatalog"))
+        mark = re.search(r"\$GeneratedMark = '([^']+)'", script).group(1)
+        self.assertIn(f'"{mark}"', INF.read_text())
+        self.assertIn("Rvkgpu.NTamd64.10.0...26100", script)
+        self.assertIn(re.search(r"\$AdapterNames = '([^']+)'", script).group(1), INF.read_text())
 
     def test_offers_exactly_the_stages_the_runner_calls(self):
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()

@@ -66,6 +66,15 @@ ClImportedMemoryRow *ClExternalMemory::row_of(uint64_t made)
     return nullptr;
 }
 
+const ClImportedMemoryRow *ClExternalMemory::row_of(uint64_t made) const
+{
+    AV_SCOPE("ClExternalMemory::row_of");
+    if (made == 0u) return nullptr;
+    for (uint32_t index = 0u; index < live_; index++)
+        if (rows_[index].made_ == made) return &rows_[index];
+    return nullptr;
+}
+
 bool ClExternalMemory::holds(uint64_t object_id) const
 {
     AV_SCOPE("ClExternalMemory::holds");
@@ -121,6 +130,12 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
     live_++;
     made = opened;
     return CL_SUCCESS;
+}
+
+bool ClExternalMemory::answered(uint64_t made) const
+{
+    AV_SCOPE("ClExternalMemory::answered");
+    return row_of(made) != nullptr;
 }
 
 bool ClExternalMemory::give_back(ClientTransport &wire, uint64_t made)
