@@ -1320,12 +1320,27 @@ void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool oper
 {
     AV_SCOPE("Adapter::log_refused_present");
     if (!budget_.allows()) return;
-    char       bytes[96];
+    char       bytes[224];
     TextBuffer message(bytes, sizeof bytes);
     message.append(operation_named ? "rvkgpu: present refused flags 0x" : "rvkgpu: present names no operation flags 0x");
     message.append_hex(request.Flags, 8u);
     message.append(" list ");
     message.append(request.pAllocationList != nullptr ? "given" : "absent");
+    message.append(request.pDmaBuffer != nullptr ? " dma" : " no-dma");
+    message.append(" rects ");
+    message.append_decimal(request.MultipassOffset);
+    message.append("/");
+    message.append_decimal(request.SubRectCnt);
+    const RectRecord *const rects[2] = {&request.SrcRect, &request.DstRect};
+    for (const RectRecord *rect : rects) {
+        message.append(" ");
+        const int32_t sides[4] = {rect->left, rect->top, rect->right, rect->bottom};
+        for (int32_t side : sides) {
+            message.append(side < 0 ? "-" : "");
+            message.append_decimal(static_cast<uint32_t>(side < 0 ? -side : side));
+            message.append(",");
+        }
+    }
     platform_.log(message.text());
 }
 

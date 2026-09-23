@@ -69,6 +69,11 @@ NtStatus PresentRequest::present()
                                         : static_cast<PresentAddressing &>(virtual_addresses);
     PresentOperation kind = PresentOperation::blt;
     Status status = operation(kind);
+    /* Under GPU virtual addressing the compositor's flips come with no DMA
+     * buffer at all: dxgkrnl carries them out through SetVidPnSourceAddress,
+     * and there is nothing to write. */
+    if (status == Status::ok && kind == PresentOperation::flip && request_.pDmaBuffer == nullptr)
+        return NtStatus(Status::ok);
     if (status == Status::ok) status = validate(kind, addressing);
     if (status != Status::ok) return NtStatus(status);
     const uint32_t remaining = request_.SubRectCnt - request_.MultipassOffset;

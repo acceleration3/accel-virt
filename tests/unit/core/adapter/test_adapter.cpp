@@ -1488,10 +1488,11 @@ TEST(adapter_present, a_blt_naming_a_source_it_cannot_reach_moves_nothing)
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 /* Under GPU virtual addressing dxgkrnl hands a flip over with no allocation
- * list: the flip is carried out by SetVidPnSourceAddress, not by the DMA. It
- * was refused, and dxgkrnl hid the desktop's source on every frame the
- * compositor flipped. A blt still needs both addresses. */
-TEST(adapter_present, a_flip_with_no_allocation_list_is_accepted_and_a_blt_without_one_refused)
+ * list, and the compositor's with no DMA buffer: the flip is carried out by
+ * SetVidPnSourceAddress, not by the DMA. They were refused, and dxgkrnl hid
+ * the desktop's source on every frame the compositor flipped. A blt still
+ * needs both addresses. */
+TEST(adapter_present, a_flip_with_no_allocation_list_or_dma_buffer_is_accepted_and_a_blt_without_one_refused)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   av::DxgkargCreateDeviceRecord device = {};
@@ -1504,7 +1505,19 @@ TEST(adapter_present, a_flip_with_no_allocation_list_is_accepted_and_a_blt_witho
   present.DmaSize = sizeof dma;
   present.Flags = 0xCu;   /* Flip | FlipWithNoWait */
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  /* And the compositor's, which come with no DMA buffer either: nothing is
+   * written and nothing is refused. */
+  present.pDmaBuffer = nullptr;
+  present.DmaSize = 0u;
+  present.SubRectCnt = 1u;
+  const av::RectRecord nothing = {};
+  present.pDstSubRects = &nothing;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(present.pDmaBuffer == nullptr);
   CHECK(!fixture.platform().logged_line("rvkgpu: present refused"));
+  present.DmaSize = sizeof dma;
+  present.SubRectCnt = 0u;
+  present.pDstSubRects = nullptr;
   present.pDmaBuffer = dma;
   present.Flags = 1u;     /* Blt */
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
