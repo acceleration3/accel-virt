@@ -31,6 +31,9 @@ struct DxgkargDestroyAllocationRecord;
 class AllocationTable {
 public:
     static constexpr uint32_t max_per_call = 1024u;
+    /* A resource's private data a user-mode driver may write: rvkumd's tag and
+     * share key. */
+    static constexpr uint32_t resource_private_bytes = 16u;
 
     AllocationTable(Platform &platform, const ApertureSegment &segment, const MemorySegments &segments,
                     SharedObjectTable &shared);

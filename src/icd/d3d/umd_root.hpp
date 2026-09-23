@@ -35,6 +35,7 @@ class ThreadLock;
 namespace av::d3d {
 
 class UmdBinding;
+class UmdHostDriver;
 struct UmdRootProbe;
 struct D3d102ddiargGetCapsRecord;
 struct D3d10ddiargCreateDeviceRecord;
@@ -45,7 +46,8 @@ struct D3d12ddiargOpenAdapterRecord;
 class UmdRoot final : public StateReporter {
 public:
     /* Binds itself into `binding` until destroyed. */
-    UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding);
+    UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
+            UmdHostDriver *builder = nullptr);
     ~UmdRoot();
     UmdRoot(const UmdRoot &) = delete;
     UmdRoot &operator=(const UmdRoot &) = delete;
@@ -99,6 +101,7 @@ private:
     icd::ThreadLock &lock_;
     icd::LogSink    &log_;
     UmdBinding      &binding_;
+    UmdHostDriver *builder_;
     UmdConnection    connection_;
     AdapterTable     adapters_;
     DeviceTable      devices_;

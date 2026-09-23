@@ -39,7 +39,11 @@ public:
     DeviceTable &operator=(const DeviceTable &) = delete;
 
     /* What pfnCalcPrivateDeviceSize answers, whatever the runtime asked with. */
-    static constexpr size_t private_bytes = sizeof(DeviceCookie);
+    /* Where in the runtime's block the device's builder keeps the address of
+     * what it built, right after the cookie: the table thunks read it there
+     * on every call, without a search. */
+    static constexpr size_t extension_offset = sizeof(DeviceCookie);
+    static constexpr size_t private_bytes = extension_offset + sizeof(void *);
 
     /* Makes a device on `adapter` and writes its cookie into `block`, the
      * memory the runtime allocated. invalid_parameter for a null block;

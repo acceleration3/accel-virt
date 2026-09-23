@@ -89,7 +89,7 @@ TEST(umd_device_model, the_private_device_size_is_the_cookie_for_every_create)
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
   CHECK_EQ(runtime.open(), hr_ok);
   CHECK_EQ(runtime.calc_private_device_size(), sizeof(DeviceCookie));
-  CHECK_EQ(DeviceTable::private_bytes, sizeof(DeviceCookie));
+  CHECK_EQ(DeviceTable::private_bytes, sizeof(DeviceCookie) + sizeof(void *));
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
 TEST(umd_device_model, a_created_device_records_the_runtimes_handles_and_both_callback_tables)

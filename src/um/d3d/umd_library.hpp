@@ -9,6 +9,7 @@
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/umd_root.hpp"
+#include "um/d3d/d3d11_driver.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
@@ -44,6 +45,7 @@ private:
         SrwLock       lock;
         FileLog       log;
         GdiKmt        kmt;
+        d3d11::D3d11Driver driver;
         d3d::UmdRoot  root;
         ProcessTrace  trace;
     };

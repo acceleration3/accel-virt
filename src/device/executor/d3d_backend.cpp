@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/dxbc_container.hpp"
-#include "device/executor/dxgi_format_layout.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"

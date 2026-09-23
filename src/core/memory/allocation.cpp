@@ -76,7 +76,9 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * host-visible chunk (045), are published as guest blobs over the pages the
      * aperture mapping hands the driver, so they are pinned there for the same
      * reason. */
-    const bool pinned = scanned_out || published_as_blob();
+    /* A user-mode driver's surface is blitted by the miniport from its pages
+     * and read back into by the host, so it wants them known too. */
+    const bool pinned = scanned_out || descriptor_.kind() == AllocationKind::surface || published_as_blob();
 
     /* Nothing is asked for in host memory yet, and the segment is reported all
      * the same. Three live experiments say VidMm refuses every allocation whose

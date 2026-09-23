@@ -1,4 +1,4 @@
-#include "device/executor/dxgi_format_layout.hpp"
+#include "proto/d3d/dxgi_format_layout.hpp"
 
 #include "core/trace/function_scope.hpp"
 

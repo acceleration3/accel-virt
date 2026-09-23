@@ -99,8 +99,11 @@ Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
     platform_.require_irql_at_most(Irql::passive, "AllocationTable::create");
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "create");
+    /* A resource's own private data is dxgkrnl's to keep and hand whoever
+     * opens the resource; the one user-mode driver that writes any (rvkumd's
+     * share key) writes exactly this much, and nothing here reads it. */
     if (request.NumAllocations == 0u || request.NumAllocations > max_per_call || request.pAllocationInfo == nullptr ||
-        request.PrivateDriverDataSize != 0u)
+        (request.PrivateDriverDataSize != 0u && request.PrivateDriverDataSize != resource_private_bytes))
         return Status::invalid_parameter;
     /* A resource is asked for by the flag and answered as a handle of this
      * driver's own, because D3DKMTShareObjects mints an NT handle over a

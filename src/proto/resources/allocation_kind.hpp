@@ -12,6 +12,10 @@ enum class AllocationKind : uint16_t {
     shadow = 2u,
     staging = 3u,
     gdi = 4u,
+    /* A user-mode driver's surface the kernel must reach: one presented,
+     * blitted by the miniport or shared with another process, whose pages the
+     * host's pixels are read back into (the Direct3D driver, rvkumd). */
+    surface = 5u,
     client = 16u,
     /* What an rvk context runs on, and what feature 043's transport gives a
      * process: a submission ring of a power-of-two page size, and the one page

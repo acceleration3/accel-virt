@@ -14,6 +14,7 @@
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/umd_binding.hpp"
+#include "icd/d3d/umd_host_driver.hpp"
 #include "icd/d3d/umd_entry_points.hpp"
 
 namespace av::d3d {
@@ -23,8 +24,9 @@ constexpr uint32_t line_bytes = 128u;
 
 }  // namespace
 
-UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding)
-    : kmt_(kmt), lock_(lock), log_(log), binding_(binding), connection_(kmt),
+UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
+                 UmdHostDriver *builder)
+    : kmt_(kmt), lock_(lock), log_(log), binding_(binding), builder_(builder), connection_(kmt),
       adapters_(memory), devices_(memory, log)
 {
     AV_SCOPE("UmdRoot::UmdRoot");
@@ -137,10 +139,12 @@ Hresult UmdRoot::caps(void *adapter, D3d102ddiargGetCapsRecord *args)
     AV_SCOPE("UmdRoot::caps");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    if (adapters_.adapter_of(adapter) == nullptr || args == nullptr) return hr_invalid_arg;
-    /* No D3D capability is implemented and tested here, so none is claimed
-     * (constitution VI). D3D12Core survives this: it falls back and records
-     * generic pipeline level 1 (research.md §12). */
+    UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
+    if (open_adapter == nullptr || args == nullptr) return hr_invalid_arg;
+    if (builder_ != nullptr) return builder_->caps(*open_adapter, *args, connection_.adapter());
+    /* No host to ask, so no capability is claimed (constitution VI). D3D12Core
+     * survives this: it falls back and records generic pipeline level 1
+     * (research.md §12). */
     note("cap refused, type", args->Type);
     return hr_invalid_arg;
 }
@@ -191,12 +195,12 @@ Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *cre
     UmdDevice    *device = nullptr;
     const Hresult adopted = adopt_device(*open_adapter, *create, device);
     if (adopted != hr_ok) return adopted;
-    /* Feature 056 fills the device-functions table here and answers hr_ok. The
-     * runtime frees its own block and never calls pfnDestroyDevice for a
+    /* The runtime frees its own block and never calls pfnDestroyDevice for a
      * create that failed, so the object model built above is given back here
      * rather than leaked. */
-    forget_device(create->hDrvDevice);
-    return hr_not_impl;
+    const Hresult built = builder_ == nullptr ? hr_not_impl : builder_->build(*device, *create, connection_.adapter());
+    if (built != hr_ok) forget_device(create->hDrvDevice);
+    return built;
 }
 
 Hresult UmdRoot::create_device12(void *adapter, const void *create)
@@ -231,6 +235,7 @@ void UmdRoot::destroy_device(void *block)
     AV_SCOPE("UmdRoot::destroy_device");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
+    if (builder_ != nullptr && devices_.device_of(block) != nullptr) builder_->tear_down(block);
     forget_device(block);
 }
 

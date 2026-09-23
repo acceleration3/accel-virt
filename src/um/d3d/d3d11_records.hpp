@@ -1,0 +1,72 @@
+/* What the driver keeps in the blocks the Direct3D runtime allocates for each
+ * object it creates - the runtime owns that memory (pfnCalcPrivate*Size says
+ * how much), so these are plain records written by assignment, never objects
+ * constructed there.
+ *
+ * Every object is named on the wire by the 32-bit id in its record, which the
+ * device hands out; the host never sees a runtime handle. */
+#ifndef AV_UM_D3D11_RECORDS_HPP
+#define AV_UM_D3D11_RECORDS_HPP
+
+#include <stddef.h>
+#include <stdint.h>
+
+namespace av::d3d11 {
+
+/* One resource. The shadow is guest memory the CPU maps: every subresource
+ * packed one after the other, rows of row_bytes, for a resource the CPU
+ * writes or reads (dynamic and staging usage). The allocation is the kernel's,
+ * made for a resource the kernel must see - one that is presented, scanned
+ * out or shared. */
+struct ResourceRecord {
+    static constexpr uint32_t tag = 0x52524B56u; /* "VKRR" */
+
+    uint32_t magic;
+    uint32_t id;
+    uint32_t dimension;  /* D3D10DDIRESOURCE_TYPE */
+    uint32_t usage;      /* D3D10_DDI_RESOURCE_USAGE */
+    uint32_t bind;       /* D3D10_DDI_RESOURCE_BIND_FLAG */
+    uint32_t cpu_access; /* D3D10_DDI_CPU_ACCESS */
+    uint32_t misc;       /* D3D10_DDI_RESOURCE_MISC_FLAG */
+    uint32_t format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+    uint32_t mips;
+    uint32_t layers; /* array slices; six a cube */
+    uint32_t samples;
+    uint32_t primary; /* scanned out: DXGI_DDI_PRIMARY_DESC was given */
+    uint32_t vidpn_source;
+    uint32_t mapped_write; /* subresources written through a map since their last upload, a bit each (first 32) */
+    uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
+    uint32_t allocation_pitch;
+    uint32_t reserved;
+    uint64_t shared_key;
+    void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
+    uint8_t *shadow;
+    size_t   shadow_bytes;
+};
+
+/* A view of any kind, a shader, an input layout, a state object, a sampler. */
+struct ObjectRecord {
+    static constexpr uint32_t tag = 0x4F524B56u; /* "VKRO" */
+
+    uint32_t magic;
+    uint32_t id;
+    uint32_t kind; /* the shader stage, for a shader */
+    uint32_t resource; /* a view's resource id */
+};
+
+/* A query: its type and how many bytes its answer is. */
+struct QueryRecord {
+    static constexpr uint32_t tag = 0x514B5652u; /* "RVKQ" */
+
+    uint32_t magic;
+    uint32_t id;
+    uint32_t type;
+    uint32_t data_bytes;
+};
+
+}  // namespace av::d3d11
+
+#endif  // AV_UM_D3D11_RECORDS_HPP

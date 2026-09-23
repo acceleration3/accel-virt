@@ -8,7 +8,8 @@
 namespace av {
 
 UmdLibrary::Seams::Seams()
-    : heap(), lock(), log(L"rvkumd"), kmt(), root(heap, kmt, lock, log, d3d::umd_binding), trace()
+    : heap(), lock(), log(L"rvkumd"), kmt(), driver(heap, kmt, log),
+      root(heap, kmt, lock, log, d3d::umd_binding, &driver), trace()
 {
     AV_SCOPE("UmdLibrary::Seams::Seams");
     log.open();

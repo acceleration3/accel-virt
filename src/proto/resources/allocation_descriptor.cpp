@@ -72,6 +72,7 @@ bool AllocationDescriptor::is_valid() const
     AV_SCOPE("AllocationDescriptor::is_valid");
     const bool known_kind = kind_ == AllocationKind::shared_primary || kind_ == AllocationKind::shadow ||
                             kind_ == AllocationKind::staging || kind_ == AllocationKind::gdi ||
+                            kind_ == AllocationKind::surface ||
                             kind_ == AllocationKind::client || kind_ == AllocationKind::context_ring ||
                             kind_ == AllocationKind::fence_page || kind_ == AllocationKind::reply_slot ||
                             kind_ == AllocationKind::host_visible_memory;
