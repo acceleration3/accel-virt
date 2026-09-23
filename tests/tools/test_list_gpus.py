@@ -1,9 +1,12 @@
+import sys
 import unittest
 
 from source_tree import SourceTree
 from tool_run import ROOT, run
 
 TOOL = ROOT / "tools" / "host" / "list_gpus.py"
+sys.path.insert(0, str(ROOT / "tools" / "host"))
+import list_gpus  # noqa: E402
 
 # The shape of full `vulkaninfo` output, trimmed to what the tool reads: two GPUs,
 # the second with a device-local heap and a host heap, and llvmpipe.
@@ -42,6 +45,12 @@ VkPhysicalDeviceProperties:
 \tdeviceType        = PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 \tdeviceName        = NVIDIA GeForce RTX 3070 Ti Laptop GPU
 \tdeviceUUID                        = 7b7ad2c5-4219-8c80-c4fd-a64b8775aedb
+VkPhysicalDevicePCIBusInfoPropertiesEXT:
+----------------------------------------
+\tpciDomain   = 0
+\tpciBus      = 123
+\tpciDevice   = 0
+\tpciFunction = 0
 memoryHeaps: count = 2
 \tmemoryHeaps[0]:
 \t\tsize   = 8589934592 (0x200000000) (8.00 GiB)
@@ -122,6 +131,56 @@ class ListGpus(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("cannot read", result.stderr)
         self.assertNotEqual(self.list(CAPTURE, "--qemu", "--libvirt").returncode, 0)
+
+
+class WhatTheGuestIsTold(unittest.TestCase):
+    """The name and PCI identity a guest sees for each GPU, which the device
+    decides in C++ and the guest runner checks Windows against."""
+
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+        self.gpus = list_gpus.parse(CAPTURE)
+
+    def test_the_bus_address_is_read_where_the_driver_reports_one(self):
+        self.assertIsNone(self.gpus[0].pci_address)
+        self.assertEqual(self.gpus[1].pci_address, "0000:7b:00.0")
+        self.assertIsNone(self.gpus[2].pci_address)
+
+    def test_a_gpu_sysfs_describes_presents_its_own_ids(self):
+        for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "0xa1\n")):
+            self.tree.write(f"0000:7b:00.0/{name}", text)
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x10DE, 0x24E0, 0xA1))
+
+    def test_a_gpu_with_no_function_or_none_sysfs_describes_keeps_virtio_gpus(self):
+        self.assertEqual(self.gpus[0].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # no files
+        for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "a1\n")):
+            self.tree.write(f"0000:7b:00.0/{name}", text)
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # no 0x
+        self.tree.write("0000:7b:00.0/revision", "0x100\n")
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # past a byte
+
+    def test_the_adapter_name_drops_the_driver_suffix_as_the_device_does(self):
+        """The cases tests/unit/device/gpu/test_adapter_name.cpp holds the C++ to."""
+        cases = {"AMD Radeon RX 9070 XT (RADV GFX1201)": "AMD Radeon RX 9070 XT",
+                 "llvmpipe (LLVM 19.1.7, 256 bits)": "llvmpipe",
+                 "Intel(R) Arc(tm) A770 Graphics (DG2)": "Intel(R) Arc(tm) A770 Graphics",
+                 "Mesa (nested (groups)) ": "Mesa",
+                 "Device  (two spaces)": "Device",
+                 "NVIDIA GeForce RTX 4090": "NVIDIA GeForce RTX 4090",
+                 "Intel(R) Arc(tm)": "Intel(R) Arc(tm)",
+                 "(RADV GFX1201)": "(RADV GFX1201)",
+                 "   (only spaces before)": "   (only spaces before)",
+                 "unbalanced)": "unbalanced)",
+                 "unbalanced x)": "unbalanced x)",
+                 "": ""}
+        for vulkan, expected in cases.items():
+            self.assertEqual(list_gpus.adapter_name(vulkan), expected, vulkan)
+        self.assertEqual(self.gpus[0].adapter_name(), "Intel(R) Iris(R) Xe Graphics")
+        self.assertEqual(list_gpus.adapter_name("x" * 60), "x" * 47)
+        self.assertEqual(list_gpus.adapter_name("y" * 46 + "\u00e9" + "y" * 8), "y" * 46)
+        self.assertEqual(list_gpus.adapter_name("w" * 47 + " (RADV)"), "w" * 47)
 
 
 if __name__ == "__main__":

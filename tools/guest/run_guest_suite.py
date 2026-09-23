@@ -50,6 +50,8 @@ from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E
 from fetch_opencl_loader import Refused as ClRefused, pins_from as cl_pins_from  # noqa: E402
 from fetch_opencl_loader import problems_on_disk as cl_problems_on_disk  # noqa: E402
 from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "host"))
+import list_gpus  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GUEST_DIRECTORY = "C:\\rvk"
@@ -201,6 +203,12 @@ BLACK_SCREEN_LIVEDUMP = 0x1A8
 # answering: expected only in a run that told the host to stop answering.
 TIMEOUT_LIVEDUMPS = (0x117, 0x141)
 MEMORY_DUMP = "MEMORY.DMP"
+# What an --all-gpus run tells provision.ps1 each host GPU is called, one
+# "<vendor>\t<device>\t<name>" line each (feature: host GPU identity).
+ADAPTER_NAMES = GUEST_DIRECTORY + "\\adapters.txt"
+# virtio-gpu-rvk-pci's subsystem, 5256 by 1af4: DXGI's SubSysId, and the part of
+# a PNPDeviceID the device always keeps.
+RVK_SUBSYSTEM = 0x52561AF4
 
 
 TIMEOUTS = re.compile(r"^timeouts: (\d+)\r?$", re.M)
@@ -237,6 +245,14 @@ def arguments():
     parser.add_argument("--executor", default=str(ROOT / "build-qemu" / "librvk_echo_executor.so"))
     parser.add_argument("--host-gpu", default="auto",
                         help="the device's host-gpu property: auto, or a Vulkan device UUID (tools/host/list_gpus.py)")
+    parser.add_argument("--all-gpus", action="store_true",
+                        help="one virtio-gpu-rvk-pci per host GPU (tools/host/list_gpus.py, CPU devices left "
+                             "out), and a check that Device Manager, WMI and DXGI name each with the host's "
+                             "name and PCI IDs")
+    parser.add_argument("--vulkaninfo", metavar="FILE",
+                        help="--all-gpus: read the host's GPUs from captured vulkaninfo output instead of "
+                             "running vulkaninfo")
+    parser.add_argument("--sysfs", default=list_gpus.SYSFS_PCI, help=argparse.SUPPRESS)
     parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
     parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
     parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
@@ -395,28 +411,37 @@ def arguments():
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
     if parsed.opengl_discovery and (parsed.rvk or parsed.vulkan or parsed.opengl):
         parser.error("--opengl-discovery is its own boot: pass it without --rvk, --vulkan and --opengl")
+    if parsed.all_gpus and parsed.host_gpu != "auto":
+        parser.error("--all-gpus binds a device to every host GPU: pass it without --host-gpu")
     if parsed.no_verifier and parsed.power_cycles:
         parser.error("--no-verifier leaves nothing to read: --power-cycles judges the pool allocations "
                      "Driver Verifier tracked, and without it every cycle reports none")
     return parsed
 
 
-def qemu_command(args, work, disk, rescue):
-    """QEMU for a run; a rescue boot leaves the device out so the driver never loads."""
+def qemu_command(args, work, disk, rescue, gpus=()):
+    """QEMU for a run; a rescue boot leaves the device out so the driver never
+    loads. With `gpus`, one device per host GPU, each bound by its UUID; the
+    first keeps the id screendumps and the hostmem query name."""
     suffix = "-rescue" if rescue else ""
-    properties = [f"virtio-gpu-rvk-pci,id={DISPLAY_DEVICE}", f"host-gpu={args.host_gpu}", f"executor={args.executor}",
-                  f"max_outputs={args.outputs}", f"vectors={FENCE_VECTORS}"]
-    # The region exists only where it is asked for, and the capset's
-    # host-visible bit follows the device's own hostmem size, so a run without
-    # it is a run against an adapter that must fall back (feature 041, FR-001).
-    if args.hostmem:
-        properties.append(f"hostmem={args.hostmem}M")
-    # What crossed the wire, written beside qemu.log so a run that rendered
-    # wrong can be printed and replayed afterwards (feature 065, FR-001).
-    if args.record and not rescue:
-        properties.append(f"record={work / RECORDING}")
-        properties.append(f"record-limit={args.record_limit}")
-    device = [] if rescue else ["-device", ",".join(properties)]
+    device = []
+    for index, host_gpu in enumerate([gpu.uuid for gpu in gpus] or [args.host_gpu]):
+        name = DISPLAY_DEVICE if index == 0 else f"{DISPLAY_DEVICE}{index}"
+        properties = [f"virtio-gpu-rvk-pci,id={name}", f"host-gpu={host_gpu}", f"executor={args.executor}",
+                      f"max_outputs={args.outputs}", f"vectors={FENCE_VECTORS}"]
+        # The region exists only where it is asked for, and the capset's
+        # host-visible bit follows the device's own hostmem size, so a run without
+        # it is a run against an adapter that must fall back (feature 041, FR-001).
+        if args.hostmem:
+            properties.append(f"hostmem={args.hostmem}M")
+        # What crossed the wire, written beside qemu.log so a run that rendered
+        # wrong can be printed and replayed afterwards (feature 065, FR-001).
+        # One file, the first device's: two devices cannot write one recording.
+        if args.record and not rescue and index == 0:
+            properties.append(f"record={work / RECORDING}")
+            properties.append(f"record-limit={args.record_limit}")
+        if not rescue:
+            device += ["-device", ",".join(properties)]
     command = [
         args.qemu, "-machine", f"q35,accel={args.accel},memory-backend=ram",
         # OVMF on q35 advertises S3 through ACPI and cannot resume from it: the
@@ -712,6 +737,8 @@ class GuestRun:
         self.cts_files = []
         # What a --d3d run pushes, by layer, once its pins were honoured.
         self.layer_files = {}
+        # The host GPUs an --all-gpus run gave a device each, in QEMU's order.
+        self.host_gpus = []
 
     def say(self, line):
         self.log.append(line)
@@ -754,6 +781,8 @@ class GuestRun:
             # runtime as much as a --vulkan one.
             self.vulkan_runtime()
             self.layer_files = self.d3d_layers()
+        if self.args.all_gpus:
+            self.host_gpus = self.every_host_gpu()
         for stale in ("overlay.qcow2", "vars.fd", "agent.sock", "qmp.sock", "rvkgpu.log", "rvkgpu-rescue.log",
                       "qemu-rescue.log", "panic.txt", "hostmem.bin"):
             (self.work / stale).unlink(missing_ok=True)
@@ -861,6 +890,42 @@ class GuestRun:
                                         "run tools/fetch_cts.py")
         self.cts_files = [(into / name, name) for name in sorted(pins.files)]
 
+    def every_host_gpu(self):
+        """The host's GPUs as list_gpus.py reads them, CPU devices left out:
+        llvmpipe is not a GPU a guest would be shown, and it has no PCI
+        function to name it."""
+        if self.args.vulkaninfo:
+            try:
+                text = pathlib.Path(self.args.vulkaninfo).read_text()
+            except OSError as error:
+                raise StepFailed("prepare", f"--vulkaninfo {self.args.vulkaninfo}: {error.strerror}")
+        else:
+            try:
+                text = subprocess.run(["vulkaninfo"], capture_output=True, text=True, check=True).stdout
+            except (OSError, subprocess.CalledProcessError) as error:
+                raise StepFailed("prepare", f"--all-gpus: vulkaninfo failed: {error}")
+        try:
+            gpus = [gpu for gpu in list_gpus.parse(text) if gpu.kind != "cpu"]
+        except ValueError as error:
+            raise StepFailed("prepare", f"--all-gpus: vulkaninfo output: {error}")
+        if not gpus:
+            raise StepFailed("prepare", "--all-gpus: the host has no Vulkan GPU that is not a CPU")
+        for gpu in gpus:
+            vendor, device, revision = gpu.pci_identity(self.args.sysfs)
+            self.say(f"host gpu: {gpu.uuid} {vendor:04x}:{device:04x} rev {revision:02x} "
+                     f"{gpu.adapter_name()!r}")
+        return gpus
+
+    def adapter_names(self):
+        """What provision.ps1 names each host GPU's INF model with."""
+        lines = []
+        for gpu in self.host_gpus:
+            vendor, device, _revision = gpu.pci_identity(self.args.sysfs)
+            lines.append(f"{vendor:04x}\t{device:04x}\t{gpu.adapter_name()}\n")
+        path = self.work / "adapter-names.txt"
+        path.write_text("".join(lines), encoding="utf-8")
+        return path
+
     def keep_symbols(self):
         """The driver under test and its PDB beside the dumps it produces: a rebuild replaces both."""
         symbols = self.work / "symbols"
@@ -887,8 +952,8 @@ class GuestRun:
             environment["RVK_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
         if self.args.stall_ms or self.args.fault_after:
             environment["RVK_ECHO_ONLY_NTH"] = str(self.args.stall_context)
-        self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue), stdout=output,
-                                     stderr=subprocess.STDOUT, env=environment)
+        self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue, self.host_gpus),
+                                     stdout=output, stderr=subprocess.STDOUT, env=environment)
         output.close()
         deadline = time.monotonic() + self.args.agent_timeout
         while not (self.work / "qmp.sock").exists():
@@ -934,6 +999,8 @@ class GuestRun:
                       (self.args.umd, PACKAGE_DIRECTORY + "\\rvkumd.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
+            if self.host_gpus:
+                files.append((self.adapter_names(), ADAPTER_NAMES))
         if self.args.vulkan:
             # The loader beside the programs that import it, where Windows
             # looks first.
@@ -991,14 +1058,60 @@ class GuestRun:
                          "-Stage", name, *extra], self.args.step_timeout))
 
     def check_monitors(self, output):
-        """US4: Windows attaches one monitor to every output the device
+        """US4: Windows attaches one monitor to every output each device
         reports, and the check stage counted them."""
         monitors = re.search(r"monitors=(\d+)", output)
         if monitors is None:
             raise StepFailed("check", "the check stage did not count the guest's monitors")
-        if int(monitors.group(1)) != self.args.outputs:
-            raise StepFailed("check", f"the guest has {monitors.group(1)} monitors, not {self.args.outputs}")
+        devices = max(len(self.host_gpus), 1)
+        if int(monitors.group(1)) != self.args.outputs * devices:
+            raise StepFailed("check", f"the guest has {monitors.group(1)} monitors, not "
+                                      f"{self.args.outputs * devices}")
+        adapters = re.search(r"adapters=(\d+)", output)
+        if self.host_gpus and (adapters is None or int(adapters.group(1)) != devices):
+            found = adapters.group(1) if adapters else "no"
+            raise StepFailed("check", f"the guest has {found} rvkgpu adapters, not {devices}")
         self.say(f"check ok: {monitors.group(1)} monitor(s)")
+
+    def expected_adapters(self):
+        """(vendor, device, revision, name) for each device an --all-gpus run
+        started: what Windows must say it is."""
+        return [(*gpu.pci_identity(self.args.sysfs), gpu.adapter_name()) for gpu in self.host_gpus]
+
+    def adapters(self):
+        """Every host GPU shown by its host's name and PCI identity, in the two
+        places an application looks: WMI's Win32_VideoController (Name and
+        PNPDeviceID) and DXGI's EnumAdapters1 (Description, VendorId, DeviceId,
+        SubSysId, Revision). Each adapter Windows lists is matched once, so two
+        of the same GPU need two adapters."""
+        output = self.stage_output("adapters", saved="adapters.txt")
+        rows = [line.rstrip("\r").split("|") for line in output.splitlines()]
+        failed = [row[1] for row in rows if row[0] == "dxgi-error"]
+        if failed:
+            raise StepFailed("adapters", f"DXGI could not list adapters: {'; '.join(failed)}")
+        wmi = [row for row in rows if row[0] == "wmi" and len(row) >= 6]
+        dxgi = [row for row in rows if row[0] == "dxgi" and len(row) >= 9]
+        missing = []
+        for vendor, device, revision, name in self.expected_adapters():
+            pnp = f"PCI\\VEN_{vendor:04X}&DEV_{device:04X}&SUBSYS_{RVK_SUBSYSTEM:08X}&REV_{revision:02X}\\"
+            shown = next((row for row in wmi if row[1].upper().startswith(pnp) and row[5] == name), None)
+            if shown is None:
+                missing.append(f"WMI has no {pnp[:-1]} named {name!r}")
+            else:
+                wmi.remove(shown)
+                self.say(f"adapters: WMI {name!r} {shown[1]}, AdapterRAM {shown[2]}, "
+                         f"AdapterCompatibility {shown[3]!r}")
+            ids = (f"{vendor:04x}", f"{device:04x}", f"{RVK_SUBSYSTEM:08x}", f"{revision:02x}")
+            listed = next((row for row in dxgi if tuple(row[1:5]) == ids and row[8] == name), None)
+            if listed is None:
+                missing.append(f"DXGI has no {':'.join(ids[:2])} subsystem {ids[2]} rev {ids[3]} named {name!r}")
+            else:
+                dxgi.remove(listed)
+                self.say(f"adapters: DXGI {name!r} {':'.join(ids[:2])} rev {ids[3]}, "
+                         f"DedicatedVideoMemory {listed[5]}")
+        if missing:
+            raise StepFailed("adapters", "; ".join(missing) + "; see adapters.txt")
+        self.say(f"adapters ok: {len(self.host_gpus)} host GPU(s) named and identified in WMI and DXGI")
 
     def segments(self):
         """FR-001: what memory the adapter told VidMm it has. The segment list
@@ -1914,6 +2027,8 @@ class GuestRun:
         if self.stage("install", extra=("-NoVerifier",) if self.args.no_verifier else ()):
             self.reboot("install")
         self.check_monitors(self.stage_output("check", saved="device.txt"))
+        if self.host_gpus:
+            self.adapters()
         self.segments()
         # The display and power scenarios are the echo run's; these boots are
         # for the work the real executor does (features 044 and 045).

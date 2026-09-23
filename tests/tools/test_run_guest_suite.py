@@ -106,6 +106,39 @@ KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or
 ICD_LOG = "C:\\ProgramData\\rvk\\rvkvk-4242.log"
 
 
+def host_gpu(index, uuid, vendor, device, kind, name, bus):
+    """One GPU of a host's full vulkaninfo output, with the PCI bus it is on."""
+    return (f"GPU{index}:\nVkPhysicalDeviceProperties:\n\tvendorID = {vendor}\n\tdeviceID = {device}\n"
+            f"\tdeviceType = PHYSICAL_DEVICE_TYPE_{kind}\n\tdeviceName = {name}\n"
+            f"\tdeviceUUID = {uuid}\n"
+            + (f"VkPhysicalDevicePCIBusInfoPropertiesEXT:\n\tpciDomain = 0\n\tpciBus = {bus}\n"
+               f"\tpciDevice = 0\n\tpciFunction = 0\n" if bus is not None else ""))
+
+
+# This project's host: the RX 9070 XT at 03:00.0 and the Raphael iGPU at
+# 7b:00.0, which sysfs is told nothing about here, and llvmpipe.
+RADEON_UUID = "00000000-0300-0000-0000-000000000000"
+RAPHAEL_UUID = "00000000-7b00-0000-0000-000000000000"
+HOST_GPUS = (host_gpu(0, RADEON_UUID, "0x1002", "0x7550", "DISCRETE_GPU", "AMD Radeon RX 9070 XT (RADV GFX1201)", 3)
+             + host_gpu(1, RAPHAEL_UUID, "0x1002", "0x13c0", "INTEGRATED_GPU",
+                        "AMD Radeon Graphics (RADV RAPHAEL_MENDOCINO)", 123)
+             + host_gpu(2, "6d657361-3231-2e31-2e30-000000000000", "0x10005", "0x0000", "CPU",
+                        "llvmpipe (LLVM 21.1.0, 256 bits)", None))
+TWO_ADAPTERS = "display: dwm=1 services=rvkgpu,rvkgpu monitors=2 adapters=2\n" \
+               "device: PCI\\VEN_1002 status=OK problem=0 service=rvkgpu\n"
+"""What the check stage says of two rvkgpu adapters with one output each."""
+WINDOWS_ADAPTERS = (
+    "wmi|PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0\\3&11583659&0&10|4293918720|accel-virt|"
+    "AMD Radeon RX 9070 XT|AMD Radeon RX 9070 XT\r\n"
+    "wmi|PCI\\VEN_1AF4&DEV_1050&SUBSYS_52561AF4&REV_01\\3&11583659&0&18|0|accel-virt|AMD Radeon Graphics|"
+    "AMD Radeon Graphics\r\n"
+    "dxgi|1002|7550|52561af4|c0|268435456|8589934592|0|AMD Radeon RX 9070 XT\r\n"
+    "dxgi|1af4|1050|52561af4|01|268435456|8589934592|0|AMD Radeon Graphics\r\n"
+    "dxgi|1414|008c|00000000|00|0|8589934592|2|Microsoft Basic Render Driver\r\n")
+"""What the adapters stage says of those two, and the software rasterizer DXGI
+always lists."""
+
+
 class GuestSuiteRun(unittest.TestCase):
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp())
@@ -391,6 +424,91 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(f"host-gpu={uuid}", self.journal.read_text())
         self.assertIn(f"guest: rvk: executor /nowhere/librvk_echo_executor.so, host-gpu {uuid}", result.stdout)
+
+    def all_gpus_run(self, adapters=WINDOWS_ADAPTERS, check=TWO_ADAPTERS):
+        """A quick --all-gpus run on HOST_GPUS, with sysfs describing only the
+        RX 9070 XT's function: the iGPU's device keeps virtio-gpu's IDs."""
+        sysfs = self.scratch / "sysfs"
+        for name, value in (("vendor", "0x1002"), ("device", "0x7550"), ("revision", "0xc0")):
+            (sysfs / "0000:03:00.0").mkdir(parents=True, exist_ok=True)
+            (sysfs / "0000:03:00.0" / name).write_text(value + "\n")
+        (self.scratch / "vulkaninfo.txt").write_text(HOST_GPUS)
+        self.script(outputs={"check": check, "adapters": adapters, "rvktest": PASSING_REPORT,
+                             "collect": COLLECTED})
+        return self.run_suite("--quick", "--all-gpus", "--vulkaninfo", self.scratch / "vulkaninfo.txt",
+                              "--sysfs", sysfs)
+
+    def test_all_gpus_starts_a_device_per_host_gpu_and_finds_each_named_in_wmi_and_dxgi(self):
+        result = self.all_gpus_run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        argv = self.journal_lines()[0]
+        self.assertIn(f"virtio-gpu-rvk-pci,id=gpu,host-gpu={RADEON_UUID},", argv)
+        self.assertIn(f"virtio-gpu-rvk-pci,id=gpu1,host-gpu={RAPHAEL_UUID},", argv)
+        self.assertEqual(argv.count("virtio-gpu-rvk-pci"), 2)   # llvmpipe is not a GPU a guest is shown
+        self.assertIn("host gpu: 00000000-0300-0000-0000-000000000000 1002:7550 rev c0 'AMD Radeon RX 9070 XT'",
+                      result.stdout)
+        self.assertIn("host gpu: 00000000-7b00-0000-0000-000000000000 1af4:1050 rev 01 'AMD Radeon Graphics'",
+                      result.stdout)
+        # provision.ps1 names each model in the INF from what the runner pushed.
+        self.assertIn("file C:\\rvk\\adapters.txt", "\n".join(self.journal_lines()))
+        self.assertEqual(self.stage_calls()[:4], ["sign", "install", "check", "adapters"])
+        self.assertIn("guest: adapters: WMI 'AMD Radeon RX 9070 XT' "
+                      "PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0\\3&11583659&0&10, AdapterRAM 4293918720",
+                      result.stdout)
+        self.assertIn("guest: adapters: DXGI 'AMD Radeon Graphics' 1af4:1050 rev 01", result.stdout)
+        self.assertIn("guest: adapters ok: 2 host GPU(s) named and identified in WMI and DXGI", result.stdout)
+        self.assert_clean()
+
+    def test_all_gpus_tells_provision_each_host_gpus_ids_and_name(self):
+        result = self.all_gpus_run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.work / "adapter-names.txt").read_text(encoding="utf-8"),
+                         "1002\t7550\tAMD Radeon RX 9070 XT\n1af4\t1050\tAMD Radeon Graphics\n")
+
+    def test_all_gpus_fails_naming_each_adapter_windows_does_not_show(self):
+        renamed = WINDOWS_ADAPTERS.replace("dxgi|1002|7550|52561af4|c0|268435456|8589934592|0|AMD Radeon RX 9070 XT",
+                                           "dxgi|1002|7550|52561af4|c0|268435456|8589934592|0|accel-virt paravirtual GPU")
+        result = self.all_gpus_run(adapters=renamed)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("adapters failed: DXGI has no 1002:7550 subsystem 52561af4 rev c0 named "
+                      "'AMD Radeon RX 9070 XT'; see adapters.txt", result.stdout)
+        wrong_ids = WINDOWS_ADAPTERS.replace("REV_C0", "REV_C1")
+        result = self.all_gpus_run(adapters=wrong_ids)
+        self.assertIn("adapters failed: WMI has no PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0 named "
+                      "'AMD Radeon RX 9070 XT'", result.stdout)
+        result = self.all_gpus_run(adapters="dxgi-error|CreateDXGIFactory1 0x887A0001\r\n")
+        self.assertIn("adapters failed: DXGI could not list adapters: CreateDXGIFactory1 0x887A0001", result.stdout)
+
+    def test_all_gpus_needs_every_device_started_with_its_monitor(self):
+        result = self.all_gpus_run(check=ONE_MONITOR + "device: PCI\\VEN_1002 status=OK problem=0 service=rvkgpu\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("check failed: the guest has 1 monitors, not 2", result.stdout)
+        result = self.all_gpus_run(check="display: dwm=1 services=rvkgpu monitors=2 adapters=1\n")
+        self.assertIn("check failed: the guest has 1 rvkgpu adapters, not 2", result.stdout)
+
+    def test_all_gpus_is_refused_with_a_named_host_gpu_or_a_host_with_no_gpu(self):
+        self.script()
+        result = self.run_suite("--all-gpus", "--host-gpu", RADEON_UUID)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--all-gpus binds a device to every host GPU", result.stderr)
+        (self.scratch / "cpu-only.txt").write_text(host_gpu(0, "6d657361-3231-2e31-2e30-000000000000", "0x10005",
+                                                            "0x0000", "CPU", "llvmpipe", None))
+        result = self.run_suite("--all-gpus", "--vulkaninfo", self.scratch / "cpu-only.txt")
+        self.assertIn("prepare failed: --all-gpus: the host has no Vulkan GPU that is not a CPU", result.stdout)
+        result = self.run_suite("--all-gpus", "--vulkaninfo", self.scratch / "absent.txt")
+        self.assertIn("prepare failed: --vulkaninfo", result.stdout)
+        (self.scratch / "broken.txt").write_text("GPU0:\n\tdeviceName = x\n")
+        result = self.run_suite("--all-gpus", "--vulkaninfo", self.scratch / "broken.txt")
+        self.assertIn("prepare failed: --all-gpus: vulkaninfo output: GPU0: no", result.stdout)
+        self.assertNotIn("argv", self.journal.read_text() if self.journal.exists() else "")
+
+    def test_a_run_without_all_gpus_starts_one_device_and_asks_windows_nothing_more(self):
+        self.script()
+        result = self.run_suite("--quick")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.journal_lines()[0].count("virtio-gpu-rvk-pci"), 1)
+        self.assertNotIn("adapters", self.stage_calls())
+        self.assertNotIn("adapters.txt", "\n".join(self.journal_lines()))
 
     def test_a_quick_run_installs_checks_and_runs_the_suite_without_the_slow_scenarios(self):
         """Feature 044: an iteration run leaves the display, power and sleep
