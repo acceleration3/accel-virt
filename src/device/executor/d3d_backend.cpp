@@ -347,6 +347,83 @@ bool D3dBackend::on_DestroyDevice11(uint32_t device)
     return true;
 }
 
+bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
+{
+    AV_SCOPE("D3dBackend::on_RotateResources11");
+    if (!has_device() || count > max_rotation) return false;
+    if (count < 2u) return true;
+    IUnknown *textures[max_rotation] = {};
+    for (uint32_t index = 0u; index < count; index++) {
+        textures[index] = objects_.find(resources[index], D3dObjectKind::resource);
+        if (textures[index] == nullptr) return false;
+        for (uint32_t other = 0u; other < index; other++)
+            if (textures[other] == textures[index]) return false;
+    }
+    for (uint32_t index = 0u; index < count; index++)
+        static_cast<void>(objects_.exchange(resources[index], D3dObjectKind::resource, textures[(index + 1u) % count]));
+    remake_views(textures, count);
+    return true;
+}
+
+/* Every view of a rotated texture is made again, with its own description, on
+ * the texture its resource's id now names: the next one in the rotation. */
+void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
+{
+    AV_SCOPE("D3dBackend::remake_views");
+    for (uint32_t slot = 0u; slot < D3dObjectTable::capacity; slot++) {
+        uint32_t      id = 0u;
+        D3dObjectKind kind = D3dObjectKind::none;
+        IUnknown *const object = objects_.at(slot, id, kind);
+        if (object == nullptr || !is_view(kind)) continue;
+        ID3D11Resource *viewed = nullptr;
+        static_cast<ID3D11View *>(object)->GetResource(&viewed);
+        uint32_t found = count;
+        for (uint32_t index = 0u; index < count; index++)
+            if (static_cast<IUnknown *>(viewed) == textures[index]) found = index;
+        if (viewed != nullptr) viewed->Release();
+        if (found == count) continue;
+        IUnknown *const made = remake_view(kind, object, static_cast<ID3D11Resource *>(textures[(found + 1u) % count]));
+        if (made == nullptr) continue;
+        IUnknown *const old = objects_.exchange(id, kind, made);
+        if (old != nullptr) old->Release();
+    }
+}
+
+bool D3dBackend::is_view(D3dObjectKind kind) const
+{
+    AV_SCOPE("D3dBackend::is_view");
+    return kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::render_target_view ||
+           kind == D3dObjectKind::depth_stencil_view || kind == D3dObjectKind::unordered_access_view;
+}
+
+IUnknown *D3dBackend::remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture)
+{
+    AV_SCOPE("D3dBackend::remake_view");
+    ID3D11Device5 *const device = device11_->device();
+    if (kind == D3dObjectKind::shader_resource_view) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc = {};
+        static_cast<ID3D11ShaderResourceView *>(view)->GetDesc(&desc);
+        ID3D11ShaderResourceView *made = nullptr;
+        return SUCCEEDED(device->CreateShaderResourceView(texture, &desc, &made)) ? made : nullptr;
+    }
+    if (kind == D3dObjectKind::render_target_view) {
+        D3D11_RENDER_TARGET_VIEW_DESC desc = {};
+        static_cast<ID3D11RenderTargetView *>(view)->GetDesc(&desc);
+        ID3D11RenderTargetView *made = nullptr;
+        return SUCCEEDED(device->CreateRenderTargetView(texture, &desc, &made)) ? made : nullptr;
+    }
+    if (kind == D3dObjectKind::depth_stencil_view) {
+        D3D11_DEPTH_STENCIL_VIEW_DESC desc = {};
+        static_cast<ID3D11DepthStencilView *>(view)->GetDesc(&desc);
+        ID3D11DepthStencilView *made = nullptr;
+        return SUCCEEDED(device->CreateDepthStencilView(texture, &desc, &made)) ? made : nullptr;
+    }
+    D3D11_UNORDERED_ACCESS_VIEW_DESC desc = {};
+    static_cast<ID3D11UnorderedAccessView *>(view)->GetDesc(&desc);
+    ID3D11UnorderedAccessView *made = nullptr;
+    return SUCCEEDED(device->CreateUnorderedAccessView(texture, &desc, &made)) ? made : nullptr;
+}
+
 bool D3dBackend::on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64_t formats_capacity,
                                 uint64_t &formats_size)
 {

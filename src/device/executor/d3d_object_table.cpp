@@ -75,6 +75,25 @@ IUnknown *D3dObjectTable::find_any(uint32_t id, D3dObjectKind &kind) const
     return slot == capacity ? nullptr : objects_[slot];
 }
 
+IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *object)
+{
+    AV_SCOPE("D3dObjectTable::exchange");
+    const uint32_t slot = id == 0u || object == nullptr ? capacity : slot_of(id);
+    if (slot == capacity || kinds_[slot] != kind) return nullptr;
+    IUnknown *const old = objects_[slot];
+    objects_[slot] = object;
+    return old;
+}
+
+IUnknown *D3dObjectTable::at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const
+{
+    AV_SCOPE("D3dObjectTable::at");
+    const bool used = slot < capacity && kinds_[slot] != D3dObjectKind::none;
+    id = used ? ids_[slot] : 0u;
+    kind = used ? kinds_[slot] : D3dObjectKind::none;
+    return used ? objects_[slot] : nullptr;
+}
+
 void D3dObjectTable::remove(uint32_t id)
 {
     AV_SCOPE("D3dObjectTable::remove");

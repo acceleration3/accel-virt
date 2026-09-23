@@ -146,6 +146,15 @@ bool rvk_d3d_DestroyDevice11(::av::ClientTransport& t, uint32_t device) {
     return t.send_async(kCmd_DestroyDevice11, b) == ::av::TransportResult::ok;
 }
 
+bool rvk_d3d_RotateResources11(::av::ClientTransport& t, uint32_t count, const uint32_t* resources) {
+    AV_SCOPE("rvk_d3d_RotateResources11");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(count);
+    if (count > 16u || (count != 0u && resources == nullptr)) return abandon(t);
+    if (count != 0u) b.write(resources, sizeof(*resources) * count);
+    return t.send_async(kCmd_RotateResources11, b) == ::av::TransportResult::ok;
+}
+
 bool rvk_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key) {
     AV_SCOPE("rvk_d3d_CreateResource");
     ::av::WireWriter b = t.request_writer();

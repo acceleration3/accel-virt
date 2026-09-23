@@ -194,6 +194,15 @@ doc = """A device made by CreateDevice11, and its context state. Destroying the 
 selected; a command that needs one before the next selection loses the session."""
 params = ["u32 device"]
 
+[[command]]
+name = "RotateResources11"
+id = 0x0008
+doc = """DXGI's RotateResourceIdentities: each resource id names the texture the next one named, the last the
+first's, and every view of a rotated texture is made again on the texture its resource id now names, with the
+same description. A swap chain's views are made once and rotated under it, so without this the device draws into
+one texture and presents another. The ids must be resources, none twice."""
+params = ["u32 count", "u32 resources[count] max 16"]
+
 # ---------------------------------------------------------------- creation
 
 [[command]]

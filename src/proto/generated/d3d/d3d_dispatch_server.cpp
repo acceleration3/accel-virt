@@ -157,6 +157,25 @@ static bool decode_DestroyDevice11(ServerDispatch& s, ::av::WireReader& r, ::av:
     return true;
 }
 
+static bool decode_RotateResources11(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:RotateResources11");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t count{};
+    if (!r.read_pod(count)) return false;
+    if (count > 16u) return false;
+    uint32_t* resources = nullptr;
+    if (count != 0u) {
+        resources = arena.allocate<uint32_t>(count);
+        if (resources == nullptr) return false;
+        if (!r.read(resources, sizeof(uint32_t) * count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_RotateResources11(count, resources)) return false;
+    return true;
+}
+
 static bool decode_CreateResource(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d:CreateResource");
     (void)s;
@@ -1168,6 +1187,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_DestroyObject:
         case kCmd_SelectDevice11:
         case kCmd_DestroyDevice11:
+        case kCmd_RotateResources11:
         case kCmd_CreateResource:
         case kCmd_OpenResource:
         case kCmd_CreateShaderResourceView:
@@ -1239,6 +1259,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_DestroyObject: return decode_DestroyObject(s, r, reply, arena);
         case kCmd_SelectDevice11: return decode_SelectDevice11(s, r, reply, arena);
         case kCmd_DestroyDevice11: return decode_DestroyDevice11(s, r, reply, arena);
+        case kCmd_RotateResources11: return decode_RotateResources11(s, r, reply, arena);
         case kCmd_CreateResource: return decode_CreateResource(s, r, reply, arena);
         case kCmd_OpenResource: return decode_OpenResource(s, r, reply, arena);
         case kCmd_CreateShaderResourceView: return decode_CreateShaderResourceView(s, r, reply, arena);

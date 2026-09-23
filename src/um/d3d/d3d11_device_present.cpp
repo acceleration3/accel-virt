@@ -194,24 +194,52 @@ HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
                : E_OUTOFMEMORY;
 }
 
+/* Each resource takes what the one after it was - its texture on the host,
+ * its kernel allocation and host key, its CPU shadow - and the last the
+ * first's; the runtime's handles and the host ids stay put. The host rotates
+ * the textures behind the ids and makes their views again, and the runtime is
+ * asked to bind its state again, since the views it bound were remade under
+ * it (VirtualBox's vboxDXRotateResourceIdentities does the same). */
 HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *args)
 {
     AV_SCOPE("D3d11Device::rotate_resource_identities");
     if (args->Resources < 2u) return S_OK;
-    /* Each resource takes the identity of the one after it and the last the
-     * first's: what the runtime's handle names moves, its handle does not. */
-    ResourceRecord first = record(args->pResources[0]);
-    for (UINT index = 0u; index + 1u < args->Resources; index++) {
+    constexpr UINT max_rotation = 16u;
+    if (args->Resources > max_rotation) return E_INVALIDARG;
+    uint32_t ids[max_rotation] = {};
+    for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).id;
+    if (!d3dproto::rvk_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
+    const ResourceRecord first = record(args->pResources[0]);
+    for (UINT index = 0u; index < args->Resources; index++) {
         ResourceRecord &to = record(args->pResources[index]);
-        void *const kept = to.runtime_resource;
-        to = record(args->pResources[index + 1u]);
-        to.runtime_resource = kept;
+        const ResourceRecord &from = index + 1u < args->Resources ? record(args->pResources[index + 1u]) : first;
+        to.allocation = from.allocation;
+        to.allocation_pitch = from.allocation_pitch;
+        to.shared_key = from.shared_key;
+        to.shadow = from.shadow;
+        to.shadow_bytes = from.shadow_bytes;
+        to.mapped_write = from.mapped_write;
+        to.primary = from.primary;
+        to.vidpn_source = from.vidpn_source;
     }
-    ResourceRecord &last = record(args->pResources[args->Resources - 1u]);
-    void *const kept = last.runtime_resource;
-    last = first;
-    last.runtime_resource = kept;
+    rebind_state();
     return S_OK;
+}
+
+void D3d11Device::rebind_state()
+{
+    AV_SCOPE("D3d11Device::rebind_state");
+    if (core_ == nullptr) return;
+    constexpr UINT srvs = D3D10_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT;
+    constexpr UINT uavs = 64u;   /* D3D11_1_UAV_SLOT_COUNT */
+    core_->pfnStateVsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStateGsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStatePsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStateHsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStateDsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStateCsSrvCb(core_layer_, 0u, srvs);
+    core_->pfnStateCsUavCb(core_layer_, 0u, uavs);
+    core_->pfnStateOmRenderTargetsCb(core_layer_);
 }
 
 HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *)

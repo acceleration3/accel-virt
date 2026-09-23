@@ -56,6 +56,12 @@ public:
     IUnknown          *find(uint32_t id, D3dObjectKind kind) const;
     /* The object `id` names and its kind, whatever it is. */
     IUnknown          *find_any(uint32_t id, D3dObjectKind &kind) const;
+    /* Puts `object` under `id` in place of what it named, if that was of
+     * `kind`, and hands the old reference back; null, with `object` still the
+     * caller's, otherwise. */
+    IUnknown          *exchange(uint32_t id, D3dObjectKind kind, IUnknown *object);
+    /* The object in `slot` and its id and kind; null for an empty slot. */
+    IUnknown          *at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const;
     /* Removes `id` and gives its reference back; nothing for an unknown id. */
     void               remove(uint32_t id);
     /* Every reference back. */

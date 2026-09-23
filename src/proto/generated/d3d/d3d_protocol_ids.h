@@ -16,6 +16,7 @@ inline constexpr uint32_t kCmd_Finish11 = 0x00040004;
 inline constexpr uint32_t kCmd_DestroyObject = 0x00040005;
 inline constexpr uint32_t kCmd_SelectDevice11 = 0x00040006;
 inline constexpr uint32_t kCmd_DestroyDevice11 = 0x00040007;
+inline constexpr uint32_t kCmd_RotateResources11 = 0x00040008;
 inline constexpr uint32_t kCmd_CreateResource = 0x00040100;
 inline constexpr uint32_t kCmd_OpenResource = 0x00040101;
 inline constexpr uint32_t kCmd_CreateShaderResourceView = 0x00040102;

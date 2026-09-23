@@ -32,6 +32,9 @@ class D3d11HostDevice;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
+    /* The most resources one rotation names: the wire's bound. */
+    static constexpr uint32_t max_rotation = 16u;
+
     D3dBackend();
 
     /* Binds this session to its GPU's Direct3D 11 device, which must outlive
@@ -60,6 +63,7 @@ public:
                            uint32_t &level) override;
     bool on_SelectDevice11(uint32_t device) override;
     bool on_DestroyDevice11(uint32_t device) override;
+    bool on_RotateResources11(uint32_t count, const uint32_t *resources) override;
     bool on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64_t formats_capacity,
                         uint64_t &formats_size) override;
     bool on_Flush11() override;
@@ -160,6 +164,10 @@ private:
     /* The session made a device: what creating an object, flushing and
      * finishing need, none of which touch pipeline state. */
     bool                     has_device() const;
+    void                     remake_views(IUnknown *const *textures, uint32_t count);
+    bool                     is_view(D3dObjectKind kind) const;
+    /* A view like `view`, of `kind`, on `texture`; null when the host refuses one. */
+    IUnknown                *remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture);
     /* The kind of object a shader of `stage` is; none for no stage. */
     D3dObjectKind            shader_kind(uint32_t stage) const;
     /* One subresource's size in texels (bytes for a buffer) and its format;

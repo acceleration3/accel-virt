@@ -79,6 +79,8 @@ private:
      * with a round trip after a call failed, since a command the host refuses
      * removes the device that sent it and says so only when asked. */
     bool            removed_on_host();
+    /* Asks the runtime to bind every view again, after the host remade them. */
+    void            rebind_state();
     d3d::D3dDeviceChannel &wire();
 
     /* The subresource's size and its layout in the shadow. */

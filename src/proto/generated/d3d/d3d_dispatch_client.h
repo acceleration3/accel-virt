@@ -34,6 +34,11 @@ namespace av::d3dproto {
 // A device made by CreateDevice11, and its context state. Destroying the selected device leaves none
 // selected; a command that needs one before the next selection loses the session.
 [[nodiscard]] bool rvk_d3d_DestroyDevice11(::av::ClientTransport& t, uint32_t device);
+// DXGI's RotateResourceIdentities: each resource id names the texture the next one named, the last the
+// first's, and every view of a rotated texture is made again on the texture its resource id now names, with the
+// same description. A swap chain's views are made once and rotated under it, so without this the device draws into
+// one texture and presents another. The ids must be resources, none twice.
+[[nodiscard]] bool rvk_d3d_RotateResources11(::av::ClientTransport& t, uint32_t count, const uint32_t* resources);
 // A resource. shared_key is non-zero for one another session may open (its KMD shared-object id): the
 // host keeps it under that key until the last session holding it destroys it.
 [[nodiscard]] bool rvk_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key);
