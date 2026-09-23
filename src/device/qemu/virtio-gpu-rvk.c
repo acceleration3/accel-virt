@@ -20,6 +20,7 @@
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
+#include "ui/console.h"
 
 static void (*virtio_gpu_rvk_parent_unrealize)(DeviceState *qdev);
 
@@ -34,6 +35,38 @@ static void virtio_gpu_rvk_schedule(RvkHostRoutine routine, void *context)
 {
     aio_bh_schedule_oneshot(qemu_get_aio_context(), routine, context);
 }
+
+
+/* The base device's console ops without ui_info. rvkgpu reads the display's
+ * size once, at StartDevice, and offers no mode larger than it; a host window
+ * reporting its own size (gtk's is 642x480 before the guest has drawn) would
+ * pin the guest's desktop there. So the guest keeps the size xres and yres
+ * name, and the window scales it. */
+static int virtio_gpu_rvk_console_flags(void *opaque)
+{
+    VirtIOGPUBase *g = opaque;
+    return virtio_gpu_dmabuf_enabled(g->conf) ? GRAPHIC_FLAGS_DMABUF : GRAPHIC_FLAGS_NONE;
+}
+
+static void virtio_gpu_rvk_console_invalidate(void *opaque)
+{
+}
+
+static bool virtio_gpu_rvk_console_update(void *opaque)
+{
+    return true;
+}
+
+static void virtio_gpu_rvk_console_text(void *opaque, uint32_t *chardata)
+{
+}
+
+static const GraphicHwOps virtio_gpu_rvk_console_ops = {
+    .get_flags = virtio_gpu_rvk_console_flags,
+    .invalidate = virtio_gpu_rvk_console_invalidate,
+    .gfx_update = virtio_gpu_rvk_console_update,
+    .text_update = virtio_gpu_rvk_console_text,
+};
 
 static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
 {
@@ -102,6 +135,9 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     virtio_gpu_device_realize(qdev, errp);
     if (*errp) {
         return;
+    }
+    for (uint32_t i = 0; i < b->conf.max_outputs; i++) {
+        qemu_graphic_console_set_hwops(b->scanout[i].con, &virtio_gpu_rvk_console_ops, b);
     }
     for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
         r->fence_queues[i] = virtio_add_queue(VIRTIO_DEVICE(qdev), 2, virtio_gpu_rvk_fence_kick);

@@ -30,6 +30,7 @@ import os
 import pathlib
 import re
 import shutil
+import select
 import signal
 import struct
 import subprocess
@@ -399,9 +400,10 @@ def arguments():
     # docs/kb/06-display.md). egl-headless is the backend that gives one and
     # still answers screendump: it imports the dma-buf, blits it and reads it
     # back into the console's surface.
-    parser.add_argument("--display", default="none", choices=("none", "egl-headless"),
+    parser.add_argument("--display", default="none", choices=("none", "egl-headless", "gtk", "sdl"),
                         help="the QEMU display backend (default: none). egl-headless gives the console a GL "
-                             "context, which is what lets the device scan out a dma-buf")
+                             "context, which is what lets the device scan out a dma-buf; gtk and sdl open a "
+                             "window on the host desktop, and closing it powers the guest off")
     parser.add_argument("--trace", action="append", default=[], metavar="PATTERN",
                         help="enable QEMU trace events matching PATTERN into qemu.log, e.g. 'virtio_gpu_*'")
     parser.add_argument("--no-verifier", action="store_true",
@@ -2340,9 +2342,12 @@ class GuestRun:
         if self.args.vnc is not None:
             print(f"  vnc    127.0.0.1:{5900 + self.args.vnc}")
         print(f"  logs   {self.work / 'rvkgpu.log'}, {self.work / 'qemu.log'}")
-        print("  press Enter to power the guest off", flush=True)
+        print("  press Enter (or close the guest's window) to power the guest off", flush=True)
         try:
-            sys.stdin.readline()
+            while self.qemu.poll() is None:
+                if select.select([sys.stdin], [], [], 1.0)[0]:
+                    sys.stdin.readline()
+                    break
         except KeyboardInterrupt:
             pass
         if self.qemu.poll() is None:
