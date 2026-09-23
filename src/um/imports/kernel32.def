@@ -2,8 +2,10 @@ LIBRARY kernel32.dll
 EXPORTS
 AcquireSRWLockExclusive
 CloseHandle
+CreateDirectoryA
 CreateDirectoryW
 CreateEventW
+CreateFileA
 CreateFileMappingW
 CreateFileW
 CreateThread
@@ -17,6 +19,7 @@ GetCurrentThreadId
 GetEnvironmentVariableA
 GetEnvironmentVariableW
 GetFileAttributesW
+GetFileSize
 GetLastError
 GetModuleFileNameW
 GetModuleHandleExW
@@ -42,6 +45,7 @@ Process32NextW
 QueryFullProcessImageNameW
 QueryPerformanceCounter
 QueryPerformanceFrequency
+ReadFile
 ReleaseSRWLockExclusive
 RtlLookupFunctionEntry
 RtlVirtualUnwind

@@ -269,6 +269,17 @@ add_dependencies(rvkd3d11sample rvkd3dprobe_imports rvkglprobe_imports)
 target_link_options(rvkd3d11sample PRIVATE /ENTRY:rvkd3d11sample_entry)
 target_link_libraries(rvkd3d11sample PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS} ${USER32_IMPORT})
 
+# The D3D11 samples (samples/d3d11): the report's guest side. Relaxed warnings:
+# the samples are ports of other code, not this driver's.
+file(GLOB RVKD3D11SAMPLES_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/d3d11/*.cpp)
+list(FILTER RVKD3D11SAMPLES_SOURCES EXCLUDE REGEX "host_platform\\.cpp$")
+add_executable(rvkd3d11samples ${RVKD3D11SAMPLES_SOURCES})
+add_dependencies(rvkd3d11samples rvkd3dprobe_imports rvkglprobe_imports)
+target_compile_options(rvkd3d11samples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-conversion -Wno-old-style-cast
+                       -Wno-shadow -Wno-unused-parameter /Gs1000000)
+target_link_options(rvkd3d11samples PRIVATE /ENTRY:rvkd3d11samples_entry /STACK:8388608,8388608)
+target_link_libraries(rvkd3d11samples PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS})
+
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
 # (feature 046), and rvkvkprobe.exe makes that window and reads it back;
 # their import library is made with the GL probe's above.

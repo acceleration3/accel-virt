@@ -161,6 +161,17 @@ set(AV_DXVK_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/dxvk/include/native/directx
 target_include_directories(av_core SYSTEM PUBLIC ${AV_DXVK_INCLUDE})
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
+# The D3D11 samples' host side (samples/d3d11): DXVK native, the guest's
+# shader bytecode, the same frames the guest renders - the report's baseline
+# (tools/d3d11_report.py).
+file(GLOB AV_D3D11_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/d3d11/*.cpp)
+list(FILTER AV_D3D11_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+add_executable(rvkd3d11samples_host ${AV_D3D11_SAMPLES_SOURCES})
+target_include_directories(rvkd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(rvkd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
+
+
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
 # rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
