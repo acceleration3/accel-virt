@@ -94,6 +94,9 @@ private:
     uint32_t                        height_;
     /* The address the live blob was made over; 0 when there is none. */
     uint64_t                        blob_address_;
+    /* The fingerprint of the pages the blob was made over: a primary made
+     * where a freed one was has the same address and other pages. */
+    uint64_t                        blob_pages_;
     uint64_t                        reported_address_;
     bool                            reported_;
     uint8_t                        *create_request_;

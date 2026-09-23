@@ -65,3 +65,18 @@ TEST(guest_page_list, does_not_join_pages_that_run_backwards)
 TEST(guest_page_list, has_no_run_past_the_end)
 { const std::uint64_t frames[] = {page};
   CHECK_EQ(GuestPageList(frames, 1u).run_length(1u), 0u); }
+
+/* Two lists differ in their fingerprint when any frame or the count differs,
+ * and agree when they hold the same frames, wherever those are stored: the
+ * scanout compares what it attached with what the address holds now. */
+TEST(guest_page_list, fingerprint_follows_the_frames_and_their_count)
+{ const std::uint64_t frames[] = {page, 2u * page, 3u * page};
+  const std::uint64_t same[] = {page, 2u * page, 3u * page};
+  const std::uint64_t moved[] = {page, 7u * page, 3u * page};
+  const std::uint64_t swapped[] = {2u * page, page, 3u * page};
+  const GuestPageList list(frames, 3u);
+  CHECK_EQ(list.fingerprint(), GuestPageList(same, 3u).fingerprint());
+  CHECK(list.fingerprint() != GuestPageList(moved, 3u).fingerprint());
+  CHECK(list.fingerprint() != GuestPageList(swapped, 3u).fingerprint());
+  CHECK(list.fingerprint() != GuestPageList(frames, 2u).fingerprint());
+  CHECK(GuestPageList().fingerprint() != GuestPageList(frames, 1u).fingerprint()); }

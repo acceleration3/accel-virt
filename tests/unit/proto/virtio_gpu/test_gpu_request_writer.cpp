@@ -129,6 +129,19 @@ TEST(gpu_request_writer_resource_unref, names_the_resource_the_host_may_forget)
   CHECK_EQ(u32(buffer.bytes, 28u), 0u);
   CHECK_EQ(buffer.bytes[32], 0xEEu); }
 
+/* struct virtio_gpu_resource_detach_backing: the resource, then padding. */
+TEST(gpu_request_writer_detach_backing, names_the_resource_that_lets_go_of_its_pages)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.detach_backing(9u), Status::ok);
+  CHECK_EQ(writer.length(), 32u);
+  CHECK(plain_header(buffer.bytes, 0x0107u));
+  CHECK_EQ(u32(buffer.bytes, 24u), 9u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
+  CHECK_EQ(buffer.bytes[32], 0xEEu);
+  GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
+  CHECK_STATUS(header_only.detach_backing(9u), Status::too_large); }
+
 TEST(gpu_request_writer_set_scanout, names_the_scanout_the_resource_and_the_rectangle)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);

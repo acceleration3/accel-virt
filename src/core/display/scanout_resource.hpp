@@ -62,6 +62,7 @@ public:
 private:
     [[nodiscard]] Status create(VirtioGpuDevice &device);
     [[nodiscard]] Status attach(VirtioGpuDevice &device, const GuestPageList &pages);
+    [[nodiscard]] Status detach(VirtioGpuDevice &device);
     /* Room for a backing request covering the mode, at worst one memory entry
      * per page; grown as the mode grows, never shrunk. */
     [[nodiscard]] Status reserve();
@@ -81,6 +82,9 @@ private:
     uint32_t                        width_;
     uint32_t                        height_;
     uint64_t                        attached_address_;
+    /* The fingerprint of the pages attached there: a primary made where a freed
+     * one was has the same address and other pages. */
+    uint64_t                        attached_pages_;
     /* The last address report() spoke about, so a frame that cannot be carried
      * is explained once instead of every DPC. */
     uint64_t                        reported_address_;
@@ -89,6 +93,9 @@ private:
     size_t                          backing_request_bytes_;
     bool                            created_;
     bool                            scanning_out_;
+    /* The host's resource holds guest pages, which it must let go of before
+     * it takes others. */
+    bool                            backed_;
 
     friend struct ScanoutResourceProbe;
 };

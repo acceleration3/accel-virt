@@ -40,7 +40,7 @@ namespace {
 
 constexpr std::uint32_t ok_nodata = 0x1100u;
 constexpr std::uint32_t create_2d = 0x0101u, unref = 0x0102u, set_scanout = 0x0103u;
-constexpr std::uint32_t flush = 0x0104u, transfer = 0x0105u, attach = 0x0106u;
+constexpr std::uint32_t flush = 0x0104u, transfer = 0x0105u, attach = 0x0106u, detach = 0x0107u;
 
 std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
 {
@@ -222,9 +222,12 @@ TEST(scanout_resource_disable, scans_out_resource_zero)
   CHECK_EQ(control.request_type(5u), set_scanout);
   CHECK_EQ(u32(control.request(5u), 44u), 0u);
   CHECK(fixture.scanout().invariants_hold());
-  /* Coming back re-attaches, because the host was told to forget it. */
+  /* Coming back re-attaches, because the host was told to forget it - after
+   * letting go of the pages it still holds, which it refuses to re-attach over. */
   CHECK_STATUS(fixture.refresh(0x200000u, false), Status::ok);
-  CHECK_EQ(control.respond_all(ok_nodata), 4u); }
+  CHECK_EQ(control.respond_all(ok_nodata), 5u);
+  CHECK_EQ(control.request_type(6u), detach);
+  CHECK_EQ(control.request_type(7u), attach); }
 
 TEST(scanout_resource_release, unrefs_what_the_host_still_holds)
 { Fixture fixture;
@@ -408,9 +411,10 @@ TEST(scanout_resource_page_count, is_the_committed_frame_in_pages)
   CHECK_STATUS(fixture.configure(DisplayMode(17u, 3u)), Status::ok);
   CHECK_EQ(fixture.scanout().page_count(), 1u); }
 
-/* The pages are only needed when a backing must be attached: an address the
- * host already reads costs the DPC no lookup. */
-TEST(scanout_resource_needs_pages, is_true_only_for_an_address_the_host_has_not_been_told)
+/* The pages are needed for every address shown, the one already attached
+ * included: a primary made where a freed one was has its address and other
+ * pages. Not before there is a resource, for no address, or with no device. */
+TEST(scanout_resource_needs_pages, is_true_for_every_address_shown_while_there_is_a_resource)
 { Fixture fixture;
   FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
   CHECK(!fixture.scanout().needs_pages(0x200000u));
@@ -419,10 +423,33 @@ TEST(scanout_resource_needs_pages, is_true_only_for_an_address_the_host_has_not_
   CHECK(!fixture.scanout().needs_pages(0u));
   CHECK_STATUS(fixture.refresh(0x200000u, false), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 5u);
-  CHECK(!fixture.scanout().needs_pages(0x200000u));
-  CHECK(fixture.scanout().needs_pages(0x300000u));
+  CHECK(fixture.scanout().needs_pages(0x200000u));
   fixture.lose_device();
   CHECK(!fixture.scanout().needs_pages(0x300000u)); }
+
+/* The compositor restarting frees its primaries and makes new ones where they
+ * were: the address the host shows is the same and its pages are not. The old
+ * pages are let go of and the new ones attached; the host refused a second
+ * attach, and the screen showed whatever the freed pages held next. The same
+ * pages at the same address cost nothing but the frame. */
+TEST(scanout_resource_refresh, new_pages_at_the_shown_address_are_detached_from_and_attached)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  CHECK_STATUS(fixture.configure(DisplayMode(64u, 64u)), Status::ok);
+  CHECK_STATUS(fixture.refresh(0x200000u, false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 5u);
+  CHECK_STATUS(fixture.scanout().refresh(0x200000u, fixture.frame().pages(), true), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 2u);   /* transfer and flush */
+  fixture.frame().describe(0x900000u, pages_for(64u, 64u));
+  CHECK_STATUS(fixture.scanout().refresh(0x200000u, fixture.frame().pages(), false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 5u);
+  CHECK_EQ(control.request_type(7u), detach);
+  CHECK_EQ(control.request_type(8u), attach);
+  CHECK_EQ(control.request_type(9u), set_scanout);
+  /* An address with no pages known keeps what it has. */
+  CHECK_STATUS(fixture.scanout().refresh(0x200000u, GuestPageList(), false), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK(fixture.scanout().invariants_hold()); }
 
 /* A backing shorter than the frame is accepted by the host and read past its
  * end, so the driver says which address it happened for. */

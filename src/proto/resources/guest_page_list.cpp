@@ -52,4 +52,14 @@ uint32_t GuestPageList::runs() const
     return runs;
 }
 
+uint64_t GuestPageList::fingerprint() const
+{
+    AV_SCOPE("GuestPageList::fingerprint");
+    constexpr uint64_t fnv_offset = 0xcbf29ce484222325u;
+    constexpr uint64_t fnv_prime = 0x100000001b3u;
+    uint64_t folded = fnv_offset ^ count_;
+    for (uint32_t index = 0u; index < count_; index++) folded = (folded ^ frames_[index]) * fnv_prime;
+    return folded;
+}
+
 }  // namespace av

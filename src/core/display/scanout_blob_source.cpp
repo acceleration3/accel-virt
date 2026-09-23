@@ -15,7 +15,7 @@ namespace av {
 ScanoutBlobSource::ScanoutBlobSource(Platform &platform, LogBudget &budget,
                                      ObjectStorage<VirtioGpuDevice> &device, uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
-      blob_address_(0u), reported_address_(0u), reported_(false), create_request_(nullptr),
+      blob_address_(0u), blob_pages_(0u), reported_address_(0u), reported_(false), create_request_(nullptr),
       create_request_bytes_(0u), created_(false), scanning_out_(false)
       {
           AV_SCOPE("ScanoutBlobSource::ScanoutBlobSource");
@@ -31,7 +31,7 @@ bool ScanoutBlobSource::needs_pages(uint64_t address) const
 {
     AV_SCOPE("ScanoutBlobSource::needs_pages");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutBlobSource::needs_pages");
-    return address != 0u && address != blob_address_ && device_.constructed() && width_ != 0u;
+    return address != 0u && device_.constructed() && width_ != 0u;
 }
 
 uint32_t ScanoutBlobSource::page_count() const
@@ -99,6 +99,7 @@ Status ScanoutBlobSource::unref()
         scanning_out_ = false;
     }
     blob_address_ = 0u;
+    blob_pages_ = 0u;
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
     static_cast<void>(writer.resource_unref(first_resource_id + source_));
@@ -174,6 +175,7 @@ void ScanoutBlobSource::forget_device()
     created_ = false;
     scanning_out_ = false;
     blob_address_ = 0u;
+    blob_pages_ = 0u;
     width_ = 0u;
     height_ = 0u;
 }
@@ -192,7 +194,9 @@ Status ScanoutBlobSource::refresh(uint64_t address, const GuestPageList &pages, 
         return Status::ok;
     }
     VirtioGpuDevice &device = device_.object();
-    if (address != blob_address_) {
+    const uint64_t   fingerprint = pages.fingerprint();
+    const bool       moved = pages.count() != 0u && fingerprint != blob_pages_;
+    if (address != blob_address_ || moved) {
         if (created_) {
             const Status freed = unref();
             if (freed != Status::ok) return freed;
@@ -204,6 +208,7 @@ Status ScanoutBlobSource::refresh(uint64_t address, const GuestPageList &pages, 
         const Status shown = show(device, first_resource_id + source_);
         if (shown != Status::ok) return shown;
         blob_address_ = address;
+        blob_pages_ = fingerprint;
         scanning_out_ = true;
         return flush(device);
     }

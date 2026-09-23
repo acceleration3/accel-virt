@@ -67,6 +67,9 @@ public:
     [[nodiscard]] Status resource_flush(uint32_t resource_id, uint32_t width, uint32_t height);
     /* The host may forget the resource; a mode change makes a new one. */
     [[nodiscard]] Status resource_unref(uint32_t resource_id);
+    /* The resource lets go of its guest pages: the device refuses to attach
+     * backing to a resource that already has some. */
+    [[nodiscard]] Status detach_backing(uint32_t resource_id);
     /* Asks for every scanout's rectangle; the answer is a DisplayInfoResponse. */
     [[nodiscard]] Status get_display_info();
     /* Resource 0 hides the cursor. */
@@ -86,6 +89,7 @@ private:
         resource_flush_type = 0x0104u,
         transfer_to_host_2d_type = 0x0105u,
         resource_attach_backing = 0x0106u,
+        resource_detach_backing = 0x0107u,
         update_cursor_type = 0x0300u,
         move_cursor_type = 0x0301u,
     };

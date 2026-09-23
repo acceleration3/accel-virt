@@ -26,6 +26,10 @@ public:
     uint32_t run_length(uint32_t index) const;
     /* Maximal runs of adjacent pages; zero for an empty list. */
     uint32_t runs() const;
+    /* The frames and their count folded into one number: two lists that
+     * differ in any frame differ here but for a collision, which is what tells
+     * the scanout that an address it shows is now backed by other pages. */
+    uint64_t fingerprint() const;
 
 private:
     const uint64_t *frames_;

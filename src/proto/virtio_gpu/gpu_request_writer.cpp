@@ -104,6 +104,17 @@ Status GpuRequestWriter::resource_unref(uint32_t resource_id)
     return Status::ok;
 }
 
+/* struct virtio_gpu_resource_detach_backing: the resource and padding, as unref's. */
+Status GpuRequestWriter::detach_backing(uint32_t resource_id)
+{
+    AV_SCOPE("GpuRequestWriter::detach_backing");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_detach_backing, resource_unref_size)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_zeros(4u);
+    return Status::ok;
+}
+
 /* struct virtio_gpu_set_scanout: the rectangle, then the scanout and the
  * resource whose pixels it shows. */
 Status GpuRequestWriter::set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height)
