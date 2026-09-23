@@ -97,7 +97,7 @@ TEST(context_setup_decode, rejects_each_malformed_field)
       {0u, 0u},      /* magic */
       {8u, 0u},      /* no sub-API */
       {8u, 3u},      /* two sub-APIs */
-      {8u, 8u},      /* unknown sub-API */
+      {8u, 16u},     /* unknown sub-API */
       {12u, 0u},     /* ring resource 0 (low byte of 17) */
       {16u, 11u},    /* order below 12 */
       {16u, 25u},    /* order above 24 */
@@ -172,7 +172,7 @@ TEST(context_setup_decode, survives_the_hostile_sweep)
    * field no reader checks (16 bits), and the doorbell is judged against the
    * capset rather than the bytes (32). Any flip of the minor asks for a
    * 48-byte setup in 32 bytes, and no flip of the sub-API reaches another one,
-   * since 1, 2 and 4 are a bit apart each. The three resource ids must differ
+   * since 1, 2, 4 and 8 are a bit apart each. The three resource ids must differ
    * and none may be zero: 31 flips of the ring survive (not the one making it
    * the reply's 19), 31 of the fence (the same), and 30 of the reply (not the
    * two making it the ring's 17 or the fence's 18); four flips of ring order
@@ -183,7 +183,7 @@ TEST(context_setup_decode, survives_the_hostile_sweep)
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(context_setup_decode, accepts_each_sub_api)
-{ const SubApi apis[] = {SubApi::vulkan, SubApi::opengl, SubApi::opencl};
+{ const SubApi apis[] = {SubApi::vulkan, SubApi::opengl, SubApi::opencl, SubApi::d3d};
   for (const SubApi api : apis) {
       Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), api, 3u, 12u, 4u, 63u, 9u));
       ContextSetup decoded;

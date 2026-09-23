@@ -87,10 +87,16 @@ def fallback_flags(root, relative):
     windows = ["--target=x86_64-pc-windows-msvc", "-fms-extensions", "-fms-compatibility",
                "-fms-compatibility-version=19.40", "-nostdlibinc", "-D_AMD64_", "-DAMD64", "-D_WIN64",
                f"-ivfsoverlay{kit}/overlay.yaml", "-isystem/windows-kit/km/crt", "-isystem/windows-kit/sdk-shared"]
+    # The host's Direct3D headers, as DXVK's native build declares them: never
+    # for a Windows shim, whose windows.h they would shadow.
+    if not relative.startswith(("src/km/", "src/um/")):
+        flags += [f"-isystem{root}/third_party/dxvk/include/native/directx",
+                  f"-isystem{root}/third_party/dxvk/include/native/windows"]
     if relative.startswith("src/km/"):
         flags += windows + ["-isystem/windows-kit/km", "-isystem/windows-kit/wdk-shared", "-D_KERNEL_MODE"]
     elif relative.startswith("src/um/"):
-        flags += windows + ["-isystem/windows-kit/um", "-DWIN32_LEAN_AND_MEAN", "-DNOMINMAX"]
+        flags += windows + ["-isystem/windows-kit/um", "-isystem/windows-kit/wdk-shared", "-DWIN32_LEAN_AND_MEAN",
+                            "-DNOMINMAX"]
     return flags
 
 

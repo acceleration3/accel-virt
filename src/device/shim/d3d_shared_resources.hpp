@@ -34,13 +34,9 @@ public:
     uint32_t           count() const;
 
 private:
-    struct Entry {
-        uint64_t  key;
-        IUnknown *resource;
-    };
-
-    Entry    entries_[capacity];
-    uint32_t count_;
+    uint64_t  keys_[capacity];
+    IUnknown *resources_[capacity];
+    uint32_t  count_;
 };
 
 }  // namespace av

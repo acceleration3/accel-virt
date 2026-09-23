@@ -13,7 +13,7 @@ constexpr uint32_t golden_ratio = 2654435769u;
 
 }  // namespace
 
-D3dObjectTable::D3dObjectTable() : entries_{}, count_(0u)
+D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, count_(0u)
 {
     AV_SCOPE("D3dObjectTable::D3dObjectTable");
 }
@@ -29,12 +29,20 @@ uint32_t D3dObjectTable::slot_of(uint32_t id) const
     AV_SCOPE("D3dObjectTable::slot_of");
     uint32_t slot = home_of(id);
     for (uint32_t probe = 0u; probe < capacity; probe++) {
-        const Entry &entry = entries_[slot];
-        if (entry.id == id && entry.kind != D3dObjectKind::none) return slot;
-        if (entry.kind == D3dObjectKind::none && !entry.tombstone) return capacity;
+        if (ids_[slot] == id && kinds_[slot] != D3dObjectKind::none) return slot;
+        if (kinds_[slot] == D3dObjectKind::none && !tombstones_[slot]) return capacity;
         slot = (slot + 1u) % capacity;
     }
     return capacity;
+}
+
+void D3dObjectTable::set(uint32_t slot, uint32_t id, D3dObjectKind kind, bool tombstone, IUnknown *object)
+{
+    AV_SCOPE("D3dObjectTable::set");
+    ids_[slot] = id;
+    kinds_[slot] = kind;
+    tombstones_[slot] = tombstone;
+    objects_[slot] = object;
 }
 
 bool D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
@@ -45,8 +53,8 @@ bool D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
      * guest is refused rather than made to walk the table on every lookup. */
     if (count_ >= capacity / 4u * 3u || slot_of(id) != capacity) return false;
     uint32_t slot = home_of(id);
-    while (entries_[slot].kind != D3dObjectKind::none) slot = (slot + 1u) % capacity;
-    entries_[slot] = Entry{id, kind, false, object};
+    while (kinds_[slot] != D3dObjectKind::none) slot = (slot + 1u) % capacity;
+    set(slot, id, kind, false, object);
     count_++;
     return true;
 }
@@ -55,16 +63,16 @@ IUnknown *D3dObjectTable::find(uint32_t id, D3dObjectKind kind) const
 {
     AV_SCOPE("D3dObjectTable::find");
     const uint32_t slot = id == 0u ? capacity : slot_of(id);
-    if (slot == capacity || entries_[slot].kind != kind) return nullptr;
-    return entries_[slot].object;
+    if (slot == capacity || kinds_[slot] != kind) return nullptr;
+    return objects_[slot];
 }
 
 IUnknown *D3dObjectTable::find_any(uint32_t id, D3dObjectKind &kind) const
 {
     AV_SCOPE("D3dObjectTable::find_any");
     const uint32_t slot = id == 0u ? capacity : slot_of(id);
-    kind = slot == capacity ? D3dObjectKind::none : entries_[slot].kind;
-    return slot == capacity ? nullptr : entries_[slot].object;
+    kind = slot == capacity ? D3dObjectKind::none : kinds_[slot];
+    return slot == capacity ? nullptr : objects_[slot];
 }
 
 void D3dObjectTable::remove(uint32_t id)
@@ -72,17 +80,17 @@ void D3dObjectTable::remove(uint32_t id)
     AV_SCOPE("D3dObjectTable::remove");
     const uint32_t slot = id == 0u ? capacity : slot_of(id);
     if (slot == capacity) return;
-    entries_[slot].object->Release();
-    entries_[slot] = Entry{0u, D3dObjectKind::none, true, nullptr};
+    objects_[slot]->Release();
+    set(slot, 0u, D3dObjectKind::none, true, nullptr);
     count_--;
 }
 
 void D3dObjectTable::clear()
 {
     AV_SCOPE("D3dObjectTable::clear");
-    for (Entry &entry : entries_) {
-        if (entry.kind != D3dObjectKind::none) entry.object->Release();
-        entry = Entry{0u, D3dObjectKind::none, false, nullptr};
+    for (uint32_t slot = 0u; slot < capacity; slot++) {
+        if (kinds_[slot] != D3dObjectKind::none) objects_[slot]->Release();
+        set(slot, 0u, D3dObjectKind::none, false, nullptr);
     }
     count_ = 0u;
 }
@@ -97,12 +105,12 @@ bool D3dObjectTable::invariants_hold() const
 {
     AV_SCOPE("D3dObjectTable::invariants_hold");
     uint32_t live = 0u;
-    for (const Entry &entry : entries_) {
-        if (entry.kind == D3dObjectKind::none) {
-            if (entry.object != nullptr) return false;
+    for (uint32_t slot = 0u; slot < capacity; slot++) {
+        if (kinds_[slot] == D3dObjectKind::none) {
+            if (objects_[slot] != nullptr) return false;
             continue;
         }
-        if (entry.object == nullptr || entry.id == 0u || entry.tombstone) return false;
+        if (objects_[slot] == nullptr || ids_[slot] == 0u || tombstones_[slot]) return false;
         live++;
     }
     return live == count_;

@@ -1,6 +1,7 @@
 #include "um/d3d/d3d11_device.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "proto/client_blob_arena.hpp"
@@ -122,6 +123,11 @@ uint32_t D3d11Device::next_id()
 void D3d11Device::set_error(HRESULT result)
 {
     AV_SCOPE("D3d11Device::set_error");
+    char line[96] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: device error 0x");
+    text.append_hex(static_cast<uint32_t>(result), 8u);
+    log_.write(text.text());
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
 }
 
@@ -259,6 +265,13 @@ VOID D3d11Device::check_format_support(DXGI_FORMAT format, UINT *support)
 {
     AV_SCOPE("D3d11Device::check_format_support");
     if (support != nullptr) *support = caps_.format_support(format);
+    char line[96] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: format ");
+    text.append_decimal(static_cast<uint32_t>(format));
+    text.append(" support 0x");
+    text.append_hex(support == nullptr ? 0u : *support, 8u);
+    log_.write(text.text());
 }
 
 VOID D3d11Device::check_multisample_quality_levels(DXGI_FORMAT format, UINT samples, UINT, UINT *levels)

@@ -37,6 +37,8 @@ private:
     /* The host's answers for this kernel adapter, asked on first use; null
      * when the adapter runs no Direct3D. */
     const D3d11HostCaps *caps_of(uint32_t kmt_adapter);
+    /* One line of what the runtime asked and what it was answered. */
+    void                 note(const char *what, uint64_t first, uint64_t second);
 
     static constexpr uint32_t max_adapters = 8u;
 

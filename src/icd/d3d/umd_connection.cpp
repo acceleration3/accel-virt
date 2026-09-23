@@ -6,12 +6,6 @@
 #include "guest/suite/adapter_scenario.hpp"
 
 namespace av::d3d {
-namespace {
-
-const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
-                         AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-
-}  // namespace
 
 UmdConnection::UmdConnection(Kmt &kmt) : search_(kmt), opens_(0u)
 {
@@ -30,6 +24,12 @@ Status UmdConnection::acquire()
         opens_++;
         return Status::ok;
     }
+    /* Made here rather than at namespace scope: rvkumd.dll has no C runtime to
+     * run a static constructor, so a global one would stay zeroed in the guest
+     * and match no adapter - while every Linux test, whose runtime does run
+     * it, passed. */
+    const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                             AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
     const Status found = search_.find(rvkgpu);
     if (found != Status::ok) return found == Status::not_found ? Status::not_supported : found;
     opens_ = 1u;

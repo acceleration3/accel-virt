@@ -78,12 +78,12 @@ TEST(umd_root_open, a_runtime_that_offers_no_callbacks_is_refused)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A runtime asking for a DDI revision this driver has not implemented gets
- * E_NOINTERFACE and no adapter: answering it would be claiming a version
- * (constitution VI). */
+/* A runtime asking for a DDI revision past what this driver implements, or
+ * another major's, gets E_NOINTERFACE and no adapter: answering it would be
+ * claiming a version (constitution VI). */
 TEST(umd_root_open, an_interface_this_driver_does_not_serve_is_refused)
-{ const std::uint32_t neighbours[] = {0u, FakeD3dRuntime::d3d11_interface - 1u,
-                                      FakeD3dRuntime::d3d11_interface + 1u, 0xFFFFFFFFu};
+{ const std::uint32_t neighbours[] = {0u, FakeD3dRuntime::d3d11_interface + 1u, (10u << 16) | 45u,
+                                      (12u << 16) | 45u, 0xFFFFFFFFu};
   for (const std::uint32_t asked : neighbours) {
       UmdRig rig;
       FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
@@ -92,6 +92,22 @@ TEST(umd_root_open, an_interface_this_driver_does_not_serve_is_refused)
       CHECK(runtime.adapter() == nullptr);
       CHECK_EQ(rig.kmt().open_objects(), 0u);
       CHECK_EQ(rig.log().holding("open refused, interface"), 1u);
+      CHECK(rig.root().invariants_hold());
+  } }
+
+/* d3d11.dll on 26100 opens with WDDM 2.0's interface, the oldest of the family
+ * it negotiates in, and settles the device's through GetSupportedVersions: an
+ * open at or below the served interface of the same major is an adapter. */
+TEST(umd_root_open, an_older_interface_of_the_same_major_opens)
+{ const std::uint32_t older[] = {(11u << 16) | 17u, FakeD3dRuntime::d3d11_interface - 1u};
+  for (const std::uint32_t asked : older) {
+      UmdRig rig;
+      FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
+      runtime.ask_for_interface(asked);
+      CHECK_EQ(runtime.open(), hr_ok);
+      CHECK(runtime.adapter() != nullptr);
+      CHECK_EQ(rig.log().holding("open refused, interface"), 0u);
+      CHECK_EQ(runtime.close_adapter(), hr_ok);
       CHECK(rig.root().invariants_hold());
   } }
 

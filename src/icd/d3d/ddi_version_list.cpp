@@ -42,6 +42,16 @@ bool DdiVersionList::serves(uint32_t interface_version) const
     return false;
 }
 
+bool DdiVersionList::opens(uint32_t interface_version) const
+{
+    AV_SCOPE("DdiVersionList::opens");
+    for (uint32_t index = 0u; index < count_; index++) {
+        const uint32_t served = static_cast<uint32_t>(words_[index] >> 32);
+        if (interface_version >> 16 == served >> 16 && interface_version <= served) return true;
+    }
+    return false;
+}
+
 Hresult DdiVersionList::answer(uint32_t *entries, uint64_t *words) const
 {
     AV_SCOPE("DdiVersionList::answer");

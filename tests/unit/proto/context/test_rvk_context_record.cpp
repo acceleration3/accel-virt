@@ -101,7 +101,7 @@ TEST(rvk_context_record, a_bad_magic_is_refused)
 /* Exactly one sub-API bit; zero, two, or an undefined value is refused. The
  * sub_api field is the u32 at offset 4, past the magic. */
 TEST(rvk_context_record, a_sub_api_that_is_not_one_known_bit_is_refused)
-{ for (std::uint32_t api : {0u, 3u, 8u, 7u}) {
+{ for (std::uint32_t api : {0u, 3u, 16u, 7u}) {
       std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
       CHECK_STATUS(sample().encode(bytes, sizeof bytes), Status::ok);
       std::memcpy(bytes + 4u, &api, sizeof api);

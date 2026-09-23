@@ -3,722 +3,725 @@
 /* The ABI boundary C requires: the runtime calls each slot with the device
  * handle it was given and nothing else, so each thunk is one line into the
  * device the handle's block names. */
+#include "core/trace/function_scope.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/device_handle.hpp"
 
 namespace av::d3d11 {
 
 namespace {
 
-VOID APIENTRY ddi_DefaultConstantBufferUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
+extern "C" VOID APIENTRY rvkumd_d3d11_DefaultConstantBufferUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
 { DeviceHandle(device.pDrvPrivate).device().default_constant_buffer_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
 
-VOID APIENTRY ddi_VsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_VsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().vs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_PsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().ps_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_PsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().ps_set_shader(a1); }
 
-VOID APIENTRY ddi_PsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_PsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().ps_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_VsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().vs_set_shader(a1); }
 
-VOID APIENTRY ddi_DrawIndexed(D3D10DDI_HDEVICE device, UINT a1, UINT a2, INT a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexed(D3D10DDI_HDEVICE device, UINT a1, UINT a2, INT a3)
 { DeviceHandle(device.pDrvPrivate).device().draw_indexed(a1, a2, a3); }
 
-VOID APIENTRY ddi_Draw(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_Draw(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().draw(a1, a2); }
 
-VOID APIENTRY ddi_DynamicIABufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DynamicIABufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_unmap(a1, a2); }
 
-VOID APIENTRY ddi_DynamicConstantBufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_map_discard(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DynamicIABufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_map_discard(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DynamicConstantBufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_unmap(a1, a2); }
 
-VOID APIENTRY ddi_PsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_PsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().ps_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_IaSetInputLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_IaSetInputLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
 { DeviceHandle(device.pDrvPrivate).device().ia_set_input_layout(a1); }
 
-VOID APIENTRY ddi_IaSetVertexBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_IaSetVertexBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().ia_set_vertex_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_IaSetIndexBuffer(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, DXGI_FORMAT a2, UINT a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_IaSetIndexBuffer(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, DXGI_FORMAT a2, UINT a3)
 { DeviceHandle(device.pDrvPrivate).device().ia_set_index_buffer(a1, a2, a3); }
 
-VOID APIENTRY ddi_DrawIndexedInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, INT a4, UINT a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexedInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, INT a4, UINT a5)
 { DeviceHandle(device.pDrvPrivate).device().draw_indexed_instanced(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DrawInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, UINT a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, UINT a4)
 { DeviceHandle(device.pDrvPrivate).device().draw_instanced(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_DynamicResourceMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicResourceMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_resource_map_discard(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DynamicResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_resource_unmap(a1, a2); }
 
-VOID APIENTRY ddi_GsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_GsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().gs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_GsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().gs_set_shader(a1); }
 
-VOID APIENTRY ddi_IaSetTopology(D3D10DDI_HDEVICE device, D3D10_DDI_PRIMITIVE_TOPOLOGY a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_IaSetTopology(D3D10DDI_HDEVICE device, D3D10_DDI_PRIMITIVE_TOPOLOGY a1)
 { DeviceHandle(device.pDrvPrivate).device().ia_set_topology(a1); }
 
-VOID APIENTRY ddi_StagingResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_StagingResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().staging_resource_map(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_StagingResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_StagingResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().staging_resource_unmap(a1, a2); }
 
-VOID APIENTRY ddi_VsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().vs_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_VsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_VsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().vs_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_GsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().gs_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_GsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_GsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().gs_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_SetRenderTargets(D3D10DDI_HDEVICE device, const D3D10DDI_HRENDERTARGETVIEW * a1, UINT a2, UINT a3, D3D10DDI_HDEPTHSTENCILVIEW a4, const D3D11DDI_HUNORDEREDACCESSVIEW * a5, const UINT * a6, UINT a7, UINT a8, UINT a9, UINT a10)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetRenderTargets(D3D10DDI_HDEVICE device, const D3D10DDI_HRENDERTARGETVIEW * a1, UINT a2, UINT a3, D3D10DDI_HDEPTHSTENCILVIEW a4, const D3D11DDI_HUNORDEREDACCESSVIEW * a5, const UINT * a6, UINT a7, UINT a8, UINT a9, UINT a10)
 { DeviceHandle(device.pDrvPrivate).device().set_render_targets(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
-VOID APIENTRY ddi_ShaderResourceViewReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1, D3D10DDI_HRESOURCE a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ShaderResourceViewReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1, D3D10DDI_HRESOURCE a2)
 { DeviceHandle(device.pDrvPrivate).device().shader_resource_view_read_after_write_hazard(a1, a2); }
 
-VOID APIENTRY ddi_ResourceReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
 { DeviceHandle(device.pDrvPrivate).device().resource_read_after_write_hazard(a1); }
 
-VOID APIENTRY ddi_SetBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1, const FLOAT * a2, UINT a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1, const FLOAT * a2, UINT a3)
 { DeviceHandle(device.pDrvPrivate).device().set_blend_state(a1, a2, a3); }
 
-VOID APIENTRY ddi_SetDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().set_depth_stencil_state(a1, a2); }
 
-VOID APIENTRY ddi_SetRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
 { DeviceHandle(device.pDrvPrivate).device().set_rasterizer_state(a1); }
 
-VOID APIENTRY ddi_QueryEnd(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_QueryEnd(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
 { DeviceHandle(device.pDrvPrivate).device().query_end(a1); }
 
-VOID APIENTRY ddi_QueryBegin(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_QueryBegin(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
 { DeviceHandle(device.pDrvPrivate).device().query_begin(a1); }
 
-VOID APIENTRY ddi_ResourceCopyRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceCopyRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
 { DeviceHandle(device.pDrvPrivate).device().resource_copy_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
-VOID APIENTRY ddi_ResourceUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
 { DeviceHandle(device.pDrvPrivate).device().resource_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
 
-VOID APIENTRY ddi_SoSetTargets(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_SoSetTargets(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4)
 { DeviceHandle(device.pDrvPrivate).device().so_set_targets(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_DrawAuto(D3D10DDI_HDEVICE device)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawAuto(D3D10DDI_HDEVICE device)
 { DeviceHandle(device.pDrvPrivate).device().draw_auto(); }
 
-VOID APIENTRY ddi_SetViewports(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_VIEWPORT * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetViewports(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_VIEWPORT * a3)
 { DeviceHandle(device.pDrvPrivate).device().set_viewports(a1, a2, a3); }
 
-VOID APIENTRY ddi_SetScissorRects(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_RECT * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetScissorRects(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_RECT * a3)
 { DeviceHandle(device.pDrvPrivate).device().set_scissor_rects(a1, a2, a3); }
 
-VOID APIENTRY ddi_ClearRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1, FLOAT * a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ClearRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1, FLOAT * a2)
 { DeviceHandle(device.pDrvPrivate).device().clear_render_target_view(a1, a2); }
 
-VOID APIENTRY ddi_ClearDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1, UINT a2, FLOAT a3, UINT8 a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_ClearDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1, UINT a2, FLOAT a3, UINT8 a4)
 { DeviceHandle(device.pDrvPrivate).device().clear_depth_stencil_view(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_SetPredication(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, BOOL a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetPredication(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, BOOL a2)
 { DeviceHandle(device.pDrvPrivate).device().set_predication(a1, a2); }
 
-VOID APIENTRY ddi_QueryGetData(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, void * a2, UINT a3, UINT a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_QueryGetData(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, void * a2, UINT a3, UINT a4)
 { DeviceHandle(device.pDrvPrivate).device().query_get_data(a1, a2, a3, a4); }
 
-BOOL APIENTRY ddi_Flush(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
+extern "C" BOOL APIENTRY rvkumd_d3d11_Flush(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
 { return DeviceHandle(device.pDrvPrivate).device().flush(a1, a2); }
 
-VOID APIENTRY ddi_GenMips(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_GenMips(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
 { DeviceHandle(device.pDrvPrivate).device().gen_mips(a1); }
 
-VOID APIENTRY ddi_ResourceCopy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceCopy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
 { DeviceHandle(device.pDrvPrivate).device().resource_copy(a1, a2); }
 
-VOID APIENTRY ddi_ResourceResolveSubresource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10DDI_HRESOURCE a3, UINT a4, DXGI_FORMAT a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceResolveSubresource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10DDI_HRESOURCE a3, UINT a4, DXGI_FORMAT a5)
 { DeviceHandle(device.pDrvPrivate).device().resource_resolve_subresource(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_ResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().resource_map(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_ResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().resource_unmap(a1, a2); }
 
-BOOL APIENTRY ddi_ResourceIsStagingBusy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
+extern "C" BOOL APIENTRY rvkumd_d3d11_ResourceIsStagingBusy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
 { return DeviceHandle(device.pDrvPrivate).device().resource_is_staging_busy(a1); }
 
-VOID APIENTRY ddi_RelocateDeviceFuncs(D3D10DDI_HDEVICE device, struct D3DWDDM2_6DDI_DEVICEFUNCS * a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_RelocateDeviceFuncs(D3D10DDI_HDEVICE device, struct D3DWDDM2_6DDI_DEVICEFUNCS * a1)
 { DeviceHandle(device.pDrvPrivate).device().relocate_device_funcs(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateResourceSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateResourceSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_resource_size(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateOpenedResourceSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateOpenedResourceSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_opened_resource_size(a1); }
 
-VOID APIENTRY ddi_CreateResource(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateResource(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
 { DeviceHandle(device.pDrvPrivate).device().create_resource(a1, a2, a3); }
 
-VOID APIENTRY ddi_OpenResource(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_OpenResource(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
 { DeviceHandle(device.pDrvPrivate).device().open_resource(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_resource(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateShaderResourceViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderResourceViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_resource_view_size(a1); }
 
-VOID APIENTRY ddi_CreateShaderResourceView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1, D3D10DDI_HSHADERRESOURCEVIEW a2, D3D10DDI_HRTSHADERRESOURCEVIEW a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateShaderResourceView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1, D3D10DDI_HSHADERRESOURCEVIEW a2, D3D10DDI_HRTSHADERRESOURCEVIEW a3)
 { DeviceHandle(device.pDrvPrivate).device().create_shader_resource_view(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyShaderResourceView(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShaderResourceView(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_shader_resource_view(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateRenderTargetViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateRenderTargetViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_render_target_view_size(a1); }
 
-VOID APIENTRY ddi_CreateRenderTargetView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1, D3D10DDI_HRENDERTARGETVIEW a2, D3D10DDI_HRTRENDERTARGETVIEW a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateRenderTargetView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1, D3D10DDI_HRENDERTARGETVIEW a2, D3D10DDI_HRTRENDERTARGETVIEW a3)
 { DeviceHandle(device.pDrvPrivate).device().create_render_target_view(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_render_target_view(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateDepthStencilViewSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDepthStencilViewSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_depth_stencil_view_size(a1); }
 
-VOID APIENTRY ddi_CreateDepthStencilView(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1, D3D10DDI_HDEPTHSTENCILVIEW a2, D3D10DDI_HRTDEPTHSTENCILVIEW a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateDepthStencilView(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1, D3D10DDI_HDEPTHSTENCILVIEW a2, D3D10DDI_HRTDEPTHSTENCILVIEW a3)
 { DeviceHandle(device.pDrvPrivate).device().create_depth_stencil_view(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_depth_stencil_view(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateElementLayoutSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateElementLayoutSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_element_layout_size(a1); }
 
-VOID APIENTRY ddi_CreateElementLayout(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1, D3D10DDI_HELEMENTLAYOUT a2, D3D10DDI_HRTELEMENTLAYOUT a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateElementLayout(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1, D3D10DDI_HELEMENTLAYOUT a2, D3D10DDI_HRTELEMENTLAYOUT a3)
 { DeviceHandle(device.pDrvPrivate).device().create_element_layout(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyElementLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyElementLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_element_layout(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateBlendStateSize(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateBlendStateSize(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_blend_state_size(a1); }
 
-VOID APIENTRY ddi_CreateBlendState(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1, D3D10DDI_HBLENDSTATE a2, D3D10DDI_HRTBLENDSTATE a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateBlendState(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1, D3D10DDI_HBLENDSTATE a2, D3D10DDI_HRTBLENDSTATE a3)
 { DeviceHandle(device.pDrvPrivate).device().create_blend_state(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_blend_state(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateDepthStencilStateSize(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDepthStencilStateSize(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_depth_stencil_state_size(a1); }
 
-VOID APIENTRY ddi_CreateDepthStencilState(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1, D3D10DDI_HDEPTHSTENCILSTATE a2, D3D10DDI_HRTDEPTHSTENCILSTATE a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateDepthStencilState(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1, D3D10DDI_HDEPTHSTENCILSTATE a2, D3D10DDI_HRTDEPTHSTENCILSTATE a3)
 { DeviceHandle(device.pDrvPrivate).device().create_depth_stencil_state(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_depth_stencil_state(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateRasterizerStateSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateRasterizerStateSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_rasterizer_state_size(a1); }
 
-VOID APIENTRY ddi_CreateRasterizerState(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1, D3D10DDI_HRASTERIZERSTATE a2, D3D10DDI_HRTRASTERIZERSTATE a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateRasterizerState(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1, D3D10DDI_HRASTERIZERSTATE a2, D3D10DDI_HRTRASTERIZERSTATE a3)
 { DeviceHandle(device.pDrvPrivate).device().create_rasterizer_state(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_rasterizer_state(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_size(a1, a2); }
 
-VOID APIENTRY ddi_CreateVertexShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateVertexShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_vertex_shader(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CreateGeometryShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateGeometryShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_geometry_shader(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CreatePixelShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreatePixelShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_pixel_shader(a1, a2, a3, a4); }
 
-SIZE_T APIENTRY ddi_CalcPrivateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_geometry_shader_with_stream_output(a1, a2); }
 
-VOID APIENTRY ddi_CreateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_geometry_shader_with_stream_output(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_DestroyShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_shader(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateSamplerSize(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateSamplerSize(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_sampler_size(a1); }
 
-VOID APIENTRY ddi_CreateSampler(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1, D3D10DDI_HSAMPLER a2, D3D10DDI_HRTSAMPLER a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateSampler(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1, D3D10DDI_HSAMPLER a2, D3D10DDI_HRTSAMPLER a3)
 { DeviceHandle(device.pDrvPrivate).device().create_sampler(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroySampler(D3D10DDI_HDEVICE device, D3D10DDI_HSAMPLER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroySampler(D3D10DDI_HDEVICE device, D3D10DDI_HSAMPLER a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_sampler(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateQuerySize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateQuerySize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_query_size(a1); }
 
-VOID APIENTRY ddi_CreateQuery(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1, D3D10DDI_HQUERY a2, D3D10DDI_HRTQUERY a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateQuery(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1, D3D10DDI_HQUERY a2, D3D10DDI_HRTQUERY a3)
 { DeviceHandle(device.pDrvPrivate).device().create_query(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyQuery(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyQuery(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_query(a1); }
 
-VOID APIENTRY ddi_CheckFormatSupport(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT * a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckFormatSupport(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT * a2)
 { DeviceHandle(device.pDrvPrivate).device().check_format_support(a1, a2); }
 
-VOID APIENTRY ddi_CheckMultisampleQualityLevels(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT a2, UINT a3, UINT * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckMultisampleQualityLevels(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT a2, UINT a3, UINT * a4)
 { DeviceHandle(device.pDrvPrivate).device().check_multisample_quality_levels(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CheckCounterInfo(D3D10DDI_HDEVICE device, D3D10DDI_COUNTER_INFO * a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckCounterInfo(D3D10DDI_HDEVICE device, D3D10DDI_COUNTER_INFO * a1)
 { DeviceHandle(device.pDrvPrivate).device().check_counter_info(a1); }
 
-VOID APIENTRY ddi_CheckCounter(D3D10DDI_HDEVICE device, D3D10DDI_QUERY a1, D3D10DDI_COUNTER_TYPE * a2, UINT * a3, LPSTR a4, UINT * a5, LPSTR a6, UINT * a7, LPSTR a8, UINT * a9)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckCounter(D3D10DDI_HDEVICE device, D3D10DDI_QUERY a1, D3D10DDI_COUNTER_TYPE * a2, UINT * a3, LPSTR a4, UINT * a5, LPSTR a6, UINT * a7, LPSTR a8, UINT * a9)
 { DeviceHandle(device.pDrvPrivate).device().check_counter(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
-VOID APIENTRY ddi_DestroyDevice(D3D10DDI_HDEVICE device)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDevice(D3D10DDI_HDEVICE device)
 { DeviceHandle(device.pDrvPrivate).device().destroy_device(); }
 
-VOID APIENTRY ddi_SetTextFilterSize(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetTextFilterSize(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().set_text_filter_size(a1, a2); }
 
-VOID APIENTRY ddi_ResourceConvert(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceConvert(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
 { DeviceHandle(device.pDrvPrivate).device().resource_convert(a1, a2); }
 
-VOID APIENTRY ddi_ResourceConvertRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResourceConvertRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
 { DeviceHandle(device.pDrvPrivate).device().resource_convert_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
-VOID APIENTRY ddi_DrawIndexedInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexedInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().draw_indexed_instanced_indirect(a1, a2); }
 
-VOID APIENTRY ddi_DrawInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DrawInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().draw_instanced_indirect(a1, a2); }
 
-VOID APIENTRY ddi_CommandListExecute(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_CommandListExecute(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
 { DeviceHandle(device.pDrvPrivate).device().command_list_execute(a1); }
 
-VOID APIENTRY ddi_HsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().hs_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_HsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().hs_set_shader(a1); }
 
-VOID APIENTRY ddi_HsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_HsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().hs_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_HsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_HsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().hs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_DsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().ds_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_DsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().ds_set_shader(a1); }
 
-VOID APIENTRY ddi_DsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_DsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().ds_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_DsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().ds_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_CreateHullShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateHullShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_hull_shader(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CreateDomainShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateDomainShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
 { DeviceHandle(device.pDrvPrivate).device().create_domain_shader(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CheckDeferredContextHandleSizes(D3D10DDI_HDEVICE device, UINT * a1, D3D11DDI_HANDLESIZE * a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckDeferredContextHandleSizes(D3D10DDI_HDEVICE device, UINT * a1, D3D11DDI_HANDLESIZE * a2)
 { DeviceHandle(device.pDrvPrivate).device().check_deferred_context_handle_sizes(a1, a2); }
 
-SIZE_T APIENTRY ddi_CalcDeferredContextHandleSize(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcDeferredContextHandleSize(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2)
 { return DeviceHandle(device.pDrvPrivate).device().calc_deferred_context_handle_size(a1, a2); }
 
-SIZE_T APIENTRY ddi_CalcPrivateDeferredContextSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CALCPRIVATEDEFERREDCONTEXTSIZE * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDeferredContextSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CALCPRIVATEDEFERREDCONTEXTSIZE * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_deferred_context_size(a1); }
 
-VOID APIENTRY ddi_CreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
 { DeviceHandle(device.pDrvPrivate).device().create_deferred_context(a1); }
 
-VOID APIENTRY ddi_AbandonCommandList(D3D10DDI_HDEVICE device)
+extern "C" VOID APIENTRY rvkumd_d3d11_AbandonCommandList(D3D10DDI_HDEVICE device)
 { DeviceHandle(device.pDrvPrivate).device().abandon_command_list(); }
 
-SIZE_T APIENTRY ddi_CalcPrivateCommandListSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateCommandListSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_command_list_size(a1); }
 
-VOID APIENTRY ddi_CreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
 { DeviceHandle(device.pDrvPrivate).device().create_command_list(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_command_list(a1); }
 
-SIZE_T APIENTRY ddi_CalcPrivateTessellationShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a2)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateTessellationShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a2)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_tessellation_shader_size(a1, a2); }
 
-VOID APIENTRY ddi_PsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().ps_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_VsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().vs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_GsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().gs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_HsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().hs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_DsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().ds_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_CreateComputeShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateComputeShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3)
 { DeviceHandle(device.pDrvPrivate).device().create_compute_shader(a1, a2, a3); }
 
-VOID APIENTRY ddi_CsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_shader(a1); }
 
-VOID APIENTRY ddi_CsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_shader_resources(a1, a2, a3); }
 
-VOID APIENTRY ddi_CsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_samplers(a1, a2, a3); }
 
-VOID APIENTRY ddi_CsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
-SIZE_T APIENTRY ddi_CalcPrivateUnorderedAccessViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateUnorderedAccessViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_unordered_access_view_size(a1); }
 
-VOID APIENTRY ddi_CreateUnorderedAccessView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1, D3D11DDI_HUNORDEREDACCESSVIEW a2, D3D11DDI_HRTUNORDEREDACCESSVIEW a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateUnorderedAccessView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1, D3D11DDI_HUNORDEREDACCESSVIEW a2, D3D11DDI_HRTUNORDEREDACCESSVIEW a3)
 { DeviceHandle(device.pDrvPrivate).device().create_unordered_access_view(a1, a2, a3); }
 
-VOID APIENTRY ddi_DestroyUnorderedAccessView(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyUnorderedAccessView(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_unordered_access_view(a1); }
 
-VOID APIENTRY ddi_ClearUnorderedAccessViewUint(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const UINT * a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ClearUnorderedAccessViewUint(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const UINT * a2)
 { DeviceHandle(device.pDrvPrivate).device().clear_unordered_access_view_uint(a1, a2); }
 
-VOID APIENTRY ddi_ClearUnorderedAccessViewFloat(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const FLOAT * a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ClearUnorderedAccessViewFloat(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const FLOAT * a2)
 { DeviceHandle(device.pDrvPrivate).device().clear_unordered_access_view_float(a1, a2); }
 
-VOID APIENTRY ddi_CsSetUnorderedAccessViews(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D11DDI_HUNORDEREDACCESSVIEW * a3, const UINT * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CsSetUnorderedAccessViews(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D11DDI_HUNORDEREDACCESSVIEW * a3, const UINT * a4)
 { DeviceHandle(device.pDrvPrivate).device().cs_set_unordered_access_views(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_Dispatch(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_Dispatch(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3)
 { DeviceHandle(device.pDrvPrivate).device().dispatch(a1, a2, a3); }
 
-VOID APIENTRY ddi_DispatchIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_DispatchIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().dispatch_indirect(a1, a2); }
 
-VOID APIENTRY ddi_SetResourceMinLOD(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, FLOAT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetResourceMinLOD(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, FLOAT a2)
 { DeviceHandle(device.pDrvPrivate).device().set_resource_min_lod(a1, a2); }
 
-VOID APIENTRY ddi_CopyStructureCount(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D11DDI_HUNORDEREDACCESSVIEW a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_CopyStructureCount(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D11DDI_HUNORDEREDACCESSVIEW a3)
 { DeviceHandle(device.pDrvPrivate).device().copy_structure_count(a1, a2, a3); }
 
-VOID APIENTRY ddi_RecycleCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_RecycleCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
 { DeviceHandle(device.pDrvPrivate).device().recycle_command_list(a1); }
 
-HRESULT APIENTRY ddi_RecycleCreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
+extern "C" HRESULT APIENTRY rvkumd_d3d11_RecycleCreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
 { return DeviceHandle(device.pDrvPrivate).device().recycle_create_command_list(a1, a2, a3); }
 
-HRESULT APIENTRY ddi_RecycleCreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
+extern "C" HRESULT APIENTRY rvkumd_d3d11_RecycleCreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
 { return DeviceHandle(device.pDrvPrivate).device().recycle_create_deferred_context(a1); }
 
-VOID APIENTRY ddi_RecycleDestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_RecycleDestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
 { DeviceHandle(device.pDrvPrivate).device().recycle_destroy_command_list(a1); }
 
-VOID APIENTRY ddi_Discard(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const D3D10_DDI_RECT * a3, UINT a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_Discard(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const D3D10_DDI_RECT * a3, UINT a4)
 { DeviceHandle(device.pDrvPrivate).device().discard(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_AssignDebugBinary(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const void * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_AssignDebugBinary(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const void * a3)
 { DeviceHandle(device.pDrvPrivate).device().assign_debug_binary(a1, a2, a3); }
 
-VOID APIENTRY ddi_DynamicConstantBufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
 { DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_CheckDirectFlipSupport(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2, UINT a3, BOOL * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_CheckDirectFlipSupport(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2, UINT a3, BOOL * a4)
 { DeviceHandle(device.pDrvPrivate).device().check_direct_flip_support(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_ClearView(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const FLOAT * a3, const D3D10_DDI_RECT * a4, UINT a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_ClearView(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const FLOAT * a3, const D3D10_DDI_RECT * a4, UINT a5)
 { DeviceHandle(device.pDrvPrivate).device().clear_view(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_UpdateTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a3, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a4, D3D10DDI_HRESOURCE a5, UINT a6, const UINT * a7, const UINT * a8, const UINT * a9, UINT a10)
+extern "C" VOID APIENTRY rvkumd_d3d11_UpdateTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a3, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a4, D3D10DDI_HRESOURCE a5, UINT a6, const UINT * a7, const UINT * a8, const UINT * a9, UINT a10)
 { DeviceHandle(device.pDrvPrivate).device().update_tile_mappings(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
-VOID APIENTRY ddi_CopyTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, D3D10DDI_HRESOURCE a3, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a4, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a5, UINT a6)
+extern "C" VOID APIENTRY rvkumd_d3d11_CopyTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, D3D10DDI_HRESOURCE a3, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a4, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a5, UINT a6)
 { DeviceHandle(device.pDrvPrivate).device().copy_tile_mappings(a1, a2, a3, a4, a5, a6); }
 
-VOID APIENTRY ddi_CopyTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, D3D10DDI_HRESOURCE a4, UINT64 a5, UINT a6)
+extern "C" VOID APIENTRY rvkumd_d3d11_CopyTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, D3D10DDI_HRESOURCE a4, UINT64 a5, UINT a6)
 { DeviceHandle(device.pDrvPrivate).device().copy_tiles(a1, a2, a3, a4, a5, a6); }
 
-VOID APIENTRY ddi_UpdateTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, const void * a4, UINT a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_UpdateTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, const void * a4, UINT a5)
 { DeviceHandle(device.pDrvPrivate).device().update_tiles(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_TiledResourceBarrier(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, D3D11DDI_HANDLETYPE a3, void * a4)
+extern "C" VOID APIENTRY rvkumd_d3d11_TiledResourceBarrier(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, D3D11DDI_HANDLETYPE a3, void * a4)
 { DeviceHandle(device.pDrvPrivate).device().tiled_resource_barrier(a1, a2, a3, a4); }
 
-VOID APIENTRY ddi_GetMipPacking(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT * a2, UINT * a3)
+extern "C" VOID APIENTRY rvkumd_d3d11_GetMipPacking(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT * a2, UINT * a3)
 { DeviceHandle(device.pDrvPrivate).device().get_mip_packing(a1, a2, a3); }
 
-VOID APIENTRY ddi_ResizeTilePool(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT64 a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ResizeTilePool(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT64 a2)
 { DeviceHandle(device.pDrvPrivate).device().resize_tile_pool(a1, a2); }
 
-VOID APIENTRY ddi_SetMarker(D3D10DDI_HDEVICE device)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetMarker(D3D10DDI_HDEVICE device)
 { DeviceHandle(device.pDrvPrivate).device().set_marker(); }
 
-VOID APIENTRY ddi_SetMarkerMode(D3D10DDI_HDEVICE device, D3DWDDM1_3DDI_MARKER_TYPE a1, UINT a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetMarkerMode(D3D10DDI_HDEVICE device, D3DWDDM1_3DDI_MARKER_TYPE a1, UINT a2)
 { DeviceHandle(device.pDrvPrivate).device().set_marker_mode(a1, a2); }
 
-VOID APIENTRY ddi_SetHardwareProtection(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, BOOL a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetHardwareProtection(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, BOOL a2)
 { DeviceHandle(device.pDrvPrivate).device().set_hardware_protection(a1, a2); }
 
-VOID APIENTRY ddi_GetResourceLayout(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DKMT_HANDLE * a3, D3DWDDM2_0DDI_TEXTURE_LAYOUT * a4, UINT * a5, D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT * a6)
+extern "C" VOID APIENTRY rvkumd_d3d11_GetResourceLayout(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DKMT_HANDLE * a3, D3DWDDM2_0DDI_TEXTURE_LAYOUT * a4, UINT * a5, D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT * a6)
 { DeviceHandle(device.pDrvPrivate).device().get_resource_layout(a1, a2, a3, a4, a5, a6); }
 
-HRESULT APIENTRY ddi_RetrieveShaderComment(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, WCHAR * a2, SIZE_T * a3)
+extern "C" HRESULT APIENTRY rvkumd_d3d11_RetrieveShaderComment(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, WCHAR * a2, SIZE_T * a3)
 { return DeviceHandle(device.pDrvPrivate).device().retrieve_shader_comment(a1, a2, a3); }
 
-VOID APIENTRY ddi_SetHardwareProtectionState(D3D10DDI_HDEVICE device, BOOL a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetHardwareProtectionState(D3D10DDI_HDEVICE device, BOOL a1)
 { DeviceHandle(device.pDrvPrivate).device().set_hardware_protection_state(a1); }
 
-VOID APIENTRY ddi_AcquireResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_AcquireResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
 { DeviceHandle(device.pDrvPrivate).device().acquire_resource(a1, a2); }
 
-VOID APIENTRY ddi_ReleaseResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_ReleaseResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
 { DeviceHandle(device.pDrvPrivate).device().release_resource(a1, a2); }
 
-SIZE_T APIENTRY ddi_CalcPrivateShaderCacheSessionSize(D3D10DDI_HDEVICE device)
+extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderCacheSessionSize(D3D10DDI_HDEVICE device)
 { return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_cache_session_size(); }
 
-VOID APIENTRY ddi_CreateShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1, D3DWDDM2_2DDI_HRTCACHESESSION a2)
+extern "C" VOID APIENTRY rvkumd_d3d11_CreateShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1, D3DWDDM2_2DDI_HRTCACHESESSION a2)
 { DeviceHandle(device.pDrvPrivate).device().create_shader_cache_session(a1, a2); }
 
-VOID APIENTRY ddi_DestroyShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
 { DeviceHandle(device.pDrvPrivate).device().destroy_shader_cache_session(a1); }
 
-VOID APIENTRY ddi_SetShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
+extern "C" VOID APIENTRY rvkumd_d3d11_SetShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
 { DeviceHandle(device.pDrvPrivate).device().set_shader_cache_session(a1); }
 
-VOID APIENTRY ddi_QueryScanoutCaps(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3DWDDM2_6DDI_SCANOUT_FLAGS * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_QueryScanoutCaps(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3DWDDM2_6DDI_SCANOUT_FLAGS * a5)
 { DeviceHandle(device.pDrvPrivate).device().query_scanout_caps(a1, a2, a3, a4, a5); }
 
-VOID APIENTRY ddi_PrepareScanoutTransformation(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3D10_DDI_RECT * a5)
+extern "C" VOID APIENTRY rvkumd_d3d11_PrepareScanoutTransformation(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3D10_DDI_RECT * a5)
 { DeviceHandle(device.pDrvPrivate).device().prepare_scanout_transformation(a1, a2, a3, a4, a5); }
 
 }  // namespace
 
 void fill_device_funcs(D3DWDDM2_6DDI_DEVICEFUNCS &table)
 {
-    table.pfnDefaultConstantBufferUpdateSubresourceUP = &ddi_DefaultConstantBufferUpdateSubresourceUP;
-    table.pfnVsSetConstantBuffers = &ddi_VsSetConstantBuffers;
-    table.pfnPsSetShaderResources = &ddi_PsSetShaderResources;
-    table.pfnPsSetShader = &ddi_PsSetShader;
-    table.pfnPsSetSamplers = &ddi_PsSetSamplers;
-    table.pfnVsSetShader = &ddi_VsSetShader;
-    table.pfnDrawIndexed = &ddi_DrawIndexed;
-    table.pfnDraw = &ddi_Draw;
-    table.pfnDynamicIABufferMapNoOverwrite = &ddi_DynamicIABufferMapNoOverwrite;
-    table.pfnDynamicIABufferUnmap = &ddi_DynamicIABufferUnmap;
-    table.pfnDynamicConstantBufferMapDiscard = &ddi_DynamicConstantBufferMapDiscard;
-    table.pfnDynamicIABufferMapDiscard = &ddi_DynamicIABufferMapDiscard;
-    table.pfnDynamicConstantBufferUnmap = &ddi_DynamicConstantBufferUnmap;
-    table.pfnPsSetConstantBuffers = &ddi_PsSetConstantBuffers;
-    table.pfnIaSetInputLayout = &ddi_IaSetInputLayout;
-    table.pfnIaSetVertexBuffers = &ddi_IaSetVertexBuffers;
-    table.pfnIaSetIndexBuffer = &ddi_IaSetIndexBuffer;
-    table.pfnDrawIndexedInstanced = &ddi_DrawIndexedInstanced;
-    table.pfnDrawInstanced = &ddi_DrawInstanced;
-    table.pfnDynamicResourceMapDiscard = &ddi_DynamicResourceMapDiscard;
-    table.pfnDynamicResourceUnmap = &ddi_DynamicResourceUnmap;
-    table.pfnGsSetConstantBuffers = &ddi_GsSetConstantBuffers;
-    table.pfnGsSetShader = &ddi_GsSetShader;
-    table.pfnIaSetTopology = &ddi_IaSetTopology;
-    table.pfnStagingResourceMap = &ddi_StagingResourceMap;
-    table.pfnStagingResourceUnmap = &ddi_StagingResourceUnmap;
-    table.pfnVsSetShaderResources = &ddi_VsSetShaderResources;
-    table.pfnVsSetSamplers = &ddi_VsSetSamplers;
-    table.pfnGsSetShaderResources = &ddi_GsSetShaderResources;
-    table.pfnGsSetSamplers = &ddi_GsSetSamplers;
-    table.pfnSetRenderTargets = &ddi_SetRenderTargets;
-    table.pfnShaderResourceViewReadAfterWriteHazard = &ddi_ShaderResourceViewReadAfterWriteHazard;
-    table.pfnResourceReadAfterWriteHazard = &ddi_ResourceReadAfterWriteHazard;
-    table.pfnSetBlendState = &ddi_SetBlendState;
-    table.pfnSetDepthStencilState = &ddi_SetDepthStencilState;
-    table.pfnSetRasterizerState = &ddi_SetRasterizerState;
-    table.pfnQueryEnd = &ddi_QueryEnd;
-    table.pfnQueryBegin = &ddi_QueryBegin;
-    table.pfnResourceCopyRegion = &ddi_ResourceCopyRegion;
-    table.pfnResourceUpdateSubresourceUP = &ddi_ResourceUpdateSubresourceUP;
-    table.pfnSoSetTargets = &ddi_SoSetTargets;
-    table.pfnDrawAuto = &ddi_DrawAuto;
-    table.pfnSetViewports = &ddi_SetViewports;
-    table.pfnSetScissorRects = &ddi_SetScissorRects;
-    table.pfnClearRenderTargetView = &ddi_ClearRenderTargetView;
-    table.pfnClearDepthStencilView = &ddi_ClearDepthStencilView;
-    table.pfnSetPredication = &ddi_SetPredication;
-    table.pfnQueryGetData = &ddi_QueryGetData;
-    table.pfnFlush = &ddi_Flush;
-    table.pfnGenMips = &ddi_GenMips;
-    table.pfnResourceCopy = &ddi_ResourceCopy;
-    table.pfnResourceResolveSubresource = &ddi_ResourceResolveSubresource;
-    table.pfnResourceMap = &ddi_ResourceMap;
-    table.pfnResourceUnmap = &ddi_ResourceUnmap;
-    table.pfnResourceIsStagingBusy = &ddi_ResourceIsStagingBusy;
-    table.pfnRelocateDeviceFuncs = &ddi_RelocateDeviceFuncs;
-    table.pfnCalcPrivateResourceSize = &ddi_CalcPrivateResourceSize;
-    table.pfnCalcPrivateOpenedResourceSize = &ddi_CalcPrivateOpenedResourceSize;
-    table.pfnCreateResource = &ddi_CreateResource;
-    table.pfnOpenResource = &ddi_OpenResource;
-    table.pfnDestroyResource = &ddi_DestroyResource;
-    table.pfnCalcPrivateShaderResourceViewSize = &ddi_CalcPrivateShaderResourceViewSize;
-    table.pfnCreateShaderResourceView = &ddi_CreateShaderResourceView;
-    table.pfnDestroyShaderResourceView = &ddi_DestroyShaderResourceView;
-    table.pfnCalcPrivateRenderTargetViewSize = &ddi_CalcPrivateRenderTargetViewSize;
-    table.pfnCreateRenderTargetView = &ddi_CreateRenderTargetView;
-    table.pfnDestroyRenderTargetView = &ddi_DestroyRenderTargetView;
-    table.pfnCalcPrivateDepthStencilViewSize = &ddi_CalcPrivateDepthStencilViewSize;
-    table.pfnCreateDepthStencilView = &ddi_CreateDepthStencilView;
-    table.pfnDestroyDepthStencilView = &ddi_DestroyDepthStencilView;
-    table.pfnCalcPrivateElementLayoutSize = &ddi_CalcPrivateElementLayoutSize;
-    table.pfnCreateElementLayout = &ddi_CreateElementLayout;
-    table.pfnDestroyElementLayout = &ddi_DestroyElementLayout;
-    table.pfnCalcPrivateBlendStateSize = &ddi_CalcPrivateBlendStateSize;
-    table.pfnCreateBlendState = &ddi_CreateBlendState;
-    table.pfnDestroyBlendState = &ddi_DestroyBlendState;
-    table.pfnCalcPrivateDepthStencilStateSize = &ddi_CalcPrivateDepthStencilStateSize;
-    table.pfnCreateDepthStencilState = &ddi_CreateDepthStencilState;
-    table.pfnDestroyDepthStencilState = &ddi_DestroyDepthStencilState;
-    table.pfnCalcPrivateRasterizerStateSize = &ddi_CalcPrivateRasterizerStateSize;
-    table.pfnCreateRasterizerState = &ddi_CreateRasterizerState;
-    table.pfnDestroyRasterizerState = &ddi_DestroyRasterizerState;
-    table.pfnCalcPrivateShaderSize = &ddi_CalcPrivateShaderSize;
-    table.pfnCreateVertexShader = &ddi_CreateVertexShader;
-    table.pfnCreateGeometryShader = &ddi_CreateGeometryShader;
-    table.pfnCreatePixelShader = &ddi_CreatePixelShader;
-    table.pfnCalcPrivateGeometryShaderWithStreamOutput = &ddi_CalcPrivateGeometryShaderWithStreamOutput;
-    table.pfnCreateGeometryShaderWithStreamOutput = &ddi_CreateGeometryShaderWithStreamOutput;
-    table.pfnDestroyShader = &ddi_DestroyShader;
-    table.pfnCalcPrivateSamplerSize = &ddi_CalcPrivateSamplerSize;
-    table.pfnCreateSampler = &ddi_CreateSampler;
-    table.pfnDestroySampler = &ddi_DestroySampler;
-    table.pfnCalcPrivateQuerySize = &ddi_CalcPrivateQuerySize;
-    table.pfnCreateQuery = &ddi_CreateQuery;
-    table.pfnDestroyQuery = &ddi_DestroyQuery;
-    table.pfnCheckFormatSupport = &ddi_CheckFormatSupport;
-    table.pfnCheckMultisampleQualityLevels = &ddi_CheckMultisampleQualityLevels;
-    table.pfnCheckCounterInfo = &ddi_CheckCounterInfo;
-    table.pfnCheckCounter = &ddi_CheckCounter;
-    table.pfnDestroyDevice = &ddi_DestroyDevice;
-    table.pfnSetTextFilterSize = &ddi_SetTextFilterSize;
-    table.pfnResourceConvert = &ddi_ResourceConvert;
-    table.pfnResourceConvertRegion = &ddi_ResourceConvertRegion;
-    table.pfnDrawIndexedInstancedIndirect = &ddi_DrawIndexedInstancedIndirect;
-    table.pfnDrawInstancedIndirect = &ddi_DrawInstancedIndirect;
-    table.pfnCommandListExecute = &ddi_CommandListExecute;
-    table.pfnHsSetShaderResources = &ddi_HsSetShaderResources;
-    table.pfnHsSetShader = &ddi_HsSetShader;
-    table.pfnHsSetSamplers = &ddi_HsSetSamplers;
-    table.pfnHsSetConstantBuffers = &ddi_HsSetConstantBuffers;
-    table.pfnDsSetShaderResources = &ddi_DsSetShaderResources;
-    table.pfnDsSetShader = &ddi_DsSetShader;
-    table.pfnDsSetSamplers = &ddi_DsSetSamplers;
-    table.pfnDsSetConstantBuffers = &ddi_DsSetConstantBuffers;
-    table.pfnCreateHullShader = &ddi_CreateHullShader;
-    table.pfnCreateDomainShader = &ddi_CreateDomainShader;
-    table.pfnCheckDeferredContextHandleSizes = &ddi_CheckDeferredContextHandleSizes;
-    table.pfnCalcDeferredContextHandleSize = &ddi_CalcDeferredContextHandleSize;
-    table.pfnCalcPrivateDeferredContextSize = &ddi_CalcPrivateDeferredContextSize;
-    table.pfnCreateDeferredContext = &ddi_CreateDeferredContext;
-    table.pfnAbandonCommandList = &ddi_AbandonCommandList;
-    table.pfnCalcPrivateCommandListSize = &ddi_CalcPrivateCommandListSize;
-    table.pfnCreateCommandList = &ddi_CreateCommandList;
-    table.pfnDestroyCommandList = &ddi_DestroyCommandList;
-    table.pfnCalcPrivateTessellationShaderSize = &ddi_CalcPrivateTessellationShaderSize;
-    table.pfnPsSetShaderWithIfaces = &ddi_PsSetShaderWithIfaces;
-    table.pfnVsSetShaderWithIfaces = &ddi_VsSetShaderWithIfaces;
-    table.pfnGsSetShaderWithIfaces = &ddi_GsSetShaderWithIfaces;
-    table.pfnHsSetShaderWithIfaces = &ddi_HsSetShaderWithIfaces;
-    table.pfnDsSetShaderWithIfaces = &ddi_DsSetShaderWithIfaces;
-    table.pfnCsSetShaderWithIfaces = &ddi_CsSetShaderWithIfaces;
-    table.pfnCreateComputeShader = &ddi_CreateComputeShader;
-    table.pfnCsSetShader = &ddi_CsSetShader;
-    table.pfnCsSetShaderResources = &ddi_CsSetShaderResources;
-    table.pfnCsSetSamplers = &ddi_CsSetSamplers;
-    table.pfnCsSetConstantBuffers = &ddi_CsSetConstantBuffers;
-    table.pfnCalcPrivateUnorderedAccessViewSize = &ddi_CalcPrivateUnorderedAccessViewSize;
-    table.pfnCreateUnorderedAccessView = &ddi_CreateUnorderedAccessView;
-    table.pfnDestroyUnorderedAccessView = &ddi_DestroyUnorderedAccessView;
-    table.pfnClearUnorderedAccessViewUint = &ddi_ClearUnorderedAccessViewUint;
-    table.pfnClearUnorderedAccessViewFloat = &ddi_ClearUnorderedAccessViewFloat;
-    table.pfnCsSetUnorderedAccessViews = &ddi_CsSetUnorderedAccessViews;
-    table.pfnDispatch = &ddi_Dispatch;
-    table.pfnDispatchIndirect = &ddi_DispatchIndirect;
-    table.pfnSetResourceMinLOD = &ddi_SetResourceMinLOD;
-    table.pfnCopyStructureCount = &ddi_CopyStructureCount;
-    table.pfnRecycleCommandList = &ddi_RecycleCommandList;
-    table.pfnRecycleCreateCommandList = &ddi_RecycleCreateCommandList;
-    table.pfnRecycleCreateDeferredContext = &ddi_RecycleCreateDeferredContext;
-    table.pfnRecycleDestroyCommandList = &ddi_RecycleDestroyCommandList;
-    table.pfnDiscard = &ddi_Discard;
-    table.pfnAssignDebugBinary = &ddi_AssignDebugBinary;
-    table.pfnDynamicConstantBufferMapNoOverwrite = &ddi_DynamicConstantBufferMapNoOverwrite;
-    table.pfnCheckDirectFlipSupport = &ddi_CheckDirectFlipSupport;
-    table.pfnClearView = &ddi_ClearView;
-    table.pfnUpdateTileMappings = &ddi_UpdateTileMappings;
-    table.pfnCopyTileMappings = &ddi_CopyTileMappings;
-    table.pfnCopyTiles = &ddi_CopyTiles;
-    table.pfnUpdateTiles = &ddi_UpdateTiles;
-    table.pfnTiledResourceBarrier = &ddi_TiledResourceBarrier;
-    table.pfnGetMipPacking = &ddi_GetMipPacking;
-    table.pfnResizeTilePool = &ddi_ResizeTilePool;
-    table.pfnSetMarker = &ddi_SetMarker;
-    table.pfnSetMarkerMode = &ddi_SetMarkerMode;
-    table.pfnSetHardwareProtection = &ddi_SetHardwareProtection;
-    table.pfnGetResourceLayout = &ddi_GetResourceLayout;
-    table.pfnRetrieveShaderComment = &ddi_RetrieveShaderComment;
-    table.pfnSetHardwareProtectionState = &ddi_SetHardwareProtectionState;
-    table.pfnAcquireResource = &ddi_AcquireResource;
-    table.pfnReleaseResource = &ddi_ReleaseResource;
-    table.pfnCalcPrivateShaderCacheSessionSize = &ddi_CalcPrivateShaderCacheSessionSize;
-    table.pfnCreateShaderCacheSession = &ddi_CreateShaderCacheSession;
-    table.pfnDestroyShaderCacheSession = &ddi_DestroyShaderCacheSession;
-    table.pfnSetShaderCacheSession = &ddi_SetShaderCacheSession;
-    table.pfnQueryScanoutCaps = &ddi_QueryScanoutCaps;
-    table.pfnPrepareScanoutTransformation = &ddi_PrepareScanoutTransformation;
+    AV_SCOPE("fill_device_funcs");
+    table.pfnDefaultConstantBufferUpdateSubresourceUP = &rvkumd_d3d11_DefaultConstantBufferUpdateSubresourceUP;
+    table.pfnVsSetConstantBuffers = &rvkumd_d3d11_VsSetConstantBuffers;
+    table.pfnPsSetShaderResources = &rvkumd_d3d11_PsSetShaderResources;
+    table.pfnPsSetShader = &rvkumd_d3d11_PsSetShader;
+    table.pfnPsSetSamplers = &rvkumd_d3d11_PsSetSamplers;
+    table.pfnVsSetShader = &rvkumd_d3d11_VsSetShader;
+    table.pfnDrawIndexed = &rvkumd_d3d11_DrawIndexed;
+    table.pfnDraw = &rvkumd_d3d11_Draw;
+    table.pfnDynamicIABufferMapNoOverwrite = &rvkumd_d3d11_DynamicIABufferMapNoOverwrite;
+    table.pfnDynamicIABufferUnmap = &rvkumd_d3d11_DynamicIABufferUnmap;
+    table.pfnDynamicConstantBufferMapDiscard = &rvkumd_d3d11_DynamicConstantBufferMapDiscard;
+    table.pfnDynamicIABufferMapDiscard = &rvkumd_d3d11_DynamicIABufferMapDiscard;
+    table.pfnDynamicConstantBufferUnmap = &rvkumd_d3d11_DynamicConstantBufferUnmap;
+    table.pfnPsSetConstantBuffers = &rvkumd_d3d11_PsSetConstantBuffers;
+    table.pfnIaSetInputLayout = &rvkumd_d3d11_IaSetInputLayout;
+    table.pfnIaSetVertexBuffers = &rvkumd_d3d11_IaSetVertexBuffers;
+    table.pfnIaSetIndexBuffer = &rvkumd_d3d11_IaSetIndexBuffer;
+    table.pfnDrawIndexedInstanced = &rvkumd_d3d11_DrawIndexedInstanced;
+    table.pfnDrawInstanced = &rvkumd_d3d11_DrawInstanced;
+    table.pfnDynamicResourceMapDiscard = &rvkumd_d3d11_DynamicResourceMapDiscard;
+    table.pfnDynamicResourceUnmap = &rvkumd_d3d11_DynamicResourceUnmap;
+    table.pfnGsSetConstantBuffers = &rvkumd_d3d11_GsSetConstantBuffers;
+    table.pfnGsSetShader = &rvkumd_d3d11_GsSetShader;
+    table.pfnIaSetTopology = &rvkumd_d3d11_IaSetTopology;
+    table.pfnStagingResourceMap = &rvkumd_d3d11_StagingResourceMap;
+    table.pfnStagingResourceUnmap = &rvkumd_d3d11_StagingResourceUnmap;
+    table.pfnVsSetShaderResources = &rvkumd_d3d11_VsSetShaderResources;
+    table.pfnVsSetSamplers = &rvkumd_d3d11_VsSetSamplers;
+    table.pfnGsSetShaderResources = &rvkumd_d3d11_GsSetShaderResources;
+    table.pfnGsSetSamplers = &rvkumd_d3d11_GsSetSamplers;
+    table.pfnSetRenderTargets = &rvkumd_d3d11_SetRenderTargets;
+    table.pfnShaderResourceViewReadAfterWriteHazard = &rvkumd_d3d11_ShaderResourceViewReadAfterWriteHazard;
+    table.pfnResourceReadAfterWriteHazard = &rvkumd_d3d11_ResourceReadAfterWriteHazard;
+    table.pfnSetBlendState = &rvkumd_d3d11_SetBlendState;
+    table.pfnSetDepthStencilState = &rvkumd_d3d11_SetDepthStencilState;
+    table.pfnSetRasterizerState = &rvkumd_d3d11_SetRasterizerState;
+    table.pfnQueryEnd = &rvkumd_d3d11_QueryEnd;
+    table.pfnQueryBegin = &rvkumd_d3d11_QueryBegin;
+    table.pfnResourceCopyRegion = &rvkumd_d3d11_ResourceCopyRegion;
+    table.pfnResourceUpdateSubresourceUP = &rvkumd_d3d11_ResourceUpdateSubresourceUP;
+    table.pfnSoSetTargets = &rvkumd_d3d11_SoSetTargets;
+    table.pfnDrawAuto = &rvkumd_d3d11_DrawAuto;
+    table.pfnSetViewports = &rvkumd_d3d11_SetViewports;
+    table.pfnSetScissorRects = &rvkumd_d3d11_SetScissorRects;
+    table.pfnClearRenderTargetView = &rvkumd_d3d11_ClearRenderTargetView;
+    table.pfnClearDepthStencilView = &rvkumd_d3d11_ClearDepthStencilView;
+    table.pfnSetPredication = &rvkumd_d3d11_SetPredication;
+    table.pfnQueryGetData = &rvkumd_d3d11_QueryGetData;
+    table.pfnFlush = &rvkumd_d3d11_Flush;
+    table.pfnGenMips = &rvkumd_d3d11_GenMips;
+    table.pfnResourceCopy = &rvkumd_d3d11_ResourceCopy;
+    table.pfnResourceResolveSubresource = &rvkumd_d3d11_ResourceResolveSubresource;
+    table.pfnResourceMap = &rvkumd_d3d11_ResourceMap;
+    table.pfnResourceUnmap = &rvkumd_d3d11_ResourceUnmap;
+    table.pfnResourceIsStagingBusy = &rvkumd_d3d11_ResourceIsStagingBusy;
+    table.pfnRelocateDeviceFuncs = &rvkumd_d3d11_RelocateDeviceFuncs;
+    table.pfnCalcPrivateResourceSize = &rvkumd_d3d11_CalcPrivateResourceSize;
+    table.pfnCalcPrivateOpenedResourceSize = &rvkumd_d3d11_CalcPrivateOpenedResourceSize;
+    table.pfnCreateResource = &rvkumd_d3d11_CreateResource;
+    table.pfnOpenResource = &rvkumd_d3d11_OpenResource;
+    table.pfnDestroyResource = &rvkumd_d3d11_DestroyResource;
+    table.pfnCalcPrivateShaderResourceViewSize = &rvkumd_d3d11_CalcPrivateShaderResourceViewSize;
+    table.pfnCreateShaderResourceView = &rvkumd_d3d11_CreateShaderResourceView;
+    table.pfnDestroyShaderResourceView = &rvkumd_d3d11_DestroyShaderResourceView;
+    table.pfnCalcPrivateRenderTargetViewSize = &rvkumd_d3d11_CalcPrivateRenderTargetViewSize;
+    table.pfnCreateRenderTargetView = &rvkumd_d3d11_CreateRenderTargetView;
+    table.pfnDestroyRenderTargetView = &rvkumd_d3d11_DestroyRenderTargetView;
+    table.pfnCalcPrivateDepthStencilViewSize = &rvkumd_d3d11_CalcPrivateDepthStencilViewSize;
+    table.pfnCreateDepthStencilView = &rvkumd_d3d11_CreateDepthStencilView;
+    table.pfnDestroyDepthStencilView = &rvkumd_d3d11_DestroyDepthStencilView;
+    table.pfnCalcPrivateElementLayoutSize = &rvkumd_d3d11_CalcPrivateElementLayoutSize;
+    table.pfnCreateElementLayout = &rvkumd_d3d11_CreateElementLayout;
+    table.pfnDestroyElementLayout = &rvkumd_d3d11_DestroyElementLayout;
+    table.pfnCalcPrivateBlendStateSize = &rvkumd_d3d11_CalcPrivateBlendStateSize;
+    table.pfnCreateBlendState = &rvkumd_d3d11_CreateBlendState;
+    table.pfnDestroyBlendState = &rvkumd_d3d11_DestroyBlendState;
+    table.pfnCalcPrivateDepthStencilStateSize = &rvkumd_d3d11_CalcPrivateDepthStencilStateSize;
+    table.pfnCreateDepthStencilState = &rvkumd_d3d11_CreateDepthStencilState;
+    table.pfnDestroyDepthStencilState = &rvkumd_d3d11_DestroyDepthStencilState;
+    table.pfnCalcPrivateRasterizerStateSize = &rvkumd_d3d11_CalcPrivateRasterizerStateSize;
+    table.pfnCreateRasterizerState = &rvkumd_d3d11_CreateRasterizerState;
+    table.pfnDestroyRasterizerState = &rvkumd_d3d11_DestroyRasterizerState;
+    table.pfnCalcPrivateShaderSize = &rvkumd_d3d11_CalcPrivateShaderSize;
+    table.pfnCreateVertexShader = &rvkumd_d3d11_CreateVertexShader;
+    table.pfnCreateGeometryShader = &rvkumd_d3d11_CreateGeometryShader;
+    table.pfnCreatePixelShader = &rvkumd_d3d11_CreatePixelShader;
+    table.pfnCalcPrivateGeometryShaderWithStreamOutput = &rvkumd_d3d11_CalcPrivateGeometryShaderWithStreamOutput;
+    table.pfnCreateGeometryShaderWithStreamOutput = &rvkumd_d3d11_CreateGeometryShaderWithStreamOutput;
+    table.pfnDestroyShader = &rvkumd_d3d11_DestroyShader;
+    table.pfnCalcPrivateSamplerSize = &rvkumd_d3d11_CalcPrivateSamplerSize;
+    table.pfnCreateSampler = &rvkumd_d3d11_CreateSampler;
+    table.pfnDestroySampler = &rvkumd_d3d11_DestroySampler;
+    table.pfnCalcPrivateQuerySize = &rvkumd_d3d11_CalcPrivateQuerySize;
+    table.pfnCreateQuery = &rvkumd_d3d11_CreateQuery;
+    table.pfnDestroyQuery = &rvkumd_d3d11_DestroyQuery;
+    table.pfnCheckFormatSupport = &rvkumd_d3d11_CheckFormatSupport;
+    table.pfnCheckMultisampleQualityLevels = &rvkumd_d3d11_CheckMultisampleQualityLevels;
+    table.pfnCheckCounterInfo = &rvkumd_d3d11_CheckCounterInfo;
+    table.pfnCheckCounter = &rvkumd_d3d11_CheckCounter;
+    table.pfnDestroyDevice = &rvkumd_d3d11_DestroyDevice;
+    table.pfnSetTextFilterSize = &rvkumd_d3d11_SetTextFilterSize;
+    table.pfnResourceConvert = &rvkumd_d3d11_ResourceConvert;
+    table.pfnResourceConvertRegion = &rvkumd_d3d11_ResourceConvertRegion;
+    table.pfnDrawIndexedInstancedIndirect = &rvkumd_d3d11_DrawIndexedInstancedIndirect;
+    table.pfnDrawInstancedIndirect = &rvkumd_d3d11_DrawInstancedIndirect;
+    table.pfnCommandListExecute = &rvkumd_d3d11_CommandListExecute;
+    table.pfnHsSetShaderResources = &rvkumd_d3d11_HsSetShaderResources;
+    table.pfnHsSetShader = &rvkumd_d3d11_HsSetShader;
+    table.pfnHsSetSamplers = &rvkumd_d3d11_HsSetSamplers;
+    table.pfnHsSetConstantBuffers = &rvkumd_d3d11_HsSetConstantBuffers;
+    table.pfnDsSetShaderResources = &rvkumd_d3d11_DsSetShaderResources;
+    table.pfnDsSetShader = &rvkumd_d3d11_DsSetShader;
+    table.pfnDsSetSamplers = &rvkumd_d3d11_DsSetSamplers;
+    table.pfnDsSetConstantBuffers = &rvkumd_d3d11_DsSetConstantBuffers;
+    table.pfnCreateHullShader = &rvkumd_d3d11_CreateHullShader;
+    table.pfnCreateDomainShader = &rvkumd_d3d11_CreateDomainShader;
+    table.pfnCheckDeferredContextHandleSizes = &rvkumd_d3d11_CheckDeferredContextHandleSizes;
+    table.pfnCalcDeferredContextHandleSize = &rvkumd_d3d11_CalcDeferredContextHandleSize;
+    table.pfnCalcPrivateDeferredContextSize = &rvkumd_d3d11_CalcPrivateDeferredContextSize;
+    table.pfnCreateDeferredContext = &rvkumd_d3d11_CreateDeferredContext;
+    table.pfnAbandonCommandList = &rvkumd_d3d11_AbandonCommandList;
+    table.pfnCalcPrivateCommandListSize = &rvkumd_d3d11_CalcPrivateCommandListSize;
+    table.pfnCreateCommandList = &rvkumd_d3d11_CreateCommandList;
+    table.pfnDestroyCommandList = &rvkumd_d3d11_DestroyCommandList;
+    table.pfnCalcPrivateTessellationShaderSize = &rvkumd_d3d11_CalcPrivateTessellationShaderSize;
+    table.pfnPsSetShaderWithIfaces = &rvkumd_d3d11_PsSetShaderWithIfaces;
+    table.pfnVsSetShaderWithIfaces = &rvkumd_d3d11_VsSetShaderWithIfaces;
+    table.pfnGsSetShaderWithIfaces = &rvkumd_d3d11_GsSetShaderWithIfaces;
+    table.pfnHsSetShaderWithIfaces = &rvkumd_d3d11_HsSetShaderWithIfaces;
+    table.pfnDsSetShaderWithIfaces = &rvkumd_d3d11_DsSetShaderWithIfaces;
+    table.pfnCsSetShaderWithIfaces = &rvkumd_d3d11_CsSetShaderWithIfaces;
+    table.pfnCreateComputeShader = &rvkumd_d3d11_CreateComputeShader;
+    table.pfnCsSetShader = &rvkumd_d3d11_CsSetShader;
+    table.pfnCsSetShaderResources = &rvkumd_d3d11_CsSetShaderResources;
+    table.pfnCsSetSamplers = &rvkumd_d3d11_CsSetSamplers;
+    table.pfnCsSetConstantBuffers = &rvkumd_d3d11_CsSetConstantBuffers;
+    table.pfnCalcPrivateUnorderedAccessViewSize = &rvkumd_d3d11_CalcPrivateUnorderedAccessViewSize;
+    table.pfnCreateUnorderedAccessView = &rvkumd_d3d11_CreateUnorderedAccessView;
+    table.pfnDestroyUnorderedAccessView = &rvkumd_d3d11_DestroyUnorderedAccessView;
+    table.pfnClearUnorderedAccessViewUint = &rvkumd_d3d11_ClearUnorderedAccessViewUint;
+    table.pfnClearUnorderedAccessViewFloat = &rvkumd_d3d11_ClearUnorderedAccessViewFloat;
+    table.pfnCsSetUnorderedAccessViews = &rvkumd_d3d11_CsSetUnorderedAccessViews;
+    table.pfnDispatch = &rvkumd_d3d11_Dispatch;
+    table.pfnDispatchIndirect = &rvkumd_d3d11_DispatchIndirect;
+    table.pfnSetResourceMinLOD = &rvkumd_d3d11_SetResourceMinLOD;
+    table.pfnCopyStructureCount = &rvkumd_d3d11_CopyStructureCount;
+    table.pfnRecycleCommandList = &rvkumd_d3d11_RecycleCommandList;
+    table.pfnRecycleCreateCommandList = &rvkumd_d3d11_RecycleCreateCommandList;
+    table.pfnRecycleCreateDeferredContext = &rvkumd_d3d11_RecycleCreateDeferredContext;
+    table.pfnRecycleDestroyCommandList = &rvkumd_d3d11_RecycleDestroyCommandList;
+    table.pfnDiscard = &rvkumd_d3d11_Discard;
+    table.pfnAssignDebugBinary = &rvkumd_d3d11_AssignDebugBinary;
+    table.pfnDynamicConstantBufferMapNoOverwrite = &rvkumd_d3d11_DynamicConstantBufferMapNoOverwrite;
+    table.pfnCheckDirectFlipSupport = &rvkumd_d3d11_CheckDirectFlipSupport;
+    table.pfnClearView = &rvkumd_d3d11_ClearView;
+    table.pfnUpdateTileMappings = &rvkumd_d3d11_UpdateTileMappings;
+    table.pfnCopyTileMappings = &rvkumd_d3d11_CopyTileMappings;
+    table.pfnCopyTiles = &rvkumd_d3d11_CopyTiles;
+    table.pfnUpdateTiles = &rvkumd_d3d11_UpdateTiles;
+    table.pfnTiledResourceBarrier = &rvkumd_d3d11_TiledResourceBarrier;
+    table.pfnGetMipPacking = &rvkumd_d3d11_GetMipPacking;
+    table.pfnResizeTilePool = &rvkumd_d3d11_ResizeTilePool;
+    table.pfnSetMarker = &rvkumd_d3d11_SetMarker;
+    table.pfnSetMarkerMode = &rvkumd_d3d11_SetMarkerMode;
+    table.pfnSetHardwareProtection = &rvkumd_d3d11_SetHardwareProtection;
+    table.pfnGetResourceLayout = &rvkumd_d3d11_GetResourceLayout;
+    table.pfnRetrieveShaderComment = &rvkumd_d3d11_RetrieveShaderComment;
+    table.pfnSetHardwareProtectionState = &rvkumd_d3d11_SetHardwareProtectionState;
+    table.pfnAcquireResource = &rvkumd_d3d11_AcquireResource;
+    table.pfnReleaseResource = &rvkumd_d3d11_ReleaseResource;
+    table.pfnCalcPrivateShaderCacheSessionSize = &rvkumd_d3d11_CalcPrivateShaderCacheSessionSize;
+    table.pfnCreateShaderCacheSession = &rvkumd_d3d11_CreateShaderCacheSession;
+    table.pfnDestroyShaderCacheSession = &rvkumd_d3d11_DestroyShaderCacheSession;
+    table.pfnSetShaderCacheSession = &rvkumd_d3d11_SetShaderCacheSession;
+    table.pfnQueryScanoutCaps = &rvkumd_d3d11_QueryScanoutCaps;
+    table.pfnPrepareScanoutTransformation = &rvkumd_d3d11_PrepareScanoutTransformation;
 }
 
 }  // namespace av::d3d11

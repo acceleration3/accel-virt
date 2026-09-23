@@ -42,6 +42,8 @@ public:
     UINT     quality_levels(DXGI_FORMAT format, UINT samples) const;
 
 private:
+    /* Whether `format` is a family's typeless parent. */
+    bool typeless(DXGI_FORMAT format) const;
     /* The DDI's pipeline levels from the host's feature level, each a bit. */
     UINT pipeline_levels() const;
 

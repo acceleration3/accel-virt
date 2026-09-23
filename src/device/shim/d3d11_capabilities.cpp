@@ -115,6 +115,14 @@ void D3d11Capabilities::measure_formats(ID3D11Device5 &device)
              * quality levels on every driver measured; the most is kept. */
             if (levels > row.quality_levels) row.quality_levels = levels;
         }
+        /* A format DXVK says renders, loads or resolves multisampled but at no
+         * count past one - its typeless formats - is one the guest's runtime
+         * refuses the whole driver over ("MSAA quality reported to be 0"), so
+         * the table says what the counts say. */
+        if ((row.sample_counts & ~1u) == 0u)
+            row.support &= ~static_cast<uint32_t>(D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE |
+                                                  D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
+                                                  D3D11_FORMAT_SUPPORT_MULTISAMPLE_LOAD);
     }
 }
 

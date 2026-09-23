@@ -62,8 +62,10 @@ class DriverPackage(unittest.TestCase):
         software = self.inf["Rvkgpu_Install"]["AddReg"]
         self.assertRegex(
             self.text,
-            rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"?rvkumd\.dll",
-            "rvkgpu.inf must add UserModeDriverName (REG_MULTI_SZ) under the install section's AddReg")
+            rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"%13%\\rvkumd\.dll",
+            "rvkgpu.inf must add UserModeDriverName (REG_MULTI_SZ) under the install section's AddReg, "
+            "as a %13% path: d3d11.dll loads the string as the registry holds it, and a bare name is "
+            "looked for in System32")
 
     def test_registers_the_vulkan_icd_through_the_adapter_and_nowhere_else(self):
         """Feature 045, contracts/loader_interface.md: the Windows Vulkan loader

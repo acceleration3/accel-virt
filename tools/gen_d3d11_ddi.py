@@ -108,18 +108,18 @@ def ret_type(ret):
 
 def thunks(table):
     lines = [HEADER, "/* The ABI boundary C requires: the runtime calls each slot with the device", " * handle it was given and nothing else, so each thunk is one line into the", " * device the handle's block names. */",
-             '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
+             '#include "core/trace/function_scope.hpp"', '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/d3d11_dxgi_thunks.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
     for name, _pfn, ret, parameters in table:
         names = ["device"] + [f"a{index}" for index in range(1, len(parameters))]
         declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
         arguments = ", ".join(names[1:])
         keyword = "" if ret == "void" else "return "
-        lines.append(f"{ret_type(ret)} APIENTRY ddi_{name[3:]}({declared})")
+        lines.append(f"extern \"C\" {ret_type(ret)} APIENTRY rvkumd_d3d11_{name[3:]}({declared})")
         lines.append(f"{{ {keyword}DeviceHandle(device.pDrvPrivate).device().{snake(name)}({arguments}); }}")
         lines.append("")
-    lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{"]
+    lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs");']
     for name, _pfn, _ret, _parameters in table:
-        lines.append(f"    table.{name} = &ddi_{name[3:]};")
+        lines.append(f"    table.{name} = &rvkumd_d3d11_{name[3:]};")
     lines += ["}", "", "}  // namespace av::d3d11", ""]
     return "\n".join(lines)
 

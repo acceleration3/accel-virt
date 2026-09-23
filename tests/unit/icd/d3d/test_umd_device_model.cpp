@@ -82,13 +82,14 @@ private:
 
 }  // namespace
 
-/* The size is the cookie's whatever the runtime asked with, because a magic
- * and a pointer is what the block holds however the device grows. */
+/* The size is the cookie's and one pointer whatever the runtime asked with,
+ * because a magic, a pointer and the host driver's device are what the block
+ * holds however the device grows. */
 TEST(umd_device_model, the_private_device_size_is_the_cookie_for_every_create)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
   CHECK_EQ(runtime.open(), hr_ok);
-  CHECK_EQ(runtime.calc_private_device_size(), sizeof(DeviceCookie));
+  CHECK_EQ(runtime.calc_private_device_size(), sizeof(DeviceCookie) + sizeof(void *));
   CHECK_EQ(DeviceTable::private_bytes, sizeof(DeviceCookie) + sizeof(void *));
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 

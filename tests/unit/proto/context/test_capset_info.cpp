@@ -150,7 +150,7 @@ TEST(capset_info_decode, rejects_each_malformed_field)
   const Case cases[] = {
       {0u, 0x00u},    /* magic */
       {8u, 0x00u},    /* no sub-API */
-      {8u, 0x0Fu},    /* unknown sub-API bit */
+      {8u, 0x1Fu},    /* unknown sub-API bit */
       {12u, 0x00u},   /* zero contexts (low byte of 64) */
       {16u, 11u},     /* min order below 12 */
       {17u, 25u},     /* max order above 24 */
@@ -190,8 +190,8 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
   /* What the capset does not judge is what a flip survives: the protocol
    * version (32 bits), the feature mask, whose unknown bits are kept on purpose
    * (64), the two PCI ids (64), the UUID (128) and the two memory sizes (128).
-   * What it does judge leaves less: three flips of the sub-api mask stay inside
-   * 0x7 and non-empty, every flip of 64 contexts but the one that clears it is
+   * What it does judge leaves less: four flips of the sub-api mask stay inside
+   * 0xF and non-empty, every flip of 64 contexts but the one that clears it is
    * still a count, two flips of the lowest ring order and three of the highest
    * stay inside [12, 24] and in order, and two flips of the device type stay
    * within VkPhysicalDeviceType. The 48-byte name must be text then zeroes:
@@ -201,7 +201,7 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
    * input is short of 128 bytes, all-zero and all-ones carry no magic, and the
    * untouched capset is the last acceptance. */
   const std::uint32_t acceptable =
-      32u + 64u + 64u + 128u + 128u + 3u + 31u + 2u + 3u + 2u + 180u + 1u;
+      32u + 64u + 64u + 128u + 128u + 4u + 31u + 2u + 3u + 2u + 180u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_writer_latches)

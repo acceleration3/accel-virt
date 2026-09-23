@@ -238,6 +238,8 @@ def arguments():
     parser.add_argument("--host-gpu", default="auto",
                         help="the device's host-gpu property: auto, or a Vulkan device UUID (tools/host/list_gpus.py)")
     parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
+    parser.add_argument("--d3d-runtime", default=str(ROOT / "build-d3d" / "lib"),
+                        help="the directory the executor loads DXVK and vkd3d-proton from (RVK_D3D_PATH)")
     parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
     parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
     parser.add_argument("--inspect", default=str(ROOT / "build" / "guest" / "rvkinspect.exe"),
@@ -855,6 +857,11 @@ class GuestRun:
                      f"build/rvkrecord print it")
         output = open(self.qemu_log, "wb")
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
+        # Where the executor library loads the host's Direct3D from: DXVK and
+        # vkd3d-proton as tools/build_d3d_runtime.sh installs them. A checkout
+        # without them runs every other sub-API (src/device/shim/d3d_runtime.hpp).
+        if os.path.isdir(self.args.d3d_runtime) and "RVK_D3D_PATH" not in environment:
+            environment["RVK_D3D_PATH"] = os.path.abspath(self.args.d3d_runtime)
         # What the test executor is told to do to the host's work: a stall
         # longer than TdrDelay is what dxgkrnl times out on (feature 040, US3).
         if self.args.stall_ms:

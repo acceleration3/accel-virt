@@ -34,6 +34,12 @@ public:
     /* Whether an Interface an OpenAdapter or a CreateDevice asked with is the
      * interface half of a word in this list. */
     bool     serves(uint32_t interface_version) const;
+    /* Whether an OpenAdapter may ask with this Interface: the runtime opens
+     * with the oldest interface of the family it will negotiate in (d3d11.dll
+     * on 26100 asks with WDDM 2.0's) and settles the device's version through
+     * GetSupportedVersions, so any interface of a served word's major at or
+     * below that word opens. */
+    bool     opens(uint32_t interface_version) const;
     /* A null `entries` is refused. A null `words` answers the count. An
      * `*entries` below the count is refused with the count written back, as
      * the runtime's own buffer growth expects. */

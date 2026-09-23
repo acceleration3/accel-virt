@@ -65,18 +65,17 @@ public:
     bool invariants_hold() const;
 
 private:
-    struct Entry {
-        uint32_t      id;
-        D3dObjectKind kind;
-        bool          tombstone;
-        IUnknown     *object;
-    };
-
     uint32_t slot_of(uint32_t id) const;
     uint32_t home_of(uint32_t id) const;
+    void     set(uint32_t slot, uint32_t id, D3dObjectKind kind, bool tombstone, IUnknown *object);
 
-    Entry    entries_[capacity];
-    uint32_t count_;
+    /* One slot across the four: the guest's id, what it names, whether a
+     * removal left the slot (so a probe carries on past it), and the object. */
+    uint32_t      ids_[capacity];
+    D3dObjectKind kinds_[capacity];
+    bool          tombstones_[capacity];
+    IUnknown     *objects_[capacity];
+    uint32_t      count_;
 };
 
 }  // namespace av

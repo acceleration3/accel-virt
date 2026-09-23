@@ -58,7 +58,7 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
     opened = nullptr;
     if (callbacks == nullptr) return hr_invalid_arg;
     const DdiVersionList versions(runtime);
-    if (runtime == RuntimeKind::d3d10_11 && !versions.serves(interface_version)) {
+    if (runtime == RuntimeKind::d3d10_11 && !versions.opens(interface_version)) {
         note("open refused, interface", interface_version);
         return hr_no_interface;
     }

@@ -68,7 +68,7 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   av::ExecutorRootProbe probe(root);
   av::MockSessionBackend backends[3];
   std::uint8_t           blocks[3][256];
-  const std::uint32_t    apis_in_slot[3] = {RVK_EXECUTOR_SUB_API_OPENCL, RVK_EXECUTOR_SUB_API_OPENGL, 8u};
+  const std::uint32_t    apis_in_slot[3] = {RVK_EXECUTOR_SUB_API_OPENCL, RVK_EXECUTOR_SUB_API_OPENGL, 16u};
   for (std::uint32_t slot = 0u; slot < 3u; slot++) {
     CHECK_STATUS(probe.session_at(slot).initialize(backends[slot], blocks[slot], sizeof blocks[slot]), Status::ok);
     probe.remember(slot, apis_in_slot[slot], 0u);

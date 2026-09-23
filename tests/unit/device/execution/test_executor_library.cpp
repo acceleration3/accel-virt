@@ -52,7 +52,7 @@ TEST(executor_library_sub_apis, bits_the_protocol_does_not_know_are_not_offered)
 { MockExecutorOps ops(0xFFFFFFFFu);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_EQ(library.sub_apis(), 7u); }
+  CHECK_EQ(library.sub_apis(), 15u); }
 
 /* A version 1 library keeps working and imports nothing; a version 2 one must
  * carry all three memory operations or it is not version 2 (feature 042). */
