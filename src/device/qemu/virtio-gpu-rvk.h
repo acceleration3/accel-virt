@@ -62,6 +62,12 @@ struct VirtIOGPURvk {
     /* The dma-buf each head is showing, which QEMU's display holds an import
      * of until it is told otherwise; NULL for a head showing nothing. */
     QemuDmaBuf *scanouts[VIRTIO_GPU_MAX_SCANOUTS];
+    /* A GL display's view of the executor's exported images, one per head and
+     * slot, kept so the display imports each image once rather than a frame;
+     * `showing` is the slot on screen, or -1 while the 2D surface is. */
+    QemuDmaBuf *exported[VIRTIO_GPU_MAX_SCANOUTS][2];
+    int32_t exported_fd[VIRTIO_GPU_MAX_SCANOUTS][2];
+    int32_t showing[VIRTIO_GPU_MAX_SCANOUTS];
 };
 
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and
@@ -73,5 +79,11 @@ void virtio_gpu_rvk_host_finish(VirtIOGPURvk *r);
 /* rvk_device_pci_identity for the PCI wrapper, which is a module of its own
  * and must not link a second copy of the core to ask it. */
 int virtio_gpu_rvk_pci_identity(VirtIOGPURvk *r, RvkPciIdentity *identity);
+
+/* Head `head` shows `image` straight from the executor's dma-buf; false
+ * where the head's display has no GL. */
+bool virtio_gpu_rvk_show_image(VirtIOGPURvk *r, uint32_t head, const RvkExportedImage *image);
+/* Head `head` goes back to its 2D surface, which new pixels were written to. */
+void virtio_gpu_rvk_show_surface(VirtIOGPURvk *r, uint32_t head);
 
 #endif

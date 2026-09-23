@@ -55,6 +55,7 @@ public:
     /* Main loop: the host image a guest allocation shows under `key`, into a
      * display surface's `pixels`. False before realize or for a key nothing
      * is published under. */
+    bool                 export_image(uint64_t key, RvkExportedImage &image);
     bool                 read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* Main loop. The bound host GPU's PCI identity, which the PCI function
      * presents as its own: false, leaving `identity` untouched, before realize

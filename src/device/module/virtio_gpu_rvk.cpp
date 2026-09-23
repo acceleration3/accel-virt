@@ -189,6 +189,14 @@ bool VirtioGpuRvk::realized() const
     return binding_.bound();
 }
 
+bool VirtioGpuRvk::export_image(uint64_t key, RvkExportedImage &image)
+{
+    AV_SCOPE("VirtioGpuRvk::export_image");
+    if (!realized()) return false;
+    contexts_.settle_d3d();
+    return library_.export_image(capset_.info().gpu().uuid(), key, image);
+}
+
 bool VirtioGpuRvk::read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
 {
     AV_SCOPE("VirtioGpuRvk::read_image");

@@ -49,6 +49,14 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
+bool ExecutorRoot::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image)
+{
+    AV_SCOPE("ExecutorRoot::export_image");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->export_image(key, image);
+}
+
 bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                               uint32_t height)
 {

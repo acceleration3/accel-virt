@@ -228,6 +228,9 @@ RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *execut
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
 /* Main loop: the host image published under `key` into a display surface's
  * `pixels` (B8G8R8A8, `stride` bytes a row). 1 when it was read. */
+/* The image published under `key` as a dma-buf the executor owns (see
+ * RvkExportedImage); 1 when there is one. Main loop. */
+int rvk_device_export_image(RvkDevice *device, uint64_t key, RvkExportedImage *image);
 int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                           uint32_t height);
 /* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT

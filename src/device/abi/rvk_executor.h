@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 8u
+#define RVK_EXECUTOR_ABI_VERSION 9u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -57,6 +57,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_SHARING 6u
 #define RVK_EXECUTOR_ABI_VERSION_IMAGES 7u
 #define RVK_EXECUTOR_ABI_VERSION_BATCHES 8u
+#define RVK_EXECUTOR_ABI_VERSION_EXPORTS 9u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -130,6 +131,21 @@ typedef struct RvkContextOptions {
     uint8_t flags;
     uint32_t reserved; /* 0 */
 } RvkContextOptions;
+
+/* A published image copied into one of the executor's exportable images: a
+ * dma-buf the executor keeps owning (a caller that keeps it duplicates it),
+ * which of its images `slot` is, and how the display reads it. */
+typedef struct RvkExportedImage {
+    int32_t  fd;
+    uint32_t slot;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+    uint32_t offset;
+    uint32_t fourcc;
+    uint32_t reserved;
+    uint64_t modifier;
+} RvkExportedImage;
 
 typedef struct RvkExecutorOps {
     uint32_t abi_version;
@@ -248,6 +264,12 @@ typedef struct RvkExecutorOps {
      * every command of the batch needs - a host device's lock - across the
      * batch rather than taking it per command. */
     void (*end_batch)(void *opaque, RvkExecutor *executor);
+
+    /* ABI 9: the image published under `key`, copied on the GPU into an
+     * exportable image and handed over as a dma-buf once the copy is done.
+     * RVK_EXECUTED, or RVK_UNKNOWN where no session published the key or the
+     * host cannot export. Main loop. */
+    uint32_t (*export_image)(void *opaque, const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage *image);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

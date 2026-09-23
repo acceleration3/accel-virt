@@ -58,6 +58,7 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
 void D3d11HostDevice::close()
 {
     AV_SCOPE("D3d11HostDevice::close");
+    exports_.release();
     shared_.clear();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
@@ -84,6 +85,36 @@ bool D3d11HostDevice::read_image(uint64_t key, void *pixels, uint32_t stride, ui
     unlock();
     if (!staged) return false;
     return drain(wanted, static_cast<uint8_t *>(pixels), stride, width, height);
+}
+
+/* Queued under the lock and waited for outside it, as a readback is. */
+bool D3d11HostDevice::export_image(uint64_t key, RvkExportedImage &image)
+{
+    AV_SCOPE("D3d11HostDevice::export_image");
+    constexpr long     poll_nanoseconds = 50000;
+    constexpr uint32_t most_polls = 400u;   /* 20 ms */
+    if (device_ == nullptr) return false;
+    lock(nullptr);
+    IUnknown        *const published = shared_.find(key);
+    ID3D11Texture2D *texture = nullptr;
+    const bool found = published != nullptr &&
+                       SUCCEEDED(published->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
+    if (published != nullptr) published->Release();
+    uint32_t   slot = 0u;
+    const bool staged = found && exports_.stage(device_, context_, texture, slot);
+    if (texture != nullptr) texture->Release();
+    unlock();
+    if (!staged) return false;
+    for (uint32_t poll = 0u; poll < most_polls; poll++) {
+        lock(nullptr);
+        const bool done = exports_.copied(context_, slot);
+        unlock();
+        if (done) break;
+        const timespec pause = {0, poll_nanoseconds};
+        nanosleep(&pause, nullptr);
+    }
+    exports_.describe(slot, image);
+    return true;
 }
 
 bool D3d11HostDevice::stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted)

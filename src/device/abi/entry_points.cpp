@@ -35,6 +35,9 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().control(request, type) ? 1 : 0; }
 
 __attribute__((visibility("default")))
+int rvk_device_export_image(RvkDevice *device, uint64_t key, RvkExportedImage *image)
+{ return image != nullptr && reinterpret_cast<av::DeviceInstance *>(device)->device().export_image(key, *image) ? 1 : 0; }
+
 int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().read_image(key, pixels, stride, width, height) ? 1 : 0; }
 

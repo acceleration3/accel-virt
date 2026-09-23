@@ -90,6 +90,9 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     };
     char error[256];
 
+    for (uint32_t head = 0; head < VIRTIO_GPU_MAX_SCANOUTS; head++) {
+        r->showing[head] = -1;
+    }
     /* Before the core: its capset reports host-visible memory from the region. */
     if (virtio_gpu_hostmem_enabled(b->conf)) {
         void *map = qemu_ram_mmap(-1, b->conf.hostmem, qemu_real_host_page_size(), 0, 0);
@@ -192,14 +195,32 @@ struct virtio_gpu_rvk_scanout_image {
     uint64_t key;
 };
 
+/* The head scanning `resource_id` out; head 0 when none is. */
+static uint32_t virtio_gpu_rvk_head_of(VirtIOGPU *g, uint32_t resource_id)
+{
+    VirtIOGPUBase *b = VIRTIO_GPU_BASE(g);
+
+    for (uint32_t head = 0; head < b->conf.max_outputs && head < VIRTIO_GPU_MAX_SCANOUTS; head++) {
+        if (b->scanout[head].resource_id == resource_id) {
+            return head;
+        }
+    }
+    return 0;
+}
+
 static void virtio_gpu_rvk_scanout_image(VirtIOGPU *g, VirtIOGPURvk *r, struct virtio_gpu_ctrl_command *cmd)
 {
     struct virtio_gpu_rvk_scanout_image request;
     struct virtio_gpu_simple_resource *resource;
     enum virtio_gpu_ctrl_type answer = VIRTIO_GPU_RESP_OK_NODATA;
+    RvkExportedImage exported;
 
     if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &request, sizeof(request)) != sizeof(request)) {
         answer = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+    } else if (rvk_device_export_image(r->core, le64_to_cpu(request.key), &exported) &&
+               virtio_gpu_rvk_show_image(r, virtio_gpu_rvk_head_of(g, le32_to_cpu(request.resource_id)), &exported)) {
+        /* A GL display composes the host's image as it is: nothing is read back. */
+        answer = VIRTIO_GPU_RESP_OK_NODATA;
     } else {
         resource = virtio_gpu_find_resource(g, le32_to_cpu(request.resource_id));
         if (resource == NULL || resource->image == NULL) {
@@ -223,6 +244,13 @@ static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comm
         virtio_gpu_ctrl_hdr_bswap(&header);
         /* virtio_gpu_ctrl_response copies fence, flags and context from here. */
         cmd->cmd_hdr = header;
+        if (header.type == VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D) {
+            struct virtio_gpu_transfer_to_host_2d transfer;
+            /* Guest pixels for a resource: its head shows the 2D surface again. */
+            if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &transfer, sizeof(transfer)) == sizeof(transfer)) {
+                virtio_gpu_rvk_show_surface(r, virtio_gpu_rvk_head_of(g, le32_to_cpu(transfer.resource_id)));
+            }
+        }
         if (header.type == VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE) {
             virtio_gpu_rvk_scanout_image(g, r, cmd);
             return;

@@ -27,6 +27,13 @@ build() {
     meson install -C "$dir" --quiet
 }
 
+# The pinned DXVK with what this project needs of it that upstream does not
+# enable: tools/dxvk-patches, applied once (a patch already in the tree is kept).
+for patch in "$ROOT"/tools/dxvk-patches/*.patch; do
+    git -C "$ROOT/third_party/dxvk" apply --reverse --check "$patch" 2>/dev/null ||
+        git -C "$ROOT/third_party/dxvk" apply "$patch"
+done
+
 # Direct3D 8, 9 and 10 stay out: the guest's user-mode driver serves 11 and 12.
 build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
 build vkd3d-proton "$ROOT/third_party/vkd3d-proton"

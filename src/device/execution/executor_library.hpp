@@ -53,6 +53,7 @@ public:
     uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const;
     /* The host image under `key`, read into `pixels` (version 7); false for a
      * library too old to or a key it does not know. */
+    bool                 export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) const;
     bool                 read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                                     uint32_t width, uint32_t height) const;
     /* Whether the library answers the wire handle an import made (version 3),

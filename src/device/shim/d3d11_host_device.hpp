@@ -19,6 +19,7 @@
 
 #include "device/shim/d3d11_capabilities.hpp"
 #include "device/shim/d3d_shared_resources.hpp"
+#include "device/shim/host_image_export.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -63,6 +64,8 @@ public:
      * `stride` bytes apart, as much of it as fits `width` by `height`. False
      * for a key nothing is published under. Takes the device's lock. */
     [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
+    /* The image published under `key` as a dma-buf (HostImageExport). */
+    [[nodiscard]] bool export_image(uint64_t key, RvkExportedImage &image);
 
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
@@ -82,6 +85,7 @@ private:
     uint32_t                feature_level_;
     D3d11Capabilities       capabilities_;
     D3dSharedResources      shared_;
+    HostImageExport         exports_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;

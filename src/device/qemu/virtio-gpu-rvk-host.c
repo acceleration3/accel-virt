@@ -830,6 +830,76 @@ static int rvk_show_scanout(void *opaque, uint32_t head, int fd, const RvkScanou
     return 0;
 }
 
+static void rvk_drop_exported(VirtIOGPURvk *r, uint32_t head, uint32_t slot, QemuConsole *con)
+{
+    if (!r->exported[head][slot]) {
+        return;
+    }
+    qemu_console_gl_release_dmabuf(con, r->exported[head][slot]);
+    qemu_dmabuf_close(r->exported[head][slot]);
+    g_clear_pointer(&r->exported[head][slot], qemu_dmabuf_free);
+}
+
+bool virtio_gpu_rvk_show_image(VirtIOGPURvk *r, uint32_t head, const RvkExportedImage *image)
+{
+    QemuConsole *con = rvk_head_console(r, head);
+    QemuDmaBuf *buffer;
+    int32_t duplicate;
+    uint32_t stride, offset;
+
+    if (!con || !qemu_console_has_gl(con) || image->slot >= 2 || image->fd < 0) {
+        return false;
+    }
+    buffer = r->exported[head][image->slot];
+    if (buffer && (r->exported_fd[head][image->slot] != image->fd ||
+                   qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height)) {
+        if (r->showing[head] == (int32_t)image->slot) {
+            r->showing[head] = -1;
+        }
+        rvk_drop_exported(r, head, image->slot, con);
+        buffer = NULL;
+    }
+    if (!buffer) {
+        duplicate = dup(image->fd);
+        if (duplicate < 0) {
+            return false;
+        }
+        stride = image->stride;
+        offset = image->offset;
+        buffer = qemu_dmabuf_new(image->width, image->height, &offset, &stride, 0, 0, image->width, image->height,
+                                 image->fourcc, image->modifier, &duplicate, 1, false, false);
+        r->exported[head][image->slot] = buffer;
+        r->exported_fd[head][image->slot] = image->fd;
+    }
+    if (r->showing[head] != (int32_t)image->slot) {
+        VIRTIO_GPU_BASE(r)->enable = 1;
+        /* A resize replaces the console's surface, which the window shows as
+         * a blank frame: only when the size is new. */
+        if (qemu_console_get_width(con, 0) != (int)image->width || qemu_console_get_height(con, 0) != (int)image->height) {
+            qemu_console_resize(con, image->width, image->height);
+        }
+        if (r->showing[head] < 0) {
+            fprintf(stderr, "virtio-gpu-rvk: head %u shows exported images\n", head);
+        }
+        qemu_console_gl_scanout_dmabuf(con, buffer);
+        r->showing[head] = (int32_t)image->slot;
+    }
+    qemu_console_gl_update(con, 0, 0, image->width, image->height);
+    return true;
+}
+
+void virtio_gpu_rvk_show_surface(VirtIOGPURvk *r, uint32_t head)
+{
+    QemuConsole *con = rvk_head_console(r, head);
+
+    if (!con || r->showing[head] < 0) {
+        return;
+    }
+    fprintf(stderr, "virtio-gpu-rvk: head %u back to its 2D surface\n", head);
+    qemu_console_gl_scanout_disable(con);
+    r->showing[head] = -1;
+}
+
 static void rvk_update_scanout(void *opaque, uint32_t head, uint32_t x, uint32_t y, uint32_t width,
                                uint32_t height)
 {
