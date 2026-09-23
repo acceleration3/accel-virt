@@ -12,6 +12,8 @@
 
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu_set.hpp"
+#include "device/shim/d3d11_host_device.hpp"
+#include "device/shim/d3d_runtime.hpp"
 #include "device/shim/gl_display.hpp"
 #include "device/shim/opencl_device.hpp"
 
@@ -36,6 +38,7 @@ public:
     uint32_t import_kinds(uint32_t index, uint32_t sub_api) override;
     const GlDisplay    *gl_display(uint32_t index) override;
     const OpenClDevice *opencl_device(uint32_t index) override;
+    D3d11HostDevice    *d3d11_device(uint32_t index) override;
 
 private:
     static constexpr uint32_t uuid_bytes = 16u;
@@ -61,6 +64,11 @@ private:
      * has been wrong on this host at least once. Both are kept once found. */
     OpenClDevice opencl_devices_[HostGpuSet::max_gpus];
     GlDisplay    gl_displays_[HostGpuSet::max_gpus];
+    /* Direct3D is served where DXVK makes a device on the GPU, found and made
+     * here for the reason the displays are: a device made inside a guest's
+     * first batch would cost it dxgkrnl's timeout. */
+    D3dRuntime      d3d_runtime_;
+    D3d11HostDevice d3d11_devices_[HostGpuSet::max_gpus];
     VkExtensionProperties extensions_[max_extensions];
     uint32_t count_;
     bool     opened_;

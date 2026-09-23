@@ -91,6 +91,7 @@ private:
     static constexpr uint16_t vulkan_commands = 1u;
     static constexpr uint16_t opencl_commands = 2u;
     static constexpr uint16_t opengl_commands = 3u;
+    static constexpr uint16_t d3d_commands = 4u;
 
     RvkExecutor *make() const;
 

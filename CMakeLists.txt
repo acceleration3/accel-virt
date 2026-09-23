@@ -71,7 +71,8 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp)
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
@@ -83,7 +84,9 @@ set(AV_GENERATED_SOURCES
   # The OpenGL host decode path, which compiles now that the sync hooks are
   # fields on RealGl rather than free functions with nowhere to keep state
   # (feature 042).
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp
+  # Direct3D's, from the registry this project writes (tools/codegen/registry).
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_server.cpp)
 
 # The OpenGL tree writes its own gl_types.h from the registry and includes it by
 # name, so it needs its own directory on the include path and no external header.
@@ -116,7 +119,8 @@ list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
 # device core for QEMU below never encodes one.
 set(AV_GENERATED_CLIENT_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp)
 if(AV_GENERATED)
   list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES} ${AV_GENERATED_CLIENT_SOURCES})
 endif()
@@ -149,6 +153,12 @@ endif()
 if(AV_GENERATED)
   target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
+# The Direct3D API as DXVK's native build declares it, for the executor's
+# Direct3D backend: third_party/dxvk is a submodule, so its headers are there
+# on any checkout, whether or not DXVK itself was built.
+set(AV_DXVK_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/dxvk/include/native/directx
+                    ${CMAKE_SOURCE_DIR}/third_party/dxvk/include/native/windows)
+target_include_directories(av_core SYSTEM PUBLIC ${AV_DXVK_INCLUDE})
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
@@ -163,6 +173,9 @@ list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
+# The Direct3D translation runs in the executor library, never in the device:
+# it loads DXVK through the environment the freestanding device cannot read.
+list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim|executor)/(d3d|dxbc|dxgi)[^/]*\\.cpp$")
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
 list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
 if(AV_GENERATED)
@@ -175,6 +188,7 @@ if(AV_GENERATED)
 endif()
 # Unwind tables, which -ffreestanding with -fno-exceptions leaves out: the crash
 # file walks the faulting thread's stack through them (docs/trace.md).
+target_include_directories(rvk_device SYSTEM PRIVATE ${AV_DXVK_INCLUDE})
 target_compile_options(rvk_device PRIVATE -O2 -ffreestanding -fasynchronous-unwind-tables)
 set_target_properties(rvk_device PROPERTIES
   POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -394,6 +408,12 @@ foreach(src ${AV_UNIT_TESTS})
   # The full-stack rig's rvk run links the executor library's own entry point:
   # its device core runs the table rvk_executor_ops() answers, in process, on
   # this machine's GPU (feature 044, T028).
+  # DXVK's driver threads allocate from modules they unload before exit, which
+  # LeakSanitizer reports as `<unknown module>` and no suppression can name.
+  if(name STREQUAL "test_d3d_backend_device")
+    set_tests_properties(${name} PROPERTIES ENVIRONMENT
+      "MESA_SHADER_CACHE_DISABLE=true;ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib")
+  endif()
   if(name STREQUAL "test_fullstack_rvk")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
   endif()

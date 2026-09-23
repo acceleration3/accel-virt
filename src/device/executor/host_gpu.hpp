@@ -46,7 +46,7 @@ private:
 
     /* Vulkan, OpenGL, OpenCL: the three bits the ABI defines, and the only
      * sub-APIs a context can name. */
-    static constexpr uint32_t sub_api_count = 3u;
+    static constexpr uint32_t sub_api_count = 4u;
 
     /* The slot `sub_api`'s kinds live in, or sub_api_count for a value that is
      * not one of the three bits. */

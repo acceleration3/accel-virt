@@ -52,7 +52,7 @@ public:
 
 private:
     static constexpr uint32_t magic           = 0x314B5652u;  /* "RVK1" */
-    static constexpr uint32_t known_sub_apis  = 0x7u;
+    static constexpr uint32_t known_sub_apis  = 0xFu;
     static constexpr uint8_t  lowest_order    = 12u;
     static constexpr uint8_t  highest_order   = 24u;
 

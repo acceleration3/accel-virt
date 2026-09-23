@@ -35,7 +35,7 @@ public:
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);
 
     uint32_t id() const;
-    /* 0 transport, 1 Vulkan, 2 OpenCL, 3 OpenGL. */
+    /* 0 transport, 1 Vulkan, 2 OpenCL, 3 OpenGL, 4 Direct3D. */
     uint16_t api() const;
     uint32_t size() const;
     bool     generates_reply() const;

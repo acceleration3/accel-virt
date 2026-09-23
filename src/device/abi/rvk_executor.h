@@ -61,6 +61,7 @@ extern "C" {
 #define RVK_EXECUTOR_SUB_API_VULKAN 1u
 #define RVK_EXECUTOR_SUB_API_OPENGL 2u
 #define RVK_EXECUTOR_SUB_API_OPENCL 4u
+#define RVK_EXECUTOR_SUB_API_D3D 8u
 
 /* What execute answers. */
 #define RVK_EXECUTED 0u         /* ran; *reply_size bytes of answer, or 0 */

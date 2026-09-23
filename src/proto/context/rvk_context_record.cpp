@@ -71,7 +71,8 @@ bool RvkContextRecord::fields_valid() const
     AV_SCOPE("RvkContextRecord::fields_valid");
     const bool one_known_api = sub_api_ == static_cast<uint32_t>(SubApi::vulkan) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opengl) ||
-                               sub_api_ == static_cast<uint32_t>(SubApi::opencl);
+                               sub_api_ == static_cast<uint32_t>(SubApi::opencl) ||
+                               sub_api_ == static_cast<uint32_t>(SubApi::d3d);
     const bool distinct_reply =
         reply_ == 0u || (reply_ != ring_ && reply_ != fence_);
     const bool options_fit =

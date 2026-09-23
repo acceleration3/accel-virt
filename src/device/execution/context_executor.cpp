@@ -174,6 +174,7 @@ uint16_t ContextExecutor::command_api() const
     switch (api_) {
     case SubApi::vulkan: return vulkan_commands;
     case SubApi::opencl: return opencl_commands;
+    case SubApi::d3d: return d3d_commands;
     default: return opengl_commands;
     }
 }

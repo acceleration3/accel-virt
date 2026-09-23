@@ -14,6 +14,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
+#include "device/executor/d3d_backend.hpp"
 #include "device/executor/host_gpu_set.hpp"
 #include "device/executor/opencl_backend.hpp"
 #include "device/executor/opengl_backend.hpp"
@@ -122,6 +123,7 @@ private:
     VulkanBackend  vulkan_[max_sessions];
     OpenClBackend  opencl_[max_sessions];
     OpenGlBackend  opengl_[max_sessions];
+    D3dBackend     d3d_[max_sessions];
     /* What each open session runs: its sub-API and its GPU's index, for a
      * share's check and the dump. */
     uint32_t       apis_of_[max_sessions];

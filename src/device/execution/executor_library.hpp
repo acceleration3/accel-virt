@@ -77,7 +77,7 @@ public:
     void                 release_object(RvkExecutor *executor, uint32_t kind, uint64_t wire_handle) const;
 
 private:
-    static constexpr uint32_t known_sub_apis = 7u;
+    static constexpr uint32_t known_sub_apis = 15u;
     /* RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF: a kind this device does not
      * know is a kind it cannot build a handle for, so it is not offered. */
     static constexpr uint32_t known_handle_kinds = 3u;

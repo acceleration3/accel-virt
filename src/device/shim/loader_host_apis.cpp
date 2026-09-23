@@ -10,7 +10,7 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
-      gl_displays_{}, extensions_{}, count_(0u),
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, extensions_{}, count_(0u),
       opened_(false)
       {
           AV_SCOPE("LoaderHostApis::LoaderHostApis");
@@ -80,6 +80,12 @@ void LoaderHostApis::enumerate()
         }
         if (gl_displays_[i].open(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENGL;
     }
+    /* After the loop: DXVK makes a Vulkan instance of its own, and asking it
+     * about each GPU in turn is one factory and one enumeration. */
+    if (d3d_runtime_.open()) {
+        for (uint32_t i = 0u; i < found; i++)
+            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_D3D;
+    }
     count_ = found;
 }
 
@@ -118,6 +124,7 @@ void LoaderHostApis::close()
     AV_SCOPE("LoaderHostApis::close");
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
+        d3d11_devices_[i].close();
         opencl_devices_[i].forget();
     }
     if (instance_ != nullptr) vkDestroyInstance(static_cast<VkInstance>(instance_), nullptr);
@@ -154,6 +161,8 @@ uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
     /* OpenGL takes a host pointer as its context's region, not as a GL object
      * (feature 050), so any GPU it runs on takes one. */
     if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL && gl_displays_[index].open()) return RVK_BLOB_HOST_POINTER;
+    /* Direct3D takes its blob arena as a region, as OpenGL does. */
+    if (sub_api == RVK_EXECUTOR_SUB_API_D3D && d3d11_devices_[index].opened()) return RVK_BLOB_HOST_POINTER;
     return 0u;
 }
 
@@ -167,6 +176,12 @@ const OpenClDevice *LoaderHostApis::opencl_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::opencl_device");
     return index < count_ && opencl_devices_[index].device() != nullptr ? &opencl_devices_[index] : nullptr;
+}
+
+D3d11HostDevice *LoaderHostApis::d3d11_device(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::d3d11_device");
+    return index < count_ && d3d11_devices_[index].opened() ? &d3d11_devices_[index] : nullptr;
 }
 
 }  // namespace av

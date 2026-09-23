@@ -12,7 +12,7 @@ namespace {
 
 /* The three sub-API bits, in the order their kinds are cached. */
 constexpr uint32_t sub_api_bits[] = {RVK_EXECUTOR_SUB_API_VULKAN, RVK_EXECUTOR_SUB_API_OPENGL,
-                                     RVK_EXECUTOR_SUB_API_OPENCL};
+                                     RVK_EXECUTOR_SUB_API_OPENCL, RVK_EXECUTOR_SUB_API_D3D};
 
 }  // namespace
 

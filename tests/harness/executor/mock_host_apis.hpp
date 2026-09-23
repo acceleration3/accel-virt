@@ -33,6 +33,7 @@ public:
      * it, so a context of either API on one is refused when it opens. */
     const GlDisplay    *gl_display(uint32_t index) override;
     const OpenClDevice *opencl_device(uint32_t index) override;
+    D3d11HostDevice    *d3d11_device(uint32_t index) override;
 
 private:
     struct Gpu {

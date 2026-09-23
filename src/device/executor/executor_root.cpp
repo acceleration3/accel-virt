@@ -18,7 +18,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 }  // namespace
 
 ExecutorRoot::ExecutorRoot()
-    : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_of_{}, gpus_of_{}, apis_(nullptr)
+    : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, apis_of_{}, gpus_of_{}, apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
 }
@@ -98,6 +98,7 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
     case RVK_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
     case RVK_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
     case RVK_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
+    case RVK_EXECUTOR_SUB_API_D3D: return &d3d_[slot];
     default: return nullptr;
     }
 }
@@ -122,6 +123,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     case RVK_EXECUTOR_SUB_API_OPENCL: return opencl_[slot].initialize(apis_->opencl_device(gpu.index()));
     case RVK_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
+    case RVK_EXECUTOR_SUB_API_D3D: return d3d_[slot].initialize(apis_->d3d11_device(gpu.index()));
     default: vulkan_[slot].initialize(gpu); return true;
     }
 }
@@ -141,6 +143,7 @@ void ExecutorRoot::close(ContextSession *session)
         vulkan_[slot].shut_down();
         opencl_[slot].shut_down();
         opengl_[slot].shut_down();
+        d3d_[slot].shut_down();
     }
 }
 
@@ -209,6 +212,7 @@ const char *ExecutorRoot::api_name(uint32_t sub_api) const
     case RVK_EXECUTOR_SUB_API_VULKAN: return "vulkan";
     case RVK_EXECUTOR_SUB_API_OPENCL: return "opencl";
     case RVK_EXECUTOR_SUB_API_OPENGL: return "opengl";
+    case RVK_EXECUTOR_SUB_API_D3D: return "d3d";
     default: return "unknown";
     }
 }

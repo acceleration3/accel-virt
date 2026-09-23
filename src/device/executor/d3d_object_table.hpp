@@ -1,0 +1,84 @@
+/* Every Direct3D object one session made, by the id the guest named it with.
+ *
+ * The guest chooses the ids - a user-mode driver has to name an object in the
+ * same batch that creates it, long before any answer could come back - so the
+ * table is keyed by the guest's number and the host accepts a number only
+ * where it made an object of the kind the command wants. An id naming
+ * nothing, or naming a sampler where a view belongs, is a refused command,
+ * never a pointer handed to DXVK.
+ *
+ * Open addressing over a fixed table: a desktop compositor holds a few
+ * thousand objects, and a guest that wants more than this is refused rather
+ * than served. Each entry holds one reference to its object. */
+#ifndef AV_D3D_OBJECT_TABLE_HPP
+#define AV_D3D_OBJECT_TABLE_HPP
+
+#include <stdint.h>
+
+struct IUnknown;
+
+namespace av {
+
+enum class D3dObjectKind : uint8_t {
+    none,
+    resource,
+    shader_resource_view,
+    render_target_view,
+    depth_stencil_view,
+    unordered_access_view,
+    vertex_shader,
+    hull_shader,
+    domain_shader,
+    geometry_shader,
+    pixel_shader,
+    compute_shader,
+    input_layout,
+    blend_state,
+    depth_stencil_state,
+    rasterizer_state,
+    sampler,
+    query
+};
+
+class D3dObjectTable {
+public:
+    static constexpr uint32_t capacity = 32768u;
+
+    D3dObjectTable();
+    D3dObjectTable(const D3dObjectTable &) = delete;
+    D3dObjectTable &operator=(const D3dObjectTable &) = delete;
+
+    /* Takes the caller's reference to `object` under `id`. False, with the
+     * reference still the caller's, for id 0, an id in use and a full table. */
+    [[nodiscard]] bool insert(uint32_t id, D3dObjectKind kind, IUnknown *object);
+    /* The object `id` names if it is of `kind`; null otherwise. No reference
+     * is taken: the table's lasts until the id is removed. */
+    IUnknown          *find(uint32_t id, D3dObjectKind kind) const;
+    /* The object `id` names and its kind, whatever it is. */
+    IUnknown          *find_any(uint32_t id, D3dObjectKind &kind) const;
+    /* Removes `id` and gives its reference back; nothing for an unknown id. */
+    void               remove(uint32_t id);
+    /* Every reference back. */
+    void               clear();
+    uint32_t           count() const;
+
+    bool invariants_hold() const;
+
+private:
+    struct Entry {
+        uint32_t      id;
+        D3dObjectKind kind;
+        bool          tombstone;
+        IUnknown     *object;
+    };
+
+    uint32_t slot_of(uint32_t id) const;
+    uint32_t home_of(uint32_t id) const;
+
+    Entry    entries_[capacity];
+    uint32_t count_;
+};
+
+}  // namespace av
+
+#endif  // AV_D3D_OBJECT_TABLE_HPP

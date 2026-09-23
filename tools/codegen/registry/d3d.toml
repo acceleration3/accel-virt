@@ -1,0 +1,496 @@
+# The Direct3D commands the user-mode driver (rvkumd.dll) sends and the
+# executor runs on the host's Direct3D - DXVK for 11, vkd3d-proton for 12.
+#
+# This is a registry this project writes, because Direct3D has none: every
+# line here is a command the guest can send, and the generator
+# (tools/codegen/rvk_codegen/d3d) emits both ends from it. Values on the wire
+# are the Direct3D *API*'s - DXGI_FORMAT, D3D11_BIND_*, D3D11_RESOURCE_MISC_*,
+# D3D11_*_DIMENSION, D3D11_BLEND - not the DDI's, where they differ: the guest
+# translates from the DDI once, and the host hands the values to DXVK as they
+# are after judging them.
+#
+# Objects are named by a 32-bit id the guest chooses, unique within its
+# session; 0 is "none" wherever a binding may be empty. The host accepts only
+# ids it made for that session.
+#
+# Parameter grammar: "<type> <name>" or "<type> <name>[<count>] max <n>",
+# where <count> is an earlier u32 parameter. `bytes` is bulk data, inline or
+# through the context's blob arena; `out_bytes` (reply only) is bulk data the
+# host writes back.
+#
+# Ids are stable: a command keeps its id for as long as the wire does. 0x0001-
+# 0x0fff are Direct3D 11's, 0x1000-0x1fff Direct3D 12's.
+
+[meta]
+api = 4
+prefix = "d3d"
+
+# ---------------------------------------------------------------- structs
+
+[structs.Float4]
+fields = ["f32 v[4]"]
+
+[structs.Uint4]
+fields = ["u32 v[4]"]
+
+[structs.Box]
+fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 back"]
+
+[structs.Rect]
+fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
+
+[structs.Viewport]
+fields = ["f32 x", "f32 y", "f32 width", "f32 height", "f32 min_depth", "f32 max_depth"]
+
+# One resource, as D3D11_BUFFER_DESC / D3D11_TEXTURE{1,2,3}D_DESC1 flattened.
+# dimension: 1 buffer, 2 texture 1D, 3 texture 2D, 4 texture 3D
+# (D3D11_RESOURCE_DIMENSION). depth_or_array is the depth of a 3D texture and
+# the array size of the others. usage is D3D11_USAGE; the host makes every
+# resource that is not staging as default usage and uploads through
+# UpdateSubresource, so a dynamic resource's map is the guest's.
+[structs.ResourceDesc]
+fields = ["u32 dimension", "u32 width", "u32 height", "u32 depth_or_array", "u32 mip_levels", "u32 format",
+          "u32 sample_count", "u32 sample_quality", "u32 usage", "u32 bind_flags", "u32 cpu_access",
+          "u32 misc_flags", "u32 structure_stride", "u32 reserved"]
+
+# A view of any kind. dimension is the kind's own D3D11_*_DIMENSION; args are
+# that dimension's union members in declaration order (SRV: FirstElement,
+# NumElements | MostDetailedMip, MipLevels, FirstArraySlice, ArraySize ...;
+# BufferEx's Flags go in flags). flags is D3D11_DSV_FLAG for a depth-stencil
+# view, D3D11_BUFFER_UAV_FLAG for an unordered-access view.
+[structs.ViewDesc]
+fields = ["u32 resource", "u32 format", "u32 dimension", "u32 flags", "u32 args[5]", "u32 reserved"]
+
+# One element of a shader's input, output or patch-constant signature, as the
+# DDI gives it: a register and mask, the D3D_NAME system value (0 for none),
+# the D3D_REGISTER_COMPONENT_TYPE and the D3D_MIN_PRECISION. The DDI carries
+# no semantic names, so the host names every element after its register.
+[structs.SignatureEntry]
+fields = ["u32 system_value", "u32 register_index", "u32 mask", "u32 component_type", "u32 min_precision",
+          "u32 stream"]
+
+# D3D11DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY: a register's components into a
+# stream's output slot. A register of 0xffffffff is a gap of `mask`'s width.
+[structs.StreamOutEntry]
+fields = ["u32 stream", "u32 output_slot", "u32 register_index", "u32 mask"]
+
+# D3D10DDIARG_INPUT_ELEMENT_DESC: the DDI names each element's shader input
+# register rather than a semantic.
+[structs.InputElement]
+fields = ["u32 input_slot", "u32 aligned_byte_offset", "u32 format", "u32 classification", "u32 step_rate",
+          "u32 input_register"]
+
+[structs.RenderTargetBlend]
+fields = ["u32 blend_enable", "u32 logic_op_enable", "u32 src_blend", "u32 dest_blend", "u32 blend_op",
+          "u32 src_blend_alpha", "u32 dest_blend_alpha", "u32 blend_op_alpha", "u32 logic_op",
+          "u32 write_mask"]
+
+[structs.BlendDesc]
+fields = ["u32 alpha_to_coverage", "u32 independent_blend", "RenderTargetBlend targets[8]"]
+
+[structs.RasterizerDesc]
+fields = ["u32 fill_mode", "u32 cull_mode", "u32 front_counter_clockwise", "i32 depth_bias",
+          "f32 depth_bias_clamp", "f32 slope_scaled_depth_bias", "u32 depth_clip", "u32 scissor",
+          "u32 multisample", "u32 antialiased_line", "u32 forced_sample_count", "u32 conservative"]
+
+[structs.StencilOp]
+fields = ["u32 fail", "u32 depth_fail", "u32 pass", "u32 func"]
+
+[structs.DepthStencilDesc]
+fields = ["u32 depth_enable", "u32 depth_write_mask", "u32 depth_func", "u32 stencil_enable",
+          "u32 stencil_read_mask", "u32 stencil_write_mask", "StencilOp front", "StencilOp back"]
+
+[structs.SamplerDesc]
+fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 mip_lod_bias",
+          "u32 max_anisotropy", "u32 comparison", "f32 border_color[4]", "f32 min_lod", "f32 max_lod"]
+
+[structs.ConstantBufferBinding]
+fields = ["u32 buffer", "u32 first_constant", "u32 num_constants"]
+
+[structs.VertexBufferBinding]
+fields = ["u32 buffer", "u32 stride", "u32 offset"]
+
+[structs.UavBinding]
+fields = ["u32 view", "u32 initial_count"]
+
+[structs.StreamOutTarget]
+fields = ["u32 buffer", "u32 offset"]
+
+# What a device on this host GPU can do, asked once per adapter: the feature
+# level and the D3D11_FEATURE_DATA_* answers the DDI's GetCaps reports.
+[structs.Caps11]
+fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_command_lists",
+          "u32 double_precision_float_shader_ops", "u32 compute_shaders_on_10x",
+          "u32 output_merger_logic_op", "u32 uav_only_rendering_forced_sample_count",
+          "u32 discard_apis_seen_by_driver", "u32 flags_for_update_and_copy_seen_by_driver", "u32 clear_view",
+          "u32 copy_with_overlap", "u32 constant_buffer_partial_update", "u32 constant_buffer_offsetting",
+          "u32 map_no_overwrite_on_dynamic_constant_buffer", "u32 map_no_overwrite_on_dynamic_buffer_srv",
+          "u32 multisample_rtv_with_forced_sample_count_one", "u32 sad4_shader_instructions",
+          "u32 extended_doubles_shader_instructions", "u32 extended_resource_sharing",
+          "u32 tile_based_deferred_renderer", "u32 pixel_shader_min_precision",
+          "u32 all_other_shader_stages_min_precision", "u32 ps_specified_stencil_ref",
+          "u32 typed_uav_load_additional_formats", "u32 rovs", "u32 conservative_rasterization_tier",
+          "u32 tiled_resources_tier", "u32 map_on_default_textures", "u32 standard_swizzle",
+          "u32 unified_memory_architecture", "u32 vp_and_rt_array_index_from_any_shader",
+          "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 dedicated_video_memory_mb",
+          "u32 vendor_id", "u32 device_id", "u32 reserved[6]"]
+
+# One DXGI_FORMAT's D3D11_FEATURE_DATA_FORMAT_SUPPORT{,2}, and which sample
+# counts it renders at (bit n: 2^n samples) with their quality levels.
+[structs.FormatCaps]
+fields = ["u32 support", "u32 support2", "u32 sample_counts", "u32 quality_levels"]
+
+# ---------------------------------------------------------------- device
+
+[[command]]
+name = "CreateDevice11"
+id = 0x0001
+doc = """The session's device: the host's shared Direct3D 11 device for this GPU, with a context state of the
+session's own. feature_level is the highest D3D_FEATURE_LEVEL the guest's runtime may use; the answer is
+what the device runs at, and an hresult that is not S_OK leaves the session without a device."""
+params = ["u32 feature_level", "u32 flags"]
+reply = ["u32 hresult", "u32 level"]
+
+[[command]]
+name = "QueryCaps11"
+id = 0x0002
+doc = """What the device can do: Caps11, and a FormatCaps for every DXGI_FORMAT from 0 up, as many as fit."""
+params = []
+reply = ["Caps11 caps", "out_bytes formats"]
+
+[[command]]
+name = "Flush11"
+id = 0x0003
+params = []
+
+[[command]]
+name = "Finish11"
+id = 0x0004
+doc = """Waits until the host has finished every command sent before it. hresult is the device's removed reason:
+S_OK while it is not removed."""
+params = []
+reply = ["u32 hresult"]
+
+[[command]]
+name = "DestroyObject"
+id = 0x0005
+doc = """Any object this session made, by id. Destroying an id that is bound leaves it bound on the host until
+it is unbound, as Direct3D does."""
+params = ["u32 object"]
+
+# ---------------------------------------------------------------- creation
+
+[[command]]
+name = "CreateResource"
+id = 0x0100
+doc = """A resource. shared_key is non-zero for one another session may open (its KMD shared-object id): the
+host keeps it under that key until the last session holding it destroys it."""
+params = ["u32 resource", "ResourceDesc desc", "u64 shared_key"]
+
+[[command]]
+name = "OpenResource"
+id = 0x0101
+doc = """A resource another session made with this shared_key, under this session's id. found is 0 when no
+session shares one by that key, and then the id names nothing."""
+params = ["u32 resource", "u64 shared_key"]
+reply = ["u32 found", "ResourceDesc desc"]
+
+[[command]]
+name = "CreateShaderResourceView"
+id = 0x0102
+params = ["u32 view", "ViewDesc desc"]
+
+[[command]]
+name = "CreateRenderTargetView"
+id = 0x0103
+params = ["u32 view", "ViewDesc desc"]
+
+[[command]]
+name = "CreateDepthStencilView"
+id = 0x0104
+params = ["u32 view", "ViewDesc desc"]
+
+[[command]]
+name = "CreateUnorderedAccessView"
+id = 0x0105
+params = ["u32 view", "ViewDesc desc"]
+
+[[command]]
+name = "CreateShader"
+id = 0x0106
+doc = """A shader of `stage` (0 vertex, 1 hull, 2 domain, 3 geometry, 4 pixel, 5 compute) from the DDI's token
+stream and signatures; the host builds the DXBC container DXVK reads. A geometry shader with stream output
+names its declaration, the buffer strides and the rasterized stream (0xffffffff for none)."""
+params = ["u32 shader", "u32 stage", "u32 input_count", "SignatureEntry inputs[input_count] max 128",
+          "u32 output_count", "SignatureEntry outputs[output_count] max 128", "u32 patch_count",
+          "SignatureEntry patch_constants[patch_count] max 128", "u32 stream_out_count",
+          "StreamOutEntry stream_out[stream_out_count] max 128", "u32 stride_count",
+          "u32 strides[stride_count] max 4", "u32 rasterized_stream", "bytes code"]
+
+[[command]]
+name = "CreateInputLayout"
+id = 0x0107
+params = ["u32 layout", "u32 element_count", "InputElement elements[element_count] max 32"]
+
+[[command]]
+name = "CreateBlendState"
+id = 0x0108
+params = ["u32 state", "BlendDesc desc"]
+
+[[command]]
+name = "CreateDepthStencilState"
+id = 0x0109
+params = ["u32 state", "DepthStencilDesc desc"]
+
+[[command]]
+name = "CreateRasterizerState"
+id = 0x010a
+params = ["u32 state", "RasterizerDesc desc"]
+
+[[command]]
+name = "CreateSampler"
+id = 0x010b
+params = ["u32 sampler", "SamplerDesc desc"]
+
+[[command]]
+name = "CreateQuery"
+id = 0x010c
+doc = "A query or predicate of D3D11_QUERY type `type`."
+params = ["u32 query", "u32 type", "u32 misc_flags"]
+
+# ---------------------------------------------------------------- binding
+
+[[command]]
+name = "SetShader"
+id = 0x0200
+params = ["u32 stage", "u32 shader"]
+
+[[command]]
+name = "SetConstantBuffers"
+id = 0x0201
+params = ["u32 stage", "u32 start", "u32 count", "ConstantBufferBinding buffers[count] max 14"]
+
+[[command]]
+name = "SetShaderResources"
+id = 0x0202
+params = ["u32 stage", "u32 start", "u32 count", "u32 views[count] max 128"]
+
+[[command]]
+name = "SetSamplers"
+id = 0x0203
+params = ["u32 stage", "u32 start", "u32 count", "u32 samplers[count] max 16"]
+
+[[command]]
+name = "SetComputeUnorderedAccessViews"
+id = 0x0204
+params = ["u32 start", "u32 count", "UavBinding views[count] max 64"]
+
+[[command]]
+name = "SetRenderTargets"
+id = 0x0205
+doc = """Render targets, depth-stencil view and the pixel stage's unordered-access views at once, as the DDI
+sets them. uav_start is the first UAV slot; slots below it are the render targets'."""
+params = ["u32 rtv_count", "u32 rtvs[rtv_count] max 8", "u32 dsv", "u32 uav_start", "u32 uav_count",
+          "UavBinding uavs[uav_count] max 64"]
+
+[[command]]
+name = "SetInputLayout"
+id = 0x0206
+params = ["u32 layout"]
+
+[[command]]
+name = "SetVertexBuffers"
+id = 0x0207
+params = ["u32 start", "u32 count", "VertexBufferBinding buffers[count] max 32"]
+
+[[command]]
+name = "SetIndexBuffer"
+id = 0x0208
+params = ["u32 buffer", "u32 format", "u32 offset"]
+
+[[command]]
+name = "SetTopology"
+id = 0x0209
+params = ["u32 topology"]
+
+[[command]]
+name = "SetViewports"
+id = 0x020a
+params = ["u32 count", "Viewport viewports[count] max 16"]
+
+[[command]]
+name = "SetScissorRects"
+id = 0x020b
+params = ["u32 count", "Rect rects[count] max 16"]
+
+[[command]]
+name = "SetBlendState"
+id = 0x020c
+params = ["u32 state", "Float4 factor", "u32 sample_mask"]
+
+[[command]]
+name = "SetDepthStencilState"
+id = 0x020d
+params = ["u32 state", "u32 stencil_ref"]
+
+[[command]]
+name = "SetRasterizerState"
+id = 0x020e
+params = ["u32 state"]
+
+[[command]]
+name = "SetStreamOutTargets"
+id = 0x020f
+params = ["u32 count", "StreamOutTarget targets[count] max 4"]
+
+[[command]]
+name = "SetPredication"
+id = 0x0210
+params = ["u32 query", "u32 value"]
+
+[[command]]
+name = "SetResourceMinLod"
+id = 0x0211
+params = ["u32 resource", "f32 min_lod"]
+
+# ---------------------------------------------------------------- work
+
+[[command]]
+name = "Draw"
+id = 0x0300
+params = ["u32 vertex_count", "u32 start_vertex"]
+
+[[command]]
+name = "DrawIndexed"
+id = 0x0301
+params = ["u32 index_count", "u32 start_index", "i32 base_vertex"]
+
+[[command]]
+name = "DrawInstanced"
+id = 0x0302
+params = ["u32 vertex_count", "u32 instance_count", "u32 start_vertex", "u32 start_instance"]
+
+[[command]]
+name = "DrawIndexedInstanced"
+id = 0x0303
+params = ["u32 index_count", "u32 instance_count", "u32 start_index", "i32 base_vertex", "u32 start_instance"]
+
+[[command]]
+name = "DrawAuto"
+id = 0x0304
+params = []
+
+[[command]]
+name = "DrawInstancedIndirect"
+id = 0x0305
+params = ["u32 buffer", "u32 offset"]
+
+[[command]]
+name = "DrawIndexedInstancedIndirect"
+id = 0x0306
+params = ["u32 buffer", "u32 offset"]
+
+[[command]]
+name = "Dispatch"
+id = 0x0307
+params = ["u32 x", "u32 y", "u32 z"]
+
+[[command]]
+name = "DispatchIndirect"
+id = 0x0308
+params = ["u32 buffer", "u32 offset"]
+
+# ---------------------------------------------------------------- clears, copies, data
+
+[[command]]
+name = "ClearRenderTargetView"
+id = 0x0400
+params = ["u32 view", "Float4 color"]
+
+[[command]]
+name = "ClearDepthStencilView"
+id = 0x0401
+params = ["u32 view", "u32 flags", "f32 depth", "u32 stencil"]
+
+[[command]]
+name = "ClearUnorderedAccessViewUint"
+id = 0x0402
+params = ["u32 view", "Uint4 values"]
+
+[[command]]
+name = "ClearUnorderedAccessViewFloat"
+id = 0x0403
+params = ["u32 view", "Float4 values"]
+
+[[command]]
+name = "ClearView"
+id = 0x0404
+params = ["u32 view", "Float4 color", "u32 rect_count", "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "Discard"
+id = 0x0405
+doc = "Discards a resource or a view's contents (DiscardResource/DiscardView1); `object` is either."
+params = ["u32 object", "u32 rect_count", "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "CopyResource"
+id = 0x0406
+params = ["u32 destination", "u32 source"]
+
+[[command]]
+name = "CopySubresourceRegion"
+id = 0x0407
+params = ["u32 destination", "u32 destination_subresource", "u32 x", "u32 y", "u32 z", "u32 source",
+          "u32 source_subresource", "u32 has_box", "Box box", "u32 copy_flags"]
+
+[[command]]
+name = "ResolveSubresource"
+id = 0x0408
+params = ["u32 destination", "u32 destination_subresource", "u32 source", "u32 source_subresource",
+          "u32 format"]
+
+[[command]]
+name = "GenerateMips"
+id = 0x0409
+params = ["u32 view"]
+
+[[command]]
+name = "CopyStructureCount"
+id = 0x040a
+params = ["u32 destination", "u32 offset", "u32 source_view"]
+
+[[command]]
+name = "UpdateSubresource"
+id = 0x040b
+doc = """`data` into one subresource, row_pitch and depth_pitch describing it as UpdateSubresource1 does.
+Without a box the whole subresource is written."""
+params = ["u32 resource", "u32 subresource", "u32 has_box", "Box box", "u32 row_pitch", "u32 depth_pitch",
+          "u32 copy_flags", "bytes data"]
+
+[[command]]
+name = "ReadSubresource"
+id = 0x040c
+doc = """One subresource's contents, tightly packed: rows of row_pitch bytes (the format's bytes per row, or
+block row), depth_pitch bytes a slice. Everything sent before it has run when it answers."""
+params = ["u32 resource", "u32 subresource"]
+reply = ["u32 hresult", "u32 row_pitch", "u32 depth_pitch", "out_bytes data"]
+
+# ---------------------------------------------------------------- queries
+
+[[command]]
+name = "BeginQuery"
+id = 0x0500
+params = ["u32 query"]
+
+[[command]]
+name = "EndQuery"
+id = 0x0501
+params = ["u32 query"]
+
+[[command]]
+name = "GetQueryData"
+id = 0x0502
+doc = "ready is 1 with the data, 0 while the host's answer is not in yet (S_FALSE)."
+params = ["u32 query", "u32 flags"]
+reply = ["u32 ready", "out_bytes data"]
