@@ -51,6 +51,8 @@ private:
 
     uint16_t read_u16(size_t offset) const;
     uint32_t read_u32(size_t offset) const;
+    void     publish_u16(size_t offset, uint16_t value);
+    uint16_t observe_u16(size_t offset) const;
     void     write_u16(size_t offset, uint16_t value);
     void     write_u32(size_t offset, uint32_t value);
     void     write_u64(size_t offset, uint64_t value);

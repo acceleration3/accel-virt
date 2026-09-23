@@ -11,7 +11,7 @@ namespace av {
 SyntheticVsync::SyntheticVsync(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), dxgkrnl_(dxgkrnl), sources_(sources), notification_(platform, dxgkrnl),
       timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), suspended_reporting_(false),
-      layer_(), ticks_(0u), reported_(0u), enables_(0u), window_start_(0u)
+      layer_(), ticks_(0u), reported_(0u), enables_(0u), window_start_(0u), schedule_start_(0u), scheduled_(0u)
       {
           AV_SCOPE("SyntheticVsync::SyntheticVsync");
       }
@@ -32,6 +32,8 @@ Status SyntheticVsync::enable()
     /* The window opens with the timer, whichever enable started it. */
     if (ticks_ == 0u) window_start_ = platform_.interrupt_time();
     if (running_) return Status::ok;
+    schedule_start_ = platform_.interrupt_time();
+    scheduled_ = 0u;
     const Status started = timer_.start(frame_period);
     running_ = started == Status::ok;
     return started;
@@ -78,11 +80,31 @@ Status SyntheticVsync::resume()
     return enable();
 }
 
+/* The timer fires on the system clock's millisecond, so a 16.667 ms period
+ * runs every 17 ms - 58.8 Hz. Each tick arms the next against an absolute
+ * schedule instead: some blanks are 16 ms apart and some 17, and the rate
+ * is the mode's. A tick that finds itself past the schedule starts it anew. */
+void SyntheticVsync::rearm()
+{
+    AV_SCOPE("SyntheticVsync::rearm");
+    constexpr uint64_t second = 10000000u;   /* 100 ns */
+    scheduled_++;
+    const uint64_t now = platform_.interrupt_time();
+    uint64_t       next = schedule_start_ + (scheduled_ + 1u) * second / DisplayMode::refresh_hz;
+    if (next <= now) {
+        schedule_start_ = now;
+        scheduled_ = 0u;
+        next = now + frame_period;
+    }
+    static_cast<void>(timer_.start(next - now));
+}
+
 void SyntheticVsync::tick()
 {
     AV_SCOPE("SyntheticVsync::tick");
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::tick");
     ticks_++;
+    rearm();
     if (reporting_) {
         if (report() == Status::ok) {
             reported_++;

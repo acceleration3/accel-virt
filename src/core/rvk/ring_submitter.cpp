@@ -73,10 +73,7 @@ void RingSubmitter::user_mode_publishes()
 Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submission, uint64_t &published)
 {
     AV_SCOPE("RingSubmitter::adopt_published_tail");
-    uint8_t bytes[sizeof(uint64_t)] = {};
-    platform_.copy(bytes, ring_ + tail_offset, sizeof bytes);
-    WireReader reader(bytes, sizeof bytes);
-    published = reader.read_u64();
+    published = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + tail_offset), __ATOMIC_ACQUIRE);
     if (submission.begin() < tail_) return Status::invalid_parameter;
     if (published != submission.end() && published != submission.begin()) return Status::invalid_parameter;
     tail_ = submission.begin();
@@ -109,10 +106,9 @@ Status RingSubmitter::submit(const SubmissionDescriptor &submission)
     }
     if (submission.end() - device_.head() > RingHeader(order_, 0u, 0u).capacity()) return Status::no_space;
     if (fences_.record_submission(submission.fence_id()) != Status::ok) return Status::invalid_parameter;
-    uint8_t    bytes[sizeof(uint64_t)] = {};
-    WireWriter writer(bytes, sizeof bytes);
-    writer.write_u64(submission.end());
-    platform_.copy(ring_ + tail_offset, bytes, sizeof bytes);
+    /* One 8-byte store after the batch is whole: the device polls the tail,
+     * and a byte-wise copy can be read half-written. */
+    __atomic_store_n(reinterpret_cast<uint64_t *>(ring_ + tail_offset), submission.end(), __ATOMIC_RELEASE);
     tail_ = submission.end();
     published_++;
     doorbells_.write_u32(doorbell_ * doorbell_page_bytes, 1u);

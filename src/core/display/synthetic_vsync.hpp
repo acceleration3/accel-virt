@@ -50,6 +50,7 @@ public:
      * more. */
     [[nodiscard]] Status resume();
     /* The timer's callback, at DISPATCH. */
+    void rearm();
     void                 tick();
     /* Vertical blanks reported since the last line it said. */
     uint32_t             reported() const;
@@ -90,6 +91,9 @@ private:
     uint32_t               reported_;
     uint32_t               enables_;
     uint64_t               window_start_;
+    /* When the blanks' schedule began, and how many it has had since. */
+    uint64_t               schedule_start_;
+    uint64_t               scheduled_;
 };
 
 }  // namespace av

@@ -81,6 +81,23 @@ uint32_t VirtQueue::read_u32(size_t offset) const
     return uint32_t{read_u16(offset)} | uint32_t{read_u16(offset + 2u)} << 16u;
 }
 
+/* The index the device polls: one 16-bit store, after everything it
+ * publishes. Two byte stores let the device read an index 256 off when it
+ * crosses a byte boundary - hundreds of phantom chains, and QEMU's "virtqueue
+ * size exceeded" breaks the device for good. */
+void VirtQueue::publish_u16(size_t offset, uint16_t value)
+{
+    AV_SCOPE("VirtQueue::publish_u16");
+    __atomic_store_n(reinterpret_cast<uint16_t *>(ring_.bytes() + offset), value, __ATOMIC_RELEASE);
+}
+
+/* The device's index: one 16-bit load, before anything it names is read. */
+uint16_t VirtQueue::observe_u16(size_t offset) const
+{
+    AV_SCOPE("VirtQueue::observe_u16");
+    return __atomic_load_n(reinterpret_cast<const uint16_t *>(ring_.bytes() + offset), __ATOMIC_ACQUIRE);
+}
+
 void VirtQueue::write_u16(size_t offset, uint16_t value)
 {
     AV_SCOPE("VirtQueue::write_u16");
@@ -135,7 +152,7 @@ Status VirtQueue::add(const VirtqSegment *segments, uint16_t count, uint16_t &he
 
     write_u16(driver_offset_ + 4u + 2u * (avail_index_ & (size_ - 1u)), first);
     avail_index_++;
-    write_u16(driver_offset_ + 2u, avail_index_);
+    publish_u16(driver_offset_ + 2u, avail_index_);
     head = first;
     return Status::ok;
 }
@@ -158,7 +175,7 @@ Status VirtQueue::take_used(uint16_t &head, uint32_t &written)
     platform_.require_irql_at_most(Irql::dispatch, "VirtQueue::take_used");
     InvariantScope<VirtQueue> guard(platform_, *this, "take_used");
     if (size_ == 0u) return Status::invalid_state;
-    const uint16_t device_index = read_u16(device_offset_ + 2u);
+    const uint16_t device_index = observe_u16(device_offset_ + 2u);
     const uint16_t pending = static_cast<uint16_t>(device_index - last_used_index_);
     if (pending == 0u) return Status::not_found;
     if (pending > static_cast<uint16_t>(avail_index_ - last_used_index_)) return Status::invalid_state;

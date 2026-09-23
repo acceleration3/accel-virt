@@ -72,9 +72,9 @@ Status TransportRing::publish_tail()
 {
     AV_SCOPE("TransportRing::publish_tail");
     if (ring_ == nullptr) return Status::invalid_state;
-    WireWriter writer(ring_ + tail_offset, sizeof(uint64_t));
-    writer.write_u64(tail_);
-    return writer.status();
+    /* One 8-byte store: the device polls it, and must never see half of it. */
+    __atomic_store_n(reinterpret_cast<uint64_t *>(ring_ + tail_offset), tail_, __ATOMIC_RELEASE);
+    return Status::ok;
 }
 
 uint64_t TransportRing::tail() const
