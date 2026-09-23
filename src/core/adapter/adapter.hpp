@@ -279,6 +279,7 @@ public:
 private:
     /* The pixels of a present nothing else executes (feature 046). */
     void move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first);
+    void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
 

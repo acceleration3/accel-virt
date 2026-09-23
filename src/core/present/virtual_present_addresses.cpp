@@ -20,11 +20,11 @@ PresentAddressSpace VirtualPresentAddresses::space() const
     return PresentAddressSpace::gpu_virtual;
 }
 
-Status VirtualPresentAddresses::validate(uint32_t) const
+Status VirtualPresentAddresses::validate(uint32_t references) const
 {
     AV_SCOPE("VirtualPresentAddresses::validate");
     platform_.require_irql_at_most(Irql::passive, "VirtualPresentAddresses::validate");
-    return request_.pAllocationList != nullptr ? Status::ok : Status::invalid_parameter;
+    return references == 0u || request_.pAllocationList != nullptr ? Status::ok : Status::invalid_parameter;
 }
 
 void VirtualPresentAddresses::refer(uint8_t *command, uint32_t allocation_index, uint32_t offset)

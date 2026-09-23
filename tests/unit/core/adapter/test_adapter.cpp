@@ -1487,6 +1487,31 @@ TEST(adapter_present, a_blt_naming_a_source_it_cannot_reach_moves_nothing)
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
+/* Under GPU virtual addressing dxgkrnl hands a flip over with no allocation
+ * list: the flip is carried out by SetVidPnSourceAddress, not by the DMA. It
+ * was refused, and dxgkrnl hid the desktop's source on every frame the
+ * compositor flipped. A blt still needs both addresses. */
+TEST(adapter_present, a_flip_with_no_allocation_list_is_accepted_and_a_blt_without_one_refused)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint8_t             dma[128] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 0xCu;   /* Flip | FlipWithNoWait */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(!fixture.platform().logged_line("rvkgpu: present refused"));
+  present.pDmaBuffer = dma;
+  present.Flags = 1u;     /* Blt */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
+  CHECK(fixture.platform().logged_line("rvkgpu: present refused flags 0x00000001 list absent"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
 /* A flip moves no pixels: the source is already the allocation the scanout
  * address will name, and dxgkrnl programs it through SetVidPnSourceAddress. A
  * present whose flags name no operation this driver presents, and one whose DMA
@@ -1520,6 +1545,10 @@ TEST(adapter_present, a_flip_an_unnamed_operation_and_a_refused_present_move_not
    * where it was: there was nothing to move. */
   CHECK(fixture.platform().logged() > quiet);
   CHECK(!fixture.platform().logged_line("rvkgpu: present unmoved"));
+  /* The refusal is said, since dxgkrnl answers it by hiding the source; a
+   * present asking for more DMA buffer is not one. */
+  CHECK(fixture.platform().logged_line("rvkgpu: present names no operation flags 0x00000000 list absent"));
+  CHECK(!fixture.platform().logged_line("rvkgpu: present refused"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 

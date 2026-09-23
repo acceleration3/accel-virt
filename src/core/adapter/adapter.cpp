@@ -95,6 +95,9 @@ namespace av {
 
 namespace {
 
+/* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER: a present asking for more room, not a refusal. */
+constexpr int32_t more_dma_buffer = static_cast<int32_t>(0xC01E0001u);
+
 /* What basicdisplay.sys reports for its one output (docs/ddi-sequences.md). */
 enum : int32_t {
     type_video_output         = 1,   /* TypeVideoOutput */
@@ -1262,6 +1265,11 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     /* The DMA buffer this wrote is executed on the host only for a context of
      * the rvk protocol; dxgkrnl's own presents are loopback-completed, so the
      * pixels the desktop presents move here (feature 046, FR-004). */
+    /* A refusal is what dxgkrnl answers by hiding the source: the only trace
+     * of why the desktop went dark is this line. More DMA buffer is not one. */
+    PresentOperation named = PresentOperation::blt;
+    if (presented < 0 && presented != more_dma_buffer)
+        log_refused_present(*request, writing.operation(named) == Status::ok);
     if (presented == 0) {
         PresentOperation kind = PresentOperation::blt;
         /* A present that was written named an operation this driver presents:
@@ -1306,6 +1314,19 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
                                       : blit.blit(from, into, rectangles, count);
     if (moved != Status::ok) log_unmoved_present("surfaces", request, request.NumSrcAllocations, request.NumDstAllocations);
     present_rows_ += blit.rows();
+}
+
+void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool operation_named)
+{
+    AV_SCOPE("Adapter::log_refused_present");
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append(operation_named ? "rvkgpu: present refused flags 0x" : "rvkgpu: present names no operation flags 0x");
+    message.append_hex(request.Flags, 8u);
+    message.append(" list ");
+    message.append(request.pAllocationList != nullptr ? "given" : "absent");
+    platform_.log(message.text());
 }
 
 /* A present whose pixels stayed where they were, with what it was: the desktop

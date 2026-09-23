@@ -42,7 +42,11 @@ Status PresentRequest::validate(PresentOperation operation, const PresentAddress
     const DxgkargPresentRecord &r = request_;
     if (r.pDmaBuffer == nullptr || r.MultipassOffset > r.SubRectCnt) return Status::invalid_parameter;
     if (r.SubRectCnt != 0u && r.pDstSubRects == nullptr) return Status::invalid_parameter;
-    const uint32_t references = operation == PresentOperation::blt ? 2u : 1u;
+    /* A flip is carried out by SetVidPnSourceAddress when its DMA completes,
+     * not by the DMA, and under GPU virtual addressing dxgkrnl hands one over
+     * with no allocation list at all: refused, it hid the desktop's source on
+     * every frame. So a flip names its source only when it can. */
+    const uint32_t references = operation == PresentOperation::blt ? 2u : operation == PresentOperation::flip ? 0u : 1u;
     if (addressing.validate(references) != Status::ok) return Status::invalid_parameter;
     if (!Rectangle(r.SrcRect.left, r.SrcRect.top, r.SrcRect.right, r.SrcRect.bottom).is_valid() ||
         !Rectangle(r.DstRect.left, r.DstRect.top, r.DstRect.right, r.DstRect.bottom).is_valid())
@@ -87,7 +91,9 @@ NtStatus PresentRequest::present()
         const RectRecord &rect = request_.pDstSubRects[request_.MultipassOffset + index];
         Rectangle(rect.left, rect.top, rect.right, rect.bottom).write(writer);
     }
-    if (kind != PresentOperation::color_fill) addressing.refer(dma, source_index, PresentCommand::source_address_offset);
+    const bool named = kind != PresentOperation::flip || addressing.validate(1u) == Status::ok;
+    if (kind != PresentOperation::color_fill && named)
+        addressing.refer(dma, source_index, PresentCommand::source_address_offset);
     if (kind != PresentOperation::flip)
         addressing.refer(dma, destination_index, PresentCommand::destination_address_offset);
     request_.pDmaBuffer = dma + writer.offset();
