@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 6u
+#define RVK_EXECUTOR_ABI_VERSION 7u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -55,6 +55,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_OPTIONS 4u
 #define RVK_EXECUTOR_ABI_VERSION_EVENTS 5u
 #define RVK_EXECUTOR_ABI_VERSION_SHARING 6u
+#define RVK_EXECUTOR_ABI_VERSION_IMAGES 7u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -230,6 +231,17 @@ typedef struct RvkExecutorOps {
      * executor never made that way; destroy releases whatever is left. Runs on
      * the context's worker. */
     void (*release_object)(void *opaque, RvkExecutor *executor, uint32_t kind, uint64_t wire_handle);
+
+    /* Version 7 onwards. A version 6 table ends above. */
+
+    /* The host image a guest allocation shows, published under `key` by a
+     * Direct3D session on the GPU `gpu_uuid` names, read into `pixels`:
+     * `height` rows of `width` B8G8R8A8 pixels, `stride` bytes apart - what a
+     * display head's surface holds. RVK_EXECUTED, or RVK_UNKNOWN for a key no
+     * session published. Runs on QEMU's main loop and blocks until the host GPU
+     * has the image. */
+    uint32_t (*read_image)(void *opaque, const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
+                           uint32_t width, uint32_t height);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

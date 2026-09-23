@@ -115,6 +115,17 @@ Status GpuRequestWriter::detach_backing(uint32_t resource_id)
     return Status::ok;
 }
 
+Status GpuRequestWriter::scanout_image(uint32_t resource_id, uint64_t key)
+{
+    AV_SCOPE("GpuRequestWriter::scanout_image");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, rvk_scanout_image, resource_unref_size + 8u)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_zeros(4u);
+    writer.write_u64(key);
+    return Status::ok;
+}
+
 /* struct virtio_gpu_set_scanout: the rectangle, then the scanout and the
  * resource whose pixels it shows. */
 Status GpuRequestWriter::set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height)

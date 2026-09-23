@@ -33,10 +33,10 @@ int32_t WindowsD3d11Entry::create_device(void *window, uint32_t width, uint32_t 
     described.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     described.SampleDesc.Count = 1u;
     described.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    described.BufferCount = 1u;
+    described.BufferCount = 2u;
     described.OutputWindow = static_cast<HWND>(window);
     described.Windowed = TRUE;
-    described.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    described.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     D3D_FEATURE_LEVEL made = D3D_FEATURE_LEVEL_11_0;
     const HRESULT     created =
         D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0u, nullptr, 0u,

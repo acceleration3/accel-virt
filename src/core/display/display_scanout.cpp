@@ -92,11 +92,13 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
             carried = blobs_[source].refresh(address, pages, presented);
             continue;
         }
+        uint64_t key = 0u;
         if (resources_[source].needs_pages(address)) {
             auto *const primary = static_cast<Allocation *>(sources.primary(source));
             if (primary != nullptr) pages = primary->pages_at(address, resources_[source].page_count());
+            if (primary != nullptr) key = primary->descriptor().host_key();
         }
-        carried = resources_[source].refresh(address, pages, presented);
+        carried = resources_[source].refresh(address, pages, presented, key);
     }
     return carried;
 }

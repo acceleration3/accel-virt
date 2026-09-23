@@ -48,7 +48,7 @@ public:
      * has not been told, and asks the host to read the pixels again when there
      * is a new frame. An address with pages the driver never recorded is not
      * scanned out: the host would read memory that is not the primary's. */
-    [[nodiscard]] Status refresh(uint64_t address, const GuestPageList &pages, bool presented);
+    [[nodiscard]] Status refresh(uint64_t address, const GuestPageList &pages, bool presented, uint64_t key = 0u);
     /* Whether a refresh at `address` would have to attach a backing, which is
      * the only time the primary's pages are needed. Dispatch at most: it is
      * what keeps the DPC from looking them up every idle frame. */
@@ -85,6 +85,9 @@ private:
     /* The fingerprint of the pages attached there: a primary made where a freed
      * one was has the same address and other pages. */
     uint64_t                        attached_pages_;
+    /* The host image the primary shows, which a frame is filled from instead
+     * of its pages; 0 for a primary the CPU draws. */
+    uint64_t                        key_;
     /* The last address report() spoke about, so a frame that cannot be carried
      * is explained once instead of every DPC. */
     uint64_t                        reported_address_;

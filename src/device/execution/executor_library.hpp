@@ -50,6 +50,10 @@ public:
     /* Which RVK_BLOB_* kinds `api` imports on the GPU `gpu_uuid` names, or 0.
      * Asked on the main loop while the capset is being described. */
     uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const;
+    /* The host image under `key`, read into `pixels` (version 7); false for a
+     * library too old to or a key it does not know. */
+    bool                 read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
+                                    uint32_t width, uint32_t height) const;
     /* Whether the library answers the wire handle an import made (version 3),
      * without which a guest has nothing to name an import by. */
     bool                 names_imports() const;

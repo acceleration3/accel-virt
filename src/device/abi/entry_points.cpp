@@ -35,6 +35,10 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().control(request, type) ? 1 : 0; }
 
 __attribute__((visibility("default")))
+int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().read_image(key, pixels, stride, width, height) ? 1 : 0; }
+
+__attribute__((visibility("default")))
 uint32_t rvk_device_capsets(RvkDevice *device)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().capsets(); }
 

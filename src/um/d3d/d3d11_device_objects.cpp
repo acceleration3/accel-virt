@@ -100,8 +100,13 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                       ((args->MiscFlags & D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP) != 0u ? api_generate_mips : 0u) |
                       (cube ? api_texture_cube : 0u);
     desc.structure_stride = args->ByteStride;
-    if ((args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u)
-        resource.shared_key = (static_cast<uint64_t>(GetCurrentProcessId()) << 32u) | ++shared_keys_;
+    /* Every resource the kernel will know - scanned out, presented or shared -
+     * is made under a host key, so any session on the GPU can name it: DWM
+     * opening an application's buffer, and the scanout showing a primary
+     * (docs/d3d-desktop.md §3.1). */
+    const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
+                                (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
+    if (kernel_visible) resource.shared_key = (static_cast<uint64_t>(GetCurrentProcessId()) << 32u) | ++shared_keys_;
     if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
         set_error(E_OUTOFMEMORY);
         return;
@@ -135,8 +140,6 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         }
     }
 
-    const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
-                                (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
     if (kernel_visible) {
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);

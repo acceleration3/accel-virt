@@ -226,6 +226,10 @@ RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *execut
 /* Nonzero when the core answered the control request (a
  * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
+/* Main loop: the host image published under `key` into a display surface's
+ * `pixels` (B8G8R8A8, `stride` bytes a row). 1 when it was read. */
+int rvk_device_read_image(RvkDevice *device, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+                          uint32_t height);
 /* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT
  * when there is one. Main loop. */
 uint32_t rvk_device_capsets(RvkDevice *device);

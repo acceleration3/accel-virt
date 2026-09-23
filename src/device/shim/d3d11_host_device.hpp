@@ -26,6 +26,7 @@
 struct ID3D11Device5;
 struct ID3D11DeviceContext4;
 struct ID3DDeviceContextState;
+struct ID3D11Texture2D;
 
 namespace av {
 
@@ -55,18 +56,29 @@ public:
      * next lock swaps rather than trusting a pointer that was released. */
     void                    forget_state(ID3DDeviceContextState *state);
 
+    /* The texture published under `key`, read into `pixels` as B8G8R8A8 rows
+     * `stride` bytes apart, as much of it as fits `width` by `height`. False
+     * for a key nothing is published under. Takes the device's lock. */
+    [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
+
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
     const D3d11Capabilities &capabilities() const;
     D3dSharedResources   &shared();
 
 private:
+    [[nodiscard]] bool copy_out(ID3D11Texture2D *texture, uint8_t *pixels, uint32_t stride, uint32_t width,
+                                uint32_t height);
+
     ID3D11Device5          *device_;
     ID3D11DeviceContext4   *context_;
     ID3DDeviceContextState *active_;
     uint32_t                feature_level_;
     D3d11Capabilities       capabilities_;
     D3dSharedResources      shared_;
+    /* The staging texture images are read through, kept while the size and
+     * format the scanout asks for stay the same. */
+    ID3D11Texture2D        *staging_;
     pthread_mutex_t         mutex_;
 };
 

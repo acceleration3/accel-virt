@@ -123,6 +123,7 @@ private:
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
+    HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context);
 
     void set_shader(uint32_t stage, D3D10DDI_HSHADER shader);
     void set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,

@@ -17,17 +17,20 @@ namespace av {
 
 class AllocationDescriptor {
 public:
-    static constexpr size_t encoded_size = 48u;
+    static constexpr size_t encoded_size = 56u;
 
     AllocationDescriptor();
+    /* `host_key` names the host image the allocation shows, for a resource a
+     * Direct3D session made under one (docs/d3d-desktop.md §3.1); 0 for none. */
     AllocationDescriptor(AllocationKind kind, bool cpu_visible, const SurfaceLayout &layout, uint64_t size,
-                         const ScanoutTarget &scanout);
+                         const ScanoutTarget &scanout, uint64_t host_key = 0u);
 
     AllocationKind       kind() const;
     bool                 cpu_visible() const;
     const SurfaceLayout &layout() const;
     uint64_t             size() const;
     const ScanoutTarget &scanout() const;
+    uint64_t             host_key() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* Unchanged unless ok. */
@@ -45,6 +48,7 @@ private:
     SurfaceLayout  layout_;
     uint64_t       size_;
     ScanoutTarget  scanout_;
+    uint64_t       host_key_;
 };
 
 }  // namespace av

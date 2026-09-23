@@ -14,7 +14,7 @@ namespace av {
 ScanoutResource::ScanoutResource(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device,
                                  uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
-      attached_address_(0u), attached_pages_(0u), reported_address_(0u), reported_(false), backing_request_(nullptr),
+      attached_address_(0u), attached_pages_(0u), key_(0u), reported_address_(0u), reported_(false), backing_request_(nullptr),
       backing_request_bytes_(0u), created_(false), scanning_out_(false), backed_(false)
       {
           AV_SCOPE("ScanoutResource::ScanoutResource");
@@ -109,7 +109,8 @@ Status ScanoutResource::flush(VirtioGpuDevice &device)
     AV_SCOPE("ScanoutResource::flush");
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
-    static_cast<void>(writer.transfer_to_host_2d(first_resource_id + source_, width_, height_));
+    if (key_ != 0u) static_cast<void>(writer.scanout_image(first_resource_id + source_, key_));
+    else static_cast<void>(writer.transfer_to_host_2d(first_resource_id + source_, width_, height_));
     const Status transferred = device.send_control(bytes, writer.length());
     if (transferred != Status::ok) return transferred;
     static_cast<void>(writer.resource_flush(first_resource_id + source_, width_, height_));
@@ -231,7 +232,7 @@ void ScanoutResource::forget_device()
     height_ = 0u;
 }
 
-Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bool presented)
+Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bool presented, uint64_t key)
 {
     AV_SCOPE("ScanoutResource::refresh");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::refresh");
@@ -243,6 +244,7 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
         return Status::ok;
     }
     VirtioGpuDevice &device = device_.object();
+    key_ = key;
     const uint64_t   fingerprint = pages.fingerprint();
     const bool       moved = pages.count() != 0u && fingerprint != attached_pages_;
     if (address != attached_address_ || moved) {

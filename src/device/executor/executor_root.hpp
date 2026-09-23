@@ -50,6 +50,9 @@ public:
     /* The RVK_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names.
      * Zero for a GPU nobody has, which is also what a null UUID gets. */
     uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
+    /* The host image under `key` on the GPU `gpu_uuid` names, into `pixels`. */
+    bool     read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+                        uint32_t height);
 
     /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
      * null: for a sub-API that GPU does not run, for a GPU nobody has, and

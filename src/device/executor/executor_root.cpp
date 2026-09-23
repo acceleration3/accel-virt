@@ -1,5 +1,7 @@
 #include "device/executor/executor_root.hpp"
 
+#include "device/shim/d3d11_host_device.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/rvk_executor.h"
@@ -45,6 +47,15 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     AV_SCOPE("ExecutorRoot::import_kinds");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
+}
+
+bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+                              uint32_t height)
+{
+    AV_SCOPE("ExecutorRoot::read_image");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    return device != nullptr && device->read_image(key, pixels, stride, width, height);
 }
 
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,

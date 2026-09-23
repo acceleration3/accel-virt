@@ -133,6 +133,39 @@ static int virtio_gpu_rvk_set_status(VirtIODevice *vdev, uint8_t status)
     return 0;
 }
 
+/* A 2D scanout resource filled from the host image a guest primary shows,
+ * named by its key (docs/d3d-desktop.md §3.3): the guest's pages are not read,
+ * and RESOURCE_FLUSH then shows it as it would a TRANSFER_TO_HOST_2D. */
+#define VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE 0x02F0
+
+struct virtio_gpu_rvk_scanout_image {
+    struct virtio_gpu_ctrl_hdr hdr;
+    uint32_t resource_id;
+    uint32_t padding;
+    uint64_t key;
+};
+
+static void virtio_gpu_rvk_scanout_image(VirtIOGPU *g, VirtIOGPURvk *r, struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_rvk_scanout_image request;
+    struct virtio_gpu_simple_resource *resource;
+    enum virtio_gpu_ctrl_type answer = VIRTIO_GPU_RESP_OK_NODATA;
+
+    if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &request, sizeof(request)) != sizeof(request)) {
+        answer = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+    } else {
+        resource = virtio_gpu_find_resource(g, le32_to_cpu(request.resource_id));
+        if (resource == NULL || resource->image == NULL) {
+            answer = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        } else if (!rvk_device_read_image(r->core, le64_to_cpu(request.key), pixman_image_get_data(resource->image),
+                                          (uint32_t)pixman_image_get_stride(resource->image), resource->width,
+                                          resource->height)) {
+            answer = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        }
+    }
+    virtio_gpu_ctrl_response_nodata(g, cmd, answer);
+}
+
 /* The core answers the requests it owns; the base class answers the rest. */
 static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_command *cmd)
 {
@@ -143,6 +176,10 @@ static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comm
         virtio_gpu_ctrl_hdr_bswap(&header);
         /* virtio_gpu_ctrl_response copies fence, flags and context from here. */
         cmd->cmd_hdr = header;
+        if (header.type == VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE) {
+            virtio_gpu_rvk_scanout_image(g, r, cmd);
+            return;
+        }
         if (rvk_device_control(r->core, cmd, header.type)) {
             return;
         }

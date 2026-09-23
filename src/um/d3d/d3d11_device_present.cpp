@@ -60,7 +60,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     const AllocationDescriptor descriptor(primary ? AllocationKind::shared_primary : AllocationKind::surface, true,
                                           SurfaceLayout(resource.width, resource.height, kernel_format(resource.format),
                                                         pitch),
-                                          bytes, scanout);
+                                          bytes, scanout, resource.shared_key);
     uint8_t encoded[AllocationDescriptor::encoded_size] = {};
     if (descriptor.encode(encoded, sizeof(encoded)) != Status::ok) return E_INVALIDARG;
     /* The resource's own private data, which dxgkrnl keeps and hands whoever
@@ -130,6 +130,16 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
                                      void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_surface");
+    /* A keyed image is shown by the host from the host's own copy (the
+     * scanout's SCANOUT_IMAGE, and DWM opening it by key), so nothing is read
+     * back: the host only has to have finished drawing it before the flip. */
+    if (source.shared_key != 0u) {
+        if (removed_on_host()) {
+            set_error(D3DDDIERR_DEVICEREMOVED);
+            return DXGI_ERROR_DEVICE_REMOVED;
+        }
+        return present_to_kernel(source, destination, dxgi_context);
+    }
     const HRESULT published = publish(source, subresource);
     if (FAILED(published) && removed_on_host()) {
         set_error(D3DDDIERR_DEVICEREMOVED);
@@ -139,6 +149,12 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
         log_.write("rvkumd: a present whose surface could not be read back");
         return published;
     }
+    return present_to_kernel(source, destination, dxgi_context);
+}
+
+HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context)
+{
+    AV_SCOPE("D3d11Device::present_to_kernel");
     HANDLE const context = present_context();
     if (context == nullptr) return E_FAIL;
     DXGIDDICB_PRESENT present = {};

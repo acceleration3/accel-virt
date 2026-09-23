@@ -207,6 +207,13 @@ void release_object(void *, RvkExecutor *executor, uint32_t kind, uint64_t wire_
     library.root().release_object(session_of(executor), kind, wire_handle);
 }
 
+uint32_t read_image(void *, const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
+                    uint32_t height)
+{
+    AV_SCOPE("read_image");
+    return library.root().read_image(gpu_uuid, key, pixels, stride, width, height) ? RVK_EXECUTED : RVK_UNKNOWN;
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -221,7 +228,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               set_signal,
                               export_object,
                               import_object,
-                              release_object};
+                              release_object,
+                              read_image};
 
 }  // namespace
 

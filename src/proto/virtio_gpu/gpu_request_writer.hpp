@@ -70,6 +70,9 @@ public:
     /* The resource lets go of its guest pages: the device refuses to attach
      * backing to a resource that already has some. */
     [[nodiscard]] Status detach_backing(uint32_t resource_id);
+    /* rvk's own: the host fills `resource_id` from the host image published
+     * under `key`, in place of a TRANSFER_TO_HOST_2D from the guest's pages. */
+    [[nodiscard]] Status scanout_image(uint32_t resource_id, uint64_t key);
     /* Asks for every scanout's rectangle; the answer is a DisplayInfoResponse. */
     [[nodiscard]] Status get_display_info();
     /* Resource 0 hides the cursor. */
@@ -90,6 +93,7 @@ private:
         transfer_to_host_2d_type = 0x0105u,
         resource_attach_backing = 0x0106u,
         resource_detach_backing = 0x0107u,
+        rvk_scanout_image = 0x02F0u,
         update_cursor_type = 0x0300u,
         move_cursor_type = 0x0301u,
     };

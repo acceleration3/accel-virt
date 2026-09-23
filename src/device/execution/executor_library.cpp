@@ -106,6 +106,15 @@ void ExecutorLibrary::release_object(RvkExecutor *executor, uint32_t kind, uint6
     ops_->release_object(ops_->opaque, executor, kind, wire_handle);
 }
 
+bool ExecutorLibrary::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
+                                 uint32_t width, uint32_t height) const
+{
+    AV_SCOPE("ExecutorLibrary::read_image");
+    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_IMAGES || ops_->read_image == nullptr)
+        return false;
+    return ops_->read_image(ops_->opaque, gpu_uuid, key, pixels, stride, width, height) == RVK_EXECUTED;
+}
+
 uint32_t ExecutorLibrary::import_kinds(SubApi api, const uint8_t *gpu_uuid) const
 {
     AV_SCOPE("ExecutorLibrary::import_kinds");

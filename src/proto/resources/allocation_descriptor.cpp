@@ -7,14 +7,14 @@
 namespace av {
 
 AllocationDescriptor::AllocationDescriptor()
-    : kind_(AllocationKind::client), cpu_visible_(false), layout_(), size_(0u), scanout_()
+    : kind_(AllocationKind::client), cpu_visible_(false), layout_(), size_(0u), scanout_(), host_key_(0u)
     {
         AV_SCOPE("AllocationDescriptor::AllocationDescriptor");
     }
 
 AllocationDescriptor::AllocationDescriptor(AllocationKind kind, bool cpu_visible, const SurfaceLayout &layout,
-                                           uint64_t size, const ScanoutTarget &scanout)
-    : kind_(kind), cpu_visible_(cpu_visible), layout_(layout), size_(size), scanout_(scanout)
+                                           uint64_t size, const ScanoutTarget &scanout, uint64_t host_key)
+    : kind_(kind), cpu_visible_(cpu_visible), layout_(layout), size_(size), scanout_(scanout), host_key_(host_key)
     {
         AV_SCOPE("AllocationDescriptor::AllocationDescriptor");
     }
@@ -45,6 +45,12 @@ const ScanoutTarget &AllocationDescriptor::scanout() const
     return scanout_;
 }
 
+uint64_t AllocationDescriptor::host_key() const
+{
+    AV_SCOPE("AllocationDescriptor::host_key");
+    return host_key_;
+}
+
 Status AllocationDescriptor::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("AllocationDescriptor::encode");
@@ -62,6 +68,7 @@ Status AllocationDescriptor::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(scanout_.refresh_denominator());
     writer.write_u32(scanout_.source());
     writer.write_zeros(4u);
+    writer.write_u64(host_key_);
     return writer.status();
 }
 
@@ -106,11 +113,12 @@ Status AllocationDescriptor::decode(const uint8_t *bytes, size_t length)
     const uint32_t refresh_denominator = reader.read_u32();
     const uint32_t source = reader.read_u32();
     reader.expect_zero(4u);
+    const uint64_t host_key = reader.read_u64();
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || (flags & ~flag_cpu_visible) != 0u) return Status::malformed;
     const AllocationDescriptor decoded(static_cast<AllocationKind>(kind), flags != 0u,
                                        SurfaceLayout(width, height, format, pitch), size,
-                                       ScanoutTarget(source, refresh_numerator, refresh_denominator));
+                                       ScanoutTarget(source, refresh_numerator, refresh_denominator), host_key);
     if (!decoded.is_valid()) return Status::malformed;
     *this = decoded;
     return Status::ok;
