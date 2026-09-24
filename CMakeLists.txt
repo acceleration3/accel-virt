@@ -232,6 +232,15 @@ set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
 # object has exactly one thing to say: the symbol QEMU looks up. Anything else
 # reaching the dynamic table is surface nobody asked for.
 target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
+# A command crosses a few dozen small functions of the core on its way to the
+# host API, most in other translation units: link-time inlining takes a large
+# share of the executor's per-command cost. Only here - rvk_device is an
+# archive QEMU's own link reads, and it cannot read LTO objects.
+if(AV_QEMU)
+  set_target_properties(av_core rvk_executor PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
+  # Whatever links the core's LTO objects needs a linker that reads them.
+  target_link_options(av_core INTERFACE -fuse-ld=lld)
+endif()
 
 # ---- rvkrecord: a recording printed, and replayed into a library (065) -----
 # Built in every configuration, before AV_QEMU's return: it reads what a device

@@ -76,6 +76,12 @@ Status TransportRing::publish_tail()
 {
     AV_SCOPE("TransportRing::publish_tail");
     if (ring_ == nullptr) return Status::invalid_state;
+    /* The ring is an aperture allocation the process maps write-combining,
+     * and x86 does not keep write-combined stores in order with a later one:
+     * a release store alone let the device see this tail before the batch it
+     * covers, and read a header that was not there yet. A full fence drains
+     * them first. */
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
     /* One 8-byte store: the device polls it, and must never see half of it. */
     __atomic_store_n(reinterpret_cast<uint64_t *>(ring_ + tail_offset), tail_, __ATOMIC_RELEASE);
     return Status::ok;
