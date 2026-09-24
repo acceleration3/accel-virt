@@ -20,10 +20,9 @@ between), which is the ICD's path less the VM:
 
     tools/opengl_report.py --loopback -o build-samples/gl-report
 
-Add --kernel-submits to keep every batch on the kernel's path: the path where
-the process publishes its own ring tail can fault the context in the rig (a
-batch header the device finds malformed), which is the ring's to fix, not the
-samples'.
+Add --kernel-submits to keep every batch on the kernel's path, the process
+never publishing its own ring tail - the other of the two ways a batch reaches
+the device, to compare them.
 """
 import argparse
 import datetime

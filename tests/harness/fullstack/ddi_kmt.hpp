@@ -134,6 +134,16 @@ public:
      * path asks for it and every other rig keeps submitting through the
      * kernel. */
     void     allow_hardware_scheduling();
+    /* TailPublishRecord's escape answered as an older driver answers it, not
+     * handed over: every submission then goes through the kernel, and the
+     * process never stores its own ring tail. */
+    void     refuse_tail_publishing();
+    /* A process that watches its own memory for its answers, as the
+     * transport does before it asks the kernel to wait: its clock is the
+     * machine's, and what the device finished interrupts the driver before
+     * its next submission, as both do on a machine. Off, the rig's clock is
+     * the test's alone, which is what a test that times by it needs. */
+    void     let_process_watch();
     /* dxgkrnl's side of a disconnect, which a process is never asked about:
      * the driver is told, and the status page the process reads says what to
      * do about it - retry for one that may come back, abort for one that will
@@ -294,6 +304,8 @@ private:
     Doorbell                     doorbells_[max_hardware_queues];
     DoorbellFabric               fabric_;
     bool                         hardware_scheduling_;
+    bool                         refuse_tail_publishing_;
+    bool                         watching_;
     std::uint8_t                 kernel_copy_[max_private_data];
     std::uint32_t                next_handle_;
     std::uint64_t                next_aperture_page_;

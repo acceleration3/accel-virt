@@ -90,6 +90,10 @@ void read_slot_names()
     std::fclose(file);
 }
 
+/* --kernel-submits: the process never publishes its own ring tail, and every
+ * batch goes through the kernel - the path a driver that refuses the escape
+ * gives, and the one to compare the shared tail's against. */
+bool                       kernel_submits = false;
 av::WidestHostGpu         *gpu = nullptr;
 av::ExecutorLibraryFile   *library = nullptr;
 av::FullStackRig          *rig = nullptr;
@@ -149,6 +153,8 @@ bool create_context(const char *)
     if (library->ops() == nullptr) return false;
     rig = new av::FullStackRig(*library->ops(), gpu->uuid());
     if (rig->started() != 0) return false;
+    rig->kmt().let_process_watch();
+    if (kernel_submits) rig->kmt().refuse_tail_publishing();
     process = new GlProcess(rig->kmt());
     av::FakeOpengl32 &gl = process->opengl32();
     if (gl.load(av::glicd::GlIcdRoot::icd_version, 1u) != av::FakeOpengl32::Load::loaded ||
@@ -177,7 +183,12 @@ void *gl_proc(const char *name)
 
 int main(int argc, char **argv)
 {
-    const int status = samples::run(argc, argv);
+    int kept = 0;
+    for (int i = 0; i < argc; i++) {
+        if (std::strcmp(argv[i], "--kernel-submits") == 0) kernel_submits = true;
+        else argv[kept++] = argv[i];
+    }
+    const int status = samples::run(kept, argv);
     if (process != nullptr)
         for (std::uint32_t index = 0u; index < process->log().lines(); index++)
             std::fprintf(stderr, "icd: %s\n", process->log().line(index));

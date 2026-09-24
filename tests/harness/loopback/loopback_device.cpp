@@ -36,6 +36,12 @@ LoopbackDevice::LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &execut
 
 void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t *gpu, const char *record)
 {
+    /* The device's workers watch the ring for a while before they sleep, by
+     * the host's clock: one that stood still would have them watch forever,
+     * and never see a stop asked of them. A microsecond a read ends the watch
+     * after a hundred looks. */
+    constexpr std::uint64_t nanoseconds_per_read = 1000u;
+    host_.advance_clock_per_read(nanoseconds_per_read);
     host_.add_gpu(gpu);
     host_.set_hostmem_size(64u << 20u);
     host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
