@@ -450,3 +450,76 @@ TEST(opencl_backend_device, a_shut_down_gives_back_what_the_guest_did_not)
   /* The descriptor outlived both, as it must: it is the device's, and every
    * import took a duplicate. */
   CHECK(::fcntl(written.handle(), F_GETFD) != -1); }
+
+/* A write's bytes are the decode arena's, which the next command decodes over,
+ * and rusticl reads a non-blocking write's source when its queue reaches the
+ * write rather than at the call. So whatever the guest asked, the write the
+ * backend makes is blocking: the source changed the moment the call returns
+ * must not be what the buffer ends up holding. The queue is given work first,
+ * so a write the host deferred would still be waiting when the source
+ * changes. */
+TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_whatever_the_guest_asked)
+{ Hosts hosts;
+  if (hosts.count() == 0u) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  cl_context const context = guest_context(backend, *hosts.device(0u));
+  if (context == nullptr) { backend.shut_down(); return; }
+  cl_int                 error = CL_SUCCESS;
+  const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
+      context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  constexpr std::size_t bytes = std::size_t{4} << 20;
+  cl_mem const          target = ::clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, nullptr, &error);
+  cl_mem const          busy = ::clCreateBuffer(context, CL_MEM_READ_WRITE, bytes, nullptr, &error);
+  CHECK(target != nullptr && busy != nullptr);
+  static std::uint8_t source[bytes];
+  static std::uint8_t read_back[bytes];
+  for (std::uint32_t copy = 0u; copy < 32u; ++copy)
+      CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, target, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::memset(source, 0xAB, bytes);
+  CHECK_EQ(backend.on_clEnqueueWriteBuffer(queue, target, CL_FALSE, 0u, bytes, source, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  std::memset(source, 0x11, bytes);
+  CHECK_EQ(::clEnqueueReadBuffer(queue, target, CL_TRUE, 0u, bytes, read_back, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(read_back[0], 0xABu);
+  CHECK_EQ(read_back[bytes - 1u], 0xABu);
+
+  /* An image write the same way: a 256x256 RGBA8 image, written with the
+   * guest asking not to block, and the source overwritten at once. */
+  const cl_image_format format = {CL_RGBA, CL_UNSIGNED_INT8};
+  cl_image_desc         desc = {};
+  desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+  desc.image_width = 256u;
+  desc.image_height = 256u;
+  cl_mem const image = ::clCreateImage(context, CL_MEM_READ_WRITE, &format, &desc, nullptr, &error);
+  CHECK(image != nullptr);
+  const std::size_t origin[3] = {0u, 0u, 0u}, region[3] = {256u, 256u, 1u};
+  for (std::uint32_t copy = 0u; copy < 32u; ++copy)
+      CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, target, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
+  std::memset(source, 0x5C, 256u * 256u * 4u);
+  CHECK_EQ(backend.on_clEnqueueWriteImage(queue, image, CL_FALSE, origin, region, 0u, 0u, source, 0u, nullptr,
+                                          nullptr),
+           CL_SUCCESS);
+  std::memset(source, 0x22, 256u * 256u * 4u);
+  CHECK_EQ(::clEnqueueReadImage(queue, image, CL_TRUE, origin, region, 0u, 0u, read_back, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(read_back[0], 0x5Cu);
+  CHECK_EQ(read_back[256u * 256u * 4u - 1u], 0x5Cu);
+
+  /* And a rectangle of a buffer. */
+  const std::size_t buffer_origin[3] = {0u, 0u, 0u}, rect[3] = {64u, 4u, 1u};
+  std::memset(source, 0x7E, 64u * 4u);
+  CHECK_EQ(backend.on_clEnqueueWriteBufferRect(queue, target, CL_FALSE, buffer_origin, buffer_origin, rect, 0u, 0u,
+                                               0u, 0u, source, 0u, nullptr, nullptr),
+           CL_SUCCESS);
+  std::memset(source, 0x33, 64u * 4u);
+  CHECK_EQ(::clEnqueueReadBuffer(queue, target, CL_TRUE, 0u, 64u * 4u, read_back, 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(read_back[0], 0x7Eu);
+  CHECK_EQ(read_back[64u * 4u - 1u], 0x7Eu);
+
+  ::clReleaseMemObject(image);
+  ::clReleaseMemObject(busy);
+  ::clReleaseMemObject(target);
+  ::clReleaseCommandQueue(queue);
+  backend.shut_down(); }

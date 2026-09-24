@@ -506,6 +506,45 @@ cl_int OpenClBackend::on_clEnqueueUnmapMemObject(cl_command_queue command_queue,
     return unmapped;
 }
 
+cl_int OpenClBackend::on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer,
+                                              cl_bool blocking_write, size_t offset, size_t size,
+                                              const void *ptr, cl_uint num_events_in_wait_list,
+                                              const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueWriteBuffer");
+    static_cast<void>(blocking_write);
+    return RealDispatch::on_clEnqueueWriteBuffer(command_queue, buffer, CL_TRUE, offset, size, ptr,
+                                                 num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int OpenClBackend::on_clEnqueueWriteImage(cl_command_queue command_queue, cl_mem image,
+                                             cl_bool blocking_write, const size_t *origin,
+                                             const size_t *region, size_t input_row_pitch,
+                                             size_t input_slice_pitch, const void *ptr,
+                                             cl_uint num_events_in_wait_list,
+                                             const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueWriteImage");
+    static_cast<void>(blocking_write);
+    return RealDispatch::on_clEnqueueWriteImage(command_queue, image, CL_TRUE, origin, region,
+                                                input_row_pitch, input_slice_pitch, ptr,
+                                                num_events_in_wait_list, event_wait_list, event);
+}
+
+cl_int OpenClBackend::on_clEnqueueWriteBufferRect(
+    cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_write, const size_t *buffer_origin,
+    const size_t *host_origin, const size_t *region, size_t buffer_row_pitch, size_t buffer_slice_pitch,
+    size_t host_row_pitch, size_t host_slice_pitch, const void *ptr, cl_uint num_events_in_wait_list,
+    const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueWriteBufferRect");
+    static_cast<void>(blocking_write);
+    return RealDispatch::on_clEnqueueWriteBufferRect(
+        command_queue, buffer, CL_TRUE, buffer_origin, host_origin, region, buffer_row_pitch,
+        buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list,
+        event_wait_list, event);
+}
+
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
 {
     AV_SCOPE("OpenClBackend::on_clSetEventCallback");

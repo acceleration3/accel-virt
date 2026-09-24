@@ -149,6 +149,29 @@ public:
                                       cl_uint num_events_in_wait_list,
                                       const cl_event *event_wait_list, cl_event *event) override;
 
+    /* A write's source is the decode arena, which the next command decodes
+     * over - and a host driver may read a non-blocking write's source when its
+     * queue reaches the write rather than at the call (rusticl does). So every
+     * write is made blocking here, whatever the guest asked: the bytes are
+     * copied before the arena is reused. The guest's ICD drains the queue
+     * first, so the host blocks on the copy and not on work ahead of it. */
+    cl_int on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_write,
+                                   size_t offset, size_t size, const void *ptr,
+                                   cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                   cl_event *event) override;
+    cl_int on_clEnqueueWriteImage(cl_command_queue command_queue, cl_mem image, cl_bool blocking_write,
+                                  const size_t *origin, const size_t *region, size_t input_row_pitch,
+                                  size_t input_slice_pitch, const void *ptr,
+                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                  cl_event *event) override;
+    cl_int on_clEnqueueWriteBufferRect(cl_command_queue command_queue, cl_mem buffer,
+                                       cl_bool blocking_write, const size_t *buffer_origin,
+                                       const size_t *host_origin, const size_t *region,
+                                       size_t buffer_row_pitch, size_t buffer_slice_pitch,
+                                       size_t host_row_pitch, size_t host_slice_pitch, const void *ptr,
+                                       cl_uint num_events_in_wait_list,
+                                       const cl_event *event_wait_list, cl_event *event) override;
+
     /* No guest function pointer crosses the wire, so the callback registered
      * here is this backend's own: it signals the device, which wakes the
      * context's worker, and the guest asks what completed. Refused when the

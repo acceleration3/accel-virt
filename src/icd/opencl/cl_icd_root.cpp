@@ -11,6 +11,8 @@
 #include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
+#include "icd/opencl/cl_image_region.hpp"
+#include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
@@ -352,8 +354,11 @@ void ClIcdRoot::give_back_to_host(ClientTransport &wire, ClObject::Kind kind, ui
     case ClObject::Kind::event:
         static_cast<void>(av::clproto::rvk_clReleaseEvent(wire, handle));
         break;
+    case ClObject::Kind::sampler:
+        static_cast<void>(av::clproto::rvk_clReleaseSampler(wire, handle));
+        break;
     /* A context is torn down rather than released through here, and a
-     * platform, a device and a sampler are never the host's to give back. */
+     * platform and a device are never the host's to give back. */
     default: break;
     }
 }
@@ -799,17 +804,18 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
     if (held == nullptr) return CL_INVALID_KERNEL;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* An argument of the size of a cl_mem may be one: the application passes
-     * the address of its own pointer, and what crosses is the number the host
-     * knows that object by. Anything else is bytes. */
+    /* An argument of the size of a cl_mem may be one, or a cl_sampler: the
+     * application passes the address of its own pointer, and what crosses is
+     * the number the host knows that object by. Anything else is bytes. */
     if (bytes == sizeof(cl_mem) && value != nullptr) {
-        cl_mem named = nullptr;
+        void *named = nullptr;
         const unsigned char *const from = static_cast<const unsigned char *>(value);
         unsigned char *const        into = reinterpret_cast<unsigned char *>(&named);
         for (size_t index_byte = 0u; index_byte < sizeof named; ++index_byte) {
             into[index_byte] = from[index_byte];
         }
-        ClObject *const object = judged(named, ClObject::Kind::mem);
+        ClObject *object = judged(named, ClObject::Kind::mem);
+        if (object == nullptr) object = judged(named, ClObject::Kind::sampler);
         if (object != nullptr) {
             const uint64_t handle = object->wire();
             return av::clproto::rvk_clSetKernelArg(*wire, held->wire(), index, sizeof handle,
@@ -920,25 +926,15 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
      * device's decode arena last held. Asking the host to block on a queue
      * that still has work in it would hold its worker for as long as the
      * queue takes, which is what TdrDelay measures, so the queue is drained
-     * the way finish() drains it - a marker this side waits for - and only
-     * then is the read sent blocking, with nothing left for the host to wait
-     * on. That is the same order a deferred read is delivered in. */
-    uint64_t     settled = 0u;
-    const cl_int marked =
-        av::clproto::rvk_clEnqueueMarkerWithWaitList(*wire, held->wire(), 0u, nullptr, &settled);
-    if (marked != CL_SUCCESS) return marked;
-    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), settled);
-    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, settled));
-    if (waited != CL_SUCCESS) return waited;
-    const cl_int ran = av::clproto::rvk_clEnqueueReadBuffer(
-        *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, into, 0u, nullptr,
-        event != nullptr ? &produced : nullptr);
+     * first and only then is the read sent blocking, with nothing left for
+     * the host to wait on - in pieces the reply slot holds. That is the same
+     * order a deferred read is delivered in. */
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     ran = chunks.read(named->wire(), offset, bytes, into);
     if (ran != CL_SUCCESS) return ran;
-    if (event != nullptr) {
-        *event = static_cast<cl_event>(
-            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
-    }
-    return CL_SUCCESS;
+    return marker_event(*wire, *held, event);
 }
 
 cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -952,24 +948,20 @@ cl_int ClIcdRoot::enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool b
     if (from == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* Enqueued without blocking whatever the application asked for, and with
-     * an event whether or not it wanted one: the blocking half is this side's
-     * wait on that event, so the host is never asked to hold its worker. */
-    uint64_t     produced = 0u;
-    const cl_int ran = av::clproto::rvk_clEnqueueWriteBuffer(
-        *wire, held->wire(), named->wire(), CL_FALSE, offset, bytes, from, 0u, nullptr, &produced);
+    /* Complete when this returns, whatever the application asked for, which
+     * a non-blocking write may be. The bytes cross inside the command, into
+     * the device's decode arena, and the next command decodes over them: a
+     * host that read them when its queue reached the write rather than at the
+     * call would write the next command into the buffer. So the queue is
+     * drained, and the write sent blocking behind nothing, in pieces the
+     * staging room carries (ClTransferChunks). */
+    static_cast<void>(blocking);
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     ran = chunks.write(named->wire(), offset, bytes, from);
     if (ran != CL_SUCCESS) return ran;
-    cl_int waited = CL_SUCCESS;
-    if (blocking == CL_TRUE) waited = waits_.until_queued_completes(*wire, held->wire(), produced);
-    if (event != nullptr) {
-        *event = static_cast<cl_event>(
-            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
-    } else {
-        /* An application that wanted no event still made one here, and this
-         * is the only place that can give it back. */
-        static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, produced));
-    }
-    return waited;
+    return marker_event(*wire, *held, event);
 }
 
 cl_int ClIcdRoot::finish(cl_command_queue queue)
@@ -981,14 +973,8 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     /* Not the host's own clFinish: that blocks the device's worker for as
      * long as the queue takes, and a guest waiting on the fence past TdrDelay
-     * has dxgkrnl reset the adapter. A marker is what the end of the queue
-     * looks like as an event, and waiting for it holds nothing. */
-    uint64_t     marker = 0u;
-    const cl_int enqueued = av::clproto::rvk_clEnqueueMarkerWithWaitList(
-        *wire, held->wire(), 0u, nullptr, &marker);
-    if (enqueued != CL_SUCCESS) return enqueued;
-    const cl_int waited = waits_.until_queued_completes(*wire, held->wire(), marker);
-    static_cast<void>(av::clproto::rvk_clReleaseEvent(*wire, marker));
+     * has dxgkrnl reset the adapter. */
+    const cl_int waited = drain(*wire, held->wire());
     if (waited != CL_SUCCESS) return waited;
     /* Everything queued before the marker has run, so every read outstanding
      * on this queue is one the application may now read. */
@@ -1094,8 +1080,8 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     /* What the application is entitled to read: the buffer's own bytes. A
      * write-invalidate map promises nothing about them, so it is not read. */
     if ((flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u) {
-        const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
-            *wire, held->wire(), named->wire(), CL_TRUE, offset, bytes, at, 0u, nullptr, nullptr);
+        ClTransferChunks chunks(*wire, held->wire());
+        const cl_int     read = chunks.read(named->wire(), offset, bytes, at);
         if (read != CL_SUCCESS) {
             /* take_mapping answered `at`, so this is the row it took. */
             MappedRegion *const region = context->mapping_at(at);
@@ -1137,9 +1123,8 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
      * is the application's own writes, so it goes last and wins. */
     cl_int written = CL_SUCCESS;
     if (unmapped == CL_SUCCESS && region->writes_back()) {
-        written = av::clproto::rvk_clEnqueueWriteBuffer(*wire, held->wire(), named->wire(), CL_TRUE,
-                                                        region->offset(), region->bytes(),
-                                                        region->at(), 0u, nullptr, nullptr);
+        ClTransferChunks chunks(*wire, held->wire());
+        written = chunks.write(named->wire(), region->offset(), region->bytes(), region->at());
     }
     context->give_back_mapping(*region);
     if (unmapped != CL_SUCCESS) return unmapped;
@@ -1390,9 +1375,9 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, const uint64_t *events, u
         /* The fetch the enqueue deferred. The host has reached the marker, so
          * everything queued before the read has run and this answers at once;
          * it is sent blocking because there is nothing left to wait for. */
-        const cl_int read = av::clproto::rvk_clEnqueueReadBuffer(
-            wire, waiting->queue(), waiting->buffer(), CL_TRUE, waiting->offset(),
-            waiting->bytes(), waiting->into(), 0u, nullptr, nullptr);
+        ClTransferChunks chunks(wire, waiting->queue());
+        const cl_int     read =
+            chunks.read(waiting->buffer(), waiting->offset(), waiting->bytes(), waiting->into());
         if (waiting->ours())
             static_cast<void>(av::clproto::rvk_clReleaseEvent(wire, waiting->event()));
         waiting->give_up();
@@ -1435,6 +1420,328 @@ void ClIcdRoot::release_watched(ClObject &event)
 {
     AV_SCOPE("ClIcdRoot::release_watched");
     static_cast<void>(release(&event, ClObject::Kind::event));
+}
+
+cl_int ClIcdRoot::drain(ClientTransport &wire, uint64_t queue)
+{
+    AV_SCOPE("ClIcdRoot::drain");
+    uint64_t     marker = 0u;
+    const cl_int enqueued =
+        av::clproto::rvk_clEnqueueMarkerWithWaitList(wire, queue, 0u, nullptr, &marker);
+    if (enqueued != CL_SUCCESS) return enqueued;
+    const cl_int waited = waits_.until_queued_completes(wire, queue, marker);
+    static_cast<void>(av::clproto::rvk_clReleaseEvent(wire, marker));
+    return waited;
+}
+
+cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::marker_event");
+    if (event == nullptr) return CL_SUCCESS;
+    uint64_t     produced = 0u;
+    const cl_int marked =
+        av::clproto::rvk_clEnqueueMarkerWithWaitList(wire, queue.wire(), 0u, nullptr, &produced);
+    if (marked != CL_SUCCESS) return marked;
+    /* The transfer is done whether or not an event can be made of the marker,
+     * as with every enqueue here: an event the ICD could not keep is a null
+     * one, not a failed transfer. */
+    *event = static_cast<cl_event>(
+        wrap(wire, ClObject::Kind::event, produced, queue.context(), &queue, nullptr));
+    return CL_SUCCESS;
+}
+
+size_t ClIcdRoot::element_bytes(ClientTransport &wire, uint64_t image)
+{
+    AV_SCOPE("ClIcdRoot::element_bytes");
+    size_t element = 0u;
+    if (av::clproto::rvk_clGetImageInfo(wire, image, CL_IMAGE_ELEMENT_SIZE, sizeof element,
+                                        &element, nullptr) != CL_SUCCESS)
+        return 0u;
+    return element;
+}
+
+cl_int ClIcdRoot::program_build_info(cl_program program, cl_device_id device,
+                                     cl_program_build_info name, size_t value_bytes, void *value,
+                                     size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::program_build_info");
+    ClObject *const held = judged(program, ClObject::Kind::program);
+    if (held == nullptr) return CL_INVALID_PROGRAM;
+    if (judged(device, ClObject::Kind::device) == nullptr) return CL_INVALID_DEVICE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* judged() found a device, and the only one this ICD makes is this. */
+    return av::clproto::rvk_clGetProgramBuildInfo(*wire, held->wire(), device_object_->wire(), name,
+                                                  value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::kernel_work_group_info(cl_kernel kernel, cl_device_id device,
+                                         cl_kernel_work_group_info name, size_t value_bytes,
+                                         void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::kernel_work_group_info");
+    ClObject *const held = judged(kernel, ClObject::Kind::kernel);
+    if (held == nullptr) return CL_INVALID_KERNEL;
+    /* A null device is the kernel's only one, which the API allows. */
+    if (device != nullptr && judged(device, ClObject::Kind::device) == nullptr)
+        return CL_INVALID_DEVICE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const uint64_t host_device = device_object_ != nullptr ? device_object_->wire() : 0u;
+    return av::clproto::rvk_clGetKernelWorkGroupInfo(*wire, held->wire(), host_device, name,
+                                                     value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_mem to,
+                                      size_t from_offset, size_t to_offset, size_t bytes,
+                                      cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_copy_buffer");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const source = judged(from, ClObject::Kind::mem);
+    ClObject *const target = judged(to, ClObject::Kind::mem);
+    if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    uint64_t     produced = 0u;
+    const cl_int copied = av::clproto::rvk_clEnqueueCopyBuffer(
+        *wire, held->wire(), source->wire(), target->wire(), from_offset, to_offset, bytes, 0u,
+        nullptr, event != nullptr ? &produced : nullptr);
+    if (copied == CL_SUCCESS && event != nullptr) {
+        *event = static_cast<cl_event>(
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+    }
+    return copied;
+}
+
+cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, const void *pattern,
+                                      size_t pattern_bytes, size_t offset, size_t bytes,
+                                      cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_fill_buffer");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(buffer, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (pattern == nullptr || pattern_bytes == 0u) return CL_INVALID_VALUE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    uint64_t     produced = 0u;
+    const cl_int filled = av::clproto::rvk_clEnqueueFillBuffer(
+        *wire, held->wire(), named->wire(), pattern, pattern_bytes, offset, bytes, 0u, nullptr,
+        event != nullptr ? &produced : nullptr);
+    if (filled == CL_SUCCESS && event != nullptr) {
+        *event = static_cast<cl_event>(
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+    }
+    return filled;
+}
+
+cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem to,
+                                     const size_t *from_origin, const size_t *to_origin,
+                                     const size_t *region, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_copy_image");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const source = judged(from, ClObject::Kind::mem);
+    ClObject *const target = judged(to, ClObject::Kind::mem);
+    if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    uint64_t     produced = 0u;
+    const cl_int copied = av::clproto::rvk_clEnqueueCopyImage(
+        *wire, held->wire(), source->wire(), target->wire(), from_origin, to_origin, region, 0u,
+        nullptr, event != nullptr ? &produced : nullptr);
+    if (copied == CL_SUCCESS && event != nullptr) {
+        *event = static_cast<cl_event>(
+            wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));
+    }
+    return copied;
+}
+
+cl_int ClIcdRoot::fill_image(ClientTransport &wire, uint64_t context, uint64_t image,
+                             const cl_image_desc &desc, const void *from)
+{
+    AV_SCOPE("ClIcdRoot::fill_image");
+    size_t extent[3] = {desc.image_width, 1u, 1u};
+    switch (desc.image_type) {
+    case CL_MEM_OBJECT_IMAGE1D: break;
+    case CL_MEM_OBJECT_IMAGE2D: extent[1] = desc.image_height; break;
+    case CL_MEM_OBJECT_IMAGE2D_ARRAY:
+        extent[1] = desc.image_height;
+        extent[2] = desc.image_array_size;
+        break;
+    case CL_MEM_OBJECT_IMAGE3D:
+        extent[1] = desc.image_height;
+        extent[2] = desc.image_depth;
+        break;
+    /* A 1D array is pitched by its slice pitch alone, and a buffer image is
+     * its buffer's bytes: neither is rows and slices. */
+    default: return CL_INVALID_OPERATION;
+    }
+    const size_t        origin[3] = {0u, 0u, 0u};
+    const ClImageRegion region(origin, extent, desc.image_row_pitch, desc.image_slice_pitch,
+                               element_bytes(wire, image));
+    if (!region.valid()) return CL_INVALID_IMAGE_DESCRIPTOR;
+    if (device_object_ == nullptr) return CL_INVALID_DEVICE;
+    /* A queue nobody else has, so there is nothing ahead of the writes for the
+     * host to wait behind; it goes when they are done. */
+    cl_int         made = CL_SUCCESS;
+    const uint64_t queue = av::clproto::rvk_clCreateCommandQueueWithProperties(
+        wire, context, device_object_->wire(), nullptr, &made);
+    if (queue == 0u) return made != CL_SUCCESS ? made : CL_OUT_OF_RESOURCES;
+    ClTransferChunks chunks(wire, queue);
+    const cl_int     written = chunks.write_image(image, region, from);
+    static_cast<void>(av::clproto::rvk_clReleaseCommandQueue(wire, queue));
+    return written;
+}
+
+cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
+                               const cl_image_format *format, const cl_image_desc *desc,
+                               void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_image");
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr) {
+        report_error(error, CL_INVALID_CONTEXT);
+        return nullptr;
+    }
+    if (format == nullptr) {
+        report_error(error, CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
+        return nullptr;
+    }
+    if (desc == nullptr) {
+        report_error(error, CL_INVALID_IMAGE_DESCRIPTOR);
+        return nullptr;
+    }
+    if ((flags & CL_MEM_USE_HOST_PTR) != 0u) {
+        log_.write("rvkcl: an image over the application's own memory is not carried");
+        report_error(error, CL_INVALID_VALUE);
+        return nullptr;
+    }
+    /* The API's own pairing: a pointer exactly when the flags say to copy. */
+    const bool copies = (flags & CL_MEM_COPY_HOST_PTR) != 0u;
+    if (copies != (host_pointer != nullptr)) {
+        report_error(error, CL_INVALID_HOST_PTR);
+        return nullptr;
+    }
+    cl_image_desc described = *desc;
+    if (desc->buffer != nullptr) {
+        ClObject *const buffer = judged(desc->buffer, ClObject::Kind::mem);
+        if (buffer == nullptr) {
+            report_error(error, CL_INVALID_IMAGE_DESCRIPTOR);
+            return nullptr;
+        }
+        /* What crosses is the host's number for it, which the decoder turns
+         * back into the host's cl_mem. */
+        described.buffer = reinterpret_cast<cl_mem>(static_cast<uintptr_t>(buffer->wire()));
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    cl_int         host_error = CL_SUCCESS;
+    const uint64_t image = av::clproto::rvk_clCreateImage(
+        *wire, held->wire(), flags & ~static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR), format,
+        &described, nullptr, 0u, &host_error);
+    if (image == 0u) {
+        report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    if (copies) {
+        const cl_int filled = fill_image(*wire, held->wire(), image, described, host_pointer);
+        if (filled != CL_SUCCESS) {
+            give_back_to_host(*wire, ClObject::Kind::mem, image);
+            report_error(error, filled);
+            return nullptr;
+        }
+    }
+    return static_cast<cl_mem>(wrap(*wire, ClObject::Kind::mem, image, held->context(), held, error));
+}
+
+cl_int ClIcdRoot::enqueue_read_image(cl_command_queue queue, cl_mem image, const size_t *origin,
+                                     const size_t *region, size_t row_pitch, size_t slice_pitch,
+                                     void *into, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_read_image");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(image, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (origin == nullptr || region == nullptr || into == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const ClImageRegion described(origin, region, row_pitch, slice_pitch,
+                                  element_bytes(*wire, named->wire()));
+    if (!described.valid()) return CL_INVALID_VALUE;
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     read = chunks.read_image(named->wire(), described, into);
+    if (read != CL_SUCCESS) return read;
+    return marker_event(*wire, *held, event);
+}
+
+cl_int ClIcdRoot::enqueue_write_image(cl_command_queue queue, cl_mem image, const size_t *origin,
+                                      const size_t *region, size_t row_pitch, size_t slice_pitch,
+                                      const void *from, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_write_image");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    ClObject *const named = judged(image, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    if (origin == nullptr || region == nullptr || from == nullptr) return CL_INVALID_VALUE;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    const ClImageRegion described(origin, region, row_pitch, slice_pitch,
+                                  element_bytes(*wire, named->wire()));
+    if (!described.valid()) return CL_INVALID_VALUE;
+    const cl_int drained = drain(*wire, held->wire());
+    if (drained != CL_SUCCESS) return drained;
+    ClTransferChunks chunks(*wire, held->wire());
+    const cl_int     written = chunks.write_image(named->wire(), described, from);
+    if (written != CL_SUCCESS) return written;
+    return marker_event(*wire, *held, event);
+}
+
+cl_sampler ClIcdRoot::create_sampler(cl_context context, const uint64_t *properties, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_sampler");
+    static constexpr uint64_t allowed[] = {static_cast<uint64_t>(CL_SAMPLER_NORMALIZED_COORDS),
+                                           static_cast<uint64_t>(CL_SAMPLER_ADDRESSING_MODE),
+                                           static_cast<uint64_t>(CL_SAMPLER_FILTER_MODE)};
+    ClPropertyList            list;
+    const cl_int              judged_list = judge(properties, allowed, 3u, list);
+    if (judged_list != CL_SUCCESS) {
+        report_error(error, judged_list);
+        return nullptr;
+    }
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr) {
+        report_error(error, CL_INVALID_CONTEXT);
+        return nullptr;
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    /* The values are the host's to judge: which modes pair with which is the
+     * device's own rule. */
+    cl_int         host_error = CL_SUCCESS;
+    const uint64_t sampler =
+        av::clproto::rvk_clCreateSamplerWithProperties(*wire, held->wire(), properties, &host_error);
+    if (sampler == 0u) {
+        report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    return static_cast<cl_sampler>(
+        wrap(*wire, ClObject::Kind::sampler, sampler, held->context(), held, error));
 }
 
 }  // namespace av::clicd
