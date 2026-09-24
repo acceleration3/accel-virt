@@ -25,3 +25,4 @@ third_party/qemu
 third_party/vulkan-runtime
 third_party/opencl-loader
 .claude/worktrees/
+third_party/dxc

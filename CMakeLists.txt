@@ -176,6 +176,15 @@ target_include_directories(rvkd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
 target_compile_options(rvkd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
 target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
 
+# The D3D12 samples' host side (samples/d3d12): vkd3d-proton native, the
+# guest's DXIL, the same frames the guest renders (tools/d3d12_report.py).
+file(GLOB AV_D3D12_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/d3d12/*.cpp)
+list(FILTER AV_D3D12_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+add_executable(rvkd3d12samples_host ${AV_D3D12_SAMPLES_SOURCES})
+target_include_directories(rvkd3d12samples_host PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(rvkd3d12samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(rvkd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
+
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
