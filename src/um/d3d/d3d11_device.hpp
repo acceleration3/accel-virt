@@ -2,7 +2,7 @@
  * table (D3DWDDM2_6DDI_DEVICEFUNCS) and the DXGI slots that present.
  *
  * The device speaks the Direct3D wire (tools/codegen/registry/d3d.toml) on the
- * process's session for its adapter (D3d11Session), as a host device of its
+ * process's session for its adapter (d3d::D3dSession), as a host device of its
  * own on the session's stream (D3dDeviceChannel): the host makes the
  * resources, compiles the shaders and draws, on its GPU's shared Direct3D 11
  * device (src/device/executor/d3d_backend.hpp). The guest keeps only what the
@@ -34,14 +34,17 @@ namespace av::icd {
 class LogSink;
 }  // namespace av::icd
 
+namespace av::d3d {
+class D3dSession;
+}  // namespace av::d3d
+
 namespace av::d3d11 {
 
 class D3d11HostCaps;
-class D3d11Session;
 
 class D3d11Device {
 public:
-    D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps);
+    D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
@@ -145,7 +148,7 @@ private:
                        const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT *stream_out);
     void destroy_object(uint32_t id);
 
-    D3d11Session          &session_;
+    d3d::D3dSession          &session_;
     BlockSource           &memory_;
     icd::LogSink          &log_;
     const D3d11HostCaps   &caps_;

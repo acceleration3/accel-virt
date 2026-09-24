@@ -4,7 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
-#include "um/d3d/d3d11_session.hpp"
+#include "um/d3d/d3d_session.hpp"
 
 namespace av::d3d11 {
 

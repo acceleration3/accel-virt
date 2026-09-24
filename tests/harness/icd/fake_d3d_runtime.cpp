@@ -2,6 +2,7 @@
 
 #include "icd/d3d/ddi/d3d10ddiarg_calc_private_device_size_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_open_adapter_record.hpp"
+#include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/dxgi_ddi_args_record.hpp"
 #include "icd/d3d/umd_root.hpp"
@@ -17,7 +18,7 @@ using SupportedVersions = Hresult (*)(void *, std::uint32_t *, std::uint64_t *);
 using GetCaps = Hresult (*)(void *, d3d::D3d102ddiargGetCapsRecord *);
 using CalcSize = std::size_t (*)(void *, const d3d::D3d10ddiargCalcPrivateDeviceSizeRecord *);
 using CreateDevice10 = Hresult (*)(void *, d3d::D3d10ddiargCreateDeviceRecord *);
-using CreateDevice12 = Hresult (*)(void *, const void *);
+using CreateDevice12 = Hresult (*)(void *, d3d::D3d12ddiargCreateDeviceRecord *);
 using CloseAdapter = Hresult (*)(void *);
 using DestroyDevice = void (*)(void *);
 using OptionalTables = Hresult (*)(void *, std::uint32_t *, d3d::D3d12ddiTableRequestRecord *);
@@ -29,17 +30,22 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
     return reinterpret_cast<void *const *>(&table);
 }
 
+/* The runtime's QueryAdapterInfo callback, which the driver asks for the LUID
+ * the kernel driver answers: this fake has no kernel driver, so it refuses,
+ * and the driver takes the first rvkgpu adapter. */
+std::int32_t refuse_adapter_info(void *, void *) { return -1; }
+
 }  // namespace
 
 FakeD3dRuntime::FakeD3dRuntime(d3d::UmdRoot &root, d3d::RuntimeKind runtime)
     : root_(root), runtime_(runtime), callbacks_{}, funcs10_{}, funcs12_{}, dxgi_callbacks_{}, dxgi_table_{},
       adapter_(nullptr), interface_(runtime == d3d::RuntimeKind::d3d10_11 ? d3d11_interface : 0u),
       no_callbacks_(false), no_table_(false), no_dxgi_callbacks_(false), no_dxgi_table_(false), scribble_(false),
-      block_{}, runtime_device_(0), runtime_core_layer_(0), kt_callbacks_(0), um_callbacks_(0)
+      block_{}, table_{}, runtime_device_(0), runtime_core_layer_(0), kt_callbacks_(0), um_callbacks_(0)
 {
     /* Non-null rows, as a real runtime's table has: the driver keeps the
      * pointer to the table, and a test that moved a row would see it. */
-    callbacks_.pfnQueryAdapterInfoCb = &runtime_device_;
+    callbacks_.pfnQueryAdapterInfoCb = reinterpret_cast<void *>(&refuse_adapter_info);
     callbacks_.pfnGetMultisampleMethodListCb = &runtime_core_layer_;
     callbacks_.pfnQueryAdapterInfoCb2 = &kt_callbacks_;
     dxgi_callbacks_.pfnPresentCb = &um_callbacks_;
@@ -125,8 +131,14 @@ Hresult FakeD3dRuntime::create_device()
 {
     std::memset(block_, scribble_ ? 0x5A : 0, sizeof block_);
     std::memset(&dxgi_table_, 0, sizeof dxgi_table_);
-    if (runtime_ == d3d::RuntimeKind::d3d12)
-        return reinterpret_cast<CreateDevice12>(funcs12_.pfnCreateDevice)(adapter_, &runtime_device_);
+    if (runtime_ == d3d::RuntimeKind::d3d12) {
+        d3d::D3d12ddiargCreateDeviceRecord create = {};
+        create.hRTDevice = &runtime_device_;
+        create.pKTCallbacks = &kt_callbacks_;
+        create.hDrvDevice = block_;
+        create.p12UMCallbacks = &um_callbacks_;
+        return reinterpret_cast<CreateDevice12>(funcs12_.pfnCreateDevice)(adapter_, &create);
+    }
     d3d::D3d10ddiargCreateDeviceRecord create = {};
     create.hRTDevice = &runtime_device_;
     create.Interface = interface_;
@@ -154,12 +166,18 @@ Hresult FakeD3dRuntime::optional_ddi_tables(std::uint32_t *entries, d3d::D3d12dd
     return reinterpret_cast<OptionalTables>(funcs12_.pfnGetOptionalDDITables)(adapter_, entries, requests);
 }
 
-Hresult FakeD3dRuntime::fill_ddi_table(std::uint32_t table_type)
+Hresult FakeD3dRuntime::fill_ddi_table(std::uint32_t table_type, std::size_t bytes)
 {
     if (runtime_ != d3d::RuntimeKind::d3d12) return d3d::hr_invalid_arg;
-    unsigned char destination[64] = {};
-    return reinterpret_cast<FillTable>(funcs12_.pfnFillDDITable)(adapter_, table_type, destination,
-                                                                 sizeof destination, 0u, nullptr);
+    for (void *&slot : table_) slot = nullptr;
+    return reinterpret_cast<FillTable>(funcs12_.pfnFillDDITable)(adapter_, table_type, table_, bytes, 0u, nullptr);
+}
+
+std::uint32_t FakeD3dRuntime::filled_slots() const
+{
+    std::uint32_t filled = 0u;
+    for (void *const slot : table_) filled += slot != nullptr ? 1u : 0u;
+    return filled;
 }
 
 void FakeD3dRuntime::destroy_device()

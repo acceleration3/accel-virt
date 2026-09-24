@@ -15,6 +15,7 @@
 
 #include "icd/d3d/hresult.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av::d3d {
@@ -23,6 +24,7 @@ class UmdAdapter;
 class UmdDevice;
 struct D3d10ddiargCreateDeviceRecord;
 struct D3d102ddiargGetCapsRecord;
+struct D3d12ddiargCreateDeviceRecord;
 
 class UmdHostDriver {
 public:
@@ -35,10 +37,19 @@ public:
      * nothing made: the root forgets the adopted device and answers the same. */
     /* `kmt_adapter` is the D3DKMT handle of the adapter the device is on. */
     virtual Hresult build(UmdDevice &adopted, D3d10ddiargCreateDeviceRecord &create, uint32_t kmt_adapter) = 0;
-    /* One GetCaps question about `adapter`, answered in the caller's buffer. */
+    /* Direct3D 12's create: the same contract over D3D12Core's arguments, the
+     * device's own tables coming later through fill_table12. */
+    virtual Hresult build12(UmdDevice &adopted, D3d12ddiargCreateDeviceRecord &create, uint32_t kmt_adapter) = 0;
+    /* One GetCaps question about `adapter`, answered in the caller's buffer;
+     * the adapter's runtime says which DDI's question it is (the two records
+     * are one shape). */
     virtual Hresult caps(UmdAdapter &adapter, D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter) = 0;
-    /* The runtime is destroying the device whose block this is. */
-    virtual void    tear_down(void *block) = 0;
+    /* One of the device tables D3D12Core asks an adapter for, filled into
+     * the `bytes` at `table`. hr_invalid_arg for a table smaller than the
+     * revision this driver fills; hr_not_impl for a table it has none of. */
+    virtual Hresult fill_table12(uint32_t table_type, void *table, size_t bytes) = 0;
+    /* The runtime is destroying `device`, whose block this is. */
+    virtual void    tear_down(UmdDevice &device, void *block) = 0;
 
 protected:
     UmdHostDriver() = default;

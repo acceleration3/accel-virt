@@ -721,6 +721,13 @@ endif()
 # ---- the committed generated sources are what the generators write --------
 add_test(NAME generated_sources
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_generated.py)
+# The D3D user-mode driver's table thunks are what the WDK's own headers say
+# each slot's signature is; a hand edit, or a header that moved, fails here.
+find_program(AV_CLANG_CL clang-cl)
+if(AV_CLANG_CL AND EXISTS ${AV_WINDOWS_KIT_DIR}/include/um/d3d12umddi.h)
+  add_test(NAME generated_d3d11_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d11_ddi.py --check)
+  add_test(NAME generated_d3d12_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d12_ddi.py --check)
+endif()
 
 # ---- the committed SPIR-V is what its GLSL compiles to (045) ----------------
 add_test(NAME check_spirv

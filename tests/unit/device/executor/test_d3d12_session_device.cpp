@@ -142,6 +142,19 @@ void make_frame(av::D3dLoopback &wire)
     texture.format = format_b8g8r8a8;
     texture.sample_count = 1u;
     texture.flags = flag_render_target;
+    /* The guest driver sizes a placed texture by the host's answer, and
+     * reports the host's waves: both come from the device the resource will
+     * be made on. A description the host would refuse has no size. */
+    std::uint64_t bytes = 0u, alignment = 0u;
+    CHECK(rvk_d3d12_ResourceAllocation12(wire, texture, &bytes, &alignment));
+    CHECK(bytes >= std::uint64_t{size} * size * 4u);
+    CHECK(alignment != 0u && (alignment & (alignment - 1u)) == 0u);
+    ResourceDesc refused = texture;
+    refused.dimension = 9u;
+    CHECK(rvk_d3d12_ResourceAllocation12(wire, refused, &bytes, &alignment));
+    CHECK_EQ(bytes, ~std::uint64_t{0});
+    CHECK(caps.wave_lane_min >= 4u && caps.wave_lane_min <= caps.wave_lane_max);
+    CHECK(caps.total_lanes >= caps.wave_lane_max);
     CHECK(rvk_d3d12_CreateCommittedResource12(wire, target, heap_of(heap_default), 0u, texture, state_render_target,
                                               ClearValue{}, 0u));
     CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, rtv_heap, descriptors_rtv, 1u, 0u));

@@ -119,7 +119,7 @@ ClientBlobArena &D3dDeviceChannel::blobs()
 bool D3dDeviceChannel::invariants_hold() const
 {
     AV_SCOPE("D3dDeviceChannel::invariants_hold");
-    return device_ != 0u;
+    return phase_ == Phase::idle;
 }
 
 }  // namespace av::d3d

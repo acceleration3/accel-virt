@@ -59,7 +59,9 @@ bool D3dCommandStream::make_room_for(size_t bytes)
 bool D3dCommandStream::speak_as(uint32_t device)
 {
     AV_SCOPE("D3dCommandStream::speak_as");
-    if (device == speaking_) return !failed_;
+    /* Device 0 is a Direct3D 12 speaker: its commands name their own objects
+     * and read no selected pipeline state, so whoever was selected stays. */
+    if (device == 0u || device == speaking_) return !failed_;
     if (!d3dproto::rvk_d3d_SelectDevice11(*this, device)) return false;
     speaking_ = device;
     return true;

@@ -36,6 +36,7 @@ public:
     virtual bool on_CreateHeap12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) = 0;
     virtual bool on_CreateCommittedResource12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
+    virtual bool on_ResourceAllocation12(const ResourceDesc& desc, uint64_t& size, uint64_t& alignment) = 0;
     virtual bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) = 0;
     virtual bool on_CreateShaderResourceView12(const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) = 0;
     virtual bool on_CreateUnorderedAccessView12(const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc) = 0;

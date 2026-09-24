@@ -9,7 +9,7 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_host_caps.hpp"
-#include "um/d3d/d3d11_session.hpp"
+#include "um/d3d/d3d_session.hpp"
 
 namespace av::d3d11 {
 
@@ -31,7 +31,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 }  // namespace
 
-D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
+D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), present_context_(nullptr), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), frame_(1u)

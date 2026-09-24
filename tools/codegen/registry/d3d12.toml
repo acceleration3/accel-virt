@@ -158,7 +158,8 @@ fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", 
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
           "u32 rovs", "u32 max_gpu_va_bits_per_resource", "u32 max_gpu_va_bits_per_process",
           "u32 vendor_id", "u32 device_id", "u32 dedicated_video_memory_mb", "u32 descriptor_sizes[4]",
-          "u32 reserved[7]"]
+          "u32 double_ops", "u32 int64_ops", "u32 wave_ops", "u32 wave_lane_min", "u32 wave_lane_max",
+          "u32 total_lanes", "u32 reserved"]
 
 # ---------------------------------------------------------------- device
 
@@ -214,6 +215,14 @@ id = 0x1102
 doc = """A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on."""
 params = ["u32 resource", "u32 heap", "u64 offset", "ResourceDesc desc", "u32 state", "ClearValue clear",
           "u64 address"]
+
+[[command]]
+name = "ResourceAllocation12"
+id = 0x1103
+doc = """How many bytes, at what alignment, a placed resource of `desc` takes in a heap: the host's answer, since
+the host is where it will be placed. size is ~0 for a description the host would refuse."""
+params = ["ResourceDesc desc"]
+reply = ["u64 size", "u64 alignment"]
 
 # ---------------------------------------------------------------- descriptors
 

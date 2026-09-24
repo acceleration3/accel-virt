@@ -167,6 +167,22 @@ bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resourc
     return t.send_async(kCmd_CreatePlacedResource12, b) == ::av::TransportResult::ok;
 }
 
+bool rvk_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment) {
+    AV_SCOPE("rvk_d3d12_ResourceAllocation12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod(desc);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_ResourceAllocation12, b, r) != ::av::TransportResult::ok) return false;
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (size != nullptr) *size = value; }
+    { uint64_t value{};
+      if (!r.read_pod(value)) return false;
+      if (alignment != nullptr) *alignment = value; }
+    return r.remaining() == 0u;
+}
+
 bool rvk_d3d12_CreateDescriptorHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) {
     AV_SCOPE("rvk_d3d12_CreateDescriptorHeap12");
     ::av::WireWriter b = t.request_writer();

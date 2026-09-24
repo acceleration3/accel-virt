@@ -16,6 +16,7 @@ const char* command_name(uint32_t id) {
         case kCmd_CreateHeap12: return "CreateHeap12";
         case kCmd_CreateCommittedResource12: return "CreateCommittedResource12";
         case kCmd_CreatePlacedResource12: return "CreatePlacedResource12";
+        case kCmd_ResourceAllocation12: return "ResourceAllocation12";
         case kCmd_CreateDescriptorHeap12: return "CreateDescriptorHeap12";
         case kCmd_CreateShaderResourceView12: return "CreateShaderResourceView12";
         case kCmd_CreateUnorderedAccessView12: return "CreateUnorderedAccessView12";

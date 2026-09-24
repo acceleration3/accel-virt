@@ -350,6 +350,20 @@ bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12pr
     return place(resource, made, desc.dimension == buffer_dimension ? address : 0u, desc.width);
 }
 
+bool D3d12Session::on_ResourceAllocation12(const d3d12proto::ResourceDesc &desc, uint64_t &size,
+                                           uint64_t &alignment)
+{
+    AV_SCOPE("D3d12Session::on_ResourceAllocation12");
+    size = ~uint64_t{0};
+    alignment = 0u;
+    if (device_ == nullptr || !resource_holds(desc)) return true;
+    const D3D12_RESOURCE_DESC made = host_desc(desc);
+    const D3D12_RESOURCE_ALLOCATION_INFO info = device_->device()->GetResourceAllocationInfo(0u, 1u, &made);
+    size = info.SizeInBytes;
+    alignment = info.Alignment;
+    return true;
+}
+
 bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset,
                                              const d3d12proto::ResourceDesc &desc, uint32_t state,
                                              const d3d12proto::ClearValue &clear, uint64_t address)

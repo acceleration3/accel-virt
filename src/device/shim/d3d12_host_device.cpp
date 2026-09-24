@@ -115,6 +115,15 @@ void D3d12HostDevice::measure(uint32_t vendor_id, uint32_t device_id, uint64_t v
         caps_.conservative_rasterization_tier = static_cast<uint32_t>(options.ConservativeRasterizationTier);
         caps_.typed_uav_load_additional_formats = options.TypedUAVLoadAdditionalFormats ? 1u : 0u;
         caps_.rovs = options.ROVsSupported ? 1u : 0u;
+        caps_.double_ops = options.DoublePrecisionFloatShaderOps ? 1u : 0u;
+    }
+    D3D12_FEATURE_DATA_D3D12_OPTIONS1 waves = {};
+    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waves, sizeof(waves)))) {
+        caps_.wave_ops = waves.WaveOps ? 1u : 0u;
+        caps_.wave_lane_min = waves.WaveLaneCountMin;
+        caps_.wave_lane_max = waves.WaveLaneCountMax;
+        caps_.total_lanes = waves.TotalLaneCount;
+        caps_.int64_ops = waves.Int64ShaderOps ? 1u : 0u;
     }
     D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT address = {};
     if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, &address, sizeof(address)))) {

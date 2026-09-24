@@ -157,7 +157,7 @@ TEST(umd_root_open, the_table_slots_refuse_an_adapter_handle_this_driver_never_g
   CHECK_EQ(rig.root().create_device12(&forged, nullptr), hr_invalid_arg);
   CHECK_EQ(rig.root().close_adapter(&forged), hr_invalid_arg);
   CHECK_EQ(rig.root().optional_ddi_tables(&forged, &entries, nullptr), hr_invalid_arg);
-  CHECK_EQ(rig.root().fill_ddi_table(&forged, 0u), hr_invalid_arg);
+  CHECK_EQ(rig.root().fill_ddi_table(&forged, 0u, &forged, sizeof forged), hr_invalid_arg);
   /* A null handle is the same answer and is never dereferenced. */
   CHECK_EQ(rig.root().close_adapter(nullptr), hr_invalid_arg);
   CHECK(rig.root().invariants_hold());
@@ -192,8 +192,13 @@ TEST(umd_root_open, every_cap_is_refused_and_logged_with_the_type_asked_for)
   CHECK_EQ(rig.log().holding("cap refused, type"), 7u);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
-TEST(umd_root_open, d3d12_answers_no_optional_tables_and_fills_none)
-{ const std::uint32_t needed[] = {0u, 1u, 2u, 3u};
+/* With no host driver only the DXGI table - the root's own seam - is filled;
+ * the device, command list and command queue tables are the host driver's,
+ * and each refusal is logged. A table smaller than DXGI's 22 slots is refused
+ * before a slot is written past it. */
+TEST(umd_root_open, d3d12_answers_no_optional_tables_and_fills_only_dxgi_without_a_host_driver)
+{ const std::uint32_t needed[] = {0u, 1u, 2u};
+  constexpr std::uint32_t dxgi = 3u;
   UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
   CHECK_EQ(runtime.open(), hr_ok);
@@ -201,7 +206,10 @@ TEST(umd_root_open, d3d12_answers_no_optional_tables_and_fills_none)
   CHECK_EQ(runtime.optional_ddi_tables(&entries, nullptr), hr_ok);
   CHECK_EQ(entries, 0u);
   for (const std::uint32_t table : needed) CHECK_EQ(runtime.fill_ddi_table(table), hr_not_impl);
-  CHECK_EQ(rig.log().holding("ddi table refused, type"), 4u);
+  CHECK_EQ(runtime.fill_ddi_table(dxgi), hr_ok);
+  CHECK(runtime.filled_slots() == 22u);
+  CHECK_EQ(runtime.fill_ddi_table(dxgi, 21u * sizeof(void *)), hr_invalid_arg);
+  CHECK_EQ(rig.log().holding("ddi table refused, type"), 3u);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
 TEST(umd_root_open, a_state_dump_names_the_adapters_and_the_connection)

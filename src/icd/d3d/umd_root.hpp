@@ -41,6 +41,7 @@ struct D3d102ddiargGetCapsRecord;
 struct D3d10ddiargCreateDeviceRecord;
 struct D3d10ddiargOpenAdapterRecord;
 struct D3d12ddiTableRequestRecord;
+struct D3d12ddiargCreateDeviceRecord;
 struct D3d12ddiargOpenAdapterRecord;
 
 class UmdRoot final : public StateReporter {
@@ -66,14 +67,16 @@ public:
     Hresult caps(void *adapter, D3d102ddiargGetCapsRecord *args);
     size_t  private_device_bytes(void *adapter) const;
     Hresult create_device(void *adapter, D3d10ddiargCreateDeviceRecord *create);
-    /* D3D12's create: 057 mirrors D3D12DDIARG_CREATEDEVICE and builds the
-     * device over this same table. Until then no device is made and the
-     * runtime is told so. */
-    Hresult create_device12(void *adapter, const void *create);
+    /* D3D12's create, over the same device table: the device is adopted into
+     * it and built by the host driver, and without one no device is made and
+     * the runtime is told so. */
+    Hresult create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *create);
     Hresult close_adapter(void *adapter);
     void    destroy_device(void *block);
     Hresult optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests);
-    Hresult fill_ddi_table(void *adapter, uint32_t table_type);
+    /* DXGI's table is the root's own seam, as it is inside D3D11's create;
+     * every other table is the host driver's. */
+    Hresult fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes);
 
     /* What a DXGI thunk resolves its argument's hDevice through. */
     UmdDevice *device_of(void *block) const;

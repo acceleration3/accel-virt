@@ -190,11 +190,15 @@ TEST(umd_device_model, the_create_answers_not_implemented_and_leaves_no_device_b
   CHECK_EQ(runtime.close_adapter(), hr_ok);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-TEST(umd_device_model, the_d3d12_create_makes_no_device_yet)
+/* The D3D12 create adopts the device into the same table as D3D11's and hands
+ * it to the host driver; with none, the device it adopted is given back, the
+ * block's cookie cleared, and the runtime told no device was made. */
+TEST(umd_device_model, without_a_host_driver_the_d3d12_create_makes_no_device)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
   CHECK_EQ(runtime.open(), hr_ok);
   CHECK_EQ(runtime.create_device(), hr_not_impl);
+  CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
   CHECK(rig.root().invariants_hold());
   /* pfnDestroyDevice on a block no create wrote is ignored, not dereferenced. */
   runtime.destroy_device();

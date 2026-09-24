@@ -31,6 +31,9 @@ namespace av::d3d12proto {
 [[nodiscard]] bool rvk_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on.
 [[nodiscard]] bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
+// How many bytes, at what alignment, a placed resource of `desc` takes in a heap: the host's answer, since
+// the host is where it will be placed. size is ~0 for a description the host would refuse.
+[[nodiscard]] bool rvk_d3d12_ResourceAllocation12(::av::ClientTransport& t, const ResourceDesc& desc, uint64_t* size, uint64_t* alignment);
 [[nodiscard]] bool rvk_d3d12_CreateDescriptorHeap12(::av::ClientTransport& t, uint32_t heap, uint32_t type, uint32_t count, uint32_t flags);
 // A view written at `at`. has_desc 0 is a null description: the resource's own format and whole extent.
 [[nodiscard]] bool rvk_d3d12_CreateShaderResourceView12(::av::ClientTransport& t, const DescriptorRef& at, uint32_t has_desc, const ViewDesc& desc);

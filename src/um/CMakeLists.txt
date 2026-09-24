@@ -375,6 +375,7 @@ list(REMOVE_ITEM RVKUMD_SOURCES ${RVKTEST_GENERATED})
 list(FILTER RVKUMD_SOURCES EXCLUDE REGEX "(extension_policy|gdi_window_surface)\\.cpp$")
 list(APPEND RVKUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
 add_library(rvkumd SHARED ${RVKUMD_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)

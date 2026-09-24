@@ -191,6 +191,22 @@ static bool decode_CreatePlacedResource12(ServerDispatch& s, ::av::WireReader& r
     return true;
 }
 
+static bool decode_ResourceAllocation12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ResourceAllocation12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    ResourceDesc desc{};
+    if (!r.read_pod(desc)) return false;
+    uint64_t size{};
+    uint64_t alignment{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ResourceAllocation12(desc, size, alignment)) return false;
+    reply.write_pod(size);
+    reply.write_pod(alignment);
+    return true;
+}
+
 static bool decode_CreateDescriptorHeap12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CreateDescriptorHeap12");
     (void)s;
@@ -1235,6 +1251,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CreateHeap12:
         case kCmd_CreateCommittedResource12:
         case kCmd_CreatePlacedResource12:
+        case kCmd_ResourceAllocation12:
         case kCmd_CreateDescriptorHeap12:
         case kCmd_CreateShaderResourceView12:
         case kCmd_CreateUnorderedAccessView12:
@@ -1304,6 +1321,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CreateHeap12: return decode_CreateHeap12(s, r, reply, arena);
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
         case kCmd_CreatePlacedResource12: return decode_CreatePlacedResource12(s, r, reply, arena);
+        case kCmd_ResourceAllocation12: return decode_ResourceAllocation12(s, r, reply, arena);
         case kCmd_CreateDescriptorHeap12: return decode_CreateDescriptorHeap12(s, r, reply, arena);
         case kCmd_CreateShaderResourceView12: return decode_CreateShaderResourceView12(s, r, reply, arena);
         case kCmd_CreateUnorderedAccessView12: return decode_CreateUnorderedAccessView12(s, r, reply, arena);

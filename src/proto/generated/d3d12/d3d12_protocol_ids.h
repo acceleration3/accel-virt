@@ -16,6 +16,7 @@ inline constexpr uint32_t kCmd_Finish12 = 0x00041003;
 inline constexpr uint32_t kCmd_CreateHeap12 = 0x00041100;
 inline constexpr uint32_t kCmd_CreateCommittedResource12 = 0x00041101;
 inline constexpr uint32_t kCmd_CreatePlacedResource12 = 0x00041102;
+inline constexpr uint32_t kCmd_ResourceAllocation12 = 0x00041103;
 inline constexpr uint32_t kCmd_CreateDescriptorHeap12 = 0x00041200;
 inline constexpr uint32_t kCmd_CreateShaderResourceView12 = 0x00041201;
 inline constexpr uint32_t kCmd_CreateUnorderedAccessView12 = 0x00041202;

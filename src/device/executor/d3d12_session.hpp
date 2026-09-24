@@ -64,6 +64,7 @@ public:
     bool on_Finish12(uint32_t& hresult) override;
     bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
+    bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
     bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) override;
     bool on_CreateShaderResourceView12(const d3d12proto::DescriptorRef& at, uint32_t has_desc, const d3d12proto::ViewDesc& desc) override;

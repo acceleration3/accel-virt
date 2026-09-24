@@ -25,6 +25,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_adapter_funcs_record.hpp"
+#include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
@@ -109,6 +110,17 @@ AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnGetCaps, D3D12DDI_ADAPTERFUNCS, pf
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnGetOptionalDDITables, D3D12DDI_ADAPTERFUNCS, pfnGetOptionalDDITables);
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnFillDDITable, D3D12DDI_ADAPTERFUNCS, pfnFillDDITable);
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnDestroyDevice, D3D12DDI_ADAPTERFUNCS, pfnDestroyDevice);
+
+AV_SAME_SIZE(D3d12ddiargCreateDeviceRecord, D3D12DDIARG_CREATEDEVICE_0109);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, hRTDevice, D3D12DDIARG_CREATEDEVICE_0109, hRTDevice);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, Interface, D3D12DDIARG_CREATEDEVICE_0109, Interface);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, Version, D3D12DDIARG_CREATEDEVICE_0109, Version);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, pKTCallbacks, D3D12DDIARG_CREATEDEVICE_0109, pKTCallbacks);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, hDrvDevice, D3D12DDIARG_CREATEDEVICE_0109, hDrvDevice);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, p12UMCallbacks, D3D12DDIARG_CREATEDEVICE_0109, p12UMCallbacks);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, Flags, D3D12DDIARG_CREATEDEVICE_0109, Flags);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, pReserveRanges, D3D12DDIARG_CREATEDEVICE_0109, pReserveRanges);
+AV_SAME_OFFSET(D3d12ddiargCreateDeviceRecord, NumReserveRanges, D3D12DDIARG_CREATEDEVICE_0109, NumReserveRanges);
 
 AV_SAME_SIZE(D3d12ddiTableRequestRecord, D3D12DDI_TABLE_REQUEST);
 AV_SAME_OFFSET(D3d12ddiTableRequestRecord, tableType, D3D12DDI_TABLE_REQUEST, tableType);

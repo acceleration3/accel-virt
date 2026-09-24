@@ -19,6 +19,8 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
+#include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/submission/reply_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -38,6 +40,8 @@ using av::WireReader;
 using av::d3d::D3dCommandStream;
 using av::d3d::D3dDeviceChannel;
 using namespace av::d3dproto;
+using av::d3d12proto::kCmd_DrawInstanced12;
+using av::d3d12proto::rvk_d3d12_DrawInstanced12;
 
 namespace av {
 
@@ -65,7 +69,7 @@ public:
     Fixture()
         : connection_(kmt_), transport_(connection_, SubApi::d3d, ring_order, reply_bytes, staging_, staging_bytes),
           stream_(transport_, block_, block_bytes), lock_(trace_, 'P'), a_(stream_, lock_, device_a),
-          b_(stream_, lock_, device_b)
+          b_(stream_, lock_, device_b), twelve_(stream_, lock_, 0u)
     {
         kmt_.add_adapter(rvk, 3200u);
         std::uint32_t adapters[1] = {};
@@ -83,6 +87,7 @@ public:
     LockTrace        &trace() { return trace_; }
     D3dDeviceChannel &a() { return a_; }
     D3dDeviceChannel &b() { return b_; }
+    D3dDeviceChannel &twelve() { return twelve_; }
 
     /* The ids of what the last batch carried, and each SelectDevice11's device. */
     std::uint32_t shipped(std::uint32_t *ids, std::uint32_t *selected, std::uint32_t capacity)
@@ -111,6 +116,7 @@ private:
     RecordingThreadLock lock_;
     D3dDeviceChannel    a_;
     D3dDeviceChannel    b_;
+    D3dDeviceChannel    twelve_;
 };
 
 }  // namespace
@@ -246,3 +252,24 @@ TEST(d3d_device_channel, an_open_that_cannot_be_sent_fails_and_keeps_no_lock)
   std::uint32_t hresult = 0u, level = 0u;
   CHECK(!fixture.a().open(0xb100u, hresult, level));
   CHECK(!fixture.lock().held()); }
+
+/* A Direct3D 12 device speaks as device 0: its commands name their own
+ * objects, so nothing is selected before them, and the device a Direct3D 11
+ * command selected stays selected across them - the next command from it
+ * needs no selection either. */
+TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_selection)
+{ Fixture fixture;
+  CHECK(rvk_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
+  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  CHECK(rvk_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
+  CHECK(rvk_d3d_Draw(fixture.a(), 6u, 0u));
+  CHECK(!fixture.lock().held());
+  CHECK_STATUS(fixture.a().flush(), Status::ok);
+  std::uint32_t ids[8] = {}, selected[8] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 8u), 5u);
+  const std::uint32_t want[5] = {kCmd_DrawInstanced12, kCmd_SelectDevice11, kCmd_Draw, kCmd_DrawInstanced12,
+                                 kCmd_Draw};
+  for (std::uint32_t index = 0u; index < 5u; index++) CHECK_EQ(ids[index], want[index]);
+  CHECK_EQ(selected[1], device_a);
+  CHECK(fixture.twelve().invariants_hold());
+  CHECK_EQ(fixture.twelve().device(), 0u); }
