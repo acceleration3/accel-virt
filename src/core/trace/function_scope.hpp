@@ -22,9 +22,27 @@ public:
     FunctionScope &operator=(const FunctionScope &) = delete;
 
 private:
+    /* The table's side of entering and leaving, when a trace is bound. */
+    void enter(const ScopeName &name);
+    void leave();
+
     TraceTable *table_;
     uint32_t    slot_;
 };
+
+/* Inline: with no trace bound a scope is a load and a branch, which is most
+ * of the time; the out-of-line calls it used to be cost a third of a busy
+ * host worker. */
+inline FunctionScope::FunctionScope(const ScopeBinding &binding, const ScopeName &name)
+    : table_(binding.table()), slot_(0u)
+{
+    if (table_ != nullptr) enter(name);
+}
+
+inline FunctionScope::~FunctionScope()
+{
+    if (table_ != nullptr) leave();
+}
 
 }  // namespace av
 

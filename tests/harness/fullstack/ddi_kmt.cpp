@@ -32,6 +32,7 @@
 #include "harness/vidmm/fake_vidmm.hpp"
 #include "harness/platform/mock_platform.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <sched.h>
@@ -763,9 +764,15 @@ Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t
     return escaped;
 }
 
+/* Real time, not the mock platform's: the transport spins on this for a
+ * reply before it waits in the kernel, and the wait is where this rig pumps
+ * the device - a clock that never moves spins forever. */
 std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const
 {
-    return platform_.performance_counter(frequency);
+    frequency = 1000000000u;
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                          std::chrono::steady_clock::now().time_since_epoch())
+                                          .count());
 }
 
 std::uint32_t DdiKmt::last_code() const { return last_code_; }

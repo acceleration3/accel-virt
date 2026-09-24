@@ -5,15 +5,14 @@
 
 namespace av {
 
-FunctionScope::FunctionScope(const ScopeBinding &binding, const ScopeName &name)
-    : table_(binding.table()), slot_(TraceTable::no_slot)
+void FunctionScope::enter(const ScopeName &name)
 {
-    if (table_ != nullptr) slot_ = table_->enter(name);
+    slot_ = table_->enter(name);
 }
 
-FunctionScope::~FunctionScope()
+void FunctionScope::leave()
 {
-    if (table_ != nullptr && slot_ != TraceTable::no_slot) table_->leave(slot_);
+    if (slot_ != TraceTable::no_slot) table_->leave(slot_);
 }
 
 }  // namespace av

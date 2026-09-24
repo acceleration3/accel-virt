@@ -258,6 +258,21 @@ static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comm
                 }
             }
         }
+        if (header.type == VIRTIO_GPU_CMD_SET_SCANOUT) {
+            struct virtio_gpu_set_scanout scanout;
+            /* A resource with neither a 2D image nor a mapped blob - a blob
+             * the host keeps in hostmem - has nothing virtio-gpu can scan out,
+             * and its SET_SCANOUT reads a null image (a SIGSEGV in
+             * pixman_image_get_data): refused here instead. */
+            if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &scanout, sizeof(scanout)) == sizeof(scanout)) {
+                const uint32_t id = le32_to_cpu(scanout.resource_id);
+                struct virtio_gpu_simple_resource *res = id != 0 ? virtio_gpu_find_resource(g, id) : NULL;
+                if (res != NULL && res->image == NULL && res->blob == NULL) {
+                    virtio_gpu_ctrl_response_nodata(g, cmd, VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID);
+                    return;
+                }
+            }
+        }
         if (header.type == VIRTIO_GPU_RVK_CMD_SCANOUT_IMAGE) {
             virtio_gpu_rvk_scanout_image(g, r, cmd);
             return;

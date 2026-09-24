@@ -87,3 +87,15 @@ diff --git a/ui/gtk.c b/ui/gtk.c
                                        GDK_COLORSPACE_RGB, true, 8,
                                        c->width, c->height, c->width * 4,
                                        NULL, NULL);
+diff --git a/ui/gtk-gl-area.c b/ui/gtk-gl-area.c
+--- a/ui/gtk-gl-area.c
++++ b/ui/gtk-gl-area.c
+@@ -116,7 +116,7 @@
+         glBlitFramebuffer(0, y1, vc->gfx.w, y2,
+                           wx_offset * gs, wy_offset * gs,
+                           (ww - wx_offset) * gs, (wh - wy_offset) * gs,
+-                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
++                          GL_COLOR_BUFFER_BIT, GL_LINEAR);
+ #ifdef CONFIG_GBM
+         if (dmabuf) {
+             egl_dmabuf_create_sync(dmabuf);

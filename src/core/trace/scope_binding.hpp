@@ -32,6 +32,10 @@ private:
 #endif
 extern constinit ScopeBinding scope_binding;
 
+/* Inline: every AV_SCOPE reads it, and an out-of-line call per scope was a
+ * third of a busy host worker's time with tracing off. */
+inline TraceTable *ScopeBinding::table() const { return table_; }
+
 }  // namespace av
 
 #endif  // AV_SCOPE_BINDING_HPP

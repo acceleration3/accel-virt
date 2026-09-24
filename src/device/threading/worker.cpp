@@ -212,7 +212,11 @@ bool Worker::work_within_spin()
     uint64_t           polled = started;
     bool               publishing = ring_.poll();
     for (;;) {
-        if (ring_.has_work()) return true;
+        /* A posted item or a stop is work too: while results are pending the
+         * spin lasts long enough that either would otherwise wait on it. */
+        if (ring_.has_work() || __atomic_load_n(&count_, __ATOMIC_ACQUIRE) != 0u ||
+            __atomic_load_n(&stopping_, __ATOMIC_ACQUIRE))
+            return true;
         const uint64_t now = host_.monotonic_nanoseconds();
         if (publishing && now - polled >= poll_every_ns) {
             publishing = ring_.poll();
