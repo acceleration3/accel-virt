@@ -227,6 +227,13 @@ void end_batch(void *, RvkExecutor *executor)
     if (session != nullptr) session->end_batch();
 }
 
+uint32_t poll(void *, RvkExecutor *executor)
+{
+    AV_SCOPE("poll");
+    av::ContextSession *const session = session_of(executor);
+    return session != nullptr && session->poll() ? 1u : 0u;
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -244,7 +251,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               release_object,
                               read_image,
                               end_batch,
-                              export_image};
+                              export_image,
+                              poll};
 
 }  // namespace
 

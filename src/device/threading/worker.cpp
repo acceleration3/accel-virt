@@ -201,12 +201,26 @@ bool Worker::work_within_spin()
 {
     AV_SCOPE("Worker::work_within_spin");
     constexpr uint64_t spin_ns = 100000u;
+    /* While the executor waits on the GPU for a result the guest reads in its
+     * own memory, the worker stays up to write it the moment it comes - a
+     * guest waiting on it sends nothing that would wake a sleeping worker. */
+    constexpr uint64_t publishing_ns = 100000000u;
+    /* A poll takes the host device's lock, which other contexts' workers
+     * take too: every couple of microseconds, not every look at the ring. */
+    constexpr uint64_t poll_every_ns = 2000u;
     const uint64_t     started = host_.monotonic_nanoseconds();
-    do {
+    uint64_t           polled = started;
+    bool               publishing = ring_.poll();
+    for (;;) {
         if (ring_.has_work()) return true;
+        const uint64_t now = host_.monotonic_nanoseconds();
+        if (publishing && now - polled >= poll_every_ns) {
+            publishing = ring_.poll();
+            polled = now;
+        }
+        if (now - started >= (publishing ? publishing_ns : spin_ns)) return false;
         __builtin_ia32_pause();
-    } while (host_.monotonic_nanoseconds() - started < spin_ns);
-    return false;
+    }
 }
 
 /* A doorbell rings only a running worker's event. */

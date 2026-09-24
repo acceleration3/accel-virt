@@ -53,6 +53,8 @@ public:
     /* It has a host executor to run batches on: a context whose executor never
      * opened holds batches that will not run, and nothing waits on them. */
     bool                 ready() const;
+    /* Worker thread, between batches: see SessionBackend::poll. */
+    bool                 poll();
     [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);
 
     /* Batches run, whether or not they completed. */

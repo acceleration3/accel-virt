@@ -59,6 +59,9 @@ public:
     bool     has_work() const;
     /* Worker thread: whether it is watching the ring, for the process to read. */
     void     announce_awake(bool awake);
+    /* Worker thread: the executor publishes what the guest will read; true
+     * while it still waits on the GPU. */
+    bool     poll();
     /* The Direct3D streams whose batches this one's follow. */
     void     order_with(D3dOrdering &ordering);
     uint64_t last_fence() const;

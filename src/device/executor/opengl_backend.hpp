@@ -42,6 +42,7 @@ public:
                            WireArena &arena) override;
     bool lost() const override;
     void end_batch() override;
+    bool poll() override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 

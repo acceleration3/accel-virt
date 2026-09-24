@@ -73,5 +73,6 @@ inline constexpr uint32_t kCmd_ReadSubresource = 0x0004040c;
 inline constexpr uint32_t kCmd_BeginQuery = 0x00040500;
 inline constexpr uint32_t kCmd_EndQuery = 0x00040501;
 inline constexpr uint32_t kCmd_GetQueryData = 0x00040502;
+inline constexpr uint32_t kCmd_BindQueryResults = 0x00040503;
 
 }  // namespace av::d3dproto

@@ -1156,6 +1156,20 @@ static bool decode_EndQuery(ServerDispatch& s, ::av::WireReader& r, ::av::WireWr
     return true;
 }
 
+static bool decode_BindQueryResults(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:BindQueryResults");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint64_t offset{};
+    if (!r.read_pod(offset)) return false;
+    uint32_t slots{};
+    if (!r.read_pod(slots)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_BindQueryResults(offset, slots)) return false;
+    return true;
+}
+
 static bool decode_GetQueryData(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d:GetQueryData");
     (void)s;
@@ -1243,6 +1257,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_ReadSubresource:
         case kCmd_BeginQuery:
         case kCmd_EndQuery:
+        case kCmd_BindQueryResults:
         case kCmd_GetQueryData:
             return true;
         default: return false;
@@ -1315,6 +1330,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_ReadSubresource: return decode_ReadSubresource(s, r, reply, arena);
         case kCmd_BeginQuery: return decode_BeginQuery(s, r, reply, arena);
         case kCmd_EndQuery: return decode_EndQuery(s, r, reply, arena);
+        case kCmd_BindQueryResults: return decode_BindQueryResults(s, r, reply, arena);
         case kCmd_GetQueryData: return decode_GetQueryData(s, r, reply, arena);
         default: return false;
     }

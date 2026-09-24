@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 9u
+#define RVK_EXECUTOR_ABI_VERSION 10u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -58,6 +58,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_IMAGES 7u
 #define RVK_EXECUTOR_ABI_VERSION_BATCHES 8u
 #define RVK_EXECUTOR_ABI_VERSION_EXPORTS 9u
+#define RVK_EXECUTOR_ABI_VERSION_POLL 10u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -270,6 +271,11 @@ typedef struct RvkExecutorOps {
      * RVK_EXECUTED, or RVK_UNKNOWN where no session published the key or the
      * host cannot export. Main loop. */
     uint32_t (*export_image)(void *opaque, const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage *image);
+
+    /* ABI 10: between batches, on the context's worker: the executor writes
+     * what the host GPU now has for the guest to read in its own memory. 1
+     * while it still waits on the GPU for some of it, 0 when nothing is left. */
+    uint32_t (*poll)(void *opaque, RvkExecutor *executor);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

@@ -11,6 +11,7 @@
 #define AV_UM_D3D11_SESSION_HPP
 
 #include "core/support/object_storage.hpp"
+#include "um/d3d/query_results.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -49,6 +50,7 @@ public:
     uint32_t               next_id();
     d3d::D3dCommandStream &stream();
     icd::ThreadLock       &lock();
+    QueryResults          &query_results();
 
 private:
     static constexpr uint8_t  ring_order = 22u;
@@ -67,6 +69,7 @@ private:
     ObjectStorage<KmtTransport>          transport_;
     ObjectStorage<KmtBlobArena>          arena_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
+    QueryResults                         query_results_;
     uint8_t                             *staging_;
     uint8_t                             *batch_;
     uint32_t                             members_;

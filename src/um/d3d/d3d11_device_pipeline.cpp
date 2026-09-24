@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/d3d11_session.hpp"
 
 namespace av::d3d11 {
 
@@ -574,13 +575,29 @@ VOID D3d11Device::query_begin(D3D10DDI_HQUERY query)
 VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
 {
     AV_SCOPE("D3d11Device::query_end");
-    static_cast<void>(d3dproto::rvk_d3d_EndQuery(wire(), id_of(query.pDrvPrivate)));
+    QueryRecord &record = *static_cast<QueryRecord *>(query.pDrvPrivate);
+    record.last_end = session_.query_results().ended();
+    record.misses = 0u;
+    static_cast<void>(d3dproto::rvk_d3d_EndQuery(wire(), record.id));
 }
 
 VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, UINT flags)
 {
     AV_SCOPE("D3d11Device::query_get_data");
-    const QueryRecord &query = *static_cast<const QueryRecord *>(handle.pDrvPrivate);
+    QueryRecord &query = *static_cast<QueryRecord *>(handle.pDrvPrivate);
+    /* The host writes a result into the session's slots once it has it, so
+     * this reads memory. What is not there yet needs only its end sent - the
+     * commands this driver still holds are its business, whatever
+     * DO_NOT_FLUSH says about the GPU's. A slot that stays behind - another
+     * query sharing it, a full host list - is asked about the old way. */
+    constexpr uint32_t most_misses = 4096u;
+    if (session_.query_results().read(query.id, query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
+        return;
+    if (query.last_end != 0u && query.misses++ < most_misses) {
+        if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+        else set_error(DXGI_DDI_ERR_WASSTILLDRAWING);
+        return;
+    }
     uint8_t answer[128] = {};
     uint32_t ready = 0u;
     uint64_t answered = 0u;

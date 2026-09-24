@@ -61,6 +61,12 @@ bool BatchExecutor::started() const
     return executor_.created();
 }
 
+bool BatchExecutor::poll()
+{
+    AV_SCOPE("BatchExecutor::poll");
+    return executor_.created() && executor_.poll();
+}
+
 bool BatchExecutor::ready() const
 {
     AV_SCOPE("BatchExecutor::ready");

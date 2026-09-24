@@ -138,6 +138,12 @@ bool RingConsumer::has_work() const
            header.tail() - __atomic_load_n(&head_, __ATOMIC_ACQUIRE) >= BatchHeader::encoded_size;
 }
 
+bool RingConsumer::poll()
+{
+    AV_SCOPE("RingConsumer::poll");
+    return attached_ && !faulted_ && executor_.poll();
+}
+
 void RingConsumer::announce_awake(bool awake)
 {
     AV_SCOPE("RingConsumer::announce_awake");

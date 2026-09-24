@@ -53,6 +53,12 @@ bool ContextSession::live() const
     return backend_ != nullptr;
 }
 
+bool ContextSession::poll()
+{
+    AV_SCOPE("ContextSession::poll");
+    return backend_ != nullptr && backend_->poll();
+}
+
 void ContextSession::end_batch()
 {
     AV_SCOPE("ContextSession::end_batch");

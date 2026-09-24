@@ -114,6 +114,12 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     return true;
 }
 
+bool OpenGlBackend::poll()
+{
+    AV_SCOPE("OpenGlBackend::poll");
+    return false;
+}
+
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");

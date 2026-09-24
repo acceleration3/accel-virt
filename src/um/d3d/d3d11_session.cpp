@@ -8,7 +8,7 @@
 namespace av::d3d11 {
 
 D3d11Session::D3d11Session(Kmt &kmt, BlockSource &memory, icd::LogSink &log)
-    : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(),
+    : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(), query_results_(),
       staging_(nullptr), batch_(nullptr), members_(0u), next_id_(0u)
 {
     AV_SCOPE("D3d11Session::D3d11Session");
@@ -60,6 +60,8 @@ HRESULT D3d11Session::open(uint32_t adapter)
     static_cast<void>(arena_.construct(connection_, transport_.object()));
     if (arena_.object().open(arena_bytes) != Status::ok)
         log_.write("rvkumd: no blob arena for the session; bulk data crosses inline");
+    else
+        query_results_.reserve(transport_.object().blobs(), arena_.object().view(), arena_.object().bytes());
     static_cast<void>(stream_.construct(transport_.object(), batch_, batch_bytes));
     return S_OK;
 }
@@ -98,6 +100,12 @@ d3d::D3dCommandStream &D3d11Session::stream()
 {
     AV_SCOPE("D3d11Session::stream");
     return stream_.object();
+}
+
+QueryResults &D3d11Session::query_results()
+{
+    AV_SCOPE("D3d11Session::query_results");
+    return query_results_;
 }
 
 icd::ThreadLock &D3d11Session::lock()

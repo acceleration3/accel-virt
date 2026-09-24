@@ -688,6 +688,14 @@ bool rvk_d3d_EndQuery(::av::ClientTransport& t, uint32_t query) {
     return t.send_async(kCmd_EndQuery, b) == ::av::TransportResult::ok;
 }
 
+bool rvk_d3d_BindQueryResults(::av::ClientTransport& t, uint64_t offset, uint32_t slots) {
+    AV_SCOPE("rvk_d3d_BindQueryResults");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint64_t>(offset);
+    b.write_pod<uint32_t>(slots);
+    return t.send_async(kCmd_BindQueryResults, b) == ::av::TransportResult::ok;
+}
+
 bool rvk_d3d_GetQueryData(::av::ClientTransport& t, uint32_t query, uint32_t flags, uint32_t* ready, void* data, uint64_t data_capacity, uint64_t* data_size) {
     AV_SCOPE("rvk_d3d_GetQueryData");
     ::av::WireWriter b = t.request_writer();

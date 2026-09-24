@@ -225,6 +225,12 @@ bool OpenClBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     return true;
 }
 
+bool OpenClBackend::poll()
+{
+    AV_SCOPE("OpenClBackend::poll");
+    return false;
+}
+
 void OpenClBackend::end_batch()
 {
     AV_SCOPE("OpenClBackend::end_batch");

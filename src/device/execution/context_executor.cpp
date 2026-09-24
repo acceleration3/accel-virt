@@ -96,6 +96,12 @@ void ContextExecutor::destroy()
     executor_ = nullptr;
 }
 
+bool ContextExecutor::poll()
+{
+    AV_SCOPE("ContextExecutor::poll");
+    return executor_ != nullptr && library_.poll(executor_);
+}
+
 void ContextExecutor::end_batch()
 {
     AV_SCOPE("ContextExecutor::end_batch");

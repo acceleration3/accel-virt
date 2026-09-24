@@ -8,6 +8,7 @@
 #include "device/executor/dxbc_container.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "device/executor/imported_blob.hpp"
+#include "device/executor/query_result_publisher.hpp"
 #include "device/shim/d3d11_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
@@ -63,7 +64,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(),
+    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), published_(),
       lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -90,6 +91,7 @@ void D3dBackend::shut_down()
             device11_->unlock();
         }
         device11_->lock(nullptr);
+        published_.unbind();
         objects_.clear();
         device11_->unlock();
     }
@@ -126,12 +128,30 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     return true;
 }
 
+/* A batch that ended queries is flushed, so DXVK starts the work their
+ * results wait on rather than when the guest next asks. */
 void D3dBackend::end_batch()
 {
     AV_SCOPE("D3dBackend::end_batch");
     if (!held_) return;
+    if (published_.needs_flush()) {
+        device11_->context()->Flush();
+        published_.flushed();
+    }
+    static_cast<void>(published_.publish(device11_->context()));
     held_ = false;
     device11_->unlock();
+}
+
+bool D3dBackend::poll()
+{
+    AV_SCOPE("D3dBackend::poll");
+    if (device11_ == nullptr || held_ || !published_.pending()) return false;
+    /* GetData reads no pipeline state, so no device's state is selected. */
+    device11_->lock(nullptr);
+    const bool pending = published_.publish(device11_->context());
+    device11_->unlock();
+    return pending;
 }
 
 bool D3dBackend::lost() const
@@ -154,6 +174,7 @@ void D3dBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::abandon");
     if (blob.object() == 0u) return;
+    published_.unbind();
     region_.give_back();
     blob.record(0u, 0u);
 }
@@ -533,6 +554,7 @@ bool D3dBackend::on_Flush11()
     AV_SCOPE("D3dBackend::on_Flush11");
     if (!has_device()) return false;
     device11_->context()->Flush();
+    published_.flushed();
     return true;
 }
 
@@ -560,6 +582,7 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     IUnknown *const found = objects_.find_any(id, kind);
     if (found == nullptr) return false;
     if (kind == D3dObjectKind::resource) device11_->shared().withdraw(found);
+    published_.forget(id);
     objects_.remove(id);
     return true;
 }
@@ -1564,8 +1587,21 @@ bool D3dBackend::on_EndQuery(uint32_t query)
 {
     AV_SCOPE("D3dBackend::on_EndQuery");
     ID3D11Query *const found = object<ID3D11Query>(query, D3dObjectKind::query);
-    if (!ready() || found == nullptr) return false;
-    device11_->context()->End(found);
+    const bool         usable = ready() && found != nullptr;
+    if (usable) device11_->context()->End(found);
+    /* Counted whether or not it ran: the guest counted it when it sent it. */
+    published_.ended(query, usable ? found : nullptr);
+    return usable;
+}
+
+bool D3dBackend::on_BindQueryResults(uint64_t offset, uint32_t slots)
+{
+    AV_SCOPE("D3dBackend::on_BindQueryResults");
+    constexpr uint32_t most_slots = 4096u;
+    if (slots == 0u || slots > most_slots) return false;
+    uint8_t *const results = region_.at(offset, static_cast<uint64_t>(slots) * QueryResultPublisher::slot_bytes);
+    if (results == nullptr) return false;
+    published_.bind(results, slots);
     return true;
 }
 

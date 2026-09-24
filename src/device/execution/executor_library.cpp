@@ -178,6 +178,13 @@ void ExecutorLibrary::destroy(RvkExecutor *executor) const
     ops_->destroy(ops_->opaque, executor);
 }
 
+bool ExecutorLibrary::poll(RvkExecutor *executor) const
+{
+    AV_SCOPE("ExecutorLibrary::poll");
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_POLL && ops_->poll != nullptr &&
+           ops_->poll(ops_->opaque, executor) != 0u;
+}
+
 void ExecutorLibrary::end_batch(RvkExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::end_batch");

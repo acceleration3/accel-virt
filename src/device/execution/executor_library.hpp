@@ -43,6 +43,7 @@ public:
                                     void *context) const;
     void                 destroy(RvkExecutor *executor) const;
     void                 end_batch(RvkExecutor *executor) const;
+    bool                 poll(RvkExecutor *executor) const;
     uint32_t             execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &reply_size) const;
     /* Whether this library carries version 2's memory channel at all. A

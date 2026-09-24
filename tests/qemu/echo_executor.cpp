@@ -329,7 +329,7 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               set_signal,
                               export_object,
                               import_object,
-                              release_object, nullptr, nullptr, nullptr};
+                              release_object, nullptr, nullptr, nullptr, nullptr};
 
 /* Version 3: default contexts only (feature 050). */
 const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
@@ -346,7 +346,7 @@ const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
                                         nullptr,
                                         nullptr,
                                         nullptr,
-                                        nullptr, nullptr, nullptr, nullptr};
+                                        nullptr, nullptr, nullptr, nullptr, nullptr};
 
 /* Version 1, carrying none of the memory operations: the device must keep
  * accepting a library that imports nothing, and a suite whose only library is
@@ -365,7 +365,7 @@ const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
                                         nullptr,
                                         nullptr,
                                         nullptr,
-                                        nullptr, nullptr, nullptr, nullptr};
+                                        nullptr, nullptr, nullptr, nullptr, nullptr};
 
 }  // namespace
 

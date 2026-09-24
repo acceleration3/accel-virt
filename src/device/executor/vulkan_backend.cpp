@@ -627,6 +627,12 @@ void VulkanBackend::abandon(ImportedBlob &blob)
     blob.record(0u, 0u);
 }
 
+bool VulkanBackend::poll()
+{
+    AV_SCOPE("VulkanBackend::poll");
+    return false;
+}
+
 void VulkanBackend::end_batch()
 {
     AV_SCOPE("VulkanBackend::end_batch");

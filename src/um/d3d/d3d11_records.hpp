@@ -65,6 +65,11 @@ struct QueryRecord {
     uint32_t id;
     uint32_t type;
     uint32_t data_bytes;
+    /* The session's count of the query's last end; 0 before any. */
+    uint64_t last_end;
+    /* GetData calls that found the host's slot behind, since the last end. */
+    uint32_t misses;
+    uint32_t reserved;
 };
 
 }  // namespace av::d3d11

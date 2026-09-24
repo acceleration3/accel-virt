@@ -73,6 +73,7 @@ const char* command_name(uint32_t id) {
         case kCmd_BeginQuery: return "BeginQuery";
         case kCmd_EndQuery: return "EndQuery";
         case kCmd_GetQueryData: return "GetQueryData";
+        case kCmd_BindQueryResults: return "BindQueryResults";
         default: return nullptr;
     }
 }

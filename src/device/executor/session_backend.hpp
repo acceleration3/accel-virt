@@ -39,6 +39,9 @@ public:
     virtual bool lost() const = 0;
     /* The batch's last command has run: what was held across it goes. */
     virtual void end_batch() = 0;
+    /* Between batches, on the worker: publishes what the host now has for the
+     * guest to read without asking; true while it still waits on the GPU. */
+    virtual bool poll() = 0;
 
     /* Turns a checked handle into whatever this API holds memory as, recording
      * it on the blob. False for a handle this API cannot take - which is not a

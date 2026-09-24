@@ -781,7 +781,8 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
      * predicate's BOOL, the stream-output statistics. */
     constexpr uint32_t sizes[] = {4u, 8u, 8u, 16u, 88u, 4u, 16u, 4u, 16u, 16u, 16u, 16u, 4u, 4u, 4u, 4u};
     const uint32_t type = static_cast<uint32_t>(args->Query);
-    query = QueryRecord{QueryRecord::tag, next_id(), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u};
+    query = QueryRecord{QueryRecord::tag, next_id(), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
+                        0u, 0u, 0u};
     if (query.data_bytes == 0u) {
         set_error(E_INVALIDARG);
         return;

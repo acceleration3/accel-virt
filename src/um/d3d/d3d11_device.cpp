@@ -75,6 +75,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
         session_.leave();
         return E_FAIL;
     }
+    session_.query_results().bind(channel_.object());
     return S_OK;
 }
 

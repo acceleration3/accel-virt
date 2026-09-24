@@ -16,6 +16,7 @@
 #include "device/executor/d3d_context_states.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_region.hpp"
+#include "device/executor/query_result_publisher.hpp"
 #include "device/executor/session_backend.hpp"
 #include "proto/generated/d3d/d3d_dispatch_server.h"
 
@@ -47,6 +48,7 @@ public:
                            WireArena &arena) override;
     bool lost() const override;
     void end_batch() override;
+    bool poll() override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
     /* Direct3D shares through the device's own table (D3dSharedResources),
@@ -146,6 +148,7 @@ public:
                             uint64_t &data_size) override;
     bool on_BeginQuery(uint32_t query) override;
     bool on_EndQuery(uint32_t query) override;
+    bool on_BindQueryResults(uint64_t offset, uint32_t slots) override;
     bool on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready_out, uint8_t *data, uint64_t data_capacity,
                          uint64_t &data_size) override;
 
@@ -204,6 +207,7 @@ private:
     WireArena              *arena_;
     D3dObjectTable          objects_;
     GuestRegion             region_;
+    QueryResultPublisher    published_;
     bool                    lost_;
 };
 
