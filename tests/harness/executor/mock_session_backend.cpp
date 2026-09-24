@@ -54,8 +54,6 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
 }
 
 bool MockSessionBackend::lost() const { return lost_; }
-void MockSessionBackend::end_batch() {}
-bool MockSessionBackend::poll() { return false; }
 
 void MockSessionBackend::end_batch() {}
 
