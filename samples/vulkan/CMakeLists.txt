@@ -90,7 +90,7 @@ if(WIN32)
   set(VKS_VULKAN_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/vulkan-runtime/vulkan-1.dll" CACHE FILEPATH "")
   target_compile_definitions(rvkvksamples PRIVATE VK_USE_PLATFORM_WIN32_KHR)
   # One file to push: the C and C++ runtimes and winpthreads linked in.
-  target_link_options(rvkvksamples PRIVATE -static -static-libgcc -static-libstdc++ -mconsole)
+  target_link_options(rvkvksamples PRIVATE -static -static-libgcc -static-libstdc++ -mconsole -s)
   target_link_libraries(rvkvksamples PRIVATE "${VKS_VULKAN_DLL}")
   set_target_properties(rvkvksamples PROPERTIES SUFFIX ".exe")
 else()
