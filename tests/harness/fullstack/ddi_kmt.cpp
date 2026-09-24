@@ -73,6 +73,13 @@ constexpr std::uint64_t blank_patience = 10000000u;
 constexpr std::uint16_t subsystem_vendor_offset = 0x2Cu;
 constexpr std::uint16_t subsystem_offset = 0x2Eu;
 
+std::uint64_t now_ns()
+{
+    timespec time = {};
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return static_cast<std::uint64_t>(time.tv_sec) * 1000000000u + static_cast<std::uint64_t>(time.tv_nsec);
+}
+
 std::uint64_t now_ms()
 {
     timespec time = {};
@@ -94,7 +101,7 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
       allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
       fabric_(platform), hardware_scheduling_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
-      next_chunk_address_(chunk_ram_address), last_code_(0u)
+      next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns())
 {
     host_.add_guest_ram(chunk_ram_address, chunk_ram_bytes);
     /* A doorbell and its queue are the adapter's, and dxgkrnl gives them back
@@ -763,9 +770,17 @@ Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t
     return escaped;
 }
 
+/* The platform's clock stands still between the rig's own steps, and a guest
+ * that spins on it for a budget - the transport watching for a reply before it
+ * asks the kernel to wait, or for one the device's own worker thread is still
+ * writing - would spin forever. The guest's view is the platform's clock moved
+ * on by the real time since the rig began, as a guest's counter runs while the
+ * host works: a spin lasts the time it says, whatever thread answers it. */
 std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const
 {
-    return platform_.performance_counter(frequency);
+    const std::uint64_t base = platform_.performance_counter(frequency);
+    const std::uint64_t elapsed_ns = now_ns() - started_ns_;
+    return base + elapsed_ns / (1000000000u / frequency);
 }
 
 std::uint32_t DdiKmt::last_code() const { return last_code_; }

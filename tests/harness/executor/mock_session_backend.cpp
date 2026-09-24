@@ -55,6 +55,10 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
 
 bool MockSessionBackend::lost() const { return lost_; }
 
+void MockSessionBackend::end_batch() {}
+
+bool MockSessionBackend::poll() { return false; }
+
 void          MockSessionBackend::set_adopts(bool adopts) { adopts_ = adopts; }
 std::uint32_t MockSessionBackend::adopted() const { return adopted_; }
 std::uint32_t MockSessionBackend::abandoned() const { return abandoned_; }

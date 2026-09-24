@@ -25,6 +25,11 @@ FullStackRig::FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *g
       kmt_(driver_.platform(), driver_.table(), fdo_, dxgkrnl_, function_, pump_, device_.host()), added_(not_added),
       started_(not_added)
 {
+    /* A context's worker is a thread of its own that watches its ring for a
+     * while before it sleeps, timing the watch on the host's clock; a clock
+     * that never moves is a watch that never ends, and a worker that never
+     * sees it was told to stop. */
+    device_.host().advance_clock_per_read(worker_clock_step_ns);
     start();
 }
 
