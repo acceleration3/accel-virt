@@ -64,7 +64,12 @@ Status HostTrace::start(const char *module)
     if (dl_iterate_phdr(&find_object, &search) != 0) image_ = ImageRange(search.low, search.high - search.low);
     const Status laid = table_.initialize(region_.region(), region_.bytes(), module, region_.process());
     if (laid != Status::ok) return laid;
-    scope_binding.bind(table_);
+    /* Every scope costs the call it opens - a batch runs a few hundred - so
+     * the table is bound only when a trace is asked for, as the kernel's is. */
+    const char *const scopes = getenv("RVK_TRACE_SCOPES");
+    const char *const perfetto = getenv("RVK_PERFETTO");
+    if ((scopes != nullptr && scopes[0] == '1') || (perfetto != nullptr && perfetto[0] == '1'))
+        scope_binding.bind(table_);
     /* A ring per slot the size of a busy thread's second or so; the file is
      * sparse, so only the slots threads use take memory. */
     constexpr uint32_t events_per_slot = 1u << 20u;
