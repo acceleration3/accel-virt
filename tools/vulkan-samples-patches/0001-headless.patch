@@ -1,0 +1,152 @@
+Headless examples: VK_EXAMPLE_HEADLESS swaps the window's swap chain for
+samples/vulkan/headless_swapchain.hpp, drops the window-system surface
+extension and the X connection, lets samples/vulkan/runner.cpp's
+HeadlessRunner drive the frame state renderLoop() would, reads assets from a
+settable root, and ends the process with a status where a failed call would
+assert or open a dialog.
+
+diff --git a/base/vulkanexamplebase.cpp b/base/vulkanexamplebase.cpp
+index ca942ef..a5c283a 100644
+--- a/base/vulkanexamplebase.cpp
++++ b/base/vulkanexamplebase.cpp
+@@ -8,6 +8,8 @@
+ 
+ #include "vulkanexamplebase.h"
+ 
++std::string VulkanExampleBase::assetRoot = "./../data/";
++
+ VkResult VulkanExampleBase::createInstance(bool enableValidation)
+ {
+ 	this->enableValidation = enableValidation;
+@@ -21,7 +23,9 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
+ 	std::vector<const char*> enabledExtensions = { VK_KHR_SURFACE_EXTENSION_NAME };
+ 
+ 	// Enable surface extensions depending on os
+-#if defined(_WIN32)
++#if defined(VK_EXAMPLE_HEADLESS)
++	// No window: the swap chain's images are the example's own
++#elif defined(_WIN32)
+ 	enabledExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+ #elif defined(__ANDROID__)
+ 	enabledExtensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+@@ -95,7 +99,7 @@ const std::string VulkanExampleBase::getAssetPath()
+ #if defined(__ANDROID__)
+ 	return "";
+ #else
+-	return "./../data/";
++	return assetRoot;
+ #endif
+ }
+ 
+@@ -753,7 +757,7 @@ VulkanExampleBase::VulkanExampleBase(bool enableValidation)
+ 	// Vulkan library is loaded dynamically on Android
+ 	bool libLoaded = loadVulkanLibrary();
+ 	assert(libLoaded);
+-#elif defined(__linux__)
++#elif defined(__linux__) && !defined(VK_EXAMPLE_HEADLESS)
+ 	initxcbConnection();
+ #endif
+ 
+@@ -830,7 +834,7 @@ VulkanExampleBase::~VulkanExampleBase()
+ #if defined(__linux)
+ #if defined(__ANDROID__)
+ 	// todo : android cleanup (if required)
+-#else
++#elif !defined(VK_EXAMPLE_HEADLESS)
+ 	xcb_destroy_window(connection, window);
+ 	xcb_disconnect(connection);
+ #endif
+@@ -1683,7 +1687,9 @@ void VulkanExampleBase::windowResized()
+ 
+ void VulkanExampleBase::initSwapchain()
+ {
+-#if defined(_WIN32)
++#if defined(VK_EXAMPLE_HEADLESS)
++	swapChain.initSurface();
++#elif defined(_WIN32)
+ 	swapChain.initSurface(windowInstance, window);
+ #elif defined(__ANDROID__)	
+ 	swapChain.initSurface(androidApp->window);
+diff --git a/base/vulkanexamplebase.h b/base/vulkanexamplebase.h
+index 4ae432a..722e5c2 100644
+--- a/base/vulkanexamplebase.h
++++ b/base/vulkanexamplebase.h
+@@ -51,6 +51,9 @@
+ 
+ class VulkanExampleBase
+ {
++#if defined(VK_EXAMPLE_HEADLESS)
++	friend class HeadlessRunner;
++#endif
+ private:	
+ 	// Set to true when example is created with enabled validation layers
+ 	bool enableValidation = false;
+@@ -135,6 +138,9 @@ protected:
+ 	vkTools::VulkanTextureLoader *textureLoader = nullptr;
+ 	// Returns the base asset path (for shaders, models, textures) depending on the os
+ 	const std::string getAssetPath();
++public:
++	// Where shaders, models and textures are read from
++	static std::string assetRoot;
+ public: 
+ 	bool prepared = false;
+ 	uint32_t width = 1280;
+diff --git a/base/vulkanswapchain.hpp b/base/vulkanswapchain.hpp
+index d27bdae..e85cbf9 100644
+--- a/base/vulkanswapchain.hpp
++++ b/base/vulkanswapchain.hpp
+@@ -11,6 +11,10 @@
+ 
+ #pragma once
+ 
++#if defined(VK_EXAMPLE_HEADLESS)
++#include "headless_swapchain.hpp"
++#else
++
+ #include <stdlib.h>
+ #include <string>
+ #include <fstream>
+@@ -433,3 +437,5 @@ public:
+ 	}
+ 
+ };
++
++#endif
+diff --git a/base/vulkantools.cpp b/base/vulkantools.cpp
+index 46669d5..0ec42d5 100644
+--- a/base/vulkantools.cpp
++++ b/base/vulkantools.cpp
+@@ -236,7 +236,7 @@ namespace vkTools
+ 
+ 	void exitFatal(std::string message, std::string caption)
+ 	{
+-#ifdef _WIN32
++#if defined(_WIN32) && !defined(VK_EXAMPLE_HEADLESS)
+ 		MessageBox(NULL, message.c_str(), caption.c_str(), MB_OK | MB_ICONERROR);
+ #else
+ 		// TODO : Linux
+diff --git a/base/vulkantools.h b/base/vulkantools.h
+index 6953e86..8cdecf9 100644
+--- a/base/vulkantools.h
++++ b/base/vulkantools.h
+@@ -35,13 +35,19 @@
+ #define DEFAULT_FENCE_TIMEOUT 100000000000
+ 
+ // Macro to check and display Vulkan return results
++#if defined(VK_EXAMPLE_HEADLESS)
++#define VK_CHECK_FAILED(res) exit(3)
++#else
++#define VK_CHECK_FAILED(res) assert(res == VK_SUCCESS)
++#endif
++
+ #define VK_CHECK_RESULT(f)																				\
+ {																										\
+ 	VkResult res = (f);																					\
+ 	if (res != VK_SUCCESS)																				\
+ 	{																									\
+ 		std::cout << "Fatal : VkResult is \"" << vkTools::errorString(res) << "\" in " << __FILE__ << " at line " << __LINE__ << std::endl; \
+-		assert(res == VK_SUCCESS);																		\
++		VK_CHECK_FAILED(res);																			\
+ 	}																									\
+ }																										\
+ 
