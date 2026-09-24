@@ -37,16 +37,22 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_BACK 0x0405
 #define GL_BGRA 0x80E1
 #define GL_BLEND 0x0BE2
+#define GL_CLAMP_TO_BORDER 0x812D
+#define GL_CLAMP_TO_EDGE 0x812F
 #define GL_COLOR 0x1800
 #define GL_COLOR_ATTACHMENT0 0x8CE0
 #define GL_COLOR_BUFFER_BIT 0x00004000
+#define GL_COMPARE_REF_TO_TEXTURE 0x884E
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_COMPUTE_SHADER 0x91B9
 #define GL_CULL_FACE 0x0B44
 #define GL_CW 0x0900
+#define GL_DEPTH 0x1801
 #define GL_DEPTH24_STENCIL8 0x88F0
 #define GL_DEPTH_ATTACHMENT 0x8D00
 #define GL_DEPTH_CLAMP 0x864F
+#define GL_DEPTH_COMPONENT16 0x81A5
+#define GL_DEPTH_COMPONENT32F 0x8CAC
 #define GL_DEPTH_STENCIL 0x84F9
 #define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
 #define GL_DEPTH_TEST 0x0B71
@@ -61,6 +67,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_FUNC_ADD 0x8006
 #define GL_GEOMETRY_SHADER 0x8DD9
 #define GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX 0x9047
+#define GL_LEQUAL 0x0203
 #define GL_LESS 0x0201
 #define GL_LINE 0x1B01
 #define GL_LINEAR 0x2601
@@ -77,11 +84,13 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_PATCH_VERTICES 0x8E72
 #define GL_POLYGON_OFFSET_FILL 0x8037
 #define GL_POLYGON_OFFSET_LINE 0x2A02
+#define GL_R32F 0x822E
 #define GL_RASTERIZER_DISCARD 0x8C89
 #define GL_READ_FRAMEBUFFER 0x8CA8
 #define GL_RENDERER 0x1F01
 #define GL_REPEAT 0x2901
 #define GL_RGBA 0x1908
+#define GL_RGBA16F 0x881A
 #define GL_RGBA8 0x8058
 #define GL_SCISSOR_TEST 0x0C11
 #define GL_STATIC_DRAW 0x88E4
@@ -91,6 +100,9 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE_2D_ARRAY 0x8C1A
 #define GL_TEXTURE_2D_MULTISAMPLE 0x9100
+#define GL_TEXTURE_BORDER_COLOR 0x1004
+#define GL_TEXTURE_COMPARE_FUNC 0x884D
+#define GL_TEXTURE_COMPARE_MODE 0x884C
 #define GL_TEXTURE_CUBE_MAP 0x8513
 #define GL_TEXTURE_CUBE_MAP_ARRAY 0x9009
 #define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
@@ -126,6 +138,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(GLenum, glCheckNamedFramebufferStatus, (GLuint framebuffer, GLenum target)) \
     X(void, glClearBufferfi, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
     X(void, glClearBufferfv, (GLenum buffer, GLint drawbuffer, const GLfloat *value)) \
+    X(void, glClearNamedFramebufferfv, (GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat *value)) \
     X(void, glClipControl, (GLenum origin, GLenum depth)) \
     X(void, glColorMask, (GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)) \
     X(void, glCompileShader, (GLuint shader)) \
@@ -170,6 +183,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glNamedFramebufferDrawBuffer, (GLuint framebuffer, GLenum buf)) \
     X(void, glNamedFramebufferDrawBuffers, (GLuint framebuffer, GLsizei n, const GLenum *bufs)) \
     X(void, glNamedFramebufferTexture, (GLuint framebuffer, GLenum attachment, GLuint texture, GLint level)) \
+    X(void, glNamedFramebufferTextureLayer, (GLuint framebuffer, GLenum attachment, GLuint texture, GLint level, GLint layer)) \
     X(void, glPatchParameteri, (GLenum pname, GLint value)) \
     X(void, glPixelStorei, (GLenum pname, GLint param)) \
     X(void, glPolygonMode, (GLenum face, GLenum mode)) \
@@ -177,6 +191,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glReadBuffer, (GLenum src)) \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels)) \
     X(void, glSamplerParameterf, (GLuint sampler, GLenum pname, GLfloat param)) \
+    X(void, glSamplerParameterfv, (GLuint sampler, GLenum pname, const GLfloat *param)) \
     X(void, glSamplerParameteri, (GLuint sampler, GLenum pname, GLint param)) \
     X(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length)) \
     X(void, glStencilMask, (GLuint mask)) \
