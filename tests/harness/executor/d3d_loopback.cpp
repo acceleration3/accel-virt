@@ -48,7 +48,11 @@ bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, std::size_t &answ
     WireReader payload(command_, writer.offset());
     WireWriter reply(reply_, reply_bytes);
     arena_.reset();
-    if (!backend_.run(command_id, payload, reply, arena_)) {
+    /* Each command is a batch of its own here, ended as the worker ends one:
+     * whether it ran or was refused, the Direct3D 11 lock it took is let go. */
+    const bool ran = backend_.run(command_id, payload, reply, arena_);
+    backend_.end_batch();
+    if (!ran) {
         refused_++;
         return false;
     }
