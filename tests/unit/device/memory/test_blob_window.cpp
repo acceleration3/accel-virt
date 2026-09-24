@@ -126,3 +126,64 @@ TEST(blob_window_extent, answers_each_extent_in_order_and_nothing_past_the_last)
   CHECK_EQ(BlobWindow().extents(), 0u);
   CHECK(BlobWindow().extent(0u, bytes) == nullptr);
   CHECK_EQ(bytes, 0u); }
+
+namespace {
+
+/* Two aligned words, each its own extent, and a third split over two. */
+class Words {
+public:
+    Words() : first_{0x1111111111111111u}, second_{0x2222222222222222u}, split_{},
+              pointers_{first_, second_, split_, split_ + 4u}, lengths_{8u, 8u, 4u, 4u} {}
+    BlobWindow    window() const { return BlobWindow(pointers_, lengths_, 4u, 24u); }
+    std::uint64_t first() const { return first_[0]; }
+    std::uint64_t second() const { return second_[0]; }
+    std::uint8_t *split() { return split_; }
+
+private:
+    std::uint64_t first_[1];
+    std::uint64_t second_[1];
+    alignas(8) std::uint8_t split_[8];
+    void         *pointers_[4];
+    std::uint64_t lengths_[4];
+};
+
+}  // namespace
+
+/* A word another processor stores whole is read and written in one piece: at
+ * an aligned offset inside one extent, and nowhere else. */
+TEST(blob_window_word, loads_and_stores_a_whole_aligned_word_of_one_extent)
+{ Words words;
+  const BlobWindow window = words.window();
+  std::uint64_t value = 0u;
+  CHECK_STATUS(window.load_u64(0u, value), Status::ok);
+  CHECK(value == 0x1111111111111111u);
+  CHECK_STATUS(window.load_u64(8u, value), Status::ok);
+  CHECK(value == 0x2222222222222222u);
+  CHECK_STATUS(window.store_u64(8u, 0x0123456789ABCDEFu), Status::ok);
+  CHECK(words.second() == 0x0123456789ABCDEFu);
+  CHECK(words.first() == 0x1111111111111111u); }
+
+TEST(blob_window_word, a_word_split_misaligned_or_outside_is_neither_loaded_nor_stored)
+{ Words words;
+  const BlobWindow window = words.window();
+  const std::uint64_t offsets[] = {16u, 4u, 1u, 20u, 24u, ~std::uint64_t{0}};
+  for (const std::uint64_t offset : offsets) {
+      std::uint64_t value = 0xEEu;
+      CHECK_STATUS(window.load_u64(offset, value), Status::invalid_parameter);
+      CHECK(value == 0xEEu);
+      CHECK_STATUS(window.store_u64(offset, 0x99u), Status::invalid_parameter);
+  }
+  for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(words.split()[i], 0u);
+  CHECK(words.first() == 0x1111111111111111u);
+  CHECK(words.second() == 0x2222222222222222u);
+  /* Whole and in one extent, but not on a word's boundary. */
+  alignas(8) std::uint8_t wide[16] = {};
+  void *const         pointer = wide;
+  const std::uint64_t length = sizeof wide;
+  const BlobWindow    one(&pointer, &length, 1u, sizeof wide);
+  std::uint64_t       value = 0xEEu;
+  CHECK_STATUS(one.load_u64(3u, value), Status::invalid_parameter);
+  CHECK_STATUS(one.store_u64(3u, 0x99u), Status::invalid_parameter);
+  CHECK(value == 0xEEu);
+  for (const std::uint8_t byte : wide) CHECK_EQ(byte, 0u);
+  CHECK_STATUS(BlobWindow().load_u64(0u, value), Status::invalid_parameter); }

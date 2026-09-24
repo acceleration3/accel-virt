@@ -3,7 +3,6 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/ring_header.hpp"
-#include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -63,12 +62,14 @@ void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint3
     __builtin_memcpy(data, source + first, count - first);
 }
 
+/* One load: the device stores the head whole while this reads, and a head
+ * read a byte at a time could be seen half moved - past what the device has
+ * consumed, which frees room it has not. */
 uint64_t TransportRing::read_head() const
 {
     AV_SCOPE("TransportRing::read_head");
     if (ring_ == nullptr) return 0u;
-    WireReader reader(ring_ + head_offset, sizeof(uint64_t));
-    return reader.read_u64();
+    return __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + head_offset), __ATOMIC_ACQUIRE);
 }
 
 Status TransportRing::publish_tail()

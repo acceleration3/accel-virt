@@ -5,7 +5,6 @@
 #include "proto/submission/fence_progress.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
-#include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -43,14 +42,14 @@ void RingSubmitter::detach()
     ring_ = nullptr;
 }
 
-/* The head is copied once and judged against the tail the ring holds. */
+/* The head is read once, in one load - the device stores it whole while this
+ * runs, and a copy a byte at a time could see it half moved - and judged
+ * against the tail the ring holds. */
 Status RingSubmitter::judge_head(uint64_t tail)
 {
     AV_SCOPE("RingSubmitter::judge_head");
-    uint8_t bytes[sizeof(uint64_t)] = {};
-    platform_.copy(bytes, ring_ + head_offset, sizeof bytes);
-    WireReader reader(bytes, sizeof bytes);
-    if (device_.observe(RingHeader(order_, tail, reader.read_u64())) == Status::ok) return Status::ok;
+    const uint64_t head = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + head_offset), __ATOMIC_ACQUIRE);
+    if (device_.observe(RingHeader(order_, tail, head)) == Status::ok) return Status::ok;
     failed_ = true;
     platform_.log("rvk: the device's ring head is inconsistent with the tail published");
     return Status::invalid_state;
