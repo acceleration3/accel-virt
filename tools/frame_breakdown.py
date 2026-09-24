@@ -10,6 +10,8 @@ calls once a frame. For each frame it adds up:
                     calls (the scopes in WAITS)
           driver    every other top-level driver call
           outside   the rest of the frame: the application and the runtime
+          polling   the frame's first wait to its last, runtime and all: how long
+                    the application sat waiting on results, not only in the driver
   host    busy      the busiest host worker running batches (RingConsumer::service)
           idle      the worker with nothing to run
 
@@ -83,9 +85,16 @@ def scope_count(trace, utid):
                             f"where tt.utid = {utid};")[0]["n"])
 
 
-def pick_threads(trace):
+def pick_threads(trace, marker):
+    """The guest thread that runs the frames (the most `marker` scopes; a
+    worker recording commands may be busier) and the busiest host thread."""
     threads = query(trace, THREADS)
-    guest = next((t for t in threads if t["process"].startswith("guest")), None)
+    marked = query(trace, f"""
+select tt.utid, count(*) n from slice s join thread_track tt on s.track_id = tt.id
+where s.name = '{marker}' group by tt.utid order by n desc limit 1;""")
+    runner = marked[0]["utid"] if marked else None
+    guest = next((t for t in threads if t["process"].startswith("guest") and t["utid"] == runner), None) or \
+        next((t for t in threads if t["process"].startswith("guest")), None)
     host = next((t for t in threads if not t["process"].startswith("guest")), None)
     if guest is None or host is None:
         raise SystemExit("the trace needs a guest thread and a host thread: capture with perfetto_trace.py --guest")
@@ -162,7 +171,7 @@ def main():
     parser.add_argument("--marker", default="D3d11Device::flush", help="the guest scope that starts each frame")
     parser.add_argument("--top", type=int, default=12, help="how many functions of each side's own time to list")
     args = parser.parse_args()
-    guest, host = pick_threads(args.trace)
+    guest, host = pick_threads(args.trace, args.marker)
     guest_utid, host_utid = int(guest["utid"]), int(host["utid"])
     markers = named(args.trace, guest_utid, args.marker)
     frames = frames_of(markers)
@@ -171,7 +180,11 @@ def main():
     guest_slices = Slices(top_level(args.trace, guest_utid))
     host_slices = Slices(top_level(args.trace, host_utid))
     window = (frames[0][0], frames[-1][1])
-    rows = {"guest waiting": [], "guest driver": [], "guest outside": [], "host busy": [], "frame": []}
+    rows = {"guest waiting": [], "guest driver": [], "guest outside": [], "host busy": [], "frame": [],
+            "polling span": []}
+    polls = Slices(query(args.trace, f"""
+select s.ts, s.dur, s.name from slice s join thread_track tt on s.track_id = tt.id
+where tt.utid = {guest_utid} and s.name in ({', '.join(f"'{name}'" for name in WAITS)}) order by s.ts;"""))
     for start, end in frames:
         length = end - start
         waiting = guest_slices.overlap(start, end, names=WAITS)
@@ -181,13 +194,16 @@ def main():
         rows["guest driver"].append(driver)
         rows["guest outside"].append(max(0, length - waiting - driver))
         rows["host busy"].append(host_slices.overlap(start, end, names=("RingConsumer::service",)))
+        first = bisect.bisect_left(polls.ts, start)
+        last = bisect.bisect_left(polls.ts, end) - 1
+        rows["polling span"].append(polls.ts[last] + polls.dur[last] - polls.ts[first] if 0 <= first <= last else 0)
     legs = chain(args.trace, guest_utid, host_utid, frames)
 
     frame = statistics.mean(rows["frame"])
     print(f"guest thread {guest['tid']} ({guest['process']}), host worker {host['tid']} ({host['process']})")
     print(f"{len(frames)} frames, {frame / 1000:.1f} us each ({1e9 / frame:.0f} fps traced)\n")
     print("per frame                     mean      share")
-    for name in ("guest waiting", "guest driver", "guest outside", "host busy"):
+    for name in ("guest waiting", "guest driver", "guest outside", "polling span", "host busy"):
         mean = statistics.mean(rows[name])
         print(f"  {name:22} {mean / 1000:8.1f} us  {100 * mean / frame:5.1f}%")
     print(f"  {'host idle':22} {(frame - statistics.mean(rows['host busy'])) / 1000:8.1f} us")

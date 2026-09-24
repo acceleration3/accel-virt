@@ -20,7 +20,7 @@ pid=$(pgrep -f "qemu-system-x86_64.*$(basename "$work")" | head -1)
 [ -n "$pid" ] || { echo "no QEMU for $work" >&2; exit 1; }
 trace="$root/build-perfetto/$sample-$(date +%H%M%S).pftrace"
 
-timeout 60 python3 -B "$root/tools/perfetto_trace.py" "$pid" --guest "$work" --arm 2097152
+timeout 60 python3 -B "$root/tools/perfetto_trace.py" "$pid" --guest "$work" --arm 2097152 --depth "${GUEST_DEPTH:-2}"
 # As the logged-on user, through the task scheduler: the agent's own session
 # has no desktop to make a device on. Frames enough to outlast the capture.
 timeout 60 "${shell[@]}" ps "
@@ -36,5 +36,5 @@ until timeout 20 "${shell[@]}" ps "Get-Process rvkd3d11samples -ErrorAction Sile
     sleep 1
 done
 timeout 600 python3 -B "$root/tools/perfetto_trace.py" "$pid" --guest "$work" -o "$trace" --seconds "$seconds"
-timeout 60 "${shell[@]}" ps "Stop-Process -Name rvkd3d11samples -ErrorAction SilentlyContinue" >/dev/null || true
+timeout 60 "${shell[@]}" ps "taskkill /F /IM rvkd3d11samples.exe 2>&1 | Out-Null; Unregister-ScheduledTask -TaskName rvkprofile -Confirm:\$false -ErrorAction SilentlyContinue" >/dev/null || true
 timeout 900 python3 -B "$root/tools/frame_breakdown.py" "$trace"

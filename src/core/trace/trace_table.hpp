@@ -58,6 +58,12 @@ public:
      * a timeline of the outer calls, where the tracer's cost on the hottest
      * leaves no longer dwarfs what it measures. */
     void limit_depth(uint32_t depth);
+    static constexpr uint32_t max_only = 16u;
+    /* Only the scopes named by `ids` (ScopeName ids) are pushed and recorded,
+     * at any depth; the rest cost one comparison. None: every scope, to the
+     * depth limit. What measuring a few legs of a round trip needs, where
+     * even a shallow trace of every command doubled a frame. */
+    void only(const uint32_t *ids, uint32_t count);
 
     /* Once, from the thread that crashed; a later call keeps the first. */
     void record_crash(uint32_t code, uint64_t address);
@@ -85,6 +91,8 @@ private:
     TraceHost  &host_;
     EventRing  *events_;
     uint32_t    max_depth_;
+    uint32_t    only_[max_only];
+    uint32_t    only_count_;
     uint8_t    *region_;
     TraceLayout layout_;
     /* layout_'s slot count, kept beside it for the scope path. */

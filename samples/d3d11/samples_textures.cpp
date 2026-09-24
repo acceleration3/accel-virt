@@ -1758,6 +1758,7 @@ public:
         c->Begin(queries_[1]);
         draw(gpu, sphere_, sphere_world(), {1, 1, 0, 0});
         c->End(queries_[1]);
+        const double ended = seconds();
         // As the original: the scene shows what the previous frame counted, and
         // this frame's counts are read once all of it has been submitted.
         const UINT64 *passed = passed_;
@@ -1785,12 +1786,23 @@ public:
         append_text(line, sizeof line, " samples passed");
         text_.add(line, 5, 85);
         text_.draw(gpu);
+        const double waiting = seconds();
         for (int i = 0; i < 2; i++)
             while (c->GetData(queries_[i], &passed_[i], sizeof passed_[i], 0) == S_FALSE) {
             }
+        const double done = seconds();
+        // What the round trip costs, the same on every machine: the last End
+        // to its result, and the part of that spent waiting in GetData.
+        end_to_result_ += done - ended;
+        waited_ += done - waiting;
+        timed_frames_++;
     }
     void release() override
     {
+        if (timed_frames_ != 0) {
+            log_number("end to result us", end_to_result_ * 1e6 / timed_frames_);
+            log_number("waiting us", waited_ * 1e6 / timed_frames_);
+        }
         safe_release(vs_);
         safe_release(ps_);
         safe_release(layout_);
@@ -1829,6 +1841,8 @@ private:
     ID3D11Buffer            *constants_ = nullptr;
     ID3D11Query             *queries_[2] = {};
     UINT64 passed_[2] = {};
+    double end_to_result_ = 0.0, waited_ = 0.0;
+    uint64_t timed_frames_ = 0;
     ID3D11RasterizerState   *raster_ = nullptr;
     ID3D11BlendState        *blend_ = nullptr, *no_color_ = nullptr;
     ID3D11DepthStencilState *test_only_ = nullptr;

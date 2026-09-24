@@ -18,7 +18,7 @@ constexpr uint32_t mix_shift = 32u;
 
 }  // namespace
 
-TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), max_depth_(0u), region_(nullptr), layout_(0u), slots_(0u) {}
+TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), max_depth_(0u), only_{}, only_count_(0u), region_(nullptr), layout_(0u), slots_(0u) {}
 
 Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module, uint32_t process)
 {
@@ -52,6 +52,11 @@ Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module,
 uint32_t TraceTable::enter(const ScopeName &name)
 {
     if (region_ == nullptr) return no_slot;
+    if (only_count_ != 0u) {
+        uint32_t index = 0u;
+        while (index < only_count_ && only_[index] != name.id()) index++;
+        if (index == only_count_) return no_slot;
+    }
     const uint64_t key = host_.thread_key();
     if (key == 0u || (key & TraceLayout::active) != 0u) return no_slot;
     /* A thread's slot is almost always the one its key hashes to: nested, it
@@ -64,7 +69,8 @@ uint32_t TraceTable::enter(const ScopeName &name)
         if (slot == no_slot) slot = claim(key);
         if (slot == no_slot) return no_slot;
     }
-    if (max_depth_ != 0u && read32(slot_at(slot) + TraceLayout::depth_at) >= max_depth_) return no_slot;
+    if (only_count_ == 0u && max_depth_ != 0u && read32(slot_at(slot) + TraceLayout::depth_at) >= max_depth_)
+        return no_slot;
     push(slot, name);
     if (events_ != nullptr) events_->record(slot, host_.clock(), name.id(), host_.thread_number(), true);
     return slot;
@@ -73,6 +79,12 @@ uint32_t TraceTable::enter(const ScopeName &name)
 void TraceTable::limit_depth(uint32_t depth)
 {
     max_depth_ = depth;
+}
+
+void TraceTable::only(const uint32_t *ids, uint32_t count)
+{
+    only_count_ = 0u;
+    for (uint32_t index = 0u; ids != nullptr && index < count && index < max_only; index++) only_[only_count_++] = ids[index];
 }
 
 void TraceTable::record_events(EventRing &ring)
