@@ -176,6 +176,17 @@ target_include_directories(rvkd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
 target_compile_options(rvkd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
 target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
 
+# The OpenGL samples' host side (samples/opengl): the host's own driver through
+# EGL, the same GLSL the guest compiles - the report's baseline
+# (tools/opengl_report.py).
+if(AV_EGL_LIBRARY)
+  file(GLOB AV_OPENGL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opengl/*.cpp)
+  list(FILTER AV_OPENGL_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+  add_executable(rvkglsamples_host ${AV_OPENGL_SAMPLES_SOURCES})
+  target_compile_options(rvkglsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+  target_link_libraries(rvkglsamples_host PRIVATE ${AV_EGL_LIBRARY} Threads::Threads)
+endif()
+
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
