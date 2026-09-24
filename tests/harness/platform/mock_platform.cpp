@@ -568,6 +568,11 @@ Status MockPlatform::write_driver_text(void *physical_device_object, const char 
     return Status::ok;
 }
 
+std::uint32_t MockPlatform::read_service_u32(void *, const char *, std::uint32_t fallback)
+{
+    return fallback;
+}
+
 Status MockPlatform::write_driver_u32(void *physical_device_object, const char *name, std::uint32_t number)
 {
     if (device_write_refused("write_driver_u32")) return Status::not_supported;

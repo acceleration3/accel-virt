@@ -60,6 +60,7 @@ public:
     bool     register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine) override;
     void     deregister_bugcheck() override;
     void     report_broken_invariant(const char *what, const char *function) override;
+    uint32_t read_service_u32(void *registry_path, const char *name, uint32_t fallback) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,
                                const DdiTable &table) override;
     Status   set_device_description(void *physical_device_object, const uint16_t *text,

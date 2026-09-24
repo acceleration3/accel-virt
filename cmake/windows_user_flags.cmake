@@ -11,7 +11,7 @@ endif()
 # generated clients encode every command of their API and the suite calls a
 # handful, so /OPT:REF gets a section per function and variable to drop.
 string(JOIN " " CMAKE_CXX_FLAGS_INIT
-  /GR- /EHs-c- /Zl /X /Z7 /GS- /Gy /Gw
+  /GR- /EHs-c- /Zl /X /Z7 /GS- /Gy /Gw /O2
   /D_AMD64_ /DAMD64 /D_WIN64 /DAV_CHECKED=1 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
   /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
   /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml

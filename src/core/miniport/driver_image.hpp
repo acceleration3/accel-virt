@@ -49,7 +49,9 @@ public:
         /* Both storages are empty whenever the platform's was. */
         static_cast<void>(host_.construct());
         static_cast<void>(trace_.construct(platform, host_.object(), image));
-        trace_.object().start(bugcheck);
+        /* Every scope costs the DPC it runs in, and dxgkrnl's other DPCs spin
+         * on the lock that DPC holds: the table is kept only when asked for. */
+        if (platform.read_service_u32(registry_path, "TraceScopes", 0u) != 0u) trace_.object().start(bugcheck);
         if (miniport_.construct(platform) != Status::ok) {
             leave_trace();
             platform_.destroy();

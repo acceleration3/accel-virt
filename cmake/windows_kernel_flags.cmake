@@ -10,7 +10,7 @@ endif()
 # words ("-imsvc a -imsvc b" becomes "-imsvc a b"). Under clang-cl -Wall means
 # -Weverything, hence /W4 plus the host build's explicit list.
 string(JOIN " " CMAKE_CXX_FLAGS_INIT
-  /kernel /GR- /EHs-c- /Zl /X /Z7
+  /kernel /GR- /EHs-c- /Zl /X /Z7 /O2
   /D_AMD64_ /DAMD64 /D_WIN64 /DAV_CHECKED=1
   /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
   /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml

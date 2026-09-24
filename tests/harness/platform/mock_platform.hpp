@@ -92,6 +92,7 @@ public:
     Status   write_driver_text(void *physical_device_object, const char *name, const std::uint16_t *text,
                                std::uint32_t bytes) override;
     Status   write_driver_u32(void *physical_device_object, const char *name, std::uint32_t value) override;
+    std::uint32_t read_service_u32(void *registry_path, const char *name, std::uint32_t fallback) override;
     Status   write_driver_u64(void *physical_device_object, const char *name, std::uint64_t value) override;
 
     /* The Nth device property or driver-key write from now (1-based) is

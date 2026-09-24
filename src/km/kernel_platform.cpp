@@ -400,6 +400,32 @@ Status KernelPlatform::write_driver_value(void *physical_device_object, const ch
     return NT_SUCCESS(written) ? Status::ok : Status::not_supported;
 }
 
+uint32_t KernelPlatform::read_service_u32(void *registry_path, const char *name, uint32_t fallback)
+{
+    AV_SCOPE("KernelPlatform::read_service_u32");
+    WCHAR  wide[value_name_chars] = {};
+    size_t length = 0u;
+    for (; name[length] != '\0' && length + 1u < value_name_chars; length++)
+        wide[length] = static_cast<WCHAR>(name[length]);
+    UNICODE_STRING    value_name = {static_cast<USHORT>(length * sizeof(WCHAR)), static_cast<USHORT>(sizeof wide), wide};
+    OBJECT_ATTRIBUTES attributes = {};
+    InitializeObjectAttributes(&attributes, static_cast<PUNICODE_STRING>(registry_path),
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, nullptr, nullptr);
+    HANDLE key = nullptr;
+    if (!NT_SUCCESS(ZwOpenKey(&key, KEY_QUERY_VALUE, &attributes))) return fallback;
+    constexpr ULONG value_bytes = sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG);
+    alignas(8) UCHAR buffer[value_bytes] = {};
+    ULONG            returned = 0u;
+    const NTSTATUS   queried = ZwQueryValueKey(key, &value_name, KeyValuePartialInformation, buffer, value_bytes,
+                                               &returned);
+    ZwClose(key);
+    const auto *const value = reinterpret_cast<const KEY_VALUE_PARTIAL_INFORMATION *>(buffer);
+    if (!NT_SUCCESS(queried) || value->Type != REG_DWORD || value->DataLength != sizeof(ULONG)) return fallback;
+    ULONG number = 0u;
+    __builtin_memcpy(&number, value->Data, sizeof number);
+    return number;
+}
+
 Status KernelPlatform::write_driver_text(void *physical_device_object, const char *name, const uint16_t *text,
                                          uint32_t bytes)
 {
