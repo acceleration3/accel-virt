@@ -12,6 +12,7 @@
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -675,3 +676,170 @@ TEST(cl_image_paths, a_sampler_is_made_from_the_three_properties_and_nothing_els
   CHECK(carries(rig.kmt(), before, host_sampler));
   CHECK_EQ(rig.root().release(sampler, av::clicd::ClObject::Kind::sampler), CL_INVALID_SAMPLER);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_is_written_after_it)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const std::size_t bytes = 2u * av::clicd::ClTransferChunks::write_room + 1u;
+  static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
+  for (std::size_t index = 0u; index < bytes; ++index) from[index] = static_cast<std::uint8_t>(index);
+
+  /* The create names no bytes and no copy; three writes on a queue of the
+   * ICD's own follow, and the queue goes. */
+  std::uint32_t sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
+  rig.host().cl_handle(own_queue, CL_SUCCESS);
+  for (int piece = 0; piece < 3; ++piece) rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  cl_int error = CL_INVALID_VALUE;
+  cl_mem buffer = rig.root().create_buffer(run.context(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, from,
+                                           nullptr, &error);
+  CHECK(buffer != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clCreateBuffer);
+  av::WireReader payload = payload_of(rig.kmt(), sent);
+  std::uint64_t  context = 0u, flags = 0u, size = 0u;
+  std::uint8_t   present = 1u;
+  CHECK(payload.read_pod(context) && payload.read_varint(flags) && payload.read_varint(size) &&
+        payload.read_pod(present));
+  CHECK_EQ(flags & CL_MEM_COPY_HOST_PTR, 0u);
+  CHECK_EQ(size, bytes);
+  CHECK_EQ(present, 0u);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clCreateCommandQueueWithProperties);
+  for (std::uint32_t piece = 2u; piece < 5u; ++piece) {
+      CHECK_EQ(rig.kmt().command_id(sent + piece), av::clproto::kCmd_clEnqueueWriteBuffer);
+      CHECK(carries(rig.kmt(), sent + piece, own_queue));
+  }
+  CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clReleaseCommandQueue);
+
+  /* A copy one command carries rides inside the create. */
+  sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 3u, CL_SUCCESS);
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, 64u, from, nullptr, &error) != nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+
+  /* A write the host refuses gives the buffer back, and the application is
+   * told the host's error. */
+  sent = rig.kmt().commands();
+  rig.host().cl_handle(host_buffer + 4u, CL_SUCCESS);
+  rig.host().cl_handle(own_queue, CL_SUCCESS);
+  rig.host().cl_result(CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
+  CHECK(carries(rig.kmt(), rig.kmt().commands() - 1u, host_buffer + 4u));
+
+  /* And a queue the host will not make does the same. */
+  rig.host().cl_handle(host_buffer + 5u, CL_SUCCESS);
+  rig.host().cl_handle(0u, CL_OUT_OF_RESOURCES);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  cl_image_format formats[4] = {};
+  cl_uint         listed = 0u;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().supported_image_formats(reinterpret_cast<cl_context>(run.queue()), CL_MEM_READ_ONLY,
+                                              CL_MEM_OBJECT_IMAGE2D, 4u, formats, &listed),
+           CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.root().supported_image_formats(run.context(), CL_MEM_READ_ONLY, CL_MEM_OBJECT_IMAGE2D, 0u, formats,
+                                              &listed),
+           CL_INVALID_VALUE);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  /* Two of the host's thirty, and the thirty. */
+  const cl_image_format answered[2] = {{CL_RGBA, CL_UNORM_INT8}, {CL_R, CL_FLOAT}};
+  rig.host().cl_formats(CL_SUCCESS, answered, 2u, 30u);
+  CHECK_EQ(table_of(run.context())->clGetSupportedImageFormats(run.context(), CL_MEM_READ_ONLY,
+                                                               CL_MEM_OBJECT_IMAGE2D, 2u, formats, &listed),
+           CL_SUCCESS);
+  CHECK_EQ(listed, 30u);
+  CHECK_EQ(formats[0].image_channel_order, static_cast<cl_channel_order>(CL_RGBA));
+  CHECK_EQ(formats[1].image_channel_data_type, static_cast<cl_channel_type>(CL_FLOAT));
+  CHECK_EQ(formats[2].image_channel_order, 0u);
+
+  /* Asked for the count alone. */
+  rig.host().cl_formats(CL_SUCCESS, nullptr, 0u, 30u);
+  listed = 0u;
+  CHECK_EQ(rig.root().supported_image_formats(run.context(), CL_MEM_READ_ONLY, CL_MEM_OBJECT_IMAGE2D, 0u, nullptr,
+                                              &listed),
+           CL_SUCCESS);
+  CHECK_EQ(listed, 30u); }
+
+TEST(cl_image_paths, a_marker_or_a_barrier_names_the_hosts_events_and_hands_back_its_own)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  /* An event of this context to wait on: a copy's. */
+  cl_event copied = nullptr;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 7u);
+  CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), run.buffer(), 0u, 128u, 64u, &copied),
+           CL_SUCCESS);
+  CHECK(copied != nullptr);
+
+  std::uint32_t sent = rig.kmt().commands();
+  cl_event      marker = nullptr;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 8u);
+  CHECK_EQ(table_of(run.queue())->clEnqueueMarkerWithWaitList(run.queue(), 1u, &copied, &marker), CL_SUCCESS);
+  CHECK(marker != nullptr);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
+  CHECK(carries(rig.kmt(), sent, host_event + 7u));
+
+  sent = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(table_of(run.queue())->clEnqueueBarrierWithWaitList(run.queue(), 0u, nullptr, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueBarrierWithWaitList);
+
+  /* The host's refusal makes no event. */
+  cl_event refused = nullptr;
+  rig.host().cl_enqueued(CL_INVALID_EVENT_WAIT_LIST, 0u);
+  CHECK_EQ(rig.root().enqueue_barrier(run.queue(), 1u, &copied, &refused), CL_INVALID_EVENT_WAIT_LIST);
+  CHECK(refused == nullptr);
+
+  /* Lists the API refuses, and lists this ICD cannot hold, ask nothing. */
+  sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_marker(reinterpret_cast<cl_command_queue>(run.context()), 0u, nullptr, nullptr),
+           CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, nullptr, nullptr), CL_INVALID_EVENT_WAIT_LIST);
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, &copied, nullptr), CL_INVALID_EVENT_WAIT_LIST);
+  const cl_event not_an_event = reinterpret_cast<cl_event>(run.kernel());
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, &not_an_event, nullptr), CL_INVALID_EVENT_WAIT_LIST);
+  cl_event many[av::clicd::ClIcdRoot::max_waited + 1u] = {};
+  for (cl_event &one : many) one = copied;
+  CHECK_EQ(rig.root().enqueue_barrier(run.queue(), av::clicd::ClIcdRoot::max_waited + 1u, many, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_image_paths, an_event_of_another_context_is_not_one_a_queue_can_wait_on)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  /* A second context, and a user event of its. */
+  rig.host().blob_import(0u, 0x79u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context + 1u, CL_SUCCESS);
+  cl_context other = rig.loader().create_context(run.device(), nullptr);
+  CHECK(other != nullptr);
+  if (other == nullptr) return;
+  rig.host().cl_handle(host_event + 9u, CL_SUCCESS);
+  cl_event foreign = rig.root().create_user_event(other, nullptr);
+  CHECK(foreign != nullptr);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, &foreign, nullptr), CL_INVALID_EVENT_WAIT_LIST);
+  CHECK_EQ(rig.kmt().commands(), sent); }

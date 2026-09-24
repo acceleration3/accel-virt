@@ -119,6 +119,10 @@ public:
     /* An enqueue that answers only a result and the event it made: a marker,
      * a kernel, a write. */
     void cl_enqueued(std::int32_t result, std::uint64_t event);
+    /* clGetSupportedImageFormats' answer: the result, `sent` formats as
+     * bytes, and the `total` the host has - or, with no formats, the answer
+     * to a query that asked for the count alone. */
+    void cl_formats(std::int32_t result, const void *formats, std::uint32_t sent, std::uint32_t total);
     /* An info query's answer: the result, `size` bytes of `value`, and the
      * size again as the size it reports. */
     void cl_info(std::int32_t result, const char *value, std::uint32_t size);

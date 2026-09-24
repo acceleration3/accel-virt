@@ -528,6 +528,31 @@ cl_int CL_API_CALL release_sampler(cl_sampler sampler)
     return root.release(sampler, ClObject::Kind::sampler);
 }
 
+cl_int CL_API_CALL get_supported_image_formats(cl_context context, cl_mem_flags flags,
+                                               cl_mem_object_type type, cl_uint num_entries,
+                                               cl_image_format *formats, cl_uint *num_formats)
+{
+    AV_SCOPE("get_supported_image_formats");
+    AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
+    return root.supported_image_formats(context, flags, type, num_entries, formats, num_formats);
+}
+
+cl_int CL_API_CALL enqueue_marker(cl_command_queue queue, cl_uint count, const cl_event *events,
+                                  cl_event *event)
+{
+    AV_SCOPE("enqueue_marker");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_marker(queue, count, events, event);
+}
+
+cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const cl_event *events,
+                                   cl_event *event)
+{
+    AV_SCOPE("enqueue_barrier");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_barrier(queue, count, events, event);
+}
+
 /* `cl_khr_external_memory`'s two, which the loader asks for by name: they are
  * not slots of cl_icd_dispatch, because the ICD ABI predates the extension. */
 cl_int CL_API_CALL acquire_external_objects(cl_command_queue queue, cl_uint num_mem_objects,
@@ -615,7 +640,10 @@ void ClDispatchTable::fill()
     table_.clCreateSampler = &create_sampler;
     table_.clRetainSampler = &retain_sampler;
     table_.clReleaseSampler = &release_sampler;
-    claimed_ = 54u;
+    table_.clGetSupportedImageFormats = &get_supported_image_formats;
+    table_.clEnqueueMarkerWithWaitList = &enqueue_marker;
+    table_.clEnqueueBarrierWithWaitList = &enqueue_barrier;
+    claimed_ = 57u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
