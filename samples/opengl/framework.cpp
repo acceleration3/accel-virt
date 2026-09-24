@@ -454,11 +454,14 @@ GLuint Gpu::framebuffer(const GLuint *colors, uint32_t count, GLuint depth_textu
     return made;
 }
 
-void Gpu::draw_fullscreen()
+void Gpu::draw_fullscreen() { draw_generated(GL_TRIANGLES, 3); }
+
+void Gpu::draw_generated(GLenum mode, uint32_t vertices, uint32_t instances)
 {
     if (empty_layout_ == 0) glCreateVertexArrays(1, &empty_layout_);
     glBindVertexArray(empty_layout_);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (instances == 1) glDrawArrays(mode, 0, static_cast<GLsizei>(vertices));
+    else glDrawArraysInstanced(mode, 0, static_cast<GLsizei>(vertices), static_cast<GLsizei>(instances));
 }
 
 void Gpu::begin_frame(float r, float g, float b)

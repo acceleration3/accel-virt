@@ -124,6 +124,9 @@ public:
     // One triangle over the viewport, its corners from gl_VertexID: Direct3D's
     // Draw(3) with no input layout.
     void     draw_fullscreen();
+    // A draw with no vertex inputs at all: the shader makes every vertex from
+    // gl_VertexID and gl_InstanceID.
+    void     draw_generated(GLenum mode, uint32_t vertices, uint32_t instances = 1);
     // Binds the frame's target, clears it, sets a full viewport.
     void     begin_frame(float r, float g, float b);
     void     viewport(float x, float y, float w, float h);
