@@ -29,11 +29,21 @@ public:
      * inside the blob. */
     [[nodiscard]] Status read(uint64_t offset, uint8_t *bytes, size_t count) const;
     [[nodiscard]] Status write(uint64_t offset, const uint8_t *bytes, size_t count) const;
+    /* The eight bytes at `offset` in one load or one store: a field another
+     * processor stores whole - a ring's tail, its head - is never seen half
+     * old and half new, which a copy a byte at a time cannot promise. In the
+     * machine's byte order, little-endian as the wire's on every machine this
+     * runs on. invalid_parameter, touching nothing, unless the eight bytes
+     * are aligned and in one extent. */
+    [[nodiscard]] Status load_u64(uint64_t offset, uint64_t &value) const;
+    [[nodiscard]] Status store_u64(uint64_t offset, uint64_t value) const;
 
     bool invariants_hold() const;
 
 private:
     bool contains(uint64_t offset, size_t count) const;
+    /* The aligned word at `offset`, null unless one extent holds all of it. */
+    uint64_t *word(uint64_t offset) const;
     /* Calls copy(extent_bytes, done, chunk) for each piece of the range. */
     template <typename Copy>
     void walk(uint64_t offset, size_t count, Copy copy) const;

@@ -37,6 +37,7 @@ public:
     bool invariants_hold() const;
 
 private:
+    static constexpr uint64_t tail_offset = 8u;
     static constexpr uint64_t head_offset = 16u;
     static constexpr uint64_t awake_offset = 5u;
 

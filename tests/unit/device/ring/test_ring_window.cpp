@@ -34,7 +34,7 @@ public:
 private:
     static constexpr std::uint64_t split = 1000u;
 
-    std::uint8_t  bytes_[32u + data_bytes];
+    alignas(8) std::uint8_t bytes_[32u + data_bytes];
     void         *pointers_[2];
     std::uint64_t lengths_[2];
 };
@@ -53,6 +53,28 @@ TEST(ring_window_snapshot, decodes_the_header_the_guest_wrote)
   CHECK_EQ(header.order(), 12u);
   CHECK(header.tail() == 0x5000u);
   CHECK(header.head() == 0x4800u); }
+
+/* The tail is read as one word, apart from the header around it: a header
+ * whose tail no single extent holds is one it cannot read. */
+TEST(ring_window_snapshot, reads_the_tail_as_one_word_and_refuses_a_header_that_splits_it)
+{ RingBlob blob;
+  static_cast<void>(RingHeader(12u, 0x0102030405060708u, 0x10u).encode(blob.bytes(), 32u));
+  RingHeader header;
+  CHECK_STATUS(blob.ring().snapshot(header), Status::ok);
+  CHECK(header.tail() == 0x0102030405060708u);
+  void *const         pointers[2] = {blob.bytes(), blob.bytes() + 12u};
+  const std::uint64_t lengths[2] = {12u, 32u + data_bytes - 12u};
+  const RingWindow    split(BlobWindow(pointers, lengths, 2u, 32u + data_bytes), 12u);
+  RingHeader          untouched(20u, 1u, 1u);
+  CHECK_STATUS(split.snapshot(untouched), Status::invalid_parameter);
+  CHECK_EQ(untouched.order(), 20u);
+  CHECK_STATUS(split.publish_head(5u), Status::ok);
+  void *const         head_split[2] = {blob.bytes(), blob.bytes() + 20u};
+  const std::uint64_t head_lengths[2] = {20u, 32u + data_bytes - 20u};
+  const RingWindow    split_head(BlobWindow(head_split, head_lengths, 2u, 32u + data_bytes), 12u);
+  CHECK_STATUS(split_head.publish_head(6u), Status::invalid_parameter);
+  const ByteLayout layout(blob.bytes(), 32u);
+  CHECK(layout.at(16u, 8u) == 5u); }
 
 TEST(ring_window_snapshot, a_malformed_header_is_malformed_and_leaves_the_snapshot)
 { RingBlob blob;

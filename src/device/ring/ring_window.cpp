@@ -2,7 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "proto/submission/ring_header.hpp"
-#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -28,12 +27,22 @@ uint64_t RingWindow::capacity() const
     return order_ != 0u ? uint64_t{1} << order_ : 0u;
 }
 
+/* The tail is stored whole, by the process or its driver, while this reads:
+ * read a byte at a time with the rest of the header, a tail crossing a
+ * multiple of 256 is seen half old and half new - a tail ahead of anything
+ * written, which faults the context on the stale bytes it points past. It is
+ * read again as one word, after the rest. */
 Status RingWindow::snapshot(RingHeader &header) const
 {
     AV_SCOPE("RingWindow::snapshot");
-    uint8_t      bytes[RingHeader::encoded_size] = {};
-    const Status status = blob_.read(0u, bytes, sizeof bytes);
-    return status != Status::ok ? status : header.decode(bytes, sizeof bytes);
+    uint8_t    bytes[RingHeader::encoded_size] = {};
+    RingHeader decoded;
+    uint64_t   tail = 0u;
+    Status     status = blob_.read(0u, bytes, sizeof bytes);
+    if (status == Status::ok) status = decoded.decode(bytes, sizeof bytes);
+    if (status == Status::ok) status = blob_.load_u64(tail_offset, tail);
+    if (status == Status::ok) header = RingHeader(decoded.order(), tail, decoded.head());
+    return status;
 }
 
 Status RingWindow::copy(uint64_t counter, uint8_t *bytes, size_t count) const
@@ -47,13 +56,12 @@ Status RingWindow::copy(uint64_t counter, uint8_t *bytes, size_t count) const
     return status;
 }
 
+/* One store, for the reason the tail is one load: the process and its driver
+ * read the head while this writes it. */
 Status RingWindow::publish_head(uint64_t head) const
 {
     AV_SCOPE("RingWindow::publish_head");
-    uint8_t    bytes[sizeof head] = {};
-    WireWriter writer(bytes, sizeof bytes);
-    writer.write_u64(head);
-    return blob_.write(head_offset, bytes, sizeof bytes);
+    return blob_.store_u64(head_offset, head);
 }
 
 /* Byte 5 of the header: whether the worker is watching the ring. A process

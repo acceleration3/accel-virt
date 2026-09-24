@@ -5,7 +5,6 @@
 #include "proto/submission/fence_progress.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
-#include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -43,14 +42,21 @@ void RingSubmitter::detach()
     ring_ = nullptr;
 }
 
-/* The head is copied once and judged against the tail the ring holds. */
+/* The head is judged against the tail the ring holds. */
 Status RingSubmitter::judge_head(uint64_t tail)
 {
     AV_SCOPE("RingSubmitter::judge_head");
-    uint8_t bytes[sizeof(uint64_t)] = {};
-    platform_.copy(bytes, ring_ + head_offset, sizeof bytes);
-    WireReader reader(bytes, sizeof bytes);
-    if (device_.observe(RingHeader(order_, tail, reader.read_u64())) == Status::ok) return Status::ok;
+    /* One load: the device stores the head whole while this runs, and a copy a
+     * byte at a time could see it half moved. */
+    const uint64_t head = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + head_offset), __ATOMIC_ACQUIRE);
+    /* A process publishing its own tail may have moved it, and the device
+     * consumed past the tail read before, since then: read after the head, it
+     * is never behind it. */
+    if (shared_tail_) {
+        const uint64_t now = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + tail_offset), __ATOMIC_ACQUIRE);
+        if (now > tail) tail = now;
+    }
+    if (device_.observe(RingHeader(order_, tail, head)) == Status::ok) return Status::ok;
     failed_ = true;
     platform_.log("rvk: the device's ring head is inconsistent with the tail published");
     return Status::invalid_state;
@@ -75,7 +81,9 @@ Status RingSubmitter::adopt_published_tail(const SubmissionDescriptor &submissio
     AV_SCOPE("RingSubmitter::adopt_published_tail");
     published = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + tail_offset), __ATOMIC_ACQUIRE);
     if (submission.begin() < tail_) return Status::invalid_parameter;
-    if (published != submission.end() && published != submission.begin()) return Status::invalid_parameter;
+    /* Past the end is a process that published later batches before the
+     * scheduler handed this one over. */
+    if (published < submission.end() && published != submission.begin()) return Status::invalid_parameter;
     tail_ = submission.begin();
     return Status::ok;
 }
@@ -107,8 +115,15 @@ Status RingSubmitter::submit(const SubmissionDescriptor &submission)
     if (submission.end() - device_.head() > RingHeader(order_, 0u, 0u).capacity()) return Status::no_space;
     if (fences_.record_submission(submission.fence_id()) != Status::ok) return Status::invalid_parameter;
     /* One 8-byte store after the batch is whole: the device polls the tail,
-     * and a byte-wise copy can be read half-written. */
-    __atomic_store_n(reinterpret_cast<uint64_t *>(ring_ + tail_offset), submission.end(), __ATOMIC_RELEASE);
+     * and a byte-wise copy can be read half-written. The process publishes from another processor while this runs: a plain
+     * store of what was read could put its newer tail back, hiding batches it
+     * already sent without the kernel. Only a tail still short of this
+     * submission is moved, and only if the process has not moved it since. */
+    uint64_t *const tail = reinterpret_cast<uint64_t *>(ring_ + tail_offset);
+    if (!shared_tail_) __atomic_store_n(tail, submission.end(), __ATOMIC_RELEASE);
+    else if (published < submission.end())
+        static_cast<void>(__atomic_compare_exchange_n(tail, &published, submission.end(), false, __ATOMIC_RELEASE,
+                                                      __ATOMIC_RELAXED));
     tail_ = submission.end();
     published_++;
     doorbells_.write_u32(doorbell_ * doorbell_page_bytes, 1u);

@@ -17,7 +17,7 @@ Status TailPublishRecord::encode(uint8_t *bytes, size_t capacity) const
     if (bytes == nullptr || capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
-    writer.write_zeros(4u);
+    writer.write_zeros(encoded_size - sizeof(uint32_t));
     return writer.status();
 }
 
@@ -27,7 +27,7 @@ Status TailPublishRecord::decode(const uint8_t *bytes, size_t length)
     if (bytes == nullptr || length != encoded_size) return Status::malformed;
     WireReader reader(bytes, length);
     if (reader.read_u32() != magic) return Status::malformed;
-    reader.expect_zero(4u);
+    reader.expect_zero(encoded_size - sizeof(uint32_t));
     return reader.status();
 }
 

@@ -60,6 +60,36 @@ Status BlobWindow::write(uint64_t offset, const uint8_t *bytes, size_t count) co
     return Status::ok;
 }
 
+uint64_t *BlobWindow::word(uint64_t offset) const
+{
+    AV_SCOPE("BlobWindow::word");
+    if (!contains(offset, sizeof(uint64_t))) return nullptr;
+    uint64_t *found = nullptr;
+    walk(offset, sizeof(uint64_t), [&found](uint8_t *at, size_t, size_t chunk) {
+        if (chunk == sizeof(uint64_t) && reinterpret_cast<uintptr_t>(at) % alignof(uint64_t) == 0u)
+            found = reinterpret_cast<uint64_t *>(at);
+    });
+    return found;
+}
+
+Status BlobWindow::load_u64(uint64_t offset, uint64_t &value) const
+{
+    AV_SCOPE("BlobWindow::load_u64");
+    const uint64_t *const field = word(offset);
+    if (field == nullptr) return Status::invalid_parameter;
+    value = __atomic_load_n(field, __ATOMIC_ACQUIRE);
+    return Status::ok;
+}
+
+Status BlobWindow::store_u64(uint64_t offset, uint64_t value) const
+{
+    AV_SCOPE("BlobWindow::store_u64");
+    uint64_t *const field = word(offset);
+    if (field == nullptr) return Status::invalid_parameter;
+    __atomic_store_n(field, value, __ATOMIC_RELEASE);
+    return Status::ok;
+}
+
 /* The extents add up to the length, and there is memory behind any of them. */
 bool BlobWindow::invariants_hold() const
 {
