@@ -1,5 +1,6 @@
 #include "harness/executor/d3d_loopback.hpp"
 
+#include "device/abi/rvk_executor.h"
 #include "device/executor/d3d_backend.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -8,16 +9,28 @@
 
 namespace av {
 
-D3dLoopback::D3dLoopback(D3dBackend &backend)
+D3dLoopback::D3dLoopback(D3dBackend &backend, std::size_t guest_bytes, std::size_t lent_bytes)
     : backend_(backend), command_(static_cast<uint8_t *>(std::calloc(command_bytes, 1u))),
       reply_(static_cast<uint8_t *>(std::calloc(reply_bytes, 1u))),
       arena_block_(static_cast<uint8_t *>(std::aligned_alloc(16u, arena_bytes))), arena_(arena_block_, arena_bytes),
-      decode_arena_(nullptr, 0u), blobs_(), refused_(0u)
+      decode_arena_(nullptr, 0u), blobs_(), refused_(0u), guest_(nullptr), guest_bytes_(0u), blob_()
 {
+    constexpr std::size_t heap_alignment = 64u * 1024u;
+    if (guest_bytes == 0u) return;
+    guest_ = static_cast<uint8_t *>(std::aligned_alloc(heap_alignment, guest_bytes));
+    guest_bytes_ = guest_bytes;
+    RvkBlobHandle handle = {};
+    handle.kind = RVK_BLOB_HOST_POINTER;
+    handle.pointer = guest_;
+    handle.fd = -1;
+    handle.size = guest_bytes;
+    if (blob_.take(1u, handle) == Status::ok && backend_.adopt(blob_)) blobs_.lend(guest_, lent_bytes);
 }
 
 D3dLoopback::~D3dLoopback()
 {
+    if (blob_.live()) backend_.abandon(blob_);
+    std::free(guest_);
     std::free(command_);
     std::free(reply_);
     std::free(arena_block_);
@@ -35,7 +48,11 @@ bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, std::size_t &answ
     WireReader payload(command_, writer.offset());
     WireWriter reply(reply_, reply_bytes);
     arena_.reset();
-    if (!backend_.run(command_id, payload, reply, arena_)) {
+    /* Each command is a batch of its own here, ended as the worker ends one:
+     * whether it ran or was refused, the Direct3D 11 lock it took is let go. */
+    const bool ran = backend_.run(command_id, payload, reply, arena_);
+    backend_.end_batch();
+    if (!ran) {
         refused_++;
         return false;
     }
@@ -53,6 +70,8 @@ TransportResult D3dLoopback::send_sync(uint32_t command_id, WireWriter &writer, 
 {
     std::size_t answered = 0u;
     if (!run(command_id, writer, answered)) return TransportResult::failed;
+    /* An answer means the host has read every lease sent before it. */
+    blobs_.retire_all();
     reply = WireReader(reply_, answered);
     return TransportResult::ok;
 }
@@ -69,6 +88,11 @@ WireArena &D3dLoopback::decode_arena()
 ClientBlobArena &D3dLoopback::blobs()
 {
     return blobs_;
+}
+
+uint8_t *D3dLoopback::guest(std::size_t offset) const
+{
+    return guest_ != nullptr && offset < guest_bytes_ ? guest_ + offset : nullptr;
 }
 
 uint32_t D3dLoopback::refused() const

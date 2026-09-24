@@ -9,6 +9,10 @@
 #define AV_D3D_HEADERS_HPP
 
 #include <d3d11_4.h>
+/* vkd3d-proton returns a struct from a COM method through a pointer, as the
+ * Windows ABI does (vkd3d_d3d12.idl defines this for itself); the native
+ * d3d12.h declares that shape only when asked. Only d3d12.h has such methods. */
+#define WIDL_EXPLICIT_AGGREGATE_RETURNS
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <vulkan/vulkan_core.h>
@@ -21,5 +25,25 @@ IDXGIVkInteropAdapter : public IUnknown {
     virtual void STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device) = 0;
 };
 __CRT_UUID_DECL(IDXGIVkInteropAdapter, 0x3a6d8f2c, 0xb0e8, 0x4ab4, 0xb4, 0xdc, 0x4f, 0xd2, 0x48, 0x91, 0xbf, 0xa5);
+
+/* ID3D12DeviceFactory (d3d12.h of the Agility SDK, vkd3d-proton's
+ * include/vkd3d_d3d12.idl), which DXVK's native d3d12.h predates: how the
+ * executor makes one independent device per GPU. */
+MIDL_INTERFACE("61f307d3-d34e-4e7c-8374-3ba4de23cccb")
+ID3D12DeviceFactory : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE InitializeFromGlobalState() = 0;
+    virtual HRESULT STDMETHODCALLTYPE ApplyToGlobalState() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetFlags(UINT flags) = 0;
+    virtual UINT STDMETHODCALLTYPE    GetFlags() = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetConfigurationInterface(REFCLSID clsid, REFIID iid, void **object) = 0;
+    virtual HRESULT STDMETHODCALLTYPE EnableExperimentalFeatures(UINT count, const IID *iids, void *configurations,
+                                                                 UINT *sizes) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateDevice(IUnknown *adapter, D3D_FEATURE_LEVEL level, REFIID riid,
+                                                   void **device) = 0;
+};
+__CRT_UUID_DECL(ID3D12DeviceFactory, 0x61f307d3, 0xd34e, 0x4e7c, 0x83, 0x74, 0x3b, 0xa4, 0xde, 0x23, 0xcc, 0xcb);
+
+/* CLSID_D3D12DeviceFactory, what D3D12GetInterface makes a factory from. */
+constexpr GUID clsid_d3d12_device_factory = {0x114863bf, 0xc386, 0x4aee, {0xb3, 0x9d, 0x8f, 0x0b, 0xbb, 0x06, 0x29, 0x55}};
 
 #endif  // AV_D3D_HEADERS_HPP

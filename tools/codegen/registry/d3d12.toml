@@ -1,0 +1,530 @@
+# The Direct3D 12 commands the user-mode driver (rvkumd.dll's OpenAdapter12
+# half) sends and the executor runs on the host's vkd3d-proton.
+#
+# The same wire as d3d.toml - the same api number, the same session, the same
+# generator - in the id range d3d.toml reserves for Direct3D 12 (0x1000-0x1fff),
+# so one session backend decodes both and routes by range. Values are the
+# Direct3D 12 *API*'s (D3D12_RESOURCE_STATES, D3D12_SRV_DIMENSION, DXGI_FORMAT
+# ...): the guest translates from the DDI once, the host judges and forwards.
+#
+# Objects are named by a 32-bit id the guest chooses, unique within its
+# session; 0 is "none" wherever a binding may be empty.
+#
+# Three things a D3D12 driver hands out that are not objects cross as what
+# they stand for:
+# - A descriptor handle (CPU or GPU) is (descriptor heap id, index); the
+#   guest's driver chooses the handle values it gives the runtime and maps
+#   them back.
+# - A GPU virtual address is the guest's own. Every buffer is made with the
+#   guest address the guest gave it, and the host finds the buffer an address
+#   falls in and adds the offset to the host buffer's own address.
+# - An upload or readback heap is guest memory: the heap names its offset in
+#   the session's blob arena and the host imports those pages, so what the
+#   guest writes the GPU reads and what the GPU writes the guest reads, with no
+#   copy either way.
+#
+# Shaders are not objects: a pipeline carries every stage's code, and the
+# signatures the DDI gives as registers, so the host keeps nothing it has not
+# made into a pipeline.
+
+[meta]
+api = 4
+prefix = "d3d12"
+first_id = 0x1000
+last_id = 0x1fff
+
+# ---------------------------------------------------------------- structs
+
+[structs.Float4]
+fields = ["f32 v[4]"]
+
+[structs.Rect]
+fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
+
+[structs.Box]
+fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 back"]
+
+[structs.Viewport]
+fields = ["f32 x", "f32 y", "f32 width", "f32 height", "f32 min_depth", "f32 max_depth"]
+
+# A descriptor handle, CPU or GPU: which heap, and where in it.
+[structs.DescriptorRef]
+fields = ["u32 heap", "u32 index"]
+
+# D3D12_HEAP_PROPERTIES without the node masks: type is D3D12_HEAP_TYPE,
+# cpu_page D3D12_CPU_PAGE_PROPERTY, pool D3D12_MEMORY_POOL.
+[structs.HeapProperties]
+fields = ["u32 type", "u32 cpu_page", "u32 pool", "u32 reserved"]
+
+# D3D12_RESOURCE_DESC, u64s first.
+[structs.ResourceDesc]
+fields = ["u64 alignment", "u64 width", "u32 dimension", "u32 height", "u32 depth_or_array", "u32 mip_levels",
+          "u32 format", "u32 sample_count", "u32 sample_quality", "u32 layout", "u32 flags", "u32 reserved"]
+
+# D3D12_CLEAR_VALUE, or none when present is 0.
+[structs.ClearValue]
+fields = ["u32 present", "u32 format", "f32 color[4]", "f32 depth", "u32 stencil"]
+
+# A view of any kind. dimension is the kind's own D3D12_*_DIMENSION; for a
+# buffer view first_element and args[0..1] are NumElements and
+# StructureByteStride, flags the kind's buffer flags, counter_offset a UAV
+# counter's; for a texture view args are the dimension's union members in
+# declaration order (SRV Texture2DArray: MostDetailedMip, MipLevels,
+# FirstArraySlice, ArraySize, PlaneSlice), min_lod its ResourceMinLODClamp.
+# mapping is an SRV's Shader4ComponentMapping.
+[structs.ViewDesc]
+fields = ["u64 first_element", "u64 counter_offset", "u32 resource", "u32 counter_resource", "u32 format",
+          "u32 dimension", "u32 mapping", "u32 flags", "u32 args[6]", "f32 min_lod", "u32 reserved"]
+
+[structs.SamplerDesc]
+fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 mip_lod_bias",
+          "u32 max_anisotropy", "u32 comparison", "f32 border_color[4]", "f32 min_lod", "f32 max_lod"]
+
+# D3D12_ROOT_PARAMETER1 flattened. type is D3D12_ROOT_PARAMETER_TYPE; a table
+# is ranges[first_range .. first_range + range_count) of the command's ranges;
+# constants have `values` 32-bit values; a root descriptor names its register.
+[structs.RootParameter]
+fields = ["u32 type", "u32 visibility", "u32 shader_register", "u32 register_space", "u32 values",
+          "u32 first_range", "u32 range_count", "u32 flags"]
+
+# D3D12_DESCRIPTOR_RANGE1: offset 0xffffffff appends.
+[structs.DescriptorRange]
+fields = ["u32 type", "u32 count", "u32 base_register", "u32 register_space", "u32 offset", "u32 flags"]
+
+# D3D12_STATIC_SAMPLER_DESC: border is D3D12_STATIC_BORDER_COLOR.
+[structs.StaticSampler]
+fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 mip_lod_bias",
+          "u32 max_anisotropy", "u32 comparison", "u32 border", "f32 min_lod", "f32 max_lod",
+          "u32 shader_register", "u32 register_space", "u32 visibility", "u32 reserved"]
+
+# One element of a stage's signature as the DDI gives it (d3d.toml's
+# SignatureEntry), with `set` saying whose: stage * 3 + role, stage 0 vertex,
+# 1 hull, 2 domain, 3 geometry, 4 pixel, role 0 input, 1 output, 2 patch
+# constant.
+[structs.SignatureEntry]
+fields = ["u32 set", "u32 system_value", "u32 register_index", "u32 mask", "u32 component_type",
+          "u32 min_precision", "u32 stream", "u32 reserved"]
+
+# D3D12DDIARG_INPUT_ELEMENT_DESC: the DDI names each element's vertex shader
+# input register, not a semantic.
+[structs.InputElement]
+fields = ["u32 input_slot", "u32 aligned_byte_offset", "u32 format", "u32 classification", "u32 step_rate",
+          "u32 input_register"]
+
+[structs.RenderTargetBlend]
+fields = ["u32 blend_enable", "u32 logic_op_enable", "u32 src_blend", "u32 dest_blend", "u32 blend_op",
+          "u32 src_blend_alpha", "u32 dest_blend_alpha", "u32 blend_op_alpha", "u32 logic_op",
+          "u32 write_mask"]
+
+[structs.RasterizerDesc]
+fields = ["u32 fill_mode", "u32 cull_mode", "u32 front_counter_clockwise", "i32 depth_bias",
+          "f32 depth_bias_clamp", "f32 slope_scaled_depth_bias", "u32 depth_clip", "u32 multisample",
+          "u32 antialiased_line", "u32 forced_sample_count", "u32 conservative", "u32 reserved"]
+
+[structs.StencilOp]
+fields = ["u32 fail", "u32 depth_fail", "u32 pass", "u32 func"]
+
+[structs.DepthStencilDesc]
+fields = ["u32 depth_enable", "u32 depth_write_mask", "u32 depth_func", "u32 stencil_enable",
+          "u32 stencil_read_mask", "u32 stencil_write_mask", "StencilOp front", "StencilOp back"]
+
+# Everything of D3D12_GRAPHICS_PIPELINE_STATE_DESC that is not a shader, the
+# root signature or the input layout.
+[structs.GraphicsState]
+fields = ["u32 alpha_to_coverage", "u32 independent_blend", "RenderTargetBlend targets[8]",
+          "u32 sample_mask", "RasterizerDesc rasterizer", "DepthStencilDesc depth_stencil",
+          "u32 strip_cut", "u32 topology_type", "u32 render_targets", "u32 rtv_formats[8]",
+          "u32 dsv_format", "u32 sample_count", "u32 sample_quality", "u32 flags"]
+
+# A transition (type 0: resource, subresource, before, after), aliasing
+# (1: resource before, resource_after after) or UAV barrier (2: resource).
+[structs.Barrier]
+fields = ["u32 type", "u32 flags", "u32 resource", "u32 subresource", "u32 before", "u32 after",
+          "u32 resource_after", "u32 reserved"]
+
+# D3D12_VERTEX_BUFFER_VIEW with the guest's address.
+[structs.VertexBufferView]
+fields = ["u64 address", "u32 size", "u32 stride"]
+
+# D3D12_TEXTURE_COPY_LOCATION: type 0 a subresource of `resource`, 1 a placed
+# footprint of buffer `resource` at `offset`.
+[structs.CopyLocation]
+fields = ["u64 offset", "u32 resource", "u32 type", "u32 subresource", "u32 format", "u32 width", "u32 height",
+          "u32 depth", "u32 row_pitch"]
+
+# What the host's device is, asked once.
+[structs.Caps12]
+fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
+          "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
+          "u32 rovs", "u32 max_gpu_va_bits_per_resource", "u32 max_gpu_va_bits_per_process",
+          "u32 vendor_id", "u32 device_id", "u32 dedicated_video_memory_mb", "u32 descriptor_sizes[4]",
+          "u32 double_ops", "u32 int64_ops", "u32 wave_ops", "u32 wave_lane_min", "u32 wave_lane_max",
+          "u32 total_lanes", "u32 reserved"]
+
+# ---------------------------------------------------------------- device
+
+[[command]]
+name = "OpenDevice12"
+id = 0x1000
+doc = """The session's Direct3D 12 device: the host's shared device for this GPU. One per session; a second
+open answers the same device. hresult is not S_OK when this GPU has none."""
+params = ["u32 flags"]
+reply = ["u32 hresult", "Caps12 caps"]
+
+[[command]]
+name = "QueryFormat12"
+id = 0x1001
+doc = """D3D12_FEATURE_DATA_FORMAT_SUPPORT and the multisample quality levels at `samples` for one format."""
+params = ["u32 format", "u32 samples"]
+reply = ["u32 support1", "u32 support2", "u32 quality_levels"]
+
+[[command]]
+name = "Destroy12"
+id = 0x1002
+doc = """Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done."""
+params = ["u32 object"]
+
+[[command]]
+name = "Finish12"
+id = 0x1003
+doc = """Waits until every queue of the session has finished what was executed on it. hresult is the device's
+removed reason: S_OK while it is not removed."""
+params = []
+reply = ["u32 hresult"]
+
+# ---------------------------------------------------------------- memory
+
+[[command]]
+name = "CreateHeap12"
+id = 0x1100
+doc = """A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
+is the guest's memory at `arena_offset` in the session's blob arena, which must be 64 KiB aligned, and can
+hold only buffers; any other heap is the host GPU's own and arena_offset is ignored."""
+params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 arena_offset"]
+
+[[command]]
+name = "CreateCommittedResource12"
+id = 0x1101
+doc = """A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on."""
+params = ["u32 resource", "HeapProperties properties", "u32 heap_flags", "ResourceDesc desc", "u32 state",
+          "ClearValue clear", "u64 address"]
+
+[[command]]
+name = "CreatePlacedResource12"
+id = 0x1102
+doc = """A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on."""
+params = ["u32 resource", "u32 heap", "u64 offset", "ResourceDesc desc", "u32 state", "ClearValue clear",
+          "u64 address"]
+
+[[command]]
+name = "ResourceAllocation12"
+id = 0x1103
+doc = """How many bytes, at what alignment, a placed resource of `desc` takes in a heap: the host's answer, since
+the host is where it will be placed. size is ~0 for a description the host would refuse."""
+params = ["ResourceDesc desc"]
+reply = ["u64 size", "u64 alignment"]
+
+# ---------------------------------------------------------------- descriptors
+
+[[command]]
+name = "CreateDescriptorHeap12"
+id = 0x1200
+params = ["u32 heap", "u32 type", "u32 count", "u32 flags"]
+
+[[command]]
+name = "CreateShaderResourceView12"
+id = 0x1201
+doc = """A view written at `at`. has_desc 0 is a null description: the resource's own format and whole extent."""
+params = ["DescriptorRef at", "u32 has_desc", "ViewDesc desc"]
+
+[[command]]
+name = "CreateUnorderedAccessView12"
+id = 0x1202
+params = ["DescriptorRef at", "u32 has_desc", "ViewDesc desc"]
+
+[[command]]
+name = "CreateRenderTargetView12"
+id = 0x1203
+params = ["DescriptorRef at", "u32 has_desc", "ViewDesc desc"]
+
+[[command]]
+name = "CreateDepthStencilView12"
+id = 0x1204
+params = ["DescriptorRef at", "u32 has_desc", "ViewDesc desc"]
+
+[[command]]
+name = "CreateConstantBufferView12"
+id = 0x1205
+params = ["DescriptorRef at", "u64 address", "u32 size"]
+
+[[command]]
+name = "CreateSampler12"
+id = 0x1206
+params = ["DescriptorRef at", "SamplerDesc desc"]
+
+[[command]]
+name = "CopyDescriptors12"
+id = 0x1207
+doc = """`count` descriptors from `source` to `destination`, both of heaps of the same type."""
+params = ["DescriptorRef destination", "DescriptorRef source", "u32 count"]
+
+# ---------------------------------------------------------------- pipelines
+
+[[command]]
+name = "CreateRootSignature12"
+id = 0x1300
+params = ["u32 root", "u32 flags", "u32 parameter_count", "RootParameter parameters[parameter_count] max 64",
+          "u32 range_count", "DescriptorRange ranges[range_count] max 512", "u32 sampler_count",
+          "StaticSampler samplers[sampler_count] max 64"]
+
+[[command]]
+name = "CreateGraphicsPipeline12"
+id = 0x1301
+doc = """A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
+container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the
+signatures are every stage's, as registers. The input layout names vertex shader input registers."""
+params = ["u32 pipeline", "u32 root", "GraphicsState state", "u32 element_count",
+          "InputElement elements[element_count] max 32", "u32 signature_count",
+          "SignatureEntry signatures[signature_count] max 1024", "bytes vs", "bytes hs", "bytes ds", "bytes gs",
+          "bytes ps"]
+
+[[command]]
+name = "CreateComputePipeline12"
+id = 0x1302
+params = ["u32 pipeline", "u32 root", "bytes cs"]
+
+# ---------------------------------------------------------------- queues, lists, fences
+
+[[command]]
+name = "CreateCommandQueue12"
+id = 0x1400
+params = ["u32 queue", "u32 type", "u32 priority", "u32 flags"]
+
+[[command]]
+name = "CreateCommandAllocator12"
+id = 0x1401
+params = ["u32 allocator", "u32 type"]
+
+[[command]]
+name = "ResetCommandAllocator12"
+id = 0x1402
+params = ["u32 allocator"]
+
+[[command]]
+name = "CreateCommandList12"
+id = 0x1403
+doc = """A command list, open for recording with `allocator` and `pipeline` (0 for none)."""
+params = ["u32 list", "u32 allocator", "u32 type", "u32 pipeline"]
+
+[[command]]
+name = "ResetCommandList12"
+id = 0x1404
+params = ["u32 list", "u32 allocator", "u32 pipeline"]
+
+[[command]]
+name = "CloseCommandList12"
+id = 0x1405
+params = ["u32 list"]
+
+[[command]]
+name = "CreateFence12"
+id = 0x1406
+params = ["u32 fence", "u64 initial", "u32 flags"]
+
+[[command]]
+name = "ExecuteCommandLists12"
+id = 0x1407
+params = ["u32 queue", "u32 count", "u32 lists[count] max 64"]
+
+[[command]]
+name = "SignalFence12"
+id = 0x1408
+doc = """`fence` reaches `value` once `queue` has finished what was executed on it before; queue 0 signals
+from the CPU, now."""
+params = ["u32 queue", "u32 fence", "u64 value"]
+
+[[command]]
+name = "WaitFence12"
+id = 0x1409
+doc = """`queue` waits on the GPU for `fence` to reach `value` before what is executed on it after."""
+params = ["u32 queue", "u32 fence", "u64 value"]
+
+[[command]]
+name = "FenceValue12"
+id = 0x140a
+doc = """The value `fence` has reached. With wait 1 the host waits until it is at least `value` first."""
+params = ["u32 fence", "u32 wait", "u64 value"]
+reply = ["u64 completed"]
+
+[[command]]
+name = "PublishFence12"
+id = 0x140b
+doc = """The host writes `fence`'s completed value, as a u64, at arena offset `offset` whenever it advances,
+so the guest reads memory instead of asking. offset ~0 stops it."""
+params = ["u32 fence", "u64 offset"]
+
+[[command]]
+name = "CreateQueryHeap12"
+id = 0x140c
+params = ["u32 heap", "u32 type", "u32 count"]
+
+# ---------------------------------------------------------------- recording
+
+[[command]]
+name = "ResourceBarrier12"
+id = 0x1500
+params = ["u32 list", "u32 count", "Barrier barriers[count] max 128"]
+
+[[command]]
+name = "SetPipelineState12"
+id = 0x1501
+params = ["u32 list", "u32 pipeline"]
+
+[[command]]
+name = "SetRootSignature12"
+id = 0x1502
+doc = "compute 1 sets the compute root signature, 0 the graphics one."
+params = ["u32 list", "u32 compute", "u32 root"]
+
+[[command]]
+name = "SetDescriptorHeaps12"
+id = 0x1503
+params = ["u32 list", "u32 count", "u32 heaps[count] max 2"]
+
+[[command]]
+name = "SetRootDescriptorTable12"
+id = 0x1504
+params = ["u32 list", "u32 compute", "u32 parameter", "DescriptorRef base"]
+
+[[command]]
+name = "SetRootConstants12"
+id = 0x1505
+params = ["u32 list", "u32 compute", "u32 parameter", "u32 first", "u32 count", "u32 values[count] max 64"]
+
+[[command]]
+name = "SetRootView12"
+id = 0x1506
+doc = "kind 0 a constant buffer, 1 a shader resource, 2 an unordered access view, at a guest address."
+params = ["u32 list", "u32 compute", "u32 parameter", "u32 kind", "u64 address"]
+
+[[command]]
+name = "SetTopology12"
+id = 0x1507
+params = ["u32 list", "u32 topology"]
+
+[[command]]
+name = "SetVertexBuffers12"
+id = 0x1508
+params = ["u32 list", "u32 start", "u32 count", "VertexBufferView views[count] max 32"]
+
+[[command]]
+name = "SetIndexBuffer12"
+id = 0x1509
+doc = "size 0 unbinds."
+params = ["u32 list", "u64 address", "u32 size", "u32 format"]
+
+[[command]]
+name = "SetViewports12"
+id = 0x150a
+params = ["u32 list", "u32 count", "Viewport viewports[count] max 16"]
+
+[[command]]
+name = "SetScissorRects12"
+id = 0x150b
+params = ["u32 list", "u32 count", "Rect rects[count] max 16"]
+
+[[command]]
+name = "SetRenderTargets12"
+id = 0x150c
+params = ["u32 list", "u32 count", "DescriptorRef targets[count] max 8", "u32 has_depth", "DescriptorRef depth"]
+
+[[command]]
+name = "SetBlendFactor12"
+id = 0x150d
+params = ["u32 list", "Float4 factor"]
+
+[[command]]
+name = "SetStencilRef12"
+id = 0x150e
+params = ["u32 list", "u32 reference"]
+
+[[command]]
+name = "ClearRenderTargetView12"
+id = 0x1510
+params = ["u32 list", "DescriptorRef view", "Float4 color", "u32 rect_count", "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "ClearDepthStencilView12"
+id = 0x1511
+params = ["u32 list", "DescriptorRef view", "u32 flags", "f32 depth", "u32 stencil", "u32 rect_count",
+          "Rect rects[rect_count] max 16"]
+
+[[command]]
+name = "DrawInstanced12"
+id = 0x1512
+params = ["u32 list", "u32 vertex_count", "u32 instance_count", "u32 start_vertex", "u32 start_instance"]
+
+[[command]]
+name = "DrawIndexedInstanced12"
+id = 0x1513
+params = ["u32 list", "u32 index_count", "u32 instance_count", "u32 start_index", "i32 base_vertex",
+          "u32 start_instance"]
+
+[[command]]
+name = "Dispatch12"
+id = 0x1514
+params = ["u32 list", "u32 x", "u32 y", "u32 z"]
+
+[[command]]
+name = "CopyBufferRegion12"
+id = 0x1515
+params = ["u32 list", "u32 destination", "u64 destination_offset", "u32 source", "u64 source_offset",
+          "u64 bytes"]
+
+[[command]]
+name = "CopyTextureRegion12"
+id = 0x1516
+params = ["u32 list", "CopyLocation destination", "u32 x", "u32 y", "u32 z", "CopyLocation source",
+          "u32 has_box", "Box box"]
+
+[[command]]
+name = "CopyResource12"
+id = 0x1517
+params = ["u32 list", "u32 destination", "u32 source"]
+
+[[command]]
+name = "ResolveSubresource12"
+id = 0x1518
+params = ["u32 list", "u32 destination", "u32 destination_subresource", "u32 source", "u32 source_subresource",
+          "u32 format"]
+
+[[command]]
+name = "BeginQuery12"
+id = 0x1519
+params = ["u32 list", "u32 heap", "u32 type", "u32 index"]
+
+[[command]]
+name = "EndQuery12"
+id = 0x151a
+params = ["u32 list", "u32 heap", "u32 type", "u32 index"]
+
+[[command]]
+name = "ResolveQueryData12"
+id = 0x151b
+params = ["u32 list", "u32 heap", "u32 type", "u32 first", "u32 count", "u32 destination", "u64 offset"]
+
+[[command]]
+name = "BeginEvent12"
+id = 0x151c
+doc = "PIX's event encoding: metadata says what `data` is."
+params = ["u32 list", "u32 metadata", "bytes data"]
+
+[[command]]
+name = "EndEvent12"
+id = 0x151d
+params = ["u32 list"]
+
+[[command]]
+name = "SetMarker12"
+id = 0x151e
+params = ["u32 list", "u32 metadata", "bytes data"]

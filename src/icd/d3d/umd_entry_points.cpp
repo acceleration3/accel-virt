@@ -11,6 +11,7 @@
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_adapter_funcs_record.hpp"
+#include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/umd_binding.hpp"
 #include "icd/d3d/umd_root.hpp"
 
@@ -34,7 +35,7 @@ extern "C" size_t rvkumd_calc_private_device_size(void *adapter, const D3d10ddia
 extern "C" Hresult rvkumd_create_device(void *adapter, D3d10ddiargCreateDeviceRecord *create)
 { return umd_binding.root().create_device(adapter, create); }
 
-extern "C" Hresult rvkumd_create_device12(void *adapter, const void *create)
+extern "C" Hresult rvkumd_create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *create)
 { return umd_binding.root().create_device12(adapter, create); }
 
 extern "C" Hresult rvkumd_close_adapter(void *adapter) { return umd_binding.root().close_adapter(adapter); }
@@ -44,8 +45,8 @@ extern "C" void rvkumd_destroy_device(void *block) { umd_binding.root().destroy_
 extern "C" Hresult rvkumd_get_optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests)
 { return umd_binding.root().optional_ddi_tables(adapter, entries, requests); }
 
-extern "C" Hresult rvkumd_fill_ddi_table(void *adapter, uint32_t table_type, void *, size_t, uint32_t, void *)
-{ return umd_binding.root().fill_ddi_table(adapter, table_type); }
+extern "C" Hresult rvkumd_fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t, void *)
+{ return umd_binding.root().fill_ddi_table(adapter, table_type, table, bytes); }
 
 }  // namespace
 

@@ -14,6 +14,9 @@
 #include "icd/d3d/ddi/d3d10ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d12ddi_table_request_record.hpp"
+#include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
+#include "icd/d3d/ddi/dxgi1_6_1_ddi_base_functions_record.hpp"
+#include "icd/d3d/dxgi_entry_points.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_open_adapter_record.hpp"
 #include "icd/d3d/umd_binding.hpp"
 #include "icd/d3d/umd_host_driver.hpp"
@@ -63,7 +66,8 @@ uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
         void    *pPrivateDriverData;
         uint32_t PrivateDriverDataSize;
     };
-    using QueryAdapterInfoCb = int32_t(__stdcall *)(void *, QueryAdapterInfo *);
+    /* x64 has one calling convention, so no __stdcall: the host build refuses the attribute. */
+    using QueryAdapterInfoCb = int32_t (*)(void *, QueryAdapterInfo *);
     const auto query = reinterpret_cast<QueryAdapterInfoCb>(
         static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks)->pfnQueryAdapterInfoCb);
     uint64_t         words[2] = {};
@@ -225,15 +229,24 @@ Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *cre
     return built;
 }
 
-Hresult UmdRoot::create_device12(void *adapter, const void *create)
+Hresult UmdRoot::create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *create)
 {
     AV_SCOPE("UmdRoot::create_device12");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    if (adapters_.adapter_of(adapter) == nullptr || create == nullptr) return hr_invalid_arg;
-    /* Feature 057 mirrors D3D12DDIARG_CREATEDEVICE and builds its device over
-     * DeviceTable, as the D3D11 create above does. */
-    return hr_not_impl;
+    UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
+    if (open_adapter == nullptr || create == nullptr || create->hDrvDevice == nullptr) return hr_invalid_arg;
+    UmdDevice   *device = nullptr;
+    const Status made = devices_.make(device, *open_adapter, create->hDrvDevice);
+    if (made != Status::ok) {
+        note("no device, status", static_cast<uint64_t>(made));
+        return hr_out_of_memory;
+    }
+    /* As for Direct3D 11, a failed create is given back here: the runtime
+     * never destroys a device it was told was not made. */
+    const Hresult built = builder_ == nullptr ? hr_not_impl : builder_->build12(*device, *create, connection_.adapter());
+    if (built != hr_ok) forget_device(create->hDrvDevice);
+    return built;
 }
 
 Hresult UmdRoot::close_adapter(void *adapter)
@@ -257,7 +270,8 @@ void UmdRoot::destroy_device(void *block)
     AV_SCOPE("UmdRoot::destroy_device");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    if (builder_ != nullptr && devices_.device_of(block) != nullptr) builder_->tear_down(block);
+    UmdDevice *const device = devices_.device_of(block);
+    if (builder_ != nullptr && device != nullptr) builder_->tear_down(*device, block);
     forget_device(block);
 }
 
@@ -273,14 +287,21 @@ Hresult UmdRoot::optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiT
     return hr_ok;
 }
 
-Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type)
+Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes)
 {
     AV_SCOPE("UmdRoot::fill_ddi_table");
+    constexpr uint32_t dxgi_table = 3u;
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    if (adapters_.adapter_of(adapter) == nullptr) return hr_invalid_arg;
-    note("ddi table refused, type", table_type);
-    return hr_not_impl;
+    if (adapters_.adapter_of(adapter) == nullptr || table == nullptr) return hr_invalid_arg;
+    if (table_type == dxgi_table) {
+        if (bytes < sizeof(Dxgi161DdiBaseFunctionsRecord)) return hr_invalid_arg;
+        fill_dxgi_base_functions(*static_cast<Dxgi161DdiBaseFunctionsRecord *>(table));
+        return hr_ok;
+    }
+    const Hresult filled = builder_ == nullptr ? hr_not_impl : builder_->fill_table12(table_type, table, bytes);
+    if (filled != hr_ok) note("ddi table refused, type", table_type);
+    return filled;
 }
 
 UmdDevice *UmdRoot::device_of(void *block) const

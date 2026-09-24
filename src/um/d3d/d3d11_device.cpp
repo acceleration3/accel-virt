@@ -12,7 +12,7 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
-#include "um/d3d/d3d11_session.hpp"
+#include "um/d3d/d3d_session.hpp"
 #include "um/d3d/device_handle.hpp"
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device);
@@ -37,7 +37,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 }  // namespace
 
-D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
+D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
       recording_block_(nullptr), present_context_(nullptr), feature_level_(0u),

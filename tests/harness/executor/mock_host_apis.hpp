@@ -34,6 +34,7 @@ public:
     const GlDisplay    *gl_display(uint32_t index) override;
     const OpenClDevice *opencl_device(uint32_t index) override;
     D3d11HostDevice    *d3d11_device(uint32_t index) override;
+    D3d12HostDevice    *d3d12_device(uint32_t index) override;
 
 private:
     struct Gpu {

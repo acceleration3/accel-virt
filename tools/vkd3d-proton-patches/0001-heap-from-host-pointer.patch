@@ -1,0 +1,200 @@
+accel-virt: ID3D12Device13::OpenExistingHeapFromAddress1, natively too, and as a C
+export (vkd3d_proton_open_heap_from_host_pointer) for an embedder whose headers
+predate ID3D12Device13: the executor imports guest memory as upload and readback
+heaps through it. A failed host import fails rather than falling back to memory
+the caller never sees.
+
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -5219,7 +5219,7 @@
+ };
+ 
+ /* ID3D12Device */
+-typedef ID3D12Device12 d3d12_device_iface;
++typedef ID3D12Device13 d3d12_device_iface;
+ 
+ struct vkd3d_descriptor_qa_global_info;
+ struct vkd3d_descriptor_qa_heap_buffer_data;
+@@ -5734,7 +5734,7 @@
+ 
+ static inline HRESULT d3d12_device_query_interface(struct d3d12_device *device, REFIID iid, void **object)
+ {
+-    return ID3D12Device12_QueryInterface(&device->ID3D12Device_iface, iid, object);
++    return ID3D12Device13_QueryInterface(&device->ID3D12Device_iface, iid, object);
+ }
+ 
+ ULONG d3d12_device_add_ref_common(struct d3d12_device *device);
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -4510,10 +4510,11 @@
+             || IsEqualGUID(riid, &IID_ID3D12Device10)
+             || IsEqualGUID(riid, &IID_ID3D12Device11)
+             || IsEqualGUID(riid, &IID_ID3D12Device12)
++            || IsEqualGUID(riid, &IID_ID3D12Device13)
+             || IsEqualGUID(riid, &IID_ID3D12Object)
+             || IsEqualGUID(riid, &IID_IUnknown))
+     {
+-        ID3D12Device12_AddRef(iface);
++        ID3D12Device13_AddRef(iface);
+         *object = iface;
+         return S_OK;
+     }
+@@ -7907,6 +7908,43 @@
+ #endif
+ }
+ 
++/* A host pointer and its size, imported as a buffer heap. Unlike
++ * OpenExistingHeapFromAddress this needs no VirtualQuery, so it works natively
++ * too: an embedder that owns a mapping (accel-virt's executor, over guest
++ * memory) names its extent itself. */
++static HRESULT STDMETHODCALLTYPE d3d12_device_OpenExistingHeapFromAddress1(d3d12_device_iface *iface,
++        const void *address, SIZE_T size, REFIID riid, void **heap)
++{
++    struct d3d12_device *device = impl_from_ID3D12Device(iface);
++    struct d3d12_heap *object;
++    D3D12_HEAP_DESC heap_desc;
++    HRESULT hr;
++
++    TRACE("iface %p, address %p, size %#"PRIx64", riid %s, heap %p\n",
++          iface, address, (uint64_t)size, debugstr_guid(riid), heap);
++
++    if (!address || !size)
++        return E_INVALIDARG;
++
++    memset(&heap_desc, 0, sizeof(heap_desc));
++    heap_desc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
++    heap_desc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
++    heap_desc.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
++    heap_desc.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
++    heap_desc.Properties.Type = D3D12_HEAP_TYPE_CUSTOM;
++    heap_desc.Properties.CreationNodeMask = 1;
++    heap_desc.Properties.VisibleNodeMask = 1;
++    heap_desc.SizeInBytes = size;
++
++    if (FAILED(hr = d3d12_heap_create(device, &heap_desc, (void *)address, &object)))
++    {
++        *heap = NULL;
++        return hr;
++    }
++
++    return return_interface(&object->ID3D12Heap_iface, &IID_ID3D12Heap, riid, heap);
++}
++
+ static HRESULT STDMETHODCALLTYPE d3d12_device_OpenExistingHeapFromFileMapping(d3d12_device_iface *iface,
+         HANDLE file_mapping, REFIID riid, void **heap)
+ {
+@@ -8872,7 +8910,7 @@
+ 
+ /* Gotta love C sometimes ... :') */
+ #define VKD3D_DECLARE_D3D12_DEVICE_VARIANT(name, create_desc, copy_desc_variant) \
+-CONST_VTBL struct ID3D12Device12Vtbl d3d12_device_vtbl_##name = \
++CONST_VTBL struct ID3D12Device13Vtbl d3d12_device_vtbl_##name = \
+ { \
+     /* IUnknown methods */ \
+     d3d12_device_QueryInterface, \
+@@ -8970,6 +9008,8 @@
+     d3d12_device_CreateSampler2_##create_desc, \
+     /* ID3D12Device12 methods */ \
+     d3d12_device_GetResourceAllocationInfo3, \
++    /* ID3D12Device13 methods */ \
++    d3d12_device_OpenExistingHeapFromAddress1, \
+ }
+ 
+ VKD3D_DECLARE_D3D12_DEVICE_VARIANT(default, default, default);
+--- a/libs/vkd3d/device_profiled.h
++++ b/libs/vkd3d/device_profiled.h
+@@ -274,7 +274,7 @@
+             num_castable_formats, castable_formats, iid, resource);
+ }
+ 
+-CONST_VTBL struct ID3D12Device12Vtbl d3d12_device_vtbl_profiled =
++CONST_VTBL struct ID3D12Device13Vtbl d3d12_device_vtbl_profiled =
+ {
+     /* IUnknown methods */
+     d3d12_device_QueryInterface,
+@@ -372,6 +372,8 @@
+     d3d12_device_CreateSampler2_profiled,
+     /* ID3D12Device12 methods */
+     d3d12_device_GetResourceAllocationInfo3,
++    /* ID3D12Device13 methods */
++    d3d12_device_OpenExistingHeapFromAddress1,
+ };
+ 
+ #endif
+--- a/libs/vkd3d/memory.c
++++ b/libs/vkd3d/memory.c
+@@ -1125,12 +1125,16 @@
+     import_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+     import_info.pHostPointer = host_address;
+ 
+-    if ((vkd3d_config_flags & VKD3D_CONFIG_FLAG_USE_HOST_IMPORT_FALLBACK) ||
+-        FAILED(hr = vkd3d_try_allocate_device_memory(device, size,
+-            type_flags, type_mask, &import_info, true, allocation)))
++    if (!(vkd3d_config_flags & VKD3D_CONFIG_FLAG_USE_HOST_IMPORT_FALLBACK))
+     {
+-        if (FAILED(hr))
++        /* A failed import fails: memory that only looks like the caller's
++         * would take writes the caller never sees. */
++        if (FAILED(hr = vkd3d_try_allocate_device_memory(device, size,
++                type_flags, type_mask, &import_info, true, allocation)))
+             WARN("Failed to import host memory, hr %#x.\n", hr);
++    }
++    else
++    {
+         /* If we failed, fall back to a host-visible allocation. Generally
+          * the app will access the memory thorugh the main host pointer,
+          * so it's fine. */
+--- a/libs/vkd3d/swapchain.c
++++ b/libs/vkd3d/swapchain.c
+@@ -691,7 +691,7 @@
+ {
+     struct dxgi_vk_swap_chain *chain = impl_from_IDXGIVkSwapChain(iface);
+     TRACE("iface %p\n", iface);
+-    return ID3D12Device12_QueryInterface(&chain->queue->device->ID3D12Device_iface, riid, object);
++    return ID3D12Device13_QueryInterface(&chain->queue->device->ID3D12Device_iface, riid, object);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE dxgi_vk_swap_chain_GetImage(IDXGIVkSwapChain2 *iface, UINT BufferId, REFIID riid, void **object)
+--- a/libs/vkd3d/state.c
++++ b/libs/vkd3d/state.c
+@@ -5803,7 +5803,7 @@
+         if (!vkd3d_shader_contains_root_signature(bytecode->pShaderBytecode, bytecode->BytecodeLength))
+             continue;
+ 
+-        if (FAILED(hr = ID3D12Device12_CreateRootSignature(&device->ID3D12Device_iface, 0,
++        if (FAILED(hr = ID3D12Device13_CreateRootSignature(&device->ID3D12Device_iface, 0,
+                 bytecode->pShaderBytecode, bytecode->BytecodeLength,
+                 &IID_ID3D12RootSignature, (void **)&object)))
+             return hr;
+--- a/libs/d3d12core/main.c
++++ b/libs/d3d12core/main.c
+@@ -1350,3 +1350,21 @@
+ /* Just expose the latest stable AgilitySDK version.
+  * This is actually exported as a UINT and not a function it seems. */
+ DLLEXPORT const UINT D3D12SDKVersion = D3D12_SDK_VERSION;
++
++/* accel-virt: ID3D12Device13::OpenExistingHeapFromAddress1 as a plain C
++ * export, for an embedder whose headers predate ID3D12Device13 - its executor
++ * imports guest memory as upload and readback heaps through this. */
++HRESULT WINAPI DLLEXPORT vkd3d_proton_open_heap_from_host_pointer(ID3D12Device *device, void *address,
++        UINT64 size, REFIID iid, void **heap)
++{
++    ID3D12Device13 *device13;
++    HRESULT hr;
++
++    if (!device || !heap)
++        return E_INVALIDARG;
++    if (FAILED(hr = ID3D12Device_QueryInterface(device, &IID_ID3D12Device13, (void **)&device13)))
++        return hr;
++    hr = ID3D12Device13_OpenExistingHeapFromAddress1(device13, address, (SIZE_T)size, iid, heap);
++    ID3D12Device13_Release(device13);
++    return hr;
++}
+--- a/libs/d3d12core/d3d12core.def
++++ b/libs/d3d12core/d3d12core.def
+@@ -2,4 +2,5 @@
+ 
+ EXPORTS
+     D3D12GetInterface
++    vkd3d_proton_open_heap_from_host_pointer
+     D3D12SDKVersion DATA PRIVATE

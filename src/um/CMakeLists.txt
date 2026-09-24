@@ -308,6 +308,17 @@ target_compile_options(rvkglsamples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-c
 target_link_options(rvkglsamples PRIVATE /ENTRY:rvkglsamples_entry /STACK:8388608,8388608)
 target_link_libraries(rvkglsamples PRIVATE ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
+# The D3D12 samples (samples/d3d12): tools/d3d12_report.py's guest side, on
+# the system d3d12.dll, which reaches rvkumd.dll's OpenAdapter12.
+file(GLOB RVKD3D12SAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/d3d12/*.cpp)
+list(FILTER RVKD3D12SAMPLES_SOURCES EXCLUDE REGEX "host_platform\\.cpp$")
+add_executable(rvkd3d12samples ${RVKD3D12SAMPLES_SOURCES})
+add_dependencies(rvkd3d12samples rvkd3dprobe_imports rvkglprobe_imports)
+target_compile_options(rvkd3d12samples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-conversion -Wno-old-style-cast
+                       -Wno-shadow -Wno-unused-parameter /Gs1000000)
+target_link_options(rvkd3d12samples PRIVATE /ENTRY:rvkd3d12samples_entry /STACK:8388608,8388608)
+target_link_libraries(rvkd3d12samples PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS})
+
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
 # (feature 046), and rvkvkprobe.exe makes that window and reads it back;
 # their import library is made with the GL probe's above.
@@ -389,6 +400,7 @@ list(REMOVE_ITEM RVKUMD_SOURCES ${RVKTEST_GENERATED})
 list(FILTER RVKUMD_SOURCES EXCLUDE REGEX "(extension_policy|gdi_window_surface)\\.cpp$")
 list(APPEND RVKUMD_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d/d3d_dispatch_client.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/d3d12/d3d12_dispatch_client.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/suite/adapter_search.cpp)
 add_library(rvkumd SHARED ${RVKUMD_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)

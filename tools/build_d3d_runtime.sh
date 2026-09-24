@@ -34,6 +34,13 @@ for patch in "$ROOT"/tools/dxvk-patches/*.patch; do
         git -C "$ROOT/third_party/dxvk" apply "$patch"
 done
 
+# The pinned vkd3d-proton with the host-pointer heap the executor imports guest
+# memory through: tools/vkd3d-proton-patches, applied the same way.
+for patch in "$ROOT"/tools/vkd3d-proton-patches/*.patch; do
+    git -C "$ROOT/third_party/vkd3d-proton" apply --reverse --check "$patch" 2>/dev/null ||
+        git -C "$ROOT/third_party/vkd3d-proton" apply "$patch"
+done
+
 # Direct3D 8, 9 and 10 stay out: the guest's user-mode driver serves 11 and 12.
 build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false
 build vkd3d-proton "$ROOT/third_party/vkd3d-proton"

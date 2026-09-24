@@ -21,10 +21,25 @@ from pathlib import Path
 from ..emit.common import write
 from .model import SCALARS, Command, Param, Registry
 
-HEADER = ("// THIS FILE IS GENERATED. DO NOT EDIT.\n"
-          "// Regenerate with: python -m rvk_codegen.d3d --xml tools/codegen/registry/d3d.toml --out ...\n")
-
+# The registry's prefix names everything it emits: "d3d" gives namespace
+# av::d3dproto, files d3d_*.h and wrappers rvk_d3d_*; "d3d12" the same with
+# d3d12. Set by emit_all before anything is emitted.
+PREFIX = "d3d"
 NS = "av::d3dproto"
+HEADER = ""
+
+
+def _use(reg: Registry) -> None:
+    global PREFIX, NS, HEADER
+    PREFIX = reg.prefix
+    NS = f"av::{reg.prefix}proto"
+    HEADER = ("// THIS FILE IS GENERATED. DO NOT EDIT.\n"
+              f"// Regenerate with: python -m rvk_codegen.d3d --xml tools/codegen/registry/{reg.prefix}.toml "
+              "--out ...\n")
+
+
+def _inc(name: str) -> str:
+    return f'"proto/generated/{PREFIX}/{PREFIX}_{name}"'
 
 # Bulk bytes smaller than this cross inline even when an arena is there: a
 # lease costs the host a bounds check and the guest a copy it would have made
@@ -127,8 +142,8 @@ def emit_names_h(reg: Registry) -> str:
 
 
 def emit_names_cpp(reg: Registry) -> str:
-    lines = [HEADER, '#include "proto/generated/d3d/d3d_command_names.h"', "",
-             '#include "proto/generated/d3d/d3d_protocol_ids.h"', "", f"namespace {NS} {{", "",
+    lines = [HEADER, f'#include {_inc("command_names.h")}', "",
+             f'#include {_inc("protocol_ids.h")}', "", f"namespace {NS} {{", "",
              "const char* command_name(uint32_t id) {", "    switch (id) {"]
     for cmd in sorted(reg.commands, key=lambda c: c.id):
         lines.append(f'        case {_const(cmd)}: return "{cmd.name}";')
@@ -140,7 +155,7 @@ def emit_names_cpp(reg: Registry) -> str:
 
 def emit_client_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stdint.h>", "",
-             '#include "proto/client_transport.hpp"', '#include "proto/generated/d3d/d3d_wire_types.h"', "",
+             '#include "proto/client_transport.hpp"', f'#include {_inc("wire_types.h")}', "",
              f"namespace {NS} {{", "",
              "// One wrapper per command: false when it could not be encoded or sent, or -",
              "// for a command with a reply - when the answer did not decode.", ""]
@@ -148,7 +163,7 @@ def emit_client_h(reg: Registry) -> str:
         if cmd.doc:
             lines += [f"// {line}" for line in cmd.doc.strip().splitlines()]
         params = ", ".join(["::av::ClientTransport& t"] + _client_params(reg, cmd))
-        lines.append(f"[[nodiscard]] bool rvk_d3d_{cmd.name}({params});")
+        lines.append(f"[[nodiscard]] bool rvk_{PREFIX}_{cmd.name}({params});")
     lines += ["", f"}}  // namespace {NS}", ""]
     return "\n".join(lines)
 
@@ -220,6 +235,20 @@ bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::
 """
 
 
+def _helpers(reg: Registry, text: str) -> str:
+    """The helper block, each helper a registry with no use for marked so: an
+    unused function in an anonymous namespace is an error under -Werror."""
+    kinds = {p.type for c in reg.commands for p in c.params + c.reply}
+    unused = []
+    if "bytes" not in kinds:
+        unused += ["bool put_bytes(", "bool read_bytes("]
+    if "out_bytes" not in kinds:
+        unused += ["bool ask_bytes(", "bool take_bytes(", "bool read_out_bytes(", "void write_out_bytes("]
+    for head in unused:
+        text = text.replace("\n" + head, "\n[[maybe_unused]] " + head)
+    return text
+
+
 def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
     if p.type == "bytes":
         lines.append(f"    if (!put_bytes(t, b, {p.name}, {p.name}_size)) return abandon(t);")
@@ -233,14 +262,14 @@ def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
 
 
 def emit_client_cpp(reg: Registry) -> str:
-    lines = [HEADER, '#include "proto/generated/d3d/d3d_dispatch_client.h"', "",
+    lines = [HEADER, f'#include {_inc("dispatch_client.h")}', "",
              '#include "core/trace/function_scope.hpp"', '#include "proto/client_blob_arena.hpp"',
-             '#include "proto/generated/d3d/d3d_protocol_ids.h"', '#include "proto/sync_call_scope.hpp"', "",
-             f"namespace {NS} {{", CLIENT_HELPERS]
+             f'#include {_inc("protocol_ids.h")}', '#include "proto/sync_call_scope.hpp"', "",
+             f"namespace {NS} {{", _helpers(reg, CLIENT_HELPERS)]
     for cmd in reg.commands:
         params = ", ".join(["::av::ClientTransport& t"] + _client_params(reg, cmd))
-        lines.append(f"bool rvk_d3d_{cmd.name}({params}) {{")
-        lines.append(f'    AV_SCOPE("rvk_d3d_{cmd.name}");')
+        lines.append(f"bool rvk_{PREFIX}_{cmd.name}({params}) {{")
+        lines.append(f'    AV_SCOPE("rvk_{PREFIX}_{cmd.name}");')
         lines.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode(reg, p, lines)
@@ -260,9 +289,10 @@ def emit_client_cpp(reg: Registry) -> str:
                 lines.append(f"    if (!take_bytes(r, {p.name}, {p.name}_capacity, {p.name}_lease, {p.name}_size)) "
                              "return false;")
             else:
-                lines.append(f"    {{ {_ctype(reg, p.type)} value{{}};")
-                lines.append("      if (!r.read_pod(value)) return false;")
-                lines.append(f"      if ({p.name} != nullptr) *{p.name} = value; }}")
+                local = "value" if p.name != "value" and all(q.name != "value" for q in cmd.params) else "answer"
+                lines.append(f"    {{ {_ctype(reg, p.type)} {local}{{}};")
+                lines.append(f"      if (!r.read_pod({local})) return false;")
+                lines.append(f"      if ({p.name} != nullptr) *{p.name} = {local}; }}")
         lines.append("    return r.remaining() == 0u;")
         lines += ["}", ""]
     lines += [f"}}  // namespace {NS}", ""]
@@ -273,7 +303,7 @@ def emit_client_cpp(reg: Registry) -> str:
 
 def emit_server_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stddef.h>", "#include <stdint.h>", "",
-             '#include "proto/generated/d3d/d3d_wire_types.h"', '#include "proto/wire/wire_arena.hpp"',
+             f'#include {_inc("wire_types.h")}', '#include "proto/wire/wire_arena.hpp"',
              '#include "proto/wire/wire_reader.hpp"', '#include "proto/wire/wire_writer.hpp"', "",
              f"namespace {NS} {{", "",
              "// Implemented by the executor; the table below calls into it. Every value",
@@ -379,13 +409,13 @@ def _decode(reg: Registry, p: Param, lines: list[str]) -> None:
 
 
 def emit_server_cpp(reg: Registry) -> str:
-    lines = [HEADER, '#include "proto/generated/d3d/d3d_dispatch_server.h"', "",
-             '#include "core/trace/function_scope.hpp"', '#include "proto/generated/d3d/d3d_protocol_ids.h"', "",
-             f"namespace {NS} {{", SERVER_HELPERS]
+    lines = [HEADER, f'#include {_inc("dispatch_server.h")}', "",
+             '#include "core/trace/function_scope.hpp"', f'#include {_inc("protocol_ids.h")}', "",
+             f"namespace {NS} {{", _helpers(reg, SERVER_HELPERS)]
     for cmd in reg.commands:
         lines.append(f"static bool decode_{cmd.name}(ServerDispatch& s, ::av::WireReader& r, "
                      "::av::WireWriter& reply, ::av::WireArena& arena) {")
-        lines.append(f'    AV_SCOPE("server:d3d:{cmd.name}");')
+        lines.append(f'    AV_SCOPE("server:{PREFIX}:{cmd.name}");')
         lines += ["    (void)s;", "    (void)reply;", "    (void)arena;"]
         for p in cmd.params:
             _decode(reg, p, lines)
@@ -422,15 +452,17 @@ def emit_server_cpp(reg: Registry) -> str:
 
 
 def emit_all(reg: Registry, out: Path) -> None:
+    _use(reg)
+    p = reg.prefix
     files = {
-        "d3d_protocol_ids.h": emit_ids(reg),
-        "d3d_wire_types.h": emit_types(reg),
-        "d3d_command_names.h": emit_names_h(reg),
-        "d3d_command_names.cpp": emit_names_cpp(reg),
-        "d3d_dispatch_client.h": emit_client_h(reg),
-        "d3d_dispatch_client.cpp": emit_client_cpp(reg),
-        "d3d_dispatch_server.h": emit_server_h(reg),
-        "d3d_dispatch_server.cpp": emit_server_cpp(reg),
+        f"{p}_protocol_ids.h": emit_ids(reg),
+        f"{p}_wire_types.h": emit_types(reg),
+        f"{p}_command_names.h": emit_names_h(reg),
+        f"{p}_command_names.cpp": emit_names_cpp(reg),
+        f"{p}_dispatch_client.h": emit_client_h(reg),
+        f"{p}_dispatch_client.cpp": emit_client_cpp(reg),
+        f"{p}_dispatch_server.h": emit_server_h(reg),
+        f"{p}_dispatch_server.cpp": emit_server_cpp(reg),
     }
     for name, content in files.items():
         write(out / name, content)

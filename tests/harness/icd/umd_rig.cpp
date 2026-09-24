@@ -13,9 +13,9 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 
 }  // namespace
 
-UmdRig::UmdRig()
+UmdRig::UmdRig(d3d::UmdHostDriver *builder)
     : platform_(), kmt_(), trace_(), lock_(trace_, 'U'), log_(),
-      root_(platform_, kmt_, lock_, log_, d3d::umd_binding)
+      root_(platform_, kmt_, lock_, log_, d3d::umd_binding, builder)
 {
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);

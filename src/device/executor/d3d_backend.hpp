@@ -13,6 +13,7 @@
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
+#include "device/executor/d3d12_session.hpp"
 #include "device/executor/d3d_context_states.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/guest_region.hpp"
@@ -30,6 +31,7 @@ struct ID3D11Buffer;
 namespace av {
 
 class D3d11HostDevice;
+class D3d12HostDevice;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
@@ -38,9 +40,10 @@ public:
 
     D3dBackend();
 
-    /* Binds this session to its GPU's Direct3D 11 device, which must outlive
-     * it. False for a GPU with none. */
-    [[nodiscard]] bool initialize(D3d11HostDevice *device11);
+    /* Binds this session to its GPU's Direct3D 11 device and, where it has
+     * one, its Direct3D 12 device; both must outlive it. False for a GPU with
+     * no Direct3D 11 device: that is what says Direct3D is served at all. */
+    [[nodiscard]] bool initialize(D3d11HostDevice *device11, D3d12HostDevice *device12 = nullptr);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;
@@ -208,6 +211,8 @@ private:
     WireArena              *arena_;
     D3dObjectTable          objects_;
     GuestRegion             region_;
+    /* Direct3D 12's half of the session, sharing its blob arena. */
+    D3d12Session            d3d12_;
     QueryResultPublisher    published_;
     bool                    lost_;
 };

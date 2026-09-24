@@ -25,7 +25,8 @@ public:
     static constexpr std::uint64_t local_budget = 512ull * 1024ull * 1024ull;
     static constexpr std::uint64_t non_local_budget = 3ull * 1024ull * 1024ull * 1024ull;
 
-    UmdRig();
+    /* `builder` is the host driver the root hands devices to; none refuses them. */
+    explicit UmdRig(d3d::UmdHostDriver *builder = nullptr);
     UmdRig(const UmdRig &) = delete;
     UmdRig &operator=(const UmdRig &) = delete;
 

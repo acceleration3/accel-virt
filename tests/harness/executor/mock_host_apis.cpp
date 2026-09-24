@@ -68,4 +68,10 @@ D3d11HostDevice *MockHostApis::d3d11_device(uint32_t)
     return nullptr;
 }
 
+D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)
+{
+    questions_++;
+    return nullptr;
+}
+
 }  // namespace av

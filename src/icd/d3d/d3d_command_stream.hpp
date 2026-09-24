@@ -74,7 +74,7 @@ public:
      * when it has not. False when even an empty arena is too small. */
     [[nodiscard]] bool   make_room_for(size_t bytes);
     /* Commands recorded after this run on `device`. False when the selection
-     * could not be sent, which fails the stream. */
+     * could not be sent, which fails the stream. Device 0 selects nothing. */
     [[nodiscard]] bool   speak_as(uint32_t device);
     /* The host selected `device` itself, as CreateDevice11 does. */
     void                 selected(uint32_t device);

@@ -27,7 +27,9 @@ class D3dCommandStream;
 
 class D3dDeviceChannel final : public ClientTransport {
 public:
-    /* `device` is the non-zero id the host knows the device by. */
+    /* `device` is the id the host knows the device by; 0 for a Direct3D 12
+     * device, which the stream never selects and which is never opened or
+     * closed through this. */
     D3dDeviceChannel(D3dCommandStream &stream, icd::ThreadLock &lock, uint32_t device);
     D3dDeviceChannel(const D3dDeviceChannel &) = delete;
     D3dDeviceChannel &operator=(const D3dDeviceChannel &) = delete;
@@ -57,7 +59,7 @@ public:
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
 
-    /* The lock is held exactly while a command is written or a reply read. */
+    /* Between calls a channel is idle: no call left its lock held. */
     bool invariants_hold() const;
 
 private:

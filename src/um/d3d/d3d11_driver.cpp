@@ -9,6 +9,13 @@
 
 namespace av::d3d11 {
 
+namespace {
+
+/* What a Direct3D 11 session's bulk data crosses through. */
+constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
+
+}  // namespace
+
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
     : memory_(memory), kmt_(kmt), log_(log), devices_(memory), caps_(), sessions_(), adapters_{}
 {
@@ -32,10 +39,10 @@ uint32_t D3d11Driver::slot_of(uint32_t kmt_adapter)
     return max_adapters;
 }
 
-D3d11Session &D3d11Driver::session(uint32_t slot)
+d3d::D3dSession &D3d11Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d11Driver::session");
-    if (!sessions_[slot].constructed()) static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_));
+    if (!sessions_[slot].constructed()) static_cast<void>(sessions_[slot].construct(kmt_, memory_, log_, session_arena_bytes));
     return sessions_[slot].object();
 }
 

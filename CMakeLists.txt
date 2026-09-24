@@ -77,7 +77,8 @@ set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_command_names.cpp)
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
@@ -91,7 +92,8 @@ set(AV_GENERATED_SOURCES
   # (feature 042).
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp
   # Direct3D's, from the registry this project writes (tools/codegen/registry).
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_server.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_server.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_server.cpp)
 
 # The OpenGL tree writes its own gl_types.h from the registry and includes it by
 # name, so it needs its own directory on the include path and no external header.
@@ -125,7 +127,8 @@ list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
 set(AV_GENERATED_CLIENT_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_client.cpp)
 if(AV_GENERATED)
   list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES} ${AV_GENERATED_CLIENT_SOURCES})
 endif()
@@ -186,6 +189,7 @@ target_include_directories(rvkclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/
 target_compile_options(rvkclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
 target_link_libraries(rvkclsamples_host PRIVATE ${CMAKE_DL_LIBS})
 
+find_package(Threads REQUIRED)
 # The OpenGL samples' host side (samples/opengl): the host's own driver through
 # EGL, the same GLSL the guest compiles - the report's baseline
 # (tools/opengl_report.py).
@@ -196,6 +200,15 @@ if(AV_EGL_LIBRARY)
   target_compile_options(rvkglsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
   target_link_libraries(rvkglsamples_host PRIVATE ${AV_EGL_LIBRARY} Threads::Threads)
 endif()
+
+# The D3D12 samples' host side (samples/d3d12): vkd3d-proton native, the
+# guest's DXIL, the same frames the guest renders (tools/d3d12_report.py).
+file(GLOB AV_D3D12_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/d3d12/*.cpp)
+list(FILTER AV_D3D12_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+add_executable(rvkd3d12samples_host ${AV_D3D12_SAMPLES_SOURCES})
+target_include_directories(rvkd3d12samples_host PRIVATE ${AV_DXVK_INCLUDE})
+target_compile_options(rvkd3d12samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(rvkd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Threads)
 
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
@@ -456,7 +469,8 @@ foreach(src ${AV_UNIT_TESTS})
   # this machine's GPU (feature 044, T028).
   # DXVK's driver threads allocate from modules they unload before exit, which
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
-  if(name STREQUAL "test_d3d_backend_device")
+  if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
+     name STREQUAL "test_d3d12_session_features_device")
     set_tests_properties(${name} PROPERTIES ENVIRONMENT
       "MESA_SHADER_CACHE_DISABLE=true;ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()
@@ -776,6 +790,13 @@ endif()
 # ---- the committed generated sources are what the generators write --------
 add_test(NAME generated_sources
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_generated.py)
+# The D3D user-mode driver's table thunks are what the WDK's own headers say
+# each slot's signature is; a hand edit, or a header that moved, fails here.
+find_program(AV_CLANG_CL clang-cl)
+if(AV_CLANG_CL AND EXISTS ${AV_WINDOWS_KIT_DIR}/include/um/d3d12umddi.h)
+  add_test(NAME generated_d3d11_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d11_ddi.py --check)
+  add_test(NAME generated_d3d12_ddi COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_d3d12_ddi.py --check)
+endif()
 
 # ---- the committed SPIR-V is what its GLSL compiles to (045) ----------------
 add_test(NAME check_spirv

@@ -118,4 +118,14 @@ void MockSessionBackend::release_object(std::uint32_t, std::uint64_t wire_handle
     if (wire_handle != 0u) released_objects_++;
 }
 
+void MockSessionBackend::end_batch()
+{
+}
+
+/* Nothing here waits on a GPU. */
+bool MockSessionBackend::poll()
+{
+    return false;
+}
+
 }  // namespace av

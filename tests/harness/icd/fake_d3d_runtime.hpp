@@ -41,6 +41,7 @@ public:
     static constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
     static constexpr std::uint32_t d3d11_runtime_build = 26100u;
     static constexpr std::size_t   device_block_bytes = 64u;
+    static constexpr std::size_t   table_bytes = 2048u;
 
     FakeD3dRuntime(d3d::UmdRoot &root, d3d::RuntimeKind runtime);
     FakeD3dRuntime(const FakeD3dRuntime &) = delete;
@@ -71,7 +72,10 @@ public:
     /* D3D12 only; a call on a D3D11 fake is the test's mistake and answers
      * hr_invalid_arg without touching the driver. */
     d3d::Hresult optional_ddi_tables(std::uint32_t *entries, d3d::D3d12ddiTableRequestRecord *requests);
-    d3d::Hresult fill_ddi_table(std::uint32_t table_type);
+    /* Fills `bytes` of a zeroed table, 2 KiB unless said. */
+    d3d::Hresult fill_ddi_table(std::uint32_t table_type, std::size_t bytes = table_bytes);
+    /* Slots the last fill left non-null. */
+    std::uint32_t filled_slots() const;
     void         destroy_device();
 
     /* What the last create was given, so a test can drive the DXGI slots. */
@@ -94,6 +98,7 @@ private:
     bool                                 no_dxgi_table_;
     bool                                 scribble_;
     alignas(16) unsigned char            block_[device_block_bytes];
+    void                                *table_[table_bytes / sizeof(void *)];
     int                                  runtime_device_;
     int                                  runtime_core_layer_;
     int                                  kt_callbacks_;

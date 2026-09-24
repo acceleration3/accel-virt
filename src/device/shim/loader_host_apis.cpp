@@ -10,7 +10,7 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, extensions_{}, count_(0u),
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, extensions_{}, count_(0u),
       opened_(false)
       {
           AV_SCOPE("LoaderHostApis::LoaderHostApis");
@@ -84,7 +84,12 @@ void LoaderHostApis::enumerate()
      * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
-            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_D3D;
+            if (d3d11_devices_[i].open(d3d_runtime_, uuids_[i])) {
+                sub_apis_[i] |= RVK_EXECUTOR_SUB_API_D3D;
+                /* Direct3D 12 rides on the same sub-API: a session speaks
+                 * whichever the guest's runtime asks for. */
+                static_cast<void>(d3d12_devices_[i].open(d3d_runtime_, uuids_[i]));
+            }
     }
     count_ = found;
 }
@@ -124,6 +129,7 @@ void LoaderHostApis::close()
     AV_SCOPE("LoaderHostApis::close");
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
+        d3d12_devices_[i].close();
         d3d11_devices_[i].close();
         opencl_devices_[i].forget();
     }
@@ -182,6 +188,12 @@ D3d11HostDevice *LoaderHostApis::d3d11_device(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::d3d11_device");
     return index < count_ && d3d11_devices_[index].opened() ? &d3d11_devices_[index] : nullptr;
+}
+
+D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::d3d12_device");
+    return index < count_ && d3d12_devices_[index].opened() ? &d3d12_devices_[index] : nullptr;
 }
 
 }  // namespace av
