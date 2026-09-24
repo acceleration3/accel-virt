@@ -31,8 +31,8 @@ void *D3dRuntime::open_library(const char *name) const
 }
 
 D3dRuntime::D3dRuntime()
-    : dxgi_(nullptr), d3d11_(nullptr), d3d12_(nullptr), create_factory_(nullptr), create_device11_(nullptr),
-      create_device12_(nullptr)
+    : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), create_factory_(nullptr),
+      create_device11_(nullptr), create_device12_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
 }
@@ -62,7 +62,12 @@ bool D3dRuntime::open()
         close();
         return false;
     }
-    d3d12_ = open_library("libvkd3d-proton-d3d12.so");
+    /* d3d12 finds its core by soname alone (vkd3d-proton's libs/d3d12/main.c,
+     * load_d3d12core_module), which the loader's search cannot resolve in
+     * RVK_D3D_PATH: loaded first, the core is already in the link map under
+     * that soname, and without it every D3D12CreateDevice fails. */
+    d3d12core_ = open_library("libvkd3d-proton-d3d12core.so");
+    if (d3d12core_ != nullptr) d3d12_ = open_library("libvkd3d-proton-d3d12.so");
     if (d3d12_ != nullptr)
         create_device12_ = reinterpret_cast<CreateDevice12>(dlsym(d3d12_, "D3D12CreateDevice"));
     return true;
@@ -79,6 +84,7 @@ void D3dRuntime::close()
     create_device12_ = nullptr;
     dxgi_ = nullptr;
     d3d11_ = nullptr;
+    d3d12core_ = nullptr;
     d3d12_ = nullptr;
 }
 

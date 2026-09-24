@@ -59,6 +59,7 @@ private:
 
     void *dxgi_;
     void *d3d11_;
+    void *d3d12core_;
     void *d3d12_;
     CreateFactory  create_factory_;
     CreateDevice11 create_device11_;
