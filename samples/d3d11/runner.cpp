@@ -12,6 +12,7 @@ struct Options {
     uint32_t    width = 1280;
     uint32_t    height = 720;
     uint32_t    warmup = 60;
+    double      warmup_seconds = 1.0;
     uint32_t    frames = 600;
     float       capture_time = 1.5f;
     bool        compile = false;
@@ -124,8 +125,13 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         return;
     }
     const float step = 1.0f / 60.0f;
-    for (uint32_t frame = 0; frame < options.warmup; frame++) {
-        sample.render(gpu, static_cast<float>(frame) * step);
+    /* The GPU's clocks climb over the first few hundred milliseconds of load,
+     * so the warm-up runs for a time as well as a count: otherwise whichever
+     * run followed another on a warm GPU looks faster than the one that did
+     * not. */
+    const double warm_from = seconds();
+    for (uint32_t frame = 0; frame < options.warmup || seconds() - warm_from < options.warmup_seconds; frame++) {
+        sample.render(gpu, static_cast<float>(frame % (options.warmup != 0 ? options.warmup : 1)) * step);
         gpu.context->Flush();
     }
     finish(gpu);
@@ -134,8 +140,11 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         sample.render(gpu, static_cast<float>(frame) * step);
         gpu.context->Flush();
     }
+    const double looped = seconds() - timed;
     finish(gpu);
     const double taken = seconds() - timed;
+    log_number("loop ms", looped * 1000.0);
+    log_number("finish ms", (taken - looped) * 1000.0);
     sample.render(gpu, options.capture_time);
     char path[512] = {};
     copy_text(path, sizeof path, options.out);

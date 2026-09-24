@@ -39,7 +39,12 @@ Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter f
     if (status != Status::ok) return status;
     status = table_.initialize(section_.region(), section_.bytes(), module, pid);
     if (status != Status::ok) return status;
-    scope_binding.bind(table_);
+    /* Every scope costs the call it opens, thousands a frame on an
+     * application's own thread, so the table is bound only when a trace is
+     * asked for: C:\ProgramData\rvk\trace-scopes, or the perfetto flag. */
+    if (GetFileAttributesW(L"C:\\ProgramData\\rvk\\trace-scopes") != INVALID_FILE_ATTRIBUTES ||
+        events_file_.wanted())
+        scope_binding.bind(table_);
     record_events(module, pid);
     HMODULE     pinned = nullptr;
     const DWORD pin = GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS;

@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -296,6 +297,8 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     uint64_t begin = 0u;
     uint64_t end = 0u;
     Status   written = ring_.write_batch(batch, length, next, published_now(), begin, end);
+    if (written == Status::no_space && room_within_spin(BatchHeader(length, next, 0u).span()))
+        written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     if (written == Status::no_space) {
         if (!drain()) return TransportResult::failed;
         next = fences_.peek();
@@ -407,6 +410,24 @@ bool KmtTransport::replied_within_spin(uint64_t fence)
         WireReader   probe(nullptr, 0u);
         const Status read = reply_.read(fence, probe);
         if (read == Status::ok || read == Status::too_large) return true;
+        uint64_t unused = 0u;
+        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        __builtin_ia32_pause();
+    }
+}
+
+/* A full ring needs room for one batch, not an empty ring: the host frees it
+ * a batch at a time, and waiting for all of it would stop the guest until the
+ * host had nothing left to do. */
+bool KmtTransport::room_within_spin(uint64_t span)
+{
+    AV_SCOPE("KmtTransport::room_within_spin");
+    constexpr uint64_t spins_per_second = 20u;
+    uint64_t           frequency = 0u;
+    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    const uint64_t     budget = frequency / spins_per_second;
+    for (;;) {
+        if (ring_.free_space() >= span) return true;
         uint64_t unused = 0u;
         if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
         __builtin_ia32_pause();

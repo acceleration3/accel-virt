@@ -123,6 +123,7 @@ private:
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
     bool                          replied_within_spin(uint64_t fence);
     bool                          consumed_within_spin();
+    bool                          room_within_spin(uint64_t span);
 
     GuestConnection &connection_;
     SubApi           sub_api_;

@@ -136,6 +136,8 @@ public:
                                uint32_t source_subresource, uint32_t format) override;
     bool on_GenerateMips(uint32_t view) override;
     bool on_CopyStructureCount(uint32_t destination, uint32_t offset, uint32_t source_view) override;
+    bool update_dynamic_buffer(ID3D11Resource *resource, uint32_t offset, const uint8_t *data, uint64_t bytes,
+                               uint32_t copy_flags);
     bool on_UpdateSubresource(uint32_t resource, uint32_t subresource, uint32_t has_box, const d3dproto::Box &box,
                               uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags, const uint8_t *data,
                               uint64_t data_size) override;

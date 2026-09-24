@@ -1,5 +1,8 @@
 #include "device/executor/d3d_backend.hpp"
 
+#include <sched.h>
+#include <time.h>
+
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/dxbc_container.hpp"
@@ -574,8 +577,16 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     HRESULT result = E_INVALIDARG;
     if (desc.dimension == dimension_buffer) {
         if (desc.width > max_buffer_bytes) return false;
-        const D3D11_BUFFER_DESC buffer = {desc.width, D3D11_USAGE_DEFAULT, desc.bind_flags, 0u, misc,
-                                          desc.structure_stride};
+        /* A buffer the guest rewrites with Map(DISCARD) stays one DXVK can
+         * rename: as a default buffer every rewrite is a copy on the GPU's
+         * timeline, with the barriers that go with it. */
+        constexpr uint32_t ddi_usage_dynamic = 2u;
+        constexpr uint32_t not_dynamic = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_STREAM_OUTPUT;
+        const bool dynamic = desc.usage == ddi_usage_dynamic && (desc.bind_flags & not_dynamic) == 0u &&
+                             (misc & D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS) == 0u;
+        const D3D11_BUFFER_DESC buffer = {desc.width, dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT,
+                                          desc.bind_flags, dynamic ? static_cast<UINT>(D3D11_CPU_ACCESS_WRITE) : 0u,
+                                          misc, desc.structure_stride};
         ID3D11Buffer *out = nullptr;
         result = device->CreateBuffer(&buffer, nullptr, &out);
         made = out;
@@ -1462,9 +1473,32 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
     const uint64_t needed = static_cast<uint64_t>(depth - 1u) * depth_pitch +
                             static_cast<uint64_t>(rows - 1u) * row_pitch + row;
     if (needed > data_size) return false;
+    if (update_dynamic_buffer(found, has_box != 0u ? box.left : 0u, data, row, copy_flags)) return true;
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     device11_->context()->UpdateSubresource1(found, subresource, has_box != 0u ? &region : nullptr, data, row_pitch,
                                              depth_pitch, copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
+    return true;
+}
+
+/* A dynamic buffer takes its bytes the way the guest wrote them: mapped with
+ * DISCARD, or with NO_OVERWRITE for a write beside data the GPU may still be
+ * reading. False for anything else, which UpdateSubresource then handles. */
+bool D3dBackend::update_dynamic_buffer(ID3D11Resource *resource, uint32_t offset, const uint8_t *data,
+                                       uint64_t bytes, uint32_t copy_flags)
+{
+    AV_SCOPE("D3dBackend::update_dynamic_buffer");
+    D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
+    resource->GetType(&dimension);
+    if (dimension != D3D11_RESOURCE_DIMENSION_BUFFER) return false;
+    D3D11_BUFFER_DESC desc = {};
+    static_cast<ID3D11Buffer *>(resource)->GetDesc(&desc);
+    if (desc.Usage != D3D11_USAGE_DYNAMIC || offset + bytes > desc.ByteWidth) return false;
+    const D3D11_MAP map = (copy_flags & D3D11_COPY_DISCARD) != 0u ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    ID3D11DeviceContext4 *const context = device11_->context();
+    if (FAILED(context->Map(resource, 0u, map, 0u, &mapped)) || mapped.pData == nullptr) return false;
+    __builtin_memcpy(static_cast<uint8_t *>(mapped.pData) + offset, data, bytes);
+    context->Unmap(resource, 0u);
     return true;
 }
 
@@ -1545,8 +1579,23 @@ bool D3dBackend::on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready
     if (!ready() || found == nullptr) return false;
     const UINT size = found->GetDataSize();
     if (size > data_capacity) return false;
-    const HRESULT result =
-        device11_->context()->GetData(found, size == 0u ? nullptr : data, size, flags & D3D11_ASYNC_GETDATA_DONOTFLUSH);
+    /* The guest's thread is stopped on this answer, and each "not yet" costs
+     * it a round trip through the kernel and back: a flushing poll waits here
+     * for a result that is a millisecond away, and still answers "not yet"
+     * after that, as GetData must. */
+    constexpr int64_t patience_ns = 1000000;
+    const UINT        donotflush = flags & D3D11_ASYNC_GETDATA_DONOTFLUSH;
+    timespec          started = {};
+    clock_gettime(CLOCK_MONOTONIC, &started);
+    HRESULT result = device11_->context()->GetData(found, size == 0u ? nullptr : data, size, donotflush);
+    while (result == S_FALSE && donotflush == 0u) {
+        timespec now = {};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        const int64_t waited = (now.tv_sec - started.tv_sec) * 1000000000 + (now.tv_nsec - started.tv_nsec);
+        if (waited >= patience_ns) break;
+        sched_yield();
+        result = device11_->context()->GetData(found, size == 0u ? nullptr : data, size, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+    }
     if (result == S_OK) {
         ready_out = 1u;
         data_size = size;

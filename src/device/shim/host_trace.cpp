@@ -1,5 +1,7 @@
 #include "device/shim/host_trace.hpp"
 
+#include <sys/prctl.h>
+
 #include "core/trace/function_scope.hpp"
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/trace_layout.hpp"
@@ -64,6 +66,10 @@ Status HostTrace::start(const char *module)
     if (dl_iterate_phdr(&find_object, &search) != 0) image_ = ImageRange(search.low, search.high - search.low);
     const Status laid = table_.initialize(region_.region(), region_.bytes(), module, region_.process());
     if (laid != Status::ok) return laid;
+    /* A profiler attaching to a QEMU this shell did not start is refused under
+     * Yama's ptrace_scope 1 unless the process names it allowed. */
+    const char *const ptrace = getenv("RVK_PTRACE");
+    if (ptrace != nullptr && ptrace[0] == '1') prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
     /* Every scope costs the call it opens - a batch runs a few hundred - so
      * the table is bound only when a trace is asked for, as the kernel's is. */
     const char *const scopes = getenv("RVK_TRACE_SCOPES");
