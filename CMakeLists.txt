@@ -570,7 +570,7 @@ ExternalProject_Add(rvktest
                    ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
                    ${CMAKE_BINARY_DIR}/guest/rvkcl.dll ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
-                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll)
+                   ${CMAKE_BINARY_DIR}/guest/rvkumd.dll ${CMAKE_BINARY_DIR}/guest/rvkclsamples.exe)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake
@@ -640,6 +640,12 @@ add_test(NAME rvkclprobe_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvkclprobe.exe
                  --allow-import OpenCL.dll --require-import clGetPlatformIDs)
+
+# The OpenCL samples import nothing past the three: OpenCL.dll is loaded, not
+# linked, so the same program runs whichever loader sits beside it.
+add_test(NAME rvkclsamples_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkclsamples.exe --require-import LoadLibraryA)
 
 # The Khronos loader, cross-built beside the probe (feature 052, T005). It is
 # somebody else's source, but it is linked by this build against a kit closure
