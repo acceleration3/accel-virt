@@ -334,7 +334,7 @@ private:
     int32_t          bind_chunk(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an rvk context: published, rung, and held on
      * the node until the fence page says the host finished it. */
-    [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request);
+    [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
     /* StartDevice: which device this adapter is running on, so the one it wakes
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */

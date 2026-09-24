@@ -291,6 +291,18 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
     return status;
 }
 
+bool RvkContextTable::completed_already(void *context, uint64_t fence)
+{
+    AV_SCOPE("RvkContextTable::completed_already");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::completed_already");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot] || lost(slot)) return true;
+    RvkContextBinding &binding = bindings_[slot].object();
+    static_cast<void>(binding.serve());
+    return binding.completed() >= fence;
+}
+
 /* What a lost context submitted is finished rather than dropped: a packet
  * left on the node would hold every context's work queued behind it until a
  * timeout reset. Serving it on every DPC also finishes a packet whose batch

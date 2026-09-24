@@ -1677,9 +1677,16 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
      * on, so no completion would ever come; SubmitCommandVirtual may refuse,
      * and D3DKMTSubmitCommand fails for the process instead (FR-005). */
     if (identity_.changed()) return NtStatus(Status::invalid_parameter).value();
-    const Status status = context->is_rvk() ? submit_rvk(*request) : node_.submit(request->SubmissionFenceId);
+    uint64_t     awaited = 0u;
+    const Status status = context->is_rvk() ? submit_rvk(*request, awaited) : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
-        static_cast<void>(dxgkrnl_.queue_dpc());
+        /* Only a batch the device already finished needs this DPC: its
+         * interrupt may have come before the packet was queued. One still
+         * running is reported by the interrupt it raises when it finishes,
+         * and a DPC per submission doubled the work dxgkrnl's DPC lock
+         * serializes. */
+        if (!context->is_rvk() || rvk_contexts_.completed_already(request->hContext, awaited))
+            static_cast<void>(dxgkrnl_.queue_dpc());
         return NtStatus(Status::ok).value();
     }
     /* A refusal is what dxgkrnl answers the process with, and may be what puts
@@ -1691,10 +1698,9 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
 /* The host may finish the batch before its packet is queued; the DPC queued
  * after both serves what the fence page already says, so nothing waits for an
  * interrupt that came first. */
-Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request)
+Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited)
 {
     AV_SCOPE("Adapter::submit_rvk");
-    uint64_t             awaited = 0u;
     const Status published = rvk_contexts_.submit(request.hContext,
                                                   static_cast<const uint8_t *>(request.pDmaBufferPrivateData),
                                                   request.DmaBufferPrivateDataSize, awaited);

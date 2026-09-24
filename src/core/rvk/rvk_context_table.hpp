@@ -87,6 +87,10 @@ public:
      * fence with no reply behind it (FR-006). dxgkrnl is not told of the
      * fault: DMA_FAULTED bugchecks a GPU MMU adapter (docs/kb/05-scheduling.md). */
     void                 serve(ExecutionNode &node, HwQueueSubmissions &queues);
+    /* DISPATCH. Whether the device has already finished `fence` on `context`
+     * - so its interrupt may have come before the packet was queued - and
+     * true for a context this table cannot answer for. */
+    bool                 completed_already(void *context, uint64_t fence);
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();
