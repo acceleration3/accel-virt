@@ -222,6 +222,28 @@ def report(args, out):
     write_html(args, out, rows, ratios)
 
 
+# The report's stylesheet, which tools/vulkan_report.py's report shares.
+STYLE = """:root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#e4e2dc; --good:#1f7a4d; --warn:#a36a00; --bad:#b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg:#161614; --fg:#ecebe6; --muted:#a19f97; --card:#1f1f1c; --line:#33322e; --good:#5cc08a; --warn:#e0a33a; --bad:#f07167; } }
+body { background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; margin:0; padding:24px max(16px, 3vw); }
+h1 { font-size:22px; margin:0 0 4px; } .muted { color:var(--muted); }
+.summary { display:flex; flex-wrap:wrap; gap:12px; margin:18px 0 26px; }
+.stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:150px; }
+.stat b { display:block; font-size:22px; }
+.sample { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
+.sample h2 { font-size:17px; margin:0 0 10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.tag { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; }
+.good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+.images { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px; }
+figure { margin:0; } figure img { width:100%; border-radius:6px; border:1px solid var(--line); display:block; }
+figcaption { font-size:12px; color:var(--muted); margin-top:4px; }
+table { border-collapse:collapse; margin-top:12px; font-variant-numeric:tabular-nums; }
+td, th { padding:4px 12px 4px 0; text-align:right; } th:first-child, td:first-child { text-align:left; }
+th { color:var(--muted); font-weight:500; }
+.wrap { overflow-x:auto; }
+"""
+
+
 def cell(value, unit="", decimals=1):
     return "&ndash;" if value is None else f"{value:,.{decimals}f}{unit}"
 
@@ -232,25 +254,7 @@ def write_html(args, out, rows, ratios):
     gpu = args.gpu_name
     parts = [f"""<!doctype html><meta charset="utf-8"><title>D3D11 samples: host vs VM</title>
 <style>
-:root {{ --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#e4e2dc; --good:#1f7a4d; --warn:#a36a00; --bad:#b3261e; }}
-@media (prefers-color-scheme: dark) {{ :root {{ --bg:#161614; --fg:#ecebe6; --muted:#a19f97; --card:#1f1f1c; --line:#33322e; --good:#5cc08a; --warn:#e0a33a; --bad:#f07167; }} }}
-body {{ background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; margin:0; padding:24px max(16px, 3vw); }}
-h1 {{ font-size:22px; margin:0 0 4px; }} .muted {{ color:var(--muted); }}
-.summary {{ display:flex; flex-wrap:wrap; gap:12px; margin:18px 0 26px; }}
-.stat {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; min-width:150px; }}
-.stat b {{ display:block; font-size:22px; }}
-.sample {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }}
-.sample h2 {{ font-size:17px; margin:0 0 10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }}
-.tag {{ font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; }}
-.good {{ color:var(--good); }} .warn {{ color:var(--warn); }} .bad {{ color:var(--bad); }}
-.images {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px; }}
-figure {{ margin:0; }} figure img {{ width:100%; border-radius:6px; border:1px solid var(--line); display:block; }}
-figcaption {{ font-size:12px; color:var(--muted); margin-top:4px; }}
-table {{ border-collapse:collapse; margin-top:12px; font-variant-numeric:tabular-nums; }}
-td, th {{ padding:4px 12px 4px 0; text-align:right; }} th:first-child, td:first-child {{ text-align:left; }}
-th {{ color:var(--muted); font-weight:500; }}
-.wrap {{ overflow-x:auto; }}
-</style>
+{STYLE}</style>
 <h1>D3D11 samples: host vs VM</h1>
 <div class="muted">{html.escape(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))} &middot; {args.width}&times;{args.height}
 &middot; {args.warmup} warm-up + {args.frames} timed frames, off-screen &middot; host: DXVK native on {html.escape(gpu)}

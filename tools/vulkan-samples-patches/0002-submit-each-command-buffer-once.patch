@@ -1,0 +1,43 @@
+offscreen, deferred and shadowmappingomni list the frame's draw command
+buffer in their submission and then push it again: one primary command
+buffer twice in a batch, without SIMULTANEOUS_USE (VUID-vkQueueSubmit-
+pCommandBuffers-00071). RADV chains a batch's command buffers and loops
+forever inside vkQueueSubmit on it, on the host and so in the device's
+executor. Submitted once, as the other samples do.
+
+diff --git a/deferred/deferred.cpp b/deferred/deferred.cpp
+index 90585d6..51e32ec 100644
+--- a/deferred/deferred.cpp
++++ b/deferred/deferred.cpp
+@@ -1200,7 +1200,6 @@ public:
+ 			offScreenCmdBuffer,
+ 			drawCmdBuffers[currentBuffer],
+ 		};
+-		submitCmdBuffers.push_back(drawCmdBuffers[currentBuffer]);
+ 		submitInfo.commandBufferCount = submitCmdBuffers.size();
+ 		submitInfo.pCommandBuffers = submitCmdBuffers.data();
+ 
+diff --git a/offscreen/offscreen.cpp b/offscreen/offscreen.cpp
+index b712171..8172c75 100644
+--- a/offscreen/offscreen.cpp
++++ b/offscreen/offscreen.cpp
+@@ -1041,7 +1041,6 @@ public:
+ 			offScreenCmdBuffer,
+ 			drawCmdBuffers[currentBuffer],
+ 		};
+-		submitCmdBuffers.push_back(drawCmdBuffers[currentBuffer]);
+ 		submitInfo.commandBufferCount = submitCmdBuffers.size();
+ 		submitInfo.pCommandBuffers = submitCmdBuffers.data();
+ 
+diff --git a/shadowmappingomni/shadowmappingomni.cpp b/shadowmappingomni/shadowmappingomni.cpp
+index cdea83e..6994bc0 100644
+--- a/shadowmappingomni/shadowmappingomni.cpp
++++ b/shadowmappingomni/shadowmappingomni.cpp
+@@ -1009,7 +1009,6 @@ public:
+ 			offScreenCmdBuffer,
+ 			drawCmdBuffers[currentBuffer],
+ 		};
+-		submitCmdBuffers.push_back(drawCmdBuffers[currentBuffer]);
+ 		submitInfo.commandBufferCount = submitCmdBuffers.size();
+ 		submitInfo.pCommandBuffers = submitCmdBuffers.data();
+ 
