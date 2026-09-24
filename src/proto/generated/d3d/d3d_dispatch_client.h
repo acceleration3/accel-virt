@@ -113,5 +113,7 @@ namespace av::d3dproto {
 [[nodiscard]] bool rvk_d3d_BindQueryResults(::av::ClientTransport& t, uint64_t offset, uint32_t slots);
 // ready is 1 with the data, 0 while the host's answer is not in yet (S_FALSE).
 [[nodiscard]] bool rvk_d3d_GetQueryData(::av::ClientTransport& t, uint32_t query, uint32_t flags, uint32_t* ready, void* data, uint64_t data_capacity, uint64_t* data_size);
+// The selected device's pipeline state back to its defaults: what a command list starts from, and what the immediate context is left in after one runs.
+[[nodiscard]] bool rvk_d3d_ClearState11(::av::ClientTransport& t);
 
 }  // namespace av::d3dproto

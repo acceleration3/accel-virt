@@ -76,3 +76,8 @@ void D3d11Driver::tear_down(void *block)
 }
 
 }  // namespace av::d3d11
+
+/* A deferred context's DestroyDevice slot: its block holds no device cookie,
+ * so the table's root would not find it; the context goes back to its pool. */
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device)
+{ av::d3d11::DeviceHandle(device.pDrvPrivate).device().retire(); }

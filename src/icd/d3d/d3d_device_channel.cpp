@@ -9,7 +9,7 @@
 namespace av::d3d {
 
 D3dDeviceChannel::D3dDeviceChannel(D3dCommandStream &stream, icd::ThreadLock &lock, uint32_t device)
-    : stream_(stream), lock_(lock), device_(device), phase_(Phase::idle)
+    : stream_(stream), lock_(lock), device_(device), cleared_at_(~uint64_t{0}), phase_(Phase::idle)
 {
     AV_SCOPE("D3dDeviceChannel::D3dDeviceChannel");
 }
@@ -39,12 +39,42 @@ Status D3dDeviceChannel::flush()
     return stream_.flush();
 }
 
-Status D3dDeviceChannel::flush_hint()
+Status D3dDeviceChannel::application_flush()
 {
-    AV_SCOPE("D3dDeviceChannel::flush_hint");
+    AV_SCOPE("D3dDeviceChannel::application_flush");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    return stream_.flush_hint();
+    return stream_.application_flush();
+}
+
+Status D3dDeviceChannel::take_recorded(uint8_t *out, size_t capacity, size_t &length)
+{
+    AV_SCOPE("D3dDeviceChannel::take_recorded");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    return stream_.take_recorded(out, capacity, length);
+}
+
+size_t D3dDeviceChannel::recorded_bytes()
+{
+    AV_SCOPE("D3dDeviceChannel::recorded_bytes");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    return stream_.recorded_bytes();
+}
+
+Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
+{
+    AV_SCOPE("D3dDeviceChannel::execute");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    if (!stream_.speak_as(device_)) return Status::invalid_state;
+    if (stream_.recorded_total() != cleared_at_ && !d3dproto::rvk_d3d_ClearState11(stream_)) return Status::invalid_state;
+    const Status appended = stream_.append_recorded(commands, length);
+    if (appended != Status::ok) return appended;
+    if (!d3dproto::rvk_d3d_ClearState11(stream_)) return Status::invalid_state;
+    cleared_at_ = stream_.recorded_total();
+    return Status::ok;
 }
 
 bool D3dDeviceChannel::make_room_for(size_t bytes)

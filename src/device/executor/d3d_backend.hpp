@@ -70,6 +70,7 @@ public:
     bool on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64_t formats_capacity,
                         uint64_t &formats_size) override;
     bool on_Flush11() override;
+    bool on_ClearState11() override;
     bool on_Finish11(uint32_t &hresult) override;
     bool on_DestroyObject(uint32_t object) override;
     bool on_CreateResource(uint32_t resource, const d3dproto::ResourceDesc &desc, uint64_t shared_key) override;

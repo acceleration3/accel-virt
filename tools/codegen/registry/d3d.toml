@@ -525,3 +525,9 @@ id = 0x0502
 doc = "ready is 1 with the data, 0 while the host's answer is not in yet (S_FALSE)."
 params = ["u32 query", "u32 flags"]
 reply = ["u32 ready", "out_bytes data"]
+
+[[command]]
+name = "ClearState11"
+id = 0x0504
+doc = "The selected device's pipeline state back to its defaults: what a command list starts from, and what the immediate context is left in after one runs."
+params = []

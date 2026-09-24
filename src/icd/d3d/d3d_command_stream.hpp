@@ -21,6 +21,7 @@
 #define AV_D3D_COMMAND_STREAM_HPP
 
 #include "core/support/status.hpp"
+#include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 
 #include <stddef.h>
@@ -52,6 +53,23 @@ public:
      * ready for it, and otherwise keeps growing until a later flush, a sync
      * or a full block sends it. */
     [[nodiscard]] Status flush_hint();
+    /* An application's Flush: the host flushes its own queue too, unless
+     * nothing was recorded since it last did - GetData asks for one on every
+     * poll. */
+    [[nodiscard]] Status application_flush();
+    /* From here on nothing is sent: commands collect in the block for a
+     * deferred context's command list, carrying their data inline, and a
+     * command that must be answered fails. */
+    void                 record();
+    /* What was recorded since the last take, copied to `out` (at most
+     * `capacity` bytes) and forgotten. invalid_parameter when it does not fit. */
+    [[nodiscard]] Status take_recorded(uint8_t *out, size_t capacity, size_t &length);
+    size_t               recorded_bytes() const;
+    /* Bytes recorded since the stream was made: equal twice, nothing came between. */
+    uint64_t             recorded_total() const;
+    /* Recorded commands, run in this stream's order: copied in when they fit
+     * the block, sent as a batch of their own after what is pending when not. */
+    [[nodiscard]] Status append_recorded(const uint8_t *bytes, size_t length);
     /* The blob arena has `bytes` free, retiring every lease with a round trip
      * when it has not. False when even an empty arena is too small. */
     [[nodiscard]] bool   make_room_for(size_t bytes);
@@ -85,6 +103,12 @@ private:
     size_t        used_;
     uint64_t      batches_;
     uint64_t      recorded_;
+    /* recorded_ just after the last application flush was recorded. */
+    uint64_t      flushed_at_;
+    /* Never ready: a recording's data goes inline, since the lease an arena
+     * hands out is gone before a command list runs, which may be many times. */
+    ClientBlobArena no_arena_;
+    bool          recording_;
     /* The device the host runs recorded commands on; 0 before any. */
     uint32_t      speaking_;
     bool          failed_;

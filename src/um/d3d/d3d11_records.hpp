@@ -67,9 +67,25 @@ struct QueryRecord {
     uint32_t data_bytes;
     /* The session's count of the query's last end; 0 before any. */
     uint64_t last_end;
-    /* GetData calls that found the host's slot behind, since the last end. */
-    uint32_t misses;
+    /* When a GetData first found the host's slot behind since the last end, in
+     * performance counter ticks; 0 before any. */
+    uint64_t first_miss;
+    /* Nonzero once an application has waited on the query: its end is sent at
+     * once from then on, so the host starts on it while the frame is still
+     * being recorded, as DXVK does for a query it sees stalled on. */
+    uint32_t waited_on;
     uint32_t reserved;
+};
+
+/* A command list's commands, recorded by a deferred context, in memory the
+ * device allocated. */
+struct CommandListRecord {
+    static constexpr uint32_t tag = 0x4C4B5652u; /* "RVKL" */
+
+    uint32_t magic;
+    uint32_t reserved;
+    uint8_t *commands;
+    size_t   length;
 };
 
 }  // namespace av::d3d11

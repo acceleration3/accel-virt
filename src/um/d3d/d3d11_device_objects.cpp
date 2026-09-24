@@ -67,6 +67,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                                   D3D10DDI_HRTRESOURCE runtime)
 {
     AV_SCOPE("D3d11Device::create_resource");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
     resource.magic = ResourceRecord::tag;
@@ -156,6 +157,7 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
                                 D3D10DDI_HRTRESOURCE runtime)
 {
     AV_SCOPE("D3d11Device::open_resource");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
     resource.magic = ResourceRecord::tag;
@@ -215,6 +217,8 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
 VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d11Device::destroy_resource");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     ResourceRecord &resource = record(handle);
     forget_guest_surface(resource);
     destroy_object(resource.id);
@@ -238,9 +242,10 @@ SIZE_T D3d11Device::calc_private_shader_resource_view_size(const D3DWDDM2_0DDIAR
 }
 
 VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW *args,
-                                              D3D10DDI_HSHADERRESOURCEVIEW handle, D3D10DDI_HRTSHADERRESOURCEVIEW)
+                                              D3D10DDI_HSHADERRESOURCEVIEW handle, D3D10DDI_HRTSHADERRESOURCEVIEW runtime)
 {
     AV_SCOPE("D3d11Device::create_shader_resource_view");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
@@ -302,6 +307,8 @@ VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADE
 VOID D3d11Device::destroy_shader_resource_view(D3D10DDI_HSHADERRESOURCEVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_shader_resource_view");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -312,9 +319,10 @@ SIZE_T D3d11Device::calc_private_render_target_view_size(const D3DWDDM2_0DDIARG_
 }
 
 VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW *args,
-                                            D3D10DDI_HRENDERTARGETVIEW handle, D3D10DDI_HRTRENDERTARGETVIEW)
+                                            D3D10DDI_HRENDERTARGETVIEW handle, D3D10DDI_HRTRENDERTARGETVIEW runtime)
 {
     AV_SCOPE("D3d11Device::create_render_target_view");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
@@ -366,6 +374,8 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
 VOID D3d11Device::destroy_render_target_view(D3D10DDI_HRENDERTARGETVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_render_target_view");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -376,9 +386,10 @@ SIZE_T D3d11Device::calc_private_depth_stencil_view_size(const D3D11DDIARG_CREAT
 }
 
 VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCILVIEW *args,
-                                            D3D10DDI_HDEPTHSTENCILVIEW handle, D3D10DDI_HRTDEPTHSTENCILVIEW)
+                                            D3D10DDI_HDEPTHSTENCILVIEW handle, D3D10DDI_HRTDEPTHSTENCILVIEW runtime)
 {
     AV_SCOPE("D3d11Device::create_depth_stencil_view");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
@@ -408,6 +419,8 @@ VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCIL
 VOID D3d11Device::destroy_depth_stencil_view(D3D10DDI_HDEPTHSTENCILVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_depth_stencil_view");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -418,9 +431,10 @@ SIZE_T D3d11Device::calc_private_unordered_access_view_size(const D3DWDDM2_0DDIA
 }
 
 VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW *args,
-                                               D3D11DDI_HUNORDEREDACCESSVIEW handle, D3D11DDI_HRTUNORDEREDACCESSVIEW)
+                                               D3D11DDI_HUNORDEREDACCESSVIEW handle, D3D11DDI_HRTUNORDEREDACCESSVIEW runtime)
 {
     AV_SCOPE("D3d11Device::create_unordered_access_view");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
@@ -460,6 +474,8 @@ VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNOR
 VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_unordered_access_view");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -530,35 +546,39 @@ SIZE_T D3d11Device::calc_private_geometry_shader_with_stream_output(
     return sizeof(ObjectRecord);
 }
 
-VOID D3d11Device::create_vertex_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+VOID D3d11Device::create_vertex_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                        const D3D11_1DDIARG_STAGE_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_vertex_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_vertex, code, shader, signatures->pInputSignature, signatures->NumInputSignatureEntries,
                   signatures->pOutputSignature, signatures->NumOutputSignatureEntries, nullptr, 0u, nullptr);
 }
 
-VOID D3d11Device::create_geometry_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+VOID D3d11Device::create_geometry_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                          const D3D11_1DDIARG_STAGE_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_geometry_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_geometry, code, shader, signatures->pInputSignature, signatures->NumInputSignatureEntries,
                   signatures->pOutputSignature, signatures->NumOutputSignatureEntries, nullptr, 0u, nullptr);
 }
 
-VOID D3d11Device::create_pixel_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+VOID D3d11Device::create_pixel_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                       const D3D11_1DDIARG_STAGE_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_pixel_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_pixel, code, shader, signatures->pInputSignature, signatures->NumInputSignatureEntries,
                   signatures->pOutputSignature, signatures->NumOutputSignatureEntries, nullptr, 0u, nullptr);
 }
 
 VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT *args,
-                                                            D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+                                                            D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                                             const D3D11_1DDIARG_STAGE_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_geometry_shader_with_stream_output");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     /* A declaration with no shader streams the vertex shader's output: the
      * runtime hands a null code pointer then, which the host cannot compile. */
     if (args->pShaderCode == nullptr) {
@@ -570,33 +590,38 @@ VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CR
                   signatures->NumOutputSignatureEntries, nullptr, 0u, args);
 }
 
-VOID D3d11Device::create_hull_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+VOID D3d11Device::create_hull_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                      const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_hull_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_hull, code, shader, signatures->pInputSignature, signatures->NumInputSignatureEntries,
                   signatures->pOutputSignature, signatures->NumOutputSignatureEntries,
                   signatures->pPatchConstantSignature, signatures->NumPatchConstantSignatureEntries, nullptr);
 }
 
-VOID D3d11Device::create_domain_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER,
+VOID D3d11Device::create_domain_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime,
                                        const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES *signatures)
 {
     AV_SCOPE("D3d11Device::create_domain_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_domain, code, shader, signatures->pInputSignature, signatures->NumInputSignatureEntries,
                   signatures->pOutputSignature, signatures->NumOutputSignatureEntries,
                   signatures->pPatchConstantSignature, signatures->NumPatchConstantSignatureEntries, nullptr);
 }
 
-VOID D3d11Device::create_compute_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER)
+VOID D3d11Device::create_compute_shader(const UINT *code, D3D10DDI_HSHADER shader, D3D10DDI_HRTSHADER runtime)
 {
     AV_SCOPE("D3d11Device::create_compute_shader");
+    if (context_local(shader.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     create_shader(stage_compute, code, shader, nullptr, 0u, nullptr, 0u, nullptr, 0u, nullptr);
 }
 
 VOID D3d11Device::destroy_shader(D3D10DDI_HSHADER handle)
 {
     AV_SCOPE("D3d11Device::destroy_shader");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -609,9 +634,10 @@ SIZE_T D3d11Device::calc_private_element_layout_size(const D3D10DDIARG_CREATEELE
 }
 
 VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *args, D3D10DDI_HELEMENTLAYOUT handle,
-                                        D3D10DDI_HRTELEMENTLAYOUT)
+                                        D3D10DDI_HRTELEMENTLAYOUT runtime)
 {
     AV_SCOPE("D3d11Device::create_element_layout");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &layout = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     layout = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
     constexpr uint32_t max_elements = 32u;
@@ -630,6 +656,8 @@ VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *a
 VOID D3d11Device::destroy_element_layout(D3D10DDI_HELEMENTLAYOUT handle)
 {
     AV_SCOPE("D3d11Device::destroy_element_layout");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -640,9 +668,10 @@ SIZE_T D3d11Device::calc_private_blend_state_size(const D3D11_1_DDI_BLEND_DESC *
 }
 
 VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DDI_HBLENDSTATE handle,
-                                     D3D10DDI_HRTBLENDSTATE)
+                                     D3D10DDI_HRTBLENDSTATE runtime)
 {
     AV_SCOPE("D3d11Device::create_blend_state");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
     d3dproto::BlendDesc desc = {};
@@ -663,6 +692,8 @@ VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DD
 VOID D3d11Device::destroy_blend_state(D3D10DDI_HBLENDSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_blend_state");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -673,9 +704,10 @@ SIZE_T D3d11Device::calc_private_depth_stencil_state_size(const D3D10_DDI_DEPTH_
 }
 
 VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC *args,
-                                             D3D10DDI_HDEPTHSTENCILSTATE handle, D3D10DDI_HRTDEPTHSTENCILSTATE)
+                                             D3D10DDI_HDEPTHSTENCILSTATE handle, D3D10DDI_HRTDEPTHSTENCILSTATE runtime)
 {
     AV_SCOPE("D3d11Device::create_depth_stencil_state");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
     d3dproto::DepthStencilDesc desc = {};
@@ -699,6 +731,8 @@ VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC 
 VOID D3d11Device::destroy_depth_stencil_state(D3D10DDI_HDEPTHSTENCILSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_depth_stencil_state");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -709,9 +743,10 @@ SIZE_T D3d11Device::calc_private_rasterizer_state_size(const D3DWDDM2_0DDI_RASTE
 }
 
 VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *args, D3D10DDI_HRASTERIZERSTATE handle,
-                                          D3D10DDI_HRTRASTERIZERSTATE)
+                                          D3D10DDI_HRTRASTERIZERSTATE runtime)
 {
     AV_SCOPE("D3d11Device::create_rasterizer_state");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
     const d3dproto::RasterizerDesc desc = {static_cast<uint32_t>(args->FillMode),
@@ -732,6 +767,8 @@ VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *a
 VOID D3d11Device::destroy_rasterizer_state(D3D10DDI_HRASTERIZERSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_rasterizer_state");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -741,9 +778,10 @@ SIZE_T D3d11Device::calc_private_sampler_size(const D3D10_DDI_SAMPLER_DESC *)
     return sizeof(ObjectRecord);
 }
 
-VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HSAMPLER handle, D3D10DDI_HRTSAMPLER)
+VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HSAMPLER handle, D3D10DDI_HRTSAMPLER runtime)
 {
     AV_SCOPE("D3d11Device::create_sampler");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &sampler = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     sampler = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
     d3dproto::SamplerDesc desc = {};
@@ -763,6 +801,8 @@ VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HS
 VOID D3d11Device::destroy_sampler(D3D10DDI_HSAMPLER handle)
 {
     AV_SCOPE("D3d11Device::destroy_sampler");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
@@ -772,9 +812,10 @@ SIZE_T D3d11Device::calc_private_query_size(const D3DWDDM2_0DDIARG_CREATEQUERY *
     return sizeof(QueryRecord);
 }
 
-VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DDI_HQUERY handle, D3D10DDI_HRTQUERY)
+VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DDI_HQUERY handle, D3D10DDI_HRTQUERY runtime)
 {
     AV_SCOPE("D3d11Device::create_query");
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(QueryRecord))) return;
     QueryRecord &query = *static_cast<QueryRecord *>(handle.pDrvPrivate);
     /* The answer's size by D3D10DDI_QUERY: an event's BOOL, an occlusion
      * count, a timestamp, the disjoint pair, the pipeline statistics, a
@@ -782,7 +823,7 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
     constexpr uint32_t sizes[] = {4u, 8u, 8u, 16u, 88u, 4u, 16u, 4u, 16u, 16u, 16u, 16u, 4u, 4u, 4u, 4u};
     const uint32_t type = static_cast<uint32_t>(args->Query);
     query = QueryRecord{QueryRecord::tag, next_id(), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
-                        0u, 0u, 0u};
+                        0u, 0u, 0u, 0u};
     if (query.data_bytes == 0u) {
         set_error(E_INVALIDARG);
         return;
@@ -793,6 +834,8 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
 VOID D3d11Device::destroy_query(D3D10DDI_HQUERY handle)
 {
     AV_SCOPE("D3d11Device::destroy_query");
+    /* A deferred context's handle is a copy: the object is the immediate one's. */
+    if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 

@@ -109,10 +109,12 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
     UINT *const word = static_cast<UINT *>(args.pData);
     switch (static_cast<UINT>(args.Type)) {
     case D3D11DDICAPS_THREADING:
-        /* Neither free-threaded nor command lists: the runtime serializes the
-         * device and emulates deferred contexts, and the wire stays one
-         * immediate stream. */
-        *word = 0u;
+        /* Command lists, not free-threaded: a deferred context records its
+         * commands in guest memory (D3d11Device::initialize_deferred) and an
+         * executed list is appended to the immediate stream, so recording runs
+         * on the application's threads instead of being replayed by the
+         * runtime on the immediate one. */
+        *word = D3D11DDICAPS_FREETHREADED | D3D11DDICAPS_COMMANDLISTS_BUILD_2;
         return S_OK;
     case D3D11DDICAPS_SHADER:
         *word = (caps_.double_precision_float_shader_ops != 0u ? D3D11DDICAPS_SHADER_DOUBLES : 0u) |

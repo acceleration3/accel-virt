@@ -94,6 +94,7 @@ public:
     virtual bool on_EndQuery(uint32_t query) = 0;
     virtual bool on_BindQueryResults(uint64_t offset, uint32_t slots) = 0;
     virtual bool on_GetQueryData(uint32_t query, uint32_t flags, uint32_t& ready, uint8_t* data, uint64_t data_capacity, uint64_t& data_size) = 0;
+    virtual bool on_ClearState11() = 0;
 
 protected:
     ServerDispatch() = default;

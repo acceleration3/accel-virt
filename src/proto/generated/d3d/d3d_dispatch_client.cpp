@@ -713,4 +713,10 @@ bool rvk_d3d_GetQueryData(::av::ClientTransport& t, uint32_t query, uint32_t fla
     return r.remaining() == 0u;
 }
 
+bool rvk_d3d_ClearState11(::av::ClientTransport& t) {
+    AV_SCOPE("rvk_d3d_ClearState11");
+    ::av::WireWriter b = t.request_writer();
+    return t.send_async(kCmd_ClearState11, b) == ::av::TransportResult::ok;
+}
+
 }  // namespace av::d3dproto

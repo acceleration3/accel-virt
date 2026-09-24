@@ -39,7 +39,13 @@ public:
     [[nodiscard]] bool   open(uint32_t feature_level, uint32_t &hresult, uint32_t &level);
     /* The stream's flush and make_room_for, under the lock. */
     [[nodiscard]] Status flush();
-    [[nodiscard]] Status flush_hint();
+    [[nodiscard]] Status application_flush();
+    /* A deferred context's recording, taken out of its stream. */
+    [[nodiscard]] Status take_recorded(uint8_t *out, size_t capacity, size_t &length);
+    size_t               recorded_bytes();
+    /* A command list run on this device: from and back to the default state,
+     * as ExecuteCommandList leaves an immediate context. */
+    [[nodiscard]] Status execute(const uint8_t *commands, size_t length);
     [[nodiscard]] bool   make_room_for(size_t bytes);
     /* The device is destroyed on the host, and the stream stops speaking for it. */
     [[nodiscard]] bool   close();
@@ -62,6 +68,9 @@ private:
     D3dCommandStream &stream_;
     icd::ThreadLock  &lock_;
     uint32_t          device_;
+    /* The stream's recorded_total() just after a command list's closing
+     * ClearState11: a list executed right after needs no opening one. */
+    uint64_t          cleared_at_;
     Phase             phase_;
 };
 

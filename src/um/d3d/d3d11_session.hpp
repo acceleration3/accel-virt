@@ -17,6 +17,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
+#include "core/support/object_pool.hpp"
 #include "um/icd/srw_lock.hpp"
 
 #include <stdint.h>
@@ -31,6 +32,8 @@ class LogSink;
 }  // namespace av::icd
 
 namespace av::d3d11 {
+
+class D3d11Device;
 
 class D3d11Session {
 public:
@@ -51,6 +54,9 @@ public:
     d3d::D3dCommandStream &stream();
     icd::ThreadLock       &lock();
     QueryResults          &query_results();
+    KmtTransport          &transport();
+    /* The deferred contexts of the session's devices. */
+    ObjectPool<D3d11Device> &contexts();
 
 private:
     static constexpr uint8_t  ring_order = 22u;
@@ -70,6 +76,7 @@ private:
     ObjectStorage<KmtBlobArena>          arena_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
     QueryResults                         query_results_;
+    ObjectPool<D3d11Device>              contexts_;
     uint8_t                             *staging_;
     uint8_t                             *batch_;
     uint32_t                             members_;

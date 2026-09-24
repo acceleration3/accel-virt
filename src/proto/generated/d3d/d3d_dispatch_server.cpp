@@ -1192,6 +1192,16 @@ static bool decode_GetQueryData(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     return true;
 }
 
+static bool decode_ClearState11(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d:ClearState11");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ClearState11()) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_CreateDevice11:
@@ -1259,6 +1269,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_EndQuery:
         case kCmd_BindQueryResults:
         case kCmd_GetQueryData:
+        case kCmd_ClearState11:
             return true;
         default: return false;
     }
@@ -1332,6 +1343,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_EndQuery: return decode_EndQuery(s, r, reply, arena);
         case kCmd_BindQueryResults: return decode_BindQueryResults(s, r, reply, arena);
         case kCmd_GetQueryData: return decode_GetQueryData(s, r, reply, arena);
+        case kCmd_ClearState11: return decode_ClearState11(s, r, reply, arena);
         default: return false;
     }
 }

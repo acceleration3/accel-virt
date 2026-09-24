@@ -549,6 +549,14 @@ bool D3dBackend::on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64
     return true;
 }
 
+bool D3dBackend::on_ClearState11()
+{
+    AV_SCOPE("D3dBackend::on_ClearState11");
+    if (!has_device()) return false;
+    device11_->context()->ClearState();
+    return true;
+}
+
 bool D3dBackend::on_Flush11()
 {
     AV_SCOPE("D3dBackend::on_Flush11");

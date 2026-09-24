@@ -9,6 +9,7 @@
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
+#include "um/d3d/device_call.hpp"
 #include "um/d3d/device_handle.hpp"
 
 namespace av::d3d11 {
@@ -16,532 +17,532 @@ namespace av::d3d11 {
 namespace {
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DefaultConstantBufferUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
-{ DeviceHandle(device.pDrvPrivate).device().default_constant_buffer_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
+{ DeviceCall(device.pDrvPrivate).device().default_constant_buffer_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_VsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().vs_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().vs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().ps_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().ps_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().ps_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().ps_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().ps_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().ps_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().vs_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().vs_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexed(D3D10DDI_HDEVICE device, UINT a1, UINT a2, INT a3)
-{ DeviceHandle(device.pDrvPrivate).device().draw_indexed(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().draw_indexed(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_Draw(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().draw(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().draw(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_ia_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_unmap(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_ia_buffer_unmap(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_map_discard(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_constant_buffer_map_discard(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicIABufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_ia_buffer_map_discard(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_ia_buffer_map_discard(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_unmap(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_constant_buffer_unmap(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().ps_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().ps_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_IaSetInputLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
-{ DeviceHandle(device.pDrvPrivate).device().ia_set_input_layout(a1); }
+{ DeviceCall(device.pDrvPrivate).device().ia_set_input_layout(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_IaSetVertexBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().ia_set_vertex_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().ia_set_vertex_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_IaSetIndexBuffer(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, DXGI_FORMAT a2, UINT a3)
-{ DeviceHandle(device.pDrvPrivate).device().ia_set_index_buffer(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().ia_set_index_buffer(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexedInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, INT a4, UINT a5)
-{ DeviceHandle(device.pDrvPrivate).device().draw_indexed_instanced(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().draw_indexed_instanced(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, UINT a4)
-{ DeviceHandle(device.pDrvPrivate).device().draw_instanced(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().draw_instanced(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicResourceMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_resource_map_discard(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_resource_map_discard(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_resource_unmap(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_resource_unmap(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().gs_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().gs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().gs_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().gs_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_IaSetTopology(D3D10DDI_HDEVICE device, D3D10_DDI_PRIMITIVE_TOPOLOGY a1)
-{ DeviceHandle(device.pDrvPrivate).device().ia_set_topology(a1); }
+{ DeviceCall(device.pDrvPrivate).device().ia_set_topology(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_StagingResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().staging_resource_map(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().staging_resource_map(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_StagingResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().staging_resource_unmap(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().staging_resource_unmap(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().vs_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().vs_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_VsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().vs_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().vs_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().gs_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().gs_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().gs_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().gs_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetRenderTargets(D3D10DDI_HDEVICE device, const D3D10DDI_HRENDERTARGETVIEW * a1, UINT a2, UINT a3, D3D10DDI_HDEPTHSTENCILVIEW a4, const D3D11DDI_HUNORDEREDACCESSVIEW * a5, const UINT * a6, UINT a7, UINT a8, UINT a9, UINT a10)
-{ DeviceHandle(device.pDrvPrivate).device().set_render_targets(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
+{ DeviceCall(device.pDrvPrivate).device().set_render_targets(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ShaderResourceViewReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1, D3D10DDI_HRESOURCE a2)
-{ DeviceHandle(device.pDrvPrivate).device().shader_resource_view_read_after_write_hazard(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().shader_resource_view_read_after_write_hazard(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ DeviceHandle(device.pDrvPrivate).device().resource_read_after_write_hazard(a1); }
+{ DeviceCall(device.pDrvPrivate).device().resource_read_after_write_hazard(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1, const FLOAT * a2, UINT a3)
-{ DeviceHandle(device.pDrvPrivate).device().set_blend_state(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().set_blend_state(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_depth_stencil_state(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_depth_stencil_state(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
-{ DeviceHandle(device.pDrvPrivate).device().set_rasterizer_state(a1); }
+{ DeviceCall(device.pDrvPrivate).device().set_rasterizer_state(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_QueryEnd(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ DeviceHandle(device.pDrvPrivate).device().query_end(a1); }
+{ DeviceCall(device.pDrvPrivate).device().query_end(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_QueryBegin(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ DeviceHandle(device.pDrvPrivate).device().query_begin(a1); }
+{ DeviceCall(device.pDrvPrivate).device().query_begin(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceCopyRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
-{ DeviceHandle(device.pDrvPrivate).device().resource_copy_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ DeviceCall(device.pDrvPrivate).device().resource_copy_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
-{ DeviceHandle(device.pDrvPrivate).device().resource_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
+{ DeviceCall(device.pDrvPrivate).device().resource_update_subresource_up(a1, a2, a3, a4, a5, a6, a7); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SoSetTargets(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4)
-{ DeviceHandle(device.pDrvPrivate).device().so_set_targets(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().so_set_targets(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawAuto(D3D10DDI_HDEVICE device)
-{ DeviceHandle(device.pDrvPrivate).device().draw_auto(); }
+{ DeviceCall(device.pDrvPrivate).device().draw_auto(); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetViewports(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_VIEWPORT * a3)
-{ DeviceHandle(device.pDrvPrivate).device().set_viewports(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().set_viewports(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetScissorRects(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_RECT * a3)
-{ DeviceHandle(device.pDrvPrivate).device().set_scissor_rects(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().set_scissor_rects(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ClearRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1, FLOAT * a2)
-{ DeviceHandle(device.pDrvPrivate).device().clear_render_target_view(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().clear_render_target_view(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ClearDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1, UINT a2, FLOAT a3, UINT8 a4)
-{ DeviceHandle(device.pDrvPrivate).device().clear_depth_stencil_view(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().clear_depth_stencil_view(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetPredication(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, BOOL a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_predication(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_predication(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_QueryGetData(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, void * a2, UINT a3, UINT a4)
-{ DeviceHandle(device.pDrvPrivate).device().query_get_data(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().query_get_data(a1, a2, a3, a4); }
 
 extern "C" BOOL APIENTRY rvkumd_d3d11_Flush(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ return DeviceHandle(device.pDrvPrivate).device().flush(a1, a2); }
+{ return DeviceCall(device.pDrvPrivate).device().flush(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GenMips(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
-{ DeviceHandle(device.pDrvPrivate).device().gen_mips(a1); }
+{ DeviceCall(device.pDrvPrivate).device().gen_mips(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceCopy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
-{ DeviceHandle(device.pDrvPrivate).device().resource_copy(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().resource_copy(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceResolveSubresource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10DDI_HRESOURCE a3, UINT a4, DXGI_FORMAT a5)
-{ DeviceHandle(device.pDrvPrivate).device().resource_resolve_subresource(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().resource_resolve_subresource(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().resource_map(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().resource_map(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().resource_unmap(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().resource_unmap(a1, a2); }
 
 extern "C" BOOL APIENTRY rvkumd_d3d11_ResourceIsStagingBusy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ return DeviceHandle(device.pDrvPrivate).device().resource_is_staging_busy(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().resource_is_staging_busy(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_RelocateDeviceFuncs(D3D10DDI_HDEVICE device, struct D3DWDDM2_6DDI_DEVICEFUNCS * a1)
-{ DeviceHandle(device.pDrvPrivate).device().relocate_device_funcs(a1); }
+{ DeviceCall(device.pDrvPrivate).device().relocate_device_funcs(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateResourceSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_resource_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_resource_size(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateOpenedResourceSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_opened_resource_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_opened_resource_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateResource(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_resource(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_resource(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_OpenResource(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
-{ DeviceHandle(device.pDrvPrivate).device().open_resource(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().open_resource(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_resource(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_resource(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderResourceViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_resource_view_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_shader_resource_view_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateShaderResourceView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1, D3D10DDI_HSHADERRESOURCEVIEW a2, D3D10DDI_HRTSHADERRESOURCEVIEW a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_shader_resource_view(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_shader_resource_view(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShaderResourceView(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_shader_resource_view(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_shader_resource_view(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateRenderTargetViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_render_target_view_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_render_target_view_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateRenderTargetView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1, D3D10DDI_HRENDERTARGETVIEW a2, D3D10DDI_HRTRENDERTARGETVIEW a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_render_target_view(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_render_target_view(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_render_target_view(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_render_target_view(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDepthStencilViewSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_depth_stencil_view_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_depth_stencil_view_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateDepthStencilView(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1, D3D10DDI_HDEPTHSTENCILVIEW a2, D3D10DDI_HRTDEPTHSTENCILVIEW a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_depth_stencil_view(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_depth_stencil_view(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_depth_stencil_view(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_depth_stencil_view(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateElementLayoutSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_element_layout_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_element_layout_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateElementLayout(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1, D3D10DDI_HELEMENTLAYOUT a2, D3D10DDI_HRTELEMENTLAYOUT a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_element_layout(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_element_layout(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyElementLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_element_layout(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_element_layout(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateBlendStateSize(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_blend_state_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_blend_state_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateBlendState(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1, D3D10DDI_HBLENDSTATE a2, D3D10DDI_HRTBLENDSTATE a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_blend_state(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_blend_state(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_blend_state(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_blend_state(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDepthStencilStateSize(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_depth_stencil_state_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_depth_stencil_state_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateDepthStencilState(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1, D3D10DDI_HDEPTHSTENCILSTATE a2, D3D10DDI_HRTDEPTHSTENCILSTATE a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_depth_stencil_state(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_depth_stencil_state(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_depth_stencil_state(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_depth_stencil_state(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateRasterizerStateSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_rasterizer_state_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_rasterizer_state_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateRasterizerState(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1, D3D10DDI_HRASTERIZERSTATE a2, D3D10DDI_HRTRASTERIZERSTATE a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_rasterizer_state(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_rasterizer_state(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_rasterizer_state(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_rasterizer_state(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_size(a1, a2); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_shader_size(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateVertexShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_vertex_shader(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_vertex_shader(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateGeometryShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_geometry_shader(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_geometry_shader(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreatePixelShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_pixel_shader(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_pixel_shader(a1, a2, a3, a4); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_geometry_shader_with_stream_output(a1, a2); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_geometry_shader_with_stream_output(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_geometry_shader_with_stream_output(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_geometry_shader_with_stream_output(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_shader(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateSamplerSize(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_sampler_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_sampler_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateSampler(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1, D3D10DDI_HSAMPLER a2, D3D10DDI_HRTSAMPLER a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_sampler(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_sampler(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroySampler(D3D10DDI_HDEVICE device, D3D10DDI_HSAMPLER a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_sampler(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_sampler(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateQuerySize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_query_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_query_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateQuery(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1, D3D10DDI_HQUERY a2, D3D10DDI_HRTQUERY a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_query(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_query(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyQuery(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_query(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_query(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckFormatSupport(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT * a2)
-{ DeviceHandle(device.pDrvPrivate).device().check_format_support(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().check_format_support(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckMultisampleQualityLevels(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT a2, UINT a3, UINT * a4)
-{ DeviceHandle(device.pDrvPrivate).device().check_multisample_quality_levels(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().check_multisample_quality_levels(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckCounterInfo(D3D10DDI_HDEVICE device, D3D10DDI_COUNTER_INFO * a1)
-{ DeviceHandle(device.pDrvPrivate).device().check_counter_info(a1); }
+{ DeviceCall(device.pDrvPrivate).device().check_counter_info(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckCounter(D3D10DDI_HDEVICE device, D3D10DDI_QUERY a1, D3D10DDI_COUNTER_TYPE * a2, UINT * a3, LPSTR a4, UINT * a5, LPSTR a6, UINT * a7, LPSTR a8, UINT * a9)
-{ DeviceHandle(device.pDrvPrivate).device().check_counter(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ DeviceCall(device.pDrvPrivate).device().check_counter(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDevice(D3D10DDI_HDEVICE device)
 { d3d::umd_binding.root().destroy_device(device.pDrvPrivate); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetTextFilterSize(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_text_filter_size(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_text_filter_size(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceConvert(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
-{ DeviceHandle(device.pDrvPrivate).device().resource_convert(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().resource_convert(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResourceConvertRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
-{ DeviceHandle(device.pDrvPrivate).device().resource_convert_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ DeviceCall(device.pDrvPrivate).device().resource_convert_region(a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawIndexedInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().draw_indexed_instanced_indirect(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().draw_indexed_instanced_indirect(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DrawInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().draw_instanced_indirect(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().draw_instanced_indirect(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CommandListExecute(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ DeviceHandle(device.pDrvPrivate).device().command_list_execute(a1); }
+{ DeviceCall(device.pDrvPrivate).device().command_list_execute(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().hs_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().hs_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().hs_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().hs_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_HsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().hs_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().hs_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_HsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().hs_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().hs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().ds_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().ds_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().ds_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().ds_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().ds_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().ds_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().ds_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().ds_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateHullShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_hull_shader(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_hull_shader(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateDomainShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
-{ DeviceHandle(device.pDrvPrivate).device().create_domain_shader(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().create_domain_shader(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckDeferredContextHandleSizes(D3D10DDI_HDEVICE device, UINT * a1, D3D11DDI_HANDLESIZE * a2)
-{ DeviceHandle(device.pDrvPrivate).device().check_deferred_context_handle_sizes(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().check_deferred_context_handle_sizes(a1, a2); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcDeferredContextHandleSize(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_deferred_context_handle_size(a1, a2); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_deferred_context_handle_size(a1, a2); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateDeferredContextSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CALCPRIVATEDEFERREDCONTEXTSIZE * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_deferred_context_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_deferred_context_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
-{ DeviceHandle(device.pDrvPrivate).device().create_deferred_context(a1); }
+{ DeviceCall(device.pDrvPrivate).device().create_deferred_context(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_AbandonCommandList(D3D10DDI_HDEVICE device)
-{ DeviceHandle(device.pDrvPrivate).device().abandon_command_list(); }
+{ DeviceCall(device.pDrvPrivate).device().abandon_command_list(); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateCommandListSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_command_list_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_command_list_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_command_list(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_command_list(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_command_list(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_command_list(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateTessellationShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a2)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_tessellation_shader_size(a1, a2); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_tessellation_shader_size(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().ps_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().ps_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_VsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().vs_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().vs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().gs_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().gs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_HsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().hs_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().hs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().ds_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().ds_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_shader_with_ifaces(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_shader_with_ifaces(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateComputeShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_compute_shader(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_compute_shader(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_shader(a1); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_shader(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_shader_resources(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_shader_resources(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_samplers(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_samplers(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_constant_buffers(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_constant_buffers(a1, a2, a3, a4, a5); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateUnorderedAccessViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_unordered_access_view_size(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_unordered_access_view_size(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateUnorderedAccessView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1, D3D11DDI_HUNORDEREDACCESSVIEW a2, D3D11DDI_HRTUNORDEREDACCESSVIEW a3)
-{ DeviceHandle(device.pDrvPrivate).device().create_unordered_access_view(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().create_unordered_access_view(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyUnorderedAccessView(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_unordered_access_view(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_unordered_access_view(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ClearUnorderedAccessViewUint(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const UINT * a2)
-{ DeviceHandle(device.pDrvPrivate).device().clear_unordered_access_view_uint(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().clear_unordered_access_view_uint(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ClearUnorderedAccessViewFloat(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const FLOAT * a2)
-{ DeviceHandle(device.pDrvPrivate).device().clear_unordered_access_view_float(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().clear_unordered_access_view_float(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CsSetUnorderedAccessViews(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D11DDI_HUNORDEREDACCESSVIEW * a3, const UINT * a4)
-{ DeviceHandle(device.pDrvPrivate).device().cs_set_unordered_access_views(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().cs_set_unordered_access_views(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_Dispatch(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3)
-{ DeviceHandle(device.pDrvPrivate).device().dispatch(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().dispatch(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DispatchIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().dispatch_indirect(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().dispatch_indirect(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetResourceMinLOD(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, FLOAT a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_resource_min_lod(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_resource_min_lod(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CopyStructureCount(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D11DDI_HUNORDEREDACCESSVIEW a3)
-{ DeviceHandle(device.pDrvPrivate).device().copy_structure_count(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().copy_structure_count(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_RecycleCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ DeviceHandle(device.pDrvPrivate).device().recycle_command_list(a1); }
+{ DeviceCall(device.pDrvPrivate).device().recycle_command_list(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d11_RecycleCreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
-{ return DeviceHandle(device.pDrvPrivate).device().recycle_create_command_list(a1, a2, a3); }
+{ return DeviceCall(device.pDrvPrivate).device().recycle_create_command_list(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d11_RecycleCreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
-{ return DeviceHandle(device.pDrvPrivate).device().recycle_create_deferred_context(a1); }
+{ return DeviceCall(device.pDrvPrivate).device().recycle_create_deferred_context(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_RecycleDestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ DeviceHandle(device.pDrvPrivate).device().recycle_destroy_command_list(a1); }
+{ DeviceCall(device.pDrvPrivate).device().recycle_destroy_command_list(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_Discard(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const D3D10_DDI_RECT * a3, UINT a4)
-{ DeviceHandle(device.pDrvPrivate).device().discard(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().discard(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_AssignDebugBinary(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const void * a3)
-{ DeviceHandle(device.pDrvPrivate).device().assign_debug_binary(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().assign_debug_binary(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DynamicConstantBufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ DeviceHandle(device.pDrvPrivate).device().dynamic_constant_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().dynamic_constant_buffer_map_no_overwrite(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CheckDirectFlipSupport(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2, UINT a3, BOOL * a4)
-{ DeviceHandle(device.pDrvPrivate).device().check_direct_flip_support(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().check_direct_flip_support(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ClearView(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const FLOAT * a3, const D3D10_DDI_RECT * a4, UINT a5)
-{ DeviceHandle(device.pDrvPrivate).device().clear_view(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().clear_view(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_UpdateTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a3, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a4, D3D10DDI_HRESOURCE a5, UINT a6, const UINT * a7, const UINT * a8, const UINT * a9, UINT a10)
-{ DeviceHandle(device.pDrvPrivate).device().update_tile_mappings(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
+{ DeviceCall(device.pDrvPrivate).device().update_tile_mappings(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CopyTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, D3D10DDI_HRESOURCE a3, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a4, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a5, UINT a6)
-{ DeviceHandle(device.pDrvPrivate).device().copy_tile_mappings(a1, a2, a3, a4, a5, a6); }
+{ DeviceCall(device.pDrvPrivate).device().copy_tile_mappings(a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CopyTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, D3D10DDI_HRESOURCE a4, UINT64 a5, UINT a6)
-{ DeviceHandle(device.pDrvPrivate).device().copy_tiles(a1, a2, a3, a4, a5, a6); }
+{ DeviceCall(device.pDrvPrivate).device().copy_tiles(a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_UpdateTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, const void * a4, UINT a5)
-{ DeviceHandle(device.pDrvPrivate).device().update_tiles(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().update_tiles(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_TiledResourceBarrier(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, D3D11DDI_HANDLETYPE a3, void * a4)
-{ DeviceHandle(device.pDrvPrivate).device().tiled_resource_barrier(a1, a2, a3, a4); }
+{ DeviceCall(device.pDrvPrivate).device().tiled_resource_barrier(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GetMipPacking(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT * a2, UINT * a3)
-{ DeviceHandle(device.pDrvPrivate).device().get_mip_packing(a1, a2, a3); }
+{ DeviceCall(device.pDrvPrivate).device().get_mip_packing(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ResizeTilePool(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT64 a2)
-{ DeviceHandle(device.pDrvPrivate).device().resize_tile_pool(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().resize_tile_pool(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetMarker(D3D10DDI_HDEVICE device)
-{ DeviceHandle(device.pDrvPrivate).device().set_marker(); }
+{ DeviceCall(device.pDrvPrivate).device().set_marker(); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetMarkerMode(D3D10DDI_HDEVICE device, D3DWDDM1_3DDI_MARKER_TYPE a1, UINT a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_marker_mode(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_marker_mode(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetHardwareProtection(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, BOOL a2)
-{ DeviceHandle(device.pDrvPrivate).device().set_hardware_protection(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().set_hardware_protection(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_GetResourceLayout(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DKMT_HANDLE * a3, D3DWDDM2_0DDI_TEXTURE_LAYOUT * a4, UINT * a5, D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT * a6)
-{ DeviceHandle(device.pDrvPrivate).device().get_resource_layout(a1, a2, a3, a4, a5, a6); }
+{ DeviceCall(device.pDrvPrivate).device().get_resource_layout(a1, a2, a3, a4, a5, a6); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d11_RetrieveShaderComment(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, WCHAR * a2, SIZE_T * a3)
-{ return DeviceHandle(device.pDrvPrivate).device().retrieve_shader_comment(a1, a2, a3); }
+{ return DeviceCall(device.pDrvPrivate).device().retrieve_shader_comment(a1, a2, a3); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetHardwareProtectionState(D3D10DDI_HDEVICE device, BOOL a1)
-{ DeviceHandle(device.pDrvPrivate).device().set_hardware_protection_state(a1); }
+{ DeviceCall(device.pDrvPrivate).device().set_hardware_protection_state(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_AcquireResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
-{ DeviceHandle(device.pDrvPrivate).device().acquire_resource(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().acquire_resource(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_ReleaseResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
-{ DeviceHandle(device.pDrvPrivate).device().release_resource(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().release_resource(a1, a2); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d11_CalcPrivateShaderCacheSessionSize(D3D10DDI_HDEVICE device)
-{ return DeviceHandle(device.pDrvPrivate).device().calc_private_shader_cache_session_size(); }
+{ return DeviceCall(device.pDrvPrivate).device().calc_private_shader_cache_session_size(); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_CreateShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1, D3DWDDM2_2DDI_HRTCACHESESSION a2)
-{ DeviceHandle(device.pDrvPrivate).device().create_shader_cache_session(a1, a2); }
+{ DeviceCall(device.pDrvPrivate).device().create_shader_cache_session(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_DestroyShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
-{ DeviceHandle(device.pDrvPrivate).device().destroy_shader_cache_session(a1); }
+{ DeviceCall(device.pDrvPrivate).device().destroy_shader_cache_session(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_SetShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
-{ DeviceHandle(device.pDrvPrivate).device().set_shader_cache_session(a1); }
+{ DeviceCall(device.pDrvPrivate).device().set_shader_cache_session(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_QueryScanoutCaps(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3DWDDM2_6DDI_SCANOUT_FLAGS * a5)
-{ DeviceHandle(device.pDrvPrivate).device().query_scanout_caps(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().query_scanout_caps(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d11_PrepareScanoutTransformation(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3D10_DDI_RECT * a5)
-{ DeviceHandle(device.pDrvPrivate).device().prepare_scanout_transformation(a1, a2, a3, a4, a5); }
+{ DeviceCall(device.pDrvPrivate).device().prepare_scanout_transformation(a1, a2, a3, a4, a5); }
 
 }  // namespace
 

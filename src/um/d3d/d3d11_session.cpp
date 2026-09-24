@@ -1,6 +1,7 @@
 #include "um/d3d/d3d11_session.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
@@ -8,7 +9,7 @@
 namespace av::d3d11 {
 
 D3d11Session::D3d11Session(Kmt &kmt, BlockSource &memory, icd::LogSink &log)
-    : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(), query_results_(),
+    : memory_(memory), log_(log), lock_(), connection_(kmt), transport_(), arena_(), stream_(), query_results_(), contexts_(memory),
       staging_(nullptr), batch_(nullptr), members_(0u), next_id_(0u)
 {
     AV_SCOPE("D3d11Session::D3d11Session");
@@ -112,6 +113,18 @@ icd::ThreadLock &D3d11Session::lock()
 {
     AV_SCOPE("D3d11Session::lock");
     return lock_;
+}
+
+KmtTransport &D3d11Session::transport()
+{
+    AV_SCOPE("D3d11Session::transport");
+    return transport_.object();
+}
+
+ObjectPool<D3d11Device> &D3d11Session::contexts()
+{
+    AV_SCOPE("D3d11Session::contexts");
+    return contexts_;
 }
 
 }  // namespace av::d3d11

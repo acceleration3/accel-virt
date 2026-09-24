@@ -114,7 +114,7 @@ def ret_type(ret):
 
 def thunks(table):
     lines = [HEADER, "/* The ABI boundary C requires: the runtime calls each slot with the device", " * handle it was given and nothing else, so each thunk is one line into the", " * device the handle's block names. */",
-             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/umd_binding.hpp"', '#include "icd/d3d/umd_root.hpp"', '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/d3d11_dxgi_thunks.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
+             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/umd_binding.hpp"', '#include "icd/d3d/umd_root.hpp"', '#include "um/d3d/d3d11_ddi.hpp"', '#include "um/d3d/d3d11_device.hpp"', '#include "um/d3d/d3d11_dxgi_thunks.hpp"', '#include "um/d3d/device_call.hpp"', '#include "um/d3d/device_handle.hpp"', "", "namespace av::d3d11 {", "", "namespace {", ""]
     for name, _pfn, ret, parameters in table:
         names = ["device"] + [f"a{index}" for index in range(1, len(parameters))]
         declared = ", ".join(f"{kind} {label}" for kind, label in zip(parameters, names))
@@ -125,7 +125,7 @@ def thunks(table):
             lines.append(f"{{ {keyword}d3d::umd_binding.root().{ROOT_SLOTS[name]}(device.pDrvPrivate); }}")
             lines.append("")
             continue
-        lines.append(f"{{ {keyword}DeviceHandle(device.pDrvPrivate).device().{snake(name)}({arguments}); }}")
+        lines.append(f"{{ {keyword}DeviceCall(device.pDrvPrivate).device().{snake(name)}({arguments}); }}")
         lines.append("")
     lines += ["}  // namespace", "", f"void fill_device_funcs({TABLE} &table)", "{", '    AV_SCOPE("fill_device_funcs");']
     for name, _pfn, _ret, _parameters in table:

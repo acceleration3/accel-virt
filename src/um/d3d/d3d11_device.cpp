@@ -4,12 +4,18 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/common/thread_lock.hpp"
+#include "icd/d3d/device_table.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 #include "um/d3d/d3d11_session.hpp"
+#include "um/d3d/device_handle.hpp"
+
+extern "C" VOID APIENTRY rvkumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device);
 
 namespace av::d3d11 {
 
@@ -33,7 +39,8 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
-      core_(nullptr), dxgi_(nullptr), channel_(), present_context_(nullptr), feature_level_(0u),
+      core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
+      recording_block_(nullptr), present_context_(nullptr), feature_level_(0u),
       guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
@@ -42,6 +49,12 @@ D3d11Device::D3d11Device(D3d11Session &session, BlockSource &memory, icd::LogSin
 D3d11Device::~D3d11Device()
 {
     AV_SCOPE("D3d11Device::~D3d11Device");
+    if (parent_ != nullptr) {
+        if (channel_.constructed()) channel_.destroy();
+        if (recording_.constructed()) recording_.destroy();
+        if (recording_block_ != nullptr) memory_.release(recording_block_);
+        return;
+    }
     if (channel_.constructed()) {
         static_cast<void>(channel_.object().close());
         static_cast<void>(channel_.object().flush());
@@ -115,6 +128,72 @@ void D3d11Device::set_error(HRESULT result)
     text.append_hex(static_cast<uint32_t>(result), 8u);
     log_.write(text.text());
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
+}
+
+bool D3d11Device::context_local(void *handle, const void *immediate, size_t bytes) const
+{
+    AV_SCOPE("D3d11Device::context_local");
+    if (parent_ == nullptr) return false;
+    if (handle != nullptr && immediate != nullptr) __builtin_memcpy(handle, immediate, bytes);
+    return true;
+}
+
+void D3d11Device::still_drawing()
+{
+    AV_SCOPE("D3d11Device::still_drawing");
+    if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, DXGI_DDI_ERR_WASSTILLDRAWING);
+}
+
+HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_CREATEDEFERREDCONTEXT &create)
+{
+    AV_SCOPE("D3d11Device::initialize_deferred");
+    if (!parent.channel_.constructed()) return E_FAIL;
+    parent_ = &parent;
+    runtime_ = parent.runtime_;
+    core_layer_ = create.hRTCoreLayer;
+    core_ = create.p11UMCallbacks;
+    kernel_ = parent.kernel_;
+    feature_level_ = parent.feature_level_;
+    recording_block_ = static_cast<uint8_t *>(memory_.allocate(recording_bytes, Pool::paged));
+    if (recording_block_ == nullptr) return E_OUTOFMEMORY;
+    const uint32_t device = parent.channel_.object().device();
+    static_cast<void>(recording_.construct(session_.transport(), recording_block_, recording_bytes));
+    recording_.object().record();
+    /* Recorded for the parent's device, which execution selects first. */
+    recording_.object().selected(device);
+    static_cast<void>(channel_.construct(recording_.object(), recording_lock_, device));
+    return S_OK;
+}
+
+void D3d11Device::lock_calls()
+{
+    AV_SCOPE("D3d11Device::lock_calls");
+    const uint32_t self = GetCurrentThreadId();
+    if (__atomic_load_n(&calls_owner_, __ATOMIC_ACQUIRE) == self) {
+        calls_depth_++;
+        return;
+    }
+    calls_.acquire();
+    __atomic_store_n(&calls_owner_, self, __ATOMIC_RELEASE);
+    calls_depth_ = 1u;
+}
+
+void D3d11Device::unlock_calls()
+{
+    AV_SCOPE("D3d11Device::unlock_calls");
+    if (--calls_depth_ != 0u) return;
+    __atomic_store_n(&calls_owner_, 0u, __ATOMIC_RELEASE);
+    calls_.release();
+}
+
+void D3d11Device::retire()
+{
+    AV_SCOPE("D3d11Device::retire");
+    if (parent_ == nullptr) return;
+    icd::ThreadLock &lock = session_.lock();
+    lock.acquire();
+    static_cast<void>(session_.contexts().destroy(this));
+    lock.release();
 }
 
 bool D3d11Device::removed_on_host()
@@ -303,8 +382,7 @@ void D3d11Device::destroy_object(uint32_t id)
 BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
-    static_cast<void>(d3dproto::rvk_d3d_Flush11(wire()));
-    if (wire().flush_hint() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (wire().application_flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
     return TRUE;
 }
 
@@ -427,59 +505,131 @@ VOID D3d11Device::prepare_scanout_transformation(D3D10DDI_HRESOURCE, UINT, D3DDD
     AV_SCOPE("D3d11Device::prepare_scanout_transformation");
 }
 
-/* ---------------------------------------------------------------- what the caps refuse */
-
-VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST)
+VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d11Device::command_list_execute");
-    set_error(E_NOTIMPL);
+    const auto &list = *static_cast<const CommandListRecord *>(handle.pDrvPrivate);
+    if (list.magic != CommandListRecord::tag) {
+        set_error(E_INVALIDARG);
+        return;
+    }
+    if (wire().execute(list.commands, list.length) != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
-VOID D3d11Device::check_deferred_context_handle_sizes(UINT *count, D3D11DDI_HANDLESIZE *)
+/* A context-local handle is a copy of the immediate context's block
+ * (context_local), so each type needs what its block does. */
+SIZE_T D3d11Device::context_handle_bytes(uint32_t type) const
+{
+    AV_SCOPE("D3d11Device::context_handle_bytes");
+    switch (type) {
+    case D3D10DDI_HT_RESOURCE: return sizeof(ResourceRecord);
+    case D3D10DDI_HT_QUERY: return sizeof(QueryRecord);
+    case D3D11DDI_HT_COMMANDLIST: return sizeof(CommandListRecord);
+    default: return sizeof(ObjectRecord);
+    }
+}
+
+VOID D3d11Device::check_deferred_context_handle_sizes(UINT *count, D3D11DDI_HANDLESIZE *sizes)
 {
     AV_SCOPE("D3d11Device::check_deferred_context_handle_sizes");
-    if (count != nullptr) *count = 0u;
+    constexpr uint32_t types = static_cast<uint32_t>(D3DWDDM2_2DDI_HT_CACHESESSION) + 1u;
+    if (count == nullptr) return;
+    if (sizes != nullptr) {
+        const uint32_t filled = *count < types ? *count : types;
+        for (uint32_t type = 0u; type < filled; type++)
+            sizes[type] = D3D11DDI_HANDLESIZE{static_cast<D3D11DDI_HANDLETYPE>(type), context_handle_bytes(type)};
+    }
+    *count = types;
 }
 
-SIZE_T D3d11Device::calc_deferred_context_handle_size(D3D11DDI_HANDLETYPE, void *)
+SIZE_T D3d11Device::calc_deferred_context_handle_size(D3D11DDI_HANDLETYPE type, void *)
 {
     AV_SCOPE("D3d11Device::calc_deferred_context_handle_size");
-    return 0u;
+    return context_handle_bytes(static_cast<uint32_t>(type));
 }
 
 SIZE_T D3d11Device::calc_private_deferred_context_size(const D3D11DDIARG_CALCPRIVATEDEFERREDCONTEXTSIZE *)
 {
     AV_SCOPE("D3d11Device::calc_private_deferred_context_size");
-    return 0u;
+    return d3d::DeviceTable::private_bytes;
 }
 
-VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEXT *)
+VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEXT *args)
 {
     AV_SCOPE("D3d11Device::create_deferred_context");
-    set_error(E_NOTIMPL);
+    if (args == nullptr || args->hDrvContext.pDrvPrivate == nullptr || args->pWDDM2_6ContextFuncs == nullptr) {
+        set_error(E_INVALIDARG);
+        return;
+    }
+    D3d11Device *context = nullptr;
+    session_.lock().acquire();
+    const Status pooled = session_.contexts().create(context, session_, memory_, log_, caps_);
+    session_.lock().release();
+    if (pooled != Status::ok) {
+        set_error(E_OUTOFMEMORY);
+        return;
+    }
+    const HRESULT made = context->initialize_deferred(*this, *args);
+    if (FAILED(made)) {
+        session_.lock().acquire();
+        static_cast<void>(session_.contexts().destroy(context));
+        session_.lock().release();
+        set_error(made);
+        return;
+    }
+    DeviceHandle(args->hDrvContext.pDrvPrivate).bind(*context);
+    fill_device_funcs(*args->pWDDM2_6ContextFuncs);
+    args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &rvkumd_d3d11_DestroyDeferredContext;
 }
 
 VOID D3d11Device::abandon_command_list()
 {
     AV_SCOPE("D3d11Device::abandon_command_list");
+    size_t dropped = 0u;
+    static_cast<void>(wire().take_recorded(nullptr, 0u, dropped));
 }
 
 SIZE_T D3d11Device::calc_private_command_list_size(const D3D11DDIARG_CREATECOMMANDLIST *)
 {
     AV_SCOPE("D3d11Device::calc_private_command_list_size");
-    return 0u;
+    return sizeof(CommandListRecord);
 }
 
-VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *, D3D11DDI_HCOMMANDLIST,
+/* The deferred context's recording becomes the list's own copy, and the
+ * context starts recording afresh. */
+VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args, D3D11DDI_HCOMMANDLIST handle,
                                       D3D11DDI_HRTCOMMANDLIST)
 {
     AV_SCOPE("D3d11Device::create_command_list");
-    set_error(E_NOTIMPL);
+    auto &list = *static_cast<CommandListRecord *>(handle.pDrvPrivate);
+    list = CommandListRecord{0u, 0u, nullptr, 0u};
+    if (args == nullptr) {
+        set_error(E_INVALIDARG);
+        return;
+    }
+    D3d11Device   &context = DeviceHandle(args->hDeferredContext.pDrvPrivate).device();
+    const size_t   bytes = context.wire().recorded_bytes();
+    uint8_t *const commands = bytes == 0u ? nullptr : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    if (bytes != 0u && commands == nullptr) {
+        set_error(E_OUTOFMEMORY);
+        return;
+    }
+    size_t taken = 0u;
+    if (context.wire().take_recorded(commands, bytes, taken) != Status::ok) {
+        if (commands != nullptr) memory_.release(commands);
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return;
+    }
+    list = CommandListRecord{CommandListRecord::tag, 0u, commands, taken};
 }
 
-VOID D3d11Device::destroy_command_list(D3D11DDI_HCOMMANDLIST)
+VOID D3d11Device::destroy_command_list(D3D11DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d11Device::destroy_command_list");
+    auto &list = *static_cast<CommandListRecord *>(handle.pDrvPrivate);
+    if (list.magic != CommandListRecord::tag) return;
+    if (list.commands != nullptr) memory_.release(list.commands);
+    list = CommandListRecord{0u, 0u, nullptr, 0u};
 }
 
 VOID D3d11Device::recycle_command_list(D3D11DDI_HCOMMANDLIST)
@@ -487,22 +637,43 @@ VOID D3d11Device::recycle_command_list(D3D11DDI_HCOMMANDLIST)
     AV_SCOPE("D3d11Device::recycle_command_list");
 }
 
-HRESULT D3d11Device::recycle_create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *, D3D11DDI_HCOMMANDLIST,
-                                                 D3D11DDI_HRTCOMMANDLIST)
+HRESULT D3d11Device::recycle_create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args, D3D11DDI_HCOMMANDLIST handle,
+                                                 D3D11DDI_HRTCOMMANDLIST runtime)
 {
     AV_SCOPE("D3d11Device::recycle_create_command_list");
-    return E_NOTIMPL;
+    create_command_list(args, handle, runtime);
+    return static_cast<const CommandListRecord *>(handle.pDrvPrivate)->magic == CommandListRecord::tag ? S_OK
+                                                                                                         : E_OUTOFMEMORY;
 }
 
-HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEXT *)
+/* The runtime reuses a deferred context's block for a fresh recording: the
+ * context already in it starts over, and a block with none gets one. */
+HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEXT *args)
 {
     AV_SCOPE("D3d11Device::recycle_create_deferred_context");
-    return E_NOTIMPL;
+    if (args == nullptr || args->hDrvContext.pDrvPrivate == nullptr || args->pWDDM2_6ContextFuncs == nullptr)
+        return E_INVALIDARG;
+    D3d11Device *const held = &DeviceHandle(args->hDrvContext.pDrvPrivate).device();
+    session_.lock().acquire();
+    D3d11Device *const live = session_.contexts().find(held);
+    session_.lock().release();
+    if (live != nullptr && live->parent_ == this) {
+        size_t dropped = 0u;
+        static_cast<void>(live->wire().take_recorded(nullptr, 0u, dropped));
+        live->core_layer_ = args->hRTCoreLayer;
+        live->core_ = args->p11UMCallbacks;
+        fill_device_funcs(*args->pWDDM2_6ContextFuncs);
+        args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &rvkumd_d3d11_DestroyDeferredContext;
+        return S_OK;
+    }
+    create_deferred_context(args);
+    return DeviceHandle(args->hDrvContext.pDrvPrivate).device().parent_ == this ? S_OK : E_OUTOFMEMORY;
 }
 
-VOID D3d11Device::recycle_destroy_command_list(D3D11DDI_HCOMMANDLIST)
+VOID D3d11Device::recycle_destroy_command_list(D3D11DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d11Device::recycle_destroy_command_list");
+    destroy_command_list(handle);
 }
 
 VOID D3d11Device::update_tile_mappings(D3D10DDI_HRESOURCE, UINT, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE *,

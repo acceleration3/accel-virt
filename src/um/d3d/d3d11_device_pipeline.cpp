@@ -577,8 +577,9 @@ VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
     AV_SCOPE("D3d11Device::query_end");
     QueryRecord &record = *static_cast<QueryRecord *>(query.pDrvPrivate);
     record.last_end = session_.query_results().ended();
-    record.misses = 0u;
+    record.first_miss = 0u;
     static_cast<void>(d3dproto::rvk_d3d_EndQuery(wire(), record.id));
+    if (record.waited_on != 0u && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
 VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, UINT flags)
@@ -589,13 +590,21 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
      * this reads memory. What is not there yet needs only its end sent - the
      * commands this driver still holds are its business, whatever
      * DO_NOT_FLUSH says about the GPU's. A slot that stays behind - another
-     * query sharing it, a full host list - is asked about the old way. */
-    constexpr uint32_t most_misses = 4096u;
+     * query sharing it, a full host list - is asked about the old way, once
+     * it has been behind longer than any GPU wait a frame makes. */
+    constexpr int64_t patience_per_second = 500;
     if (session_.query_results().read(query.id, query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
         return;
-    if (query.last_end != 0u && query.misses++ < most_misses) {
+    LARGE_INTEGER now = {};
+    LARGE_INTEGER frequency = {};
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&frequency);
+    if (query.first_miss == 0u) query.first_miss = static_cast<uint64_t>(now.QuadPart);
+    const int64_t behind = now.QuadPart - static_cast<int64_t>(query.first_miss);
+    if (query.last_end != 0u && behind < frequency.QuadPart / patience_per_second) {
+        query.waited_on = 1u;
         if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
-        else set_error(DXGI_DDI_ERR_WASSTILLDRAWING);
+        else still_drawing();
         return;
     }
     uint8_t answer[128] = {};
@@ -606,7 +615,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
         return;
     }
     if (ready == 0u) {
-        set_error(DXGI_DDI_ERR_WASSTILLDRAWING);
+        still_drawing();
         return;
     }
     if (data != nullptr && size != 0u) __builtin_memcpy(data, answer, size < answered ? size : answered);

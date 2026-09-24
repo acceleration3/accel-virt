@@ -20,7 +20,9 @@
 #define AV_UM_D3D11_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
+#include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
+#include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
 
@@ -51,6 +53,15 @@ public:
      * what the runtime handed over. The HRESULT the runtime is answered with:
      * anything but S_OK leaves the device out of the session. */
     HRESULT initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE &create);
+    /* A deferred context of `parent`: its calls record commands for the
+     * parent's host device into a block of its own, which a command list
+     * takes, and nothing reaches the host until the list is executed. */
+    HRESULT initialize_deferred(D3d11Device &parent, const D3D11DDIARG_CREATEDEFERREDCONTEXT &create);
+    /* The runtime is done with this deferred context. */
+    void    retire();
+    /* One runtime call at a time into this object (DeviceCall). */
+    void    lock_calls();
+    void    unlock_calls();
 
     /* DXGI's slots, over the table the root already published. */
     HRESULT present(DXGI_DDI_ARG_PRESENT *args);
@@ -75,6 +86,15 @@ private:
     /* An error the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
+    /* The work an asynchronous read waits on is not done yet: a status the
+     * application polls on, reported without the error log's write. */
+    void            still_drawing();
+    /* On a deferred context, a create names an object the immediate context
+     * made (the runtime handle is its block): the context-local handle is a
+     * copy of that block, and nothing reaches the host. False on the
+     * immediate context, which makes the object. */
+    bool            context_local(void *handle, const void *immediate, size_t bytes) const;
+    SIZE_T          context_handle_bytes(uint32_t type) const;
     /* Whether the host removed this device, or the session is gone: asked
      * with a round trip after a call failed, since a command the host refuses
      * removes the device that sent it and says so only when asked. */
@@ -155,6 +175,18 @@ private:
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
+    /* A deferred context's: the device it records for, and its recording. */
+    static constexpr size_t recording_bytes = 4u << 20u;
+    D3d11Device                          *parent_;
+    SrwLock                               recording_lock_;
+    SrwLock                               calls_;
+    /* The thread inside a call, and how deep: the runtime answers some calls
+     * by calling the same device back on the same thread (a rotate asks it to
+     * bind its state again), which must not wait on itself. */
+    uint32_t                              calls_owner_;
+    uint32_t                              calls_depth_;
+    ObjectStorage<d3d::D3dCommandStream>  recording_;
+    uint8_t                              *recording_block_;
     HANDLE    present_context_;
     uint32_t  feature_level_;
     static constexpr uint32_t max_guest_surfaces = 256u;
