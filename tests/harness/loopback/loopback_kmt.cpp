@@ -334,4 +334,10 @@ Status LoopbackKmt::close_shared_object(std::uint64_t)
     return Status::not_supported;
 }
 
+Status LoopbackKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
+{
+    supported = true;
+    return Status::ok;
+}
+
 }  // namespace av

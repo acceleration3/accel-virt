@@ -1123,4 +1123,10 @@ Status DdiKmt::close_shared_object(std::uint64_t handle)
     return refuse(Status::ok);
 }
 
+Status DdiKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
+{
+    supported = true;
+    return Status::ok;
+}
+
 }  // namespace av

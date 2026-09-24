@@ -1186,4 +1186,10 @@ std::uint64_t MockKmt::allocation_pages(std::uint32_t allocation)
 const std::uint8_t *MockKmt::last_private() const { return private_; }
 std::uint32_t       MockKmt::last_private_size() const { return private_size_; }
 
+Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
+{
+    supported = true;
+    return Status::ok;
+}
+
 }  // namespace av

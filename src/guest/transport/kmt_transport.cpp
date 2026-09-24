@@ -115,19 +115,33 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     /* A context a hardware queue may run on first: that is what a doorbell
      * hangs off, and a machine whose OS hands out no hardware queue refuses it
      * and gets the context this transport has always had (research.md §13). */
-    Status made = connection_.kmt().create_hw_queue_context(connection_.device(), private_data,
-                                                            sizeof private_data, context_);
+    bool doorbells = false;
+    static_cast<void>(connection_.kmt().query_native_gpu_fences(connection_.adapter(), doorbells));
+    Status made = doorbells ? connection_.kmt().create_hw_queue_context(connection_.device(), private_data,
+                                                                        sizeof private_data, context_)
+                            : Status::not_supported;
     hardware_scheduled_ = made == Status::ok;
     if (made != Status::ok)
         made = connection_.kmt().create_context_virtual(connection_.device(), private_data, sizeof private_data,
                                                         context_);
     if (made != Status::ok) return made;
-    /* A doorbell for this context, where there is a queue to hang one off: a
-     * refusal is an answer, not a failure - the transport then submits through
-     * the kernel, exactly as it did before (research.md §11). */
+    /* A hardware-scheduled context without a doorbell still submits, but
+     * through D3DKMTSubmitCommandToHwQueue at ten times the cost of the plain
+     * context's D3DKMTSubmitCommand, so none is asked for where the adapter
+     * has no native fences - a doorbell needs them, and 26100 refuses them
+     * (049 research.md §20) - and one whose doorbell is refused anyway is
+     * given back for the plain one. */
     if (hardware_scheduled_ &&
-        doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok)
+        doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok) {
         static_cast<void>(doorbell_.connect());
+    } else if (hardware_scheduled_) {
+        static_cast<void>(connection_.kmt().destroy_context(context_));
+        context_ = 0u;
+        hardware_scheduled_ = false;
+        const Status plain = connection_.kmt().create_context_virtual(connection_.device(), private_data,
+                                                                      sizeof private_data, context_);
+        if (plain != Status::ok) return plain;
+    }
     undo.dismiss();
     return Status::ok;
 }

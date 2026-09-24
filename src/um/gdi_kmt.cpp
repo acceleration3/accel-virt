@@ -187,6 +187,20 @@ Status GdiKmt::query_driver_version(uint32_t adapter, uint32_t &version)
     return status;
 }
 
+Status GdiKmt::query_native_gpu_fences(uint32_t adapter, bool &supported)
+{
+    AV_SCOPE("GdiKmt::query_native_gpu_fences");
+    D3DKMT_WDDM_3_1_CAPS    caps = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_WDDM_3_1_CAPS;
+    query.pPrivateDriverData = &caps;
+    query.PrivateDriverDataSize = sizeof caps;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    supported = status == Status::ok && caps.NativeGpuFenceSupported != 0u;
+    return status;
+}
+
 Status GdiKmt::close_adapter(uint32_t adapter)
 {
     AV_SCOPE("GdiKmt::close_adapter");
@@ -511,7 +525,11 @@ Status GdiKmt::make_context(uint32_t device, const uint8_t *private_data, uint32
      * doorbell, only runs on the node that reports context scheduling
      * (feature 049, research.md §16). */
     request.NodeOrdinal = hardware_queue ? hardware_queue_node : 0u;
-    request.EngineAffinity = 1u << request.NodeOrdinal;
+    /* The engines within the node, of which each has one. dxgkrnl passes it
+     * through to DXGKARG_CREATECONTEXT unjudged (DXGCONTEXT::Initialize) and
+     * the miniport refuses any other bit: `1 << NodeOrdinal` asked node 1 for
+     * an engine it does not have, so no hardware-queue context was ever made. */
+    request.EngineAffinity = 1u;
     request.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
     request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
     request.PrivateDriverDataSize = size;
@@ -608,6 +626,11 @@ Status GdiKmt::create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell
     D3DKMT_CREATE_DOORBELL request = {};
     request.hHwQueue = queue;
     request.hRingBuffer = ring;
+    /* The ring's head and tail live in its own header, so the ring is its own
+     * control area - and dxgkrnl refuses a doorbell without one, whatever the
+     * header's "opt" says (DXGDOORBELL::Initialize looks the handle up
+     * unconditionally). */
+    request.hRingBufferControl = ring;
     const Status made = answer(D3DKMTCreateDoorbell(&request));
     if (made != Status::ok) return made;
     doorbell = request.hDoorbell;
