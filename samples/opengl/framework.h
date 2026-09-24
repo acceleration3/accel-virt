@@ -121,6 +121,9 @@ public:
     GLuint   render_texture(GLenum format, uint32_t width, uint32_t height, uint32_t layers = 1);
     // A framebuffer of up to four colour textures and a depth one.
     GLuint   framebuffer(const GLuint *colors, uint32_t count, GLuint depth_texture);
+    // One triangle over the viewport, its corners from gl_VertexID: Direct3D's
+    // Draw(3) with no input layout.
+    void     draw_fullscreen();
     // Binds the frame's target, clears it, sets a full viewport.
     void     begin_frame(float r, float g, float b);
     void     viewport(float x, float y, float w, float h);
@@ -128,6 +131,9 @@ public:
     void     reset_state();
     float    aspect() const { return static_cast<float>(width) / static_cast<float>(height); }
     bool     failed = false;
+
+private:
+    GLuint   empty_layout_ = 0;
 };
 
 // ---- samples

@@ -454,6 +454,13 @@ GLuint Gpu::framebuffer(const GLuint *colors, uint32_t count, GLuint depth_textu
     return made;
 }
 
+void Gpu::draw_fullscreen()
+{
+    if (empty_layout_ == 0) glCreateVertexArrays(1, &empty_layout_);
+    glBindVertexArray(empty_layout_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
 void Gpu::begin_frame(float r, float g, float b)
 {
     // A Direct3D clear ignores the masks and the scissor; glClear does not.
