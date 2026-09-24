@@ -11,7 +11,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), staging_(nullptr), mutex_()
+    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -196,7 +196,10 @@ bool D3d11HostDevice::opened() const
 void D3d11HostDevice::lock(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::lock");
+    __atomic_fetch_add(&waiting_, 1u, __ATOMIC_ACQ_REL);
     pthread_mutex_lock(&mutex_);
+    __atomic_fetch_sub(&waiting_, 1u, __ATOMIC_ACQ_REL);
+    __atomic_fetch_add(&taken_, uint64_t{1}, __ATOMIC_RELEASE);
     select(state);
 }
 
@@ -211,7 +214,13 @@ void D3d11HostDevice::select(ID3DDeviceContextState *state)
 void D3d11HostDevice::unlock()
 {
     AV_SCOPE("D3d11HostDevice::unlock");
+    const uint64_t mine = __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
     pthread_mutex_unlock(&mutex_);
+    if (__atomic_load_n(&waiting_, __ATOMIC_ACQUIRE) == 0u) return;
+    /* Bounded: a waiter that is itself descheduled must not stall this one. */
+    constexpr uint32_t patience = 100000u;
+    for (uint32_t spin = 0u; spin < patience && __atomic_load_n(&taken_, __ATOMIC_ACQUIRE) == mine; spin++)
+        __builtin_ia32_pause();
 }
 
 ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)

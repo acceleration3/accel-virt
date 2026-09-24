@@ -90,6 +90,13 @@ private:
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;
     pthread_mutex_t         mutex_;
+    /* Workers waiting for the lock, and how often it was taken: a worker that
+     * lets go while another waits holds off until that one has it, since a
+     * mutex handed back at once goes to whoever asks first - the worker that
+     * just let go - and a session with batches queued starved every other,
+     * the desktop's among them. */
+    uint32_t                waiting_;
+    uint64_t                taken_;
 };
 
 }  // namespace av
