@@ -20,6 +20,7 @@
 namespace av {
 
 class D3d11HostDevice;
+class D3d12HostDevice;
 class GlDisplay;
 class OpenClDevice;
 
@@ -54,6 +55,9 @@ public:
      * does not run on, or a host without it. Not const: sessions take its
      * lock and share resources through it. */
     virtual D3d11HostDevice    *d3d11_device(uint32_t index) = 0;
+    /* The GPU's Direct3D 12 device, made through vkd3d-proton alongside it;
+     * null for a GPU with none. */
+    virtual D3d12HostDevice    *d3d12_device(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

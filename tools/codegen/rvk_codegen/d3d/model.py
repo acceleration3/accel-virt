@@ -166,12 +166,14 @@ def load(path: Path) -> Registry:
         structs[name] = Struct(name, [_parse_field(f) for f in body["fields"]])
     _layout(structs)
     reg = Registry(int(meta["api"]), meta.get("prefix", "d3d"), structs, [])
+    # Registries that share an api share its id space: each keeps to its range.
+    first_id, last_id = int(meta.get("first_id", 1)), int(meta.get("last_id", 0xffff))
     ids: set[int] = set()
     names: set[str] = set()
     for body in raw.get("command", []):
         cmd = Command(body["name"], int(body["id"]), [_parse_param(p) for p in body.get("params", [])],
                       [_parse_param(p) for p in body.get("reply", [])], body.get("doc", ""))
-        if cmd.id in ids or not 0 < cmd.id < 0x10000:
+        if cmd.id in ids or not first_id <= cmd.id <= last_id or not 0 < cmd.id < 0x10000:
             raise RegistryError(f"{cmd.name}: id {cmd.id:#x} is taken or out of range")
         if cmd.name in names:
             raise RegistryError(f"{cmd.name} twice")

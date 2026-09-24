@@ -217,6 +217,29 @@ bool DxbcContainer::add_code(const uint8_t *tokens, size_t size)
     return !overflowed_;
 }
 
+bool DxbcContainer::add_dxil(const uint8_t *program, size_t size)
+{
+    AV_SCOPE("DxbcContainer::add_dxil");
+    /* DxilProgramHeader: version, size in dwords, then DxilBitcodeHeader,
+     * whose first word is 'DXIL'. */
+    constexpr size_t   magic_at = 8u;
+    constexpr uint32_t dxil_magic = 0x4c495844u;
+    if (program == nullptr || size < magic_at + 4u || size % 4u != 0u) return false;
+    const uint32_t dwords = read_u32(program + 4u);
+    if (static_cast<size_t>(dwords) * 4u != size || read_u32(program + magic_at) != dxil_magic) return false;
+    if (!begin_chunk("DXIL")) return false;
+    put_bytes(program, size);
+    end_chunk();
+    return !overflowed_;
+}
+
+uint32_t DxbcContainer::read_u32(const uint8_t *at) const
+{
+    AV_SCOPE("DxbcContainer::read_u32");
+    return static_cast<uint32_t>(at[0]) | static_cast<uint32_t>(at[1]) << 8u | static_cast<uint32_t>(at[2]) << 16u |
+           static_cast<uint32_t>(at[3]) << 24u;
+}
+
 size_t DxbcContainer::finish()
 {
     AV_SCOPE("DxbcContainer::finish");

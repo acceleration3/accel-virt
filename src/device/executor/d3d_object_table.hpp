@@ -37,7 +37,18 @@ enum class D3dObjectKind : uint8_t {
     depth_stencil_state,
     rasterizer_state,
     sampler,
-    query
+    query,
+    /* Direct3D 12's, in the same session's table under ids of their own. */
+    heap12,
+    resource12,
+    descriptor_heap12,
+    root_signature12,
+    pipeline12,
+    queue12,
+    allocator12,
+    list12,
+    fence12,
+    query_heap12
 };
 
 class D3dObjectTable {

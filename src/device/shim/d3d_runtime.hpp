@@ -44,18 +44,33 @@ public:
      * 12_1; the HRESULT, with the device and its immediate context on S_OK. */
     int32_t create_device11(IDXGIAdapter1 *adapter, ID3D11Device *&device, ID3D11DeviceContext *&context,
                             uint32_t &feature_level) const;
-    /* vkd3d-proton's D3D12CreateDevice, on the adapter whose Vulkan device has
-     * this UUID; `device` is an ID3D12Device, null on failure. */
+    /* A vkd3d-proton device of its own on the Vulkan device with this UUID;
+     * `device` is an ID3D12Device, null on failure. */
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
+    /* Whether this vkd3d-proton imports host memory as a heap: the patched
+     * one does (tools/vkd3d-proton-patches), a stock one does not. */
+    bool    imports_host_heaps() const;
+    /* `size` bytes of host memory at `address` as an ID3D12Heap of `device`'s
+     * that only buffers can be placed in; the HRESULT, `heap` null on failure. */
+    int32_t open_host_heap(void *device, void *address, uint64_t size, void *&heap) const;
+    /* D3D12SerializeVersionedRootSignature on a D3D12_VERSIONED_ROOT_SIGNATURE_DESC;
+     * `blob` an ID3DBlob the caller owns, null on failure. */
+    int32_t serialize_root_signature(const void *desc, void *&blob) const;
 
 private:
     using CreateFactory = int32_t (*)(const void *riid, void **factory);
     using CreateDevice11 = int32_t (*)(void *adapter, uint32_t driver_type, void *software, uint32_t flags,
                                        const uint32_t *levels, uint32_t level_count, uint32_t sdk_version,
                                        ID3D11Device **device, uint32_t *level, ID3D11DeviceContext **context);
-    using CreateDevice12 = int32_t (*)(void *adapter, uint32_t minimum_level, const void *riid, void **device);
+    using GetInterface12 = int32_t (*)(const void *clsid, const void *riid, void **object);
+    using OpenHostHeap = int32_t (*)(void *device, void *address, uint64_t size, const void *riid, void **heap);
+    using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
 
     void *open_library(const char *name) const;
+    /* Where the Vulkan device with this UUID comes in the loader's
+     * enumeration, which is what vkd3d-proton selects a device by; ~0u when
+     * none has it. */
+    uint32_t vulkan_index(const uint8_t *uuid) const;
 
     void *dxgi_;
     void *d3d11_;
@@ -63,7 +78,9 @@ private:
     void *d3d12_;
     CreateFactory  create_factory_;
     CreateDevice11 create_device11_;
-    CreateDevice12 create_device12_;
+    GetInterface12 get_interface12_;
+    OpenHostHeap   open_host_heap_;
+    SerializeRoot  serialize_root_;
 };
 
 }  // namespace av

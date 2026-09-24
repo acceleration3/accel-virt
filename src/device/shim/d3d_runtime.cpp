@@ -32,7 +32,8 @@ void *D3dRuntime::open_library(const char *name) const
 
 D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), create_factory_(nullptr),
-      create_device11_(nullptr), create_device12_(nullptr)
+      create_device11_(nullptr), get_interface12_(nullptr), open_host_heap_(nullptr),
+      serialize_root_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
 }
@@ -68,8 +69,12 @@ bool D3dRuntime::open()
      * that soname, and without it every D3D12CreateDevice fails. */
     d3d12core_ = open_library("libvkd3d-proton-d3d12core.so");
     if (d3d12core_ != nullptr) d3d12_ = open_library("libvkd3d-proton-d3d12.so");
-    if (d3d12_ != nullptr)
-        create_device12_ = reinterpret_cast<CreateDevice12>(dlsym(d3d12_, "D3D12CreateDevice"));
+    if (d3d12_ != nullptr) {
+        get_interface12_ = reinterpret_cast<GetInterface12>(dlsym(d3d12_, "D3D12GetInterface"));
+        open_host_heap_ =
+            reinterpret_cast<OpenHostHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_host_pointer"));
+        serialize_root_ = reinterpret_cast<SerializeRoot>(dlsym(d3d12_, "D3D12SerializeVersionedRootSignature"));
+    }
     return true;
 }
 
@@ -81,7 +86,9 @@ void D3dRuntime::close()
      * crash at exit rather than a leak. */
     create_factory_ = nullptr;
     create_device11_ = nullptr;
-    create_device12_ = nullptr;
+    get_interface12_ = nullptr;
+    open_host_heap_ = nullptr;
+    serialize_root_ = nullptr;
     dxgi_ = nullptr;
     d3d11_ = nullptr;
     d3d12core_ = nullptr;
@@ -97,7 +104,7 @@ bool D3dRuntime::has_d3d11() const
 bool D3dRuntime::has_d3d12() const
 {
     AV_SCOPE("D3dRuntime::has_d3d12");
-    return create_device12_ != nullptr;
+    return get_interface12_ != nullptr;
 }
 
 IDXGIAdapter1 *D3dRuntime::adapter_for(const uint8_t *uuid) const
@@ -154,13 +161,95 @@ int32_t D3dRuntime::create_device11(IDXGIAdapter1 *adapter, ID3D11Device *&devic
                             &feature_level, &context);
 }
 
+uint32_t D3dRuntime::vulkan_index(const uint8_t *uuid) const
+{
+    AV_SCOPE("D3dRuntime::vulkan_index");
+    constexpr uint32_t most_devices = 16u;
+    constexpr uint32_t vulkan_1_1 = (1u << 22u) | (1u << 12u);
+    VkApplicationInfo application = {};
+    application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    application.apiVersion = vulkan_1_1;
+    VkInstanceCreateInfo create = {};
+    create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    create.pApplicationInfo = &application;
+    VkInstance instance = VK_NULL_HANDLE;
+    if (vkCreateInstance(&create, nullptr, &instance) != VK_SUCCESS) return ~0u;
+    VkPhysicalDevice devices[most_devices] = {};
+    uint32_t count = most_devices;
+    uint32_t found = ~0u;
+    if (vkEnumeratePhysicalDevices(instance, &count, devices) >= 0) {
+        for (uint32_t index = 0u; index < count && found == ~0u; index++) {
+            VkPhysicalDeviceIDProperties identity = {};
+            identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+            VkPhysicalDeviceProperties2 properties = {};
+            properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            properties.pNext = &identity;
+            vkGetPhysicalDeviceProperties2(devices[index], &properties);
+            if (memcmp(identity.deviceUUID, uuid, uuid_bytes) == 0) found = index;
+        }
+    }
+    vkDestroyInstance(instance, nullptr);
+    return found;
+}
+
+/* Through a device factory, so each GPU's device is one of its own: natively
+ * vkd3d-proton ignores the adapter and keys its singleton devices by a LUID
+ * that is zero for every GPU, so D3D12CreateDevice on the second GPU would
+ * answer the first's. The GPU is chosen by VKD3D_VULKAN_DEVICE, the one way
+ * its native build takes one, set for the call and put back after it. */
 int32_t D3dRuntime::create_device12(const uint8_t *uuid, void *&device) const
 {
     AV_SCOPE("D3dRuntime::create_device12");
+    constexpr size_t index_bytes = 16u;
     device = nullptr;
-    if (create_device12_ == nullptr || uuid == nullptr) return E_FAIL;
-    const GUID device_id = __uuidof(ID3D12Device);
-    return create_device12_(nullptr, D3D_FEATURE_LEVEL_12_0, &device_id, &device);
+    if (get_interface12_ == nullptr || uuid == nullptr) return E_FAIL;
+    const uint32_t index = vulkan_index(uuid);
+    if (index == ~0u) return E_FAIL;
+    ID3D12DeviceFactory *factory = nullptr;
+    const GUID factory_class = clsid_d3d12_device_factory;
+    const GUID factory_id = __uuidof(ID3D12DeviceFactory);
+    if (FAILED(get_interface12_(&factory_class, &factory_id, reinterpret_cast<void **>(&factory)))) return E_FAIL;
+    char previous[index_bytes] = {};
+    const char *const was = getenv("VKD3D_VULKAN_DEVICE");
+    if (was != nullptr) snprintf(previous, sizeof(previous), "%s", was);
+    char chosen[index_bytes] = {};
+    snprintf(chosen, sizeof(chosen), "%u", index);
+    setenv("VKD3D_VULKAN_DEVICE", chosen, 1);
+    const HRESULT made = factory->CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), &device);
+    if (was != nullptr) setenv("VKD3D_VULKAN_DEVICE", previous, 1);
+    else unsetenv("VKD3D_VULKAN_DEVICE");
+    factory->Release();
+    if (FAILED(made)) device = nullptr;
+    return made;
+}
+
+bool D3dRuntime::imports_host_heaps() const
+{
+    AV_SCOPE("D3dRuntime::imports_host_heaps");
+    return open_host_heap_ != nullptr;
+}
+
+int32_t D3dRuntime::open_host_heap(void *device, void *address, uint64_t size, void *&heap) const
+{
+    AV_SCOPE("D3dRuntime::open_host_heap");
+    heap = nullptr;
+    if (open_host_heap_ == nullptr || device == nullptr) return E_NOTIMPL;
+    const GUID heap_id = __uuidof(ID3D12Heap);
+    const int32_t made = open_host_heap_(device, address, size, &heap_id, &heap);
+    if (FAILED(made)) heap = nullptr;
+    return made;
+}
+
+int32_t D3dRuntime::serialize_root_signature(const void *desc, void *&blob) const
+{
+    AV_SCOPE("D3dRuntime::serialize_root_signature");
+    blob = nullptr;
+    if (serialize_root_ == nullptr || desc == nullptr) return E_NOTIMPL;
+    void *errors = nullptr;
+    const int32_t made = serialize_root_(desc, &blob, &errors);
+    if (errors != nullptr) static_cast<IUnknown *>(errors)->Release();
+    if (FAILED(made)) blob = nullptr;
+    return made;
 }
 
 }  // namespace av

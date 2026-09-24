@@ -7,6 +7,7 @@
 #ifndef AV_D3D_LOOPBACK_HPP
 #define AV_D3D_LOOPBACK_HPP
 
+#include "device/executor/imported_blob.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/wire/wire_arena.hpp"
@@ -24,8 +25,15 @@ public:
     static constexpr std::size_t reply_bytes = 64u * 1024u;
     static constexpr std::size_t arena_bytes = 4u << 20u;
 
-    explicit D3dLoopback(D3dBackend &backend);
+    /* With `guest_bytes`, a session blob arena of that many bytes of this
+     * process's memory stands for the guest's: the backend adopts it as it
+     * would a blob the guest imported, the first `lent_bytes` of it lend bulk
+     * data, and the rest is the test's to place heaps in by offset. */
+    explicit D3dLoopback(D3dBackend &backend, std::size_t guest_bytes = 0u, std::size_t lent_bytes = 0u);
     ~D3dLoopback();
+
+    /* The guest memory at `offset` of the arena; null with no arena. */
+    uint8_t *guest(std::size_t offset) const;
 
     WireWriter       request_writer() override;
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
@@ -49,6 +57,9 @@ private:
     WireArena       decode_arena_;
     ClientBlobArena blobs_;
     uint32_t        refused_;
+    uint8_t        *guest_;
+    std::size_t     guest_bytes_;
+    ImportedBlob    blob_;
 };
 
 }  // namespace av

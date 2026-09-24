@@ -63,7 +63,8 @@ uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
         void    *pPrivateDriverData;
         uint32_t PrivateDriverDataSize;
     };
-    using QueryAdapterInfoCb = int32_t(__stdcall *)(void *, QueryAdapterInfo *);
+    /* x64 has one calling convention, so no __stdcall: the host build refuses the attribute. */
+    using QueryAdapterInfoCb = int32_t (*)(void *, QueryAdapterInfo *);
     const auto query = reinterpret_cast<QueryAdapterInfoCb>(
         static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks)->pfnQueryAdapterInfoCb);
     uint64_t         words[2] = {};

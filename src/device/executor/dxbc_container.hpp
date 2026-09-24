@@ -41,6 +41,10 @@ public:
     /* The token stream as the DDI gave it: its second token is its length in
      * tokens, and a stream whose length disagrees with `size` is refused. */
     [[nodiscard]] bool add_code(const uint8_t *tokens, size_t size);
+    /* A chunk holding `size` bytes of `program` as they are: a DXIL program
+     * (its header's third word is DXIL's magic) under "DXIL". False when the
+     * bytes are not one or do not fit. */
+    [[nodiscard]] bool add_dxil(const uint8_t *program, size_t size);
     /* The header and checksum over what was added; the container's size, or 0
      * when nothing fit. */
     size_t             finish();
@@ -54,6 +58,7 @@ private:
     static constexpr size_t   header_bytes = 32u + 4u * max_chunks;
 
     bool     reserve(size_t bytes);
+    uint32_t read_u32(const uint8_t *at) const;
     void     put_u32(uint32_t value);
     void     put_bytes(const void *data, size_t size);
     void     patch_u32(size_t at, uint32_t value);

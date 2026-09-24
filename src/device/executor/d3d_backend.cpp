@@ -64,17 +64,18 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), published_(),
+    : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), published_(),
       lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
 
-bool D3dBackend::initialize(D3d11HostDevice *device11)
+bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12)
 {
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->opened()) return false;
     device11_ = device11;
+    d3d12_.initialize(device12);
     lost_ = false;
     return true;
 }
@@ -95,6 +96,7 @@ void D3dBackend::shut_down()
         objects_.clear();
         device11_->unlock();
     }
+    d3d12_.shut_down();
     selected_ = nullptr;
     selected_device_ = 0u;
     device11_ = nullptr;
@@ -104,13 +106,16 @@ void D3dBackend::shut_down()
 bool D3dBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("D3dBackend::knows");
-    return d3dproto::knows_command(command_id);
+    return d3dproto::knows_command(command_id) || d3d12_.knows(command_id);
 }
 
 bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena)
 {
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
+    /* Direct3D 12 has no immediate context to share: its commands take no
+     * Direct3D 11 lock, and a batch mixing both takes it only for the 11 ones. */
+    if (d3d12_.knows(command_id)) return d3d12_.run(command_id, payload, reply, arena);
     if (!held_) device11_->lock(selected_);
     else device11_->select(selected_);
     held_ = true;
@@ -146,7 +151,8 @@ void D3dBackend::end_batch()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    if (device11_ == nullptr || held_ || !published_.pending()) return false;
+    const bool fences_pending = d3d12_.poll();
+    if (device11_ == nullptr || held_ || !published_.pending()) return fences_pending;
     /* GetData reads no pipeline state, so no device's state is selected. */
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
