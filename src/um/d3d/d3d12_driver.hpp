@@ -55,6 +55,7 @@ private:
      * use; max_adapters when the adapter runs no Direct3D 12 or none is free. */
     uint32_t         slot_of(uint32_t kmt_adapter);
     d3d::D3dSession &session(uint32_t slot);
+    void             note(const char *what, uint64_t value);
 
     BlockSource                    &memory_;
     Kmt                            &kmt_;

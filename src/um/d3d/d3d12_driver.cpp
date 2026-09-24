@@ -1,5 +1,6 @@
 #include "um/d3d/d3d12_driver.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
@@ -51,7 +52,23 @@ d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t km
     const uint32_t slot = slot_of(kmt_adapter);
     if (slot == max_adapters) return d3d::hr_fail;
     /* The record is D3D12DDIARG_GETCAPS byte for byte (umd_record_layout.cpp). */
-    return static_cast<d3d::Hresult>(caps_[slot].answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args)));
+    const HRESULT answered = caps_[slot].answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
+    /* Which questions go unanswered is what a first run on a new D3D12Core
+     * needs to know; the runtime asks each a handful of times at most. */
+    if (FAILED(answered)) note("Direct3D 12 caps refused, type", args.Type);
+    return static_cast<d3d::Hresult>(answered);
+}
+
+void D3d12Driver::note(const char *what, uint64_t value)
+{
+    AV_SCOPE("D3d12Driver::note");
+    char       line[128] = {};
+    TextBuffer text(line, sizeof line);
+    text.append("rvkumd: ");
+    text.append(what);
+    text.append(" ");
+    text.append_decimal(value);
+    log_.write(text.text());
 }
 
 d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint32_t kmt_adapter)
@@ -67,15 +84,18 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
         static_cast<void>(devices_.destroy(device));
+        note("Direct3D 12 device refused, HRESULT", static_cast<uint32_t>(opened));
         return static_cast<d3d::Hresult>(opened);
     }
     D3d12DeviceHandle(create.hDrvDevice).bind(*device);
+    note("Direct3D 12 device made at interface", arguments.Interface);
     return d3d::hr_ok;
 }
 
 d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t bytes)
 {
     AV_SCOPE("D3d12Driver::fill_table");
+    note("Direct3D 12 table asked for, type", table_type);
     switch (table_type) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
         if (bytes < sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0109)) return d3d::hr_invalid_arg;
