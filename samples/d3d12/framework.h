@@ -134,11 +134,13 @@ struct DrawMesh {
     void                     draw(ID3D12GraphicsCommandList *list, uint32_t instances = 1) const;
 };
 
-// A sampled texture: the resource and its shader resource view.
+// A sampled texture: the resource, its shader resource view, and the view's
+// description, to write it again into a table beside others.
 struct Texture {
-    ID3D12Resource *resource = nullptr;
-    Descriptors     srv;
-    void            release();
+    ID3D12Resource                 *resource = nullptr;
+    Descriptors                     srv;
+    D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
+    void                            release();
 };
 
 // Memory the CPU writes this frame and the GPU reads: constants, dynamic
@@ -267,6 +269,8 @@ public:
     Descriptors cpu_views(uint32_t count);      // CBV/SRV/UAV, not shader visible (UAV clears)
     Descriptors rtvs(uint32_t count);
     Descriptors dsvs(uint32_t count);
+    // A table of these textures' views, in order: t0, t1... for one binding.
+    Descriptors table(const Texture *const *textures, uint32_t count);
     void        texture_view(ID3D12Resource *resource, D3D12_CPU_DESCRIPTOR_HANDLE at,
                              const D3D12_SHADER_RESOURCE_VIEW_DESC *desc = nullptr);
     void        make_sampler(D3D12_CPU_DESCRIPTOR_HANDLE at, D3D12_FILTER filter = D3D12_FILTER_ANISOTROPIC,

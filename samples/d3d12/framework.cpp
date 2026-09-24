@@ -885,7 +885,16 @@ Texture Gpu::texture(const uint32_t *texels, uint32_t w, uint32_t h, uint32_t la
         view.Texture2D.MipLevels = levels;
     }
     texture_view(made.resource, made.srv.cpu, &view);
+    made.view = view;
     return made;
+}
+
+Descriptors Gpu::table(const Texture *const *textures, uint32_t count)
+{
+    const Descriptors run = views(count);
+    for (uint32_t i = 0; i < count && run.count != 0; i++)
+        texture_view(textures[i]->resource, run.cpu_at(i), &textures[i]->view);
+    return run;
 }
 
 Upload Gpu::upload(uint32_t bytes, uint32_t alignment)
