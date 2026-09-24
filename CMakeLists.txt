@@ -176,6 +176,16 @@ target_include_directories(rvkd3d11samples_host PRIVATE ${AV_DXVK_INCLUDE})
 target_compile_options(rvkd3d11samples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
 target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
 
+# The OpenCL samples' host side (samples/opencl): the host's own OpenCL, loaded
+# at run time as the guest loads OpenCL.dll - the report's baseline
+# (tools/opencl_report.py).
+file(GLOB AV_OPENCL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opencl/*.cpp)
+list(FILTER AV_OPENCL_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+add_executable(rvkclsamples_host ${AV_OPENCL_SAMPLES_SOURCES})
+target_include_directories(rvkclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
+target_compile_options(rvkclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+target_link_libraries(rvkclsamples_host PRIVATE ${CMAKE_DL_LIBS})
+
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
