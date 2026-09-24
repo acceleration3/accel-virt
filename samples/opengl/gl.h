@@ -39,6 +39,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_BLEND 0x0BE2
 #define GL_COLOR 0x1800
 #define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_COLOR_BUFFER_BIT 0x00004000
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_COMPUTE_SHADER 0x91B9
 #define GL_CULL_FACE 0x0B44
@@ -61,9 +62,13 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_GEOMETRY_SHADER 0x8DD9
 #define GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX 0x9047
 #define GL_LESS 0x0201
+#define GL_LINE 0x1B01
 #define GL_LINEAR 0x2601
 #define GL_LINEAR_MIPMAP_LINEAR 0x2703
 #define GL_LINK_STATUS 0x8B82
+#define GL_MAX_SAMPLES 0x8D57
+#define GL_MULTISAMPLE 0x809D
+#define GL_NEAREST 0x2600
 #define GL_NONE 0
 #define GL_NO_ERROR 0
 #define GL_ONE 1
@@ -85,6 +90,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
 #define GL_TESS_EVALUATION_SHADER 0x8E87
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE_2D_ARRAY 0x8C1A
+#define GL_TEXTURE_2D_MULTISAMPLE 0x9100
 #define GL_TEXTURE_CUBE_MAP 0x8513
 #define GL_TEXTURE_CUBE_MAP_ARRAY 0x9009
 #define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
@@ -116,6 +122,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glBindVertexArray, (GLuint array)) \
     X(void, glBlendEquation, (GLenum mode)) \
     X(void, glBlendFunc, (GLenum sfactor, GLenum dfactor)) \
+    X(void, glBlitNamedFramebuffer, (GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter)) \
     X(GLenum, glCheckNamedFramebufferStatus, (GLuint framebuffer, GLenum target)) \
     X(void, glClearBufferfi, (GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil)) \
     X(void, glClearBufferfv, (GLenum buffer, GLint drawbuffer, const GLfloat *value)) \
@@ -151,6 +158,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glFrontFace, (GLenum mode)) \
     X(void, glGenerateTextureMipmap, (GLuint texture)) \
     X(GLenum, glGetError, (void)) \
+    X(void, glGetIntegerv, (GLenum pname, GLint *data)) \
     X(void, glGetProgramInfoLog, (GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog)) \
     X(void, glGetProgramiv, (GLuint program, GLenum pname, GLint *params)) \
     X(void, glGetShaderInfoLog, (GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog)) \
@@ -165,6 +173,7 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glPatchParameteri, (GLenum pname, GLint value)) \
     X(void, glPixelStorei, (GLenum pname, GLint param)) \
     X(void, glPolygonMode, (GLenum face, GLenum mode)) \
+    X(void, glPolygonOffset, (GLfloat factor, GLfloat units)) \
     X(void, glReadBuffer, (GLenum src)) \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels)) \
     X(void, glSamplerParameterf, (GLuint sampler, GLenum pname, GLfloat param)) \
@@ -172,12 +181,15 @@ typedef void(SAMPLES_GL_API *GLDEBUGPROC)(GLenum source, GLenum type, GLuint id,
     X(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length)) \
     X(void, glStencilMask, (GLuint mask)) \
     X(void, glTextureStorage2D, (GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height)) \
+    X(void, glTextureStorage2DMultisample, (GLuint texture, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
     X(void, glTextureStorage3D, (GLuint texture, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth)) \
     X(void, glTextureSubImage2D, (GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels)) \
     X(void, glTextureSubImage3D, (GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void *pixels)) \
     X(void, glUseProgram, (GLuint program)) \
     X(void, glVertexArrayAttribBinding, (GLuint vaobj, GLuint attribindex, GLuint bindingindex)) \
     X(void, glVertexArrayAttribFormat, (GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLboolean normalized, GLuint relativeoffset)) \
+    X(void, glVertexArrayAttribIFormat, (GLuint vaobj, GLuint attribindex, GLint size, GLenum type, GLuint relativeoffset)) \
+    X(void, glVertexArrayBindingDivisor, (GLuint vaobj, GLuint bindingindex, GLuint divisor)) \
     X(void, glVertexArrayElementBuffer, (GLuint vaobj, GLuint buffer)) \
     X(void, glVertexArrayVertexBuffer, (GLuint vaobj, GLuint bindingindex, GLuint buffer, GLintptr offset, GLsizei stride)) \
     X(void, glViewportIndexedf, (GLuint index, GLfloat x, GLfloat y, GLfloat w, GLfloat h)) \

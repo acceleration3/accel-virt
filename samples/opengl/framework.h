@@ -138,6 +138,9 @@ public:
     // One frame at `time` seconds into the sample's own timeline.
     virtual void        render(Gpu &gpu, float time) = 0;
     virtual void        release() = 0;
+
+protected:
+    ~Sample() = default;
 };
 
 // Every sample, in the report's order.
