@@ -286,12 +286,9 @@ VOID D3d12Device::destroy_command_queue(D3D12DDI_HCOMMANDQUEUE handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_queue");
     QueueRecord &queue = *static_cast<QueueRecord *>(handle.pDrvPrivate);
+    /* The queue's context is D3D12Core's to destroy with the queue: its
+     * device-level DestroyContextCb refuses a queue's context. */
     static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), queue.header.id), "Destroy12"));
-    if (queue.context != nullptr && core_ != nullptr) {
-        D3DDDICB_DESTROYCONTEXT destroy = {};
-        destroy.hContext = queue.context;
-        static_cast<void>(core_->pfnDestroyContextCb(queue.runtime, &destroy));
-    }
     queue = QueueRecord{};
 }
 
