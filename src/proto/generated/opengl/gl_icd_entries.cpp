@@ -714,7 +714,7 @@ GLuint APIENTRY Wrap_glCreateShader(GLenum type) {
     return ::av::glproto::rvk_glCreateShader(*rvk_t, type);
 }
 
-GLuint APIENTRY Wrap_glCreateShaderProgramv(GLenum type, GLsizei count, const GLchar** strings) {
+GLuint APIENTRY Wrap_glCreateShaderProgramv(GLenum type, GLsizei count, const GLchar*const* strings) {
     AV_SCOPE("glCreateShaderProgramv");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
@@ -1898,7 +1898,7 @@ GLuint APIENTRY Wrap_glGetUniformBlockIndex(GLuint program, const GLchar* unifor
     return ::av::glproto::rvk_glGetUniformBlockIndex(*rvk_t, program, uniformBlockName);
 }
 
-void APIENTRY Wrap_glGetUniformIndices(GLuint program, GLsizei uniformCount, const GLchar** uniformNames, GLuint* uniformIndices) {
+void APIENTRY Wrap_glGetUniformIndices(GLuint program, GLsizei uniformCount, const GLchar*const* uniformNames, GLuint* uniformIndices) {
     AV_SCOPE("glGetUniformIndices");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
@@ -3079,7 +3079,7 @@ void APIENTRY Wrap_glShaderBinary(GLsizei count, const GLuint* shaders, GLenum b
     ::av::glproto::rvk_glShaderBinary(*rvk_t, count, shaders, binaryFormat, binary, length);
 }
 
-void APIENTRY Wrap_glShaderSource(GLuint shader, GLsizei count, const GLchar** string, const GLint* length) {
+void APIENTRY Wrap_glShaderSource(GLuint shader, GLsizei count, const GLchar*const* string, const GLint* length) {
     AV_SCOPE("glShaderSource");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
@@ -3494,7 +3494,7 @@ void APIENTRY Wrap_glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLui
     ::av::glproto::rvk_glTransformFeedbackBufferRange(*rvk_t, xfb, index, buffer, offset, size);
 }
 
-void APIENTRY Wrap_glTransformFeedbackVaryings(GLuint program, GLsizei count, const GLchar** varyings, GLenum bufferMode) {
+void APIENTRY Wrap_glTransformFeedbackVaryings(GLuint program, GLsizei count, const GLchar*const* varyings, GLenum bufferMode) {
     AV_SCOPE("glTransformFeedbackVaryings");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;

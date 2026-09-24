@@ -125,10 +125,9 @@ std::uint32_t Opengl32GlEntry::create_shader(std::uint32_t type)
 
 void Opengl32GlEntry::shader_source(std::uint32_t shader, const char *source)
 {
-    /* The generated entry takes the list as the registry's (not const) pointer type. */
-    const GLchar *sources[] = {source};
-    named<void (APIENTRY *)(GLuint, GLsizei, const GLchar **, const GLint *)>("glShaderSource")(shader, 1, sources,
-                                                                                            nullptr);
+    const GLchar *const sources[] = {source};
+    named<void (APIENTRY *)(GLuint, GLsizei, const GLchar *const *, const GLint *)>("glShaderSource")(shader, 1, sources,
+                                                                                              nullptr);
 }
 
 void Opengl32GlEntry::compile_shader(std::uint32_t shader)

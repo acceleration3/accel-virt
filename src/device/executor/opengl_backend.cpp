@@ -12,6 +12,11 @@ namespace av {
 
 namespace {
 
+constexpr uint32_t gl_context_profile_mask = 0x9126u, gl_context_core_profile_bit = 0x1u;
+/* GL's error flags are one per kind: past this many, what is left is a lost
+ * context answering GL_CONTEXT_LOST to every look. */
+constexpr uint32_t error_flags = 8u;
+
 /* The generated table's loader signature: a name and whatever the caller wants
  * to reach, which here is the context the entry points come from. */
 void *resolve_through(const char *name, void *user)
@@ -69,12 +74,26 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions
     gl_.rvk_sync_user = this;
     gl_.rvk_blob = blob_at;
     gl_.rvk_blob_user = this;
+    gl_.rvk_fixed_function = granted_fixed_function();
     import_.configure(context_);
     /* Opened is served. A driver that resolves fewer entry points than the
      * table has is not refused here: the decoder refuses each command whose
      * entry point is null, one command at a time, which is the degradation a
      * guest can live with rather than a context it cannot have at all. */
     return true;
+}
+
+/* A context from before profiles has no mask to ask for, and the asking is
+ * an error: that context has the fixed-function arrays. */
+bool OpenGlBackend::granted_fixed_function()
+{
+    AV_SCOPE("OpenGlBackend::granted_fixed_function");
+    if (gl_.glGetIntegerv == nullptr || gl_.glGetError == nullptr) return true;
+    GLint mask = 0;
+    gl_.glGetIntegerv(gl_context_profile_mask, &mask);
+    for (uint32_t flag = 0u; flag < error_flags && gl_.glGetError() != 0u; flag++) {
+    }
+    return (static_cast<uint32_t>(mask) & gl_context_core_profile_bit) == 0u;
 }
 
 void OpenGlBackend::shut_down()

@@ -49,6 +49,10 @@ public:
     /* Removes glGetIntegerv, which no pixel store or binding can be asked
      * without. */
     void forget_state_queries();
+    /* A core context's table: it has no fixed-function arrays to ask of. */
+    void be_core();
+    /* How many times glIsEnabled was asked. */
+    std::uint32_t capability_queries() const;
 
     /* Pixel reads that reached the driver. */
     std::uint32_t reads() const;
@@ -83,7 +87,7 @@ public:
     void attribute_pointer(GLuint index, const void *pointer);
     void attribute_enabled(GLuint index, bool enabled);
     void attribute_query(GLuint index, GLenum pname, GLint *value);
-    GLboolean is_enabled(GLenum capability) const;
+    GLboolean is_enabled(GLenum capability);
     void client_state(GLenum capability, bool enabled);
     void client_texture(GLenum unit);
     void array_pointer(GLenum array, const void *pointer);
@@ -137,6 +141,7 @@ private:
     std::uint32_t       reads_;
     std::uint32_t       calls_;
     std::uint32_t       strays_;
+    std::uint32_t       capability_queries_;
 };
 
 }  // namespace av

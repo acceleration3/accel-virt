@@ -84,6 +84,10 @@ private:
 
     /* The entry point a kind is destroyed through. */
     void destroy_made(uint32_t kind, uint32_t name);
+    /* Whether the context the host made has the fixed-function vertex arrays
+     * a draw's check asks after - a core context has none - asked once, with
+     * whatever error the asking left cleared before the guest can read it. */
+    bool granted_fixed_function();
 
     GlContext   context_;
     glproto::RealGl gl_;

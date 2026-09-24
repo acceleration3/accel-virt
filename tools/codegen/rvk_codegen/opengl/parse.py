@@ -97,7 +97,8 @@ def _ctype_from(node: ET.Element) -> CType:
                  if w not in ("const", "GLAPI", "APIENTRY")]
         base = words[0] if words else "void"
     return CType(base=base, pointer_depth=declaration.count("*"),
-                 is_const="const" in declaration)
+                 is_const="const" in declaration,
+                 inner_const="*const*" in "".join(declaration.split()))
 
 
 def _read(path: Path, api: str, reg: RawRegistry) -> None:

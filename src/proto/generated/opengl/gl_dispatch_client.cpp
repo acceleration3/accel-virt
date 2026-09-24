@@ -2773,7 +2773,7 @@ GLuint rvk_glCreateShader(::av::ClientTransport& rvk_t, GLenum type) {
     return static_cast<GLuint>(rvk_ret);
 }
 
-GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLsizei count, const GLchar** strings) {
+GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLsizei count, const GLchar*const* strings) {
     AV_SCOPE("rvk_glCreateShaderProgramv");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const ::av::SyncCallScope rvk_call{rvk_t};
@@ -8265,7 +8265,7 @@ GLuint rvk_glGetUniformBlockIndex(::av::ClientTransport& rvk_t, GLuint program, 
     return static_cast<GLuint>(rvk_ret);
 }
 
-void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLchar** uniformNames, GLuint* uniformIndices) {
+void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLchar*const* uniformNames, GLuint* uniformIndices) {
     AV_SCOPE("rvk_glGetUniformIndices");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     const ::av::SyncCallScope rvk_call{rvk_t};
@@ -13250,7 +13250,7 @@ void rvk_glShaderBinary(::av::ClientTransport& rvk_t, GLsizei count, const GLuin
     (void)rvk_t.send_async(kCmd_glShaderBinary, rvk_b);
 }
 
-void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei count, const GLchar** string, const GLint* length) {
+void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei count, const GLchar*const* string, const GLint* length) {
     AV_SCOPE("rvk_glShaderSource");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(shader));
@@ -14860,7 +14860,7 @@ void rvk_glTransformFeedbackBufferRange(::av::ClientTransport& rvk_t, GLuint xfb
     (void)rvk_t.send_async(kCmd_glTransformFeedbackBufferRange, rvk_b);
 }
 
-void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint program, GLsizei count, const GLchar** varyings, GLenum bufferMode) {
+void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint program, GLsizei count, const GLchar*const* varyings, GLenum bufferMode) {
     AV_SCOPE("rvk_glTransformFeedbackVaryings");
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(program));

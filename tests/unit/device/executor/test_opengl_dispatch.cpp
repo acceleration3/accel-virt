@@ -543,6 +543,23 @@ TEST(opengl_dispatch, a_draw_reads_no_client_array_on_any_texture_unit)
   CHECK(send(session, av::glproto::kCmd_glDrawArrays, arrays));
   CHECK_EQ(session.gl().strays(), 0u); }
 
+/* A core context has no fixed-function arrays, and asking it about one is an
+ * error the application would read back from its own glGetError: a draw asks
+ * nothing of them there, and still refuses an attribute with no buffer. */
+TEST(opengl_dispatch, a_core_context_draw_asks_nothing_of_the_fixed_function_arrays)
+{ GlSession session;
+  const Frame arrays = Frame().varint(triangles).varint(0u).varint(3u);
+  CHECK(send(session, av::glproto::kCmd_glDrawArrays, arrays));
+  CHECK(session.gl().capability_queries() > 0u);
+  session.gl().be_core();
+  const std::uint32_t asked = session.gl().capability_queries();
+  CHECK(send(session, av::glproto::kCmd_glDrawArrays, arrays));
+  CHECK_EQ(session.gl().capability_queries(), asked);
+  CHECK(send(session, av::glproto::kCmd_glEnableVertexAttribArray, Frame().varint(0u)));
+  CHECK(!send(session, av::glproto::kCmd_glDrawArrays, arrays));
+  CHECK_EQ(session.gl().capability_queries(), asked);
+  CHECK_EQ(session.gl().strays(), 0u); }
+
 /* glMultiDrawElements reads drawcount counts and drawcount offsets. */
 TEST(opengl_dispatch, a_multi_draw_holds_its_lists_to_the_draw_count)
 { GlSession session;
