@@ -69,6 +69,7 @@ public:
     Status   query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status   query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status   query_native_gpu_fences(std::uint32_t adapter, bool &supported) override;
+    void     sleep_briefly() override;
     Status   close_adapter(std::uint32_t adapter) override;
     /* rig_luid, the one adapter's. */
     Status   adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;

@@ -56,6 +56,17 @@ Status RingWindow::publish_head(uint64_t head) const
     return blob_.write(head_offset, bytes, sizeof bytes);
 }
 
+/* Byte 5 of the header: whether the worker is watching the ring. A process
+ * that sees it set may leave the kernel out of a submission. */
+Status RingWindow::announce_awake(bool awake) const
+{
+    AV_SCOPE("RingWindow::announce_awake");
+    const uint8_t flag = awake ? 1u : 0u;
+    const Status  written = blob_.write(awake_offset, &flag, sizeof flag);
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    return written;
+}
+
 bool RingWindow::invariants_hold() const
 {
     AV_SCOPE("RingWindow::invariants_hold");

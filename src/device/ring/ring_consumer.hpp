@@ -57,6 +57,8 @@ public:
     uint64_t earliest_pending() const;
     /* Any thread: the guest has published a batch not yet taken. */
     bool     has_work() const;
+    /* Worker thread: whether it is watching the ring, for the process to read. */
+    void     announce_awake(bool awake);
     /* The Direct3D streams whose batches this one's follow. */
     void     order_with(D3dOrdering &ordering);
     uint64_t last_fence() const;

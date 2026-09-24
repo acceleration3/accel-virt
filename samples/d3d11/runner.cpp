@@ -13,6 +13,7 @@ struct Options {
     uint32_t    height = 720;
     uint32_t    warmup = 60;
     double      warmup_seconds = 1.0;
+    double      timed_seconds = 1.0;
     uint32_t    frames = 600;
     float       capture_time = 1.5f;
     bool        compile = false;
@@ -135,16 +136,31 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         gpu.context->Flush();
     }
     finish(gpu);
+    /* Blocks of the frames asked for, each finished, until a second has gone:
+     * a run of a few milliseconds measures whatever else the machine did
+     * then, and a Flush alone holds nothing back - a machine can queue a
+     * minute of frames in a second. */
     const double timed = seconds();
-    for (uint32_t frame = 0; frame < options.frames; frame++) {
-        sample.render(gpu, static_cast<float>(frame) * step);
-        gpu.context->Flush();
-    }
-    const double looped = seconds() - timed;
-    finish(gpu);
+    uint32_t     frames = 0;
+    double       looped = 0.0;
+    do {
+        const double block = seconds();
+        for (uint32_t frame = 0; frame < options.frames; frame++, frames++) {
+            sample.render(gpu, static_cast<float>(frames) * step);
+            gpu.context->Flush();
+        }
+        looped += seconds() - block;
+        finish(gpu);
+    } while (seconds() - timed < options.timed_seconds);
     const double taken = seconds() - timed;
     log_number("loop ms", looped * 1000.0);
     log_number("finish ms", (taken - looped) * 1000.0);
+    /* Twice: a sample that shows what its previous frame measured - the
+     * occlusion counts - then shows the capture time's own, however many
+     * frames each machine managed before it. */
+    sample.render(gpu, options.capture_time);
+    gpu.context->Flush();
+    finish(gpu);
     sample.render(gpu, options.capture_time);
     char path[512] = {};
     copy_text(path, sizeof path, options.out);
@@ -152,7 +168,7 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     append_text(path, sizeof path, sample.name());
     append_text(path, sizeof path, ".bgra");
     const bool captured = !gpu.failed && capture(gpu, path);
-    report(metrics, capacity, sample.name(), captured ? "ok" : "capture-failed", init_ms, options.frames, taken);
+    report(metrics, capacity, sample.name(), captured ? "ok" : "capture-failed", init_ms, frames, taken);
     sample.release();
     gpu.context->ClearState();
     gpu.context->Flush();

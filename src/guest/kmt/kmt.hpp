@@ -175,6 +175,9 @@ public:
     /* The system's performance counter and its frequency: a vertical blank
      * carries no timestamp, so a rate is measured against this. */
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
+    /* Gives the processor up for about a millisecond, for a wait that has
+     * outlasted spinning and has no kernel object to sleep on. */
+    virtual void     sleep_briefly() = 0;
     virtual uint32_t last_code() const = 0;
 
 protected:

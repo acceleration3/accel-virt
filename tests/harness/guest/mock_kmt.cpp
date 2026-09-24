@@ -1192,4 +1192,6 @@ Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
     return Status::ok;
 }
 
+void MockKmt::sleep_briefly() {}
+
 }  // namespace av

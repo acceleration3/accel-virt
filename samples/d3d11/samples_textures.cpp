@@ -1758,10 +1758,9 @@ public:
         c->Begin(queries_[1]);
         draw(gpu, sphere_, sphere_world(), {1, 1, 0, 0});
         c->End(queries_[1]);
-        UINT64 passed[2] = {};
-        for (int i = 0; i < 2; i++)
-            while (c->GetData(queries_[i], &passed[i], sizeof passed[i], 0) == S_FALSE) {
-            }
+        // As the original: the scene shows what the previous frame counted, and
+        // this frame's counts are read once all of it has been submitted.
+        const UINT64 *passed = passed_;
 
         c->ClearDepthStencilView(gpu.depth, D3D11_CLEAR_DEPTH, 1.0f, 0);
         c->OMSetDepthStencilState(nullptr, 0);
@@ -1786,6 +1785,9 @@ public:
         append_text(line, sizeof line, " samples passed");
         text_.add(line, 5, 85);
         text_.draw(gpu);
+        for (int i = 0; i < 2; i++)
+            while (c->GetData(queries_[i], &passed_[i], sizeof passed_[i], 0) == S_FALSE) {
+            }
     }
     void release() override
     {
@@ -1826,6 +1828,7 @@ private:
     DrawMesh                 teapot_, sphere_, plane_;
     ID3D11Buffer            *constants_ = nullptr;
     ID3D11Query             *queries_[2] = {};
+    UINT64 passed_[2] = {};
     ID3D11RasterizerState   *raster_ = nullptr;
     ID3D11BlendState        *blend_ = nullptr, *no_color_ = nullptr;
     ID3D11DepthStencilState *test_only_ = nullptr;

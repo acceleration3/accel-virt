@@ -80,6 +80,14 @@ Status TransportRing::publish_tail()
     return Status::ok;
 }
 
+bool TransportRing::consumer_awake() const
+{
+    AV_SCOPE("TransportRing::consumer_awake");
+    if (ring_ == nullptr) return false;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    return __atomic_load_n(ring_ + awake_offset, __ATOMIC_ACQUIRE) != 0u;
+}
+
 uint64_t TransportRing::tail() const
 {
     AV_SCOPE("TransportRing::tail");

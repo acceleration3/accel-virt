@@ -58,7 +58,8 @@ Status RingHeader::decode(const uint8_t *bytes, size_t length)
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint8_t  order = reader.read_u8();
-    reader.expect_zero(3u);
+    static_cast<void>(reader.read_u8());   /* the device's awake flag, the process's to read */
+    reader.expect_zero(2u);
     const uint64_t tail = reader.read_u64();
     const uint64_t head = reader.read_u64();
     static_cast<void>(reader.read_u64());   /* the fence the guest last published, the miniport's to read */

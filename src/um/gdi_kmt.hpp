@@ -28,6 +28,7 @@ public:
     Status   query_identity(uint32_t adapter, PciIdentity &identity) override;
     Status   query_driver_version(uint32_t adapter, uint32_t &version) override;
     Status   query_native_gpu_fences(uint32_t adapter, bool &supported) override;
+    void     sleep_briefly() override;
     Status   close_adapter(uint32_t adapter) override;
     Status   adapter_luid(uint32_t adapter, uint64_t &luid) override;
     Status   query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget,

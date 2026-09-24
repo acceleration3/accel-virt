@@ -32,10 +32,13 @@ public:
     [[nodiscard]] Status publish_head(uint64_t head) const;
 
     /* The blob holds the header and the whole data area of a valid order. */
+    [[nodiscard]] Status announce_awake(bool awake) const;
+
     bool invariants_hold() const;
 
 private:
     static constexpr uint64_t head_offset = 16u;
+    static constexpr uint64_t awake_offset = 5u;
 
     BlobWindow blob_;
     uint8_t    order_;

@@ -138,6 +138,12 @@ bool RingConsumer::has_work() const
            header.tail() - __atomic_load_n(&head_, __ATOMIC_ACQUIRE) >= BatchHeader::encoded_size;
 }
 
+void RingConsumer::announce_awake(bool awake)
+{
+    AV_SCOPE("RingConsumer::announce_awake");
+    if (attached_) static_cast<void>(ring_.announce_awake(awake));
+}
+
 uint64_t RingConsumer::earliest_pending() const
 {
     AV_SCOPE("RingConsumer::earliest_pending");

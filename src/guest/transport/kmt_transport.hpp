@@ -125,6 +125,8 @@ private:
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
     bool                          replied_within_spin(uint64_t fence);
     bool                          consumed_within_spin();
+    void                          spin_once() const;
+    template <typename Arrived> bool arrives_eventually(Arrived arrived);
     bool                          room_within_spin(uint64_t span);
 
     GuestConnection &connection_;

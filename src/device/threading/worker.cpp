@@ -175,7 +175,14 @@ void Worker::run()
     AV_SCOPE("Worker::run");
     host_.require_worker("Worker::run");
     for (;;) {
-        if (!work_within_spin()) host_.wait_event(wake_);
+        /* Asleep only once the process can see it is, and only if nothing
+         * was published before it could: the process publishes its tail and
+         * then reads the flag, this clears the flag and then reads the tail. */
+        if (!work_within_spin()) {
+            ring_.announce_awake(false);
+            if (!ring_.has_work()) host_.wait_event(wake_);
+            ring_.announce_awake(true);
+        }
         WorkItem item;
         for (Step step = next(item); step != Step::idle; step = next(item)) {
             if (step == Step::stop) return ring_.detach();

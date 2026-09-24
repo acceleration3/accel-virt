@@ -57,6 +57,7 @@ private:
     uint64_t       doorbell_submissions_;
     uint64_t       kernel_submissions_;
     bool           publishes_tail_;
+    uint64_t       user_submissions_;
 
     friend struct SubmissionPathProbe;
 };

@@ -201,6 +201,12 @@ Status GdiKmt::query_native_gpu_fences(uint32_t adapter, bool &supported)
     return status;
 }
 
+void GdiKmt::sleep_briefly()
+{
+    AV_SCOPE("GdiKmt::sleep_briefly");
+    Sleep(1u);
+}
+
 Status GdiKmt::close_adapter(uint32_t adapter)
 {
     AV_SCOPE("GdiKmt::close_adapter");

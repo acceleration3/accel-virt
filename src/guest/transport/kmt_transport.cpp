@@ -286,7 +286,7 @@ bool KmtTransport::drain()
                               ? connection_.kmt().wait_for_hw_queue(connection_.device(),
                                                                     doorbell_.progress_fence(), newest)
                               : connection_.kmt().wait_for_context(connection_.device(), context_);
-    if (waited != Status::ok) {
+    if (waited != Status::ok || !arrives_eventually([this] { return ring_.head() == ring_.tail(); })) {
         faulted_ = true;
         return false;
     }
@@ -418,7 +418,14 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
                                   ? connection_.kmt().wait_for_hw_queue(connection_.device(),
                                                                         doorbell_.progress_fence(), fence)
                                   : connection_.kmt().wait_for_context(connection_.device(), context_);
-        if (waited != Status::ok) {
+        /* A batch the kernel was not told of is the device's alone, so the
+         * kernel's wait can return before it: the slot is watched until the
+         * answer lands. */
+        if (waited != Status::ok || !arrives_eventually([this, fence] {
+                WireReader   probe(nullptr, 0u);
+                const Status read = reply_.read(fence, probe);
+                return read == Status::ok || read == Status::too_large;
+            })) {
             faulted_ = true;
             return TransportResult::failed;
         }
@@ -429,6 +436,15 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
         return TransportResult::failed;
     }
     return TransportResult::ok;
+}
+
+/* No PAUSE in a guest's spin: KVM takes a run of them for a vCPU waiting on a
+ * lock held elsewhere and descheduled it, so the answer arrived to a vCPU
+ * that was not running. A compiler barrier keeps the loads in the loop. */
+void KmtTransport::spin_once() const
+{
+    AV_SCOPE("KmtTransport::spin_once");
+    __asm__ __volatile__("" ::: "memory");
 }
 
 /* A reply usually lands within tens of microseconds, and the kernel's wait -
@@ -448,7 +464,7 @@ bool KmtTransport::replied_within_spin(uint64_t fence)
         if (read == Status::ok || read == Status::too_large) return true;
         uint64_t unused = 0u;
         if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
-        __builtin_ia32_pause();
+        spin_once();
     }
 }
 
@@ -466,7 +482,28 @@ bool KmtTransport::room_within_spin(uint64_t span)
         if (ring_.free_space() >= span) return true;
         uint64_t unused = 0u;
         if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
-        __builtin_ia32_pause();
+        spin_once();
+    }
+}
+
+/* A device that has stopped taking the ring leaves the process waiting, so
+ * the wait ends in a fault after a few seconds rather than never. */
+template <typename Arrived> bool KmtTransport::arrives_eventually(Arrived arrived)
+{
+    AV_SCOPE("KmtTransport::arrives_eventually");
+    constexpr uint64_t patience_seconds = 5u;
+    uint64_t           frequency = 0u;
+    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    for (;;) {
+        if (arrived()) return true;
+        uint64_t unused = 0u;
+        const uint64_t elapsed = connection_.kmt().performance_counter(unused) - started;
+        if (elapsed >= frequency * patience_seconds) return false;
+        /* Spinning, as a GPU wait of a few milliseconds usually is; a sleep
+         * costs a timer tick, up to 15 ms on Windows' default resolution. */
+        constexpr uint64_t spins_per_second = 50u;
+        if (elapsed < frequency / spins_per_second) spin_once();
+        else connection_.kmt().sleep_briefly();
     }
 }
 
@@ -481,7 +518,7 @@ bool KmtTransport::consumed_within_spin()
         if (ring_.head() == ring_.tail()) return true;
         uint64_t unused = 0u;
         if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
-        __builtin_ia32_pause();
+        spin_once();
     }
 }
 

@@ -53,6 +53,8 @@ public:
     uint64_t capacity() const;
     /* Data-area bytes not yet consumed by the device. */
     uint64_t free_space() const;
+    /* After a full fence: whether the device's worker is watching the ring. */
+    bool     consumer_awake() const;
 
     bool invariants_hold() const;
 
@@ -60,6 +62,7 @@ private:
     static constexpr size_t   header_size = 32u;
     static constexpr uint64_t tail_offset = 8u;
     static constexpr uint64_t head_offset = 16u;
+    static constexpr uint64_t awake_offset = 5u;
 
     void     write_wrapped(uint64_t counter, const uint8_t *source, uint32_t count);
     uint64_t read_head() const;
