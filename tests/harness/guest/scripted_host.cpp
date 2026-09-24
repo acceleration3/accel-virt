@@ -283,6 +283,20 @@ void ScriptedHost::cl_ids(std::int32_t result, const std::uint64_t *ids, std::ui
     queue(writer);
 }
 
+void ScriptedHost::cl_formats(std::int32_t result, const void *formats, std::uint32_t sent, std::uint32_t total)
+{
+    /* Eight bytes a format: the channel order and the data type. */
+    constexpr std::uint32_t format_bytes = 8u;
+    WireWriter              writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    if (formats != nullptr) {
+        writer.write_varint(sent * format_bytes);
+        writer.write(formats, sent * format_bytes);
+    }
+    writer.write_varint(total);
+    queue(writer);
+}
+
 void ScriptedHost::cl_bytes(std::int32_t result, const void *values, std::uint32_t count)
 {
     WireWriter writer(answer_, sizeof answer_);

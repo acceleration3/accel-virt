@@ -15,6 +15,10 @@ ClIcdRig::ClIcdRig()
                              AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
     kmt_.set_adapter_luid(0u, adapter_luid);
+    /* The transport watches the reply slot for a budget of the guest's clock
+     * before it asks the kernel to wait, and a command no answer was queued
+     * for is one it would watch for ever on a clock that never moves. */
+    kmt_.reads_clock(nullptr, transport_clock_step);
 }
 
 MockPlatform        &ClIcdRig::platform() { return platform_; }

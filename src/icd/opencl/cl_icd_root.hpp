@@ -129,6 +129,69 @@ public:
                                    size_t offset, size_t bytes, const void *from, cl_event *event);
     cl_int           finish(cl_command_queue queue);
     cl_int           flush(cl_command_queue queue);
+
+    /* ---- what a program and a kernel say about themselves on a device --- */
+
+    /* Asked of the host about its own device, which is the one this ICD's
+     * device stands for. */
+    cl_int program_build_info(cl_program program, cl_device_id device, cl_program_build_info name,
+                              size_t value_bytes, void *value, size_t *size_ret);
+    cl_int kernel_work_group_info(cl_kernel kernel, cl_device_id device,
+                                  cl_kernel_work_group_info name, size_t value_bytes, void *value,
+                                  size_t *size_ret);
+
+    /* ---- transfers the device makes on its own ------------------------- */
+
+    /* Nothing crosses but the two handles and the offsets, so these are
+     * enqueued as they are and the host's own event answered. */
+    cl_int enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_mem to, size_t from_offset,
+                               size_t to_offset, size_t bytes, cl_event *event);
+    /* The pattern is at most 128 bytes (the API's own bound) and crosses with
+     * the command; the host copies it before it answers. */
+    cl_int enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, const void *pattern,
+                               size_t pattern_bytes, size_t offset, size_t bytes, cl_event *event);
+    cl_int enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem to,
+                              const size_t *from_origin, const size_t *to_origin,
+                              const size_t *region, cl_event *event);
+
+    /* ---- images and samplers -------------------------------------------- */
+
+    /* An image of the host's making. A buffer the description names is
+     * translated to the host's number for it. Bytes copied from the
+     * application's pointer are written after the create, in commands that
+     * fit, on a queue of the ICD's own - an image of any size can be made from
+     * memory - for the image types whose layout is rows and slices. Memory the
+     * application keeps (CL_MEM_USE_HOST_PTR) is refused: nothing here could
+     * keep the host's image and the application's pointer the same. */
+    cl_mem create_image(cl_context context, cl_mem_flags flags, const cl_image_format *format,
+                        const cl_image_desc *desc, void *host_pointer, cl_int *error);
+    /* Image transfers are always complete when they return: a non-blocking
+     * one may be, and the bytes are then valid before the event says so,
+     * which the API allows. Both wait for the queue first and then go as
+     * commands that fit (ClTransferChunks). */
+    cl_int enqueue_read_image(cl_command_queue queue, cl_mem image, const size_t *origin,
+                              const size_t *region, size_t row_pitch, size_t slice_pitch,
+                              void *into, cl_event *event);
+    cl_int enqueue_write_image(cl_command_queue queue, cl_mem image, const size_t *origin,
+                               const size_t *region, size_t row_pitch, size_t slice_pitch,
+                               const void *from, cl_event *event);
+    /* The three sampler properties and nothing else; the deprecated
+     * clCreateSampler is the same list written out. */
+    cl_sampler create_sampler(cl_context context, const uint64_t *properties, cl_int *error);
+    /* The host's formats for an image of `type`: a format holds no handle, so
+     * the answer is the host's as it stands. */
+    cl_int supported_image_formats(cl_context context, cl_mem_flags flags, cl_mem_object_type type,
+                                   cl_uint num_entries, cl_image_format *formats, cl_uint *num_formats);
+
+    /* ---- the queue's own points ------------------------------------------ */
+
+    /* A marker or a barrier behind `count` events of this context, named to the
+     * host by its numbers for them. A queue here runs in order, so what either
+     * adds is the wait on events of another queue, and the event. */
+    cl_int enqueue_marker(cl_command_queue queue, cl_uint count, const cl_event *events,
+                          cl_event *event);
+    cl_int enqueue_barrier(cl_command_queue queue, cl_uint count, const cl_event *events,
+                           cl_event *event);
     /* `cl_khr_external_memory`'s acquire and release, which are the same call
      * here: the object was acquired on the host when the device opened it and
      * stays acquired for its life, so what is left of their meaning is the
@@ -229,6 +292,39 @@ private:
     /* Every read outstanding on one queue, for a finish - which says
      * everything queued on it has run. */
     cl_int           deliver_queued(ClientTransport &wire, uint64_t queue);
+    /* Waits for everything enqueued on `queue` so far without holding the
+     * host's worker: a marker is the queue's end as an event, and this side
+     * asks after it (ClBlockingWait). What a finish is, and what every
+     * transfer that asks the host to block does first. */
+    cl_int           drain(ClientTransport &wire, uint64_t queue);
+    /* The event a transfer that completed inside its call hands back when one
+     * was asked for: a marker in the queue, which is complete as soon as the
+     * host looks. CL_SUCCESS with nothing made when `event` is null. */
+    cl_int           marker_event(ClientTransport &wire, ClObject &queue, cl_event *event);
+    /* The host's numbers for an application's wait list, into `into` (room for
+     * max_waited): CL_INVALID_EVENT_WAIT_LIST for a list the API refuses or an
+     * event of another context, CL_OUT_OF_RESOURCES past max_waited. */
+    cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events,
+                               uint64_t *into);
+    /* A marker or a barrier: which of the two generated calls sends it is the
+     * whole difference. */
+    using PointCommand = cl_int (*)(ClientTransport &, uint64_t, cl_uint, const uint64_t *, uint64_t *);
+    cl_int           enqueue_point(PointCommand command, cl_command_queue queue, cl_uint count,
+                                   const cl_event *events, cl_event *event);
+    /* CL_IMAGE_ELEMENT_SIZE, asked of the host; zero when it will not say. */
+    size_t           element_bytes(ClientTransport &wire, uint64_t image);
+    /* Writes the application's bytes into an image just made, on a queue of
+     * its own that is released again; CL_INVALID_OPERATION for an image type
+     * whose layout is not rows and slices. */
+    cl_int           fill_image(ClientTransport &wire, uint64_t context, uint64_t image,
+                                const cl_image_desc &desc, const void *from);
+    /* The same for a buffer whose bytes one create could not carry. */
+    cl_int           fill_buffer(ClientTransport &wire, uint64_t context, uint64_t buffer, size_t bytes,
+                                 const void *from);
+    /* A host queue on `context` that nothing else has, for a fill: nothing is
+     * ahead of its writes for the host to wait behind. 0, with the error, when
+     * the host will not make one. */
+    uint64_t         own_queue(ClientTransport &wire, uint64_t context, cl_int &error);
     /* Opens the device this ICD shows, once, on the first ask. */
     [[nodiscard]] Status open_device();
     /* Gives one host object back, by the kind that says which call does it.

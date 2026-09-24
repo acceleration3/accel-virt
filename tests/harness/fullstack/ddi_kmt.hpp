@@ -301,6 +301,8 @@ private:
     std::uint64_t                paging_fence_;
     std::uint64_t                next_chunk_address_;
     std::uint32_t                last_code_;
+    /* When the rig began, on the real clock the guest's counter runs on. */
+    std::uint64_t                started_ns_;
 };
 
 }  // namespace av

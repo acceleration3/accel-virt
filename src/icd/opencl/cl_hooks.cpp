@@ -404,6 +404,155 @@ cl_int CL_API_CALL set_event_callback(cl_event event, cl_int status,
     return root.watch_event(event, status, notify, user_data);
 }
 
+cl_int CL_API_CALL get_program_build_info(cl_program program, cl_device_id device,
+                                          cl_program_build_info name, size_t value_bytes,
+                                          void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_program_build_info");
+    AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
+    return root.program_build_info(program, device, name, value_bytes, value, size_ret);
+}
+
+cl_int CL_API_CALL get_kernel_work_group_info(cl_kernel kernel, cl_device_id device,
+                                              cl_kernel_work_group_info name, size_t value_bytes,
+                                              void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_kernel_work_group_info");
+    AV_CL_ROOT_OR(CL_INVALID_KERNEL);
+    return root.kernel_work_group_info(kernel, device, name, value_bytes, value, size_ret);
+}
+
+cl_int CL_API_CALL enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_mem to,
+                                       size_t from_offset, size_t to_offset, size_t bytes, cl_uint,
+                                       const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_copy_buffer");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_copy_buffer(queue, from, to, from_offset, to_offset, bytes, event);
+}
+
+cl_int CL_API_CALL enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, const void *pattern,
+                                       size_t pattern_bytes, size_t offset, size_t bytes, cl_uint,
+                                       const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_fill_buffer");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_fill_buffer(queue, buffer, pattern, pattern_bytes, offset, bytes, event);
+}
+
+cl_int CL_API_CALL enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem to,
+                                      const size_t *from_origin, const size_t *to_origin,
+                                      const size_t *region, cl_uint, const cl_event *,
+                                      cl_event *event)
+{
+    AV_SCOPE("enqueue_copy_image");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_copy_image(queue, from, to, from_origin, to_origin, region, event);
+}
+
+cl_mem CL_API_CALL create_image(cl_context context, cl_mem_flags flags,
+                                const cl_image_format *format, const cl_image_desc *desc,
+                                void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("create_image");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return cl_icd_binding.root().create_image(context, flags, format, desc, host_pointer, error);
+}
+
+cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_bool,
+                                      const size_t *origin, const size_t *region, size_t row_pitch,
+                                      size_t slice_pitch, void *into, cl_uint, const cl_event *,
+                                      cl_event *event)
+{
+    AV_SCOPE("enqueue_read_image");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_read_image(queue, image, origin, region, row_pitch, slice_pitch, into,
+                                   event);
+}
+
+cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_bool,
+                                       const size_t *origin, const size_t *region, size_t row_pitch,
+                                       size_t slice_pitch, const void *from, cl_uint,
+                                       const cl_event *, cl_event *event)
+{
+    AV_SCOPE("enqueue_write_image");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_write_image(queue, image, origin, region, row_pitch, slice_pitch, from,
+                                    event);
+}
+
+cl_sampler CL_API_CALL create_sampler_with_properties(cl_context context,
+                                                      const cl_sampler_properties *properties,
+                                                      cl_int *error)
+{
+    AV_SCOPE("create_sampler_with_properties");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    return cl_icd_binding.root().create_sampler(
+        context, reinterpret_cast<const uint64_t *>(properties), error);
+}
+
+cl_sampler CL_API_CALL create_sampler(cl_context context, cl_bool normalized,
+                                      cl_addressing_mode addressing, cl_filter_mode filter,
+                                      cl_int *error)
+{
+    AV_SCOPE("create_sampler");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    /* The 1.2 call is the property list written out in its arguments. */
+    const uint64_t properties[] = {CL_SAMPLER_NORMALIZED_COORDS, normalized,
+                                   CL_SAMPLER_ADDRESSING_MODE,   addressing,
+                                   CL_SAMPLER_FILTER_MODE,       filter,
+                                   0u};
+    return cl_icd_binding.root().create_sampler(context, properties, error);
+}
+
+cl_int CL_API_CALL retain_sampler(cl_sampler sampler)
+{
+    AV_SCOPE("retain_sampler");
+    AV_CL_ROOT_OR(CL_INVALID_SAMPLER);
+    return root.retain(sampler, ClObject::Kind::sampler);
+}
+
+cl_int CL_API_CALL release_sampler(cl_sampler sampler)
+{
+    AV_SCOPE("release_sampler");
+    AV_CL_ROOT_OR(CL_INVALID_SAMPLER);
+    return root.release(sampler, ClObject::Kind::sampler);
+}
+
+cl_int CL_API_CALL get_supported_image_formats(cl_context context, cl_mem_flags flags,
+                                               cl_mem_object_type type, cl_uint num_entries,
+                                               cl_image_format *formats, cl_uint *num_formats)
+{
+    AV_SCOPE("get_supported_image_formats");
+    AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
+    return root.supported_image_formats(context, flags, type, num_entries, formats, num_formats);
+}
+
+cl_int CL_API_CALL enqueue_marker(cl_command_queue queue, cl_uint count, const cl_event *events,
+                                  cl_event *event)
+{
+    AV_SCOPE("enqueue_marker");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_marker(queue, count, events, event);
+}
+
+cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const cl_event *events,
+                                   cl_event *event)
+{
+    AV_SCOPE("enqueue_barrier");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.enqueue_barrier(queue, count, events, event);
+}
+
 /* `cl_khr_external_memory`'s two, which the loader asks for by name: they are
  * not slots of cl_icd_dispatch, because the ICD ABI predates the extension. */
 cl_int CL_API_CALL acquire_external_objects(cl_command_queue queue, cl_uint num_mem_objects,
@@ -479,7 +628,22 @@ void ClDispatchTable::fill()
     table_.clWaitForEvents = &wait_for_events;
     table_.clGetEventInfo = &get_event_info;
     table_.clSetEventCallback = &set_event_callback;
-    claimed_ = 42u;
+    table_.clGetProgramBuildInfo = &get_program_build_info;
+    table_.clGetKernelWorkGroupInfo = &get_kernel_work_group_info;
+    table_.clEnqueueCopyBuffer = &enqueue_copy_buffer;
+    table_.clEnqueueFillBuffer = &enqueue_fill_buffer;
+    table_.clEnqueueCopyImage = &enqueue_copy_image;
+    table_.clCreateImage = &create_image;
+    table_.clEnqueueReadImage = &enqueue_read_image;
+    table_.clEnqueueWriteImage = &enqueue_write_image;
+    table_.clCreateSamplerWithProperties = &create_sampler_with_properties;
+    table_.clCreateSampler = &create_sampler;
+    table_.clRetainSampler = &retain_sampler;
+    table_.clReleaseSampler = &release_sampler;
+    table_.clGetSupportedImageFormats = &get_supported_image_formats;
+    table_.clEnqueueMarkerWithWaitList = &enqueue_marker;
+    table_.clEnqueueBarrierWithWaitList = &enqueue_barrier;
+    claimed_ = 57u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;

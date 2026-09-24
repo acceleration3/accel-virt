@@ -27,6 +27,9 @@ public:
     /* Both halves non-zero and different, so a half dropped or swapped
      * shows. */
     static constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
+    /* How far the guest's clock moves each time the ICD reads it: a tenth of a
+     * millisecond, so a spin for a reply gives up after ten reads. */
+    static constexpr std::uint64_t transport_clock_step = 1000u;
 
     ClIcdRig();
     ClIcdRig(const ClIcdRig &) = delete;

@@ -46,6 +46,7 @@ public:
     [[nodiscard]] bool run(std::uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    /* Holds nothing across a batch and waits on no GPU. */
     void end_batch() override;
     bool poll() override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;

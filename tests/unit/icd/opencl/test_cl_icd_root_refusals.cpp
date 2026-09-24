@@ -415,19 +415,28 @@ TEST(cl_icd_root_refusals, an_event_of_nothing_is_kept_by_nobody_and_released_by
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  /* The write is enqueued and the host says it made no event for it. */
+  /* The write is made after its queue drains, and the marker its event
+   * would be comes back from the host as no event at all. */
   unsigned char from[8] = {};
+  rig.host().cl_enqueued(CL_SUCCESS, 0x6900u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, 0u);
   const std::uint32_t before = rig.kmt().commands();
   cl_event            event = nullptr;
   CHECK_EQ(rig.root().enqueue_write(queue, buffer, CL_FALSE, 0u, sizeof from, from, &event),
            CL_SUCCESS);
-  /* Nothing to hand the application, and nothing sent to undo: exactly one
-   * command, the write itself. */
+  /* Nothing to hand the application, and nothing sent to undo: the drain,
+   * the write, and the marker, and no release after it. */
   CHECK(event == nullptr);
-  CHECK_EQ(rig.kmt().commands(), before + 1u);
-  CHECK_EQ(rig.kmt().command_id(before),
+  CHECK_EQ(rig.kmt().commands(), before + 6u);
+  CHECK_EQ(rig.kmt().command_id(before + 4u),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueWriteBuffer));
+  CHECK_EQ(rig.kmt().command_id(before + 5u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
   CHECK(rig.root().invariants_hold()); }
 
 /* An object of the wrong kind is told which kind it should have been. The

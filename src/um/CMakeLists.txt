@@ -283,6 +283,19 @@ target_compile_options(rvkd3d11samples PRIVATE /WX- /W3 -Wno-conversion -Wno-sig
 target_link_options(rvkd3d11samples PRIVATE /ENTRY:rvkd3d11samples_entry /STACK:8388608,8388608)
 target_link_libraries(rvkd3d11samples PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_IMPORTS})
 
+# The OpenCL samples (samples/opencl): the OpenCL report's guest side. It
+# imports no OpenCL: every entry point is resolved from the OpenCL.dll pushed
+# beside it, as the host half resolves them from libOpenCL.
+file(GLOB RVKCLSAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/opencl/*.cpp)
+list(FILTER RVKCLSAMPLES_SOURCES EXCLUDE REGEX "(host|loopback)_platform\\.cpp$")
+add_executable(rvkclsamples ${RVKCLSAMPLES_SOURCES})
+add_dependencies(rvkclsamples rvktest_imports)
+target_include_directories(rvkclsamples SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
+target_compile_options(rvkclsamples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-conversion -Wno-old-style-cast
+                       -Wno-shadow -Wno-unused-parameter /Gs1000000)
+target_link_options(rvkclsamples PRIVATE /ENTRY:rvkclsamples_entry /STACK:8388608,8388608)
+target_link_libraries(rvkclsamples PRIVATE ${RVKTEST_IMPORTS})
+
 # rvkvk.dll puts a presented frame on its window through user32 and gdi32
 # (feature 046), and rvkvkprobe.exe makes that window and reads it back;
 # their import library is made with the GL probe's above.

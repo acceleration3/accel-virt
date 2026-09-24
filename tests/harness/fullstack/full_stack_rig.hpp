@@ -43,6 +43,8 @@ public:
     static constexpr std::uint8_t  hostmem_bar = 2u;
     static constexpr std::uint64_t hostmem_bytes = 64u << 20u;
     static constexpr std::uint64_t hostmem_address = 0x4000000000ull;
+    /* How far the host's clock moves per reading when a real executor runs. */
+    static constexpr std::uint64_t worker_clock_step_ns = 1000u;
 
     FullStackRig();
     FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *gpu);

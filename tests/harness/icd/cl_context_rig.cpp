@@ -1,4 +1,5 @@
 #include "harness/icd/cl_context_rig.hpp"
+#include "harness/icd/cl_icd_rig.hpp"
 
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -12,6 +13,10 @@ ClContextRig::ClContextRig()
     const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                              AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    /* The transport watches the reply slot for a budget of the guest's clock
+     * before it asks the kernel to wait, and a command no answer was queued
+     * for is one it would watch for ever on a clock that never moves. */
+    kmt_.reads_clock(nullptr, ClIcdRig::transport_clock_step);
 }
 
 av::icd::SharedHandles &ClContextRig::handles() { return handles_; }
