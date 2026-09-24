@@ -61,6 +61,9 @@ public:
     /* How this transport's submissions went (feature 049): through the
      * doorbell, and through the kernel. */
     uint64_t             submissions_through_doorbell() const;
+    /* The host has taken every batch but the newest: one more now keeps it
+     * fed, and holding a batch back until then lets it grow instead. */
+    bool                 ready_for_batch() const;
     uint64_t             submissions_through_kernel() const;
     /* Gives the doorbell back: every submission after this goes through the
      * kernel, which is how the in-guest benchmark measures the two paths on
@@ -118,6 +121,8 @@ private:
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
     /* Waits for the context and points `reply` at the answer for `fence`. */
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
+    bool                          replied_within_spin(uint64_t fence);
+    bool                          consumed_within_spin();
 
     GuestConnection &connection_;
     SubApi           sub_api_;
@@ -136,6 +141,8 @@ private:
      * D3DKMTSubmitCommand at all (feature 049, research.md §13). */
     bool             hardware_scheduled_;
     TransportRing    ring_;
+    uint64_t         newest_end_;
+    uint64_t         previous_end_;
     /* Feature 049: the doorbell this context submits through where the OS
      * gives it one, and the choice made per submission. A context that never
      * gets a doorbell submits exactly as it did before. */

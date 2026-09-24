@@ -303,7 +303,7 @@ BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
     static_cast<void>(d3dproto::rvk_d3d_Flush11(wire()));
-    if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (wire().flush_hint() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
     return TRUE;
 }
 

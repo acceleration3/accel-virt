@@ -48,6 +48,10 @@ public:
     /* Sends what is recorded, answered by nothing. invalid_state when the
      * transport refused it, which loses the device; ok with nothing to send. */
     [[nodiscard]] Status flush();
+    /* What an application's Flush asks for: the batch goes when the host is
+     * ready for it, and otherwise keeps growing until a later flush, a sync
+     * or a full block sends it. */
+    [[nodiscard]] Status flush_hint();
     /* The blob arena has `bytes` free, retiring every lease with a round trip
      * when it has not. False when even an empty arena is too small. */
     [[nodiscard]] bool   make_room_for(size_t bytes);

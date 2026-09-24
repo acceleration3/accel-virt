@@ -170,8 +170,17 @@ void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
         ReplyHeader(fence_id, required).within(static_cast<uint32_t>(staging_.reply_capacity()));
     uint8_t bytes[ReplyHeader::encoded_size] = {};
     static_cast<void>(header.encode(bytes, sizeof bytes));
-    static_cast<void>(reply_.write(0u, bytes, sizeof bytes));
+    /* The fence id goes last: a guest polling the slot takes the answer as
+     * soon as it sees its own fence there, so everything else must be in
+     * place first. */
+    constexpr size_t fence_at = 8u;
+    constexpr size_t fence_bytes = 8u;
     static_cast<void>(reply_.write(ReplyHeader::encoded_size, staging_.reply(), header.size()));
+    static_cast<void>(reply_.write(0u, bytes, fence_at));
+    static_cast<void>(reply_.write(fence_at + fence_bytes, bytes + fence_at + fence_bytes,
+                                   sizeof bytes - fence_at - fence_bytes));
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    static_cast<void>(reply_.write(fence_at, bytes + fence_at, fence_bytes));
     recorder_.record_reply(context_, fence_id, staging_.reply(), header.size());
 }
 

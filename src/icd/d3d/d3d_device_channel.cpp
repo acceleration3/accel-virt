@@ -39,6 +39,14 @@ Status D3dDeviceChannel::flush()
     return stream_.flush();
 }
 
+Status D3dDeviceChannel::flush_hint()
+{
+    AV_SCOPE("D3dDeviceChannel::flush_hint");
+    lock_.acquire();
+    ScopeExit release([this] { lock_.release(); });
+    return stream_.flush_hint();
+}
+
 bool D3dDeviceChannel::make_room_for(size_t bytes)
 {
     AV_SCOPE("D3dDeviceChannel::make_room_for");

@@ -39,6 +39,7 @@ public:
     [[nodiscard]] bool   open(uint32_t feature_level, uint32_t &hresult, uint32_t &level);
     /* The stream's flush and make_room_for, under the lock. */
     [[nodiscard]] Status flush();
+    [[nodiscard]] Status flush_hint();
     [[nodiscard]] bool   make_room_for(size_t bytes);
     /* The device is destroyed on the host, and the stream stops speaking for it. */
     [[nodiscard]] bool   close();

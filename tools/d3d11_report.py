@@ -80,7 +80,11 @@ foreach ($f in (Get-ChildItem {GUEST_DIR}\\out, {GUEST_DIR}\\shaders -File)) {{
 }}
 $writer.Close()""")
     local = out / "guest-bundle.gz"
-    pulled = guest_shell(work, "pull", bundle, str(local))
+    pulled = ""
+    for attempt in range(5):
+        pulled = guest_shell(work, "pull", bundle, str(local))
+        if local.exists() and local.stat().st_size != 0:
+            break
     if not local.exists() or local.stat().st_size == 0:
         sys.exit(f"could not bring the guest's results back: {pulled.strip()}")
     data = gzip.decompress(local.read_bytes())

@@ -36,6 +36,14 @@ Status D3dCommandStream::flush()
     return Status::invalid_state;
 }
 
+Status D3dCommandStream::flush_hint()
+{
+    AV_SCOPE("D3dCommandStream::flush_hint");
+    if (failed_) return Status::invalid_state;
+    if (used_ == 0u || !transport_.ready_for_batch()) return Status::ok;
+    return flush();
+}
+
 bool D3dCommandStream::make_room_for(size_t bytes)
 {
     AV_SCOPE("D3dCommandStream::make_room_for");

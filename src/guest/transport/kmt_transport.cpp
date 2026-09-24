@@ -25,7 +25,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
-      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), doorbell_(connection.kmt()),
+      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
@@ -158,6 +158,12 @@ bool KmtTransport::record_carries(const GlContextOptions &options) const
     return decoded.decode(bytes, sizeof bytes) == Status::ok;
 }
 
+bool KmtTransport::ready_for_batch() const
+{
+    AV_SCOPE("KmtTransport::ready_for_batch");
+    return ring_.head() >= previous_end_;
+}
+
 uint64_t KmtTransport::submissions_through_doorbell() const
 {
     AV_SCOPE("KmtTransport::submissions_through_doorbell");
@@ -260,6 +266,12 @@ bool KmtTransport::drain()
     AV_SCOPE("KmtTransport::drain");
     const uint64_t newest = fences_.completed() + fences_.outstanding();
     if (fences_.outstanding() == 0u) return true;
+    /* The device publishes its head as it finishes each batch; all taken is
+     * all done, and that is usually a matter of microseconds away. */
+    if (consumed_within_spin()) {
+        fences_.close(newest);
+        return true;
+    }
     const Status waited = doorbell_.queue() != 0u
                               ? connection_.kmt().wait_for_hw_queue(connection_.device(),
                                                                     doorbell_.progress_fence(), newest)
@@ -290,6 +302,8 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
         written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     }
     if (written != Status::ok) return TransportResult::failed;
+    previous_end_ = newest_end_;
+    newest_end_ = end;
     fence = fences_.open();
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
@@ -360,13 +374,15 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
      * kernel queued, so what it waits on is the queue's progress fence - the
      * monitored fence dxgkrnl made with the queue, which this driver writes
      * what the device finished into (research.md §12). */
-    const Status waited = doorbell_.queue() != 0u
-                              ? connection_.kmt().wait_for_hw_queue(connection_.device(),
-                                                                    doorbell_.progress_fence(), fence)
-                              : connection_.kmt().wait_for_context(connection_.device(), context_);
-    if (waited != Status::ok) {
-        faulted_ = true;
-        return TransportResult::failed;
+    if (!replied_within_spin(fence)) {
+        const Status waited = doorbell_.queue() != 0u
+                                  ? connection_.kmt().wait_for_hw_queue(connection_.device(),
+                                                                        doorbell_.progress_fence(), fence)
+                                  : connection_.kmt().wait_for_context(connection_.device(), context_);
+        if (waited != Status::ok) {
+            faulted_ = true;
+            return TransportResult::failed;
+        }
     }
     fences_.close(fence);
     if (reply_.read(fence, reply) != Status::ok) {
@@ -374,6 +390,42 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
         return TransportResult::failed;
     }
     return TransportResult::ok;
+}
+
+/* A reply usually lands within tens of microseconds, and the kernel's wait -
+ * a CPU notification the scheduler signals behind the context's work - takes
+ * far longer to come back: the slot is watched for a millisecond first. The
+ * device writes the fence id last, so seeing it means the answer is whole. */
+bool KmtTransport::replied_within_spin(uint64_t fence)
+{
+    AV_SCOPE("KmtTransport::replied_within_spin");
+    constexpr uint64_t spins_per_second = 1000u;
+    uint64_t           frequency = 0u;
+    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    const uint64_t     budget = frequency / spins_per_second;
+    for (;;) {
+        WireReader   probe(nullptr, 0u);
+        const Status read = reply_.read(fence, probe);
+        if (read == Status::ok || read == Status::too_large) return true;
+        uint64_t unused = 0u;
+        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        __builtin_ia32_pause();
+    }
+}
+
+bool KmtTransport::consumed_within_spin()
+{
+    AV_SCOPE("KmtTransport::consumed_within_spin");
+    constexpr uint64_t spins_per_second = 500u;
+    uint64_t           frequency = 0u;
+    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    const uint64_t     budget = frequency / spins_per_second;
+    for (;;) {
+        if (ring_.head() == ring_.tail()) return true;
+        uint64_t unused = 0u;
+        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        __builtin_ia32_pause();
+    }
 }
 
 Status KmtTransport::nop(uint32_t &answered)
