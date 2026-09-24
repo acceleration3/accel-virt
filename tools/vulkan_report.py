@@ -39,6 +39,13 @@ GUEST_EXE = GUEST_DIR + "\\rvkvksamples.exe"
 # cannot even do that.
 SAMPLE_TIMEOUT = 600
 FIELDS = 6
+# What makes a sample's two pictures differ that is the sample's own doing.
+NOTES = {
+    "computeparticles": "Differs between two runs on one machine: upstream's compute shader runs 16 invocations "
+                        "per particle (local_size_y 16 over a one-dimensional dispatch), racing on its position.",
+    "multithreading": "Splits 256 objects over std::thread::hardware_concurrency() threads, so the scene and the "
+                      "work follow each machine's core count.",
+}
 
 
 def build(args):
@@ -98,7 +105,9 @@ def run_host(args, out, names):
             done = subprocess.run(command, capture_output=True, text=True, timeout=SAMPLE_TIMEOUT)
             text, exits[name] = done.stdout + done.stderr, done.returncode
         except subprocess.TimeoutExpired as expired:
-            text, exits[name] = (expired.stdout or b"").decode(errors="replace"), "timeout"
+            partial = expired.stdout or ""
+            text = partial.decode(errors="replace") if isinstance(partial, bytes) else partial
+            exits[name] = "timeout"
         log.append(f"== {name} (exit {exits[name]})\n{text}")
         found = result_lines(text)
         rows.update(found)
@@ -252,6 +261,7 @@ def write_html(args, out, rows, ratios):
         ratio = g["fps"] / h["fps"] if h and g and h["fps"] > 0 else None
         parts.append(f"""<section class="sample"><h2>{html.escape(name)} <span class="tag {tone}">{label}</span>
 <span class="muted" style="font-size:13px">VM at {cell(ratio * 100 if ratio else None, "%", 1)} of host speed</span></h2>
+{f'<p class="muted">{html.escape(NOTES[name])}</p>' if name in NOTES else ""}
 <div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (native Vulkan)</figcaption></figure>
 <figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (rvkvk over virtio-gpu-rvk)</figcaption></figure>
