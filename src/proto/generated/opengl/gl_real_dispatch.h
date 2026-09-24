@@ -34,6 +34,12 @@ struct RealGl {
     void* (*rvk_sync_for)(void*, uint64_t) = nullptr;
     void (*rvk_forget_sync)(void*, uint64_t) = nullptr;
     void* rvk_sync_user = nullptr;
+
+    // Whether the context has the compatibility profile's
+    // fixed-function vertex arrays, which a draw's check of its
+    // arrays asks after. Set by the server from what the host
+    // granted; a core context has none to ask of.
+    bool rvk_fixed_function = true;
     void (*glActiveShaderProgram)(GLuint, GLuint) = nullptr;
     void (*glActiveTexture)(GLenum) = nullptr;
     void (*glAttachShader)(GLuint, GLuint) = nullptr;
@@ -136,7 +142,7 @@ struct RealGl {
     void (*glCreateRenderbuffers)(GLsizei, GLuint*) = nullptr;
     void (*glCreateSamplers)(GLsizei, GLuint*) = nullptr;
     GLuint (*glCreateShader)(GLenum) = nullptr;
-    GLuint (*glCreateShaderProgramv)(GLenum, GLsizei, const GLchar**) = nullptr;
+    GLuint (*glCreateShaderProgramv)(GLenum, GLsizei, const GLchar*const*) = nullptr;
     void (*glCreateTextures)(GLenum, GLsizei, GLuint*) = nullptr;
     void (*glCreateTransformFeedbacks)(GLsizei, GLuint*) = nullptr;
     void (*glCreateVertexArrays)(GLsizei, GLuint*) = nullptr;
@@ -320,7 +326,7 @@ struct RealGl {
     void (*glGetTransformFeedbacki_v)(GLuint, GLenum, GLuint, GLint*) = nullptr;
     void (*glGetTransformFeedbackiv)(GLuint, GLenum, GLint*) = nullptr;
     GLuint (*glGetUniformBlockIndex)(GLuint, const GLchar*) = nullptr;
-    void (*glGetUniformIndices)(GLuint, GLsizei, const GLchar**, GLuint*) = nullptr;
+    void (*glGetUniformIndices)(GLuint, GLsizei, const GLchar*const*, GLuint*) = nullptr;
     GLint (*glGetUniformLocation)(GLuint, const GLchar*) = nullptr;
     void (*glGetUniformSubroutineuiv)(GLenum, GLint, GLuint*) = nullptr;
     void (*glGetUniformdv)(GLuint, GLint, GLdouble*) = nullptr;
@@ -374,8 +380,8 @@ struct RealGl {
     void (*glMultiDrawArrays)(GLenum, const GLint*, const GLsizei*, GLsizei) = nullptr;
     void (*glMultiDrawArraysIndirect)(GLenum, const void*, GLsizei, GLsizei) = nullptr;
     void (*glMultiDrawArraysIndirectCount)(GLenum, const void*, GLintptr, GLsizei, GLsizei) = nullptr;
-    void (*glMultiDrawElements)(GLenum, const GLsizei*, GLenum, const void**, GLsizei) = nullptr;
-    void (*glMultiDrawElementsBaseVertex)(GLenum, const GLsizei*, GLenum, const void**, GLsizei, const GLint*) = nullptr;
+    void (*glMultiDrawElements)(GLenum, const GLsizei*, GLenum, const void*const*, GLsizei) = nullptr;
+    void (*glMultiDrawElementsBaseVertex)(GLenum, const GLsizei*, GLenum, const void*const*, GLsizei, const GLint*) = nullptr;
     void (*glMultiDrawElementsIndirect)(GLenum, GLenum, const void*, GLsizei, GLsizei) = nullptr;
     void (*glMultiDrawElementsIndirectCount)(GLenum, GLenum, const void*, GLintptr, GLsizei, GLsizei) = nullptr;
     void (*glMultiTexCoordP1ui)(GLenum, GLenum, GLuint) = nullptr;
@@ -494,7 +500,7 @@ struct RealGl {
     void (*glSecondaryColorP3ui)(GLenum, GLuint) = nullptr;
     void (*glSecondaryColorP3uiv)(GLenum, const GLuint*) = nullptr;
     void (*glShaderBinary)(GLsizei, const GLuint*, GLenum, const void*, GLsizei) = nullptr;
-    void (*glShaderSource)(GLuint, GLsizei, const GLchar**, const GLint*) = nullptr;
+    void (*glShaderSource)(GLuint, GLsizei, const GLchar*const*, const GLint*) = nullptr;
     void (*glShaderStorageBlockBinding)(GLuint, GLuint, GLuint) = nullptr;
     void (*glSpecializeShader)(GLuint, const GLchar*, GLuint, const GLuint*, const GLuint*) = nullptr;
     void (*glStencilFunc)(GLenum, GLint, GLuint) = nullptr;
@@ -552,7 +558,7 @@ struct RealGl {
     void (*glTextureView)(GLuint, GLenum, GLuint, GLenum, GLuint, GLuint, GLuint, GLuint) = nullptr;
     void (*glTransformFeedbackBufferBase)(GLuint, GLuint, GLuint) = nullptr;
     void (*glTransformFeedbackBufferRange)(GLuint, GLuint, GLuint, GLintptr, GLsizeiptr) = nullptr;
-    void (*glTransformFeedbackVaryings)(GLuint, GLsizei, const GLchar**, GLenum) = nullptr;
+    void (*glTransformFeedbackVaryings)(GLuint, GLsizei, const GLchar*const*, GLenum) = nullptr;
     void (*glUniform1d)(GLint, GLdouble) = nullptr;
     void (*glUniform1dv)(GLint, GLsizei, const GLdouble*) = nullptr;
     void (*glUniform1f)(GLint, GLfloat) = nullptr;
@@ -1640,7 +1646,7 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glCreateSamplers != nullptr) ++found;
     gl.glCreateShader = reinterpret_cast<GLuint (*)(GLenum)>(load("glCreateShader", user));
     if (gl.glCreateShader != nullptr) ++found;
-    gl.glCreateShaderProgramv = reinterpret_cast<GLuint (*)(GLenum, GLsizei, const GLchar**)>(load("glCreateShaderProgramv", user));
+    gl.glCreateShaderProgramv = reinterpret_cast<GLuint (*)(GLenum, GLsizei, const GLchar*const*)>(load("glCreateShaderProgramv", user));
     if (gl.glCreateShaderProgramv != nullptr) ++found;
     gl.glCreateTextures = reinterpret_cast<void (*)(GLenum, GLsizei, GLuint*)>(load("glCreateTextures", user));
     if (gl.glCreateTextures != nullptr) ++found;
@@ -2008,7 +2014,7 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glGetTransformFeedbackiv != nullptr) ++found;
     gl.glGetUniformBlockIndex = reinterpret_cast<GLuint (*)(GLuint, const GLchar*)>(load("glGetUniformBlockIndex", user));
     if (gl.glGetUniformBlockIndex != nullptr) ++found;
-    gl.glGetUniformIndices = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar**, GLuint*)>(load("glGetUniformIndices", user));
+    gl.glGetUniformIndices = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar*const*, GLuint*)>(load("glGetUniformIndices", user));
     if (gl.glGetUniformIndices != nullptr) ++found;
     gl.glGetUniformLocation = reinterpret_cast<GLint (*)(GLuint, const GLchar*)>(load("glGetUniformLocation", user));
     if (gl.glGetUniformLocation != nullptr) ++found;
@@ -2116,9 +2122,9 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glMultiDrawArraysIndirect != nullptr) ++found;
     gl.glMultiDrawArraysIndirectCount = reinterpret_cast<void (*)(GLenum, const void*, GLintptr, GLsizei, GLsizei)>(load("glMultiDrawArraysIndirectCount", user));
     if (gl.glMultiDrawArraysIndirectCount != nullptr) ++found;
-    gl.glMultiDrawElements = reinterpret_cast<void (*)(GLenum, const GLsizei*, GLenum, const void**, GLsizei)>(load("glMultiDrawElements", user));
+    gl.glMultiDrawElements = reinterpret_cast<void (*)(GLenum, const GLsizei*, GLenum, const void*const*, GLsizei)>(load("glMultiDrawElements", user));
     if (gl.glMultiDrawElements != nullptr) ++found;
-    gl.glMultiDrawElementsBaseVertex = reinterpret_cast<void (*)(GLenum, const GLsizei*, GLenum, const void**, GLsizei, const GLint*)>(load("glMultiDrawElementsBaseVertex", user));
+    gl.glMultiDrawElementsBaseVertex = reinterpret_cast<void (*)(GLenum, const GLsizei*, GLenum, const void*const*, GLsizei, const GLint*)>(load("glMultiDrawElementsBaseVertex", user));
     if (gl.glMultiDrawElementsBaseVertex != nullptr) ++found;
     gl.glMultiDrawElementsIndirect = reinterpret_cast<void (*)(GLenum, GLenum, const void*, GLsizei, GLsizei)>(load("glMultiDrawElementsIndirect", user));
     if (gl.glMultiDrawElementsIndirect != nullptr) ++found;
@@ -2356,7 +2362,7 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glSecondaryColorP3uiv != nullptr) ++found;
     gl.glShaderBinary = reinterpret_cast<void (*)(GLsizei, const GLuint*, GLenum, const void*, GLsizei)>(load("glShaderBinary", user));
     if (gl.glShaderBinary != nullptr) ++found;
-    gl.glShaderSource = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar**, const GLint*)>(load("glShaderSource", user));
+    gl.glShaderSource = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar*const*, const GLint*)>(load("glShaderSource", user));
     if (gl.glShaderSource != nullptr) ++found;
     gl.glShaderStorageBlockBinding = reinterpret_cast<void (*)(GLuint, GLuint, GLuint)>(load("glShaderStorageBlockBinding", user));
     if (gl.glShaderStorageBlockBinding != nullptr) ++found;
@@ -2472,7 +2478,7 @@ inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
     if (gl.glTransformFeedbackBufferBase != nullptr) ++found;
     gl.glTransformFeedbackBufferRange = reinterpret_cast<void (*)(GLuint, GLuint, GLuint, GLintptr, GLsizeiptr)>(load("glTransformFeedbackBufferRange", user));
     if (gl.glTransformFeedbackBufferRange != nullptr) ++found;
-    gl.glTransformFeedbackVaryings = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar**, GLenum)>(load("glTransformFeedbackVaryings", user));
+    gl.glTransformFeedbackVaryings = reinterpret_cast<void (*)(GLuint, GLsizei, const GLchar*const*, GLenum)>(load("glTransformFeedbackVaryings", user));
     if (gl.glTransformFeedbackVaryings != nullptr) ++found;
     gl.glUniform1d = reinterpret_cast<void (*)(GLint, GLdouble)>(load("glUniform1d", user));
     if (gl.glUniform1d != nullptr) ++found;

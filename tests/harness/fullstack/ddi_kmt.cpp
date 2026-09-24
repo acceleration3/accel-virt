@@ -21,6 +21,7 @@
 #include "core/miniport/ddi_table.hpp"
 #include "core/support/nt_status.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/context/tail_publish_record.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -99,7 +100,7 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
     : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump), host_(host),
       handles_(), fences_(), devices_{}, shared_{}, next_shared_handle_(first_shared_handle),
       allocations_{}, contexts_{}, queues_{}, hardware_queues_{}, doorbells_{},
-      fabric_(platform), hardware_scheduling_(false), kernel_copy_{},
+      fabric_(platform), hardware_scheduling_(false), refuse_tail_publishing_(false), watching_(false), kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
       next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns())
 {
@@ -661,6 +662,10 @@ Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64
         (private_data == nullptr && private_size != 0u))
         return refuse(Status::invalid_parameter);
     if (private_size != 0u) std::memcpy(kernel_copy_, private_data, private_size);
+    /* What the device finished since the process last called the kernel has
+     * interrupted the driver by now on a machine: a process that watched for
+     * its answers in its own memory made no call to deliver them in. */
+    if (watching_) pump_.deliver();
     DxgkargSubmitCommandVirtualRecord request = {};
     request.hContext = found->driver;
     request.DmaBufferVirtualAddress = commands;
@@ -757,6 +762,8 @@ Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t
     if (adapter != adapter_handle || owner == nullptr || found == nullptr || found->device != device ||
         data == nullptr || size == 0u || size > max_private_data)
         return refuse(Status::invalid_parameter);
+    if (refuse_tail_publishing_ && TailPublishRecord().decode(data, size) == Status::ok)
+        return refuse(Status::not_supported);
     std::memcpy(kernel_copy_, data, size);
     DxgkargEscapeRecord request = {};
     request.hDevice = owner->driver;
@@ -1145,5 +1152,9 @@ Status DdiKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 }
 
 void DdiKmt::sleep_briefly() {}
+
+void DdiKmt::refuse_tail_publishing() { refuse_tail_publishing_ = true; }
+
+void DdiKmt::let_process_watch() { watching_ = true; }
 
 }  // namespace av

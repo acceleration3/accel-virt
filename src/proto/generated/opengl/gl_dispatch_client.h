@@ -114,7 +114,7 @@ void rvk_glCreateQueries(::av::ClientTransport& rvk_t, GLenum target, GLsizei n,
 void rvk_glCreateRenderbuffers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* renderbuffers);
 void rvk_glCreateSamplers(::av::ClientTransport& rvk_t, GLsizei n, GLuint* samplers);
 GLuint rvk_glCreateShader(::av::ClientTransport& rvk_t, GLenum type);
-GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLsizei count, const GLchar** strings);
+GLuint rvk_glCreateShaderProgramv(::av::ClientTransport& rvk_t, GLenum type, GLsizei count, const GLchar*const* strings);
 void rvk_glCreateTextures(::av::ClientTransport& rvk_t, GLenum target, GLsizei n, GLuint* textures);
 void rvk_glCreateTransformFeedbacks(::av::ClientTransport& rvk_t, GLsizei n, GLuint* ids);
 void rvk_glCreateVertexArrays(::av::ClientTransport& rvk_t, GLsizei n, GLuint* arrays);
@@ -298,7 +298,7 @@ void rvk_glGetTransformFeedbacki64_v(::av::ClientTransport& rvk_t, GLuint xfb, G
 void rvk_glGetTransformFeedbacki_v(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLuint index, GLint* param);
 void rvk_glGetTransformFeedbackiv(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLint* param);
 GLuint rvk_glGetUniformBlockIndex(::av::ClientTransport& rvk_t, GLuint program, const GLchar* uniformBlockName);
-void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLchar** uniformNames, GLuint* uniformIndices);
+void rvk_glGetUniformIndices(::av::ClientTransport& rvk_t, GLuint program, GLsizei uniformCount, const GLchar*const* uniformNames, GLuint* uniformIndices);
 GLint rvk_glGetUniformLocation(::av::ClientTransport& rvk_t, GLuint program, const GLchar* name);
 void rvk_glGetUniformSubroutineuiv(::av::ClientTransport& rvk_t, GLenum shadertype, GLint location, GLuint* params);
 void rvk_glGetUniformdv(::av::ClientTransport& rvk_t, GLuint program, GLint location, GLdouble* params);
@@ -472,7 +472,7 @@ void rvk_glScissorIndexedv(::av::ClientTransport& rvk_t, GLuint index, const GLi
 void rvk_glSecondaryColorP3ui(::av::ClientTransport& rvk_t, GLenum type, GLuint color);
 void rvk_glSecondaryColorP3uiv(::av::ClientTransport& rvk_t, GLenum type, const GLuint* color);
 void rvk_glShaderBinary(::av::ClientTransport& rvk_t, GLsizei count, const GLuint* shaders, GLenum binaryFormat, const void* binary, GLsizei length);
-void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei count, const GLchar** string, const GLint* length);
+void rvk_glShaderSource(::av::ClientTransport& rvk_t, GLuint shader, GLsizei count, const GLchar*const* string, const GLint* length);
 void rvk_glShaderStorageBlockBinding(::av::ClientTransport& rvk_t, GLuint program, GLuint storageBlockIndex, GLuint storageBlockBinding);
 void rvk_glSpecializeShader(::av::ClientTransport& rvk_t, GLuint shader, const GLchar* pEntryPoint, GLuint numSpecializationConstants, const GLuint* pConstantIndex, const GLuint* pConstantValue);
 void rvk_glStencilFunc(::av::ClientTransport& rvk_t, GLenum func, GLint ref, GLuint mask);
@@ -530,7 +530,7 @@ void rvk_glTextureSubImage3D(::av::ClientTransport& rvk_t, GLuint texture, GLint
 void rvk_glTextureView(::av::ClientTransport& rvk_t, GLuint texture, GLenum target, GLuint origtexture, GLenum internalformat, GLuint minlevel, GLuint numlevels, GLuint minlayer, GLuint numlayers);
 void rvk_glTransformFeedbackBufferBase(::av::ClientTransport& rvk_t, GLuint xfb, GLuint index, GLuint buffer);
 void rvk_glTransformFeedbackBufferRange(::av::ClientTransport& rvk_t, GLuint xfb, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
-void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint program, GLsizei count, const GLchar** varyings, GLenum bufferMode);
+void rvk_glTransformFeedbackVaryings(::av::ClientTransport& rvk_t, GLuint program, GLsizei count, const GLchar*const* varyings, GLenum bufferMode);
 void rvk_glUniform1d(::av::ClientTransport& rvk_t, GLint location, GLdouble x);
 void rvk_glUniform1dv(::av::ClientTransport& rvk_t, GLint location, GLsizei count, const GLdouble* value);
 void rvk_glUniform1f(::av::ClientTransport& rvk_t, GLint location, GLfloat v0);

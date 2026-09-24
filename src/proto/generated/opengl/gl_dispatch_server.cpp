@@ -159,9 +159,7 @@ static bool compressed_starts_at_pointer(const RealGl& rvk_gl) noexcept {
 // process that the guest chose - and a buffer deleted from under an array
 // leaves it one too, so this is asked at the draw rather than when the
 // pointer was set.
-static bool arrays_in_buffers(const RealGl& rvk_gl) noexcept {
-    if (rvk_gl.glGetIntegerv == nullptr || rvk_gl.glIsEnabled == nullptr ||
-        rvk_gl.glGetVertexAttribiv == nullptr) return false;
+static bool fixed_arrays_in_buffers(const RealGl& rvk_gl) noexcept {
     static constexpr GLenum kArrays[][2] = {
         {0x8074, 0x8896}, {0x8075, 0x8897}, {0x8076, 0x8898}, {0x8077, 0x8899},
         {0x8079, 0x889B}, {0x8457, 0x889D}, {0x845E, 0x889C}};
@@ -170,18 +168,26 @@ static bool arrays_in_buffers(const RealGl& rvk_gl) noexcept {
     }
     GLint units = 0;
     rvk_gl.glGetIntegerv(0x8871, &units);
-    if (units > 0) {
-        if (rvk_gl.glClientActiveTexture == nullptr) return false;
-        GLint active = 0x84C0;
-        rvk_gl.glGetIntegerv(0x84E1, &active);
-        bool bound = true;
-        for (GLint unit = 0; bound && unit < units && unit < kMaxArrays; ++unit) {
-            rvk_gl.glClientActiveTexture(static_cast<GLenum>(0x84C0 + unit));
-            bound = !rvk_gl.glIsEnabled(0x8078) || buffer_bound(rvk_gl, 0x889A);
-        }
-        rvk_gl.glClientActiveTexture(static_cast<GLenum>(active));
-        if (!bound) return false;
+    if (units <= 0) return true;
+    if (rvk_gl.glClientActiveTexture == nullptr) return false;
+    GLint active = 0x84C0;
+    rvk_gl.glGetIntegerv(0x84E1, &active);
+    bool bound = true;
+    for (GLint unit = 0; bound && unit < units && unit < kMaxArrays; ++unit) {
+        rvk_gl.glClientActiveTexture(static_cast<GLenum>(0x84C0 + unit));
+        bound = !rvk_gl.glIsEnabled(0x8078) || buffer_bound(rvk_gl, 0x889A);
     }
+    rvk_gl.glClientActiveTexture(static_cast<GLenum>(active));
+    return bound;
+}
+
+// The fixed-function arrays are the compatibility profile's: a core
+// context has none, and asking it of them is an error the application
+// would read back from its own glGetError.
+static bool arrays_in_buffers(const RealGl& rvk_gl) noexcept {
+    if (rvk_gl.glGetIntegerv == nullptr || rvk_gl.glIsEnabled == nullptr ||
+        rvk_gl.glGetVertexAttribiv == nullptr) return false;
+    if (rvk_gl.rvk_fixed_function && !fixed_arrays_in_buffers(rvk_gl)) return false;
     GLint attributes = 0;
     rvk_gl.glGetIntegerv(0x8869, &attributes);
     for (GLint index = 0; index < attributes && index < kMaxArrays; ++index) {

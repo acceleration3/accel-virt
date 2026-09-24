@@ -110,7 +110,7 @@ void clear_buffer_data(GLenum, GLenum, GLenum format, GLenum type, const void *d
 void entry_buffer_data(GLenum, GLsizeiptr size, const void *data, GLenum) { live->buffer_data(size, data); }
 void entry_call_lists(GLsizei n, GLenum type, const void *lists) { live->call_lists(n, type, lists); }
 
-void entry_shader_source(GLuint, GLsizei count, const GLchar **strings, const GLint *lengths)
+void entry_shader_source(GLuint, GLsizei count, const GLchar *const *strings, const GLint *lengths)
 {
     live->shader_source(count, strings, lengths);
 }
@@ -123,7 +123,7 @@ void debug_message_insert(GLenum, GLenum, GLuint, GLenum, GLsizei length, const 
 void draw_elements(GLenum, GLsizei, GLenum, const void *) { live->draw(true); }
 void draw_arrays(GLenum, GLint, GLsizei) { live->draw(false); }
 
-void multi_draw_elements(GLenum, const GLsizei *counts, GLenum, const void **indices, GLsizei drawcount)
+void multi_draw_elements(GLenum, const GLsizei *counts, GLenum, const void *const *indices, GLsizei drawcount)
 {
     live->draw_many(drawcount, counts, indices);
 }
@@ -195,7 +195,7 @@ RecordingGl::RecordingGl(const std::uint8_t *block, const WireArena &arena)
       parameter_buffer_(0u), attribute_enabled_{}, attribute_buffer_{},
       vertex_array_enabled_(false), vertex_array_buffer_(0u), texture_array_enabled_{},
       texture_array_buffer_{}, client_unit_(0), map_target_(0u), map_order_(0), level_extent_{},
-      reads_(0u), calls_(0u), strays_(0u)
+      reads_(0u), calls_(0u), strays_(0u), capability_queries_(0u)
 {
     live = this;
     table_.glPixelStorei = store;
@@ -258,6 +258,8 @@ void RecordingGl::set_level_extent(GLint width, GLint height, GLint depth)
 }
 
 void RecordingGl::forget_state_queries() { table_.glGetIntegerv = nullptr; }
+void RecordingGl::be_core() { table_.rvk_fixed_function = false; }
+std::uint32_t RecordingGl::capability_queries() const { return capability_queries_; }
 
 std::uint32_t RecordingGl::reads() const { return reads_; }
 std::uint32_t RecordingGl::calls() const { return calls_; }
@@ -574,8 +576,9 @@ void RecordingGl::attribute_query(GLuint index, GLenum pname, GLint *value)
     }
 }
 
-GLboolean RecordingGl::is_enabled(GLenum capability) const
+GLboolean RecordingGl::is_enabled(GLenum capability)
 {
+    capability_queries_++;
     if (capability == vertex_array) return vertex_array_enabled_ ? 1u : 0u;
     if (capability == texture_coord_array) return texture_array_enabled_[client_unit_] ? 1u : 0u;
     return 0u;

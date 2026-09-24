@@ -186,6 +186,17 @@ target_include_directories(rvkclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/
 target_compile_options(rvkclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
 target_link_libraries(rvkclsamples_host PRIVATE ${CMAKE_DL_LIBS})
 
+# The OpenGL samples' host side (samples/opengl): the host's own driver through
+# EGL, the same GLSL the guest compiles - the report's baseline
+# (tools/opengl_report.py).
+if(AV_EGL_LIBRARY)
+  file(GLOB AV_OPENGL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opengl/*.cpp)
+  list(FILTER AV_OPENGL_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+  add_executable(rvkglsamples_host ${AV_OPENGL_SAMPLES_SOURCES})
+  target_compile_options(rvkglsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
+  target_link_libraries(rvkglsamples_host PRIVATE ${AV_EGL_LIBRARY} Threads::Threads)
+endif()
+
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
 # No sanitizer or profile flags and hidden visibility: the archive exports only
@@ -532,6 +543,23 @@ foreach(src ${AV_UNIT_TESTS})
       FIXTURES_REQUIRED coverage_clean FIXTURES_SETUP coverage_profiles)
   endif()
 endforeach()
+
+# The OpenGL samples through the OpenGL ICD, the driver and the device core on
+# this machine's GPU, with no guest (tests/loopback/gl_samples_loopback.cpp):
+# what tools/opengl_report.py --loopback sets beside the host's frames. A tool,
+# not a test - the ICD's own tests judge the ICD.
+if(AV_GENERATED AND AV_EGL_LIBRARY)
+  file(GLOB AV_GL_LOOPBACK_SOURCES CONFIGURE_DEPENDS samples/opengl/*.cpp)
+  list(FILTER AV_GL_LOOPBACK_SOURCES EXCLUDE REGEX "(host|guest)_platform\\.cpp$")
+  set_source_files_properties(${AV_GL_LOOPBACK_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+  add_executable(rvkglsamples_loopback tests/loopback/gl_samples_loopback.cpp ${AV_GL_LOOPBACK_SOURCES})
+  target_include_directories(rvkglsamples_loopback PRIVATE ${CMAKE_SOURCE_DIR})
+  target_link_libraries(rvkglsamples_loopback PRIVATE av_harness av_gl_icd ${CMAKE_DL_LIBS})
+  target_compile_options(rvkglsamples_loopback PRIVATE ${AV_TEST_FLAGS})
+  add_dependencies(rvkglsamples_loopback rvk_executor)
+  target_compile_definitions(rvkglsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>"
+    AV_PROC_TABLE="${CMAKE_SOURCE_DIR}/tools/codegen/profiles/opengl_proc_table.txt")
+endif()
 if(AV_COVERAGE)
   add_test(NAME coverage_gate
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_coverage.py ${CMAKE_BINARY_DIR})

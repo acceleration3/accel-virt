@@ -13,6 +13,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ElementTree
 
 from tool_run import ROOT
 
@@ -21,6 +22,7 @@ sys.path.insert(0, str(ROOT / "tools" / "codegen"))
 from rvk_codegen.ir import CType  # noqa: E402
 from rvk_codegen.opengl import emit  # noqa: E402
 from rvk_codegen.opengl.model import Command, Length, LengthKind, Param, Registry, Role  # noqa: E402
+from rvk_codegen.opengl.parse import _ctype_from  # noqa: E402
 
 SCOPE = "const ::av::SyncCallScope rvk_call{rvk_t};"
 
@@ -198,6 +200,30 @@ class ProcTableOrder(unittest.TestCase):
 
     def test_the_rgba_suffix_names_the_same_command(self):
         self.assertEqual(emit.read_proc_table("0 glColor3b_InRGBA\n1 glEnable\n"), ["glColor3b", "glEnable"])
+
+
+class ParameterTypes(unittest.TestCase):
+    """GL declares its lists of strings and of index pointers `const T *const *`:
+    an entry point written with one const fewer is a different function type,
+    which a caller holding the registry's type calls through a mismatched
+    pointer."""
+
+    def rendered(self, text):
+        return _ctype_from(ElementTree.fromstring(text)).cpp()
+
+    def test_a_list_of_const_pointers_keeps_both_consts(self):
+        self.assertEqual(self.rendered('<param len="count">const <ptype>GLchar</ptype> *const*<name>string</name>'
+                                       '</param>'), "const GLchar*const*")
+        self.assertEqual(self.rendered('<param len="drawcount">const void *const*<name>indices</name></param>'),
+                         "const void*const*")
+
+    def test_a_list_of_plain_pointers_and_a_single_pointer_are_unchanged(self):
+        self.assertEqual(self.rendered('<param>const <ptype>GLchar</ptype> **<name>string</name></param>'),
+                         "const GLchar**")
+        self.assertEqual(self.rendered('<param>const <ptype>GLchar</ptype> *<name>name</name></param>'),
+                         "const GLchar*")
+        self.assertEqual(CType(base="GLchar", pointer_depth=1, is_const=True, inner_const=True).cpp(),
+                         "const GLchar*")
 
 
 if __name__ == "__main__":

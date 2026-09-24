@@ -22,6 +22,10 @@ class CType:
     # original symbol — useful for emitting readable code. ``None`` for
     # numeric literals.
     api_constant: str | None = None
+    # ``const T *const *``: the pointers the outer one points at are const
+    # too. GL declares its arrays of strings and of index pointers this way,
+    # and an entry point written without it is a different function type.
+    inner_const: bool = False
 
     @property
     def is_fixed_array(self) -> bool:
@@ -29,7 +33,9 @@ class CType:
 
     def cpp(self) -> str:
         s = self.base
-        if self.pointer_depth:
+        if self.pointer_depth and self.inner_const and self.pointer_depth >= 2:
+            s += "*const" + "*" * (self.pointer_depth - 1)
+        elif self.pointer_depth:
             s += "*" * self.pointer_depth
         if self.is_const:
             s = "const " + s

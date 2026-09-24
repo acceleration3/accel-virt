@@ -178,6 +178,7 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
   char expected_renderer[renderer_bytes] = {};
   CHECK(host_renderer(*library.ops(), gpu.uuid(), expected_renderer));
   FullStackRig rig(*library.ops(), gpu.uuid());
+  rig.kmt().let_process_watch();
   CHECK_EQ(rig.started(), 0);
   { GlProcess process(rig.kmt());
     FakeOpengl32 &gl = process.opengl32();
@@ -263,6 +264,7 @@ TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_th
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
   FullStackRig rig(*library.ops(), gpu.uuid());
+  rig.kmt().let_process_watch();
   CHECK_EQ(rig.started(), 0);
   { GlProcess process(rig.kmt());
     FakeOpengl32 &gl = process.opengl32();
@@ -357,6 +359,7 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
   CHECK(library.ops() != nullptr);
   if (library.ops() == nullptr) return;
   FullStackRig rig(*library.ops(), gpu.uuid());
+  rig.kmt().let_process_watch();
   CHECK_EQ(rig.started(), 0);
   { GlProcess process(rig.kmt());
     CHECK(process.opengl32().load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);

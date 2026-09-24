@@ -19,7 +19,20 @@
 
 #include <cstdint>
 
+namespace av {
+
+/* The backend's table and what it asks of the context it opened, reached with
+ * no context: a table of this test's own entry points stands in for the
+ * driver's. */
+struct OpenGlBackendProbe {
+    static glproto::RealGl &gl(OpenGlBackend &backend) { return backend.gl_; }
+    static bool granted_fixed_function(OpenGlBackend &backend) { return backend.granted_fixed_function(); }
+};
+
+}  // namespace av
+
 using av::OpenGlBackend;
+using av::OpenGlBackendProbe;
 using av::WireArena;
 using av::WireReader;
 using av::WireWriter;
@@ -59,6 +72,41 @@ RvkBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
     return handle;
 }
 int          fence = 0;
+/* What the stand-in driver answers: the profile mask, and how many errors
+ * glGetError has left to report (all of them GL_INVALID_ENUM). */
+constexpr GLenum  gl_context_profile_mask = 0x9126u, gl_invalid_enum = 0x0500u;
+constexpr GLint   core_profile_bit = 0x1, compatibility_profile_bit = 0x2;
+constexpr std::uint32_t endless = 1000u;
+GLint             answered_mask = 0;
+std::uint32_t     errors_left = 0u;
+std::uint32_t     errors_asked = 0u;
+
+void profile_integers(GLenum pname, GLint *value)
+{
+    if (pname == gl_context_profile_mask) *value = answered_mask;
+}
+
+GLenum pending_error()
+{
+    errors_asked++;
+    if (errors_left == 0u) return 0u;
+    errors_left--;
+    return gl_invalid_enum;
+}
+
+/* A backend whose table answers the mask and the errors given. */
+bool fixed_function_for(GLint mask, std::uint32_t errors)
+{
+    OpenGlBackend backend;
+    av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+    gl.glGetIntegerv = profile_integers;
+    gl.glGetError = pending_error;
+    answered_mask = mask;
+    errors_left = errors;
+    errors_asked = 0u;
+    return OpenGlBackendProbe::granted_fixed_function(backend);
+}
+
 constexpr std::uint8_t no_such_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                           0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -110,6 +158,24 @@ TEST(opengl_backend, a_gpu_with_no_display_opens_no_context)
   CHECK(!display.open(nullptr));
   CHECK(!backend.initialize(&display, nullptr, nullptr));
   CHECK_EQ(backend.resolved(), 0u); }
+
+/* Only a core context lacks the fixed-function arrays a draw's check asks
+ * after. A context from before profiles has no mask, and asking for one is an
+ * error that is cleared before the guest can read it back; a context lost
+ * answers an error forever, and is asked only as often as GL has flags. */
+TEST(opengl_backend, only_a_core_context_is_told_it_has_no_fixed_function_arrays)
+{ CHECK(!fixed_function_for(core_profile_bit, 0u));
+  CHECK_EQ(errors_asked, 1u);
+  CHECK(fixed_function_for(compatibility_profile_bit, 0u));
+  CHECK(fixed_function_for(0, 1u));
+  CHECK_EQ(errors_left, 0u);
+  CHECK_EQ(errors_asked, 2u);
+  CHECK(!fixed_function_for(core_profile_bit | compatibility_profile_bit, endless));
+  CHECK_EQ(errors_asked, 8u);
+  OpenGlBackend unloaded;
+  CHECK(OpenGlBackendProbe::granted_fixed_function(unloaded));
+  OpenGlBackendProbe::gl(unloaded).glGetIntegerv = profile_integers;
+  CHECK(OpenGlBackendProbe::granted_fixed_function(unloaded)); }
 
 /* Without a context every command is refused rather than run against a table
  * of null entry points. */
