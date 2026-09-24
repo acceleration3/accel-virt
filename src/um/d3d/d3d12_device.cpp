@@ -157,14 +157,14 @@ VOID D3d12Device::check_format_support(DXGI_FORMAT format, UINT *support)
     if (support != nullptr) *support = caps_.format_support(format);
 }
 
-/* No multisampling yet: one sample of a format that is there at all, and no
- * quality level at any other count. */
+/* No tiled resources, so none multisampled either. */
 VOID D3d12Device::check_multisample_quality_levels(DXGI_FORMAT format, UINT samples,
-                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS, UINT *levels)
+                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS flags, UINT *levels)
 {
     AV_SCOPE("D3d12Device::check_multisample_quality_levels");
     if (levels == nullptr) return;
-    *levels = samples == 1u && caps_.format_support(format) != 0u ? 1u : 0u;
+    *levels = (flags & D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAG_TILED_RESOURCE) != 0 ? 0u
+                                                                                   : caps_.quality_levels(format, samples);
 }
 
 /* ---------------------------------------------------------------- facts */

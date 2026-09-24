@@ -11,9 +11,9 @@
  *
  * What is reported is what this driver implements over what the host has:
  * feature level 11_1 at most, since 12_0 promises tiled resources tier 2,
- * which no command here maps; no multisampling, until resolves cross the
- * wire; no tiled resources, raytracing, mesh shaders, view instancing or
- * render passes. A device's CheckFormatSupport is answered from the same
+ * which no command here maps; multisampling only where every member of a
+ * format's cast family agrees; no tiled resources, raytracing, mesh shaders,
+ * view instancing or render passes. A device's CheckFormatSupport is answered from the same
  * table, so the runtime is told one story. */
 #ifndef AV_UM_D3D12_HOST_CAPS_HPP
 #define AV_UM_D3D12_HOST_CAPS_HPP
@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 namespace av {
+class ClientTransport;
 class Kmt;
 }  // namespace av
 
@@ -47,9 +48,23 @@ public:
     HRESULT answer(const D3D12DDIARG_GETCAPS &args) const;
     /* D3D12DDI_FORMAT_SUPPORT_* bits for `format`. */
     UINT    format_support(DXGI_FORMAT format) const;
+    /* Quality levels of `format` at `samples`: one level at one sample for a
+     * format there is at all, and at more samples a level count its whole cast
+     * family shares, or none. */
+    UINT    quality_levels(DXGI_FORMAT format, UINT samples) const;
     UINT    descriptor_size(uint32_t type) const;
 
 private:
+    /* 2, 4, 8 and 16 samples. */
+    static constexpr uint32_t sample_counts = 4u;
+
+    /* The host's quality levels at each count, per cast family: the fewest any
+     * member the runtime lets multisample has. D3D12Core refuses a driver
+     * whose family members disagree (d3d12core's LLOCompleteLayerConstruction,
+     * "MSAA quality for parent != child"). */
+    [[nodiscard]] bool learn_samples(ClientTransport &transport);
+    uint32_t sample_slot(UINT samples) const;
+    bool     multisampled(uint32_t format) const;
     uint32_t pipeline_level() const;
     HRESULT  options(void *data, UINT bytes) const;
     HRESULT  shader(void *data, UINT bytes) const;
@@ -61,6 +76,7 @@ private:
     d3d12proto::Caps12 caps_;
     uint32_t           support1_[format_count];
     uint32_t           support2_[format_count];
+    uint32_t           qualities_[format_count][sample_counts];
     bool               learned_;
 };
 

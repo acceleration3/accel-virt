@@ -5,6 +5,7 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/client_transport.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
 namespace av::d3d12 {
@@ -36,6 +37,8 @@ struct SupportBit {
     uint32_t second; /* 1 for a FORMAT_SUPPORT2 bit */
     UINT     ddi;
 };
+/* D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD. */
+constexpr uint32_t multisample_load = 0x400000u;
 constexpr SupportBit support_bits[] = {
     {0x1u, 0u, D3D12DDI_FORMAT_SUPPORT_BUFFER},
     {0x2u, 0u, D3D12DDI_FORMAT_SUPPORT_VERTEX_BUFFER},
@@ -49,9 +52,43 @@ constexpr SupportBit support_bits[] = {
     {0x100u, 1u, D3D12DDI_FORMAT_SUPPORT_OUTPUT_MERGER_LOGIC_OP},
 };
 
+/* DXGI formats D3D12Core lets a driver multisample at feature level 11_1:
+ * its CD3D11FormatHelper::MultisampleRenderTargetSupport table (d3d12core
+ * 0x1802808c4) without the entries it marks not supported. A typeless format
+ * is never among them, and claiming one fails the device. */
+constexpr uint8_t multisample_formats[] = {2,  3,  4,  6,  7,  8,  10, 11, 12, 13, 14, 16, 17, 18, 20, 24, 25, 26, 28,
+                                           29, 30, 31, 32, 34, 35, 36, 37, 38, 40, 41, 42, 43, 45, 49, 50, 51, 52, 54,
+                                           55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 67, 85, 86, 87, 88, 91, 93, 115, 191};
+
+/* Each cast family by its typeless head and its last member: DXGI numbers a
+ * family's formats consecutively after the head, except the two BGRA families,
+ * named member by member. */
+struct Family {
+    uint32_t head;
+    uint32_t last;
+};
+constexpr Family families[] = {{1u, 4u},   {5u, 8u},   {9u, 14u},  {15u, 18u}, {19u, 22u}, {23u, 25u},
+                               {27u, 32u}, {33u, 38u}, {39u, 43u}, {44u, 47u}, {48u, 52u}, {53u, 59u},
+                               {60u, 64u}, {70u, 72u}, {73u, 75u}, {76u, 78u}, {79u, 81u}, {82u, 84u},
+                               {94u, 96u}, {97u, 99u}};
+/* B8G8R8A8: 87 and 91 under 90; B8G8R8X8: 88 and 93 under 92. */
+constexpr uint32_t bgra_head = 90u, bgrx_head = 92u;
+constexpr uint32_t bgra_unorm = 87u, bgra_srgb = 91u, bgrx_unorm = 88u, bgrx_srgb = 93u;
+constexpr UINT     counts[] = {2u, 4u, 8u, 16u};
+
+uint32_t family_of(uint32_t format)
+{
+    AV_SCOPE("family_of");
+    if (format == bgra_unorm || format == bgra_srgb) return bgra_head;
+    if (format == bgrx_unorm || format == bgrx_srgb) return bgrx_head;
+    for (const Family &family : families)
+        if (format >= family.head && format <= family.last) return family.head;
+    return format;
+}
+
 }  // namespace
 
-D3d12HostCaps::D3d12HostCaps() : caps_{}, support1_{}, support2_{}, learned_(false)
+D3d12HostCaps::D3d12HostCaps() : caps_{}, support1_{}, support2_{}, qualities_{}, learned_(false)
 {
     AV_SCOPE("D3d12HostCaps::D3d12HostCaps");
 }
@@ -75,8 +112,59 @@ bool D3d12HostCaps::learn(Kmt &kmt, uint32_t adapter)
                                                  &levels))
             return false;
     }
+    if (!learn_samples(transport)) return false;
     learned_ = true;
     return true;
+}
+
+bool D3d12HostCaps::multisampled(uint32_t format) const
+{
+    AV_SCOPE("D3d12HostCaps::multisampled");
+    for (const uint8_t allowed : multisample_formats)
+        if (allowed == format) return true;
+    return false;
+}
+
+/* Each family's level count at each sample count is its members' fewest, so
+ * every member D3D12Core lets multisample reports the same. */
+bool D3d12HostCaps::learn_samples(ClientTransport &transport)
+{
+    AV_SCOPE("D3d12HostCaps::learn_samples");
+    for (uint32_t format = 1u; format < format_count; format++)
+        for (uint32_t slot = 0u; slot < sample_counts; slot++) qualities_[format][slot] = ~0u;
+    for (uint32_t format = 1u; format < format_count; format++) {
+        if (!multisampled(format)) continue;
+        const uint32_t family = family_of(format);
+        for (uint32_t slot = 0u; slot < sample_counts; slot++) {
+            uint32_t support1 = 0u, support2 = 0u, levels = 0u;
+            if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, counts[slot], &support1, &support2, &levels))
+                return false;
+            if (levels < qualities_[family][slot]) qualities_[family][slot] = levels;
+        }
+    }
+    for (uint32_t format = 1u; format < format_count; format++)
+        for (uint32_t slot = 0u; slot < sample_counts; slot++)
+            if (qualities_[format][slot] == ~0u) qualities_[format][slot] = 0u;
+    return true;
+}
+
+uint32_t D3d12HostCaps::sample_slot(UINT samples) const
+{
+    AV_SCOPE("D3d12HostCaps::sample_slot");
+    for (uint32_t slot = 0u; slot < sample_counts; slot++)
+        if (counts[slot] == samples) return slot;
+    return sample_counts;
+}
+
+UINT D3d12HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const
+{
+    AV_SCOPE("D3d12HostCaps::quality_levels");
+    const uint32_t index = static_cast<uint32_t>(format);
+    if (index == 0u || index >= format_count) return 0u;
+    if (samples == 1u) return format_support(format) != 0u ? 1u : 0u;
+    const uint32_t slot = sample_slot(samples);
+    if (slot == sample_counts || !multisampled(index)) return 0u;
+    return qualities_[family_of(index)][slot];
 }
 
 bool D3d12HostCaps::learned() const
@@ -94,6 +182,12 @@ UINT D3d12HostCaps::format_support(DXGI_FORMAT format) const
     for (const SupportBit &bit : support_bits) {
         const uint32_t word = bit.second != 0u ? support2_[index] : support1_[index];
         if ((word & bit.api) != 0u) made |= bit.ddi;
+    }
+    /* Multisampling is the family's, never one member's alone. */
+    for (uint32_t slot = 0u; multisampled(index) && slot < sample_counts; slot++) {
+        if (qualities_[family_of(index)][slot] == 0u) continue;
+        made |= D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
+        if ((support1_[index] & multisample_load) != 0u) made |= D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
     }
     return made;
 }
