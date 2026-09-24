@@ -154,7 +154,11 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         fault_ = transport ? FaultCode::command_framing : fault_for(status);
         return status;
     }
-    fences_.heartbeat();
+    /* Progress is what the guest's timeout detection watches in a long batch;
+     * every command's store to the shared page is a line the guest's DPC then
+     * pulls back across, so it goes out every few hundred. */
+    constexpr uint64_t commands_per_heartbeat = 256u;
+    if (commands_ % commands_per_heartbeat == 0u) fences_.heartbeat();
     commands_++;
     answered = answered || replying;
     answer = replying ? produced : answer;

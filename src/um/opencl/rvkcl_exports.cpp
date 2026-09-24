@@ -41,4 +41,4 @@ extern "C" CL_API_ENTRY cl_int CL_API_CALL clIcdGetPlatformIDsKHR(cl_uint num_en
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
 
-extern "C" int _fltused = 0;
+extern "C" [[gnu::used]] int _fltused = 0;

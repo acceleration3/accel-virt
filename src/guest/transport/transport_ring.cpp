@@ -57,7 +57,10 @@ void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint3
     AV_SCOPE("TransportRing::write_wrapped");
     const uint64_t mask = capacity() - 1u;
     uint8_t *const data = ring_ + header_size;
-    for (uint32_t i = 0u; i < count; i++) data[(counter + i) & mask] = source[i];
+    const uint64_t at = counter & mask;
+    const uint64_t first = capacity() - at < count ? capacity() - at : count;
+    __builtin_memcpy(data + at, source, first);
+    __builtin_memcpy(data, source + first, count - first);
 }
 
 uint64_t TransportRing::read_head() const

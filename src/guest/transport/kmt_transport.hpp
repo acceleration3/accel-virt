@@ -97,6 +97,8 @@ public:
      * answered batch ends its call as a synchronous command does: end_call
      * retires every blob lease. */
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
+    TransportResult send_async_batch(const uint8_t *framed, size_t length);
+    TransportResult send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;
 

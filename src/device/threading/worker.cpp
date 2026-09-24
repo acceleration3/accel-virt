@@ -175,7 +175,7 @@ void Worker::run()
     AV_SCOPE("Worker::run");
     host_.require_worker("Worker::run");
     for (;;) {
-        host_.wait_event(wake_);
+        if (!work_within_spin()) host_.wait_event(wake_);
         WorkItem item;
         for (Step step = next(item); step != Step::idle; step = next(item)) {
             if (step == Step::stop) return ring_.detach();
@@ -185,6 +185,21 @@ void Worker::run()
         if (signal_ != nullptr) signal_->drain();
         ring_.service();
     }
+}
+
+/* A guest waiting on an answer sends its next batch within microseconds, and
+ * a thread asleep in poll() on an idle core takes tens of them to wake: the
+ * ring is watched for a moment before the worker sleeps. */
+bool Worker::work_within_spin()
+{
+    AV_SCOPE("Worker::work_within_spin");
+    constexpr uint64_t spin_ns = 100000u;
+    const uint64_t     started = host_.monotonic_nanoseconds();
+    do {
+        if (ring_.has_work()) return true;
+        __builtin_ia32_pause();
+    } while (host_.monotonic_nanoseconds() - started < spin_ns);
+    return false;
 }
 
 /* A doorbell rings only a running worker's event. */

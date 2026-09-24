@@ -1972,6 +1972,9 @@ public:
             workers_[t].first = t * (objects / threads);
             workers_[t].count = objects / threads;
         }
+        // The pool lives as long as the sample, as the original's does: a
+        // frame hands each worker its share and waits for the lists.
+        for (Worker &w : workers_) spawn(w);
         return !gpu.failed;
     }
     void render(Gpu &gpu, float time) override
@@ -2019,6 +2022,7 @@ public:
         safe_release(sky_constants_);
         safe_release(raster_);
         safe_release(sky_depth_);
+        for (Worker &w : workers_) retire(w);
         for (Worker &w : workers_) {
             safe_release(w.list);
             safe_release(w.constants);
@@ -2034,11 +2038,14 @@ private:
         ID3D11CommandList   *list = nullptr;
         Multithreading      *owner = nullptr;
         uint32_t             first = 0, count = 0;
+        bool                 quit = false;
 #ifdef _WIN32
-        HANDLE thread = nullptr;
+        HANDLE thread = nullptr, go = nullptr, done = nullptr;
 #else
-        pthread_t thread = {};
-        bool      running = false;
+        pthread_t       thread = {};
+        bool            running = false, pending = false, finished = false;
+        pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+        pthread_cond_t  wake = PTHREAD_COND_INITIALIZER;
 #endif
     };
 
@@ -2046,36 +2053,86 @@ private:
     static DWORD WINAPI thread_entry(LPVOID argument)
     {
         Worker *w = static_cast<Worker *>(argument);
-        w->owner->record(*w);
-        return 0;
+        for (;;) {
+            WaitForSingleObject(w->go, INFINITE);
+            if (w->quit) return 0;
+            w->owner->record(*w);
+            SetEvent(w->done);
+        }
+    }
+    void spawn(Worker &w)
+    {
+        w.go = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        w.done = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (w.go != nullptr && w.done != nullptr) w.thread = CreateThread(nullptr, 256 * 1024, thread_entry, &w, 0, nullptr);
     }
     void start(Worker &w)
     {
-        w.thread = CreateThread(nullptr, 256 * 1024, thread_entry, &w, 0, nullptr);
         if (w.thread == nullptr) record(w);
+        else SetEvent(w.go);
     }
     void join(Worker &w)
     {
-        if (w.thread == nullptr) return;
-        WaitForSingleObject(w.thread, INFINITE);
-        CloseHandle(w.thread);
-        w.thread = nullptr;
+        if (w.thread != nullptr) WaitForSingleObject(w.done, INFINITE);
+    }
+    void retire(Worker &w)
+    {
+        if (w.thread != nullptr) {
+            w.quit = true;
+            SetEvent(w.go);
+            WaitForSingleObject(w.thread, INFINITE);
+            CloseHandle(w.thread);
+        }
+        if (w.go != nullptr) CloseHandle(w.go);
+        if (w.done != nullptr) CloseHandle(w.done);
+        w.thread = w.go = w.done = nullptr;
     }
 #else
     static void *thread_entry(void *argument)
     {
         Worker *w = static_cast<Worker *>(argument);
-        w->owner->record(*w);
-        return nullptr;
+        for (;;) {
+            pthread_mutex_lock(&w->lock);
+            while (!w->pending) pthread_cond_wait(&w->wake, &w->lock);
+            w->pending = false;
+            const bool quit = w->quit;
+            pthread_mutex_unlock(&w->lock);
+            if (quit) return nullptr;
+            w->owner->record(*w);
+            pthread_mutex_lock(&w->lock);
+            w->finished = true;
+            pthread_cond_broadcast(&w->wake);
+            pthread_mutex_unlock(&w->lock);
+        }
     }
+    void spawn(Worker &w) { w.running = pthread_create(&w.thread, nullptr, thread_entry, &w) == 0; }
     void start(Worker &w)
     {
-        w.running = pthread_create(&w.thread, nullptr, thread_entry, &w) == 0;
-        if (!w.running) record(w);
+        if (!w.running) {
+            record(w);
+            return;
+        }
+        pthread_mutex_lock(&w.lock);
+        w.finished = false;
+        w.pending = true;
+        pthread_cond_broadcast(&w.wake);
+        pthread_mutex_unlock(&w.lock);
     }
     void join(Worker &w)
     {
         if (!w.running) return;
+        pthread_mutex_lock(&w.lock);
+        while (!w.finished) pthread_cond_wait(&w.wake, &w.lock);
+        pthread_mutex_unlock(&w.lock);
+    }
+    void retire(Worker &w)
+    {
+        if (!w.running) return;
+        pthread_mutex_lock(&w.lock);
+        w.quit = true;
+        w.pending = true;
+        pthread_cond_broadcast(&w.wake);
+        pthread_mutex_unlock(&w.lock);
         pthread_join(w.thread, nullptr);
         w.running = false;
     }

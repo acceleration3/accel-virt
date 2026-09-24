@@ -16,7 +16,7 @@ extern "C" void rvkd3d12probe_entry();
 
 extern "C" int  _purecall();
 extern "C" int  _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
-extern "C" int  _fltused = 0;
+extern "C" [[gnu::used]] int  _fltused = 0;
 
 extern "C" void rvkd3d9probe_entry() { ExitProcess(av::D3d9ProbeProgram().run()); }
 extern "C" void rvkd3d11probe_entry() { ExitProcess(av::D3d11ProbeProgram().run()); }

@@ -4,7 +4,7 @@
 #include <d3dcommon.h>
 
 extern "C" {
-int _fltused = 0;
+[[gnu::used]] int _fltused = 0;
 int __cdecl _purecall() { ExitProcess(3); }
 #pragma function(memset, memcpy, memmove, memcmp)
 void *__cdecl memset(void *to, int value, size_t count)

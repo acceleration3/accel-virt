@@ -349,6 +349,33 @@ TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer,
 
 /* The batch is judged whole before a byte reaches the ring: a frame the device
  * would fault the context for is the caller's mistake, not the context's. */
+/* For a stream that framed the batch itself and knows none of it answers:
+ * reading every header back to learn that cost more than writing them, once
+ * a Flush lets a batch grow to thousands of commands. */
+TransportResult KmtTransport::send_async_batch(const uint8_t *framed, size_t length)
+{
+    AV_SCOPE("KmtTransport::send_async_batch");
+    if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
+        return TransportResult::failed;
+    uint64_t fence = 0u;
+    return publish_batch(framed, static_cast<uint32_t>(length), fence);
+}
+
+/* For a stream whose batch ends in the one command that answers. */
+TransportResult KmtTransport::send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply)
+{
+    AV_SCOPE("KmtTransport::send_answered_batch");
+    reply = WireReader(nullptr, 0u);
+    if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
+        return TransportResult::failed;
+    uint64_t              fence = 0u;
+    const TransportResult sent = publish_batch(framed, static_cast<uint32_t>(length), fence);
+    if (sent != TransportResult::ok) return sent;
+    const TransportResult answered = await(fence, reply);
+    answered_ = answered == TransportResult::ok;
+    return answered;
+}
+
 TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::send_batch");

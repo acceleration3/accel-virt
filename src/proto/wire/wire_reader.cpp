@@ -33,9 +33,11 @@ uint64_t WireReader::read_u64() { return read_little_endian(8u); }
 
 void WireReader::copy_bytes(uint8_t *destination, size_t count)
 {
+    /* Builtins, not loops: the freestanding builds do not turn a loop into
+     * memcpy, and every byte an upload carries passes through here. */
     const uint8_t *start = take(count);
-    for (size_t i = 0u; i < count; i++)
-        destination[i] = (start != nullptr) ? start[i] : 0u;
+    if (start != nullptr) __builtin_memcpy(destination, start, count);
+    else __builtin_memset(destination, 0, count);
 }
 
 void WireReader::expect_zero(size_t count)

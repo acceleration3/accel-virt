@@ -116,6 +116,9 @@ list(APPEND RVKVK_SOURCES
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp)
 
+# The probe's module-level assembly is Intel syntax that LTO's IR assembler
+# reads as AT&T: it stays an ordinary object.
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp PROPERTIES COMPILE_OPTIONS -fno-lto)
 add_library(rvkvk SHARED ${RVKVK_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/stack_probe.cpp)
 add_dependencies(rvkvk rvktest_imports)
 set_target_properties(rvkvk PROPERTIES PREFIX "")

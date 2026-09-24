@@ -64,4 +64,4 @@ extern "C" void rvktest_entry()
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
 
-extern "C" int _fltused = 0;
+extern "C" [[gnu::used]] int _fltused = 0;

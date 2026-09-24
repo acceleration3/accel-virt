@@ -129,6 +129,15 @@ Status RingConsumer::consume_next()
 
 /* The executor goes at once: the host API's objects are the device's to free,
  * the context's binding the guest's. */
+bool RingConsumer::has_work() const
+{
+    AV_SCOPE("RingConsumer::has_work");
+    if (!attached_ || faulted_) return false;
+    RingHeader header;
+    return ring_.snapshot(header) == Status::ok &&
+           header.tail() - __atomic_load_n(&head_, __ATOMIC_ACQUIRE) >= BatchHeader::encoded_size;
+}
+
 uint64_t RingConsumer::earliest_pending() const
 {
     AV_SCOPE("RingConsumer::earliest_pending");

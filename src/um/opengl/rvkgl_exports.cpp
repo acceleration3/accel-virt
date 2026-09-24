@@ -71,4 +71,4 @@ extern "C" BOOL APIENTRY DrvSwapBuffers(HDC dc) { return rvkgl_library.swap_buff
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
 
-extern "C" int _fltused = 0;
+extern "C" [[gnu::used]] int _fltused = 0;

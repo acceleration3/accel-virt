@@ -27,8 +27,7 @@ Status D3dCommandStream::flush()
     AV_SCOPE("D3dCommandStream::flush");
     if (failed_) return Status::invalid_state;
     if (used_ == 0u) return Status::ok;
-    WireReader reply(nullptr, 0u);
-    const TransportResult sent = transport_.send_batch(block_, used_, reply);
+    const TransportResult sent = transport_.send_async_batch(block_, used_);
     used_ = 0u;
     batches_++;
     if (sent == TransportResult::ok) return Status::ok;
@@ -116,7 +115,7 @@ TransportResult D3dCommandStream::send_sync(uint32_t command_id, WireWriter &wri
     AV_SCOPE("D3dCommandStream::send_sync");
     reply = WireReader(nullptr, 0u);
     if (append(command_id, writer, CommandHeader::generate_reply) != TransportResult::ok) return TransportResult::failed;
-    const TransportResult sent = transport_.send_batch(block_, used_, reply);
+    const TransportResult sent = transport_.send_answered_batch(block_, used_, reply);
     used_ = 0u;
     batches_++;
     if (sent != TransportResult::ok) failed_ = true;

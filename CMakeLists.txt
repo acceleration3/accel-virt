@@ -14,6 +14,11 @@ option(AV_COVERAGE "instrument for llvm-cov"        OFF)
 option(AV_SANITIZE "build tests with ASan + UBSan"  ON)
 option(AV_FUZZ     "build libFuzzer targets"        OFF)
 option(AV_QEMU     "build the patched QEMU with the device and smoke-test it" OFF)
+# The QEMU configuration is the one guests run on: with no build type, CMake
+# compiles the core and the executor library unoptimized.
+if(AV_QEMU AND NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
 
 add_compile_options(
   -Wall -Wextra -Werror

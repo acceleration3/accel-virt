@@ -64,6 +64,7 @@ private:
     enum class Step { work, idle, stop };
 
     Step next(WorkItem &item);
+    bool work_within_spin();
     void release();
 
     Host          &host_;
