@@ -239,7 +239,7 @@ void Gpu::read_image(cl_mem image, void *into, uint32_t width, uint32_t height)
 
 void Gpu::local(cl_kernel kernel, cl_uint index, size_t bytes)
 {
-    check(cl.SetKernelArg(kernel, index, bytes, nullptr), "clSetKernelArg (local)");
+    if (!failed) check(cl.SetKernelArg(kernel, index, bytes, nullptr), "clSetKernelArg (local)");
 }
 
 void Gpu::run(cl_kernel kernel, size_t global_x, size_t local_x)

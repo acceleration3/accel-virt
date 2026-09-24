@@ -42,7 +42,11 @@ ABSOLUTE_TOLERANCE = 1e-6
 
 
 def build(args):
-    targets = ["rvkclsamples_host"] if args.host_only else ["rvktest", "rvkclsamples_host"]
+    targets = ["rvkclsamples_host"]
+    if args.loopback:
+        targets.append("rvkclsamples_loopback")
+    elif not args.host_only:
+        targets.append("rvktest")
     for target in targets:
         subprocess.run(["cmake", "--build", str(args.build), "--target", target], check=True,
                        stdout=subprocess.DEVNULL)
@@ -102,6 +106,24 @@ $writer.Close()""")
         (target / name).write_bytes(data[at + 4:at + 4 + size])
         at += 4 + size
     local.unlink()
+
+
+def run_loopback(args, out):
+    """The guest's path without a guest: rvkcl's core, the driver, the device
+    core and the executor library in one host process (the L4 rig), in the
+    VM's column. What it shows is whether the ICD carries every sample right;
+    its speed is the sanitized single-process rig's, not a VM's."""
+    print("loopback: running", flush=True)
+    shutil.rmtree(out / "guest", ignore_errors=True)
+    (out / "guest").mkdir(parents=True)
+    command = [str(args.build / "rvkclsamples_loopback"), "--out", str(out / "guest"), "--frames", str(args.frames),
+               "--warmup", str(args.warmup)]
+    if args.only:
+        command += ["--only", args.only]
+    environment = dict(os.environ, MESA_SHADER_CACHE_DISABLE="true", VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING="1")
+    done = subprocess.run(command, capture_output=True, text=True, timeout=3600, env=environment)
+    (out / "guest.log").write_text(done.stdout + done.stderr)
+    print(done.stdout, flush=True)
 
 
 def run_host(args, out):
@@ -233,8 +255,9 @@ def write_html(args, out, rows):
     ok_host = sum(1 for r in rows if r["host"] and r["host"]["status"] == "ok")
     device = (out / "host" / "device.txt").read_text().strip() if (out / "host" / "device.txt").exists() else ""
     vm_device = (out / "guest" / "device.txt").read_text().strip() if (out / "guest" / "device.txt").exists() else ""
+    vm = "loopback" if args.loopback else "VM"
     parts = [f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenCL samples: host vs VM</title>
+<title>OpenCL samples: host vs {vm}</title>
 <style>
 :root {{ --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#e4e2dc; --good:#1f7a4d; --warn:#a36a00; --bad:#b3261e; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#161614; --fg:#ecebe6; --muted:#a19f97; --card:#1f1f1c; --line:#33322e; --good:#5cc08a; --warn:#e0a33a; --bad:#f07167; }} }}
@@ -256,19 +279,19 @@ th {{ color:var(--muted); font-weight:500; }}
 .wrap {{ overflow-x:auto; }}
 .overview td:nth-child(2), .overview th:nth-child(2) {{ text-align:left; }}
 </style>
-<h1>OpenCL samples: host vs VM</h1>
+<h1>OpenCL samples: host vs {vm}</h1>
 <div class="muted">{html.escape(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))}
 &middot; {args.warmup} warm-up iterations (at least 1 s), then blocks of {args.frames} iterations with a clFinish each, for at least 1 s
 &middot; host: {html.escape(device or "the host's OpenCL")}
-&middot; VM: {html.escape(vm_device or "not run")} (Khronos loader &rarr; rvkcl &rarr; virtio-gpu-rvk &rarr; the host's OpenCL)</div>
+&middot; {vm}: {html.escape(vm_device or "not run")} ({"rvkcl&apos;s core, the driver, the device core and the executor in one host process" if args.loopback else "Khronos loader &rarr; rvkcl &rarr; virtio-gpu-rvk &rarr; the host&apos;s OpenCL"})</div>
 <div class="summary">
 <div class="stat"><span class="muted">samples</span><b>{len(rows)}</b></div>
 <div class="stat"><span class="muted">correct on the host</span><b>{ok_host} / {len(rows)}</b></div>
-<div class="stat"><span class="muted">VM output matching host</span><b>{matched} / {len(rows)}</b></div>
-<div class="stat"><span class="muted">VM speed vs host (geomean)</span><b>{cell(geomean * 100 if geomean else None, "%", 1)}</b></div>
+<div class="stat"><span class="muted">{vm} output matching host</span><b>{matched} / {len(rows)}</b></div>
+<div class="stat"><span class="muted">{vm} speed vs host (geomean)</span><b>{cell(geomean * 100 if geomean else None, "%", 1)}</b></div>
 </div>
 <div class="wrap"><table class="overview">
-<tr><th>sample</th><th>verdict</th><th>host it/s</th><th>VM it/s</th><th>VM / host</th><th>host rate</th><th>VM rate</th></tr>"""]
+<tr><th>sample</th><th>verdict</th><th>host it/s</th><th>{vm} it/s</th><th>{vm} / host</th><th>host rate</th><th>{vm} rate</th></tr>"""]
     for r, (label, tone) in zip(rows, verdicts):
         h, g = r["host"], r["guest"]
         ratio = g["ips"] / h["ips"] if h and g and h["ips"] > 0 else None
@@ -279,27 +302,27 @@ th {{ color:var(--muted); font-weight:500; }}
 <td>{cell(g and g["rate"], " " + unit, 2)}</td></tr>""")
     parts.append("</table></div>")
     for r, (label, tone) in zip(rows, verdicts):
-        parts.append(sample_section(r, label, tone))
+        parts.append(sample_section(r, label, tone, vm))
     (out / "index.html").write_text("\n".join(parts))
     print(f"report: {out / 'index.html'}")
 
 
-def sample_section(r, label, tone):
+def sample_section(r, label, tone, vm):
     name, h, g = r["name"], r["host"], r["guest"]
     ratio = g["ips"] / h["ips"] if h and g and h["ips"] > 0 else None
     unit = (h or g)["unit"]
     section = [f"""<section class="sample" id="{html.escape(name)}"><h2>{html.escape(name)} <span class="tag {tone}">{html.escape(label)}</span>
-<span class="muted" style="font-size:13px">VM at {cell(ratio * 100 if ratio else None, "%", 1)} of host speed</span></h2>"""]
+<span class="muted" style="font-size:13px">{vm} at {cell(ratio * 100 if ratio else None, "%", 1)} of host speed</span></h2>"""]
     if r["has_image"]:
         section.append(f"""<div class="images">
 <figure><img src="img/{name}-host.png" alt="host"><figcaption>host (native OpenCL)</figcaption></figure>
-<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>VM (rvkcl over virtio-gpu-rvk)</figcaption></figure>
+<figure><img src="img/{name}-vm.png" alt="vm"><figcaption>{vm} (rvkcl)</figcaption></figure>
 <figure><img src="img/{name}-diff.png" alt="difference"><figcaption>difference, largest channel &times;8</figcaption></figure>
 </div>""")
     section.append(f"""<div class="wrap"><table>
 <tr><th></th><th>iterations / s</th><th>ms / iteration</th><th>rate</th><th>setup ms</th><th>status</th></tr>
 <tr><td>host</td><td>{cell(h and h["ips"], "", 1)}</td><td>{cell(h and h["ms"] / max(h["iterations"], 1), "", 3)}</td><td>{cell(h and h["rate"], " " + unit, 2)}</td><td>{cell(h and h["init_ms"], "", 1)}</td><td>{html.escape(h["status"]) if h else "&ndash;"}</td></tr>
-<tr><td>VM</td><td>{cell(g and g["ips"], "", 1)}</td><td>{cell(g and g["ms"] / max(g["iterations"], 1), "", 3)}</td><td>{cell(g and g["rate"], " " + unit, 2)}</td><td>{cell(g and g["init_ms"], "", 1)}</td><td>{html.escape(g["status"]) if g else "&ndash;"}</td></tr>
+<tr><td>{vm}</td><td>{cell(g and g["ips"], "", 1)}</td><td>{cell(g and g["ms"] / max(g["iterations"], 1), "", 3)}</td><td>{cell(g and g["rate"], " " + unit, 2)}</td><td>{cell(g and g["init_ms"], "", 1)}</td><td>{html.escape(g["status"]) if g else "&ndash;"}</td></tr>
 </table>""")
     stats = r["image"]
     if stats:
@@ -307,7 +330,7 @@ def sample_section(r, label, tone):
 <tr><td>{stats["changed"]:.3f}%</td><td>{stats["max"]}</td><td>{stats["mean"]:.4f}</td><td>{"&infin;" if stats["psnr"] == float("inf") else f'{stats["psnr"]:.1f} dB'}</td></tr></table>""")
     b = r["buffer"]
     if b:
-        first = "&ndash;" if not b["first"] else html.escape(f"[{b['first'][0]}] host {b['first'][1]!r}, VM {b['first'][2]!r}")
+        first = "&ndash;" if not b["first"] else html.escape(f"[{b['first'][0]}] host {b['first'][1]!r}, {vm} {b['first'][2]!r}")
         section.append(f"""<table><tr><th>buffer</th><th>elements</th><th>bit-identical</th><th>differing</th><th>largest abs</th><th>largest rel</th><th>first difference</th></tr>
 <tr><td>{b["kind"]}</td><td>{b["count"]:,}</td><td>{b["exact"]:,}</td><td>{b["differing"]:,}</td><td>{b["max_abs"]:.3g}</td><td>{b["max_rel"]:.3g}</td><td>{first}</td></tr></table>""")
     section.append("</div></section>")
@@ -328,11 +351,17 @@ def main():
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--no-guest", action="store_true", help="reuse the guest results already in the output")
     parser.add_argument("--host-only", action="store_true", help="run nothing in the guest; report the host alone")
+    parser.add_argument("--loopback", action="store_true",
+                        help="no guest: run the suite through the ICD, driver, device and executor in one host "
+                             "process (rvkclsamples_loopback) and report it in the VM's column")
     args = parser.parse_args()
     if not args.no_build:
         build(args)
     args.out.mkdir(parents=True, exist_ok=True)
-    if not args.no_guest and not args.host_only:
+    if args.loopback:
+        shutil.rmtree(args.out / "img", ignore_errors=True)
+        run_loopback(args, args.out)
+    elif not args.no_guest and not args.host_only:
         for stale in ("guest", "img"):
             shutil.rmtree(args.out / stale, ignore_errors=True)
         run_guest(args, args.out)

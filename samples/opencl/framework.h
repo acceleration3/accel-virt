@@ -89,7 +89,7 @@ public:
 
     template <typename T> void arg(cl_kernel kernel, cl_uint index, const T &value)
     {
-        check(cl.SetKernelArg(kernel, index, sizeof value, &value), "clSetKernelArg");
+        if (!failed) check(cl.SetKernelArg(kernel, index, sizeof value, &value), "clSetKernelArg");
     }
     // A __local argument of `bytes`.
     void local(cl_kernel kernel, cl_uint index, size_t bytes);

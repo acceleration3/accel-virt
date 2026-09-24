@@ -180,7 +180,7 @@ target_link_libraries(rvkd3d11samples_host PRIVATE ${CMAKE_DL_LIBS})
 # at run time as the guest loads OpenCL.dll - the report's baseline
 # (tools/opencl_report.py).
 file(GLOB AV_OPENCL_SAMPLES_SOURCES CONFIGURE_DEPENDS samples/opencl/*.cpp)
-list(FILTER AV_OPENCL_SAMPLES_SOURCES EXCLUDE REGEX "guest_platform\\.cpp$")
+list(FILTER AV_OPENCL_SAMPLES_SOURCES EXCLUDE REGEX "(guest|loopback)_platform\\.cpp$")
 add_executable(rvkclsamples_host ${AV_OPENCL_SAMPLES_SOURCES})
 target_include_directories(rvkclsamples_host SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 target_compile_options(rvkclsamples_host PRIVATE -O2 -w -fno-exceptions -fno-rtti)
@@ -527,6 +527,20 @@ if(AV_COVERAGE)
   add_test(NAME coverage_gate
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_coverage.py ${CMAKE_BINARY_DIR})
   set_tests_properties(coverage_gate PROPERTIES FIXTURES_REQUIRED coverage_profiles)
+endif()
+
+# The OpenCL samples through the guest's whole path in one process: rvkcl's core
+# over the L4 rig and the executor library on this machine's GPU. Not a test -
+# nothing here judges it but tools/opencl_report.py --loopback, which compares
+# its outputs with rvkclsamples_host's the way it compares the VM's.
+if(AV_GENERATED)
+  file(GLOB AV_OPENCL_LOOPBACK_SOURCES CONFIGURE_DEPENDS samples/opencl/*.cpp)
+  list(FILTER AV_OPENCL_LOOPBACK_SOURCES EXCLUDE REGEX "(guest|host)_platform\\.cpp$")
+  add_executable(rvkclsamples_loopback ${AV_OPENCL_LOOPBACK_SOURCES})
+  target_compile_options(rvkclsamples_loopback PRIVATE -O2 -w)
+  target_link_libraries(rvkclsamples_loopback PRIVATE av_harness av_cl_icd ${CMAKE_DL_LIBS})
+  add_dependencies(rvkclsamples_loopback rvk_executor)
+  target_compile_definitions(rvkclsamples_loopback PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
 endif()
 
 # ---- the driver: the same core, compiled for the Windows kernel ------------

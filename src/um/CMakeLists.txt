@@ -287,7 +287,7 @@ target_link_libraries(rvkd3d11samples PRIVATE ${RVKTEST_IMPORTS} ${RVKD3DPROBE_I
 # imports no OpenCL: every entry point is resolved from the OpenCL.dll pushed
 # beside it, as the host half resolves them from libOpenCL.
 file(GLOB RVKCLSAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/opencl/*.cpp)
-list(FILTER RVKCLSAMPLES_SOURCES EXCLUDE REGEX "host_platform\\.cpp$")
+list(FILTER RVKCLSAMPLES_SOURCES EXCLUDE REGEX "(host|loopback)_platform\\.cpp$")
 add_executable(rvkclsamples ${RVKCLSAMPLES_SOURCES})
 add_dependencies(rvkclsamples rvktest_imports)
 target_include_directories(rvkclsamples SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
