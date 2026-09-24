@@ -45,7 +45,6 @@ float power(float base, int exponent)
     return r;
 }
 float3 mix3(float3 a, float3 b, float t) { return a + (b - a) * t; }
-float3 mul3(float3 a, float3 b) { return {a.x * b.x, a.y * b.y, a.z * b.z}; }
 
 // Value noise on an integer lattice; x and y repeat every `period` cells when it is positive.
 float value_noise(float x, float y, float z, uint32_t seed, int period)
