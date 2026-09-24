@@ -28,10 +28,13 @@ uint32_t parse_number(const char *text)
     return value;
 }
 
-// The frame as B8G8R8A8 rows: "BGRA", width, height, then the texels.
-// Recorded into the list the capture frame was drawn into.
+// The frame as B8G8R8A8 rows: "BGRA", width, height, then the texels. The
+// capture frame is submitted first, with any lists the sample queued after
+// its own, and the copy follows in a list of its own.
 bool capture(Gpu &gpu, const char *path)
 {
+    gpu.submit();
+    gpu.open();
     const uint32_t pitch = (gpu.width * 4u + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) &
                            ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
     D3D12_HEAP_PROPERTIES heap = {};
