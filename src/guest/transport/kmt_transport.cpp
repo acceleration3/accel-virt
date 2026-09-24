@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/context/tail_publish_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -142,6 +143,14 @@ Status KmtTransport::initialize(const GlContextOptions &options)
         const Status plain = connection_.kmt().create_context_virtual(connection_.device(), private_data,
                                                                       sizeof private_data, context_);
         if (plain != Status::ok) return plain;
+    }
+    if (!doorbell_.established()) {
+        uint8_t escape[TailPublishRecord::encoded_size] = {};
+        static_cast<void>(TailPublishRecord().encode(escape, sizeof escape));
+        /* An older driver refuses it, and the kernel publishes as it always has. */
+        if (connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, escape, sizeof escape) ==
+            Status::ok)
+            path_.publish_before_kernel();
     }
     undo.dismiss();
     return Status::ok;

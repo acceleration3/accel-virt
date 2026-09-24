@@ -41,6 +41,10 @@ public:
     /* How each way has been taken, which is what the benchmark measures and
      * what says a disconnect was survived rather than missed. */
     uint64_t through_doorbell() const;
+    /* The driver took this process's word that it stores its own tail: a batch
+     * submitted through the kernel is published first, so a device already
+     * watching the ring takes it without waiting for the scheduler. */
+    void     publish_before_kernel();
     uint64_t through_kernel() const;
 
     /* Every submission went one way or the other. */
@@ -52,6 +56,7 @@ private:
     TransportRing &ring_;
     uint64_t       doorbell_submissions_;
     uint64_t       kernel_submissions_;
+    bool           publishes_tail_;
 
     friend struct SubmissionPathProbe;
 };

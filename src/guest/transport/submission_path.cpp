@@ -8,7 +8,7 @@
 namespace av {
 
 SubmissionPath::SubmissionPath(Kmt &kmt, GuestDoorbell &doorbell, TransportRing &ring)
-    : kmt_(kmt), doorbell_(doorbell), ring_(ring), doorbell_submissions_(0u), kernel_submissions_(0u)
+    : kmt_(kmt), doorbell_(doorbell), ring_(ring), doorbell_submissions_(0u), kernel_submissions_(0u), publishes_tail_(false)
 {
     AV_SCOPE("SubmissionPath::SubmissionPath");
 }
@@ -35,6 +35,10 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
      * at all: the same batch at the same tail, through the kernel - and where
      * there is a hardware queue, through that, because a hardware-scheduled
      * context refuses D3DKMTSubmitCommand outright (research.md §13). */
+    if (publishes_tail_ && doorbell_.queue() == 0u) {
+        const Status published = ring_.publish_tail();
+        if (published != Status::ok) return published;
+    }
     const Status submitted =
         doorbell_.queue() != 0u
             ? kmt_.submit_to_hw_queue(doorbell_.queue(), dma_address, size, descriptor, size, fence)
@@ -42,6 +46,12 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
     if (submitted != Status::ok) return submitted;
     kernel_submissions_++;
     return Status::ok;
+}
+
+void SubmissionPath::publish_before_kernel()
+{
+    AV_SCOPE("SubmissionPath::publish_before_kernel");
+    publishes_tail_ = true;
 }
 
 uint64_t SubmissionPath::through_doorbell() const

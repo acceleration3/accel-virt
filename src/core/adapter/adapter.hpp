@@ -332,6 +332,7 @@ private:
     /* The device a teardown can still ask, or null when it cannot. */
     VirtioGpuDevice     *answering_device();
     int32_t          bind_chunk(const DxgkargEscapeRecord &escape);
+    int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an rvk context: published, rung, and held on
      * the node until the fence page says the host finished it. */
     [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);

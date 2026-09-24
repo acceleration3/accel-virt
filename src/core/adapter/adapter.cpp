@@ -21,6 +21,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "proto/context/tail_publish_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkddi_feature_interface_record.hpp"
 #include "core/ddi/entry_points.hpp"
@@ -691,6 +692,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     auto *const bytes = static_cast<uint8_t *>(escape->pPrivateDriverData);
     uint32_t    magic = 0u;
     if (escape->PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
+    if (magic == TailPublishRecord::magic) return publish_own_tail(*escape);
     if (magic != TraceEscapeRecord::magic) return bind_chunk(*escape);
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
@@ -716,6 +718,20 @@ int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
         return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, HostVisibleBindRecord::encoded_size));   /* the length was checked */
     return NtStatus(Status::ok).value();
+}
+
+/* A process that stores its own ring's tail before each submission: the
+ * device may then take a batch before the scheduler hands this driver its
+ * packet, which the context accepts as it does a doorbell's. */
+int32_t Adapter::publish_own_tail(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::publish_own_tail");
+    TailPublishRecord record;
+    if (escape.hContext == nullptr ||
+        record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize) !=
+            Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(rvk_contexts_.user_mode_submits(escape.hContext, nullptr)).value();
 }
 
 int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
