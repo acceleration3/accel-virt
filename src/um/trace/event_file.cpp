@@ -18,6 +18,47 @@ bool EventFile::wanted() const
     return GetFileAttributesW(L"C:\\ProgramData\\rvk\\perfetto") != INVALID_FILE_ATTRIBUTES;
 }
 
+uint32_t EventFile::events_per_slot() const
+{
+    AV_SCOPE("EventFile::events_per_slot");
+    constexpr uint32_t fallback = 1u << 20u;
+    constexpr uint32_t smallest = 1u << 16u;
+    constexpr uint32_t largest = 1u << 24u;
+    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return fallback;
+    char  text[16] = {};
+    DWORD read = 0u;
+    const BOOL got = ReadFile(file, text, sizeof text - 1u, &read, nullptr);
+    CloseHandle(file);
+    uint32_t value = 0u;
+    for (DWORD index = 0u; got && index < read && text[index] >= '0' && text[index] <= '9'; index++)
+        value = value * 10u + static_cast<uint32_t>(text[index] - '0');
+    if (value == 0u) return fallback;
+    return value < smallest ? smallest : value > largest ? largest : value;
+}
+
+uint32_t EventFile::depth() const
+{
+    AV_SCOPE("EventFile::depth");
+    constexpr uint32_t fallback = 2u;
+    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return fallback;
+    char  text[32] = {};
+    DWORD read = 0u;
+    const BOOL got = ReadFile(file, text, sizeof text - 1u, &read, nullptr);
+    CloseHandle(file);
+    DWORD index = 0u;
+    while (got && index < read && text[index] >= '0' && text[index] <= '9') index++;
+    while (got && index < read && text[index] == ' ') index++;
+    if (!got || index >= read || text[index] < '0' || text[index] > '9') return fallback;
+    uint32_t value = 0u;
+    for (; index < read && text[index] >= '0' && text[index] <= '9'; index++)
+        value = value * 10u + static_cast<uint32_t>(text[index] - '0');
+    return value;
+}
+
 /* The mapping and the file handle are left open for the process's life: the
  * table writes into the view until the process ends. */
 Status EventFile::open(const char *module, uint32_t process, size_t bytes)
@@ -36,6 +77,12 @@ Status EventFile::open(const char *module, uint32_t process, size_t bytes)
     const HANDLE file = CreateFileW(wide, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return Status::no_memory;
+    /* Sparse: the rings of threads that never run take no disk. */
+    /* FSCTL_SET_SPARSE: CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 49, METHOD_BUFFERED,
+     * FILE_SPECIAL_ACCESS), which the user-mode kit here has no winioctl.h for. */
+    constexpr DWORD set_sparse = 0x000900C4u;
+    DWORD returned = 0u;
+    static_cast<void>(DeviceIoControl(file, set_sparse, nullptr, 0u, nullptr, 0u, &returned, nullptr));
     const HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READWRITE, static_cast<DWORD>(bytes >> 32u),
                                               static_cast<DWORD>(bytes), nullptr);
     if (mapping == nullptr) return Status::no_memory;

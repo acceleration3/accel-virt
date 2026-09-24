@@ -10,6 +10,7 @@ CreateFileMappingW
 CreateFileW
 CreateThread
 CreateToolhelp32Snapshot
+DeviceIoControl
 ExitProcess
 FreeLibrary
 GetCommandLineW

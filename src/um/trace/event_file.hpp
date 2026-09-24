@@ -19,6 +19,12 @@ public:
     EventFile &operator=(const EventFile &) = delete;
 
     bool                 wanted() const;
+    /* How many events a thread's ring holds: the flag file's number, when it
+     * names one, or a second or so of a busy thread. */
+    uint32_t             events_per_slot() const;
+    /* How deep a scope is still recorded: the flag file's second number, when
+     * it names one, or the outer calls only (TraceTable::limit_depth). */
+    uint32_t             depth() const;
     [[nodiscard]] Status open(const char *module, uint32_t process, size_t bytes);
     uint8_t             *region() const;
     size_t               bytes() const;

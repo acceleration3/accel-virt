@@ -18,7 +18,7 @@ constexpr uint32_t mix_shift = 32u;
 
 }  // namespace
 
-TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), region_(nullptr), layout_(0u), slots_(0u) {}
+TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), max_depth_(0u), region_(nullptr), layout_(0u), slots_(0u) {}
 
 Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module, uint32_t process)
 {
@@ -64,9 +64,15 @@ uint32_t TraceTable::enter(const ScopeName &name)
         if (slot == no_slot) slot = claim(key);
         if (slot == no_slot) return no_slot;
     }
+    if (max_depth_ != 0u && read32(slot_at(slot) + TraceLayout::depth_at) >= max_depth_) return no_slot;
     push(slot, name);
     if (events_ != nullptr) events_->record(slot, host_.clock(), name.id(), host_.thread_number(), true);
     return slot;
+}
+
+void TraceTable::limit_depth(uint32_t depth)
+{
+    max_depth_ = depth;
 }
 
 void TraceTable::record_events(EventRing &ring)

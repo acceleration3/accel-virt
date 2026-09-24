@@ -389,6 +389,9 @@ def arguments():
                              "pause: stop the guest at the bugcheck for --gdb")
     parser.add_argument("--hold", action="store_true",
                         help="on failure, keep the guest running until Enter is pressed")
+    parser.add_argument("--no-collect", action="store_true",
+                        help="do not pull the guest's diagnostics before holding it: a guest kept for interactive "
+                             "work is handed over the moment its steps are done")
     parser.add_argument("--keep", action="store_true",
                         help="keep the guest running until Enter is pressed whatever the verdict, to inspect it "
                              "(tools/mcp/rvk_inspect.py)")
@@ -2396,7 +2399,7 @@ class GuestRun:
         paused = panicked and self.args.on_panic == "pause"
         if paused:
             self.say("panic: the guest is paused at the bugcheck")
-        elif not self.args.prepare_image:
+        elif not self.args.prepare_image and not self.args.no_collect:
             self.collect_evidence(panicked)
         if (failure is not None and self.args.hold) or self.args.keep:
             self.hold()

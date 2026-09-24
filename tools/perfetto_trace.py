@@ -209,41 +209,79 @@ def freeze_guest(work, frozen=True):
                             f"$f.Seek(24, 'Begin') | Out-Null; $f.WriteByte({1 if frozen else 0}); $f.Close() }}")
 
 
-def guest_rings(work, scratch):
-    """Every guest process's event file, zipped in the guest (they are mostly
-    zeroes) and pulled."""
+GUEST_EVENTS_KEPT = 1 << 20   # the newest events a guest thread's ring gives the capture
+
+
+def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
+    """Every guest process's recorded events, copied in the guest without the
+    ring's unused slots and with only each slot's newest `kept` events, zipped
+    and pulled: slot number, count, then the events oldest first."""
     listing = guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { $_.Name }")
     for name in listing.split():
         if not name.endswith(".bin"):
             continue
         remote = f"C:\\ProgramData\\rvk\\{name}"
-        # The process still has it open for writing: read it with write sharing.
-        guest_shell(work, "ps", f"$in = [IO.File]::Open('{remote}', 'Open', 'Read', 'ReadWrite'); "
-                                f"$out = [IO.File]::Create('{remote}.gz'); "
-                                "$zip = New-Object IO.Compression.GZipStream($out, [IO.Compression.CompressionMode]::Compress); "
-                                "$in.CopyTo($zip); $zip.Close(); $in.Close()")
-        local = scratch / f"{name}.gz"
-        guest_shell(work, "pull", f"{remote}.gz", str(local))
-        if not local.exists():
-            continue
-        (scratch / name).write_bytes(gzip.decompress(local.read_bytes()))
-        yield name, scratch / name
+        script = (
+            f"$in = [IO.File]::Open('{remote}', 'Open', 'Read', 'ReadWrite'); $r = New-Object IO.BinaryReader($in); "
+            "$magic = $r.ReadUInt32(); $version = $r.ReadUInt32(); $slots = $r.ReadUInt32(); $per = $r.ReadUInt32(); "
+            f"$out = [IO.File]::Create('{remote}.c.gz'); "
+            "$zip = New-Object IO.Compression.GZipStream($out, [IO.Compression.CompressionMode]::Compress); "
+            "$w = New-Object IO.BinaryWriter($zip); $w.Write([uint32]0x434B5652); $w.Write([uint32]$slots); "
+            "for ($slot = 0; $slot -lt $slots; $slot++) { "
+            "  $base = 32 + [int64]$slot * (16 + [int64]$per * 16); $in.Seek($base, 'Begin') | Out-Null; "
+            "  $written = $r.ReadUInt64(); if ($written -eq 0) { continue } "
+            f"  $n = [Math]::Min([Math]::Min($written, [uint64]$per), [uint64]{kept}); $first = $written - $n; "
+            "  $w.Write([uint32]$slot); $w.Write([uint32]$n); "
+            "  $at = $first % $per; $head = [Math]::Min($n, [uint64]$per - $at); "
+            "  $buffer = New-Object byte[] ([int]($head * 16)); $in.Seek($base + 16 + [int64]$at * 16, 'Begin') | Out-Null; "
+            "  $in.Read($buffer, 0, $buffer.Length) | Out-Null; $w.Write($buffer); "
+            "  if ($n -gt $head) { $rest = New-Object byte[] ([int](($n - $head) * 16)); "
+            "    $in.Seek($base + 16, 'Begin') | Out-Null; $in.Read($rest, 0, $rest.Length) | Out-Null; $w.Write($rest) } } "
+            "$w.Close(); $in.Close()")
+        guest_shell(work, "ps", script)
+        local = scratch / f"{name}.c.gz"
+        guest_shell(work, "pull", f"{remote}.c.gz", str(local))
+        if local.exists():
+            yield name, local
 
 
-def collect_guest(work, seconds, names, scratch):
-    """The guest processes' events in the `seconds` before the newest of them,
-    on the host's clock, and where that window ends."""
+def read_compact(path):
+    """The compact copy guest_rings pulls: per slot, its events oldest first,
+    as read_ring yields them."""
+    data = gzip.decompress(path.read_bytes())
+    magic, _slots = struct.unpack_from("<II", data, 0)
+    if magic != 0x434B5652:
+        raise SystemExit(f"{path}: not a compact event copy")
+    at = 8
+    while at < len(data):
+        slot, count = struct.unpack_from("<II", data, at)
+        at += 8
+        events = []
+        for index in range(count):
+            time, name, word = struct.unpack_from("<QII", data, at + index * EVENT)
+            events.append((time, name, word & ~BEGIN, bool(word & BEGIN)))
+        at += count * EVENT
+        yield slot, events
+
+
+def collect_guest(work, seconds, names, scratch, end=None):
+    """The guest processes' events in the `seconds` before `end` (the guest
+    clock; the newest of them when None), on the host's clock, and where that
+    window ends."""
     offset = guest_offset(work)
     rings = []
     latest = []
     for name, path in guest_rings(work, scratch):
-        slots = list(read_ring(path, 0))
+        slots = list(read_compact(path))
         latest.append(max((events[-1][0] for _, events in slots if events), default=0))
         rings.append((name, slots))
     # The freeze reaches the files one at a time, hundreds of milliseconds
     # apart: the window ends where the first of the live processes stopped.
     live_within = 2 * 1_000_000 * TICKS_PER_US
-    newest = min(stamp for stamp in latest if stamp >= max(latest) - live_within)
+    if end is not None:
+        newest = end
+    else:
+        newest = min(stamp for stamp in latest if stamp >= max(latest) - live_within)
     end = newest + offset
     since = newest - int(seconds * 1_000_000 * TICKS_PER_US)
     trace = []
@@ -273,12 +311,47 @@ def collect_guest(work, seconds, names, scratch):
     return trace, end
 
 
+def stop_host(pid, stop):
+    """Every host ring of `pid` stops recording at `stop` (host clock, 100 ns;
+    0 records again)."""
+    for module in MODULES:
+        path = pathlib.Path(f"/dev/shm/rvk-events-{module}-{pid}")
+        if path.exists():
+            with open(path, "r+b") as handle:
+                handle.seek(24)
+                handle.write(struct.pack("<Q", stop))
+
+
+def stop_guest(work, stop):
+    """Every guest event file stops recording at `stop` (the guest's clock)."""
+    guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\rvk\\events-*.bin | ForEach-Object { "
+                            "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
+                            f"$f.Seek(24, 'Begin') | Out-Null; $f.Write([BitConverter]::GetBytes([uint64]{stop}), 0, 8); "
+                            "$f.Close() }")
+
+
+def arm_guest(work, events_per_slot, depth):
+    """Guest processes started from now on record events, `events_per_slot`
+    per thread, of scopes at most `depth` deep (0: all)."""
+    guest_shell(work, "ps", "Set-Content -NoNewline -Path C:\\ProgramData\\rvk\\perfetto "
+                            f"-Value '{events_per_slot} {depth}'")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pid", type=int, help="the QEMU process")
     parser.add_argument("-o", "--output", type=pathlib.Path, default=pathlib.Path("rvk-trace.json"))
     parser.add_argument("--seconds", type=float, default=2.0, help="how much of the newest history to keep")
     parser.add_argument("--merge", type=pathlib.Path, help="a tracebox .pftrace to append the scopes to")
+    parser.add_argument("--lead", type=float, default=3.0,
+                        help="with --guest: how far ahead both sides are told to stop, time enough for the guest "
+                             "to be told")
+    parser.add_argument("--arm", type=int, metavar="EVENTS", default=0,
+                        help="with --guest: only make guest processes started from now on record, EVENTS per "
+                             "thread, and exit")
+    parser.add_argument("--depth", type=int, default=2,
+                        help="with --arm: the deepest scope guest processes record (0: all; the host's is "
+                             "RVK_TRACE_DEPTH in QEMU's environment)")
     parser.add_argument("--guest", type=pathlib.Path, metavar="WORK",
                         help="the run's work directory: add the guest processes' timelines too (they record while "
                              "C:\\ProgramData\\rvk\\perfetto exists when they start)")
@@ -286,15 +359,29 @@ def main():
     names = rvk_inspect.ScopeNames().load()
     now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     guest = []
+    if args.guest is not None and args.arm:
+        arm_guest(args.guest, args.arm, args.depth)
+        print(f"guest processes started from now record {args.arm} events per thread, {args.depth} deep")
+        return
     if args.guest is not None:
-        # The guest is frozen first and its window ends where it stopped; the
-        # host's rings are far larger and still hold that stretch.
-        freeze_guest(args.guest)
+        # Both sides stop at one instant, far enough ahead for the guest to be
+        # told: a ring holds well under a second of a busy thread, so windows
+        # cut at different moments would not overlap.
+        offset = guest_offset(args.guest)
+        stop = now + int(args.lead * 1_000_000 * TICKS_PER_US)
+        stop_host(args.pid, stop)
+        stop_guest(args.guest, stop - offset)
+        wait = (stop - clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100) / (1_000_000 * TICKS_PER_US) + 0.2
+        if wait > 0:
+            clock.sleep(wait)
         scratch = args.output.parent / "guest-events"
         scratch.mkdir(parents=True, exist_ok=True)
-        guest, now = collect_guest(args.guest, args.seconds, names, scratch)
-        freeze_guest(args.guest, frozen=False)
+        guest, now = collect_guest(args.guest, args.seconds, names, scratch, end=stop - offset)
+        stop_guest(args.guest, 0)
+        now = stop
     trace = collect(args.pid, args.seconds, names, now) + guest
+    if args.guest is not None:
+        stop_host(args.pid, 0)
     if args.output.suffix == ".pftrace" or args.merge is not None:
         system = args.merge.read_bytes() if args.merge is not None else b""
         args.output.write_bytes(system + protobuf(args.pid, trace))

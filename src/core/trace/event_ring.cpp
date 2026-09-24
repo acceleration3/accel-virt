@@ -51,8 +51,13 @@ bool EventRing::recording() const
 
 void EventRing::record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thread, bool begin)
 {
-    /* Header byte 24 set by a reader freezes the ring while it is copied. */
-    if (region_ == nullptr || slot >= slots_ || __atomic_load_n(region_ + 24u, __ATOMIC_RELAXED) != 0u) return;
+    /* Header bytes 24..31 are a stop time a reader sets: events from then on
+     * are not recorded, so a ring stops at the same instant as the others a
+     * capture reads, and holds still while it is copied. 0 records; 1 - a
+     * reader setting byte 24 alone - stops it now. */
+    if (region_ == nullptr || slot >= slots_) return;
+    const uint64_t stop = __atomic_load_n(reinterpret_cast<const uint64_t *>(region_ + 24u), __ATOMIC_RELAXED);
+    if (stop != 0u && time >= stop) return;
     uint8_t *const base = region_ + header_bytes + static_cast<size_t>(slot) * (slot_header_bytes +
                                                                               static_cast<size_t>(events_per_slot_) * event_bytes);
     uint64_t written = 0u;

@@ -54,6 +54,10 @@ public:
     void withdraw();
     /* Every enter and leave from now on is also an event in `ring`. */
     void record_events(EventRing &ring);
+    /* Scopes deeper than `depth` (0: none) are neither pushed nor recorded:
+     * a timeline of the outer calls, where the tracer's cost on the hottest
+     * leaves no longer dwarfs what it measures. */
+    void limit_depth(uint32_t depth);
 
     /* Once, from the thread that crashed; a later call keeps the first. */
     void record_crash(uint32_t code, uint64_t address);
@@ -80,6 +84,7 @@ private:
 
     TraceHost  &host_;
     EventRing  *events_;
+    uint32_t    max_depth_;
     uint8_t    *region_;
     TraceLayout layout_;
     /* layout_'s slot count, kept beside it for the scope path. */

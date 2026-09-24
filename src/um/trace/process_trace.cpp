@@ -19,15 +19,16 @@ ProcessTrace::ProcessTrace()
 void ProcessTrace::record_events(const char *module, uint32_t pid)
 {
     AV_SCOPE("ProcessTrace::record_events");
-    constexpr uint32_t events_per_slot = 65536u;
     constexpr uint64_t hundred_ns = 10000000u;
     if (!events_file_.wanted()) return;
+    const uint32_t events_per_slot = events_file_.events_per_slot();
     const size_t bytes = EventRing::bytes_for(TraceSection::slots, events_per_slot);
     if (events_file_.open(module, pid, bytes) != Status::ok) return;
     if (events_.initialize(events_file_.region(), bytes, TraceSection::slots, events_per_slot) != Status::ok) return;
     host_.precise();
     events_.describe_clock(hundred_ns);
     table_.record_events(events_);
+    table_.limit_depth(events_file_.depth());
 }
 
 Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter filter)

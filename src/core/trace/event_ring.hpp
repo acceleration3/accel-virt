@@ -31,7 +31,8 @@ public:
     bool                 recording() const;
     /* The stamps' unit, in the header's bytes 16..23, for a reader. */
     void                 describe_clock(uint64_t ticks_per_second);
-    /* `time` in 100 ns units, the trace host's clock. */
+    /* `time` in 100 ns units, the trace host's clock. Nothing is recorded at
+     * or after the stop time a reader put in header bytes 24..31. */
     void                 record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thread, bool begin);
 
 private:
