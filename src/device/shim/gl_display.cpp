@@ -5,6 +5,7 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <stdlib.h>
 #include <string.h>
 
 namespace av {
@@ -47,6 +48,14 @@ bool GlDisplay::open(const uint8_t *uuid)
 {
     AV_SCOPE("GlDisplay::open");
     if (display_ != nullptr || uuid == nullptr) return false;
+    /* Mesa runs an application's GL on a second thread (glthread) by
+     * default, and any call that answers - the draw checks' glGetIntegerv,
+     * every query the guest makes - waits for that thread to catch up. A
+     * server answers a guest's queries all the time, and with it on spent a
+     * third of its time in those waits: pushconstants ran at 81% of native
+     * with it and 98% without. Read when a display initialises, so set before
+     * the first; a host that chose for itself is left its choice. */
+    setenv("mesa_glthread", "false", 0);
 
     auto *const query = reinterpret_cast<QueryDevices>(eglGetProcAddress("eglQueryDevicesEXT"));
     auto *const platform_display =
