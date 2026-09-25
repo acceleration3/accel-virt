@@ -1529,8 +1529,11 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     uint64_t     produced = 0u;
+    /* As a launch: waiting for the answer of a copy that wants no event would
+     * wait for every command queued ahead of it, a GPU's worth each time. */
+    icd::UnansweredTransport unanswered(*wire);
     const cl_int copied = av::clproto::rvk_clEnqueueCopyBuffer(
-        *wire, held->wire(), source->wire(), target->wire(), from_offset, to_offset, bytes, 0u,
+        event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), from_offset, to_offset, bytes, 0u,
         nullptr, event != nullptr ? &produced : nullptr);
     if (copied == CL_SUCCESS && event != nullptr) {
         *event = static_cast<cl_event>(
@@ -1552,8 +1555,9 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     uint64_t     produced = 0u;
+    icd::UnansweredTransport unanswered(*wire);
     const cl_int filled = av::clproto::rvk_clEnqueueFillBuffer(
-        *wire, held->wire(), named->wire(), pattern, pattern_bytes, offset, bytes, 0u, nullptr,
+        event != nullptr ? *wire : unanswered, held->wire(), named->wire(), pattern, pattern_bytes, offset, bytes, 0u, nullptr,
         event != nullptr ? &produced : nullptr);
     if (filled == CL_SUCCESS && event != nullptr) {
         *event = static_cast<cl_event>(
@@ -1576,8 +1580,9 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     uint64_t     produced = 0u;
+    icd::UnansweredTransport unanswered(*wire);
     const cl_int copied = av::clproto::rvk_clEnqueueCopyImage(
-        *wire, held->wire(), source->wire(), target->wire(), from_origin, to_origin, region, 0u,
+        event != nullptr ? *wire : unanswered, held->wire(), source->wire(), target->wire(), from_origin, to_origin, region, 0u,
         nullptr, event != nullptr ? &produced : nullptr);
     if (copied == CL_SUCCESS && event != nullptr) {
         *event = static_cast<cl_event>(

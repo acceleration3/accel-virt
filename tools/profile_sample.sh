@@ -14,7 +14,9 @@
 # profiles rvkvksamples.exe from C:\rvk\vksamples (tools/vulkan_report.py's),
 # SAMPLES=opengl rvkglsamples.exe from C:\rvk\glsamples, kept running by a
 # long warm-up (each of its timed blocks ends in glFinish, so it never queues
-# more than a ring's worth).
+# more than a ring's worth). SAMPLES=opencl runs rvkclsamples.exe from
+# C:\rvk\clsamples on a long warm-up, which finishes every 8 iterations -
+# never a long --frames, which is launches between clFinish calls.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 sample=${1:?usage: profile_sample.sh <sample> [work] [seconds]}
@@ -29,6 +31,9 @@ if [ "${SAMPLES:-d3d11}" = vulkan ]; then
 elif [ "${SAMPLES:-d3d11}" = opengl ]; then
     exe=rvkglsamples
     command="C:\\rvk\\glsamples\\rvkglsamples.exe --only $sample --warmup 3000000 --out C:\\rvk\\glsamples\\out"
+elif [ "${SAMPLES:-d3d11}" = opencl ]; then
+    exe=rvkclsamples
+    command="C:\\rvk\\clsamples\\rvkclsamples.exe --only $sample --warmup 20000 --out C:\\rvk\\clsamples\\out"
 else
     exe=rvkd3d11samples
     command="C:\\rvk\\samples\\rvkd3d11samples.exe --only $sample --frames 400000 --out C:\\rvk\\samples\\out --shaders C:\\rvk\\samples\\shaders"

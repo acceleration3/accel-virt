@@ -105,7 +105,10 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
         }
         apis_of_[slot] = sub_api;
         gpus_of_[slot] = gpu->index();
-        if (clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
+        /* Not OpenCL's: its kernels saturate the GPU between the guest's
+         * waits, and the peak state's fixed clock is below what a saturated
+         * GPU boosts to - held, the OpenCL samples lost 5 to 10%. */
+        if (sub_api != RVK_EXECUTOR_SUB_API_OPENCL && clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
             sessions_[slot].hold_clocks(clocks_[gpu->index()]);
         return &sessions_[slot];
     }
