@@ -11,7 +11,10 @@
 # tools/frame_breakdown.py's account of it. The trace stays in build-perfetto/
 # for ui.perfetto.dev. GUEST_DEPTH and GUEST_ONLY narrow what the guest
 # records, as RVK_TRACE_DEPTH and RVK_TRACE_ONLY do the host's. SAMPLES=vulkan
-# profiles rvkvksamples.exe from C:\rvk\vksamples (tools/vulkan_report.py's).
+# profiles rvkvksamples.exe from C:\rvk\vksamples (tools/vulkan_report.py's),
+# SAMPLES=opengl rvkglsamples.exe from C:\rvk\glsamples, kept running by a
+# long warm-up (each of its timed blocks ends in glFinish, so it never queues
+# more than a ring's worth).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 sample=${1:?usage: profile_sample.sh <sample> [work] [seconds]}
@@ -23,6 +26,9 @@ pid=$(pgrep -f "qemu-system-x86_64.*$(basename "$work")" | head -1)
 if [ "${SAMPLES:-d3d11}" = vulkan ]; then
     exe=rvkvksamples
     command="C:\\rvk\\vksamples\\rvkvksamples.exe --only $sample --frames 400000 --watchdog 100000 --out C:\\rvk\\vksamples\\out --data C:\\rvk\\vksamples\\data\\"
+elif [ "${SAMPLES:-d3d11}" = opengl ]; then
+    exe=rvkglsamples
+    command="C:\\rvk\\glsamples\\rvkglsamples.exe --only $sample --warmup 3000000 --out C:\\rvk\\glsamples\\out"
 else
     exe=rvkd3d11samples
     command="C:\\rvk\\samples\\rvkd3d11samples.exe --only $sample --frames 400000 --out C:\\rvk\\samples\\out --shaders C:\\rvk\\samples\\shaders"
