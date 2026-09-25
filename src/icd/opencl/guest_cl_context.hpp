@@ -57,7 +57,9 @@ public:
     /* A megabyte of ring, as the other two ICDs take: a queue's worth of
      * enqueues without waiting for room. */
     static constexpr uint8_t  ring_order = 20u;
-    static constexpr uint32_t reply_bytes = 64u * 1024u;
+    /* A read's bytes come back in the reply: a megabyte of them per round
+     * trip rather than 60 KiB (the host reads ahead, ClReadAhead). */
+    static constexpr uint32_t reply_bytes = 1024u * 1024u;
     /* One command's room. A kernel's arguments and a program's source are the
      * large ones, and anything larger crosses as a blob. */
     static constexpr size_t   staging_bytes = 256u * 1024u;
