@@ -32,7 +32,7 @@ void *D3dRuntime::open_library(const char *name) const
 
 D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), create_factory_(nullptr),
-      create_device11_(nullptr), get_interface12_(nullptr), open_host_heap_(nullptr),
+      create_device11_(nullptr), get_interface12_(nullptr), open_host_heap_(nullptr), open_dmabuf_heap_(nullptr),
       serialize_root_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
@@ -73,6 +73,8 @@ bool D3dRuntime::open()
         get_interface12_ = reinterpret_cast<GetInterface12>(dlsym(d3d12_, "D3D12GetInterface"));
         open_host_heap_ =
             reinterpret_cast<OpenHostHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_host_pointer"));
+        open_dmabuf_heap_ =
+            reinterpret_cast<OpenDmabufHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_dmabuf"));
         serialize_root_ = reinterpret_cast<SerializeRoot>(dlsym(d3d12_, "D3D12SerializeVersionedRootSignature"));
     }
     return true;
@@ -88,6 +90,7 @@ void D3dRuntime::close()
     create_device11_ = nullptr;
     get_interface12_ = nullptr;
     open_host_heap_ = nullptr;
+    open_dmabuf_heap_ = nullptr;
     serialize_root_ = nullptr;
     dxgi_ = nullptr;
     d3d11_ = nullptr;
@@ -236,6 +239,17 @@ int32_t D3dRuntime::open_host_heap(void *device, void *address, uint64_t size, v
     if (open_host_heap_ == nullptr || device == nullptr) return E_NOTIMPL;
     const GUID heap_id = __uuidof(ID3D12Heap);
     const int32_t made = open_host_heap_(device, address, size, &heap_id, &heap);
+    if (FAILED(made)) heap = nullptr;
+    return made;
+}
+
+int32_t D3dRuntime::open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const
+{
+    AV_SCOPE("D3dRuntime::open_dmabuf_heap");
+    heap = nullptr;
+    if (open_dmabuf_heap_ == nullptr || device == nullptr) return E_NOTIMPL;
+    const GUID    heap_id = __uuidof(ID3D12Heap);
+    const int32_t made = open_dmabuf_heap_(device, address, fd, size, &heap_id, &heap);
     if (FAILED(made)) heap = nullptr;
     return made;
 }

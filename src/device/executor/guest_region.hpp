@@ -21,7 +21,13 @@ public:
     /* Takes a mapping the device made. A null base, or no length, is a context
      * with no region - every ask then answers null. */
     void take(uint8_t *base, uint64_t length);
+    /* Takes a dma-buf of the region, mapping it here: false, with the
+     * descriptor still the caller's, when it cannot be mapped. The mapping and
+     * the descriptor are this region's until give_back. */
+    [[nodiscard]] bool take_shared(int descriptor, uint64_t length);
     void give_back();
+    /* The dma-buf the region was taken as; -1 for one taken as a pointer. */
+    int  descriptor() const;
 
     /* `bytes` at `offset`, or null: for a region that is not there, an offset
      * past its end, a length past its end, and a sum that would wrap. */
@@ -35,6 +41,7 @@ private:
 
     uint8_t *base_;
     uint64_t length_;
+    int      descriptor_;
 };
 
 }  // namespace av

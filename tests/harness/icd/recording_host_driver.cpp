@@ -40,7 +40,8 @@ d3d::Hresult RecordingHostDriver::caps(d3d::UmdAdapter &adapter, d3d::D3d102ddia
     return caps_answer_;
 }
 
-d3d::Hresult RecordingHostDriver::fill_table12(std::uint32_t table_type, void *, std::size_t bytes)
+d3d::Hresult RecordingHostDriver::fill_table12(std::uint32_t table_type, void *, std::size_t bytes, std::uint32_t,
+                                               void *)
 {
     table_type_ = table_type;
     table_bytes_ = bytes;

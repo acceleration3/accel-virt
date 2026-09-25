@@ -290,7 +290,7 @@ extern "C" HRESULT APIENTRY rvkumd_d3d12_SerializeLibrary(D3D12DDI_HDEVICE handl
 { static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnSerializeLibrary"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_GetDebugAllocationInfo(D3D12DDI_HDEVICE handle, D3D12DDI_HANDLE_AND_TYPE a1, UINT * a2, D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 * a3, UINT * a4, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 * a5)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnGetDebugAllocationInfo"); }
+{ D3d12DeviceHandle(handle.pDrvPrivate).device().get_debug_allocation_info(a1, a2, a3, a4, a5); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandRecorderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 * a1)
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_recorder_size(a1); }

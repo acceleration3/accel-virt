@@ -24,7 +24,8 @@ public:
                          std::uint32_t kmt_adapter) override;
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args,
                       std::uint32_t kmt_adapter) override;
-    d3d::Hresult fill_table12(std::uint32_t table_type, void *table, std::size_t bytes) override;
+    d3d::Hresult fill_table12(std::uint32_t table_type, void *table, std::size_t bytes, std::uint32_t index,
+                              void *runtime_table) override;
     void         tear_down(d3d::UmdDevice &device, void *block) override;
 
     /* What the next build12, caps and fill_table12 answer. */

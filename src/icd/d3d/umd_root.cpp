@@ -287,7 +287,8 @@ Hresult UmdRoot::optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiT
     return hr_ok;
 }
 
-Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes)
+Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                                void *runtime_table)
 {
     AV_SCOPE("UmdRoot::fill_ddi_table");
     constexpr uint32_t dxgi_table = 3u;
@@ -299,7 +300,7 @@ Hresult UmdRoot::fill_ddi_table(void *adapter, uint32_t table_type, void *table,
         fill_dxgi_base_functions(*static_cast<Dxgi161DdiBaseFunctionsRecord *>(table));
         return hr_ok;
     }
-    const Hresult filled = builder_ == nullptr ? hr_not_impl : builder_->fill_table12(table_type, table, bytes);
+    const Hresult filled = builder_ == nullptr ? hr_not_impl : builder_->fill_table12(table_type, table, bytes, index, runtime_table);
     if (filled != hr_ok) note("ddi table refused, type", table_type);
     return filled;
 }

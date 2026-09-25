@@ -13,7 +13,7 @@ namespace av::d3d12 {
 
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, icd::LogSink &log)
     : memory_(memory), kmt_(kmt), log_(log), devices_(memory), caps_(), sessions_(), arena_locks_(), heaps_(),
-      adapters_{}
+      adapters_{}, list_table_(nullptr)
 {
     AV_SCOPE("D3d12Driver::D3d12Driver");
 }
@@ -79,7 +79,7 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
     d3d::D3dSession &joined = session(slot);
-    if (devices_.create(device, joined, heaps_[slot].object(), log_, caps_[slot]) != Status::ok)
+    if (devices_.create(device, joined, heaps_[slot].object(), log_, caps_[slot], list_table_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
@@ -92,7 +92,8 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     return d3d::hr_ok;
 }
 
-d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t bytes)
+d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                                     void *runtime_table)
 {
     AV_SCOPE("D3d12Driver::fill_table");
     note("Direct3D 12 table asked for, type", table_type);
@@ -104,6 +105,10 @@ d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t by
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
         if (bytes < sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0108)) return d3d::hr_invalid_arg;
         fill_list_funcs12(*static_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0108 *>(table));
+        /* D3D12Core fills this table twice, and names each by a handle it
+         * gives nowhere else; a list is made on the first one's
+         * (D3d12Device::create_command_list). */
+        if (index == 0u) list_table_ = runtime_table;
         return d3d::hr_ok;
     case D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D:
         if (bytes < sizeof(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001)) return d3d::hr_invalid_arg;

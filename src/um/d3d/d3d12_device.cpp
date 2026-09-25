@@ -37,8 +37,9 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 }  // namespace
 
 D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
-                         const D3d12HostCaps &caps)
-    : session_(session), heaps_(heaps), log_(log), caps_(caps), runtime_{}, core_(nullptr), channel_(), addresses_(),
+                         const D3d12HostCaps &caps,
+                         void *const &list_table)
+    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, lost_(false), logged_{}
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -82,6 +83,20 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
         return E_FAIL;
     }
     return S_OK;
+}
+
+/* A call this driver answered with a failure: the runtime passes it on as
+ * the API's HRESULT and says nothing of where it came from. */
+void D3d12Device::refused(const char *slot, uint32_t hresult)
+{
+    AV_SCOPE("D3d12Device::refused");
+    char       line[128] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: Direct3D 12 ");
+    text.append(slot);
+    text.append(" refused, HRESULT ");
+    text.append_hex(hresult, 8u);
+    log_.write(text.text());
 }
 
 void D3d12Device::unsupported(const char *slot)
@@ -193,6 +208,18 @@ HRESULT D3d12Device::enumerate_meta_commands(UINT *count, D3D12DDIARG_META_COMMA
     if (count == nullptr) return E_INVALIDARG;
     *count = 0u;
     return S_OK;
+}
+
+/* The allocations behind an object, for the debug layer: its memory is the
+ * host's, so there are none to name - and the counts must say so, since the
+ * runtime reads them whether or not it gets a list. */
+VOID D3d12Device::get_debug_allocation_info(D3D12DDI_HANDLE_AND_TYPE, UINT *virtual_addresses,
+                                            D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
+                                            UINT *kernel_allocations, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 *)
+{
+    AV_SCOPE("D3d12Device::get_debug_allocation_info");
+    if (virtual_addresses != nullptr) *virtual_addresses = 0u;
+    if (kernel_allocations != nullptr) *kernel_allocations = 0u;
 }
 
 /* No pipeline is ever serialized, so no blob is this driver's. */
@@ -401,10 +428,15 @@ SIZE_T D3d12Device::calc_private_command_list_size(const D3D12DDIARG_CREATE_COMM
 }
 
 HRESULT D3d12Device::create_command_list(const D3D12DDIARG_CREATE_COMMAND_LIST_0040 *args, D3D12DDI_HCOMMANDLIST handle,
-                                         D3D12DDI_HRTCOMMANDLIST)
+                                         D3D12DDI_HRTCOMMANDLIST runtime_list)
 {
     AV_SCOPE("D3d12Device::create_command_list");
-    if (args == nullptr || handle.pDrvPrivate == nullptr) return E_INVALIDARG;
+    if (args == nullptr || handle.pDrvPrivate == nullptr || core_ == nullptr || list_table_ == nullptr)
+        return E_INVALIDARG;
+    /* Without this D3D12Core records the list into its own stubs ("Driver
+     * didn't call pfnSetCommandListDDITableCb ... defaulting to stubbed
+     * DDIs"), and none of it reaches this driver. */
+    core_->pfnSetCommandListDDITableCb(runtime_list, D3D12DDI_HRTTABLE{list_table_});
     ListRecord &list = *static_cast<ListRecord *>(handle.pDrvPrivate);
     list = ListRecord{};
     stamp(list.header, ListRecord::tag, next_id());

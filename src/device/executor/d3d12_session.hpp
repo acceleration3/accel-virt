@@ -17,6 +17,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/executor/d3d12_address_map.hpp"
+#include "device/executor/d3d12_arena_heaps.hpp"
 #include "device/executor/d3d12_fence_publisher.hpp"
 #include "device/executor/d3d12_pipeline_builder.hpp"
 #include "device/executor/d3d12_view_writer.hpp"
@@ -29,6 +30,7 @@
 struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
 struct IUnknown;
+struct ID3D12Heap;
 
 namespace av {
 
@@ -134,10 +136,15 @@ private:
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     /* Registers a buffer's guest range, or refuses the resource. */
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
+    /* A resource placed at `offset` in `in`, and kept as `resource`. */
+    bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
+                                      const d3d12proto::ResourceDesc &desc, uint32_t state,
+                                      const d3d12proto::ClearValue &clear, uint64_t address);
     /* Every queue of the session has finished what was executed on it. */
     void                       drain();
 
     GuestRegion           &region_;
+    D3d12ArenaHeaps        arena_heaps_;
     D3d12HostDevice       *device_;
     D3dObjectTable         objects_;
     D3d12AddressMap        addresses_;

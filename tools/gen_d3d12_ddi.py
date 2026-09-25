@@ -87,7 +87,7 @@ IMPLEMENTED = {
         "pfnGetPresentPrivateDriverDataSize", "pfnQueryNodeMap",
         "pfnCalcPrivateCommandRecorderSize", "pfnCreateCommandRecorder", "pfnDestroyCommandRecorder",
         "pfnCommandRecorderSetCommandPoolAsTarget", "pfnEnumerateMetaCommands",
-        "pfnCheckDriverMatchingIdentifier",
+        "pfnCheckDriverMatchingIdentifier", "pfnGetDebugAllocationInfo",
     },
     QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence"},
     EXTENDED_TABLE: {"pfnGetSupportedExtendedFeatures", "pfnGetSupportedExtendedFeatureVersions",

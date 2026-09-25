@@ -170,9 +170,17 @@ bool D3dBackend::lost() const
 bool D3dBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("D3dBackend::adopt");
-    if (blob.kind() != RVK_BLOB_HOST_POINTER || region_.length() != 0u) return false;
-    region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
-    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
+    if (region_.length() != 0u) return false;
+    /* A dma-buf when the device offers one: it is what the host GPU imports
+     * guest pages as (D3d12ArenaHeaps). */
+    if (blob.kind() == RVK_BLOB_DMA_BUF) {
+        if (!region_.take_shared(blob.descriptor(), blob.size())) return false;
+    } else if (blob.kind() == RVK_BLOB_HOST_POINTER) {
+        region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
+    } else {
+        return false;
+    }
+    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(region_.at(0u, region_.length())));
     blob.record(address, address);
     return true;
 }

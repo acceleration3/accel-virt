@@ -4,8 +4,11 @@
 #include "device/executor/guest_region.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
+#include "proto/generated/d3d12/d3d12_command_names.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
+
+#include <stdio.h>
 
 namespace av {
 
@@ -116,6 +119,7 @@ void D3d12Session::shut_down()
     fences_.clear();
     addresses_.clear();
     objects_.clear();
+    arena_heaps_.close();
     if (drained_ != nullptr) drained_->Release();
     drained_ = nullptr;
     drained_value_ = 0u;
@@ -142,6 +146,9 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     if (ran || command_id == d3d12proto::kCmd_Finish12 || command_id == d3d12proto::kCmd_FenceValue12 ||
         command_id == d3d12proto::kCmd_OpenDevice12 || command_id == d3d12proto::kCmd_QueryFormat12)
         return ran;
+    /* The first refusal is the one that says why: every later one follows from it. */
+    if (removed_ == 0u)
+        fprintf(stderr, "virtio-gpu-rvk: d3d12: %s refused; the device is removed\n", d3d12proto::command_name(command_id));
     removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
     return true;
 }
@@ -283,6 +290,7 @@ bool D3d12Session::on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t 
 bool D3d12Session::on_Destroy12(uint32_t id)
 {
     AV_SCOPE("D3d12Session::on_Destroy12");
+    if (arena_heaps_.remove(id)) return true;
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12) return false;
     if (kind == D3dObjectKind::resource12) addresses_.remove(id);
@@ -316,6 +324,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
         if (pages == nullptr || arena_offset % heap_alignment != 0u ||
             reinterpret_cast<uintptr_t>(pages) % heap_alignment != 0u)
             return false;
+        if (region_.descriptor() >= 0) return arena_heaps_.add(*device_, region_, heap, arena_offset, size);
         return keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
     }
     D3D12_HEAP_DESC desc = {};
@@ -369,11 +378,22 @@ bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, u
                                              const d3d12proto::ClearValue &clear, uint64_t address)
 {
     AV_SCOPE("D3d12Session::on_CreatePlacedResource12");
+    uint64_t in_arena = 0u;
+    if (device_ != nullptr && resource_holds(desc) &&
+        arena_heaps_.place(heap, offset, desc.dimension == buffer_dimension ? desc.width : 0u, in_arena))
+        return placed(resource, arena_heaps_.heap(), in_arena, desc, state, clear, address);
     ID3D12Heap *const in = object<ID3D12Heap>(heap, D3dObjectKind::heap12);
     if (device_ == nullptr || in == nullptr || !resource_holds(desc)) return false;
     const D3D12_HEAP_DESC heap_desc = in->GetDesc();
     if (offset > heap_desc.SizeInBytes || (desc.dimension == buffer_dimension && desc.width > heap_desc.SizeInBytes - offset))
         return false;
+    return placed(resource, in, offset, desc, state, clear, address);
+}
+
+bool D3d12Session::placed(uint32_t resource, ID3D12Heap *in, uint64_t offset, const d3d12proto::ResourceDesc &desc,
+                          uint32_t state, const d3d12proto::ClearValue &clear, uint64_t address)
+{
+    AV_SCOPE("D3d12Session::placed");
     const D3D12_RESOURCE_DESC made_desc = host_desc(desc);
     D3D12_CLEAR_VALUE         value = {};
     ID3D12Resource           *made = nullptr;

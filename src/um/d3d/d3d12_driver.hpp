@@ -45,7 +45,7 @@ public:
     d3d::Hresult caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter);
     /* The device, command list, command queue and extended feature tables;
      * nothing else. */
-    d3d::Hresult fill_table(uint32_t table_type, void *table, size_t bytes);
+    d3d::Hresult fill_table(uint32_t table_type, void *table, size_t bytes, uint32_t index, void *runtime_table);
     void         tear_down(void *block);
 
 private:
@@ -66,6 +66,8 @@ private:
     SrwLock                         arena_locks_[max_adapters];
     ObjectStorage<d3d::D3d12HeapArena> heaps_[max_adapters];
     uint32_t                        adapters_[max_adapters];
+    /* D3D12Core's handle for the command-list table this driver filled. */
+    void                           *list_table_;
 };
 
 }  // namespace av::d3d12

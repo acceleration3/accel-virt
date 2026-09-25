@@ -32,10 +32,11 @@ d3d::Hresult UmdDrivers::caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCaps
     return d3d11_.caps(adapter, args, kmt_adapter);
 }
 
-d3d::Hresult UmdDrivers::fill_table12(uint32_t table_type, void *table, size_t bytes)
+d3d::Hresult UmdDrivers::fill_table12(uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                                      void *runtime_table)
 {
     AV_SCOPE("UmdDrivers::fill_table12");
-    return d3d12_.fill_table(table_type, table, bytes);
+    return d3d12_.fill_table(table_type, table, bytes, index, runtime_table);
 }
 
 void UmdDrivers::tear_down(d3d::UmdDevice &device, void *block)

@@ -47,7 +47,8 @@ public:
     /* One of the device tables D3D12Core asks an adapter for, filled into
      * the `bytes` at `table`. hr_invalid_arg for a table smaller than the
      * revision this driver fills; hr_not_impl for a table it has none of. */
-    virtual Hresult fill_table12(uint32_t table_type, void *table, size_t bytes) = 0;
+    virtual Hresult fill_table12(uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                                 void *runtime_table) = 0;
     /* The runtime is destroying `device`, whose block this is. */
     virtual void    tear_down(UmdDevice &device, void *block) = 0;
 

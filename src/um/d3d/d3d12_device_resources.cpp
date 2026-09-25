@@ -144,7 +144,10 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     heap.flags = api_heap_flags(static_cast<uint32_t>(args.Flags));
     heap.arena_offset = HeapRecord::no_arena;
     heap.address = addresses_.reserve(args.ByteSize);
-    if (heap.address == 0u) return E_OUTOFMEMORY;
+    if (heap.address == 0u) {
+        refused("heap address space, bytes", static_cast<uint32_t>(args.ByteSize));
+        return E_OUTOFMEMORY;
+    }
     if (heap.type != heap_default) {
         if (heaps_.place(args.ByteSize, heap.arena_offset) != Status::ok) {
             heap.arena_offset = HeapRecord::no_arena;
@@ -218,10 +221,28 @@ HRESULT D3d12Device::create_heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 
                                               D3D12DDI_HPROTECTEDRESOURCESESSION_0030, D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::create_heap_and_resource");
+    const HRESULT made = heap_and_resource(heap_args, heap_handle, args, clear, handle);
+    if (FAILED(made)) refused("CreateHeapAndResource", static_cast<uint32_t>(made));
+    return made;
+}
+
+HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
+                                       const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                                       const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle)
+{
+    AV_SCOPE("D3d12Device::heap_and_resource");
     if (heap_handle.pDrvPrivate == nullptr) return E_INVALIDARG;
     HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
     if (heap_args != nullptr) {
-        const HRESULT made = make_heap(*heap_args, heap, args != nullptr);
+        /* A committed resource's heap comes unsized - D3D12Core passes all
+         * ones - since its size is the resource's. */
+        D3D12DDIARG_CREATEHEAP_0001 sized = *heap_args;
+        if ((sized.ByteSize == 0u || sized.ByteSize == refused_size) && args != nullptr) {
+            uint64_t alignment = buffer_alignment;
+            sized.ByteSize = allocation_bytes(resource_desc(*args), alignment);
+            if (sized.Alignment < alignment) sized.Alignment = alignment;
+        }
+        const HRESULT made = make_heap(sized, heap, args != nullptr);
         if (FAILED(made)) return made;
     }
     if (args == nullptr) return S_OK;

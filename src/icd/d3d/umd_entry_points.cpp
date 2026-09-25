@@ -45,8 +45,8 @@ extern "C" void rvkumd_destroy_device(void *block) { umd_binding.root().destroy_
 extern "C" Hresult rvkumd_get_optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests)
 { return umd_binding.root().optional_ddi_tables(adapter, entries, requests); }
 
-extern "C" Hresult rvkumd_fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t, void *)
-{ return umd_binding.root().fill_ddi_table(adapter, table_type, table, bytes); }
+extern "C" Hresult rvkumd_fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t index, void *runtime_table)
+{ return umd_binding.root().fill_ddi_table(adapter, table_type, table, bytes, index, runtime_table); }
 
 }  // namespace
 

@@ -41,6 +41,8 @@ public:
      * caller owns; null where the runtime cannot import (a stock
      * vkd3d-proton) or refuses these pages. */
     ID3D12Heap                *import_heap(void *address, uint64_t size) const;
+    /* The same, over the dma-buf `fd` of those pages (the caller keeps it). */
+    ID3D12Heap                *import_dmabuf_heap(void *address, int fd, uint64_t size) const;
     /* A root signature from a D3D12_VERSIONED_ROOT_SIGNATURE_DESC, with a
      * reference the caller owns; null when the runtime refuses it. */
     ID3D12RootSignature       *root_signature(const void *desc) const;

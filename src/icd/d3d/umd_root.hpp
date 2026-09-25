@@ -76,7 +76,10 @@ public:
     Hresult optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiTableRequestRecord *requests);
     /* DXGI's table is the root's own seam, as it is inside D3D11's create;
      * every other table is the host driver's. */
-    Hresult fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes);
+    /* `index` and `runtime_table` are D3D12Core's: which of a type's tables
+     * this is, and the handle it names that table by. */
+    Hresult fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                           void *runtime_table);
 
     /* What a DXGI thunk resolves its argument's hDevice through. */
     UmdDevice *device_of(void *block) const;

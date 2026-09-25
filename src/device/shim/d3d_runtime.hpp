@@ -53,6 +53,8 @@ public:
     /* `size` bytes of host memory at `address` as an ID3D12Heap of `device`'s
      * that only buffers can be placed in; the HRESULT, `heap` null on failure. */
     int32_t open_host_heap(void *device, void *address, uint64_t size, void *&heap) const;
+    /* The same pages as the dma-buf `fd`, which the caller keeps. */
+    int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
     /* D3D12SerializeVersionedRootSignature on a D3D12_VERSIONED_ROOT_SIGNATURE_DESC;
      * `blob` an ID3DBlob the caller owns, null on failure. */
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
@@ -64,6 +66,8 @@ private:
                                        ID3D11Device **device, uint32_t *level, ID3D11DeviceContext **context);
     using GetInterface12 = int32_t (*)(const void *clsid, const void *riid, void **object);
     using OpenHostHeap = int32_t (*)(void *device, void *address, uint64_t size, const void *riid, void **heap);
+    using OpenDmabufHeap = int32_t (*)(void *device, void *address, int fd, uint64_t size, const void *riid,
+                                       void **heap);
     using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
 
     void *open_library(const char *name) const;
@@ -80,6 +84,7 @@ private:
     CreateDevice11 create_device11_;
     GetInterface12 get_interface12_;
     OpenHostHeap   open_host_heap_;
+    OpenDmabufHeap open_dmabuf_heap_;
     SerializeRoot  serialize_root_;
 };
 

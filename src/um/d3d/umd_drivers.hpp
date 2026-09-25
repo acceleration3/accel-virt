@@ -32,7 +32,8 @@ public:
     d3d::Hresult build12(d3d::UmdDevice &adopted, d3d::D3d12ddiargCreateDeviceRecord &create,
                          uint32_t kmt_adapter) override;
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter) override;
-    d3d::Hresult fill_table12(uint32_t table_type, void *table, size_t bytes) override;
+    d3d::Hresult fill_table12(uint32_t table_type, void *table, size_t bytes, uint32_t index,
+                              void *runtime_table) override;
     void         tear_down(d3d::UmdDevice &device, void *block) override;
 
 private:

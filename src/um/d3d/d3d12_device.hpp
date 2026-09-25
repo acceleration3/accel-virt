@@ -50,7 +50,9 @@ public:
      * DescriptorSlot, and what GetDescriptorSizeInBytes answers. */
     static constexpr UINT descriptor_bytes = 32u;
 
-    D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log, const D3d12HostCaps &caps);
+    /* `list_table` is the driver's, and is filled after the device is made. */
+    D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log, const D3d12HostCaps &caps,
+                void *const &list_table);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
     D3d12Device &operator=(const D3d12Device &) = delete;
@@ -63,6 +65,7 @@ public:
 
     /* A slot this driver has no implementation of was called: logged once. */
     void unsupported(const char *slot);
+    void refused(const char *slot, uint32_t hresult);
 
 #include "um/d3d/generated/d3d12_device_ddi.inc"
 
@@ -85,6 +88,9 @@ private:
     /* Resources and heaps (d3d12_device_resources.cpp). */
     d3d12proto::ResourceDesc resource_desc(const D3D12DDIARG_CREATERESOURCE_0109 &args) const;
     uint32_t                 initial_state(const D3D12DDIARG_CREATERESOURCE_0109 &args, uint32_t heap_type) const;
+    HRESULT heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
+                              const D3D12DDIARG_CREATERESOURCE_0109 *args, const D3D12DDI_CLEAR_VALUES *clear,
+                              D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                            HeapRecord &heap, uint64_t offset, ResourceRecord &resource);
@@ -107,6 +113,7 @@ private:
     d3d::D3d12HeapArena                  &heaps_;
     icd::LogSink                         &log_;
     const D3d12HostCaps                  &caps_;
+    void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;
