@@ -13,8 +13,9 @@ thread.
     tools/guest_cpu_profile.py rvkd3d11samples
     tools/guest_cpu_profile.py rvkd3d11samples --seconds 3 --threads 2 --top 30
 
-The process must already be running in the held guest (run_guest_suite.py
---keep). Parsing needs the etl-parser package: it is taken from
+The guest must be held (run_guest_suite.py --keep). The process is found in the
+trace by name, so one that exits and is started over during it counts whole.
+Parsing needs the etl-parser package: it is taken from
 build-perfetto/venv when the running Python lacks it.
 """
 import argparse
@@ -62,21 +63,24 @@ def record(work, process, seconds, scratch):
     """The process's modules and the trace of `seconds` of every CPU."""
     listing = guest(work, "ps", f"""
 wpr -cancel 2>&1 | Out-Null
-$p = Get-Process {process} -ErrorAction Stop | Select-Object -First 1
-"p " + $p.Id + " " + [Environment]::ProcessorCount
-$p.Modules | ForEach-Object {{ "m " + ("{{0:x}}" -f $_.BaseAddress.ToInt64()) + " " + $_.ModuleMemorySize + " " + $_.FileName }}
+$p = Get-Process {process} -ErrorAction SilentlyContinue | Select-Object -First 1
+"c " + [Environment]::ProcessorCount
+if ($p) {{
+    "p " + $p.Id
+    $p.Modules | ForEach-Object {{ "m " + ("{{0:x}}" -f $_.BaseAddress.ToInt64()) + " " + $_.ModuleMemorySize + " " + $_.FileName }}
+}}
 wpr -start CPU -filemode 2>&1 | Out-Null
 Start-Sleep -Milliseconds {int(seconds * 1000)}
 wpr -stop {REMOTE_TRACE} 2>&1 | Out-Null""", timeout=int(seconds) + 120)
     pid, cpus, modules = 0, 1, []
     for line in listing.splitlines():
         parts = line.strip().split(" ", 3)
-        if parts[0] == "p":
-            pid, cpus = int(parts[1]), int(parts[2])
+        if parts[0] == "c":
+            cpus = int(parts[1])
+        elif parts[0] == "p":
+            pid = int(parts[1])
         elif parts[0] == "m" and len(parts) == 4:
             modules.append((int(parts[1], 16), int(parts[2]), parts[3]))
-    if pid == 0:
-        raise SystemExit(f"no process {process} in the guest")
     trace = scratch / "cpu.etl"
     guest(work, "pull", REMOTE_TRACE, str(trace), timeout=300)
     return pid, cpus, modules, trace
@@ -89,7 +93,9 @@ class Trace(IEtlFileObserver):
         self.samples = []
         self.sampled_at = set()   # (stamp, thread) of each sample
         self.walked = {}          # (stamp, thread): frames, leaf first
-        self.kernel_images = []
+        self.kernel_images = []   # (base, size, path, process)
+        self.thread_process = {}  # thread: process
+        self.process_names = {}   # process: image name, lower case
         build_from_stream(path.read_bytes()).parse(self)
 
     def on_event_record(self, event):
@@ -125,8 +131,25 @@ class Trace(IEtlFileObserver):
             mof = event.get_mof()
         except Exception:  # the parser raises on event versions it does not know; those are not images
             return
-        if type(mof).__name__ == "ImageLoad":
-            self.kernel_images.append((mof.source.ImageBase, mof.source.ImageSize, mof.get_image_filename()))
+        kind = type(mof).__name__
+        if kind == "ImageLoad":
+            self.kernel_images.append((mof.source.ImageBase, mof.source.ImageSize, mof.get_image_filename(),
+                                       int(mof.source.ProcessId)))
+        elif kind.startswith("Thread_"):
+            self.thread_process[int(mof.source.ThreadId)] = int(mof.source.ProcessId)
+        elif kind.startswith("Process_") and hasattr(mof, "get_image_file_name"):
+            try:
+                self.process_names[int(mof.get_process_id())] = str(mof.get_image_file_name()).lower()
+            except Exception:  # a process event of a shape the parser half-knows names nothing useful
+                pass
+
+    def threads_of(self, name):
+        """Every thread of every process of image `name` the trace saw: a
+        process that ran for part of it, and one started over, count too."""
+        wanted = name.lower()
+        wanted = {wanted, wanted + ".exe"} if not wanted.endswith(".exe") else {wanted}
+        pids = {pid for pid, image in self.process_names.items() if image in wanted}
+        return pids, {tid for tid, pid in self.thread_process.items() if pid in pids}
 
 
 def windows_path(name):
@@ -226,12 +249,18 @@ class Module:
 class AddressSpace:
     """The images samples fall in: the process's own modules, then the kernel's."""
 
-    def __init__(self, user, kernel):
-        # The trace lists the user modules too, by device path; the process's
-        # own list names them as the guest agent can open them.
-        bases = {base for base, _, _ in user}
-        kernel = [entry for entry in kernel if entry[0] not in bases]
-        self.modules = sorted((Module(*entry) for entry in user + kernel), key=lambda module: module.base)
+    def __init__(self, user, kernel, pids):
+        # The trace lists the user modules too, by device path, per process;
+        # the process's own list, where there is one, names them as the guest
+        # agent can open them. One image at one base is one module.
+        seen = {base for base, _, _ in user}
+        entries = list(user)
+        for base, size, path, pid in kernel:
+            if base in seen or (pid not in pids and base < KERNEL_SPACE):
+                continue
+            seen.add(base)
+            entries.append((base, size, path))
+        self.modules = sorted((Module(*entry) for entry in entries), key=lambda module: module.base)
         self.bases = [module.base for module in self.modules]
 
     def locate(self, address):
@@ -331,15 +360,22 @@ def main():
         if not args.process:
             parser.error("name the process to profile, or pass --again")
         pid, cpus, modules, path = record(args.work, args.process, args.seconds, scratch)
+        # A process that exits during the trace is found in it by name; one
+        # still running is asked for its threads as well.
         threads = [int(tid) for tid in guest(args.work, "ps", f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue)"
-                                                               ".Threads | ForEach-Object { $_.Id }").split()]
-        recording.write_text(json.dumps({"cpus": cpus, "modules": modules, "threads": threads, "trace": str(path)}))
+                                                               ".Threads | ForEach-Object { $_.Id }").split()] if pid else []
+        recording.write_text(json.dumps({"cpus": cpus, "modules": modules, "threads": threads, "trace": str(path),
+                                         "process": args.process}))
     saved = json.loads(recording.read_text())
     trace = Trace(pathlib.Path(saved["trace"]))
-    names = Names(args.work, AddressSpace([tuple(entry) for entry in saved["modules"]], trace.kernel_images))
+    pids, tids = trace.threads_of(saved["process"])
+    tids |= set(saved["threads"])
+    names = Names(args.work, AddressSpace([tuple(entry) for entry in saved["modules"]], trace.kernel_images, pids))
     per_thread = collections.Counter(tid for _, tid in trace.samples)
     per_cpu = len(trace.samples) / max(saved["cpus"], 1)
-    busiest = [tid for tid, _ in per_thread.most_common() if tid in set(saved["threads"])][:args.threads]
+    busiest = [tid for tid, _ in per_thread.most_common() if tid in tids][:args.threads]
+    if len(pids) > 1:
+        print(f"{len(pids)} processes named {saved['process']} ran during the trace; their threads are merged")
     if not busiest:
         raise SystemExit("no samples on the process's threads: was it running?")
     print(f"{len(trace.samples)} samples over {saved['cpus']} CPUs; the process's busiest threads:")
