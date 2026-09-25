@@ -201,6 +201,24 @@ static bool arrays_in_buffers(const RealGl& rvk_gl) noexcept {
     return true;
 }
 
+// arrays_in_buffers, asked once per vertex array object rather than once
+// per draw: it is a query per attribute, dozens a draw, and the answer
+// changes only when a command that is not array_neutral runs, which
+// forgets every verdict. Keyed by the binding GL reports rather than one
+// the server tracks, so a bind GL refused cannot stand in for a check.
+static bool arrays_verified(const RealGl& rvk_gl) noexcept {
+    if (rvk_gl.glGetIntegerv == nullptr) return false;
+    GLint bound = 0;
+    rvk_gl.glGetIntegerv(0x85B5, &bound);
+    const uint32_t vao = static_cast<uint32_t>(bound);
+    for (uint32_t i = 0; i < rvk_gl.rvk_verified_count; ++i)
+        if (rvk_gl.rvk_verified_arrays[i] == vao) return true;
+    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (rvk_gl.rvk_verified_count < RealGl::rvk_verified_capacity)
+        rvk_gl.rvk_verified_arrays[rvk_gl.rvk_verified_count++] = vao;
+    return true;
+}
+
 // How many values an evaluator map's points hold per control point, by
 // target, or 0 for a target that is not a map.
 static uint64_t map_dimensions(GLenum target) noexcept {
@@ -4753,7 +4771,7 @@ static bool decode_glDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     GLsizei count{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       count = static_cast<GLsizei>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawArrays == nullptr) return false;
     rvk_gl.glDrawArrays(mode, first, count);
     return true;
@@ -4769,7 +4787,7 @@ static bool decode_glDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireReader& 
     { uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;
       indirect = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v)); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawArraysIndirect == nullptr) return false;
     rvk_gl.glDrawArraysIndirect(mode, indirect);
     return true;
@@ -4790,7 +4808,7 @@ static bool decode_glDrawArraysInstanced(const RealGl& rvk_gl, ::av::WireReader&
     GLsizei instancecount{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       instancecount = static_cast<GLsizei>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawArraysInstanced == nullptr) return false;
     rvk_gl.glDrawArraysInstanced(mode, first, count, instancecount);
     return true;
@@ -4814,7 +4832,7 @@ static bool decode_glDrawArraysInstancedBaseInstance(const RealGl& rvk_gl, ::av:
     GLuint baseinstance{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       baseinstance = static_cast<GLuint>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawArraysInstancedBaseInstance == nullptr) return false;
     rvk_gl.glDrawArraysInstancedBaseInstance(mode, first, count, instancecount, baseinstance);
     return true;
@@ -4891,7 +4909,7 @@ static bool decode_glDrawElements(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     { uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;
       indices = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v)); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElements == nullptr) return false;
     rvk_gl.glDrawElements(mode, count, type, indices);
     return true;
@@ -4916,7 +4934,7 @@ static bool decode_glDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::WireRead
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       basevertex = static_cast<GLint>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsBaseVertex == nullptr) return false;
     rvk_gl.glDrawElementsBaseVertex(mode, count, type, indices, basevertex);
     return true;
@@ -4935,7 +4953,7 @@ static bool decode_glDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireReader
     { uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;
       indirect = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v)); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsIndirect == nullptr) return false;
     rvk_gl.glDrawElementsIndirect(mode, type, indirect);
     return true;
@@ -4960,7 +4978,7 @@ static bool decode_glDrawElementsInstanced(const RealGl& rvk_gl, ::av::WireReade
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       instancecount = static_cast<GLsizei>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsInstanced == nullptr) return false;
     rvk_gl.glDrawElementsInstanced(mode, count, type, indices, instancecount);
     return true;
@@ -4988,7 +5006,7 @@ static bool decode_glDrawElementsInstancedBaseInstance(const RealGl& rvk_gl, ::a
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       baseinstance = static_cast<GLuint>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsInstancedBaseInstance == nullptr) return false;
     rvk_gl.glDrawElementsInstancedBaseInstance(mode, count, type, indices, instancecount, baseinstance);
     return true;
@@ -5016,7 +5034,7 @@ static bool decode_glDrawElementsInstancedBaseVertex(const RealGl& rvk_gl, ::av:
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       basevertex = static_cast<GLint>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsInstancedBaseVertex == nullptr) return false;
     rvk_gl.glDrawElementsInstancedBaseVertex(mode, count, type, indices, instancecount, basevertex);
     return true;
@@ -5047,7 +5065,7 @@ static bool decode_glDrawElementsInstancedBaseVertexBaseInstance(const RealGl& r
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       baseinstance = static_cast<GLuint>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawElementsInstancedBaseVertexBaseInstance == nullptr) return false;
     rvk_gl.glDrawElementsInstancedBaseVertexBaseInstance(mode, count, type, indices, instancecount, basevertex, baseinstance);
     return true;
@@ -5075,7 +5093,7 @@ static bool decode_glDrawRangeElements(const RealGl& rvk_gl, ::av::WireReader& r
     { uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;
       indices = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v)); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawRangeElements == nullptr) return false;
     rvk_gl.glDrawRangeElements(mode, start, end, count, type, indices);
     return true;
@@ -5106,7 +5124,7 @@ static bool decode_glDrawRangeElementsBaseVertex(const RealGl& rvk_gl, ::av::Wir
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       basevertex = static_cast<GLint>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawRangeElementsBaseVertex == nullptr) return false;
     rvk_gl.glDrawRangeElementsBaseVertex(mode, start, end, count, type, indices, basevertex);
     return true;
@@ -5121,7 +5139,7 @@ static bool decode_glDrawTransformFeedback(const RealGl& rvk_gl, ::av::WireReade
     GLuint id{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       id = static_cast<GLuint>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawTransformFeedback == nullptr) return false;
     rvk_gl.glDrawTransformFeedback(mode, id);
     return true;
@@ -5139,7 +5157,7 @@ static bool decode_glDrawTransformFeedbackInstanced(const RealGl& rvk_gl, ::av::
     GLsizei instancecount{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       instancecount = static_cast<GLsizei>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawTransformFeedbackInstanced == nullptr) return false;
     rvk_gl.glDrawTransformFeedbackInstanced(mode, id, instancecount);
     return true;
@@ -5157,7 +5175,7 @@ static bool decode_glDrawTransformFeedbackStream(const RealGl& rvk_gl, ::av::Wir
     GLuint stream{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       stream = static_cast<GLuint>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawTransformFeedbackStream == nullptr) return false;
     rvk_gl.glDrawTransformFeedbackStream(mode, id, stream);
     return true;
@@ -5178,7 +5196,7 @@ static bool decode_glDrawTransformFeedbackStreamInstanced(const RealGl& rvk_gl, 
     GLsizei instancecount{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       instancecount = static_cast<GLsizei>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glDrawTransformFeedbackStreamInstanced == nullptr) return false;
     rvk_gl.glDrawTransformFeedbackStreamInstanced(mode, id, stream, instancecount);
     return true;
@@ -13198,7 +13216,7 @@ static bool decode_glMultiDrawArrays(const RealGl& rvk_gl, ::av::WireReader& rvk
     uint64_t count_needed = 0;
     if (__builtin_mul_overflow(count_elements, static_cast<uint64_t>(sizeof(GLsizei)), &count_needed)) return false;
     if (count == nullptr ? (count_needed != 0 && !(false)) : count_room < count_needed) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawArrays == nullptr) return false;
     rvk_gl.glMultiDrawArrays(mode, first, count, drawcount);
     return true;
@@ -13220,7 +13238,7 @@ static bool decode_glMultiDrawArraysIndirect(const RealGl& rvk_gl, ::av::WireRea
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       stride = static_cast<GLsizei>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawArraysIndirect == nullptr) return false;
     rvk_gl.glMultiDrawArraysIndirect(mode, indirect, drawcount, stride);
     return true;
@@ -13246,7 +13264,7 @@ static bool decode_glMultiDrawArraysIndirectCount(const RealGl& rvk_gl, ::av::Wi
       stride = static_cast<GLsizei>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
     if (!buffer_bound(rvk_gl, 0x80EF)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawArraysIndirectCount == nullptr) return false;
     rvk_gl.glMultiDrawArraysIndirectCount(mode, indirect, drawcount, maxdrawcount, stride);
     return true;
@@ -13319,7 +13337,7 @@ static bool decode_glMultiDrawElements(const RealGl& rvk_gl, ::av::WireReader& r
     if (drawcount < 0) return false;
     if (indices == nullptr ? drawcount != 0 : indices_count < static_cast<uint64_t>(drawcount)) return false;
     if (drawcount != 0 && !buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawElements == nullptr) return false;
     rvk_gl.glMultiDrawElements(mode, count, type, indices, drawcount);
     return true;
@@ -13425,7 +13443,7 @@ static bool decode_glMultiDrawElementsBaseVertex(const RealGl& rvk_gl, ::av::Wir
     if (basevertex == nullptr ? (basevertex_needed != 0 && !(false)) : basevertex_room < basevertex_needed) return false;
     if (indices == nullptr ? drawcount != 0 : indices_count < static_cast<uint64_t>(drawcount)) return false;
     if (drawcount != 0 && !buffer_bound(rvk_gl, 0x8895)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawElementsBaseVertex == nullptr) return false;
     rvk_gl.glMultiDrawElementsBaseVertex(mode, count, type, indices, drawcount, basevertex);
     return true;
@@ -13450,7 +13468,7 @@ static bool decode_glMultiDrawElementsIndirect(const RealGl& rvk_gl, ::av::WireR
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       stride = static_cast<GLsizei>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawElementsIndirect == nullptr) return false;
     rvk_gl.glMultiDrawElementsIndirect(mode, type, indirect, drawcount, stride);
     return true;
@@ -13479,7 +13497,7 @@ static bool decode_glMultiDrawElementsIndirectCount(const RealGl& rvk_gl, ::av::
       stride = static_cast<GLsizei>(rvk_v); }
     if (!buffer_bound(rvk_gl, 0x8F43)) return false;
     if (!buffer_bound(rvk_gl, 0x80EF)) return false;
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glMultiDrawElementsIndirectCount == nullptr) return false;
     rvk_gl.glMultiDrawElementsIndirectCount(mode, type, indirect, drawcount, maxdrawcount, stride);
     return true;
@@ -24797,7 +24815,7 @@ static bool decode_glArrayElement(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     GLint i{};
     { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       i = static_cast<GLint>(rvk_v); }
-    if (!arrays_in_buffers(rvk_gl)) return false;
+    if (!arrays_verified(rvk_gl)) return false;
     if (rvk_gl.glArrayElement == nullptr) return false;
     rvk_gl.glArrayElement(i);
     return true;
@@ -47561,10 +47579,325 @@ static bool decode_glVertexArrayVertexAttribDivisorEXT(const RealGl& rvk_gl, ::a
     return true;
 }
 
+// Commands that cannot change what any vertex array reads from, so a
+// verdict of arrays_verified outlives them. Anything else - a pointer,
+// an enable, a deleted buffer or array, a client state - forgets them.
+static bool array_neutral(uint32_t cmd_id) noexcept {
+    switch (cmd_id) {
+        case kCmd_glActiveTexture:
+        case kCmd_glBeginConditionalRender:
+        case kCmd_glBeginQuery:
+        case kCmd_glBindBuffer:
+        case kCmd_glBindBufferBase:
+        case kCmd_glBindBufferRange:
+        case kCmd_glBindFramebuffer:
+        case kCmd_glBindImageTexture:
+        case kCmd_glBindSampler:
+        case kCmd_glBindSamplers:
+        case kCmd_glBindTexture:
+        case kCmd_glBindTextureUnit:
+        case kCmd_glBindTextures:
+        case kCmd_glBindVertexArray:
+        case kCmd_glBlendColor:
+        case kCmd_glBlendEquation:
+        case kCmd_glBlendEquationSeparate:
+        case kCmd_glBlendFunc:
+        case kCmd_glBlendFuncSeparate:
+        case kCmd_glBufferData:
+        case kCmd_glBufferSubData:
+        case kCmd_glClear:
+        case kCmd_glClearBufferData:
+        case kCmd_glClearBufferSubData:
+        case kCmd_glClearBufferfi:
+        case kCmd_glClearBufferfv:
+        case kCmd_glClearBufferiv:
+        case kCmd_glClearBufferuiv:
+        case kCmd_glClearColor:
+        case kCmd_glClearDepth:
+        case kCmd_glClearDepthf:
+        case kCmd_glClearNamedFramebufferfi:
+        case kCmd_glClearNamedFramebufferfv:
+        case kCmd_glClearNamedFramebufferiv:
+        case kCmd_glClearNamedFramebufferuiv:
+        case kCmd_glClearStencil:
+        case kCmd_glColorMask:
+        case kCmd_glColorMaski:
+        case kCmd_glCullFace:
+        case kCmd_glDepthFunc:
+        case kCmd_glDepthMask:
+        case kCmd_glDepthRange:
+        case kCmd_glDepthRangef:
+        case kCmd_glDispatchCompute:
+        case kCmd_glDrawArrays:
+        case kCmd_glDrawArraysIndirect:
+        case kCmd_glDrawArraysInstanced:
+        case kCmd_glDrawArraysInstancedBaseInstance:
+        case kCmd_glDrawBuffer:
+        case kCmd_glDrawBuffers:
+        case kCmd_glDrawElements:
+        case kCmd_glDrawElementsBaseVertex:
+        case kCmd_glDrawElementsIndirect:
+        case kCmd_glDrawElementsInstanced:
+        case kCmd_glDrawElementsInstancedBaseInstance:
+        case kCmd_glDrawElementsInstancedBaseVertex:
+        case kCmd_glDrawElementsInstancedBaseVertexBaseInstance:
+        case kCmd_glDrawRangeElements:
+        case kCmd_glDrawRangeElementsBaseVertex:
+        case kCmd_glDrawTransformFeedback:
+        case kCmd_glDrawTransformFeedbackInstanced:
+        case kCmd_glDrawTransformFeedbackStream:
+        case kCmd_glDrawTransformFeedbackStreamInstanced:
+        case kCmd_glEndConditionalRender:
+        case kCmd_glEndQuery:
+        case kCmd_glFlush:
+        case kCmd_glFrontFace:
+        case kCmd_glGenerateMipmap:
+        case kCmd_glGenerateTextureMipmap:
+        case kCmd_glLineWidth:
+        case kCmd_glMemoryBarrier:
+        case kCmd_glMinSampleShading:
+        case kCmd_glMultiDrawArrays:
+        case kCmd_glMultiDrawArraysIndirect:
+        case kCmd_glMultiDrawArraysIndirectCount:
+        case kCmd_glMultiDrawElements:
+        case kCmd_glMultiDrawElementsBaseVertex:
+        case kCmd_glMultiDrawElementsIndirect:
+        case kCmd_glMultiDrawElementsIndirectCount:
+        case kCmd_glNamedBufferData:
+        case kCmd_glNamedBufferSubData:
+        case kCmd_glPatchParameteri:
+        case kCmd_glPixelStorei:
+        case kCmd_glPointSize:
+        case kCmd_glPolygonMode:
+        case kCmd_glPolygonOffset:
+        case kCmd_glPrimitiveRestartIndex:
+        case kCmd_glProgramUniform1d:
+        case kCmd_glProgramUniform1dv:
+        case kCmd_glProgramUniform1f:
+        case kCmd_glProgramUniform1fv:
+        case kCmd_glProgramUniform1i:
+        case kCmd_glProgramUniform1iv:
+        case kCmd_glProgramUniform1ui:
+        case kCmd_glProgramUniform1uiv:
+        case kCmd_glProgramUniform2d:
+        case kCmd_glProgramUniform2dv:
+        case kCmd_glProgramUniform2f:
+        case kCmd_glProgramUniform2fv:
+        case kCmd_glProgramUniform2i:
+        case kCmd_glProgramUniform2iv:
+        case kCmd_glProgramUniform2ui:
+        case kCmd_glProgramUniform2uiv:
+        case kCmd_glProgramUniform3d:
+        case kCmd_glProgramUniform3dv:
+        case kCmd_glProgramUniform3f:
+        case kCmd_glProgramUniform3fv:
+        case kCmd_glProgramUniform3i:
+        case kCmd_glProgramUniform3iv:
+        case kCmd_glProgramUniform3ui:
+        case kCmd_glProgramUniform3uiv:
+        case kCmd_glProgramUniform4d:
+        case kCmd_glProgramUniform4dv:
+        case kCmd_glProgramUniform4f:
+        case kCmd_glProgramUniform4fv:
+        case kCmd_glProgramUniform4i:
+        case kCmd_glProgramUniform4iv:
+        case kCmd_glProgramUniform4ui:
+        case kCmd_glProgramUniform4uiv:
+        case kCmd_glProgramUniformMatrix2dv:
+        case kCmd_glProgramUniformMatrix2fv:
+        case kCmd_glProgramUniformMatrix2x3dv:
+        case kCmd_glProgramUniformMatrix2x3fv:
+        case kCmd_glProgramUniformMatrix2x4dv:
+        case kCmd_glProgramUniformMatrix2x4fv:
+        case kCmd_glProgramUniformMatrix3dv:
+        case kCmd_glProgramUniformMatrix3fv:
+        case kCmd_glProgramUniformMatrix3x2dv:
+        case kCmd_glProgramUniformMatrix3x2fv:
+        case kCmd_glProgramUniformMatrix3x4dv:
+        case kCmd_glProgramUniformMatrix3x4fv:
+        case kCmd_glProgramUniformMatrix4dv:
+        case kCmd_glProgramUniformMatrix4fv:
+        case kCmd_glProgramUniformMatrix4x2dv:
+        case kCmd_glProgramUniformMatrix4x2fv:
+        case kCmd_glProgramUniformMatrix4x3dv:
+        case kCmd_glProgramUniformMatrix4x3fv:
+        case kCmd_glProvokingVertex:
+        case kCmd_glQueryCounter:
+        case kCmd_glSampleMaski:
+        case kCmd_glScissor:
+        case kCmd_glScissorIndexed:
+        case kCmd_glShaderStorageBlockBinding:
+        case kCmd_glStencilFunc:
+        case kCmd_glStencilFuncSeparate:
+        case kCmd_glStencilMask:
+        case kCmd_glStencilMaskSeparate:
+        case kCmd_glStencilOp:
+        case kCmd_glStencilOpSeparate:
+        case kCmd_glTexSubImage2D:
+        case kCmd_glTexSubImage3D:
+        case kCmd_glTextureSubImage2D:
+        case kCmd_glTextureSubImage3D:
+        case kCmd_glUniform1d:
+        case kCmd_glUniform1dv:
+        case kCmd_glUniform1f:
+        case kCmd_glUniform1fv:
+        case kCmd_glUniform1i:
+        case kCmd_glUniform1iv:
+        case kCmd_glUniform1ui:
+        case kCmd_glUniform1uiv:
+        case kCmd_glUniform2d:
+        case kCmd_glUniform2dv:
+        case kCmd_glUniform2f:
+        case kCmd_glUniform2fv:
+        case kCmd_glUniform2i:
+        case kCmd_glUniform2iv:
+        case kCmd_glUniform2ui:
+        case kCmd_glUniform2uiv:
+        case kCmd_glUniform3d:
+        case kCmd_glUniform3dv:
+        case kCmd_glUniform3f:
+        case kCmd_glUniform3fv:
+        case kCmd_glUniform3i:
+        case kCmd_glUniform3iv:
+        case kCmd_glUniform3ui:
+        case kCmd_glUniform3uiv:
+        case kCmd_glUniform4d:
+        case kCmd_glUniform4dv:
+        case kCmd_glUniform4f:
+        case kCmd_glUniform4fv:
+        case kCmd_glUniform4i:
+        case kCmd_glUniform4iv:
+        case kCmd_glUniform4ui:
+        case kCmd_glUniform4uiv:
+        case kCmd_glUniformBlockBinding:
+        case kCmd_glUniformMatrix2dv:
+        case kCmd_glUniformMatrix2fv:
+        case kCmd_glUniformMatrix2x3dv:
+        case kCmd_glUniformMatrix2x3fv:
+        case kCmd_glUniformMatrix2x4dv:
+        case kCmd_glUniformMatrix2x4fv:
+        case kCmd_glUniformMatrix3dv:
+        case kCmd_glUniformMatrix3fv:
+        case kCmd_glUniformMatrix3x2dv:
+        case kCmd_glUniformMatrix3x2fv:
+        case kCmd_glUniformMatrix3x4dv:
+        case kCmd_glUniformMatrix3x4fv:
+        case kCmd_glUniformMatrix4dv:
+        case kCmd_glUniformMatrix4fv:
+        case kCmd_glUniformMatrix4x2dv:
+        case kCmd_glUniformMatrix4x2fv:
+        case kCmd_glUniformMatrix4x3dv:
+        case kCmd_glUniformMatrix4x3fv:
+        case kCmd_glUniformSubroutinesuiv:
+        case kCmd_glUseProgram:
+        case kCmd_glViewport:
+        case kCmd_glViewportIndexedf:
+        case kCmd_glViewportIndexedfv:
+        case kCmd_glArrayElement:
+        case kCmd_glUniformHandleui64ARB:
+        case kCmd_glUniformHandleui64vARB:
+        case kCmd_glProgramUniformHandleui64ARB:
+        case kCmd_glProgramUniformHandleui64vARB:
+        case kCmd_glUniformHandleui64NV:
+        case kCmd_glUniformHandleui64vNV:
+        case kCmd_glProgramUniformHandleui64NV:
+        case kCmd_glProgramUniformHandleui64vNV:
+        case kCmd_glUniformui64NV:
+        case kCmd_glUniformui64vNV:
+        case kCmd_glProgramUniformui64NV:
+        case kCmd_glProgramUniformui64vNV:
+        case kCmd_glUniform1i64NV:
+        case kCmd_glUniform2i64NV:
+        case kCmd_glUniform3i64NV:
+        case kCmd_glUniform4i64NV:
+        case kCmd_glUniform1i64vNV:
+        case kCmd_glUniform2i64vNV:
+        case kCmd_glUniform3i64vNV:
+        case kCmd_glUniform4i64vNV:
+        case kCmd_glUniform1ui64NV:
+        case kCmd_glUniform2ui64NV:
+        case kCmd_glUniform3ui64NV:
+        case kCmd_glUniform4ui64NV:
+        case kCmd_glUniform1ui64vNV:
+        case kCmd_glUniform2ui64vNV:
+        case kCmd_glUniform3ui64vNV:
+        case kCmd_glUniform4ui64vNV:
+        case kCmd_glProgramUniform1i64NV:
+        case kCmd_glProgramUniform2i64NV:
+        case kCmd_glProgramUniform3i64NV:
+        case kCmd_glProgramUniform4i64NV:
+        case kCmd_glProgramUniform1i64vNV:
+        case kCmd_glProgramUniform2i64vNV:
+        case kCmd_glProgramUniform3i64vNV:
+        case kCmd_glProgramUniform4i64vNV:
+        case kCmd_glProgramUniform1ui64NV:
+        case kCmd_glProgramUniform2ui64NV:
+        case kCmd_glProgramUniform3ui64NV:
+        case kCmd_glProgramUniform4ui64NV:
+        case kCmd_glProgramUniform1ui64vNV:
+        case kCmd_glProgramUniform2ui64vNV:
+        case kCmd_glProgramUniform3ui64vNV:
+        case kCmd_glProgramUniform4ui64vNV:
+        case kCmd_glProgramUniform1fEXT:
+        case kCmd_glProgramUniform2fEXT:
+        case kCmd_glProgramUniform3fEXT:
+        case kCmd_glProgramUniform4fEXT:
+        case kCmd_glProgramUniform1iEXT:
+        case kCmd_glProgramUniform2iEXT:
+        case kCmd_glProgramUniform3iEXT:
+        case kCmd_glProgramUniform4iEXT:
+        case kCmd_glProgramUniform1fvEXT:
+        case kCmd_glProgramUniform2fvEXT:
+        case kCmd_glProgramUniform3fvEXT:
+        case kCmd_glProgramUniform4fvEXT:
+        case kCmd_glProgramUniform1ivEXT:
+        case kCmd_glProgramUniform2ivEXT:
+        case kCmd_glProgramUniform3ivEXT:
+        case kCmd_glProgramUniform4ivEXT:
+        case kCmd_glProgramUniformMatrix2fvEXT:
+        case kCmd_glProgramUniformMatrix3fvEXT:
+        case kCmd_glProgramUniformMatrix4fvEXT:
+        case kCmd_glProgramUniformMatrix2x3fvEXT:
+        case kCmd_glProgramUniformMatrix3x2fvEXT:
+        case kCmd_glProgramUniformMatrix2x4fvEXT:
+        case kCmd_glProgramUniformMatrix4x2fvEXT:
+        case kCmd_glProgramUniformMatrix3x4fvEXT:
+        case kCmd_glProgramUniformMatrix4x3fvEXT:
+        case kCmd_glProgramUniform1uiEXT:
+        case kCmd_glProgramUniform2uiEXT:
+        case kCmd_glProgramUniform3uiEXT:
+        case kCmd_glProgramUniform4uiEXT:
+        case kCmd_glProgramUniform1uivEXT:
+        case kCmd_glProgramUniform2uivEXT:
+        case kCmd_glProgramUniform3uivEXT:
+        case kCmd_glProgramUniform4uivEXT:
+        case kCmd_glProgramUniform1dEXT:
+        case kCmd_glProgramUniform2dEXT:
+        case kCmd_glProgramUniform3dEXT:
+        case kCmd_glProgramUniform4dEXT:
+        case kCmd_glProgramUniform1dvEXT:
+        case kCmd_glProgramUniform2dvEXT:
+        case kCmd_glProgramUniform3dvEXT:
+        case kCmd_glProgramUniform4dvEXT:
+        case kCmd_glProgramUniformMatrix2dvEXT:
+        case kCmd_glProgramUniformMatrix3dvEXT:
+        case kCmd_glProgramUniformMatrix4dvEXT:
+        case kCmd_glProgramUniformMatrix2x3dvEXT:
+        case kCmd_glProgramUniformMatrix2x4dvEXT:
+        case kCmd_glProgramUniformMatrix3x2dvEXT:
+        case kCmd_glProgramUniformMatrix3x4dvEXT:
+        case kCmd_glProgramUniformMatrix4x2dvEXT:
+        case kCmd_glProgramUniformMatrix4x3dvEXT:
+            return true;
+        default: return false;
+    }
+}
+
 bool dispatch_command(const RealGl& rvk_gl, uint32_t cmd_id,
                       ::av::WireReader& rvk_r,
                       ::av::WireWriter& rvk_reply,
                       ::av::WireArena& rvk_arena) noexcept {
+    if (!array_neutral(cmd_id)) rvk_gl.rvk_verified_count = 0;
     switch (cmd_id) {
         case kCmd_glActiveShaderProgram: return decode_glActiveShaderProgram(rvk_gl, rvk_r, rvk_reply, rvk_arena);
         case kCmd_glActiveTexture: return decode_glActiveTexture(rvk_gl, rvk_r, rvk_reply, rvk_arena);

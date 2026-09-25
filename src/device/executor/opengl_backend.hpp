@@ -98,6 +98,8 @@ private:
     uint32_t    resolved_;
     uint64_t    ran_;
     bool        lost_;
+    /* Whether this batch has made the context current yet. */
+    bool        current_;
 
     friend struct OpenGlBackendProbe;
 };

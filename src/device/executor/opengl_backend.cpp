@@ -56,7 +56,7 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
 
 OpenGlBackend::OpenGlBackend()
     : context_(), gl_(), import_(), objects_(), fences_(), region_(), resolved_(0u), ran_(0u),
-      lost_(false)
+      lost_(false), current_(false)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
@@ -118,7 +118,8 @@ bool OpenGlBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenGlBackend::knows");
     if (command_id >> 16u != opengl_api) return false;
-    return strcmp(glproto::cmd_id_to_string(command_id), "unknown") != 0;
+    /* Every id the table has not got answers the one literal id 0 does. */
+    return glproto::cmd_id_to_string(command_id) != glproto::cmd_id_to_string(0u);
 }
 
 bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -126,8 +127,11 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
 {
     AV_SCOPE("OpenGlBackend::run");
     /* One context belongs to one worker, but a worker runs many contexts in
-     * turn, so the current one is set per command rather than once. */
-    if (!context_.make_current()) return false;
+     * turn, a batch at a time: the current one is set at a batch's first
+     * command. Not per command - libglvnd's eglMakeCurrent, and even its
+     * eglGetCurrentContext, is a getpid() system call each time. */
+    if (!current_ && !context_.make_current()) return false;
+    current_ = true;
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) return false;
     ran_++;
     return true;
@@ -142,6 +146,7 @@ bool OpenGlBackend::poll()
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");
+    current_ = false;
 }
 
 bool OpenGlBackend::lost() const

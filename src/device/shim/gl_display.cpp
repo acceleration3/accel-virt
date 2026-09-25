@@ -110,10 +110,6 @@ bool GlDisplay::make_current(void *context) const
 {
     AV_SCOPE("GlDisplay::make_current");
     if (display_ == nullptr || context == nullptr) return false;
-    /* Asked before every command: the thread's current context is a
-     * thread-local read, and eglMakeCurrent takes the display's lock even to
-     * change nothing. */
-    if (eglGetCurrentContext() == context) return true;
     return eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, context) == EGL_TRUE;
 }
 

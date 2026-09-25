@@ -1210,6 +1210,24 @@ PACK_HELPERS = [
     "    return true;",
     "}",
     "",
+    "// arrays_in_buffers, asked once per vertex array object rather than once",
+    "// per draw: it is a query per attribute, dozens a draw, and the answer",
+    "// changes only when a command that is not array_neutral runs, which",
+    "// forgets every verdict. Keyed by the binding GL reports rather than one",
+    "// the server tracks, so a bind GL refused cannot stand in for a check.",
+    "static bool arrays_verified(const RealGl& rvk_gl) noexcept {",
+    "    if (rvk_gl.glGetIntegerv == nullptr) return false;",
+    "    GLint bound = 0;",
+    "    rvk_gl.glGetIntegerv(0x85B5, &bound);",
+    "    const uint32_t vao = static_cast<uint32_t>(bound);",
+    "    for (uint32_t i = 0; i < rvk_gl.rvk_verified_count; ++i)",
+    "        if (rvk_gl.rvk_verified_arrays[i] == vao) return true;",
+    "    if (!arrays_in_buffers(rvk_gl)) return false;",
+    "    if (rvk_gl.rvk_verified_count < RealGl::rvk_verified_capacity)",
+    "        rvk_gl.rvk_verified_arrays[rvk_gl.rvk_verified_count++] = vao;",
+    "    return true;",
+    "}",
+    "",
     "// How many values an evaluator map's points hold per control point, by",
     "// target, or 0 for a target that is not a map.",
     "static uint64_t map_dimensions(GLenum target) noexcept {",
@@ -1341,6 +1359,33 @@ REFUSED_COMMANDS = {
 }
 
 # The draws that read every enabled vertex array at its pointer.
+# What array_neutral lets past without forgetting arrays_verified's
+# verdicts: draws, and state no vertex array holds. glEnable and glDisable
+# are not here - a compatibility context takes GL_VERTEX_ARRAY through them.
+ARRAY_NEUTRAL_PREFIXES = ("glUniform", "glProgramUniform", "glClearBuffer", "glClearNamedFramebuffer")
+ARRAY_NEUTRAL = frozenset((
+    "glBindVertexArray", "glUseProgram", "glBindBuffer", "glBindBufferBase", "glBindBufferRange",
+    "glBufferData", "glBufferSubData", "glNamedBufferData", "glNamedBufferSubData",
+    "glBindTexture", "glBindTextures", "glBindTextureUnit", "glActiveTexture", "glBindSampler", "glBindSamplers",
+    "glBindFramebuffer", "glClear", "glClearColor", "glClearDepth", "glClearDepthf", "glClearStencil",
+    "glViewport", "glViewportIndexedf", "glViewportIndexedfv", "glScissor", "glScissorIndexed",
+    "glDepthMask", "glDepthFunc", "glDepthRange", "glDepthRangef", "glColorMask", "glColorMaski",
+    "glStencilMask", "glStencilMaskSeparate", "glStencilFunc", "glStencilFuncSeparate", "glStencilOp",
+    "glStencilOpSeparate", "glBlendFunc", "glBlendFuncSeparate", "glBlendEquation", "glBlendEquationSeparate",
+    "glBlendColor", "glCullFace", "glFrontFace", "glPolygonMode", "glPolygonOffset", "glLineWidth",
+    "glPointSize", "glFlush", "glMemoryBarrier", "glDispatchCompute", "glBindImageTexture",
+    "glTexSubImage2D", "glTexSubImage3D", "glTextureSubImage2D", "glTextureSubImage3D", "glGenerateMipmap",
+    "glGenerateTextureMipmap", "glBeginQuery", "glEndQuery", "glQueryCounter", "glPixelStorei",
+    "glDrawBuffer", "glDrawBuffers", "glSampleMaski", "glPatchParameteri", "glPrimitiveRestartIndex",
+    "glProvokingVertex", "glMinSampleShading", "glBeginConditionalRender", "glEndConditionalRender",
+    "glUniformBlockBinding", "glShaderStorageBlockBinding",
+))
+
+
+def _array_neutral(name):
+    return name in ARRAY_NEUTRAL or name.startswith(ARRAY_NEUTRAL_PREFIXES) or name.startswith(DRAWS_FROM_ARRAYS)
+
+
 DRAWS_FROM_ARRAYS = ("glDrawArrays", "glDrawElements", "glDrawRangeElements", "glMultiDrawArrays",
                      "glMultiDrawElements", "glArrayElement", "glDrawTransformFeedback")
 
@@ -1647,7 +1692,7 @@ def _refusals(cmd: Command) -> list[str]:
             if cmd.name.endswith("IndirectCount"):
                 out.append(f"    if (!buffer_bound(rvk_gl, {GL_PARAMETER_BUFFER_BINDING})) return false;")
     if cmd.name.startswith(DRAWS_FROM_ARRAYS):
-        late.append("    if (!arrays_in_buffers(rvk_gl)) return false;")
+        late.append("    if (!arrays_verified(rvk_gl)) return false;")
     if cmd.name in ENABLED_ARRAYS:
         _scalar(cmd, "array")
         late.append(f"    if (!({ENABLED_ARRAYS[cmd.name]})) return false;")
@@ -1795,10 +1840,20 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.append("    return true;")
         c.append("}")
         c.append("")
+    neutral = [name for name in reg.commands if _array_neutral(name)]
+    c.append("// Commands that cannot change what any vertex array reads from, so a")
+    c.append("// verdict of arrays_verified outlives them. Anything else - a pointer,")
+    c.append("// an enable, a deleted buffer or array, a client state - forgets them.")
+    c.append("static bool array_neutral(uint32_t cmd_id) noexcept {")
+    c.append("    switch (cmd_id) {")
+    for name in neutral:
+        c.append(f"        case kCmd_{name}:")
+    c += ["            return true;", "        default: return false;", "    }", "}", ""]
     c.append("bool dispatch_command(const RealGl& rvk_gl, uint32_t cmd_id,")
     c.append("                      ::av::WireReader& rvk_r,")
     c.append("                      ::av::WireWriter& rvk_reply,")
     c.append("                      ::av::WireArena& rvk_arena) noexcept {")
+    c.append("    if (!array_neutral(cmd_id)) rvk_gl.rvk_verified_count = 0;")
     c.append("    switch (cmd_id) {")
     for cmd in reg.commands.values():
         c.append(f"        case kCmd_{cmd.name}: "
@@ -1847,7 +1902,15 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // fixed-function vertex arrays, which a draw's check of its",
            "    // arrays asks after. Set by the server from what the host",
            "    // granted; a core context has none to ask of.",
-           "    bool rvk_fixed_function = true;"]
+           "    bool rvk_fixed_function = true;",
+           "",
+           "    // The vertex array objects a draw found reading only from",
+           "    // buffers (arrays_verified). Mutable because dispatch is handed",
+           "    // the table const: these are a cache of what the context would",
+           "    // answer, not entry points.",
+           "    static constexpr uint32_t rvk_verified_capacity = 8;",
+           "    mutable uint32_t rvk_verified_arrays[rvk_verified_capacity] = {};",
+           "    mutable uint32_t rvk_verified_count = 0;"]
     for cmd in reg.commands.values():
         params = ", ".join(p.type.cpp() for p in cmd.params) or "void"
         out.append(f"    {cmd.return_type.cpp()} (*{cmd.name})({params}) = nullptr;")

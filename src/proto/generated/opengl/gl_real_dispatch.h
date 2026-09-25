@@ -40,6 +40,14 @@ struct RealGl {
     // arrays asks after. Set by the server from what the host
     // granted; a core context has none to ask of.
     bool rvk_fixed_function = true;
+
+    // The vertex array objects a draw found reading only from
+    // buffers (arrays_verified). Mutable because dispatch is handed
+    // the table const: these are a cache of what the context would
+    // answer, not entry points.
+    static constexpr uint32_t rvk_verified_capacity = 8;
+    mutable uint32_t rvk_verified_arrays[rvk_verified_capacity] = {};
+    mutable uint32_t rvk_verified_count = 0;
     void (*glActiveShaderProgram)(GLuint, GLuint) = nullptr;
     void (*glActiveTexture)(GLenum) = nullptr;
     void (*glAttachShader)(GLuint, GLuint) = nullptr;
