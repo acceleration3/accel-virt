@@ -49,9 +49,14 @@ private:
     static constexpr uint64_t look_every_ns = 50000000u;
     /* Looks in a row the GPU must be busy and slow before the hold is taken:
      * long enough that a clock still ramping up is not taken for a low one. */
-    static constexpr uint32_t slow_looks = 4u;
+    static constexpr uint32_t slow_looks = 8u;
     static constexpr uint32_t busy_percent = 50u;
     static constexpr uint64_t probe_every_ns = 4000000000u;
+    /* The first look after taking the hold comes soon: a GPU still ramping
+     * up to a saturating load reads as slow, and held it would stay at the
+     * peak state's clock for the whole of a short run while the driver's own
+     * choice would have been higher (Vulkan instancing, 77% of native). */
+    static constexpr uint64_t first_probe_ns = 500000000u;
 
     bool     request(uint32_t pstate);
     /* An AMDGPU_INFO_SENSOR reading; zero where the kernel will not say. */
@@ -70,6 +75,8 @@ private:
     pthread_cond_t  wake_;
     uint64_t        last_busy_;
     uint64_t        held_since_;
+    /* How long this hold lasts before it is let go to look again. */
+    uint64_t        hold_for_;
     uint32_t        peak_mhz_;
     uint32_t        slow_;
     bool            held_;

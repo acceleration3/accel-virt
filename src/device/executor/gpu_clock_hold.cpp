@@ -23,7 +23,7 @@ void *run_clock_hold(void *hold)
 
 GpuClockHold::GpuClockHold()
     : fd_(-1), context_(0u), thread_{}, lock_(PTHREAD_MUTEX_INITIALIZER), wake_(PTHREAD_COND_INITIALIZER),
-      last_busy_(0u), held_since_(0u), peak_mhz_(0u), slow_(0u), held_(false), wanted_(false), stopping_(false), open_(false)
+      last_busy_(0u), held_since_(0u), hold_for_(0u), peak_mhz_(0u), slow_(0u), held_(false), wanted_(false), stopping_(false), open_(false)
 {
     AV_SCOPE("GpuClockHold::GpuClockHold");
 }
@@ -102,7 +102,7 @@ void GpuClockHold::watch()
         pthread_cond_timedwait(&wake_, &lock_, &until);
         if (stopping_) break;
         if (held_) {
-            if (now() - held_since_ >= probe_every_ns) let_go();
+            if (now() - held_since_ >= hold_for_) let_go();
             continue;
         }
         slow_ = slow() ? slow_ + 1u : 0u;
@@ -128,7 +128,11 @@ void GpuClockHold::take()
     slow_ = 0u;
     if (!request(AMDGPU_CTX_STABLE_PSTATE_PEAK)) return;
     __atomic_store_n(&held_, true, __ATOMIC_RELEASE);
-    held_since_ = now();
+    /* A hold that follows a look soon after the last one let go is one the
+     * driver's own clock did not beat: it may stay longer. */
+    const uint64_t taken = now();
+    hold_for_ = taken - held_since_ < probe_every_ns + first_probe_ns ? probe_every_ns : first_probe_ns;
+    held_since_ = taken;
 }
 
 void GpuClockHold::let_go()
