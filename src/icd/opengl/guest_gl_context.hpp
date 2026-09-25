@@ -18,7 +18,6 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/batched_transport.hpp"
 #include "icd/common/icd_connection.hpp"
-#include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/frame_pacer.hpp"
@@ -187,7 +186,6 @@ private:
     uint8_t                       *batch_block_;
     ObjectStorage<KmtTransport>    transport_;
     ObjectStorage<icd::BatchedTransport> batched_;
-    ObjectStorage<icd::LockedTransport> locked_;
     ObjectStorage<KmtBlobArena>    arena_;
     ClientArrayState               arrays_;
     UniformShapes                  uniforms_;

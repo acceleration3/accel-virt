@@ -30,7 +30,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
+      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -188,7 +188,11 @@ ClientTransport *GuestGlContext::wire()
         state_ = State::lost;
         log_.write("rvkgl: the context's device faulted; the context is lost");
     }
-    return state_ == State::made ? &locked_.object() : nullptr;
+    /* The batch itself, with no lock: WGL lets a context be current on one
+     * thread at a time, and it is only ever called on that one. The lock
+     * every call took serialised each context's calls against every other
+     * context's, and cost a sixth of a draw-heavy thread's time. */
+    return state_ == State::made ? &batched_.object() : nullptr;
 }
 
 ClientArrayState &GuestGlContext::arrays()
@@ -345,7 +349,7 @@ bool GuestGlContext::invariants_hold() const
 {
     AV_SCOPE("GuestGlContext::invariants_hold");
     const bool held = state_ != State::created;
-    if (held != transport_.constructed() || held != locked_.constructed() ||
+    if (held != transport_.constructed() || held != batched_.constructed() ||
         held != (link_ != icd::IcdConnection::no_link))
         return false;
     if (loss_reported_ && state_ != State::lost) return false;
@@ -373,7 +377,6 @@ Status GuestGlContext::build()
     batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
     if (batch_block_ == nullptr) return Status::no_memory;
     static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes, staging_bytes));
-    static_cast<void>(locked_.construct(batched_.object(), send_lock_));
     static_cast<void>(pacer_.construct(connection_.device(link_).kmt(), log_, connection_.device(link_).adapter(),
                                        connection_.device(link_).device()));
     static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
@@ -385,7 +388,7 @@ Status GuestGlContext::build()
 bool GuestGlContext::learn()
 {
     AV_SCOPE("GuestGlContext::learn");
-    ClientTransport &wire = locked_.object();
+    ClientTransport &wire = batched_.object();
     for (uint32_t row = 0u; row < strings; row++) {
         size_t length = 0u;
         if (!glproto::rvk_glGetString(wire, string_names[row], strings_[row], string_bytes - 1u, &length))
@@ -450,7 +453,6 @@ void GuestGlContext::teardown()
         if (closed != Status::ok) log_.write("rvkgl: the blob arena did not close whole");
         arena_.destroy();
     }
-    locked_.destroy();
     batched_.destroy();
     pacer_.destroy();
     transport_.destroy();
