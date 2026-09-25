@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/gpu_clock_hold.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/session_backend.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -10,7 +11,7 @@
 namespace av {
 
 ContextSession::ContextSession()
-    : backend_(nullptr), arena_(), imports_(), starved_(0u), faulted_(false)
+    : backend_(nullptr), clocks_(nullptr), arena_(), imports_(), starved_(0u), faulted_(false)
 {
     AV_SCOPE("ContextSession::ContextSession");
 }
@@ -41,6 +42,7 @@ void ContextSession::release()
         blob->give_back();
     }
     backend_ = nullptr;
+    clocks_ = nullptr;
     /* The block goes back to the library, so the slot holds no pointer into
      * memory the next context will be given. */
     arena_.attach(nullptr, 0u);
@@ -63,6 +65,13 @@ void ContextSession::end_batch()
 {
     AV_SCOPE("ContextSession::end_batch");
     if (backend_ != nullptr) backend_->end_batch();
+    if (clocks_ != nullptr) clocks_->busy();
+}
+
+void ContextSession::hold_clocks(GpuClockHold &clocks)
+{
+    AV_SCOPE("ContextSession::hold_clocks");
+    clocks_ = &clocks;
 }
 
 uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, size_t size,

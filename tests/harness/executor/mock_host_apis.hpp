@@ -27,6 +27,7 @@ public:
 
     uint32_t gpu_count() override;
     void     gpu_uuid(uint32_t index, uint8_t *out) override;
+    int32_t  render_minor(uint32_t index) override;
     uint32_t sub_apis(uint32_t index) override;
     uint32_t import_kinds(uint32_t index, uint32_t sub_api) override;
     /* Null for every GPU: a mock GPU has no display or OpenCL device behind

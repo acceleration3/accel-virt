@@ -57,14 +57,18 @@ void LoaderHostApis::enumerate()
     if (found > HostGpuSet::max_gpus) found = HostGpuSet::max_gpus;
 
     for (uint32_t i = 0u; i < found; i++) {
+        VkPhysicalDeviceDrmPropertiesEXT node = {};
+        node.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
         VkPhysicalDeviceIDProperties identity = {};
         identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+        identity.pNext = &node;
         VkPhysicalDeviceProperties2 device = {};
         device.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         device.pNext = &identity;
         vkGetPhysicalDeviceProperties2(devices[i], &device);
 
         memcpy(uuids_[i], identity.deviceUUID, uuid_bytes);
+        render_minors_[i] = node.hasRender ? static_cast<int32_t>(node.renderMinor) : -1;
         sub_apis_[i] = RVK_EXECUTOR_SUB_API_VULKAN;
         vulkan_kinds_[i] = kinds_of(devices[i]);
         opencl_kinds_[i] = 0u;
@@ -150,6 +154,12 @@ void LoaderHostApis::gpu_uuid(uint32_t index, uint8_t *out)
     AV_SCOPE("LoaderHostApis::gpu_uuid");
     if (index >= count_ || out == nullptr) return;
     memcpy(out, uuids_[index], uuid_bytes);
+}
+
+int32_t LoaderHostApis::render_minor(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::render_minor");
+    return index < count_ ? render_minors_[index] : -1;
 }
 
 uint32_t LoaderHostApis::sub_apis(uint32_t index)

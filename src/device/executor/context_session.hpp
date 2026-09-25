@@ -18,6 +18,7 @@ struct RvkBlobHandle;
 
 namespace av {
 
+class GpuClockHold;
 class SessionBackend;
 
 class ContextSession {
@@ -32,6 +33,8 @@ public:
     /* Releases the session for reuse. Safe on one that never ran. */
     void                 release();
     bool                 live() const;
+    /* The clocks of the GPU this session runs on, told of every batch. */
+    void                 hold_clocks(GpuClockHold &clocks);
 
     /* Runs one command and answers one of the ABI's four results. `reply` may
      * be null with a capacity of zero, which is what the device passes for
@@ -76,6 +79,7 @@ private:
     friend struct ContextSessionProbe;
 
     SessionBackend *backend_;
+    GpuClockHold   *clocks_;
     DecodeArena     arena_;
     ImportTable     imports_;
     size_t          starved_;

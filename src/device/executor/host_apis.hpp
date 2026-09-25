@@ -42,6 +42,9 @@ public:
      * differ: a host pointer into Vulkan works where a dma-buf into OpenCL
      * does not (feature 042, research). */
     virtual uint32_t import_kinds(uint32_t index, uint32_t sub_api) = 0;
+    /* The minor number of this GPU's DRM render node, or -1 where the driver
+     * does not say (VK_EXT_physical_device_drm). */
+    virtual int32_t  render_minor(uint32_t index) = 0;
 
     /* What a context on `index` runs on, found when the host was asked and
      * kept for as long as this is: the EGL display an OpenGL context is made

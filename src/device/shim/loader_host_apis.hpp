@@ -37,6 +37,7 @@ public:
     void     gpu_uuid(uint32_t index, uint8_t *out) override;
     uint32_t sub_apis(uint32_t index) override;
     uint32_t import_kinds(uint32_t index, uint32_t sub_api) override;
+    int32_t  render_minor(uint32_t index) override;
     const GlDisplay    *gl_display(uint32_t index) override;
     const OpenClDevice *opencl_device(uint32_t index) override;
     D3d11HostDevice    *d3d11_device(uint32_t index) override;
@@ -60,6 +61,7 @@ private:
     uint32_t sub_apis_[HostGpuSet::max_gpus];
     uint32_t vulkan_kinds_[HostGpuSet::max_gpus];
     uint32_t opencl_kinds_[HostGpuSet::max_gpus];
+    int32_t  render_minors_[HostGpuSet::max_gpus];
     /* OpenCL is served where a device on this host says it is the same GPU,
      * and OpenGL where a context made on a display answers that GPU's UUID -
      * because every cheaper answer, an EGL device count or a vendor string,

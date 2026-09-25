@@ -34,6 +34,12 @@ void MockHostApis::gpu_uuid(uint32_t index, uint8_t *out)
     for (uint32_t i = 0u; i < uuid_bytes; i++) out[i] = gpus_[index].uuid[i];
 }
 
+int32_t MockHostApis::render_minor(uint32_t)
+{
+    questions_++;
+    return -1;
+}
+
 uint32_t MockHostApis::sub_apis(uint32_t index)
 {
     questions_++;

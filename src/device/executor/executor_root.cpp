@@ -105,6 +105,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
         }
         apis_of_[slot] = sub_api;
         gpus_of_[slot] = gpu->index();
+        if (clocks_[gpu->index()].open(apis_->render_minor(gpu->index())))
+            sessions_[slot].hold_clocks(clocks_[gpu->index()]);
         return &sessions_[slot];
     }
     return nullptr;

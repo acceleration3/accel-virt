@@ -15,6 +15,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/d3d_backend.hpp"
+#include "device/executor/gpu_clock_hold.hpp"
 #include "device/executor/host_gpu_set.hpp"
 #include "device/executor/opencl_backend.hpp"
 #include "device/executor/opengl_backend.hpp"
@@ -123,6 +124,7 @@ private:
     const char *api_name(uint32_t sub_api) const;
 
     HostGpuSet     gpus_;
+    GpuClockHold   clocks_[HostGpuSet::max_gpus];
     ContextSession sessions_[max_sessions];
     VulkanBackend  vulkan_[max_sessions];
     OpenClBackend  opencl_[max_sessions];
