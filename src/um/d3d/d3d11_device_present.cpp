@@ -241,7 +241,6 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.shared_key = from.shared_key;
         to.shadow = from.shadow;
         to.shadow_bytes = from.shadow_bytes;
-        to.watched = from.watched;
         to.mapped_write = from.mapped_write;
         to.primary = from.primary;
         to.vidpn_source = from.vidpn_source;

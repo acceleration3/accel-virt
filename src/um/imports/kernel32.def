@@ -60,11 +60,7 @@ TlsGetValue
 TlsSetValue
 TryAcquireSRWLockExclusive
 UnmapViewOfFile
-VirtualAlloc
-VirtualFree
 VirtualQuery
-GetWriteWatch
-ResetWriteWatch
 WaitForSingleObject
 WideCharToMultiByte
 WriteFile
