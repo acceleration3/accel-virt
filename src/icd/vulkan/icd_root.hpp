@@ -261,6 +261,7 @@ private:
     /* The device at `device`, made through a physical device, or null. */
     LoaderHandle        *allocating_device(VkDevice device);
     void                 release_device_memory(LoaderHandle &device);
+    void                 release_idle_fences(LoaderHandle &device);
 
     BlockSource           &memory_;
     Kmt                   &kmt_;

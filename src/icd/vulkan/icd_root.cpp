@@ -1057,8 +1057,23 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     /* A swapchain frees its memory through the device: before the device's own. */
     presentation_.forget_device(device);
     release_device_memory(*made);
+    release_idle_fences(*made);
     vkicd::generated::Wrap_vkDestroyDevice(device, allocator);
     destroy_wrapper(device, LoaderHandle::Kind::device);
+}
+
+/* Each queue's vkQueueWaitIdle fence, before the device that owns them. */
+void IcdRoot::release_idle_fences(LoaderHandle &device)
+{
+    AV_SCOPE("IcdRoot::release_idle_fences");
+    for (uint32_t index = 0u;; index++) {
+        LoaderHandle *const queue = child_of(device, LoaderHandle::Kind::queue, index);
+        if (queue == nullptr) return;
+        if (queue->idle_fence() == 0u) continue;
+        vkproto::rvk_vkDestroyFence(device.connection()->transport(), static_cast<VkDevice>(static_cast<void *>(&device)),
+                                    reinterpret_cast<VkFence>(queue->idle_fence()), nullptr);
+        queue->keep_idle_fence(0u);
+    }
 }
 
 void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks *allocator)
@@ -1074,6 +1089,7 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
             if (device == nullptr) break;
             presentation_.forget_device(reinterpret_cast<VkDevice>(device));
             release_device_memory(*device);
+            release_idle_fences(*device);
         }
     }
     presentation_.forget_instance(instance);
@@ -1490,7 +1506,9 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
 
 /* The host's own vkQueueWaitIdle has no timeout, so it could hold the context's
  * worker past TdrDelay; a fence on an empty submission can be waited for in
- * slices instead. */
+ * slices instead. The queue keeps that fence: making one per wait was a round
+ * trip of its own, several times a frame in an application that waits for its
+ * queue between passes. */
 VkResult IcdRoot::queue_wait_idle(VkQueue queue)
 {
     AV_SCOPE("IcdRoot::queue_wait_idle");
@@ -1502,12 +1520,17 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     if (lost(*made->connection(), "vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
     const auto        device = static_cast<VkDevice>(static_cast<void *>(made->parent()));
     ClientTransport  &transport = made->connection()->transport();
-    VkFenceCreateInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    VkFence        fence = VK_NULL_HANDLE;
-    const VkResult created = vkproto::rvk_vkCreateFence(transport, device, &info, nullptr, &fence);
-    if (created != VK_SUCCESS) return created;
-    ScopeExit      destroyed([&] { vkproto::rvk_vkDestroyFence(transport, device, fence, nullptr); });
+    VkFence fence = reinterpret_cast<VkFence>(made->idle_fence());
+    if (fence == VK_NULL_HANDLE) {
+        VkFenceCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        const VkResult created = vkproto::rvk_vkCreateFence(transport, device, &info, nullptr, &fence);
+        if (created != VK_SUCCESS) return created;
+        made->keep_idle_fence(reinterpret_cast<uint64_t>(fence));
+    } else {
+        const VkResult reset = vkproto::rvk_vkResetFences(transport, device, 1u, &fence);
+        if (reset != VK_SUCCESS) return reset;
+    }
     const VkResult submitted = vkproto::rvk_vkQueueSubmit(transport, queue, 0u, nullptr, fence);
     if (submitted != VK_SUCCESS) return submitted;
     return wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);

@@ -59,6 +59,9 @@ public:
     void          allocate_from(ObjectPool<DeviceMemory> &memories, DeviceMemory &memory);
     /* The memory it owns; null for anything but a device given one. */
     DeviceMemory *device_memory() const;
+    /* A queue's fence for vkQueueWaitIdle, the host's handle; 0 until made. */
+    void          keep_idle_fence(uint64_t fence);
+    uint64_t      idle_fence() const;
 
     /* An instance has no parent and anything else has one of a lower kind on
      * the same connection; the host never names an object 0; only a command
@@ -76,6 +79,7 @@ private:
     CommandBatch             *batch_;
     ObjectPool<DeviceMemory> *memories_;
     DeviceMemory             *memory_;
+    uint64_t                  idle_fence_;
 
     friend struct LoaderHandleProbe;
 };
