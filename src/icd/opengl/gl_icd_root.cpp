@@ -235,6 +235,11 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
         fail(error_busy);
         return nullptr;
     }
+    /* A context the thread leaves may be read from another next (a shared
+     * object, a context the application makes current elsewhere): what it
+     * holds goes first. */
+    GuestGlContext *const previous = currents_.current();
+    if (previous != nullptr && previous != context) previous->flush();
     if (context->state() == GuestGlContext::State::created) {
         const Status made = make_chain(*context);
         if (made != Status::ok) {
@@ -266,6 +271,7 @@ bool GlIcdRoot::release_context(uint64_t handle)
     ScopeExit             release([&] { lock_.release(); });
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr || currents_.current() != context) return false;
+    context->flush();
     context->set_current_dc(nullptr);
     currents_.release();
     return true;
@@ -370,7 +376,9 @@ bool GlIcdRoot::swap_buffers(void *dc)
                               formats_.format(context->pixel_format()), surface_))
         return false;
     /* The frame is on its window; what the interval buys is the wait after it
-     * (feature 051, US2.2). */
+     * (feature 051, US2.2). The calls after the present's go before the
+     * application waits. */
+    context->flush();
     context->pace();
     return true;
 }

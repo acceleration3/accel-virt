@@ -6,6 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/common/thread_lock.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "proto/context/sub_api.hpp"
@@ -29,7 +30,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), transport_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
+      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), locked_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -164,6 +165,16 @@ Status GuestGlContext::share(uint32_t share_name)
     if (options_.major() == 0u) options_ = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
     options_ = options_.sharing(share_name);
     return Status::ok;
+}
+
+void GuestGlContext::flush()
+{
+    AV_SCOPE("GuestGlContext::flush");
+    if (state_ != State::made || !batched_.constructed()) return;
+    send_lock_.acquire();
+    const TransportResult sent = batched_.object().flush();
+    send_lock_.release();
+    if (sent != TransportResult::ok) log_.write("rvkgl: the held calls could not be sent");
 }
 
 ClientTransport *GuestGlContext::wire()
@@ -359,7 +370,10 @@ Status GuestGlContext::build()
         log_.write("rvkgl: the driver refused the context");
         return initialized == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
     }
-    static_cast<void>(locked_.construct(transport_.object(), send_lock_));
+    batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
+    if (batch_block_ == nullptr) return Status::no_memory;
+    static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes, staging_bytes));
+    static_cast<void>(locked_.construct(batched_.object(), send_lock_));
     static_cast<void>(pacer_.construct(connection_.device(link_).kmt(), log_, connection_.device(link_).adapter(),
                                        connection_.device(link_).device()));
     static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
@@ -423,6 +437,9 @@ void GuestGlContext::cap_version()
 void GuestGlContext::teardown()
 {
     AV_SCOPE("GuestGlContext::teardown");
+    /* What the application sent last still reaches the host before its
+     * context goes. */
+    if (batched_.constructed() && state_ == State::made) static_cast<void>(batched_.object().flush());
     /* The host's framebuffer objects go with its context. */
     framebuffers_.release(nullptr);
     mappings_.release();
@@ -434,10 +451,13 @@ void GuestGlContext::teardown()
         arena_.destroy();
     }
     locked_.destroy();
+    batched_.destroy();
     pacer_.destroy();
     transport_.destroy();
     if (staging_ != nullptr) memory_.release(staging_);
     staging_ = nullptr;
+    if (batch_block_ != nullptr) memory_.release(batch_block_);
+    batch_block_ = nullptr;
     connection_.release(link_);
     link_ = icd::IcdConnection::no_link;
     loss_reported_ = false;

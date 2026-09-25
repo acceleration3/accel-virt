@@ -16,6 +16,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/batched_transport.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -56,6 +57,9 @@ public:
     static constexpr uint8_t  ring_order = 20u;
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 256u * 1024u;
+    /* The calls held before they go as one batch; two of the largest a
+     * command can be, and well inside the ring (ring_order). */
+    static constexpr size_t   batch_bytes = 2u * staging_bytes;
     static constexpr uint32_t string_bytes = 256u;
     enum : uint32_t {
         gl_vendor = 0x1F00u, gl_renderer = 0x1F01u, gl_version = 0x1F02u, gl_shading_language_version = 0x8B8Cu,
@@ -101,6 +105,9 @@ public:
     /* What a GL call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here. */
     ClientTransport     *wire();
+    /* The calls held so far go to the host: at glFlush, and before another
+     * context may depend on them. */
+    void                 flush();
 
     ClientArrayState &arrays();
     UniformShapes    &uniforms();
@@ -177,7 +184,9 @@ private:
     uint32_t                       link_;
     bool                           loss_reported_;
     uint8_t                       *staging_;
+    uint8_t                       *batch_block_;
     ObjectStorage<KmtTransport>    transport_;
+    ObjectStorage<icd::BatchedTransport> batched_;
     ObjectStorage<icd::LockedTransport> locked_;
     ObjectStorage<KmtBlobArena>    arena_;
     ClientArrayState               arrays_;
