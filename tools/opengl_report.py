@@ -37,7 +37,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from d3d11_report import compare, guest_shell, metrics, png, read_frame, verdict  # noqa: E402
+from d3d11_report import compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\rvk\\glsamples"
@@ -181,6 +181,7 @@ def report(args, out):
             ratios.append(g["fps"] / h["fps"])
         rows.append(entry)
     write_html(args, out, rows, ratios)
+    write_summary(out, "OpenGL", rows)
 
 
 def cell(value, unit="", decimals=1):

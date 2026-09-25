@@ -81,10 +81,23 @@ void TraceTable::limit_depth(uint32_t depth)
     max_depth_ = depth;
 }
 
-void TraceTable::only(const uint32_t *ids, uint32_t count)
+void TraceTable::only(const char *names)
 {
+    constexpr size_t longest_name = 128u;
     only_count_ = 0u;
-    for (uint32_t index = 0u; ids != nullptr && index < count && index < max_only; index++) only_[only_count_++] = ids[index];
+    char   name[longest_name] = {};
+    size_t length = 0u;
+    for (const char *at = names; at != nullptr; at++) {
+        const bool ends = *at == '\0' || *at <= ' ';
+        if (*at != ',' && !ends) {
+            if (length + 1u < sizeof name) name[length++] = *at;
+            continue;
+        }
+        name[length] = '\0';
+        if (length != 0u && only_count_ < max_only) only_[only_count_++] = ScopeName(name).id();
+        length = 0u;
+        if (ends) break;
+    }
 }
 
 void TraceTable::record_events(EventRing &ring)

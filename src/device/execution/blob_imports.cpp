@@ -17,7 +17,7 @@ namespace av {
 BlobImports::BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor, WireRecorder &recorder,
                          uint32_t context)
     : host_(host), blobs_(blobs), executor_(executor), recorder_(recorder), context_(context), ring_resource_(0u), next_blob_id_(1u),
-      device_memory_(nullptr), blob_ids_(nullptr), resources_(nullptr)
+      device_memory_(nullptr), blob_ids_(nullptr), resources_(nullptr), pointer_noted_(false)
       {
           AV_SCOPE("BlobImports::BlobImports");
       }
@@ -139,6 +139,14 @@ Status BlobImports::hand_over(const BlobWindow &pages, const GuestPageAlias &ali
      * with no udmabuf, or a library that imports no dma-buf, falls through to
      * the pointer, which is what every one of them did before. */
     if (hand_over_dmabuf(pages, offset, size, memory_type, blob_id, slot) == Status::ok) return Status::ok;
+    /* Said, because a host GPU that refuses the pointer then fails far from
+     * here: udmabuf's size_limit_mb and list_limit (64 MiB and 1024 runs by
+     * default) are what usually refused it. */
+    if (!pointer_noted_) {
+        pointer_noted_ = true;
+        host_.log("virtio-gpu-rvk: a blob could not be a dma-buf (raise udmabuf's size_limit_mb and list_limit?); "
+                  "handing over a host pointer");
+    }
     return hand_over_pointer(alias, offset, size, memory_type, blob_id, slot);
 }
 

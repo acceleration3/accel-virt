@@ -9,7 +9,8 @@
 # tools/d3d11_report.py pushes it) for long enough, captures `seconds` of both
 # sides stopped at one instant (tools/perfetto_trace.py --guest) and prints
 # tools/frame_breakdown.py's account of it. The trace stays in build-perfetto/
-# for ui.perfetto.dev.
+# for ui.perfetto.dev. GUEST_DEPTH and GUEST_ONLY narrow what the guest
+# records, as RVK_TRACE_DEPTH and RVK_TRACE_ONLY do the host's.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 sample=${1:?usage: profile_sample.sh <sample> [work] [seconds]}
@@ -20,7 +21,7 @@ pid=$(pgrep -f "qemu-system-x86_64.*$(basename "$work")" | head -1)
 [ -n "$pid" ] || { echo "no QEMU for $work" >&2; exit 1; }
 trace="$root/build-perfetto/$sample-$(date +%H%M%S).pftrace"
 
-timeout 60 python3 -B "$root/tools/perfetto_trace.py" "$pid" --guest "$work" --arm 2097152 --depth "${GUEST_DEPTH:-2}"
+timeout 60 python3 -B "$root/tools/perfetto_trace.py" "$pid" --guest "$work" --arm 2097152 --depth "${GUEST_DEPTH:-2}" --only "${GUEST_ONLY:-}"
 # As the logged-on user, through the task scheduler: the agent's own session
 # has no desktop to make a device on. Frames enough to outlast the capture.
 timeout 60 "${shell[@]}" ps "

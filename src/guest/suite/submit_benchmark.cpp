@@ -18,7 +18,7 @@ constexpr uint32_t hundredths = 100u;
 
 SubmitBenchmark::SubmitBenchmark(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), report_(report), steps_(kmt, report, "submit"), link_(kmt, search, steps_, SubApi::vulkan),
-      doorbell_ns_(0u), kernel_ns_(0u), measured_(false)
+      doorbell_ns_(0u), kernel_ns_(0u), measured_(false), trip_ns_{}
 {
     AV_SCOPE("SubmitBenchmark::SubmitBenchmark");
 }
@@ -79,6 +79,47 @@ void SubmitBenchmark::run()
     steps_.check_measured("doorbell_ns", Status::ok, doorbell_ns_);
     steps_.check_measured("kernel_ns", Status::ok, kernel_ns_);
     steps_.check_measured("ratio", Status::ok, ratio());
+}
+
+void SubmitBenchmark::round_trips()
+{
+    AV_SCOPE("SubmitBenchmark::round_trips");
+    constexpr uint32_t percent = 100u;
+    constexpr uint32_t tail_percent = 99u;
+    ScopeExit closing([&] { link_.close(); });
+    if (link_.open() != Status::ok) return;
+    uint32_t answered = 0u;
+    if (steps_.check("warm", link_.transport().nop(answered)) != Status::ok) return;
+    uint64_t frequency = 0u;
+    uint64_t total = 0u;
+    for (uint32_t trip = 0u; trip < trips; trip++) {
+        const uint64_t began = kmt_.performance_counter(frequency);
+        const Status sent = link_.transport().nop(answered);
+        if (sent != Status::ok) {
+            static_cast<void>(steps_.check("nop", sent));
+            return;
+        }
+        const uint64_t ticks = kmt_.performance_counter(frequency) - began;
+        if (frequency == 0u) return;
+        trip_ns_[trip] = static_cast<uint32_t>(ticks * nanoseconds_per_second / frequency);
+        total += trip_ns_[trip];
+    }
+    /* Few enough to sort in place. */
+    for (uint32_t index = 1u; index < trips; index++) {
+        const uint32_t value = trip_ns_[index];
+        uint32_t       at = index;
+        for (; at > 0u && trip_ns_[at - 1u] > value; at--) trip_ns_[at] = trip_ns_[at - 1u];
+        trip_ns_[at] = value;
+    }
+    steps_.check_measured("trip_min_ns", Status::ok, trip_ns_[0]);
+    constexpr uint32_t quartile = 25u, tenth = 10u, ninetieth = 90u;
+    steps_.check_measured("trip_p10_ns", Status::ok, trip_ns_[trips * tenth / percent]);
+    steps_.check_measured("trip_p25_ns", Status::ok, trip_ns_[trips * quartile / percent]);
+    steps_.check_measured("trip_median_ns", Status::ok, trip_ns_[trips / 2u]);
+    steps_.check_measured("trip_p75_ns", Status::ok, trip_ns_[trips * (percent - quartile) / percent]);
+    steps_.check_measured("trip_p90_ns", Status::ok, trip_ns_[trips * ninetieth / percent]);
+    steps_.check_measured("trip_p99_ns", Status::ok, trip_ns_[trips * tail_percent / percent]);
+    steps_.check_measured("trip_mean_ns", Status::ok, static_cast<uint32_t>(total / trips));
 }
 
 uint32_t SubmitBenchmark::doorbell_ns() const

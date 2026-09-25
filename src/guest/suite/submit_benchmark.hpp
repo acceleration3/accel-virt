@@ -30,12 +30,16 @@ public:
      * device having to catch up inside a timed one. */
     static constexpr uint32_t rounds = 32u;
     static constexpr uint32_t block = 8u;
+    static constexpr uint32_t trips = 2000u;
 
     SubmitBenchmark(Kmt &kmt, GuestReport &report, const AdapterSearch &search);
     SubmitBenchmark(const SubmitBenchmark &) = delete;
     SubmitBenchmark &operator=(const SubmitBenchmark &) = delete;
 
     void run();
+    /* Answered no-ops one at a time, each timed: the least, the median, the
+     * 99th percentile and the mean of a synchronous call with no work in it. */
+    void round_trips();
 
     /* Per submission, 0 for a path that was not measured. */
     uint32_t doorbell_ns() const;
@@ -60,6 +64,7 @@ private:
     uint32_t          kernel_ns_;
     /* Whether this machine gave the transport a doorbell to measure at all. */
     bool              measured_;
+    uint32_t          trip_ns_[trips];
 };
 
 }  // namespace av

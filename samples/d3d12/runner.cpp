@@ -195,8 +195,12 @@ int run(int argc, const char *const *argv)
     Gpu gpu;
     gpu.width = options.width;
     gpu.height = options.height;
-    if (!create_device(&gpu.device) || !gpu.initialize()) {
+    if (!create_device(&gpu.device)) {
         log("FAIL: no Direct3D 12 device\n");
+        return 2;
+    }
+    if (!gpu.initialize()) {
+        log("FAIL: the Direct3D 12 device could not be set up\n");
         return 2;
     }
     const size_t capacity = 64u * 1024u;

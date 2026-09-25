@@ -49,6 +49,23 @@ uint32_t GuestSuite::run_rvk()
     return report_.failed();
 }
 
+/* How long one answered command takes from the guest's side, alone: what
+ * every synchronous call any ICD makes pays on top of its work. */
+uint32_t GuestSuite::run_round_trip()
+{
+    AV_SCOPE("GuestSuite::run_round_trip");
+    adapter_.run();
+    /* Which adapter answered: with two rvkgpu adapters, each is its own device
+     * and worker on the host. */
+    uint64_t luid = 0u;
+    static_cast<void>(kmt_.adapter_luid(search_.adapter(), luid));
+    report_.measure("trip", "adapter_luid", Status::ok, static_cast<uint32_t>(luid));
+    submit_.round_trips();
+    report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
+    report_.finish();
+    return report_.failed();
+}
+
 uint32_t GuestSuite::run()
 {
     AV_SCOPE("GuestSuite::run");

@@ -31,8 +31,9 @@ static uint32_t rvktest_stress_seconds(const wchar_t *line)
     return seconds;
 }
 
-/* Whether the command line asks for the timeout scenario (feature 040, US3) or
- * the rvk scenarios (feature 044) instead of the suite. */
+/* Whether the command line asks for the timeout scenario (feature 040, US3),
+ * the rvk scenarios (feature 044) or the round-trip timing (`trip`) instead of
+ * the suite. */
 static av::GuestProgram::Run rvktest_run(const wchar_t *line)
 {
     AV_SCOPE("rvktest_run");
@@ -41,6 +42,8 @@ static av::GuestProgram::Run rvktest_run(const wchar_t *line)
             return av::GuestProgram::Run::timeout;
         if (line[0] == L' ' && line[1] == L'r' && line[2] == L'v' && line[3] == L'k')
             return av::GuestProgram::Run::rvk;
+        if (line[0] == L' ' && line[1] == L't' && line[2] == L'r' && line[3] == L'i' && line[4] == L'p')
+            return av::GuestProgram::Run::round_trip;
     }
     return av::GuestProgram::Run::suite;
 }

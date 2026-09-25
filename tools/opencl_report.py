@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from d3d11_report import compare, guest_shell, png, read_frame, verdict  # noqa: E402
+from d3d11_report import compare, guest_shell, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\rvk\\clsamples"
@@ -66,10 +66,19 @@ def run_guest(args, out):
     only = f" --only {args.only}" if args.only else ""
     command = (f"{GUEST_EXE} --out {GUEST_DIR}\\out --frames {args.frames} --warmup {args.warmup}{only} "
                f"> {GUEST_DIR}\\run.txt 2>&1")
+    # The user's interactive session: with more than one rvkgpu adapter the ICD
+    # takes the one the primary display is on, and the agent's session has no
+    # display to ask - there it would take whichever the kernel lists first.
     output = guest_shell(work, "ps", f"""
-Set-Location {GUEST_DIR}
-& cmd.exe /c "{command}"
-'exit: ' + $LASTEXITCODE
+Unregister-ScheduledTask -TaskName rvkclsamples -Confirm:$false -ErrorAction SilentlyContinue
+$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c cd /d {GUEST_DIR} && {command}'
+$p = New-ScheduledTaskPrincipal -UserId '{args.guest_user}' -LogonType Interactive -RunLevel Highest
+$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName rvkclsamples -Action $a -Principal $p -Settings $s | Out-Null
+Start-ScheduledTask -TaskName rvkclsamples
+Start-Sleep 2
+while ((Get-ScheduledTask rvkclsamples).State -eq 'Running') {{ Start-Sleep 1 }}
+'exit: ' + (Get-ScheduledTaskInfo rvkclsamples).LastTaskResult
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
@@ -222,6 +231,7 @@ def report(args, out):
             entry["buffer"] = compare_buffers(read_buffer(host_buffer), read_buffer(guest_buffer))
         rows.append(entry)
     write_html(args, out, rows)
+    write_summary(out, "OpenCL", rows, rate="ips", judge=sample_verdict)
 
 
 def cell(value, unit="", decimals=1):
@@ -348,6 +358,7 @@ def main():
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--device", type=int, default=0, help="which host GPU the host run uses")
     parser.add_argument("--only", help="one sample")
+    parser.add_argument("--guest-user", default="win11\\winuser", help="the guest's logged-on user")
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--no-guest", action="store_true", help="reuse the guest results already in the output")
     parser.add_argument("--host-only", action="store_true", help="run nothing in the guest; report the host alone")

@@ -2,6 +2,7 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/trace_table.hpp"
 
 #include <windows.h>
 
@@ -18,22 +19,53 @@ bool EventFile::wanted() const
     return GetFileAttributesW(L"C:\\ProgramData\\rvk\\perfetto") != INVALID_FILE_ATTRIBUTES;
 }
 
+/* The flag file's text, "<events per slot> <depth> <scope,scope,...>", every
+ * field optional; empty when there is none. */
+void EventFile::read_flag(char *text, uint32_t capacity) const
+{
+    AV_SCOPE("EventFile::read_flag");
+    text[0] = '\0';
+    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    DWORD read = 0u;
+    if (!ReadFile(file, text, capacity - 1u, &read, nullptr)) read = 0u;
+    CloseHandle(file);
+    text[read] = '\0';
+}
+
+/* Where the flag's field `index` starts, or its end when it has fewer. */
+const char *EventFile::field(const char *text, uint32_t index) const
+{
+    AV_SCOPE("EventFile::field");
+    const char *at = text;
+    while (*at == ' ') at++;
+    for (; index != 0u && *at != '\0'; index--) {
+        while (*at > ' ') at++;
+        while (*at == ' ') at++;
+    }
+    return at;
+}
+
+uint32_t EventFile::number(uint32_t index, uint32_t fallback) const
+{
+    AV_SCOPE("EventFile::number");
+    char text[flag_capacity] = {};
+    read_flag(text, sizeof text);
+    const char *at = field(text, index);
+    if (*at < '0' || *at > '9') return fallback;
+    uint32_t value = 0u;
+    for (; *at >= '0' && *at <= '9'; at++) value = value * 10u + static_cast<uint32_t>(*at - '0');
+    return value;
+}
+
 uint32_t EventFile::events_per_slot() const
 {
     AV_SCOPE("EventFile::events_per_slot");
     constexpr uint32_t fallback = 1u << 20u;
     constexpr uint32_t smallest = 1u << 16u;
     constexpr uint32_t largest = 1u << 24u;
-    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return fallback;
-    char  text[16] = {};
-    DWORD read = 0u;
-    const BOOL got = ReadFile(file, text, sizeof text - 1u, &read, nullptr);
-    CloseHandle(file);
-    uint32_t value = 0u;
-    for (DWORD index = 0u; got && index < read && text[index] >= '0' && text[index] <= '9'; index++)
-        value = value * 10u + static_cast<uint32_t>(text[index] - '0');
+    const uint32_t     value = number(0u, fallback);
     if (value == 0u) return fallback;
     return value < smallest ? smallest : value > largest ? largest : value;
 }
@@ -42,21 +74,15 @@ uint32_t EventFile::depth() const
 {
     AV_SCOPE("EventFile::depth");
     constexpr uint32_t fallback = 2u;
-    const HANDLE file = CreateFileW(L"C:\\ProgramData\\rvk\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return fallback;
-    char  text[32] = {};
-    DWORD read = 0u;
-    const BOOL got = ReadFile(file, text, sizeof text - 1u, &read, nullptr);
-    CloseHandle(file);
-    DWORD index = 0u;
-    while (got && index < read && text[index] >= '0' && text[index] <= '9') index++;
-    while (got && index < read && text[index] == ' ') index++;
-    if (!got || index >= read || text[index] < '0' || text[index] > '9') return fallback;
-    uint32_t value = 0u;
-    for (; index < read && text[index] >= '0' && text[index] <= '9'; index++)
-        value = value * 10u + static_cast<uint32_t>(text[index] - '0');
-    return value;
+    return number(1u, fallback);
+}
+
+void EventFile::only(TraceTable &table) const
+{
+    AV_SCOPE("EventFile::only");
+    char text[flag_capacity] = {};
+    read_flag(text, sizeof text);
+    table.only(field(text, 2u));
 }
 
 /* The mapping and the file handle are left open for the process's life: the

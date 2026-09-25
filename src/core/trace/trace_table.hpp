@@ -59,11 +59,12 @@ public:
      * leaves no longer dwarfs what it measures. */
     void limit_depth(uint32_t depth);
     static constexpr uint32_t max_only = 16u;
-    /* Only the scopes named by `ids` (ScopeName ids) are pushed and recorded,
-     * at any depth; the rest cost one comparison. None: every scope, to the
-     * depth limit. What measuring a few legs of a round trip needs, where
-     * even a shallow trace of every command doubled a frame. */
-    void only(const uint32_t *ids, uint32_t count);
+    /* Only the scopes `names` lists ("Class::method", comma-separated, up to
+     * a space or the end) are pushed and recorded, at any depth; the rest
+     * cost one comparison. Empty: every scope, to the depth limit. What
+     * measuring a few legs of a round trip needs, where even a shallow trace
+     * of every command doubled a frame. */
+    void only(const char *names);
 
     /* Once, from the thread that crashed; a later call keeps the first. */
     void record_crash(uint32_t code, uint64_t address);

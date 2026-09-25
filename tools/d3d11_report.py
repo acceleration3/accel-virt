@@ -16,6 +16,7 @@ import argparse
 import datetime
 import gzip
 import html
+import json
 import math
 import os
 import pathlib
@@ -186,6 +187,26 @@ def compare(host, guest):
     return stats, (width, height, bytes(heat))
 
 
+def write_summary(out, api, rows, rate="fps", judge=None):
+    """summary.json beside index.html: each sample's rates, their ratio and
+    its picture's verdict, for tools/api_report.py's overview of every API."""
+    samples = []
+    for row in rows:
+        h, g = row["host"], row["guest"]
+        ratio = g[rate] / h[rate] if h and g and h[rate] > 0 and g[rate] > 0 else None
+        if judge is not None:
+            label, tone = judge(row)
+        else:
+            label, tone = verdict(row["stats"]) if row.get("stats") else ("missing", "bad")
+        samples.append({"name": row["name"], "host": h and h[rate], "vm": g and g[rate], "ratio": ratio,
+                        "host_status": h and h["status"], "vm_status": g and g["status"],
+                        "picture": label, "tone": tone})
+    ratios = [sample["ratio"] for sample in samples if sample["ratio"]]
+    geomean = math.exp(sum(math.log(r) for r in ratios) / len(ratios)) if ratios else None
+    (out / "summary.json").write_text(json.dumps({"api": api, "unit": rate, "geomean": geomean,
+                                                  "samples": samples}, indent=1))
+
+
 def verdict(stats):
     if stats["max"] == 0:
         return "identical", "good"
@@ -220,6 +241,7 @@ def report(args, out):
             ratios.append(g["fps"] / h["fps"])
         rows.append(entry)
     write_html(args, out, rows, ratios)
+    write_summary(out, "D3D11", rows)
 
 
 # The report's stylesheet, which tools/vulkan_report.py's report shares.

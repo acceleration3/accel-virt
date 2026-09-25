@@ -94,24 +94,7 @@ Status HostTrace::start(const char *module)
     table_.limit_depth(limit);
     /* RVK_TRACE_ONLY: a comma-separated list of scope names, the only ones
      * recorded. */
-    const char *const only = getenv("RVK_TRACE_ONLY");
-    if (only != nullptr && only[0] != '\0') {
-        uint32_t ids[TraceTable::max_only] = {};
-        uint32_t count = 0u;
-        char     name[128] = {};
-        uint32_t length = 0u;
-        for (const char *at = only;; at++) {
-            if (*at != ',' && *at != '\0') {
-                if (length + 1u < sizeof name) name[length++] = *at;
-                continue;
-            }
-            name[length] = '\0';
-            if (length != 0u && count < TraceTable::max_only) ids[count++] = ScopeName(name).id();
-            length = 0u;
-            if (*at == '\0') break;
-        }
-        table_.only(ids, count);
-    }
+    table_.only(getenv("RVK_TRACE_ONLY"));
     /* A ring per slot the size of a busy thread's second or so; the file is
      * sparse, so only the slots threads use take memory. */
     constexpr uint32_t events_per_slot = 1u << 22u;

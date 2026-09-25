@@ -29,6 +29,7 @@ void ProcessTrace::record_events(const char *module, uint32_t pid)
     events_.describe_clock(hundred_ns);
     table_.record_events(events_);
     table_.limit_depth(events_file_.depth());
+    events_file_.only(table_);
 }
 
 Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter filter)

@@ -38,7 +38,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from d3d11_report import cell, compare, guest_shell, metrics, png, read_frame, verdict  # noqa: E402
+from d3d11_report import cell, compare, guest_shell, metrics, png, read_frame, verdict, write_summary  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\rvk\\samples12"
@@ -184,6 +184,7 @@ def report(args, out):
             ratios.append(g["fps"] / h["fps"])
         rows.append(entry)
     write_html(args, out, rows, ratios)
+    write_summary(out, "D3D12", rows)
 
 
 def write_html(args, out, rows, ratios):

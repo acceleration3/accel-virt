@@ -474,26 +474,52 @@ const D3D12_INPUT_ELEMENT_DESC Gpu::mesh_layout[4] = {
     {"COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 };
 
+namespace {
+
+/* A step of setting the device up that failed, named with its HRESULT: "no
+ * Direct3D 12 device" alone does not say which of a dozen it was. */
+bool made(HRESULT result, const char *what)
+{
+    if (SUCCEEDED(result)) return true;
+    char line[128] = {};
+    append_text(line, sizeof line, "FAIL: ");
+    append_text(line, sizeof line, what);
+    append_text(line, sizeof line, " 0x");
+    char hex[9] = {};
+    for (int digit = 0; digit < 8; digit++)
+        hex[digit] = "0123456789abcdef"[(static_cast<unsigned>(result) >> (28 - 4 * digit)) & 0xfu];
+    append_text(line, sizeof line, hex);
+    append_text(line, sizeof line, "\n");
+    log(line);
+    return false;
+}
+
+}  // namespace
+
 bool Gpu::initialize()
 {
     D3D12_COMMAND_QUEUE_DESC queue_desc = {};
     queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    if (FAILED(device->CreateCommandQueue(&queue_desc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void **>(&queue))))
+    if (!made(device->CreateCommandQueue(&queue_desc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void **>(&queue)),
+              "CreateCommandQueue"))
         return false;
-    if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&fence_))))
+    if (!made(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&fence_)),
+              "CreateFence"))
         return false;
     for (Slot &s : slots_) {
-        if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
-                                                  reinterpret_cast<void **>(&s.allocator))))
+        if (!made(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
+                                                 reinterpret_cast<void **>(&s.allocator)),
+                  "CreateCommandAllocator"))
             return false;
         s.ring = upload_buffer(device, ring_bytes);
-        if (s.ring == nullptr) return false;
+        if (s.ring == nullptr) return made(E_FAIL, "upload ring");
         const D3D12_RANGE none = {0, 0};
-        if (FAILED(s.ring->Map(0, &none, reinterpret_cast<void **>(&s.ring_cpu)))) return false;
+        if (!made(s.ring->Map(0, &none, reinterpret_cast<void **>(&s.ring_cpu)), "Map of the upload ring")) return false;
         s.ring_gpu = s.ring->GetGPUVirtualAddress();
     }
-    if (FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, slots_[0].allocator, nullptr,
-                                         __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&list))))
+    if (!made(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, slots_[0].allocator, nullptr,
+                                        __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&list)),
+              "CreateCommandList"))
         return false;
     list->Close();
     if (!views_.make(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, static_views + slots * views_per_slot, true) ||
@@ -501,7 +527,7 @@ bool Gpu::initialize()
         !cpu_views_.make(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4096, false) ||
         !rtvs_.make(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 512, false) ||
         !dsvs_.make(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 128, false))
-        return false;
+        return made(E_FAIL, "a descriptor heap");
     views_.capacity = static_views;
     shaders_ = static_cast<CachedShader *>(allocate(sizeof(CachedShader) * shader_cache));
 
@@ -521,7 +547,7 @@ bool Gpu::initialize()
     clear.Format = depth_format;
     clear.DepthStencil.Depth = 1.0f;
     depth_buffer = resource(desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear);
-    if (color == nullptr || depth_buffer == nullptr) return false;
+    if (color == nullptr || depth_buffer == nullptr) return made(E_FAIL, "the render target or depth buffer");
     target = rtvs_.take(1).cpu;
     depth = dsvs_.take(1).cpu;
     device->CreateRenderTargetView(color, nullptr, target);

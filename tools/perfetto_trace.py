@@ -238,11 +238,24 @@ def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
             "  if ($n -gt $head) { $rest = New-Object byte[] ([int](($n - $head) * 16)); "
             "    $in.Seek($base + 16, 'Begin') | Out-Null; $in.Read($rest, 0, $rest.Length) | Out-Null; $w.Write($rest) } } "
             "$w.Close(); $in.Close()")
-        guest_shell(work, "ps", script)
         local = scratch / f"{name}.c.gz"
-        guest_shell(work, "pull", f"{remote}.c.gz", str(local))
-        if local.exists():
+        # A copy can come back empty once and whole the next time; a process
+        # that ended mid-copy, or a file from an older driver, never gives a
+        # readable one, and the others are still worth having.
+        whole = False
+        for _attempt in range(2):
+            guest_shell(work, "ps", script)
+            guest_shell(work, "pull", f"{remote}.c.gz", str(local))
+            try:
+                whole = local.exists() and len(gzip.decompress(local.read_bytes())) >= 8
+            except (OSError, EOFError):
+                whole = False
+            if whole:
+                break
+        if whole:
             yield name, local
+        else:
+            print(f"guest: {name} gave no readable copy; left out", file=sys.stderr)
 
 
 def read_compact(path):
@@ -330,11 +343,12 @@ def stop_guest(work, stop):
                             "$f.Close() }")
 
 
-def arm_guest(work, events_per_slot, depth):
+def arm_guest(work, events_per_slot, depth, only=""):
     """Guest processes started from now on record events, `events_per_slot`
-    per thread, of scopes at most `depth` deep (0: all)."""
+    per thread, of scopes at most `depth` deep (0: all) - or with `only`
+    (comma-separated scope names), just those, at any depth."""
     guest_shell(work, "ps", "Set-Content -NoNewline -Path C:\\ProgramData\\rvk\\perfetto "
-                            f"-Value '{events_per_slot} {depth}'")
+                            f"-Value '{events_per_slot} {depth} {only}'")
 
 
 def main():
@@ -352,6 +366,9 @@ def main():
     parser.add_argument("--depth", type=int, default=2,
                         help="with --arm: the deepest scope guest processes record (0: all; the host's is "
                              "RVK_TRACE_DEPTH in QEMU's environment)")
+    parser.add_argument("--only", default="", metavar="SCOPES",
+                        help="with --arm: the only scopes guest processes record, comma-separated "
+                             "'Class::method' names, at any depth (the host's is RVK_TRACE_ONLY)")
     parser.add_argument("--guest", type=pathlib.Path, metavar="WORK",
                         help="the run's work directory: add the guest processes' timelines too (they record while "
                              "C:\\ProgramData\\rvk\\perfetto exists when they start)")
@@ -360,7 +377,7 @@ def main():
     now = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC) // 100
     guest = []
     if args.guest is not None and args.arm:
-        arm_guest(args.guest, args.arm, args.depth)
+        arm_guest(args.guest, args.arm, args.depth, args.only)
         print(f"guest processes started from now record {args.arm} events per thread, {args.depth} deep")
         return
     if args.guest is not None:

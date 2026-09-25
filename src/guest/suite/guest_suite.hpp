@@ -43,6 +43,7 @@ public:
     /* Only the scenarios that send real work to the host's executor library,
      * for a run whose device loaded it rather than the echo library
      * (feature 044). */
+    uint32_t run_round_trip();
     uint32_t run_rvk();
 
 private:

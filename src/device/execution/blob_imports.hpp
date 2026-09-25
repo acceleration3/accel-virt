@@ -97,6 +97,8 @@ private:
     uint64_t        *device_memory_;
     uint64_t        *blob_ids_;
     uint32_t        *resources_;
+    /* The pointer fallback was logged: once per context is enough. */
+    bool             pointer_noted_;
 
     friend struct BlobImportsProbe;
 };
