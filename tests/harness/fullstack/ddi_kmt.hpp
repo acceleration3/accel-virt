@@ -73,6 +73,7 @@ public:
     Status   close_adapter(std::uint32_t adapter) override;
     /* rig_luid, the one adapter's. */
     Status   adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
+    Status   primary_display_luid(std::uint64_t &luid) override;
     /* The budget is the size of the segments the driver reports in the group,
      * asked through QUERYSEGMENT4 as VidMm asks: local those that are neither
      * an aperture nor populated from system memory, non-local the rest. The

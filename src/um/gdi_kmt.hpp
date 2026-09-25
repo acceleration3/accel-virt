@@ -31,6 +31,7 @@ public:
     void     sleep_briefly() override;
     Status   close_adapter(uint32_t adapter) override;
     Status   adapter_luid(uint32_t adapter, uint64_t &luid) override;
+    Status   primary_display_luid(uint64_t &luid) override;
     Status   query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget,
                                 uint64_t &usage) override;
     Status   create_device(uint32_t adapter, uint32_t &device) override;

@@ -342,4 +342,11 @@ Status LoopbackKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 
 void LoopbackKmt::sleep_briefly() {}
 
+/* No display here: every search takes the first adapter it finds. */
+Status LoopbackKmt::primary_display_luid(std::uint64_t &answered)
+{
+    answered = 0u;
+    return Status::not_supported;
+}
+
 }  // namespace av

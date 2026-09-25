@@ -1157,4 +1157,11 @@ void DdiKmt::refuse_tail_publishing() { refuse_tail_publishing_ = true; }
 
 void DdiKmt::let_process_watch() { watching_ = true; }
 
+/* No display here: every search takes the first adapter it finds. */
+Status DdiKmt::primary_display_luid(std::uint64_t &answered)
+{
+    answered = 0u;
+    return Status::not_supported;
+}
+
 }  // namespace av

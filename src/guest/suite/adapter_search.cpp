@@ -18,9 +18,16 @@ AdapterSearch::~AdapterSearch()
     static_cast<void>(close());
 }
 
+/* With more than one rvkgpu adapter, the first the kernel enumerates may be
+ * a lesser GPU - an integrated one beside the discrete GPU driving the
+ * display - so the one the primary display is on is looked for first, as
+ * DXGI lists it first and a D3D application gets it by default. */
 Status AdapterSearch::find(const PciIdentity &identity)
 {
     AV_SCOPE("AdapterSearch::find");
+    uint64_t primary = 0u;
+    if (kmt_.primary_display_luid(primary) == Status::ok && primary != 0u && find(identity, primary) == Status::ok)
+        return Status::ok;
     return find(identity, 0u);
 }
 

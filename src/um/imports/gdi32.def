@@ -3,6 +3,7 @@ EXPORTS
 BitBlt
 ChoosePixelFormat
 CreateCompatibleDC
+CreateDCW
 CreateDIBSection
 D3DKMTCloseAdapter
 D3DKMTConnectDoorbell

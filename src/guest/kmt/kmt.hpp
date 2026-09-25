@@ -31,6 +31,9 @@ public:
      * and HighPart in the high: what the Vulkan loader matches an ICD's
      * physical device against. */
     virtual Status   adapter_luid(uint32_t adapter, uint64_t &luid) = 0;
+    /* The LUID of the adapter the primary display is on - the one DXGI lists
+     * first - packed as adapter_luid packs it. */
+    virtual Status   primary_display_luid(uint64_t &luid) = 0;
     /* D3DKMTQueryVideoMemoryInfo for this process: how much of `group` it may
      * use, and how much its devices use now. */
     virtual Status   query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget,

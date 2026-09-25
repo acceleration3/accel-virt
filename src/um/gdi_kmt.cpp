@@ -146,6 +146,26 @@ Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
     return answer(NtStatus(Status::invalid_parameter).value());
 }
 
+/* The desktop's DC, which gdi32 alone makes (the OpenCL ICD imports no
+ * user32): the adapter it opens is the one the primary display is on. */
+Status GdiKmt::primary_display_luid(uint64_t &luid)
+{
+    AV_SCOPE("GdiKmt::primary_display_luid");
+    luid = 0u;
+    const HDC screen = CreateDCW(L"DISPLAY", nullptr, nullptr, nullptr);
+    if (screen == nullptr) return answer(NtStatus(Status::not_found).value());
+    D3DKMT_OPENADAPTERFROMHDC open = {};
+    open.hDc = screen;
+    const Status opened = answer(D3DKMTOpenAdapterFromHdc(&open));
+    static_cast<void>(DeleteDC(screen));
+    if (opened != Status::ok) return opened;
+    luid = static_cast<uint64_t>(static_cast<uint32_t>(open.AdapterLuid.HighPart)) << 32u | open.AdapterLuid.LowPart;
+    D3DKMT_CLOSEADAPTER close = {};
+    close.hAdapter = open.hAdapter;
+    static_cast<void>(D3DKMTCloseAdapter(&close));
+    return opened;
+}
+
 Status GdiKmt::query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget, uint64_t &usage)
 {
     AV_SCOPE("GdiKmt::query_video_memory");

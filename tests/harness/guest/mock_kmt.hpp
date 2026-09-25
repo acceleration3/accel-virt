@@ -152,6 +152,7 @@ public:
     void          sleep_briefly() override;
     Status        close_adapter(std::uint32_t adapter) override;
     Status        adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
+    Status        primary_display_luid(std::uint64_t &luid) override;
     Status        query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
                                      std::uint64_t &usage) override;
     Status        create_device(std::uint32_t adapter, std::uint32_t &device) override;
