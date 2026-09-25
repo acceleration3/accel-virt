@@ -122,6 +122,8 @@ private:
                                           uint64_t &fence);
     /* Waits for everything sent so far, and retires its fences. */
     [[nodiscard]] bool drain();
+    void               retire_consumed();
+    [[nodiscard]] bool room_for_fence();
     uint64_t           published_now() const;
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
     /* Waits for the context and points `reply` at the answer for `fence`. */
@@ -158,6 +160,8 @@ private:
     SubmissionPath   path_;
     ReplyReader      reply_;
     TransportFence   fences_;
+    /* Where each outstanding fence's batch ends in the ring. */
+    uint64_t         fence_ends_[TransportFence::max_outstanding];
     bool             faulted_;
     /* A synchronous call was answered since the last end_call. */
     bool             answered_;

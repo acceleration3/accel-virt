@@ -28,7 +28,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), faulted_(false), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -300,13 +300,48 @@ bool KmtTransport::drain()
     return true;
 }
 
+/* Every fence whose batch the device has moved its head past is done: the
+ * device publishes the head as it finishes each batch. */
+void KmtTransport::retire_consumed()
+{
+    AV_SCOPE("KmtTransport::retire_consumed");
+    const uint64_t head = ring_.head();
+    const uint64_t newest = fences_.completed() + fences_.outstanding();
+    uint64_t       done = 0u;
+    for (uint64_t fence = fences_.oldest(); fence != 0u && fence <= newest; fence++) {
+        if (fence_ends_[fence % TransportFence::max_outstanding] > head) break;
+        done = fence;
+    }
+    if (done != 0u) fences_.close(done);
+}
+
+/* A full fence window waits for its oldest batch, not for all of them: a
+ * sender of many small batches - a flush a frame - drained the device empty
+ * every 64, and then refilled it from nothing. */
+bool KmtTransport::room_for_fence()
+{
+    AV_SCOPE("KmtTransport::room_for_fence");
+    retire_consumed();
+    if (!fences_.full()) return true;
+    constexpr uint64_t spins_per_second = 1000u;
+    uint64_t           frequency = 0u;
+    const uint64_t     started = connection_.kmt().performance_counter(frequency);
+    const uint64_t     budget = frequency / spins_per_second;
+    while (connection_.kmt().performance_counter(frequency) - started < budget) {
+        spin_once();
+        retire_consumed();
+        if (!fences_.full()) return true;
+    }
+    return drain();
+}
+
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
     AV_SCOPE("KmtTransport::publish_batch");
     /* Asynchronous batches open fences nobody waits on: a sender faster than
      * the host fills the fence window or the ring, and then waits for the
      * host to catch up rather than failing. */
-    if (fences_.full() && !drain()) return TransportResult::failed;
+    if (fences_.full() && !room_for_fence()) return TransportResult::failed;
     uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
     uint64_t begin = 0u;
@@ -323,6 +358,7 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     previous_end_ = newest_end_;
     newest_end_ = end;
     fence = fences_.open();
+    fence_ends_[fence % TransportFence::max_outstanding] = end;
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
     const Status submitted = path_.submit(context_, dma_address_, descriptor, SubmissionDescriptor::encoded_size,
