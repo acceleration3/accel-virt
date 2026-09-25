@@ -22,6 +22,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/batched_transport.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/mapped_region.hpp"
@@ -60,6 +61,9 @@ public:
     /* One command's room. A kernel's arguments and a program's source are the
      * large ones, and anything larger crosses as a blob. */
     static constexpr size_t   staging_bytes = 256u * 1024u;
+    /* The calls held before they go as one batch (icd::BatchedTransport):
+     * two of the largest a command can be, well inside the ring. */
+    static constexpr size_t   batch_bytes = 2u * staging_bytes;
     static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
     /* Mappings one context may hold at once. An application that maps more
      * buffers than this at the same time is told so at the map. */
@@ -132,7 +136,9 @@ private:
     icd::LogSink       &log_;
     uint32_t            link_;
     uint8_t            *staging_;
+    uint8_t            *batch_block_;
     ObjectStorage<KmtTransport>          transport_;
+    ObjectStorage<icd::BatchedTransport> batched_;
     ObjectStorage<icd::LockedTransport>  locked_;
     ObjectStorage<KmtBlobArena>          arena_;
     ClArenaBlocks                        blocks_;

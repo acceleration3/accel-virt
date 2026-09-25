@@ -9,6 +9,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
+#include "icd/common/unanswered_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_image_region.hpp"
@@ -821,6 +822,9 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
     if (held == nullptr) return CL_INVALID_KERNEL;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    /* Its only answer is a status, which a kernel the ICD judged live gets
+     * wrong only on a misuse: not worth a round trip per argument. */
+    icd::UnansweredTransport unanswered(*wire);
     /* An argument of the size of a cl_mem may be one, or a cl_sampler: the
      * application passes the address of its own pointer, and what crosses is
      * the number the host knows that object by. Anything else is bytes. */
@@ -835,11 +839,11 @@ cl_int ClIcdRoot::set_kernel_argument(cl_kernel kernel, cl_uint index, size_t by
         if (object == nullptr) object = judged(named, ClObject::Kind::sampler);
         if (object != nullptr) {
             const uint64_t handle = object->wire();
-            return av::clproto::rvk_clSetKernelArg(*wire, held->wire(), index, sizeof handle,
+            return av::clproto::rvk_clSetKernelArg(unanswered, held->wire(), index, sizeof handle,
                                                    &handle);
         }
     }
-    return av::clproto::rvk_clSetKernelArg(*wire, held->wire(), index, bytes, value);
+    return av::clproto::rvk_clSetKernelArg(unanswered, held->wire(), index, bytes, value);
 }
 
 cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
@@ -854,9 +858,12 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     uint64_t     produced = 0u;
+    /* An event is the host's to name, so only a launch that wants none goes
+     * without waiting for its answer. */
+    icd::UnansweredTransport unanswered(*wire);
     const cl_int ran = av::clproto::rvk_clEnqueueNDRangeKernel(
-        *wire, held->wire(), named->wire(), dimensions, offset, global, local, 0u, nullptr,
-        event != nullptr ? &produced : nullptr);
+        event != nullptr ? *wire : unanswered, held->wire(), named->wire(), dimensions, offset, global, local, 0u,
+        nullptr, event != nullptr ? &produced : nullptr);
     if (ran == CL_SUCCESS && event != nullptr) {
         *event = static_cast<cl_event>(
             wrap(*wire, ClObject::Kind::event, produced, held->context(), held, nullptr));

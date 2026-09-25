@@ -15,7 +15,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                                icd::ThreadLock &send_lock, icd::LogSink &log,
                                icd::SharedHandles &handles)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log),
-      link_(icd::IcdConnection::no_link), staging_(nullptr), transport_(), locked_(), arena_(),
+      link_(icd::IcdConnection::no_link), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), locked_(), arena_(),
       svm_(memory), external_(handles, log), mappings_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -55,7 +55,10 @@ Status GuestClContext::build()
         log_.write("rvkcl: the driver refused the context");
         return initialized;
     }
-    static_cast<void>(locked_.construct(transport_.object(), send_lock_));
+    batch_block_ = static_cast<uint8_t *>(memory_.allocate(batch_bytes, Pool::paged));
+    if (batch_block_ == nullptr) return Status::no_memory;
+    static_cast<void>(batched_.construct(transport_.object(), batch_block_, batch_bytes, staging_bytes));
+    static_cast<void>(locked_.construct(batched_.object(), send_lock_));
     static_cast<void>(arena_.construct(connection_.device(link_), transport_.object()));
     if (arena_.object().open(arena_bytes) != Status::ok) {
         /* Two different things fail this, and only one of them is survivable.
@@ -90,6 +93,8 @@ void GuestClContext::teardown()
      * the device counts this context as a holder of every object it opened,
      * and a lost context's are released by the device with the context. */
     if (state_ == State::made && locked_.constructed()) external_.release_all(locked_.object());
+    /* What is still held reaches the host before its context goes. */
+    if (state_ == State::made && batched_.constructed()) static_cast<void>(batched_.object().flush());
     if (arena_.constructed()) {
         /* A lost context's import is forgotten rather than released: the
          * device frees it with the context, and asking a faulted transport
@@ -108,6 +113,11 @@ void GuestClContext::teardown()
      * an address this context must not be able to hand out. */
     blocks_.lend(nullptr, 0u);
     if (locked_.constructed()) locked_.destroy();
+    if (batched_.constructed()) batched_.destroy();
+    if (batch_block_ != nullptr) {
+        memory_.release(batch_block_);
+        batch_block_ = nullptr;
+    }
     if (transport_.constructed()) {
         transport_.object().teardown();
         transport_.destroy();
