@@ -9,7 +9,7 @@ namespace av::icd {
 
 LoaderHandle::LoaderHandle(Kind kind, uint64_t host, Connection *connection, LoaderHandle *parent)
     : loader_data_(reinterpret_cast<void *>(loader_magic)), host_(host), connection_(connection), kind_(kind),
-      parent_(parent), batches_(nullptr), batch_(nullptr), memories_(nullptr), memory_(nullptr), idle_fence_(0u)
+      parent_(parent), batches_(nullptr), batch_(nullptr), memories_(nullptr), memory_(nullptr), idle_fence_(0u), idle_at_(~uint64_t{0})
       {
           AV_SCOPE("LoaderHandle::LoaderHandle");
       }
@@ -59,6 +59,18 @@ uint64_t LoaderHandle::idle_fence() const
 {
     AV_SCOPE("LoaderHandle::idle_fence");
     return idle_fence_;
+}
+
+void LoaderHandle::mark_idle(uint64_t submissions)
+{
+    AV_SCOPE("LoaderHandle::mark_idle");
+    idle_at_ = submissions;
+}
+
+uint64_t LoaderHandle::idle_at() const
+{
+    AV_SCOPE("LoaderHandle::idle_at");
+    return idle_at_;
 }
 
 LoaderHandle::Kind LoaderHandle::kind() const

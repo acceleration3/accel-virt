@@ -62,6 +62,10 @@ public:
     /* A queue's fence for vkQueueWaitIdle, the host's handle; 0 until made. */
     void          keep_idle_fence(uint64_t fence);
     uint64_t      idle_fence() const;
+    /* The connection's submission count when the queue was last found idle;
+     * all ones until it has been. */
+    void          mark_idle(uint64_t submissions);
+    uint64_t      idle_at() const;
 
     /* An instance has no parent and anything else has one of a lower kind on
      * the same connection; the host never names an object 0; only a command
@@ -80,6 +84,7 @@ private:
     ObjectPool<DeviceMemory> *memories_;
     DeviceMemory             *memory_;
     uint64_t                  idle_fence_;
+    uint64_t                  idle_at_;
 
     friend struct LoaderHandleProbe;
 };

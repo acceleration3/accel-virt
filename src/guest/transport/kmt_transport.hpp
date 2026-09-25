@@ -65,6 +65,9 @@ public:
      * fed, and holding a batch back until then lets it grow instead. */
     bool                 ready_for_batch() const;
     uint64_t             submissions_through_kernel() const;
+    /* Every batch this transport has submitted: what has not moved has sent
+     * nothing in between. */
+    uint64_t             submissions() const;
     /* Gives the doorbell back: every submission after this goes through the
      * kernel, which is how the in-guest benchmark measures the two paths on
      * one boot (feature 049, US3). Harmless without one. */

@@ -46,6 +46,8 @@ public:
      * watching the ring takes it without waiting for the scheduler. */
     void     publish_before_kernel();
     uint64_t through_kernel() const;
+    /* Every batch submitted, whichever way it went. */
+    uint64_t submitted() const;
 
     /* Every submission went one way or the other. */
     bool invariants_hold() const;

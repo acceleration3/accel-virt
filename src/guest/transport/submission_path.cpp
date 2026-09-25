@@ -67,6 +67,12 @@ uint64_t SubmissionPath::through_doorbell() const
     return doorbell_submissions_;
 }
 
+uint64_t SubmissionPath::submitted() const
+{
+    AV_SCOPE("SubmissionPath::submitted");
+    return doorbell_submissions_ + kernel_submissions_ + user_submissions_;
+}
+
 uint64_t SubmissionPath::through_kernel() const
 {
     AV_SCOPE("SubmissionPath::through_kernel");

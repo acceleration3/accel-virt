@@ -186,6 +186,12 @@ uint64_t KmtTransport::submissions_through_kernel() const
     return path_.through_kernel();
 }
 
+uint64_t KmtTransport::submissions() const
+{
+    AV_SCOPE("KmtTransport::submissions");
+    return path_.submitted();
+}
+
 uint32_t KmtTransport::ring() const
 {
     AV_SCOPE("KmtTransport::ring");

@@ -99,6 +99,12 @@ uint64_t         Connection::luid() const
     AV_SCOPE("Connection::luid");
     return luid_;
 }
+uint64_t Connection::submissions() const
+{
+    AV_SCOPE("Connection::submissions");
+    return transport_.constructed() ? transport_.object().submissions() : 0u;
+}
+
 ClientTransport &Connection::transport()
 {
     AV_SCOPE("Connection::transport");

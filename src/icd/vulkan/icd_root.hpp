@@ -292,6 +292,9 @@ private:
     SharedHandles           shared_handles_;
     /* The NTSTATUS of the last kernel call that refused; 0 until one does. */
     uint32_t                kernel_refusal_;
+    /* vkQueueWaitIdle calls answered here and sent to the host, for the log. */
+    uint64_t                idle_skipped_;
+    uint64_t                idle_waited_;
     Win32HandleKind         memory_handles_;
     Win32HandleKind         semaphore_handles_;
     /* A fresh fd of an object of `owner`, asked of the host each time an

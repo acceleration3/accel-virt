@@ -231,7 +231,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
       entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_), templates_(lock),
-      externals_(lock), shared_handles_(kmt, lock), kernel_refusal_(0u),
+      externals_(lock), shared_handles_(kmt, lock), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
       semaphore_handles_(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -1058,6 +1058,8 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     presentation_.forget_device(device);
     release_device_memory(*made);
     release_idle_fences(*made);
+    note("queue idle waits answered without the host", idle_skipped_);
+    note("queue idle waits sent to the host", idle_waited_);
     vkicd::generated::Wrap_vkDestroyDevice(device, allocator);
     destroy_wrapper(device, LoaderHandle::Kind::device);
 }
@@ -1518,8 +1520,17 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
         return VK_ERROR_DEVICE_LOST;
     }
     if (lost(*made->connection(), "vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
+    /* Nothing sent on the connection since the queue was last found idle -
+     * no submit, no present, nothing - leaves it idle: a device-wide wait
+     * right after a queue's own was a whole submission and wait for nothing. */
+    Connection &connection = *made->connection();
+    if (made->idle_at() == connection.submissions()) {
+        idle_skipped_++;
+        return VK_SUCCESS;
+    }
+    idle_waited_++;
     const auto        device = static_cast<VkDevice>(static_cast<void *>(made->parent()));
-    ClientTransport  &transport = made->connection()->transport();
+    ClientTransport  &transport = connection.transport();
     VkFence fence = reinterpret_cast<VkFence>(made->idle_fence());
     if (fence == VK_NULL_HANDLE) {
         VkFenceCreateInfo info = {};
@@ -1533,7 +1544,9 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     }
     const VkResult submitted = vkproto::rvk_vkQueueSubmit(transport, queue, 0u, nullptr, fence);
     if (submitted != VK_SUCCESS) return submitted;
-    return wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);
+    const VkResult waited = wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);
+    if (waited == VK_SUCCESS) made->mark_idle(connection.submissions());
+    return waited;
 }
 
 /* An application may submit only through a queue it was handed, so the queues
