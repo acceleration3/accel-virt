@@ -9,6 +9,7 @@
 #ifndef AV_UM_D3D11_HOST_CAPS_HPP
 #define AV_UM_D3D11_HOST_CAPS_HPP
 
+#include "icd/d3d/dxgi_format_table.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 #include "um/d3d/d3d11_ddi.hpp"
 
@@ -42,13 +43,11 @@ public:
     UINT     quality_levels(DXGI_FORMAT format, UINT samples) const;
 
 private:
-    /* Whether `format` is a family's typeless parent. */
-    bool typeless(DXGI_FORMAT format) const;
     /* The DDI's pipeline levels from the host's feature level, each a bit. */
     UINT pipeline_levels() const;
 
     d3dproto::Caps11     caps_;
-    d3dproto::FormatCaps formats_[format_count];
+    d3d::DxgiFormatTable formats_;
     bool                 learned_;
 };
 

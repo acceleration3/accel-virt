@@ -18,6 +18,7 @@
 #ifndef AV_UM_D3D12_HOST_CAPS_HPP
 #define AV_UM_D3D12_HOST_CAPS_HPP
 
+#include "icd/d3d/dxgi_format_table.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/d3d12_ddi.hpp"
 
@@ -55,16 +56,8 @@ public:
     UINT    descriptor_size(uint32_t type) const;
 
 private:
-    /* 2, 4, 8 and 16 samples. */
-    static constexpr uint32_t sample_counts = 4u;
-
-    /* The host's quality levels at each count, per cast family: the fewest any
-     * member the runtime lets multisample has. D3D12Core refuses a driver
-     * whose family members disagree (d3d12core's LLOCompleteLayerConstruction,
-     * "MSAA quality for parent != child"). */
+    /* The host's level counts past one sample, into the format table. */
     [[nodiscard]] bool learn_samples(ClientTransport &transport);
-    uint32_t sample_slot(UINT samples) const;
-    bool     multisampled(uint32_t format) const;
     uint32_t pipeline_level() const;
     HRESULT  options(void *data, UINT bytes) const;
     HRESULT  shader(void *data, UINT bytes) const;
@@ -74,9 +67,7 @@ private:
     HRESULT  fill(void *data, UINT bytes, const void *answer, UINT answer_bytes) const;
 
     d3d12proto::Caps12 caps_;
-    uint32_t           support1_[format_count];
-    uint32_t           support2_[format_count];
-    uint32_t           qualities_[format_count][sample_counts];
+    d3d::DxgiFormatTable formats_;
     bool               learned_;
 };
 

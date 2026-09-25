@@ -36,8 +36,17 @@ bool D3d11HostCaps::learn(Kmt &kmt, uint32_t adapter)
     KmtTransport transport(connection, SubApi::d3d, ring_order, reply_bytes, staging, sizeof(staging));
     if (transport.initialize() != Status::ok) return false;
     ScopeExit torn([&] { transport.teardown(); });
-    uint64_t answered = 0u;
-    if (!d3dproto::rvk_d3d_QueryCaps11(transport, &caps_, formats_, sizeof(formats_), &answered)) return false;
+    uint64_t             answered = 0u;
+    d3dproto::FormatCaps rows[format_count] = {};
+    if (!d3dproto::rvk_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
+    for (uint32_t format = 0u; format < format_count; format++) {
+        formats_.record(format, rows[format].support, rows[format].support2);
+        /* A row's sample counts are a bit per power of two, all at one level count. */
+        for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++)
+            if ((rows[format].sample_counts & (1u << step)) != 0u)
+                formats_.record_samples(format, 1u << step, rows[format].quality_levels);
+    }
+    formats_.settle();
     learned_ = true;
     return true;
 }
@@ -46,36 +55,6 @@ bool D3d11HostCaps::learned() const
 {
     AV_SCOPE("D3d11HostCaps::learned");
     return learned_;
-}
-
-bool D3d11HostCaps::typeless(DXGI_FORMAT format) const
-{
-    AV_SCOPE("D3d11HostCaps::typeless");
-    switch (format) {
-    case DXGI_FORMAT_R32G32B32A32_TYPELESS:
-    case DXGI_FORMAT_R32G32B32_TYPELESS:
-    case DXGI_FORMAT_R16G16B16A16_TYPELESS:
-    case DXGI_FORMAT_R32G32_TYPELESS:
-    case DXGI_FORMAT_R32G8X24_TYPELESS:
-    case DXGI_FORMAT_R10G10B10A2_TYPELESS:
-    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-    case DXGI_FORMAT_R16G16_TYPELESS:
-    case DXGI_FORMAT_R32_TYPELESS:
-    case DXGI_FORMAT_R24G8_TYPELESS:
-    case DXGI_FORMAT_R8G8_TYPELESS:
-    case DXGI_FORMAT_R16_TYPELESS:
-    case DXGI_FORMAT_R8_TYPELESS:
-    case DXGI_FORMAT_BC1_TYPELESS:
-    case DXGI_FORMAT_BC2_TYPELESS:
-    case DXGI_FORMAT_BC3_TYPELESS:
-    case DXGI_FORMAT_BC4_TYPELESS:
-    case DXGI_FORMAT_BC5_TYPELESS:
-    case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-    case DXGI_FORMAT_B8G8R8X8_TYPELESS:
-    case DXGI_FORMAT_BC6H_TYPELESS:
-    case DXGI_FORMAT_BC7_TYPELESS: return true;
-    default: return false;
-    }
 }
 
 uint32_t D3d11HostCaps::feature_level() const
@@ -169,80 +148,13 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
 UINT D3d11HostCaps::format_support(DXGI_FORMAT format) const
 {
     AV_SCOPE("D3d11HostCaps::format_support");
-    const uint32_t index = static_cast<uint32_t>(format);
-    if (index >= format_count) return 0u;
-    /* The host answers in the API's D3D11_FORMAT_SUPPORT{,2} bits and the DDI
-     * asks in its own, which are numbered differently: each is carried across
-     * by name. */
-    struct Carry {
-        uint32_t api;
-        bool     second;
-        UINT     ddi;
-    };
-    constexpr Carry carried[] = {
-        {0x200u, false, D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE},
-        {0x4000u, false, D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET},
-        {0x8000u, false, D3D10_DDI_FORMAT_SUPPORT_BLENDABLE},
-        {0x200000u, false, D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET},
-        {0x400000u, false, D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD},
-        {0x2u, false, D3D11_1DDI_FORMAT_SUPPORT_VERTEX_BUFFER},
-        {0x2000000u, false, D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES},
-        {0x1u, false, D3D11_1DDI_FORMAT_SUPPORT_BUFFER},
-        {0x800000u, false, D3D11_1DDI_FORMAT_SUPPORT_SHADER_GATHER},
-        {0x80000u, false, D3D11_1DDI_FORMAT_SUPPORT_DISPLAY},
-        {0x100u, true, D3D11_1DDI_FORMAT_SUPPORT_OUTPUT_MERGER_LOGIC_OP},
-        {0x40u, true, D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS},
-    };
-    const d3dproto::FormatCaps &row = formats_[index];
-    UINT support = 0u;
-    for (const Carry &carry : carried)
-        if (((carry.second ? row.support2 : row.support) & carry.api) != 0u) support |= carry.ddi;
-    /* The DDI has no depth-stencil bit: a depth format's "render target" is
-     * its depth-stencil view - but only a depth format's, never the typeless
-     * and view formats of its family, which the runtime refuses to see as
-     * renderable (it stops at R32_FLOAT_X8X24_TYPELESS). */
-    const bool depth = format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT || format == DXGI_FORMAT_D32_FLOAT ||
-                       format == DXGI_FORMAT_D24_UNORM_S8_UINT || format == DXGI_FORMAT_D16_UNORM;
-    constexpr uint32_t api_depth_stencil = 0x10000u;
-    if (depth && (row.support & api_depth_stencil) != 0u) support |= D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET;
-    /* A depth format is sampled through its view format, never itself, and
-     * Vulkan's answer - which can sample depth - is not Direct3D's. */
-    if (depth)
-        support &= ~static_cast<UINT>(D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE | D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD |
-                                      D3D11_1DDI_FORMAT_SUPPORT_SHADER_GATHER | D3D11_1DDI_FORMAT_SUPPORT_BUFFER |
-                                      D3D11_1DDI_FORMAT_SUPPORT_VERTEX_BUFFER | D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES |
-                                      D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS);
-    /* Blending and multisampled rendering are rendering; multisampled use at
-     * no count past one is a table the runtime refuses the driver over
-     * ("MSAA quality reported to be 0"). */
-    const bool renders = (support & D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET) != 0u;
-    const bool counted = (row.sample_counts & ~1u) != 0u && row.quality_levels != 0u;
-    if (!renders)
-        support &= ~static_cast<UINT>(D3D10_DDI_FORMAT_SUPPORT_BLENDABLE |
-                                      D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET);
-    if (!counted)
-        support &= ~static_cast<UINT>(D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
-                                      D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD);
-    return support;
+    return formats_.format_support(static_cast<uint32_t>(format));
 }
 
 UINT D3d11HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const
 {
     AV_SCOPE("D3d11HostCaps::quality_levels");
-    const uint32_t index = static_cast<uint32_t>(format);
-    if (index >= format_count || samples == 0u || (samples & (samples - 1u)) != 0u) return 0u;
-    /* One sample is every format's one quality level. Past one, the runtime
-     * holds each format family to one story (LLOCompleteLayerConstruction): a
-     * typeless parent answers what its multisampled children do, a child that
-     * claims multisampled rendering answers the parent's levels, and a child
-     * that does not claim it answers none - "MSAA quality reported to be 0" is
-     * its complaint about a non-zero answer there. */
-    if (samples == 1u) return 1u;
-    const bool multisampled = typeless(format) ||
-                              (format_support(format) & D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET) != 0u;
-    if (!multisampled) return 0u;
-    const uint32_t step = static_cast<uint32_t>(__builtin_ctz(samples));
-    return (formats_[index].sample_counts & (1u << step)) != 0u ? formats_[index].quality_levels : 0u;
+    return formats_.quality_levels(static_cast<uint32_t>(format), samples);
 }
 
 }  // namespace av::d3d11

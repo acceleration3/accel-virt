@@ -30,65 +30,16 @@ constexpr uint32_t address_bits = 40u;
 /* Row-major layout alignments: what a texture copy footprint is aligned to. */
 constexpr UINT16   row_major_element = 16u;
 constexpr UINT16   row_major_alignment = 256u;
-
-/* D3D12_FORMAT_SUPPORT1 and 2 bits, and the DDI's bit each becomes. */
-struct SupportBit {
-    uint32_t api;
-    uint32_t second; /* 1 for a FORMAT_SUPPORT2 bit */
-    UINT     ddi;
-};
-/* D3D12_FORMAT_SUPPORT1_MULTISAMPLE_LOAD. */
-constexpr uint32_t multisample_load = 0x400000u;
-constexpr SupportBit support_bits[] = {
-    {0x1u, 0u, D3D12DDI_FORMAT_SUPPORT_BUFFER},
-    {0x2u, 0u, D3D12DDI_FORMAT_SUPPORT_VERTEX_BUFFER},
-    {0x200u, 0u, D3D12DDI_FORMAT_SUPPORT_SHADER_SAMPLE},
-    {0x4000u, 0u, D3D12DDI_FORMAT_SUPPORT_RENDERTARGET},
-    {0x8000u, 0u, D3D12DDI_FORMAT_SUPPORT_BLENDABLE},
-    {0x80000u, 0u, D3D12DDI_FORMAT_SUPPORT_DISPLAY},
-    {0x800000u, 0u, D3D12DDI_FORMAT_SUPPORT_SHADER_GATHER},
-    {0x2000000u, 0u, D3D12DDI_FORMAT_SUPPORT_UAV_WRITES},
-    {0x40u, 1u, D3D12DDI_FORMAT_SUPPORT_UAV_READS},
-    {0x100u, 1u, D3D12DDI_FORMAT_SUPPORT_OUTPUT_MERGER_LOGIC_OP},
-};
-
-/* DXGI formats D3D12Core lets a driver multisample at feature level 11_1:
- * its CD3D11FormatHelper::MultisampleRenderTargetSupport table (d3d12core
- * 0x1802808c4) without the entries it marks not supported. A typeless format
- * is never among them, and claiming one fails the device. */
-constexpr uint8_t multisample_formats[] = {2,  3,  4,  6,  7,  8,  10, 11, 12, 13, 14, 16, 17, 18, 20, 24, 25, 26, 28,
-                                           29, 30, 31, 32, 34, 35, 36, 37, 38, 40, 41, 42, 43, 45, 49, 50, 51, 52, 54,
-                                           55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 67, 85, 86, 87, 88, 91, 93, 115, 191};
-
-/* Each cast family by its typeless head and its last member: DXGI numbers a
- * family's formats consecutively after the head, except the two BGRA families,
- * named member by member. */
-struct Family {
-    uint32_t head;
-    uint32_t last;
-};
-constexpr Family families[] = {{1u, 4u},   {5u, 8u},   {9u, 14u},  {15u, 18u}, {19u, 22u}, {23u, 25u},
-                               {27u, 32u}, {33u, 38u}, {39u, 43u}, {44u, 47u}, {48u, 52u}, {53u, 59u},
-                               {60u, 64u}, {70u, 72u}, {73u, 75u}, {76u, 78u}, {79u, 81u}, {82u, 84u},
-                               {94u, 96u}, {97u, 99u}};
-/* B8G8R8A8: 87 and 91 under 90; B8G8R8X8: 88 and 93 under 92. */
-constexpr uint32_t bgra_head = 90u, bgrx_head = 92u;
-constexpr uint32_t bgra_unorm = 87u, bgra_srgb = 91u, bgrx_unorm = 88u, bgrx_srgb = 93u;
-constexpr UINT     counts[] = {2u, 4u, 8u, 16u};
-
-uint32_t family_of(uint32_t format)
-{
-    AV_SCOPE("family_of");
-    if (format == bgra_unorm || format == bgra_srgb) return bgra_head;
-    if (format == bgrx_unorm || format == bgrx_srgb) return bgrx_head;
-    for (const Family &family : families)
-        if (format >= family.head && format <= family.last) return family.head;
-    return format;
-}
+/* OPTIONS_0102's ceilings: vkd3d-proton's own view heap floor, and the sampler
+ * count the runtime takes as the least a driver may report. */
+constexpr UINT     view_heap_ceiling = 1000000u;
+constexpr UINT     sampler_heap_ceiling = 4000u;
+/* 1, 2, 4, 8 and 16 samples, a bit each. */
+constexpr UINT     no_output_sample_counts = 0x1fu;
 
 }  // namespace
 
-D3d12HostCaps::D3d12HostCaps() : caps_{}, support1_{}, support2_{}, qualities_{}, learned_(false)
+D3d12HostCaps::D3d12HostCaps() : caps_{}, formats_(), learned_(false)
 {
     AV_SCOPE("D3d12HostCaps::D3d12HostCaps");
 }
@@ -107,64 +58,37 @@ bool D3d12HostCaps::learn(Kmt &kmt, uint32_t adapter)
     uint32_t hresult = 1u;
     if (!d3d12proto::rvk_d3d12_OpenDevice12(transport, 0u, &hresult, &caps_) || hresult != 0u) return false;
     for (uint32_t format = 1u; format < format_count; format++) {
-        uint32_t levels = 0u;
-        if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, 1u, &support1_[format], &support2_[format],
-                                                 &levels))
-            return false;
+        uint32_t support1 = 0u, support2 = 0u, levels = 0u;
+        if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, 1u, &support1, &support2, &levels)) return false;
+        formats_.record(format, support1, support2);
     }
     if (!learn_samples(transport)) return false;
     learned_ = true;
     return true;
 }
 
-bool D3d12HostCaps::multisampled(uint32_t format) const
-{
-    AV_SCOPE("D3d12HostCaps::multisampled");
-    for (const uint8_t allowed : multisample_formats)
-        if (allowed == format) return true;
-    return false;
-}
-
-/* Each family's level count at each sample count is its members' fewest, so
- * every member D3D12Core lets multisample reports the same. */
+/* Level counts past one sample, asked only of the formats the host would
+ * multisample at all: a question each, and there are hundreds. */
 bool D3d12HostCaps::learn_samples(ClientTransport &transport)
 {
     AV_SCOPE("D3d12HostCaps::learn_samples");
-    for (uint32_t format = 1u; format < format_count; format++)
-        for (uint32_t slot = 0u; slot < sample_counts; slot++) qualities_[format][slot] = ~0u;
     for (uint32_t format = 1u; format < format_count; format++) {
-        if (!multisampled(format)) continue;
-        const uint32_t family = family_of(format);
-        for (uint32_t slot = 0u; slot < sample_counts; slot++) {
+        if (!formats_.multisample_candidate(format)) continue;
+        for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++) {
             uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-            if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, counts[slot], &support1, &support2, &levels))
+            if (!d3d12proto::rvk_d3d12_QueryFormat12(transport, format, 1u << step, &support1, &support2, &levels))
                 return false;
-            if (levels < qualities_[family][slot]) qualities_[family][slot] = levels;
+            formats_.record_samples(format, 1u << step, levels);
         }
     }
-    for (uint32_t format = 1u; format < format_count; format++)
-        for (uint32_t slot = 0u; slot < sample_counts; slot++)
-            if (qualities_[format][slot] == ~0u) qualities_[format][slot] = 0u;
+    formats_.settle();
     return true;
-}
-
-uint32_t D3d12HostCaps::sample_slot(UINT samples) const
-{
-    AV_SCOPE("D3d12HostCaps::sample_slot");
-    for (uint32_t slot = 0u; slot < sample_counts; slot++)
-        if (counts[slot] == samples) return slot;
-    return sample_counts;
 }
 
 UINT D3d12HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const
 {
     AV_SCOPE("D3d12HostCaps::quality_levels");
-    const uint32_t index = static_cast<uint32_t>(format);
-    if (index == 0u || index >= format_count) return 0u;
-    if (samples == 1u) return format_support(format) != 0u ? 1u : 0u;
-    const uint32_t slot = sample_slot(samples);
-    if (slot == sample_counts || !multisampled(index)) return 0u;
-    return qualities_[family_of(index)][slot];
+    return formats_.quality_levels(static_cast<uint32_t>(format), samples);
 }
 
 bool D3d12HostCaps::learned() const
@@ -176,20 +100,7 @@ bool D3d12HostCaps::learned() const
 UINT D3d12HostCaps::format_support(DXGI_FORMAT format) const
 {
     AV_SCOPE("D3d12HostCaps::format_support");
-    const uint32_t index = static_cast<uint32_t>(format);
-    if (index == 0u || index >= format_count) return 0u;
-    UINT made = 0u;
-    for (const SupportBit &bit : support_bits) {
-        const uint32_t word = bit.second != 0u ? support2_[index] : support1_[index];
-        if ((word & bit.api) != 0u) made |= bit.ddi;
-    }
-    /* Multisampling is the family's, never one member's alone. */
-    for (uint32_t slot = 0u; multisampled(index) && slot < sample_counts; slot++) {
-        if (qualities_[family_of(index)][slot] == 0u) continue;
-        made |= D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
-        if ((support1_[index] & multisample_load) != 0u) made |= D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
-    }
-    return made;
+    return formats_.format_support(static_cast<uint32_t>(format));
 }
 
 UINT D3d12HostCaps::descriptor_size(uint32_t type) const
@@ -314,7 +225,30 @@ HRESULT D3d12HostCaps::answer(const D3D12DDIARG_GETCAPS &args) const
          * no false positives, no queue priorities, not compute-only, no
          * hardware queues: every one of them zero. */
         return fill(args.pData, bytes, nullptr, 0u);
-    default: return E_INVALIDARG;
+    case D3D12DDICAPS_TYPE_OPTIONS_0102: {
+        /* The DDI's ceilings, which the runtime clamps to the API's own: it
+         * refuses a device reporting the API's 2048 samplers or a view heap
+         * smaller than its 1000000 ("Driver's MaxViewDescriptorHeapSize is
+         * too small"). No-output rendering at 1 to 16 samples is required at
+         * 11_1. */
+        D3D12DDI_OPTIONS_DATA_0102 answer = {};
+        answer.SupportedSampleCountsWithNoOutputs = no_output_sample_counts;
+        answer.MaxSamplerDescriptorHeapSize = sampler_heap_ceiling;
+        answer.MaxSamplerDescriptorHeapSizeWithStaticSamplers = sampler_heap_ceiling;
+        answer.MaxViewDescriptorHeapSize = view_heap_ceiling;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    case D3D12DDICAPS_TYPE_OPTIONS_0110: {
+        /* The tier has no zero: 1_0 is the floor, and all-zero is out of range. */
+        D3D12DDI_OPTIONS_DATA_0110 answer = {};
+        answer.ExecuteIndirectTier = D3D12DDI_EXECUTE_INDIRECT_TIER_1_0;
+        return fill(args.pData, bytes, &answer, sizeof(answer));
+    }
+    default:
+        /* Every other question is about a feature this driver does not
+         * expose, and all zeroes is each one's "none": a refusal is what the
+         * runtime cannot take for some of them. */
+        return fill(args.pData, bytes, nullptr, 0u);
     }
 }
 
