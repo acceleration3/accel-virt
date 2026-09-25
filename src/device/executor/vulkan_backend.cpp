@@ -397,9 +397,26 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     return RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
 }
 
+void VulkanBackend::on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
+                                        VkQueue *pQueue)
+{
+    AV_SCOPE("VulkanBackend::on_vkGetDeviceQueue");
+    RealVulkanDispatch::on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, pQueue);
+    if (timing_.enabled() && pQueue != nullptr) timing_.queue_made(physical_, device, queueFamilyIndex, *pQueue);
+}
+
+VkResult VulkanBackend::on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
+                                         VkFence fence)
+{
+    AV_SCOPE("VulkanBackend::on_vkQueueSubmit");
+    if (timing_.enabled()) return timing_.submit(queue, submitCount, pSubmits, fence);
+    return RealVulkanDispatch::on_vkQueueSubmit(queue, submitCount, pSubmits, fence);
+}
+
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
+    timing_.forget(device);
     templates_.forget_device(device);
     fds_.forget_device(device);
     if (device == device_) device_ = VK_NULL_HANDLE;

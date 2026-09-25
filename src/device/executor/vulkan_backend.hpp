@@ -17,6 +17,7 @@
 #include "device/executor/host_template_table.hpp"
 #include "device/executor/importable_types.hpp"
 #include "device/executor/session_backend.hpp"
+#include "device/executor/vulkan_submit_timing.hpp"
 #include "device/shim/physical_device_list.hpp"
 #include "device/shim/vulkan_host_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
@@ -73,6 +74,10 @@ public:
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+    void     on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
+                                 VkQueue *pQueue) override;
+    VkResult on_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
+                              VkFence fence) override;
 
     /* The driver's memory types, host visible only where a host pointer
      * imports (feature 045, T033): the guest maps nothing but its own RAM. */
@@ -272,6 +277,8 @@ private:
     AdoptedBlobs     adopted_;
     VulkanHostImport import_;
     ImportableTypes  importable_;
+    /* RVK_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */
+    VulkanSubmitTiming timing_;
     uint64_t parent_;
     uint64_t ran_;
     bool     lost_;
