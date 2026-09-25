@@ -120,6 +120,14 @@ void SubmitBenchmark::round_trips()
     steps_.check_measured("trip_p90_ns", Status::ok, trip_ns_[trips * ninetieth / percent]);
     steps_.check_measured("trip_p99_ns", Status::ok, trip_ns_[trips * tail_percent / percent]);
     steps_.check_measured("trip_mean_ns", Status::ok, static_cast<uint32_t>(total / trips));
+    /* What the clock itself costs, which the transport reads for every batch
+     * and every turn of a spin: a clock the hypervisor serves is an exit a read. */
+    constexpr uint32_t reads = 100000u;
+    const uint64_t     clock_began = kmt_.performance_counter(frequency);
+    for (uint32_t read = 0u; read < reads; read++) static_cast<void>(kmt_.performance_counter(frequency));
+    const uint64_t clock_ticks = kmt_.performance_counter(frequency) - clock_began;
+    steps_.check_measured("clock_read_ns", Status::ok,
+                          static_cast<uint32_t>(clock_ticks * nanoseconds_per_second / frequency / reads));
 }
 
 uint32_t SubmitBenchmark::doorbell_ns() const
