@@ -45,6 +45,10 @@ GUEST_DIR = "C:\\rvk\\samples12"
 GUEST_EXE = GUEST_DIR + "\\rvkd3d12samples.exe"
 DXC = ROOT / "third_party" / "dxc"
 DXC_FILES = ("dxcompiler.dll", "dxil.dll")
+# dxcompiler.dll links the Visual C++ runtime, which a clean Windows install
+# lacks: without it the samples find no compiler beside them.
+VC_REDIST = ROOT / "third_party" / "vcredist" / "vc_redist.x64.exe"
+VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 GUEST_EXE_LOCAL = ROOT / "build" / "guest" / "rvkd3d12samples.exe"
 HOST_EXE = ROOT / "build" / "rvkd3d12samples_host"
 
@@ -61,12 +65,28 @@ def sample_arguments(args, out, shaders):
             "--width", str(args.width), "--height", str(args.height)] + (["--only", args.only] if args.only else [])
 
 
+def ensure_vc_runtime(work):
+    """Microsoft's Visual C++ runtime in the guest, installed quietly when it
+    is not there: the guest disk is a fresh overlay each boot."""
+    present = guest_shell(work, "ps", "Test-Path C:\\Windows\\System32\\vcruntime140_1.dll").strip()
+    if present.endswith("True"):
+        return
+    if not VC_REDIST.exists():
+        VC_REDIST.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["curl", "-sSL", "-o", str(VC_REDIST), VC_REDIST_URL], check=True, timeout=600)
+    guest_shell(work, "push", str(VC_REDIST), "C:\\rvk\\vc_redist.x64.exe")
+    print("guest: installing the Visual C++ runtime", flush=True)
+    guest_shell(work, "ps", "Start-Process -Wait C:\\rvk\\vc_redist.x64.exe -ArgumentList '/install','/quiet','/norestart'",
+                timeout=600)
+
+
 def run_guest(args, out):
     """The guest's run, and everything it wrote brought back."""
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out, {GUEST_DIR}\\shaders | Out-Null")
     guest_shell(work, "push", str(GUEST_EXE_LOCAL), GUEST_EXE)
+    ensure_vc_runtime(work)
     for name in DXC_FILES:
         guest_shell(work, "push", str(DXC / name), f"{GUEST_DIR}\\{name}")
     if args.layer:

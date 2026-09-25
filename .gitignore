@@ -27,3 +27,4 @@ third_party/opencl-loader
 .claude/worktrees/
 third_party/vulkan-samples
 third_party/dxc
+third_party/vcredist
