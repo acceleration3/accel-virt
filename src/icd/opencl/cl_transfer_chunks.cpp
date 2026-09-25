@@ -1,6 +1,7 @@
 #include "icd/opencl/cl_transfer_chunks.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/unanswered_transport.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -31,11 +32,15 @@ cl_int ClTransferChunks::write(uint64_t buffer, size_t offset, size_t bytes, con
 {
     AV_SCOPE("ClTransferChunks::write");
     const uint8_t *const source = static_cast<const uint8_t *>(from);
+    /* The host makes every write blocking, in queue order, before the next
+     * command, so a piece needs no answer of its own: the caller's drain after
+     * the last one is the answer for all of them. */
+    icd::UnansweredTransport unanswered(wire_);
     for (size_t done = 0u; done < bytes;) {
         const size_t piece = bytes - done < write_room ? bytes - done : write_room;
         ++commands_;
         const cl_int written = av::clproto::rvk_clEnqueueWriteBuffer(
-            wire_, queue_, buffer, CL_TRUE, offset + done, piece, source + done, 0u, nullptr,
+            unanswered, queue_, buffer, CL_TRUE, offset + done, piece, source + done, 0u, nullptr,
             nullptr);
         if (written != CL_SUCCESS) return written;
         done += piece;
