@@ -102,8 +102,14 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * VidMm leaves it in its own implicit system memory segment and
      * SetVidPnSourceAddress answers segment 0, address 0 - an address with no
      * pages behind it (feature 038). */
+    /* A reply slot is the host's to write and the guest's only to read, a
+     * megabyte and more of a buffer read at a time: mapped write-combined, as
+     * an aperture allocation is by default, every byte of it was an uncached
+     * read. The aperture segment is cache coherent (ApertureSegment::flags),
+     * which is what Cached asks of it. */
+    const bool cached = descriptor_.kind() == AllocationKind::reply_slot;
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) |
-                 (pinned ? flag_accessed_physically : 0u);
+                 (pinned ? flag_accessed_physically : 0u) | (cached ? flag_cached : 0u);
     info.AllocationPriority = priority_normal;
     info.Flags2 = 0u;
 }
