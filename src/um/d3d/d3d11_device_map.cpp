@@ -57,8 +57,18 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
     const uint32_t line = row_bytes(resource, width);
-    upload(resource, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource),
-           subresource_bytes(resource, subresource), line, line * rows(resource, height), resource.reserved);
+    uint8_t *const at = resource.shadow + subresource_offset(resource, subresource);
+    const size_t   bytes = subresource_bytes(resource, subresource);
+    if (resource.watched == 0u) {
+        upload(resource, subresource, nullptr, at, bytes, line, line * rows(resource, height), resource.reserved);
+        return;
+    }
+    /* A buffer, so the written pages are one byte range of it. */
+    size_t first = 0u, end = 0u;
+    written_.written(at, bytes, first, end);
+    if (end == 0u) return;
+    const D3D10_DDI_BOX box = {static_cast<LONG>(first), 0, 0, static_cast<LONG>(end), 1, 1};
+    upload(resource, subresource, &box, at + first, end - first, line, line, resource.reserved);
 }
 
 VOID D3d11Device::resource_map(D3D10DDI_HRESOURCE resource, UINT sub, D3D10_DDI_MAP type, UINT flags,

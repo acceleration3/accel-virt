@@ -25,6 +25,7 @@
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
+#include "um/d3d/written_pages.hpp"
 
 #include <stdint.h>
 
@@ -170,6 +171,7 @@ private:
 
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
+    WrittenPages           written_;
     icd::LogSink          &log_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;

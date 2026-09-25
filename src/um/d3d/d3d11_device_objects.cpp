@@ -118,7 +118,12 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->Usage == D3D10_DDI_USAGE_DYNAMIC || args->Usage == D3D10_DDI_USAGE_STAGING || args->MapFlags != 0u) {
         size_t bytes = 0u;
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) bytes += subresource_bytes(resource, sub);
-        resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+        /* A large dynamic buffer is usually written a part at a time. */
+        constexpr size_t watched_from = 64u * 1024u;
+        resource.watched = args->Usage == D3D10_DDI_USAGE_DYNAMIC && resource.dimension == D3D10DDIRESOURCE_BUFFER &&
+                           bytes >= watched_from;
+        resource.shadow = resource.watched != 0u ? written_.allocate(bytes)
+                                                 : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
         resource.shadow_bytes = resource.shadow == nullptr ? 0u : bytes;
         if (resource.shadow == nullptr) set_error(E_OUTOFMEMORY);
     }
@@ -222,7 +227,8 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     ResourceRecord &resource = record(handle);
     forget_guest_surface(resource);
     destroy_object(resource.id);
-    if (resource.shadow != nullptr) memory_.release(resource.shadow);
+    if (resource.shadow != nullptr && resource.watched != 0u) written_.release(resource.shadow);
+    else if (resource.shadow != nullptr) memory_.release(resource.shadow);
     if (resource.allocation != 0u && resource.shared_key == 0u) {
         D3DDDICB_DEALLOCATE deallocate = {};
         deallocate.hResource = static_cast<HANDLE>(resource.runtime_resource);

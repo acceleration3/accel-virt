@@ -41,6 +41,7 @@ struct ResourceRecord {
     uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
     uint32_t allocation_pitch;
     uint32_t reserved;
+    uint32_t watched; /* the shadow is WrittenPages', not the device's heap's */
     uint64_t shared_key;
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
