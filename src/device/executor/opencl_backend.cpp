@@ -17,6 +17,7 @@
 #include "device/shim/opencl_device.hpp"
 #include "proto/generated/opencl/cl_command_names.h"
 #include "proto/generated/opencl/cl_dispatch_server.h"
+#include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -220,6 +221,11 @@ bool OpenClBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
                         WireArena &arena)
 {
     AV_SCOPE("OpenClBackend::run");
+    /* Anything but another read or a question about an object may change a
+     * buffer, or free one whose handle a new one then takes. */
+    if (command_id != clproto::kCmd_clEnqueueReadBuffer &&
+        strncmp(clproto::cmd_id_to_string(command_id), "clGet", 5u) != 0)
+        read_ahead_.forget();
     if (!clproto::dispatch_command(*this, command_id, payload, reply, arena)) return false;
     ran_++;
     return true;
@@ -504,6 +510,19 @@ cl_int OpenClBackend::on_clEnqueueUnmapMemObject(cl_command_queue command_queue,
      * mapping live, and an address the guest may still name. */
     if (unmapped == CL_SUCCESS) static_cast<void>(mapped_.forget(mapped_ptr));
     return unmapped;
+}
+
+cl_int OpenClBackend::on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
+                                             size_t offset, size_t size, void *ptr, cl_uint num_events_in_wait_list,
+                                             const cl_event *event_wait_list, cl_event *event)
+{
+    AV_SCOPE("OpenClBackend::on_clEnqueueReadBuffer");
+    cl_int served = CL_SUCCESS;
+    if (blocking_read == CL_TRUE && num_events_in_wait_list == 0u && event == nullptr &&
+        read_ahead_.read(command_queue, buffer, offset, size, ptr, served))
+        return served;
+    return RealDispatch::on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size, ptr,
+                                                num_events_in_wait_list, event_wait_list, event);
 }
 
 cl_int OpenClBackend::on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer,

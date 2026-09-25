@@ -9,6 +9,7 @@
 
 #include "device/executor/cl_event_signals.hpp"
 #include "device/executor/cl_handle_registry.hpp"
+#include "device/executor/cl_read_ahead.hpp"
 #include "device/executor/cl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/host_svm_ranges.hpp"
@@ -155,6 +156,11 @@ public:
      * write is made blocking here, whatever the guest asked: the bytes are
      * copied before the arena is reused. The guest's ICD drains the queue
      * first, so the host blocks on the copy and not on work ahead of it. */
+    /* A blocking read with no events: the guest's pieces, from one read made
+     * ahead of them (ClReadAhead). */
+    cl_int on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
+                                  size_t offset, size_t size, void *ptr, cl_uint num_events_in_wait_list,
+                                  const cl_event *event_wait_list, cl_event *event) override;
     cl_int on_clEnqueueWriteBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_write,
                                    size_t offset, size_t size, const void *ptr,
                                    cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
@@ -246,6 +252,7 @@ private:
     /* The one import a context has: its blob arena. */
     GuestRegion      arena_;
     ClEventSignals   events_;
+    ClReadAhead      read_ahead_;
     uint64_t       ran_;
     bool           lost_;
 };
