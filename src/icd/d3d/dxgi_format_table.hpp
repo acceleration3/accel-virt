@@ -30,9 +30,18 @@ public:
     /* Every answer recorded: each family's shared level counts are settled. */
     void settle();
 
-    /* D3D10_DDI_FORMAT_SUPPORT_* bits, which D3D12DDI_FORMAT_SUPPORT_* repeat. */
+    /* D3D10_DDI_FORMAT_SUPPORT_* bits, which D3D12DDI_FORMAT_SUPPORT_* repeat,
+     * and level counts, as Direct3D 12 wants them: each family one story, its
+     * members' multisampling pooled (D3D12Core refuses "MSAA quality for
+     * parent != child"). */
     uint32_t format_support(uint32_t format) const;
     uint32_t quality_levels(uint32_t format, uint32_t samples) const;
+    /* The same as Direct3D 11 wants them: each format its own answer, a
+     * typeless parent included. Pooled, some formats DWM draws its acrylic
+     * backdrop in lost their multisampling, and the Start menu's backdrop
+     * drew black. */
+    uint32_t own_format_support(uint32_t format) const;
+    uint32_t own_quality_levels(uint32_t format, uint32_t samples) const;
     /* Whether the host would multisample `format` at all - worth asking its
      * level counts for. */
     bool     multisample_candidate(uint32_t format) const;

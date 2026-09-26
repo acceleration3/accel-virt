@@ -180,6 +180,27 @@ uint32_t DxgiFormatTable::quality_levels(uint32_t format, uint32_t samples) cons
     return family_levels_[family_of(format)][step];
 }
 
+uint32_t DxgiFormatTable::own_format_support(uint32_t format) const
+{
+    AV_SCOPE("DxgiFormatTable::own_format_support");
+    if (format == 0u || format >= format_count) return 0u;
+    uint32_t support = carried(format);
+    bool     counted = false;
+    for (uint32_t step = 1u; step < sample_steps; step++) counted = counted || levels_[format][step] != 0u;
+    if (!counted) support &= ~(ddi_multisample_render_target | ddi_multisample_load);
+    return support;
+}
+
+uint32_t DxgiFormatTable::own_quality_levels(uint32_t format, uint32_t samples) const
+{
+    AV_SCOPE("DxgiFormatTable::own_quality_levels");
+    const uint32_t step = step_of(samples);
+    if (format >= format_count || step == sample_steps) return 0u;
+    if (step == 0u) return 1u;
+    if (!typeless(format) && (own_format_support(format) & ddi_multisample_render_target) == 0u) return 0u;
+    return levels_[format][step];
+}
+
 bool DxgiFormatTable::multisample_candidate(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::multisample_candidate");

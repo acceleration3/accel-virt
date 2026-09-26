@@ -148,13 +148,13 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
 UINT D3d11HostCaps::format_support(DXGI_FORMAT format) const
 {
     AV_SCOPE("D3d11HostCaps::format_support");
-    return formats_.format_support(static_cast<uint32_t>(format));
+    return formats_.own_format_support(static_cast<uint32_t>(format));
 }
 
 UINT D3d11HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const
 {
     AV_SCOPE("D3d11HostCaps::quality_levels");
-    return formats_.quality_levels(static_cast<uint32_t>(format), samples);
+    return formats_.own_quality_levels(static_cast<uint32_t>(format), samples);
 }
 
 }  // namespace av::d3d11
