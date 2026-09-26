@@ -250,10 +250,16 @@ static void virtio_gpu_rvk_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comm
         cmd->cmd_hdr = header;
         if (header.type == VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D) {
             struct virtio_gpu_transfer_to_host_2d transfer;
-            /* Guest pixels for a resource: its head shows the 2D surface again. */
+            /* Guest pixels for the whole of a resource: its head shows the 2D
+             * surface again. A part of one is not the guest going back to
+             * drawing on the CPU, and showing a stale surface with that part
+             * on it would be worse than the image already shown. */
             if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &transfer, sizeof(transfer)) == sizeof(transfer)) {
                 const uint32_t head = virtio_gpu_rvk_head_of(g, le32_to_cpu(transfer.resource_id));
-                if (head != VIRTIO_GPU_RVK_NO_HEAD) {
+                if (head != VIRTIO_GPU_RVK_NO_HEAD && le32_to_cpu(transfer.r.x) == 0 &&
+                    le32_to_cpu(transfer.r.y) == 0 &&
+                    le32_to_cpu(transfer.r.width) >= VIRTIO_GPU_BASE(g)->scanout[head].width &&
+                    le32_to_cpu(transfer.r.height) >= VIRTIO_GPU_BASE(g)->scanout[head].height) {
                     virtio_gpu_rvk_show_surface(r, head);
                 }
             }
