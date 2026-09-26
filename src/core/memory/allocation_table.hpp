@@ -12,6 +12,8 @@
 #include "core/platform/platform.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_record.hpp"
 
 #include <stdint.h>
 
@@ -63,7 +65,8 @@ public:
 private:
     static constexpr int32_t rotation_identity = 1;   /* D3DDDI_ROTATION_IDENTITY */
     /* A descriptor followed by a SharedObjectRecord: 48 + 40. */
-    static constexpr uint32_t shareable_private_size = 88u;
+    static constexpr uint32_t shareable_private_size =
+        static_cast<uint32_t>(AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size);
     /* DXGK_CREATEALLOCATIONFLAGS::Resource and
      * DXGK_DESTROYALLOCATIONFLAGS::DestroyResource, each bit 0 of their own
      * Value. A shared object's identity is minted over a resource, because

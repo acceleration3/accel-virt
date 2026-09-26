@@ -119,7 +119,12 @@ void D3d12HostDevice::measure(uint32_t vendor_id, uint32_t device_id, uint64_t v
     D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
     if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options)))) {
         caps_.resource_binding_tier = static_cast<uint32_t>(options.ResourceBindingTier);
-        caps_.tiled_resources_tier = static_cast<uint32_t>(options.TiledResourcesTier);
+        /* Read as a plain integer: drivers report tier 4, past the last
+         * value the headers' enum names, and loading that through the enum
+         * is undefined. */
+        uint32_t tiled_tier = 0u;
+        __builtin_memcpy(&tiled_tier, &options.TiledResourcesTier, sizeof tiled_tier);
+        caps_.tiled_resources_tier = tiled_tier;
         caps_.resource_heap_tier = static_cast<uint32_t>(options.ResourceHeapTier);
         caps_.conservative_rasterization_tier = static_cast<uint32_t>(options.ConservativeRasterizationTier);
         caps_.typed_uav_load_additional_formats = options.TypedUAVLoadAdditionalFormats ? 1u : 0u;

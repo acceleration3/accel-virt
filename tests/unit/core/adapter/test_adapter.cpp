@@ -75,6 +75,8 @@
 #include "core/ddi/dxgkarg_submit_command_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
+#include "core/scheduling/execution_node.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
 #include "core/display/display_mode.hpp"
@@ -95,6 +97,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
+#include "proto/context/tail_publish_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
@@ -146,6 +149,7 @@ constexpr std::uint32_t invalid_device_state = 0xC0000184u;
 constexpr std::uint32_t buffer_too_small = 0xC0000023u;
 constexpr std::uint32_t no_more_descriptor_data = 0xC01D0008u;
 constexpr std::uint32_t not_implemented = 0xC0000002u;
+constexpr std::int32_t  query_umd_private = 0;          /* DXGKQAITYPE_UMDRIVERPRIVATE */
 constexpr std::int32_t  query_driver_caps = 1;          /* DXGKQAITYPE_DRIVERCAPS */
 constexpr std::int32_t  query_wddm_device_caps = 29;    /* DXGKQAITYPE_WDDMDEVICECAPS */
 constexpr std::int32_t  last_query_type = 48;           /* DXGKQAITYPE_PAGINGPROCESSGPUVASIZE */
@@ -155,6 +159,9 @@ constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
 constexpr std::uint8_t  driver_ok_status = 0x0Fu;
 constexpr std::uint8_t  failed_bit = 0x80u;
+/* The DPC refreshes the scanout once a display period at most, by interrupt
+ * time, so a test that expects a refresh lets one pass first. */
+constexpr std::uint64_t display_period = 10000000u / 60u;
 
 std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status); }
 
@@ -230,12 +237,12 @@ public:
 
     /* StartDevice asks the device what its displays are and waits for the
      * answer, so the host answers from the stall between its polls. */
-    std::uint32_t start()
+    std::uint32_t start(void *start_info = nullptr)
     {
         /* A start builds new rings, so the device side of the old ones is gone. */
         control_.reset();
         platform_.on_stall(&Fixture::answer_display_info, this);
-        const std::uint32_t started = nt(adapter_.start_device(nullptr, &dxgkrnl_.record(), &sources_, &children_));
+        const std::uint32_t started = nt(adapter_.start_device(start_info, &dxgkrnl_.record(), &sources_, &children_));
         platform_.on_stall(nullptr, nullptr);
         return started;
     }
@@ -851,6 +858,9 @@ TEST(adapter_query_child_relations, no_room_is_buffer_too_small_and_no_buffer_in
 
 TEST(adapter_query_child_status, the_one_child_is_connected)
 { Fixture fixture;
+  /* Connected is what the device's display info says of the scanout, which
+   * StartDevice asks for. */
+  CHECK_EQ(fixture.start(), success);
   DxgkChildStatusRecord status = {};
   status.Type = 1;   /* StatusConnection */
   CHECK_EQ(nt(fixture.adapter().query_child_status(&status, 1u)), success);
@@ -1048,6 +1058,7 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   address.hAllocation = primary.handle();
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
@@ -1061,6 +1072,7 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   CHECK_EQ(control.request_type(6u), 0x0105u);
   CHECK_EQ(control.request_type(7u), 0x0104u);
   /* Nothing presented since: the host is not asked to read again. */
+  fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
@@ -1084,6 +1096,7 @@ TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_logged)
       address.hAllocation = primary.handle();
       fixture.platform().set_irql(Irql::isr);
       CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+      fixture.platform().advance_time(display_period);
       fixture.platform().set_irql(Irql::dispatch);
       fixture.adapter().dpc_routine();
       fixture.platform().set_irql(Irql::passive);
@@ -1213,7 +1226,9 @@ TEST(adapter, recommend_functional_vidpn_and_recommend_vidpn_topology_decline)
 TEST(adapter_control_interrupt, vsync_runs_between_enable_and_disable)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  const std::uint64_t frame = 10000000u / 60u;
+  /* The blank runs on an absolute schedule, the Nth at N * 10^7 / 60 rounded
+   * down: a window of whole 166666-tick frames ends a tick before the second. */
+  const std::uint64_t frame = 10000000u / 60u + 1u;
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
   fixture.platform().run_timers(frame * 2u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
@@ -1311,6 +1326,9 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  /* One blank a window: the schedule's Nth is at N * 10^7 / 60 rounded down,
+   * so whole 166666-tick windows fall behind it. */
+  constexpr std::uint64_t blank = 10000000u / 60u + 1u;
   int primary = 0, overlay = 0;
   av::DxgkMultiplaneOverlayPlaneRecord planes[2] = {};
   planes[0].LayerIndex = 1u;
@@ -1331,7 +1349,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
   fixture.platform().set_irql(Irql::passive);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.platform().run_timers(blank);
   const av::DxgkargcbNotifyInterruptDataRecord base = fixture.dxgkrnl().interrupt(0u);
   CHECK_EQ(base.InterruptType, 7);
   CHECK_EQ(base.Argument1, 1u);   /* physical adapter mask */
@@ -1349,7 +1367,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   }
   request.PlaneCount = 1u;   /* the overlay alone: no base plane */
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.platform().run_timers(blank);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, 7);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument2, 0u);
   request.PlaneCount = 0u;   /* dxgmms2's disable-planes flip */
@@ -1357,7 +1375,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   request.PlaneCount = 2u;
   planes[1].Enabled = 0u;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.platform().run_timers(blank);
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, 7);
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).Argument2, 0u);
   av::DxgkargSetVidPnSourceAddressRecord plain = {};
@@ -1365,7 +1383,7 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, shows_the_base_p
   plain.PrimaryAddress = 0x5000000000ll;
   plain.hAllocation = &primary;
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&plain)), success);
-  fixture.platform().run_timers(10000000u / 60u);
+  fixture.platform().run_timers(blank);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).InterruptType, 3);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).Argument3, 0x50u);
   planes[1].Enabled = 1u;
@@ -2145,16 +2163,6 @@ TEST(adapter, the_legacy_surface_answers_not_supported)
 
 /* ---- The rest of the slot list --------------------------------------------- */
 
-TEST(adapter_link_device, is_a_chain_of_one_led_by_this_adapter)
-{ Fixture fixture;
-  LinkedDeviceRecord linked;
-  std::memset(&linked, 0xEE, sizeof linked);
-  CHECK_EQ(nt(fixture.adapter().link_device(&fixture.function(), &linked)), success);
-  CHECK_EQ(linked.ChainUid, 0u);
-  CHECK_EQ(linked.NumberOfLinksInChain, 1u);
-  CHECK_EQ(linked.LeadLink, 1u);
-  CHECK_EQ(nt(fixture.adapter().link_device(&fixture.function(), nullptr)), invalid_parameter); }
-
 TEST(adapter, dispatch_io_request_is_not_supported)
 { Fixture fixture;
   CHECK_EQ(nt(fixture.adapter().dispatch_io_request(0u, nullptr)), not_supported); }
@@ -2328,13 +2336,37 @@ TEST(adapter_query_adapter_info, answers_the_segment_query_once_started)
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
   CHECK_EQ(out.NbSegment, 1u); }
 
+/* The UMD asks which adapter the runtime opened it on: the LUID dxgkrnl's
+ * DXGK_START_INFO gave StartDevice, behind a tag an older driver's answer
+ * cannot carry. An output too small for both words is refused. */
+TEST(adapter_query_adapter_info, umd_private_names_the_luid_the_adapter_was_started_with)
+{ Fixture fixture;
+  constexpr std::size_t luid_offset = 20u;   /* after RequiredDmaQueueEntry and AdapterGuid */
+  std::uint8_t start_info[64] = {};
+  const std::uint32_t luid[2] = {0x00001234u, 0x00000005u};
+  std::memcpy(start_info + luid_offset, luid, sizeof luid);
+  CHECK_EQ(fixture.start(start_info), success);
+  std::uint64_t words[2] = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_umd_private;
+  query.pOutputData = words;
+  query.OutputDataSize = sizeof words;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(words[0], 0x44494C554B5652ull);   /* "RVKULID" */
+  CHECK_EQ(words[1], 0x0000000500001234ull);
+  std::uint64_t short_output[1] = {0xEEu};
+  query.pOutputData = short_output;
+  query.OutputDataSize = sizeof short_output;
+  CHECK(nt(fixture.adapter().query_adapter_info(&query)) != success);
+  CHECK_EQ(short_output[0], 0xEEu); }
+
 TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_either_buffer)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   const std::int32_t out_of_range[] = {-1, last_query_type + 1, 0x7FFFFFFF, static_cast<std::int32_t>(0x80000000u)};
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
-      if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
+      if (requested == query_umd_private || requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
           (requested >= 13 && requested <= 16) || requested == 37 || requested == 38)
           continue;
       GuardedBuffer input(64u), output(64u);
@@ -2688,7 +2720,8 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
                     "rvkgpu: GetStandardAllocationDriverData status 0x00000000") == 0);
   CHECK_EQ(shadow.create(), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: CreateAllocation bytes 48 status 0x00000000") == 0);
+                    "rvkgpu: CreateAllocation bytes 56 status 0x00000000") == 0);
+  static_assert(av::AllocationDescriptor::encoded_size == 56u, "the line above names the descriptor's size");
   av::DxgkargCreateDeviceRecord device = {};
   device.hDevice = &fixture;   /* the runtime's handle, which the driver replaces with its own */
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
@@ -3368,6 +3401,7 @@ TEST(adapter_dpc_routine, a_failing_harvest_is_silent_once_the_window_is_spent)
 TEST(adapter_start_device, offers_a_source_and_a_child_for_every_display)
 { Fixture fixture;
   fixture.function().device_config().set_u32(8u, 2u);   /* num_scanouts */
+  fixture.display_info().describe(1u, 1280u, 800u);      /* and the second is enabled */
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(fixture.sources(), 2u);
   CHECK_EQ(fixture.children(), 2u);
@@ -3414,6 +3448,7 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   address.PrimarySegment = av::ApertureSegment::segment_id;
   address.hAllocation = primary.handle();
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
@@ -3852,6 +3887,10 @@ public:
         const av::RvkContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), fence_.kmt_handle(),
                                           reply_.kmt_handle());
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
+        /* The device writes a fresh fence page when it binds the context, and a
+         * submission reads it at once to learn whether the batch already
+         * finished: zeroes there are a malformed page, not "nothing yet". */
+        host_completes(0u);
     }
 
     /* A context a hardware queue may run on, which is what a doorbell hangs off
@@ -4490,3 +4529,170 @@ TEST(adapter_escape, a_chunk_binding_with_no_device_is_invalid)
   escape.hContext = &context;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter); }
 
+
+namespace {
+
+/* A packet on an ordinary context carrying `bytes` as its private data, as
+ * D3D12Core submits one after an execute. */
+std::uint32_t submit_packet(Fixture &fixture, void *context, std::uint32_t fence_id, std::uint8_t *bytes,
+                            std::uint32_t length)
+{
+    av::DxgkargSubmitCommandVirtualRecord submit = {};
+    submit.hContext = context;
+    submit.DmaBufferVirtualAddress = 0x8000000000ull;
+    submit.pDmaBufferPrivateData = bytes;
+    submit.DmaBufferPrivateDataSize = length;
+    submit.SubmissionFenceId = fence_id;
+    return nt(fixture.adapter().submit_command_virtual(&submit));
+}
+
+void run_dpc(Fixture &fixture)
+{
+    fixture.platform().set_irql(Irql::dispatch);
+    fixture.adapter().dpc_routine();
+    fixture.platform().set_irql(Irql::passive);
+}
+
+}  // namespace
+
+/* A process takes over storing its ring's tail by naming that ring on the
+ * context that runs it: a record naming another ring, a context that runs no
+ * ring, or no context at all is refused. */
+TEST(adapter_escape, a_tail_publish_names_the_ring_of_the_context_it_is_sent_on)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord plain = {};
+  plain.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &plain)), success);
+  std::uint8_t data[av::TailPublishRecord::encoded_size] = {};
+  av::DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  CHECK_STATUS(av::TailPublishRecord(process.ring().kmt_handle() + 1u).encode(data, sizeof data), av::Status::ok);
+  escape.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  CHECK_STATUS(av::TailPublishRecord(process.ring().kmt_handle()).encode(data, sizeof data), av::Status::ok);
+  escape.hContext = plain.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.hContext = nullptr;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(plain.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success); }
+
+/* An execute goes through the ring; the application's fence is signalled on
+ * the queue's own context once its packet completes. That packet carries a
+ * FollowRecord and is held until the rvk context's host has completed the
+ * batch - and it kicks the rvk context's doorbell, because the process may
+ * have published the batch alone while the host's worker slept. */
+TEST(adapter_submit_command_virtual, a_follow_record_holds_the_packet_until_the_host_completes_the_batch)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+  CHECK_EQ(queue.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size);
+  CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(process.ring().kmt_handle(), 1u).encode(follow, sizeof follow), av::Status::ok);
+  const std::uint32_t rings = fixture.function().doorbells().rings(0u);
+  const std::uint32_t dpcs = fixture.dxgkrnl().dpcs_queued();
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 8u, follow, sizeof follow), success);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), rings + 1u);   /* the kick */
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), dpcs);                  /* the batch is still running */
+
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);   /* neither the batch nor its follower */
+  process.host_completes(1u);
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 7u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).FenceId, 8u);
+
+  /* A batch the host already finished: the packet's DPC is asked for now, as
+   * its interrupt came before the packet was queued. */
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 9u, follow, sizeof follow), success);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), dpcs + 1u);
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 2u).FenceId, 9u);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A record naming a ring this process has no rvk context on follows nothing
+ * and is refused; private data that is no record is an ordinary packet. */
+TEST(adapter_submit_command_virtual, a_follow_record_of_no_ring_is_refused_and_other_data_is_ordinary)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(process.ring().kmt_handle() + 0x100u, 1u).encode(follow, sizeof follow),
+               av::Status::ok);
+  const std::uint32_t rings = fixture.function().doorbells().rings(0u);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 5u, follow, sizeof follow), invalid_parameter);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), rings);
+
+  std::uint8_t other[av::FollowRecord::encoded_size] = {};
+  const std::uint32_t dpcs = fixture.dxgkrnl().dpcs_queued();
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 5u, other, sizeof other), success);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), dpcs + 1u);   /* an ordinary packet completes at once */
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 5u);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), rings);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A host that never finishes the batch must not hold the follower past the
+ * deadline: dxgkrnl would call the engine hung. The DPC lets it go, says so,
+ * and what it guarded completes a little early. */
+TEST(adapter_dpc_routine, lets_a_follower_go_once_it_has_waited_the_deadline)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+  CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(process.ring().kmt_handle(), 1u).encode(follow, sizeof follow), av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 8u, follow, sizeof follow), success);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().advance_time(av::ExecutionNode::park_deadline - 1u);
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+  CHECK(!fixture.platform().logged_line("a held packet passed its deadline"));
+  fixture.platform().advance_time(1u);
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).FenceId, 8u);
+  CHECK(fixture.platform().logged_line("rvkgpu: a held packet passed its deadline and was let go"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }

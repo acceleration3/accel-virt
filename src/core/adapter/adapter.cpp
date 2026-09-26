@@ -729,10 +729,12 @@ int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
 int32_t Adapter::publish_own_tail(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::publish_own_tail");
-    TailPublishRecord record;
-    if (escape.hContext == nullptr ||
+    TailPublishRecord    record;
+    const Context *const context = escape.hContext != nullptr ? contexts_.find(escape.hContext) : nullptr;
+    if (context == nullptr || !context->is_rvk() ||
         record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize) !=
-            Status::ok)
+            Status::ok ||
+        record.ring() != context->rvk_record().ring())
         return NtStatus(Status::invalid_parameter).value();
     return NtStatus(rvk_contexts_.user_mode_submits(escape.hContext, nullptr)).value();
 }

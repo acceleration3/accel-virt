@@ -163,7 +163,9 @@ bool     RingSubmitter::failed() const
 bool RingSubmitter::invariants_hold() const
 {
     AV_SCOPE("RingSubmitter::invariants_hold");
-    return (published_ == 0u || tail_ != 0u) && device_.tail() <= tail_;
+    /* A process that publishes its own tail may have moved the device's past
+     * what it has told this driver of. */
+    return (published_ == 0u || tail_ != 0u) && (shared_tail_ || device_.tail() <= tail_);
 }
 
 }  // namespace av
