@@ -9,7 +9,6 @@
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
-#include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
@@ -54,7 +53,6 @@ private:
     AllocationScenario allocation_;
     GpuMappingScenario mapping_;
     SubmissionScenario submission_;
-    HostVisibleScenario host_visible_;
     VsyncScenario       vsync_;
     TransportScenario   transport_;
     FenceStressScenario stress_;

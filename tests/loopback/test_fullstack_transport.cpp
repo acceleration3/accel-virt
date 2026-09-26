@@ -20,6 +20,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -43,6 +44,7 @@ using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
 using av::HostVisibleBindRecord;
+using av::HostWindowRecord;
 using av::KmtTransport;
 using av::KmtTransportProbe;
 using av::MockExecutorOps;
@@ -112,11 +114,11 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   CHECK(rig.platform().device_description_is("mock gpu"));
   CHECK(rig.platform().driver_text_is("HardwareInformation.AdapterString", "mock gpu"));
   CHECK_EQ(rig.platform().driver_number("HardwareInformation.qwMemorySize"), 24ull << 30);
-  /* The host-visible region is one blob the device core made and placed. */
-  CHECK(rig.platform().logged_line("rvkgpu: host-visible region status 0x00000000"));
-  CHECK_EQ(rig.device().device().blobs(), 1u);
-  CHECK(rig.device().host().placed_at(0u) != nullptr);
-  CHECK(rig.bridge().answered_by_core() >= 4u);      /* the capset's two, CREATE_BLOB and MAP_BLOB */
+  /* The hostmem region is the driver's host window, and nothing is placed in
+   * it until a process asks (docs/host-window.md). */
+  CHECK(rig.platform().logged_line("rvkgpu: host window status 0x00000000"));
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK(rig.bridge().answered_by_core() >= 2u);      /* the capset's two */
   CHECK(rig.bridge().answered_by_base() >= 1u);      /* GET_DISPLAY_INFO */
   CHECK_EQ(rig.fdo().children(), 1u);
   /* BAR 0's doorbell pages, the virtio BAR and the MSI-X table stay mapped. */
@@ -124,9 +126,10 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   CHECK_EQ(rig.device().doorbells().stores(), 0u); }
 
 /* What a Vulkan ICD sizes its heaps and names its adapter by: the rig's LUID,
- * and budgets that are the driver's own segments - the host-visible segment
- * over the 64 MiB hostmem region is local, the aperture over the guest's 8 GiB
- * of system memory is not - with this process's allocations counted where they
+ * and budgets that are the driver's own segments - the aperture over the
+ * guest's 8 GiB of system memory, which is not local, and nothing local: the
+ * hostmem region is the driver's host window, not a segment
+ * (docs/host-window.md) - with this process's allocations counted where they
  * live. */
 TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_segments)
 { FullStackRig rig;
@@ -143,7 +146,7 @@ TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_se
   std::uint64_t budget = 0u;
   std::uint64_t usage = 1u;
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
-  CHECK_EQ(budget, FullStackRig::hostmem_bytes);
+  CHECK_EQ(budget, 0u);
   CHECK_EQ(usage, 0u);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
   CHECK_EQ(budget, std::uint64_t{8} << 30u);
@@ -197,14 +200,71 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK_EQ(transport.submissions(), 2u);
   CHECK_EQ(settled_fences(rig, transport), transport.submissions_through_kernel());
 
-  CHECK_EQ(rig.device().device().blobs(), 4u);   /* the region, and the ring, fence page and reply slot */
+  CHECK_EQ(rig.device().device().blobs(), 3u);   /* the ring, fence page and reply slot */
   transport.teardown();
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u);
-  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(rig.device().host().live_guest_mappings(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
+
+/* A process takes a chunk of its device's host window through the real driver
+ * and the real device core (docs/host-window.md): a host blob of the context's
+ * own range, placed at the window's first page, and the process's view of it.
+ * Giving it back takes all three away again. */
+TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_driver)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  DdiKmt &kmt = rig.kmt();
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(adapter), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_EQ(rig.device().device().blobs(), 3u);
+
+  std::uint8_t bytes[HostWindowRecord::encoded_size] = {};
+  HostWindowRecord open(HostWindowRecord::Operation::open, 0xF800u, 0u);
+  CHECK_STATUS(open.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(open.accept_answer(bytes, sizeof bytes), Status::ok);
+  CHECK(open.resource_id() != 0u);
+  CHECK_EQ(open.bytes(), 0x10000u);
+  CHECK(open.address() != 0u);
+  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK(rig.device().host().placed_at(0u) != nullptr);
+  CHECK_EQ(rig.platform().process_mappings(), 1u);
+  /* The process's view is the host's memory: what it writes, the host reads. */
+  auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
+  view[0] = 0x5Au;
+  view[0xF7FFu] = 0xA5u;
+  CHECK_EQ(static_cast<const std::uint8_t *>(rig.device().host().placed_at(0u))[0], 0x5Au);
+  CHECK_EQ(static_cast<const std::uint8_t *>(rig.device().host().placed_at(0u))[0xF7FFu], 0xA5u);
+
+  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, open.resource_id());
+  CHECK_STATUS(close.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(rig.device().device().blobs(), 3u);
+  CHECK(rig.device().host().placed_at(0u) == nullptr);
+  CHECK_EQ(rig.platform().process_mappings(), 0u);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
+               Status::invalid_parameter);
+
+  /* One left open is closed with its context. */
+  HostWindowRecord again(HostWindowRecord::Operation::open, 0x1000u, 0u);
+  CHECK_STATUS(again.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(rig.device().device().blobs(), 4u);
+  transport.teardown();
+  connection.close();
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_EQ(rig.platform().process_mappings(), 0u);
+  CHECK_EQ(kmt.open_objects(), 0u); }
 
 /* DdiKmt's escape is DxgkDdiEscape as dxgkrnl calls it: the driver's device and
  * context, a kernel copy of the record copied back out. A 64 MiB host-visible
@@ -245,12 +305,12 @@ TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_
                Status::invalid_parameter);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), nullptr, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(bind.accept_answer(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(bind.pages(), chunk_bytes / 4096u);
   CHECK(bind.resource_id() != 0u);
-  CHECK_EQ(rig.device().device().blobs(), 5u);
+  CHECK_EQ(rig.device().device().blobs(), 4u);
 
   std::uint8_t foreign[HostVisibleBindRecord::encoded_size] = {'N', 'O', 'P', 'E'};
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), foreign, sizeof foreign),
@@ -258,13 +318,13 @@ TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_
   HostVisibleBindRecord unbind(HostVisibleBindRecord::Operation::unbind, 0u, bind.resource_id());
   CHECK_STATUS(unbind.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
   CHECK_STATUS(kmt.destroy_allocation(connection.device(), chunk), Status::ok);
   transport.teardown();
   connection.close();
-  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 
@@ -370,8 +430,8 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(rig.fdo().set_power_state(power_d0), 0);
   CHECK(rig.platform().logged_line("rvkgpu: SetPowerState D0 done"));
-  /* The same device came back, so the host-visible region is made on it again. */
-  CHECK_EQ(rig.device().device().blobs(), 1u);
+  /* The same device came back with nothing placed in its window. */
+  CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(!echoes(before, echo_payload));
   CHECK(before.faulted());
   before.teardown();
@@ -385,8 +445,8 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
 /* A timeout reset is a device reset: dxgkrnl's ResetFromTimeout loses every
- * context, and RestartFromTimeout brings back a device with the host-visible
- * region made again and room for a new transport. */
+ * context, and RestartFromTimeout brings back a device with room for a new
+ * transport. */
 TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs_a_new_one)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -407,7 +467,7 @@ TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(table.routine(DdiSlot::DxgkDdiRestartFromTimeout))(
                rig.fdo().context()),
            0);
-  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(!echoes(before, echo_payload));
   before.teardown();
 
@@ -436,7 +496,7 @@ TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_fo
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(rig.dxgkrnl().live_mappings(), 0u);
   CHECK_EQ(rig.fdo().start_device(), 0);
-  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(!echoes(before, echo_payload));
   before.teardown();
 

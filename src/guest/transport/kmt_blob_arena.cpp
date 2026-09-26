@@ -38,9 +38,7 @@ Status KmtBlobArena::open(uint64_t bytes)
         static_cast<void>(import_.release());
         static_cast<void>(chunk_.release());
     });
-    Status status = chunk_.allocate(size);
-    if (status == Status::ok) status = chunk_.lock();
-    if (status == Status::ok) status = chunk_.bind();
+    Status status = chunk_.open(size);
     if (status == Status::ok) status = import_.import(chunk_.resource_id(), 0u, size, any_memory_type);
     if (status != Status::ok) return status;
     undo.dismiss();

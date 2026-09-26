@@ -1,3 +1,7 @@
+/* Before the header's ntddk.h, which it includes and must follow: attaching to
+ * another process to take a view out of it is declared only in ntifs.h. */
+#include <ntifs.h>
+
 #include "km/kernel_platform.hpp"
 
 #include <intrin.h>
@@ -14,6 +18,7 @@ extern "C" {
 #include "core/miniport/ddi_table.hpp"
 #include "core/platform/mutex.hpp"
 #include "core/platform/wait_mutex.hpp"
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -96,6 +101,66 @@ void KernelPlatform::unmap_frame(uint8_t *view)
 {
     AV_SCOPE("KernelPlatform::unmap_frame");
     MmUnmapIoSpace(view, PAGE_SIZE);
+}
+
+/* The BAR's pages have no PFN database entries for MmBuildMdlForNonPagedPool
+ * to read, so the MDL's page array is written by hand; they never move, which
+ * is what MDL_PAGES_LOCKED claims. Write-back, because the host maps the same
+ * pages write-back and an alias of any other type reads stale data
+ * (docs/host-window.md). A user-mode mapping the process's address space
+ * refuses is raised as an exception, not answered with null. */
+Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_to_process");
+    view = 0u;
+    mapping = nullptr;
+    if (bytes == 0u || bytes > max_mapping_bytes) return Status::no_memory;
+    auto *const record =
+        static_cast<ProcessMapping *>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(ProcessMapping), pool_tag_));
+    if (record == nullptr) return Status::no_memory;
+    ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
+    PMDL const mdl = IoAllocateMdl(reinterpret_cast<PVOID>(physical), static_cast<ULONG>(bytes), FALSE, FALSE, nullptr);
+    if (mdl == nullptr) return Status::no_memory;
+    ScopeExit free_mdl([mdl] { IoFreeMdl(mdl); });
+    PFN_NUMBER *const frames = MmGetMdlPfnArray(mdl);
+    const PFN_NUMBER  first = static_cast<PFN_NUMBER>(physical >> PAGE_SHIFT);
+    for (uint64_t page = 0u; page < bytes >> PAGE_SHIFT; page++) frames[page] = first + page;
+    mdl->MdlFlags |= MDL_PAGES_LOCKED;
+    PVOID user = nullptr;
+    __try {
+        user = MmMapLockedPagesSpecifyCache(mdl, UserMode, MmCached, nullptr, FALSE, NormalPagePriority);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        user = nullptr;
+    }
+    if (user == nullptr) return Status::no_memory;
+    PEPROCESS const process = PsGetCurrentProcess();
+    ObReferenceObject(process);
+    *record = ProcessMapping{mdl, user, process};
+    free_mdl.dismiss();
+    free_record.dismiss();
+    view = reinterpret_cast<uint64_t>(user);
+    mapping = record;
+    return Status::ok;
+}
+
+/* A view comes down in the process it was made in: here if that is the caller,
+ * attached to it if it is still running, and not at all if it has exited, which
+ * took the view with its address space. */
+void KernelPlatform::unmap_from_process(void *mapping)
+{
+    AV_SCOPE("KernelPlatform::unmap_from_process");
+    auto *const record = static_cast<ProcessMapping *>(mapping);
+    if (PsGetCurrentProcess() == record->process) {
+        MmUnmapLockedPages(record->view, record->mdl);
+    } else if (PsGetProcessExitStatus(record->process) == STATUS_PENDING) {
+        KAPC_STATE attached = {};
+        KeStackAttachProcess(record->process, &attached);
+        MmUnmapLockedPages(record->view, record->mdl);
+        KeUnstackDetachProcess(&attached);
+    }
+    IoFreeMdl(record->mdl);
+    ObDereferenceObject(record->process);
+    ExFreePoolWithTag(record, pool_tag_);
 }
 
 void KernelPlatform::release_contiguous(void *block, size_t bytes)

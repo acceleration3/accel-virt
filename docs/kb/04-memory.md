@@ -28,6 +28,14 @@ place that does not exist.
 
 ### The CPU-visible segment, as feature 041 built it
 
+**Superseded by the host window (`docs/host-window.md`).** The driver no longer
+reports the region as a segment or maps it as one blob: on WDDM 3.x VidMm
+refuses a CPU-visible allocation whose segment set has no aperture segment, and
+with the aperture in the set it hands out the aperture's staging pages at Lock
+rather than the region. The driver now places one host blob per chunk itself
+and maps it into the process that asked. What follows is kept for what it
+learnt about VidMm.
+
 Three things were settled by reading `dxgmms2.sys`, and each of them changed the
 design:
 

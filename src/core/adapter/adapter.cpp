@@ -37,6 +37,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 #include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
@@ -117,12 +118,11 @@ enum : int32_t {
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
-      segment_(platform), host_visible_(platform), region_blob_(platform),
-      memory_(platform, segment_, host_visible_),
+      segment_(platform), host_visible_(platform), memory_(platform, segment_), window_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      rvk_contexts_(platform, dxgkrnl_, allocations_),
+      rvk_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u),
@@ -214,7 +214,11 @@ void Adapter::remember_device()
         identity_.remember(capset);
         host_visible_.offer(capset);
         scanout_.offer(capset);
-        open_region();
+        /* A window this driver cannot place chunks in is logged, never a
+         * failed start: every chunk then falls back to guest RAM. */
+        if (host_visible_.offered())
+            log_status("rvkgpu: host window",
+                       NtStatus(window_.initialize(host_visible_.base(), host_visible_.size())).value());
         /* A name that did not reach the registry is the INF's name standing,
          * which is a working adapter: logged, never a failed start. */
         log_status("rvkgpu: adapter description",
@@ -223,27 +227,12 @@ void Adapter::remember_device()
     log_status("rvkgpu: device capset", NtStatus(read).value());
 }
 
-/* A blob already made is the region working: a D0 that finds the device
- * still powered has nothing to make again. */
-void Adapter::open_region()
+/* Chunks already placed stay recorded, and are given back into the window as
+ * their contexts close them. */
+void Adapter::withdraw_window()
 {
-    AV_SCOPE("Adapter::open_region");
-    if (!host_visible_.offered() || region_blob_.created()) return;
-    const Status created = region_blob_.create(device_.object(), HostVisibleBlob::first_resource_id,
-                                               host_visible_.size());
-    const Status mapped = created == Status::ok ? region_blob_.map(device_.object(), 0u) : created;
-    log_status("rvkgpu: host-visible region", NtStatus(mapped).value());
-    if (mapped != Status::ok) close_region();
-}
-
-/* The device is going away, is already gone, or would not give the driver its
- * region. Either way the adapter has no host memory: the segment stops being
- * offered, because a segment reported without storage behind it is one VidMm
- * places allocations in and then writes into nothing (docs/kb/04-memory.md). */
-void Adapter::close_region()
-{
-    AV_SCOPE("Adapter::close_region");
-    region_blob_.abandon();
+    AV_SCOPE("Adapter::withdraw_window");
+    window_.withdraw();
     host_visible_.forget();
 }
 
@@ -254,16 +243,12 @@ void Adapter::judge_device()
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
     if (exchange.read(capset) != Status::ok) {
-        close_region();
+        withdraw_window();
         return;
     }
-    if (identity_.accept(capset)) {
-        /* The same device, built again: its region holds nothing of what it
-         * held before, so the blob is made again on the device that is there
-         * now. */
-        open_region();
-        return;
-    }
+    /* The same device, built again: its window is empty, and the contexts the
+     * reset abandoned let go of their chunks as they are destroyed. */
+    if (identity_.accept(capset)) return;
     /* Nothing runs on a device that changed, and its region is not the one
      * VidMm was told about. What an rvk context queued for it stays on the
      * node and never completes: the engine stops moving, and dxgkrnl's timeout
@@ -272,7 +257,7 @@ void Adapter::judge_device()
      * telling dxgkrnl would mean DMA_FAULTED, which bugchecks this adapter
      * (docs/kb/05-scheduling.md). The display is the scanout the transition
      * restored, none of this, and keeps working. */
-    close_region();
+    withdraw_window();
     rvk_contexts_.abandon_all();
 }
 
@@ -294,10 +279,8 @@ Status Adapter::power_down()
     AV_SCOPE("Adapter::power_down");
     if (!device_.constructed()) return Status::ok;
     /* A reset destroys every host context and blob, and the device object goes
-     * with it. The region stays found and offered - VidMm keeps the segment -
-     * for whatever brings the device back to make its blob again. */
+     * with it. The window stays offered for whatever brings the device back. */
     rvk_contexts_.abandon_all();
-    region_blob_.abandon();
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
@@ -367,8 +350,7 @@ int32_t Adapter::stop_device()
     doorbells_.destroy();
     mappings_.unmap_all();
     identity_.forget();
-    close_region();
-    host_visible_.forget();
+    withdraw_window();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
     log_status("rvkgpu: StopDevice", stopped);
@@ -696,6 +678,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     uint32_t    magic = 0u;
     if (escape->PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
     if (magic == TailPublishRecord::magic) return publish_own_tail(*escape);
+    if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic != TraceEscapeRecord::magic) return bind_chunk(*escape);
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
@@ -720,6 +703,26 @@ int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
         rvk_contexts_.bind_chunk(escape.hContext, record, *device) != Status::ok)
         return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, HostVisibleBindRecord::encoded_size));   /* the length was checked */
+    return NtStatus(Status::ok).value();
+}
+
+/* A process asking for a chunk of the host window on its rvk context, or giving
+ * one back (docs/host-window.md). A window this adapter does not have is
+ * STATUS_NOT_SUPPORTED, which a process takes as "use guest RAM"; every other
+ * refusal is STATUS_INVALID_PARAMETER, as a chunk binding's is. */
+int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::window_chunk");
+    auto *const            bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
+    HostWindowRecord       record;
+    VirtioGpuDevice *const device = answering_device();
+    if (escape.hContext == nullptr || escape.PrivateDriverDataSize != HostWindowRecord::encoded_size ||
+        record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok || device == nullptr)
+        return NtStatus(Status::invalid_parameter).value();
+    const Status status = rvk_contexts_.window_chunk(escape.hContext, record, *device);
+    if (status == Status::not_supported) return NtStatus(status).value();
+    if (status != Status::ok) return NtStatus(Status::invalid_parameter).value();
+    static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));   /* the length was checked */
     return NtStatus(Status::ok).value();
 }
 
@@ -978,7 +981,6 @@ int32_t Adapter::restart_from_timeout()
     const Status status = started_ ? power_up() : Status::ok;
     if (status != Status::ok) return NtStatus(status).value();
     node_.restart();
-    open_region();
     return NtStatus(status).value();
 }
 

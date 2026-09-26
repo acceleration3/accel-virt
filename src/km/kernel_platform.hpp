@@ -24,6 +24,8 @@ public:
     Status   read_page_frames(void *mdl, uint32_t first, uint32_t count, uint64_t *frames) override;
     uint8_t *map_frame(uint64_t frame) override;
     void     unmap_frame(uint8_t *view) override;
+    Status   map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping) override;
+    void     unmap_from_process(void *mapping) override;
     void     zero(void *dst, size_t bytes) override;
     void     copy(void *dst, const void *src, size_t bytes) override;
     Irql     current_irql() const override;
@@ -73,6 +75,18 @@ public:
 private:
     /* The longest registry value name core writes, NUL included. */
     static constexpr size_t value_name_chars = 64u;
+
+    /* What map_to_process hands out and unmap_from_process takes back: the
+     * MDL over the device pages, the view it has in the process, and the
+     * process itself, referenced so that it is still the same process - alive
+     * or exited - when the view is taken down. */
+    struct ProcessMapping {
+        PMDL      mdl;
+        PVOID     view;
+        PEPROCESS process;
+    };
+    /* An MDL's byte count is a ULONG. */
+    static constexpr uint64_t max_mapping_bytes = 0xFFFFF000u;
 
     /* ZwSetValueKey on the device's driver key, opened for the one write. */
     Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,

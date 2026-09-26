@@ -59,8 +59,9 @@ HRESULT D3dSession::open(uint32_t adapter)
         return E_FAIL;
     }
     static_cast<void>(arena_.construct(connection_, transport_.object()));
-    /* A large arena the host-visible segment has no room for is tried again
-     * at half the size, down to what bulk data alone needs. */
+    /* Each size is the host window's when it has room and guest RAM's when
+     * not (BlobChunk); an arena neither can hold is tried again at half the
+     * size, down to what bulk data alone needs. */
     uint64_t bytes = arena_bytes_;
     Status   opened = arena_.object().open(bytes);
     while (opened != Status::ok && bytes / 2u >= KmtBlobArena::default_bytes) {

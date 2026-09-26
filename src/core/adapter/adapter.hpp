@@ -17,8 +17,8 @@
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_blob.hpp"
 #include "core/memory/host_visible_segment.hpp"
+#include "core/memory/host_window.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -150,8 +150,9 @@ public:
     int32_t query_feature_support(DxgkargQueryFeatureSupportRecord *request);
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
-    /* A host-visible chunk binding (feature 045), or rvkinspect.exe's trace
-     * escape (docs/trace.md), told apart by the record's magic. */
+    /* A host-visible chunk binding (feature 045), a host window chunk
+     * (docs/host-window.md), a tail publish, or rvkinspect.exe's trace escape
+     * (docs/trace.md), told apart by the record's magic. */
     int32_t escape(const DxgkargEscapeRecord *escape);
     int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);
     int32_t create_device(DxgkargCreateDeviceRecord *request);
@@ -333,6 +334,7 @@ private:
     /* The device a teardown can still ask, or null when it cannot. */
     VirtioGpuDevice     *answering_device();
     int32_t          bind_chunk(const DxgkargEscapeRecord &escape);
+    int32_t          window_chunk(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an rvk context: published, rung, and held on
      * the node until the fence page says the host finished it. */
@@ -343,11 +345,9 @@ private:
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */
     void                 remember_device();
-    /* The whole host-visible region as one blob, so every offset VidMm can
-     * place an allocation at already has host memory behind it: VidMm maps a
-     * process's view itself and tells the driver nothing (feature 041). */
-    void                 open_region();
-    void                 close_region();
+    /* The device is going away, is already gone, or is not the one the region
+     * was found on: no chunk is placed in its window from now on. */
+    void                 withdraw_window();
     /* D0: a guest restored onto another device cannot finish what it holds, so
      * the work queued on the one that is gone is reported lost (FR-005). */
     void                 judge_device();
@@ -407,8 +407,9 @@ private:
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
     HostVisibleSegment             host_visible_;
-    HostVisibleBlob                region_blob_;
     MemorySegments                 memory_;
+    /* Before the rvk contexts, whose window chunks are placed in it. */
+    HostWindow                     window_;
     DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;
     Edid                           edid_;

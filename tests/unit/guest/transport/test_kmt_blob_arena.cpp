@@ -1,6 +1,7 @@
 /* The room an OpenGL context lends bulk data in (feature 050, research.md §5),
- * over MockKmt: a host-visible chunk bound to the context's own transport and
- * imported whole with IMPORT_BLOB, lent through that transport's blobs() only
+ * over MockKmt: a chunk bound to the context's own transport - guest RAM on a
+ * device with no window, else a chunk of its host window - and imported whole
+ * with IMPORT_BLOB, lent through that transport's blobs() only
  * while it is held, and let go import first - the device refuses to unbind a
  * chunk it still has imported. */
 #include "core/support/status.hpp"
@@ -16,6 +17,8 @@
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -123,6 +126,13 @@ void witness_release(void *context)
     witness.bindings_at_release = witness.kmt->bindings();
 }
 
+/* The window chunks held when the release was waited for. */
+void witness_window_release(void *context)
+{
+    ReleaseWitness &witness = *static_cast<ReleaseWitness *>(context);
+    witness.bindings_at_release = witness.kmt->window_chunks();
+}
+
 }  // namespace
 
 TEST(kmt_blob_arena, lends_nothing_before_it_is_opened)
@@ -224,14 +234,17 @@ TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
 /* A refusal at any step answers that step's status and leaves nothing held:
  * no allocation, no binding, no import, nothing lent. */
 TEST(kmt_blob_arena, a_refusal_at_each_step_leaves_nothing_held)
-{ const MockKmt::Call calls[] = {MockKmt::Call::create_allocation, MockKmt::Call::make_resident,
-                                 MockKmt::Call::lock, MockKmt::Call::escape};
-  for (const MockKmt::Call call : calls) {
+{ /* The device has no window, so the chunk is guest RAM: the bind is the
+   * second escape, after the window's refused open. */
+  struct Case { MockKmt::Call call; std::uint32_t nth; };
+  const Case cases[] = {{MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::make_resident, 1u},
+                        {MockKmt::Call::lock, 1u}, {MockKmt::Call::escape, 2u}};
+  for (const Case &one : cases) {
       Rig rig;
-      const std::uint32_t before = rig.kmt().calls(call);
-      rig.kmt().fail_at(call, 1u, refused);
+      const std::uint32_t before = rig.kmt().calls(one.call);
+      rig.kmt().fail_at(one.call, one.nth, refused);
       CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
-      CHECK_EQ(rig.kmt().calls(call), before + 1u);
+      CHECK_EQ(rig.kmt().calls(one.call), before + one.nth);
       CHECK_EQ(rig.kmt().commands(), 0u);
       rig.check_nothing_is_held();
       /* And it opens once the Kmt allows it. */
@@ -354,3 +367,73 @@ TEST(kmt_blob_arena, an_arena_that_lends_nothing_has_no_view)
   CHECK(rig.arena().view() == nullptr);
   CHECK_EQ(rig.arena().bytes(), 0u);
   CHECK(rig.arena().invariants_hold()); }
+
+/* On a device with a host window the arena is a chunk of it: imported and
+ * lent the same way, with leases in the window's own memory, and closed with
+ * the import released first. */
+TEST(kmt_blob_arena, over_a_host_window_lends_the_windows_memory)
+{ Rig rig;
+  rig.kmt().open_host_window(64u * mib);
+  rig.host_takes_the_import();
+  const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  CHECK(rig.arena().invariants_hold());
+  CHECK_EQ(rig.arena().bytes(), KmtBlobArena::default_bytes);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  /* The import names the window chunk's resource, all of it. */
+  CHECK_EQ(rig.kmt().commands(), 1u);
+  const std::uint8_t *const request = rig.kmt().command_bytes(0u) + CommandHeader::encoded_size;
+  CHECK_EQ(u32_at(request, 0u), MockKmt::first_window_resource);
+  CHECK_EQ(u64_at(request, 16u), 16u * mib);
+  CHECK(rig.arena().view() == rig.kmt().window_base());
+  ClientBlobLease lease = rig.transport().blobs().take(64u);
+  CHECK(lease.taken());
+  CHECK(static_cast<const void *>(lease.data()) == static_cast<const void *>(rig.kmt().window_base()));
+  std::memset(lease.data(), 0x77, lease.bytes());
+  CHECK_EQ(rig.kmt().window_base()[63u], 0x77u);
+  ReleaseWitness witness = {&rig.kmt(), 0xFFu};
+  rig.kmt().play_at_wait(1u, &witness_window_release, &witness);
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  CHECK_EQ(witness.bindings_at_release, 1u);
+  CHECK_EQ(rig.kmt().commands(), 2u);
+  CHECK_EQ(rig.kmt().command_id(1u), CommandHeader::release_blob_id);
+  rig.check_nothing_is_held();
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
+
+/* A window with no room for the arena leaves it to guest RAM, as before. */
+TEST(kmt_blob_arena, a_full_window_leaves_the_arena_to_guest_ram)
+{ Rig rig;
+  rig.kmt().open_host_window(8u * mib);
+  rig.host_takes_the_import();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK(rig.arena().view() == rig.kmt().view_of(rig.kmt().bound_allocation(0u)));
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+/* An abandoned window arena on a faulted context sends nothing: the kernel
+ * closes the chunk with the context. */
+TEST(kmt_blob_arena, an_abandoned_window_arena_is_closed_by_the_kernel)
+{ Rig rig;
+  rig.kmt().open_host_window(64u * mib);
+  rig.host_takes_the_import();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.kmt().withhold_answer_at(1u);
+  av::WireWriter request = rig.transport().request_writer();
+  request.write_u32(1u);
+  av::WireReader reply(nullptr, 0u);
+  CHECK(rig.transport().send_sync(1u, request, reply) != av::TransportResult::ok);
+  rig.transport().end_call();
+  CHECK(rig.transport().faulted());
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  CHECK_STATUS(rig.arena().abandon(), Status::ok);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
+  CHECK(!rig.arena().lending());
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  rig.transport().teardown();
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }

@@ -7,7 +7,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "guest/transport/host_visible_chunk.hpp"
+#include "guest/transport/blob_chunk.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -120,24 +120,19 @@ TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
     return transport_.object().send_batch(framed, length, unanswered);
 }
 
-Status Connection::open_chunk(ObjectStorage<HostVisibleChunk> &chunk, uint64_t bytes)
+Status Connection::open_chunk(ObjectStorage<BlobChunk> &chunk, uint64_t bytes)
 {
     AV_SCOPE("Connection::open_chunk");
     if (!opened() || faulted() || chunk.constructed()) return Status::invalid_state;
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     static_cast<void>(chunk.construct(connection_, transport_.object()));   /* checked empty above */
-    HostVisibleChunk &made = chunk.object();
-    Status            status = made.allocate(bytes);
-    if (status == Status::ok) status = made.lock();
-    if (status == Status::ok) status = made.bind();
-    if (status == Status::ok) return Status::ok;
-    static_cast<void>(made.release());   /* the refusal above is the answer */
-    chunk.destroy();
+    const Status status = chunk.object().open(bytes);
+    if (status != Status::ok) chunk.destroy();
     return status;
 }
 
-Status Connection::close_chunk(ObjectStorage<HostVisibleChunk> &chunk)
+Status Connection::close_chunk(ObjectStorage<BlobChunk> &chunk)
 {
     AV_SCOPE("Connection::close_chunk");
     if (!chunk.constructed()) return Status::ok;

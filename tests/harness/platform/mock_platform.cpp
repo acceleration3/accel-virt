@@ -65,6 +65,8 @@ MockPlatform::~MockPlatform()
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
     if (frame_view_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u frame view(s) left mapped", frame_view_count_);
+    if (process_mappings() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u process view(s) left mapped", process_mappings());
     if (bugcheck_routine_ != nullptr)
         registry.record_failure(__FILE__, __LINE__, "a bugcheck callback was never deregistered");
     for (const Timer &timer : timers_)
@@ -238,6 +240,70 @@ std::uint32_t MockPlatform::mapped_frames() const { return frame_view_count_; }
 void MockPlatform::fail_frame_map_at(std::uint32_t nth)
 {
     frame_fail_at_ = nth == 0u ? 0u : frame_map_sequence_ + nth;
+}
+
+Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes, std::uint64_t &view,
+                                    void *&mapping)
+{
+    view = 0u;
+    mapping = nullptr;
+    if (irql_ > Irql::passive)
+        record(Violation::irql_ceiling, "map_to_process at IRQL %u", static_cast<unsigned>(irql_));
+    if (bytes == 0u || ((physical | bytes) & 0xFFFu) != 0u)
+        record(Violation::frame_misuse, "map_to_process of 0x%llx bytes at 0x%llx, not whole pages",
+               static_cast<unsigned long long>(bytes), static_cast<unsigned long long>(physical));
+    process_map_sequence_++;
+    if (process_fail_at_ != 0u && process_map_sequence_ == process_fail_at_) return Status::no_memory;
+    void *const backed =
+        process_resolver_ != nullptr ? process_resolver_(process_resolver_context_, physical, bytes) : nullptr;
+    for (ProcessView &slot : process_views_) {
+        if (slot.live) continue;
+        const std::uint64_t address = backed != nullptr ? reinterpret_cast<std::uintptr_t>(backed) : next_process_view_;
+        slot = ProcessView{physical, bytes, address, true};
+        if (backed == nullptr) next_process_view_ += (bytes + 0xFFFu) & ~std::uint64_t{0xFFFu};
+        view = slot.view;
+        mapping = &slot;
+        return Status::ok;
+    }
+    std::fprintf(stderr, "\n    more than %u process views\n", max_process_views);
+    std::abort();
+}
+
+void MockPlatform::unmap_from_process(void *mapping)
+{
+    if (irql_ > Irql::passive)
+        record(Violation::irql_ceiling, "unmap_from_process at IRQL %u", static_cast<unsigned>(irql_));
+    for (ProcessView &slot : process_views_) {
+        if (&slot != mapping || !slot.live) continue;
+        slot.live = false;
+        return;
+    }
+    record(Violation::frame_misuse, "unmap_from_process of a mapping never made");
+}
+
+std::uint32_t MockPlatform::process_mappings() const
+{
+    std::uint32_t live = 0u;
+    for (const ProcessView &slot : process_views_) live += slot.live ? 1u : 0u;
+    return live;
+}
+
+bool MockPlatform::maps_into_process(std::uint64_t view, std::uint64_t physical, std::uint64_t bytes) const
+{
+    for (const ProcessView &slot : process_views_)
+        if (slot.live && slot.view == view) return slot.physical == physical && slot.bytes == bytes;
+    return false;
+}
+
+void MockPlatform::resolve_process_views(ProcessViewResolver resolver, void *context)
+{
+    process_resolver_ = resolver;
+    process_resolver_context_ = context;
+}
+
+void MockPlatform::fail_process_map_at(std::uint32_t nth)
+{
+    process_fail_at_ = nth == 0u ? 0u : process_map_sequence_ + nth;
 }
 
 void MockPlatform::zero(void *dst, std::size_t bytes) { std::memset(dst, 0, bytes); }

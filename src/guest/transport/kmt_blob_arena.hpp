@@ -1,6 +1,7 @@
 /* The room one OpenGL context lends bulk data in (feature 050, research.md §5):
- * a host-visible chunk bound to the context's own transport and imported whole
- * with IMPORT_BLOB, which the host executor takes as the region its bulk-data
+ * a chunk bound to the context's own transport - the device's host window
+ * when the kernel has room there, else guest RAM (BlobChunk) - and imported
+ * whole with IMPORT_BLOB, which the host executor takes as the region its bulk-data
  * commands read and write. While it is held, the transport's blobs() lends from
  * the chunk's view, a lease's offset being its distance from the chunk's
  * start - where the host finds it. */
@@ -8,8 +9,8 @@
 #define AV_KMT_BLOB_ARENA_HPP
 
 #include "core/support/status.hpp"
+#include "guest/transport/blob_chunk.hpp"
 #include "guest/transport/blob_import.hpp"
-#include "guest/transport/host_visible_chunk.hpp"
 
 #include <stdint.h>
 
@@ -29,8 +30,8 @@ public:
     KmtBlobArena(const KmtBlobArena &) = delete;
     KmtBlobArena &operator=(const KmtBlobArena &) = delete;
 
-    /* A chunk of `bytes` in whole pages and at least default_bytes, allocated,
-     * locked, bound and imported, then lent through the transport.
+    /* A chunk of `bytes` in whole pages and at least default_bytes, opened
+     * and imported, then lent through the transport.
      * invalid_state when one is held; invalid_parameter, with nothing asked,
      * past max_bytes; otherwise the failing step's status with nothing left
      * held (BlobImport's for the import). */
@@ -56,7 +57,7 @@ public:
 
 private:
     KmtTransport    &transport_;
-    HostVisibleChunk chunk_;
+    BlobChunk        chunk_;
     BlobImport       import_;
     uint64_t         bytes_;
 

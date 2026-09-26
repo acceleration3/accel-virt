@@ -6,6 +6,16 @@ namespace {
 
 constexpr std::int32_t not_added = -1;
 
+/* A process's view of the hostmem BAR is the host memory the device core
+ * placed there, so a guest that writes through a window chunk writes what the
+ * host GPU reads. */
+void *window_memory(void *context, std::uint64_t physical, std::uint64_t)
+{
+    auto *const host = static_cast<MockHost *>(context);
+    if (physical < FullStackRig::hostmem_address) return nullptr;
+    return host->placed_at(physical - FullStackRig::hostmem_address);
+}
+
 }  // namespace
 
 FullStackRig::FullStackRig()
@@ -35,6 +45,7 @@ FullStackRig::FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *g
 
 void FullStackRig::start()
 {
+    driver_.platform().resolve_process_views(&window_memory, &device_.host());
     /* First: the knob rebuilds the resource list, and the regions append theirs. */
     function_.set_message_interrupts(message_interrupts);
     function_.add_shared_memory_region(hostmem_region, hostmem_bar, 0u, hostmem_bytes, hostmem_address);
@@ -54,6 +65,7 @@ FullStackRig::~FullStackRig()
 {
     kmt_.end_process();
     if (added_ >= 0) static_cast<void>(fdo_.remove_device());
+    driver_.platform().resolve_process_views(nullptr, nullptr);
 }
 
 std::int32_t           FullStackRig::added() const { return added_; }

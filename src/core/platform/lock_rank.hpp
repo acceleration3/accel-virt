@@ -17,6 +17,7 @@ enum class LockRank : uint16_t {
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
     rvk_control_requests = 105u, /* wait mutex: an rvk context's setup, teardown or chunk request sequence,
                                     which resolves its allocations in AllocationTable */
+    host_window = 107u,        /* HostWindow's page map: a leaf, taken inside a window chunk's request sequence */
     allocation_table = 110u,
     shared_objects = 115u,     /* SharedObjectTable: minted inside the allocation table's create,
                                   and opened beside it from the device table (feature 053) */

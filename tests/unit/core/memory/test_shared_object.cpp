@@ -4,7 +4,6 @@
  * object another process still has open. */
 #include "core/memory/allocation.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/shared_object.hpp"
 #include "core/support/status.hpp"
@@ -47,7 +46,7 @@ constexpr std::uint64_t page = Allocation::page_bytes;
 class Fixture {
 public:
     Fixture()
-        : aperture_(platform_), host_visible_(platform_), segments_(platform_, aperture_, host_visible_),
+        : aperture_(platform_), segments_(platform_, aperture_),
           descriptor_(AllocationKind::client, false, SurfaceLayout(16u, 16u, 64u, 40u), 2u * page,
                       ScanoutTarget()),
           allocation_(platform_, segments_, descriptor_, 2u * page),
@@ -64,7 +63,6 @@ public:
 private:
     MockPlatform            platform_;
     av::ApertureSegment     aperture_;
-    av::HostVisibleSegment  host_visible_;
     av::MemorySegments      segments_;
     AllocationDescriptor    descriptor_;
     Allocation              allocation_;
@@ -86,8 +84,7 @@ TEST(shared_object_names, is_false_for_any_other_allocation)
 { Fixture rig;
   MockPlatform            other_platform;
   av::ApertureSegment     aperture(other_platform);
-  av::HostVisibleSegment  host_visible(other_platform);
-  av::MemorySegments      segments(other_platform, aperture, host_visible);
+  av::MemorySegments      segments(other_platform, aperture);
   CHECK_STATUS(aperture.initialize(0x100000000), Status::ok);
   const AllocationDescriptor descriptor(AllocationKind::client, false, SurfaceLayout(8u, 8u, 32u, 40u),
                                         page, ScanoutTarget());

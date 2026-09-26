@@ -601,8 +601,8 @@ What it runs (`tests/loopback/test_fullstack_*.cpp`):
 - a context the executor faults, whose wait completes with no reply and whose
   next submission the driver refuses, while its neighbour echoes
 - D3 and D0, ResetFromTimeout and RestartFromTimeout, and StopDevice and
-  StartDevice, each under a live transport: the context lost, the region blob
-  made again, a new transport echoing
+  StartDevice, each under a live transport: the context lost, a new transport
+  echoing
 - 3000 batches wrapping the smallest ring; five transports interleaved on
   their own doorbells and messages, and a freed doorbell reused
 - the doorbell path with the submission in the process's hands (feature 049,
@@ -629,8 +629,7 @@ What it cannot see, and L5 still must:
 - dxgkrnl's and VidMm's real behaviour - the rig's sequences are the ones
   `docs/ddi-sequences.md` records, not the kernel's; no TDR, no eviction or
   paging decisions of VidMm's own, no GPU page tables built, no
-  `D3DKMTLock2` of a CPU-visible segment (the host-visible scenario locks guest
-  pages, as the guest does while 041's segment is parked)
+  `D3DKMTLock2` of a CPU-visible segment
 - time: the platform clock moves only where a wait moves it, so vsync proves
   the period the driver asks for and the stress run's worst wait is not a
   measurement
@@ -1190,7 +1189,7 @@ after one with nothing changed in it.
 ### What the device does about it
 
 It hands the same pages over as a **dma-buf** instead, which such a driver
-takes. `GuestDmaBuf` turns a blob's extents into one descriptor through
+takes. `BlobDmaBuf` turns a blob's extents into one descriptor through
 udmabuf (`/dev/udmabuf`, `UDMABUF_CREATE_LIST`), so the host GPU sees one
 contiguous range and no byte is copied — the same thing `GuestPageAlias` does
 for a pointer, one layer down. The guest RAM memfd must be sealed against

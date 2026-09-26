@@ -173,7 +173,7 @@ TEST(fullstack_rvk, the_host_gpu_copies_between_two_imported_guest_chunks)
   CHECK(reported(report, "ok import.copied 1048576"));
   CHECK(reported(report, "ok import.guest_saw_host_write 0"));
   CHECK(reported(report, "ok import.release"));
-  CHECK_EQ(rig.device().device().blobs(), 1u); }
+  CHECK_EQ(rig.device().device().blobs(), 0u); }
 
 /* The host refuses the truncated create-info before any ICD sees it, the
  * driver completes that context's work with no reply and refuses its next

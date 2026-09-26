@@ -202,7 +202,7 @@ public:
     /* What the device says it is from the next ask on: another host GPU behind
      * the same function is another device (feature 040, FR-005). */
     void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
-    /* Whether the driver made its region blob and mapped it. */
+    /* Whether the driver made a blob and placed it in the region. */
     bool created_blob() const { return created_blob_; }
     bool mapped_region() const { return mapped_region_; }
 
@@ -223,8 +223,8 @@ private:
         /* The adapter asks what the device is as well as what it shows, and the
          * answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = device->control().pending_type();
-        /* The region as one blob, which StartDevice makes when the device
-         * offers a region (feature 041, US1). */
+        /* A blob placed in the region, which only a process asking for a
+         * window chunk makes (docs/host-window.md). */
         if (asked == create_blob || asked == map_blob) {
             av::GpuResponse answer;
             if (asked == map_blob) {
@@ -2030,21 +2030,19 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
   CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* Feature 041, US1, through the real table: an adapter whose device has a
- * host-visible region reports two segments, the second addressable by the CPU
- * at the BAR, and has host memory behind every offset VidMm can place an
- * allocation at - because VidMm maps a process's view itself and tells the
- * driver nothing (MapInCpuVisibleSegment, dxgmms2.sys @14009ea98). An
- * allocation that asks to be mapped is asked for in that segment; a primary
- * still lives in the aperture the display reads. */
-TEST(ddi_scenario, a_device_with_host_memory_offers_a_second_segment_and_maps_it)
+/* Through the real table: the device's host-visible region is the driver's
+ * own window, never a segment. VidMm is told of the aperture alone - with the
+ * region in a CPU-visible segment it hands a process the aperture's staging
+ * pages at Lock instead (docs/host-window.md) - and nothing is placed in the
+ * region until a process asks for a chunk of it. */
+TEST(ddi_scenario, a_device_with_host_memory_reports_the_aperture_alone)
 { LoadedDriver driver;
   Device device(driver, 0u);
   device.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.start_device(), 0);
-  CHECK(device.created_blob());
-  CHECK(device.mapped_region());
+  CHECK(!device.created_blob());
+  CHECK(!device.mapped_region());
   void           *adapter = device.fdo().context();
   const DdiTable &table = driver.table();
 
@@ -2059,23 +2057,9 @@ TEST(ddi_scenario, a_device_with_host_memory_offers_a_second_segment_and_maps_it
   const auto ask = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargQueryAdapterInfoRecord *)>(
       table.routine(DdiSlot::DxgkDdiQueryAdapterInfo));
   CHECK_EQ(ask(adapter, &query), 0);
-  CHECK_EQ(out.NbSegment, 2u);
+  CHECK_EQ(out.NbSegment, 1u);
 
-  constexpr std::uint32_t stride = 0x68u;
-  std::uint8_t descriptors[2u * stride] = {};
-  out.pSegmentDescriptor = descriptors;
-  out.SegmentDescriptorStride = stride;
-  CHECK_EQ(ask(adapter, &query), 0);
-  av::DxgkSegmentDescriptor4Record host_visible = {};
-  std::memcpy(&host_visible, descriptors + stride, sizeof host_visible);
-  /* CpuVisible | CacheCoherent: the host maps its memory write-back, so a
-   * process's view is cached like the host's own. */
-  CHECK_EQ(host_visible.Flags, 0x14u);
-  CHECK_EQ(host_visible.Size, host_region_bytes);
-  CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(host_region_address));
-
-  /* A primary still lives in the aperture the display reads, on an adapter
-   * that now has somewhere else to put memory. */
+  /* A primary lives in the aperture the display reads. */
   Runtime runtime(table, adapter);
   CHECK_EQ(runtime.create_primary(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);

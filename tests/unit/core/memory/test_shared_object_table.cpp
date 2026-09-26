@@ -9,7 +9,6 @@
  * copies private data without reading it. */
 #include "core/memory/allocation.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/shared_object.hpp"
 #include "core/memory/shared_object_table.hpp"
@@ -68,7 +67,7 @@ constexpr std::uint64_t page = Allocation::page_bytes;
 class Fixture {
 public:
     Fixture()
-        : aperture_(platform_), host_visible_(platform_), segments_(platform_, aperture_, host_visible_),
+        : aperture_(platform_), segments_(platform_, aperture_),
           table_(platform_)
     {
         CHECK_STATUS(aperture_.initialize(0x100000000), Status::ok);
@@ -117,7 +116,6 @@ private:
     alignas(Allocation) unsigned char storage_[max_allocations][sizeof(Allocation)] = {};
     MockPlatform            platform_;
     av::ApertureSegment     aperture_;
-    av::HostVisibleSegment  host_visible_;
     av::MemorySegments      segments_;
     AllocationDescriptor    descriptors_[max_allocations];
     SharedObjectTable       table_;
@@ -139,8 +137,7 @@ TEST(shared_object_table_initialize, mints_an_adapter_number_once_and_never_zero
 TEST(shared_object_table_mint, refuses_before_the_adapter_has_a_number)
 { MockPlatform            platform;
   av::ApertureSegment     aperture(platform);
-  av::HostVisibleSegment  host_visible(platform);
-  av::MemorySegments      segments(platform, aperture, host_visible);
+  av::MemorySegments      segments(platform, aperture);
   CHECK_STATUS(aperture.initialize(0x100000000), Status::ok);
   const AllocationDescriptor descriptor(AllocationKind::client, false, SurfaceLayout(16u, 16u, 64u, 40u),
                                         page, ScanoutTarget());
@@ -337,8 +334,7 @@ TEST(shared_object_table_close, refuses_an_object_this_table_does_not_hold)
 { Fixture rig;
   MockPlatform            other;
   av::ApertureSegment     aperture(other);
-  av::HostVisibleSegment  host_visible(other);
-  av::MemorySegments      segments(other, aperture, host_visible);
+  av::MemorySegments      segments(other, aperture);
   CHECK_STATUS(aperture.initialize(0x100000000), Status::ok);
   const AllocationDescriptor descriptor(AllocationKind::client, false, SurfaceLayout(8u, 8u, 32u, 40u),
                                         page, ScanoutTarget());

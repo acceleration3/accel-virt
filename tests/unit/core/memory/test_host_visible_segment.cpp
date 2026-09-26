@@ -1,6 +1,5 @@
-/* The CPU-visible segment over the device's hostmem region: what makes it
- * offered at all, and what it tells VidMm when it is (feature 041, US1). */
-#include "core/ddi/dxgk_segment_descriptor4_record.hpp"
+/* Where the device's hostmem region is, and whether the driver may use it as
+ * its host window at all (docs/host-window.md). */
 #include "core/memory/host_visible_segment.hpp"
 #include "core/pci/pci_base_addresses.hpp"
 #include "core/support/status.hpp"
@@ -17,7 +16,6 @@
 #include <cstring>
 
 using av::CapsetInfo;
-using av::DxgkSegmentDescriptor4Record;
 using av::GpuIdentity;
 using av::HostVisibleSegment;
 using av::Irql;
@@ -140,35 +138,26 @@ TEST(host_visible_segment, a_region_that_does_not_fit_a_page_is_refused)
   unassigned.offer(capset(CapsetInfo::feature_host_visible_memory));
   CHECK(!unassigned.offered()); }
 
-/* What VidMm is told: storage of its own, addressable by the CPU at the BAR,
- * and never an aperture - an aperture has no storage and VidMm would ask for
- * guest pages to be mapped into it. */
-TEST(host_visible_segment, describes_a_cpu_visible_segment_at_the_bar)
+/* Where the window is: the BAR firmware assigned plus the region's offset in
+ * it, which is the guest physical address chunks are mapped from. */
+TEST(host_visible_segment, says_where_the_region_is_in_guest_physical_memory)
 { MockPlatform platform;
   Function function;
   HostVisibleSegment segment(platform);
   segment.discover(function.bars(), layout_with(VirtioRegion(region_bar, 0x1000u, region_bytes)));
   segment.offer(capset(CapsetInfo::feature_host_visible_memory));
-  DxgkSegmentDescriptor4Record descriptor = {};
-  segment.describe(descriptor);
-  CHECK_EQ(descriptor.Flags, 0x14u);   /* CpuVisible | CacheCoherent: the host maps it write-back */
-  CHECK(descriptor.BaseAddress == 0);
-  CHECK_EQ(descriptor.Size, region_bytes);
-  CHECK_EQ(descriptor.CommitLimit, region_bytes);
-  CHECK(descriptor.CpuTranslatedAddress == static_cast<std::int64_t>(bar_address + 0x1000u));
-  CHECK_EQ(descriptor.CpuHostApertureSizeInPages, 0u);
-  CHECK_EQ(descriptor.SystemMemoryEndAddress, 0u); }
+  CHECK_EQ(segment.base(), bar_address + 0x1000u);
+  CHECK_EQ(segment.size(), region_bytes); }
 
-/* An unoffered segment describes a segment of nothing; what keeps it out of the
- * answer VidMm gets is MemorySegments, which does not count it. */
-TEST(host_visible_segment, an_unoffered_segment_describes_nothing)
+/* A region found but not offered is no window: nothing is placed in it. */
+TEST(host_visible_segment, an_unoffered_region_is_nowhere)
 { MockPlatform platform;
+  Function function;
   HostVisibleSegment segment(platform);
-  DxgkSegmentDescriptor4Record descriptor = {};
-  descriptor.Flags = 0xAAu;
-  segment.describe(descriptor);
-  CHECK_EQ(descriptor.Size, 0u);
-  CHECK(descriptor.CpuTranslatedAddress == 0); }
+  segment.discover(function.bars(), layout_with(VirtioRegion(region_bar, 0x1000u, region_bytes)));
+  segment.offer(capset(0u));
+  CHECK_EQ(segment.base(), 0u);
+  CHECK_EQ(segment.size(), 0u); }
 
 /* StopDevice: the next start looks again, because the device it looks at may
  * be another one (feature 040, FR-005). */

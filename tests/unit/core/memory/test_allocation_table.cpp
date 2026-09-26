@@ -6,7 +6,6 @@
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/support/status.hpp"
@@ -74,7 +73,7 @@ const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10
 
 class Fixture {
 public:
-    Fixture() : segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+    Fixture() : segment_(platform_), segments_(platform_, segment_),
         sources_(platform_), shared_(platform_), table_(platform_, segment_, segments_, shared_),
         infos_{}, descriptors_{}, request_{}
     {
@@ -177,7 +176,6 @@ public:
 private:
     MockPlatform                  platform_;
     ApertureSegment               segment_;
-    av::HostVisibleSegment        host_visible_;
     av::MemorySegments            segments_;
     DisplaySources                sources_;
     av::SharedObjectTable         shared_;

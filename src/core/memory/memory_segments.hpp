@@ -1,8 +1,10 @@
 /* The memory this adapter has, as VidMm is told about it: the aperture over
- * guest system memory, and - where the device offers one - the CPU-visible
- * segment over its hostmem region. It is the only thing that knows how many
- * segments the adapter reports, because everything else that needs the number
- * needs the same one (feature 041, FR-001). */
+ * guest system memory, and nothing else. The device's hostmem region is not a
+ * segment: VidMm hands out the aperture's staging pages when a process locks a
+ * CPU-visible allocation, so the driver places chunks in that window itself
+ * (docs/host-window.md). It is the only thing that knows how many segments the
+ * adapter reports, because everything else that needs the number needs the
+ * same one. */
 #ifndef AV_MEMORY_SEGMENTS_HPP
 #define AV_MEMORY_SEGMENTS_HPP
 
@@ -15,11 +17,10 @@ namespace av {
 
 class AdapterInfoQuery;
 class ApertureSegment;
-class HostVisibleSegment;
 
 class MemorySegments {
 public:
-    MemorySegments(Platform &platform, const ApertureSegment &aperture, const HostVisibleSegment &host_visible);
+    MemorySegments(Platform &platform, const ApertureSegment &aperture);
     MemorySegments(const MemorySegments &) = delete;
     MemorySegments &operator=(const MemorySegments &) = delete;
 
@@ -28,13 +29,9 @@ public:
      * (CreatePhysicalAdapterSegments), which is where an allocation with no
      * segment of its own goes. */
     uint32_t system_memory_segment_id() const;
-    /* Whether this adapter has host memory a process can map, and how much of
-     * it there is (feature 041, FR-001). */
-    bool     offers_host_visible() const;
-    uint64_t host_visible_bytes() const;
     /* DXGKQAITYPE_QUERYSEGMENT4: the count when no descriptor array is given,
-     * otherwise every segment at the caller's stride. The paging buffer is the
-     * aperture's, whatever else is reported. */
+     * otherwise the aperture's descriptor. The paging buffer is the
+     * aperture's. */
     [[nodiscard]] Status report(const AdapterInfoQuery &query) const;
 
     bool invariants_hold() const;
@@ -42,9 +39,10 @@ public:
 private:
     static constexpr uint32_t physical_adapter_bytes = 4u;   /* DXGK_QUERYSEGMENTIN4 */
 
-    Platform                 &platform_;
-    const ApertureSegment    &aperture_;
-    const HostVisibleSegment &host_visible_;
+    static constexpr uint32_t segments = 1u;
+
+    Platform              &platform_;
+    const ApertureSegment &aperture_;
 };
 
 }  // namespace av

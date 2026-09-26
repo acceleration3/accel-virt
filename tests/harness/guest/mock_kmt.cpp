@@ -13,6 +13,7 @@
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 
 #include <sys/mman.h>
 
@@ -30,7 +31,7 @@ MockKmt::MockKmt()
       adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{}, failing_run_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
-      bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
+      bound_allocations_{}, bound_history_{}, binds_(0u), window_(nullptr), window_pages_(0u), window_chunks_{}, window_opens_(0u), window_refusal_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
       next_shared_handle_(first_shared_handle),
       next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), carried_next_(),
@@ -219,6 +220,7 @@ MockKmt::~MockKmt()
 {
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (large_views_[slot] != nullptr) munmap(large_views_[slot], large_bytes_[slot]);
+    if (window_ != nullptr) munmap(window_, window_pages_ * page_bytes);
 }
 
 bool MockKmt::begin(Call call)
@@ -770,6 +772,7 @@ Status MockKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t
 Status MockKmt::destroy_context(std::uint32_t context)
 {
     if (!begin(Call::destroy_context)) return refuse(last_code_);
+    if (find(Kind::context, context) != nullptr) close_window_chunks_of(context);
     return close(Kind::context, context);
 }
 
@@ -953,8 +956,95 @@ Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_
         for (std::uint32_t i = 0u; i < escape_answer_size_ && i < size; i++) data[i] = escape_answer_[i];
         return succeed();
     }
+    std::uint32_t magic = 0u;
+    for (std::uint32_t i = 0u; i < sizeof magic && i < size; i++) magic |= std::uint32_t{data[i]} << (8u * i);
+    if (magic == HostWindowRecord::magic) return window_chunk(context, data, size);
     return bind_chunk(device, data, size);
 }
+
+/* The driver answers NOT_SUPPORTED for a device without a window before it
+ * reads anything, and INVALID_PARAMETER for every refusal after. */
+Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
+{
+    if (window_ == nullptr) return refuse(not_supported);
+    HostWindowRecord record;
+    if (record.decode(data, size) != Status::ok) return refuse(invalid_parameter);
+    if (record.opens()) return open_window_chunk(context, data, size, record.bytes());
+    for (WindowChunk &chunk : window_chunks_) {
+        if (chunk.resource != record.resource_id() || chunk.context != context) continue;
+        chunk = WindowChunk{};
+        return succeed();
+    }
+    return refuse(invalid_parameter);
+}
+
+Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
+                                  std::uint64_t bytes)
+{
+    if (window_refusal_ != 0u) {
+        const std::uint32_t code = window_refusal_;
+        window_refusal_ = 0u;
+        return refuse(code);
+    }
+    if (bytes > window_pages_ * page_bytes) return refuse(invalid_parameter);
+    const std::uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
+    const std::uint64_t first = window_fit(pages);
+    if (first == window_pages_) return refuse(invalid_parameter);
+    for (WindowChunk &chunk : window_chunks_) {
+        if (chunk.resource != 0u) continue;
+        chunk = WindowChunk{first_window_resource + window_opens_, context, first, pages};
+        window_opens_++;
+        const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
+        const HostWindowRecord request(HostWindowRecord::Operation::open, bytes, 0u);
+        static_cast<void>(request.answered(chunk.resource, pages * page_bytes, address).encode(data, size));
+        return succeed();
+    }
+    return refuse(invalid_parameter);
+}
+
+std::uint64_t MockKmt::window_fit(std::uint64_t pages) const
+{
+    std::uint64_t first = 0u;
+    bool          moved = true;
+    while (moved) {
+        moved = false;
+        for (const WindowChunk &chunk : window_chunks_) {
+            if (chunk.resource == 0u || chunk.first >= first + pages || chunk.first + chunk.pages <= first) continue;
+            first = chunk.first + chunk.pages;
+            moved = true;
+        }
+    }
+    return window_pages_ - first >= pages ? first : window_pages_;
+}
+
+void MockKmt::close_window_chunks_of(std::uint32_t context)
+{
+    for (WindowChunk &chunk : window_chunks_)
+        if (chunk.resource != 0u && chunk.context == context) chunk = WindowChunk{};
+}
+
+void MockKmt::open_host_window(std::uint64_t bytes)
+{
+    if (window_ != nullptr) munmap(window_, window_pages_ * page_bytes);
+    window_pages_ = (bytes + page_bytes - 1u) / page_bytes;
+    void *const mapped = mmap(nullptr, window_pages_ * page_bytes, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    window_ = mapped == MAP_FAILED ? nullptr : static_cast<std::uint8_t *>(mapped);
+    window_pages_ = window_ != nullptr ? window_pages_ : 0u;
+    for (WindowChunk &chunk : window_chunks_) chunk = WindowChunk{};
+}
+
+void MockKmt::refuse_next_window_open(std::uint32_t code) { window_refusal_ = code; }
+
+std::uint32_t MockKmt::window_chunks() const
+{
+    std::uint32_t held = 0u;
+    for (const WindowChunk &chunk : window_chunks_) held += chunk.resource != 0u ? 1u : 0u;
+    return held;
+}
+
+std::uint32_t MockKmt::window_opens() const { return window_opens_; }
+std::uint8_t *MockKmt::window_base() const { return window_; }
 
 /* The driver's own refusals are all STATUS_INVALID_PARAMETER; only data that is
  * not its record at all is not supported. */

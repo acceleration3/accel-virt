@@ -11,7 +11,6 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
-#include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/transport_scenario.hpp"
@@ -31,7 +30,6 @@ using av::GpuMappingScenario;
 using av::GuestReport;
 using av::GuestSuite;
 using av::HostVisibleImportScenario;
-using av::HostVisibleScenario;
 using av::MockKmt;
 using av::PciIdentity;
 using av::Status;
@@ -87,22 +85,6 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok submission.submit\n"
                     "ok submission.wait\n"
                     "ok submission.teardown\n"
-                    "ok host_visible.adapter\n"
-                    "ok host_visible.device\n"
-                    "ok host_visible.allocation\n"
-                    "ok host_visible.paging_queue\n"
-                    "ok host_visible.resident\n"
-                    "ok host_visible.local_budget_kib 262144\n"
-                    "ok host_visible.local_usage_kib 0\n"
-                    "ok host_visible.non_local_budget_kib 1048576\n"
-                    "ok host_visible.non_local_usage_kib 0\n"
-                    "ok host_visible.lock\n"
-                    "ok host_visible.first_write_mbps 0\n"
-                    "ok host_visible.write_mbps 0\n"
-                    "ok host_visible.read_mbps 0\n"
-                    "ok host_visible.pattern 4096\n"
-                    "ok host_visible.unlock\n"
-                    "ok host_visible.teardown\n"
                     "ok vsync.adapter\n"
                     "ok vsync.device\n"
                     "ok vsync.blanks\n"
@@ -118,7 +100,7 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok transport.warm_median 1000\n"
                     "ok transport.warm_fastest 1000\n"
                     "ok suite.close_adapter\n"
-                    "rvktest: 53 passed, 0 failed\n") == 0);
+                    "rvktest: 37 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
@@ -128,12 +110,11 @@ TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkm
   kmt.add_adapter(PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u), 1300u);
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run(), 7u);
+  CHECK_EQ(suite.run(), 6u);
   CHECK(has_line(report, "FAIL adapter.find status=3"));
   CHECK(has_line(report, "FAIL allocation.adapter status=3"));
   CHECK(has_line(report, "FAIL mapping.adapter status=3"));
   CHECK(has_line(report, "FAIL submission.adapter status=3"));
-  CHECK(has_line(report, "FAIL host_visible.adapter status=3"));
   CHECK(has_line(report, "FAIL vsync.adapter status=3"));
   CHECK(has_line(report, "FAIL transport.adapter status=3"));
   CHECK(has_line(report, "ok suite.close_adapter"));
@@ -161,7 +142,7 @@ TEST(guest_suite, a_refusal_at_any_call_is_reported_and_leaves_nothing_open)
       MockKmt::Call::create_device, MockKmt::Call::create_allocation, MockKmt::Call::create_paging_queue,
       MockKmt::Call::make_resident, MockKmt::Call::map_gpu_virtual_address, MockKmt::Call::create_context,
       MockKmt::Call::submit, MockKmt::Call::wait_for_context, MockKmt::Call::destroy_context,
-      MockKmt::Call::lock, MockKmt::Call::unlock, MockKmt::Call::close_adapter};
+      MockKmt::Call::close_adapter};
   for (MockKmt::Call call : calls) {
       MockKmt kmt;
       kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
@@ -213,132 +194,6 @@ TEST(guest_suite, each_scenario_stops_at_its_first_failure_and_still_tears_down)
   CHECK_EQ(kmt.open_objects(), 1u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK_STATUS(search.close(), Status::ok); }
-
-/* ---- Host-visible memory (feature 041, US1) -------------------------------- */
-
-/* What SC-003 claims: a CPU-visible allocation is memory the process writes
- * through the pointer the lock answers, and reads its own bytes back from. */
-TEST(host_visible_scenario, writes_a_pattern_through_the_view_and_reads_every_byte_back)
-{ MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
-  GuestReport report;
-  HostVisibleScenario host_visible(kmt, report, search);
-  CHECK_EQ(host_visible.matched_bytes(), 0u);
-  host_visible.run();
-  CHECK(has_line(report, "ok host_visible.device"));
-  CHECK(has_line(report, "ok host_visible.allocation"));
-  CHECK(has_line(report, "ok host_visible.lock"));
-  CHECK(has_line(report, "ok host_visible.pattern 4096\n"));
-  CHECK(has_line(report, "ok host_visible.unlock"));
-  CHECK(has_line(report, "ok host_visible.teardown"));
-  CHECK_EQ(host_visible.matched_bytes(), HostVisibleScenario::pattern_bytes);
-  /* The bytes reached the memory the mock handed out: a scenario that read
-   * back its own local copy would leave the view empty. The measurement's
-   * words fill the rest of the 16 MiB, all but the first word's. */
-  CHECK(kmt.view_filled() >= HostVisibleScenario::pattern_bytes);
-  CHECK_STATUS(search.close(), Status::ok);
-  CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u); }
-
-/* A lock the driver refuses is where the run stops: nothing is written through
- * a pointer it never got, and the allocation is never unlocked. */
-TEST(host_visible_scenario, a_lock_the_driver_refuses_writes_nothing_and_never_unlocks)
-{ MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  kmt.fail_at(MockKmt::Call::lock, 1u, 0xC0000001u);
-  AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
-  GuestReport report;
-  HostVisibleScenario host_visible(kmt, report, search);
-  host_visible.run();
-  CHECK(has_line(report, "FAIL host_visible.lock status=7 code=0xC0000001"));
-  CHECK(!has_line(report, "host_visible.pattern"));
-  CHECK(has_line(report, "ok host_visible.teardown"));
-  CHECK_EQ(host_visible.matched_bytes(), 0u);
-  CHECK_EQ(kmt.view_filled(), 0u);
-  CHECK_EQ(kmt.calls(MockKmt::Call::unlock), 0u);
-  CHECK_STATUS(search.close(), Status::ok);
-  CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u); }
-
-/* A lock that answers success with no pointer is malformed, and a scenario
- * that wrote through it would fault the guest instead of failing the step. */
-TEST(host_visible_scenario, a_lock_that_answers_no_pointer_is_malformed)
-{ MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  kmt.zero_next(MockKmt::Call::lock);
-  AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
-  GuestReport report;
-  HostVisibleScenario host_visible(kmt, report, search);
-  host_visible.run();
-  CHECK(has_line(report, "FAIL host_visible.lock status=9"));
-  CHECK(!has_line(report, "host_visible.pattern"));
-  CHECK(has_line(report, "ok host_visible.teardown"));
-  CHECK_EQ(host_visible.matched_bytes(), 0u);
-  CHECK_EQ(kmt.view_filled(), 0u);
-  CHECK_EQ(kmt.calls(MockKmt::Call::unlock), 0u);
-  CHECK_STATUS(search.close(), Status::ok);
-  CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u); }
-
-/* An unlock the driver refuses is reported, and the allocation is still locked:
- * the teardown unlocks it before destroying it, or the driver is left holding a
- * view of memory nobody owns. */
-TEST(host_visible_scenario, an_unlock_that_fails_is_reported_and_the_teardown_unlocks)
-{ MockKmt kmt;
-  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  kmt.fail_at(MockKmt::Call::unlock, 1u, 0xC0000001u);
-  AdapterSearch search(kmt);
-  CHECK_STATUS(search.find(rvk), Status::ok);
-  GuestReport report;
-  HostVisibleScenario host_visible(kmt, report, search);
-  host_visible.run();
-  CHECK(has_line(report, "ok host_visible.pattern 4096\n"));
-  CHECK(has_line(report, "FAIL host_visible.unlock status=7 code=0xC0000001"));
-  CHECK(has_line(report, "ok host_visible.teardown"));
-  CHECK_EQ(kmt.calls(MockKmt::Call::unlock), 2u);
-  CHECK_STATUS(search.close(), Status::ok);
-  CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u); }
-
-/* Nothing is locked that was not created: the run stops at the step that
- * failed, and the driver is never asked for a view. */
-TEST(host_visible_scenario, a_device_or_an_allocation_that_fails_stops_the_run_before_the_lock)
-{ const struct { MockKmt::Call call; const char *line; } cases[] = {
-      {MockKmt::Call::create_device, "FAIL host_visible.device"},
-      {MockKmt::Call::create_allocation, "FAIL host_visible.allocation"}};
-  for (const auto &refusal : cases) {
-      MockKmt kmt;
-      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-      kmt.fail_at(refusal.call, 1u, 0xC0000017u);
-      AdapterSearch search(kmt);
-      CHECK_STATUS(search.find(rvk), Status::ok);
-      GuestReport report;
-      HostVisibleScenario host_visible(kmt, report, search);
-      host_visible.run();
-      CHECK(has_line(report, refusal.line));
-      CHECK(!has_line(report, "host_visible.lock"));
-      CHECK(has_line(report, "ok host_visible.teardown"));
-      CHECK_EQ(kmt.calls(MockKmt::Call::lock), 0u);
-      CHECK_EQ(host_visible.matched_bytes(), 0u);
-      CHECK_STATUS(search.close(), Status::ok);
-      CHECK_EQ(kmt.open_objects(), 0u);
-      CHECK_EQ(kmt.misuses(), 0u);
-  } }
-
-TEST(host_visible_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
-{ MockKmt kmt;
-  AdapterSearch search(kmt);
-  GuestReport report;
-  HostVisibleScenario host_visible(kmt, report, search);
-  host_visible.run();
-  CHECK(has_line(report, "FAIL host_visible.adapter status=3"));
-  CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u);
-  CHECK_EQ(kmt.calls(MockKmt::Call::lock), 0u);
-  CHECK_EQ(host_visible.matched_bytes(), 0u); }
 
 /* ---- Vertical blanks (feature 038, US3) ------------------------------------ */
 

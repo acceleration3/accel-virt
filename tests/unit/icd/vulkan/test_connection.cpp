@@ -10,7 +10,7 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "core/support/object_storage.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "guest/transport/host_visible_chunk.hpp"
+#include "guest/transport/blob_chunk.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -397,14 +397,14 @@ TEST(connection, opens_a_bound_chunk_under_its_lock_and_closes_it)
 { Rig rig;
   CHECK_STATUS(rig.connection().open(), Status::ok);
   CHECK_EQ(rig.connection().adapter(), ConnectionProbe::search(rig.connection()).adapter());
-  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  av::ObjectStorage<av::BlobChunk> chunk;
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
   CHECK(rig.connection().invariants_hold());
   CHECK(chunk.constructed());
   CHECK(chunk.object().invariants_hold());
   CHECK(chunk.object().view() != nullptr);
   CHECK_EQ(chunk.object().resource_id(), MockKmt::first_chunk_resource);
-  CHECK_EQ(chunk.object().pages(), chunk_bytes / MockKmt::page_bytes);
+  CHECK_EQ(chunk.object().bytes(), chunk_bytes);
   CHECK_EQ(rig.kmt().bindings(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), open_objects + 1u);
   CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
@@ -424,18 +424,22 @@ TEST(connection, opens_a_bound_chunk_under_its_lock_and_closes_it)
 /* Any step refused - the allocation, its residency, the paging fence, the
  * lock, the bind - is the answer, with the chunk given back whole. */
 TEST(connection, a_chunk_refused_at_any_step_leaves_nothing)
-{ const MockKmt::Call steps[] = {MockKmt::Call::create_allocation, MockKmt::Call::make_resident,
-                                 MockKmt::Call::wait_for_fence, MockKmt::Call::lock, MockKmt::Call::escape};
-  for (const MockKmt::Call step : steps) {
+{ /* No window here, so the chunk is guest RAM and the bind is the second
+   * escape, after the window's refused open. */
+  struct Step { MockKmt::Call call; std::uint32_t nth; };
+  const Step steps[] = {{MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::make_resident, 1u},
+                        {MockKmt::Call::wait_for_fence, 1u}, {MockKmt::Call::lock, 1u},
+                        {MockKmt::Call::escape, 2u}};
+  for (const Step &step : steps) {
       Rig rig;
       CHECK_STATUS(rig.connection().open(), Status::ok);
-      const std::uint32_t before = rig.kmt().calls(step);
-      rig.kmt().fail_at(step, 1u, MockKmt::invalid_parameter);
-      av::ObjectStorage<av::HostVisibleChunk> chunk;
+      const std::uint32_t before = rig.kmt().calls(step.call);
+      rig.kmt().fail_at(step.call, step.nth, MockKmt::invalid_parameter);
+      av::ObjectStorage<av::BlobChunk> chunk;
       CHECK(rig.connection().open_chunk(chunk, chunk_bytes) != Status::ok);
       CHECK(!chunk.constructed());
       CHECK(rig.connection().invariants_hold());
-      CHECK_EQ(rig.kmt().calls(step), before + 1u);
+      CHECK_EQ(rig.kmt().calls(step.call), before + step.nth);
       CHECK_EQ(rig.kmt().open_objects(), open_objects);
       CHECK_EQ(rig.kmt().bindings(), 0u);
       CHECK_EQ(rig.kmt().misuses(), 0u);
@@ -447,7 +451,7 @@ TEST(connection, a_chunk_refused_at_any_step_leaves_nothing)
  * the Kmt nothing; storage already holding one is not overwritten. */
 TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
 { Rig rig;
-  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  av::ObjectStorage<av::BlobChunk> chunk;
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
   CHECK(!chunk.constructed());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), 0u);
@@ -462,7 +466,7 @@ TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
   rig.kmt().withhold_answer_at(1u);
   std::uint64_t instance = 0u;
   CHECK_EQ(create_instance(rig.connection(), instance), VK_ERROR_DEVICE_LOST);
-  av::ObjectStorage<av::HostVisibleChunk> other;
+  av::ObjectStorage<av::BlobChunk> other;
   CHECK_STATUS(rig.connection().open_chunk(other, chunk_bytes), Status::invalid_state);
   CHECK(!other.constructed());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made);
@@ -471,12 +475,35 @@ TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
   CHECK_EQ(rig.kmt().bindings(), 0u);
   CHECK(!rig.lock().held()); }
 
+/* On a device with a host window the chunk is the window's: one escape, no
+ * allocation, and one escape to close it, each under the lock. */
+TEST(connection, opens_a_window_chunk_under_its_lock_and_closes_it)
+{ Rig rig;
+  rig.kmt().open_host_window(2u * chunk_bytes);
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
+  av::ObjectStorage<av::BlobChunk> chunk;
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  CHECK(chunk.object().invariants_hold());
+  CHECK_EQ(chunk.object().resource_id(), MockKmt::first_window_resource);
+  CHECK_EQ(chunk.object().bytes(), chunk_bytes);
+  CHECK(chunk.object().view() == rig.kmt().window_base());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  CHECK_EQ(rig.kmt().open_objects(), open_objects);
+  CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
+  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
+  CHECK(!chunk.constructed());
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0);
+  CHECK_EQ(rig.kmt().misuses(), 0u); }
+
 /* The Kmt's refusal to give a chunk back is reported, and the chunk is gone
  * all the same. */
 TEST(connection, a_chunk_whose_release_is_refused_is_still_closed)
 { Rig rig;
   CHECK_STATUS(rig.connection().open(), Status::ok);
-  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  av::ObjectStorage<av::BlobChunk> chunk;
   CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
   CHECK(rig.connection().close_chunk(chunk) != Status::ok);

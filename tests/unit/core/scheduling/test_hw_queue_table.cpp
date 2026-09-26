@@ -4,7 +4,6 @@
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
@@ -61,7 +60,7 @@ namespace {
 class Fixture {
 public:
     Fixture()
-        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), segments_(platform_, segment_),
           shared_(platform_), allocations_(platform_, segment_, segments_, shared_),
           devices_(platform_, allocations_, shared_, interface_), geometry_(platform_), contexts_(platform_, devices_, geometry_),
           queues_(platform_, contexts_), fence_(0u), hw_context_(context_with(0x14u)), plain_context_(context_with(0x4u))
@@ -97,7 +96,6 @@ private:
     int              pdo_ = 0;
     Adapter          adapter_;
     ApertureSegment  segment_;
-    av::HostVisibleSegment        host_visible_;
     av::MemorySegments            segments_;
     av::SharedObjectTable shared_;
     AllocationTable  allocations_;

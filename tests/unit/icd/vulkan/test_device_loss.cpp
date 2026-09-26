@@ -102,6 +102,7 @@ public:
         if (instance_ != VK_NULL_HANDLE) rig_.destroy_instance(instance_);
         CHECK(rig_.root().invariants_hold());
         CHECK_EQ(rig_.kmt().bindings(), 0u);
+        CHECK_EQ(rig_.kmt().window_chunks(), 0u);
         CHECK_EQ(rig_.kmt().open_objects(), 0u);
         CHECK_EQ(rig_.kmt().misuses(), 0u);
     }
@@ -360,6 +361,29 @@ TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
   /* Freed, it is no allocation to map. */
   CHECK_EQ(rig.map(memory, data), VK_ERROR_DEVICE_LOST); }
 
+/* The same over a host window chunk: its view stays the window's memory
+ * after the loss, freeing it sends the kernel nothing, and the kernel closes
+ * it when the instance's context goes. */
+TEST(device_loss, a_window_chunk_freed_after_the_loss_is_left_to_the_kernel)
+{ LossRig rig;
+  rig.kmt().open_host_window(std::uint64_t{128} << 20u);
+  const VkDeviceMemory memory = rig.host_visible();
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  void *data = nullptr;
+  CHECK_EQ(rig.map(memory, data), VK_SUCCESS);
+  CHECK(data == rig.kmt().window_base());
+  static_cast<std::uint8_t *>(data)[page - 1u] = pattern;
+  rig.lose();
+  CHECK_EQ(static_cast<std::uint8_t *>(data)[page - 1u], pattern);
+  rig.entry<UnmapMemory>("vkUnmapMemory")(rig.device(), memory);
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  const std::uint32_t commands = rig.kmt().commands();
+  rig.entry<FreeMemory>("vkFreeMemory")(rig.device(), memory, nullptr);
+  CHECK(rig.rig().root().invariants_hold());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u); }
+
 /* Everything made before the loss can still be given back: command buffers,
  * memory of either kind, the device and the instance, each locally, with the
  * kernel asked only to close what it holds for the process. */
@@ -437,7 +461,7 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_DEVICE_LOST);
   CHECK(memory == VK_NULL_HANDLE);
   CHECK(rig.connection()->faulted());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);   /* the bind alone */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 2u);   /* the window's refused open and the bind */
   CHECK_EQ(rig.kmt().bindings(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), objects); }
 

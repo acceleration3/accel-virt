@@ -47,10 +47,7 @@ void print(const GuestReport &report)
 }  // namespace
 
 /* Every scenario rvktest.exe runs in the guest passes here too, with the same
- * steps the guest run reports. host_visible passes as it does in the
- * guest today: its allocation is a client allocation VidMm keeps in system
- * memory (feature 041 parked the CPU-visible segment), so the lock is a view
- * of guest pages, not of the hostmem BAR. vsync measures the driver's timer
+ * steps the guest run reports. vsync measures the driver's timer
  * period on the mock clock, which only the wait moves: it proves the period
  * the driver asks for, not how a host timer keeps it. */
 TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
@@ -62,13 +59,12 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
     failed = suite.run(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK_EQ(report.passed(), 53u);
-  CHECK(reported(report, "rvktest: 53 passed, 0 failed"));
+  CHECK_EQ(report.passed(), 37u);
+  CHECK(reported(report, "rvktest: 37 passed, 0 failed"));
   CHECK(reported(report, "ok adapter.driver_version"));
   CHECK(reported(report, "ok allocation.refuse_hostile"));
   CHECK(reported(report, "ok mapping.map"));
   CHECK(reported(report, "ok submission.wait"));
-  CHECK(reported(report, "ok host_visible.pattern 4096"));
   CHECK(std::strstr(report.text(), "\nok vsync.rate 60") != nullptr);
   /* The blanks keep the mode's absolute 60 Hz schedule; the rig's clock moves
    * in 100 us steps, so a wait sees its blank up to a step late and what the
@@ -77,7 +73,6 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(std::strstr(report.text(), "\nok transport.latency ") != nullptr);
   CHECK(std::strstr(report.text(), "\nok transport.warm_nop ") != nullptr);
-  CHECK(std::strstr(report.text(), "\nok host_visible.local_budget_kib ") != nullptr);
   /* The device core answered the no-op itself: the executor behind it ran nothing. */
   CHECK_EQ(rig.device().executor().executed(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);

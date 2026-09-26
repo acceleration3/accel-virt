@@ -1,6 +1,5 @@
 #include "core/memory/host_visible_segment.hpp"
 
-#include "core/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "core/pci/pci_base_addresses.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_pci_layout.hpp"
@@ -60,21 +59,6 @@ uint64_t HostVisibleSegment::size() const
 {
     AV_SCOPE("HostVisibleSegment::size");
     return offered_ ? size_ : 0u;
-}
-
-void HostVisibleSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
-{
-    AV_SCOPE("HostVisibleSegment::describe");
-    platform_.require_irql_at_most(Irql::passive, "HostVisibleSegment::describe");
-    descriptor = DxgkSegmentDescriptor4Record{};
-    descriptor.Flags = flags;
-    /* Its own linear space, which is also the offsets the device places blobs
-     * at: the two are the same space, so a placement VidMm chooses is an offset
-     * the device can be told. */
-    descriptor.BaseAddress = 0;
-    descriptor.Size = size_;
-    descriptor.CommitLimit = size_;
-    descriptor.CpuTranslatedAddress = static_cast<int64_t>(base_);
 }
 
 bool HostVisibleSegment::invariants_hold() const

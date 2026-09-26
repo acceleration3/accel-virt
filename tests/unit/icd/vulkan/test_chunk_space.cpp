@@ -99,28 +99,59 @@ TEST(chunk_space, a_size_that_is_no_chunk_is_refused_unasked)
 TEST(chunk_space, the_kernel_s_refusal_is_the_answer)
 { OpenConnection rig;
   ChunkSpace     space(rig.connection());
-  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
+  rig.kmt().fail_at(MockKmt::Call::escape, 2u, MockKmt::invalid_parameter);   /* the bind */
   CHECK(space.open(chunk_pages) != Status::ok);
   CHECK(space.invariants_hold());
   CHECK(!space.opened());
   CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
 
 /* A kernel that bound fewer pages than were asked for would have the device
- * refuse every import past them, and one that bound more is not answering this
- * chunk: either is refused, with the chunk given back. */
-TEST(chunk_space, a_bind_of_another_size_than_asked_is_refused)
-{ const std::uint64_t answers[] = {chunk_pages - 1u, chunk_pages + 1u};
-  for (const std::uint64_t answered : answers) {
-      OpenConnection rig;
-      ChunkSpace     space(rig.connection());
-      rig.kmt().answer_next_bind_pages(answered);
-      CHECK_STATUS(space.open(chunk_pages), Status::malformed);
-      CHECK(space.invariants_hold());
-      CHECK(!space.opened());
-      CHECK_EQ(rig.kmt().bindings(), 0u);
-      CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects);
-  }
-}
+ * refuse every import past them: refused, with the chunk given back. One that
+ * gave more - a window grants whole pages of at least what was asked - is
+ * taken, and only the pages asked are placed in. */
+TEST(chunk_space, a_chunk_smaller_than_asked_is_refused_and_a_larger_one_used_as_asked)
+{ { OpenConnection rig;
+    ChunkSpace     space(rig.connection());
+    rig.kmt().answer_next_bind_pages(chunk_pages - 1u);
+    CHECK_STATUS(space.open(chunk_pages), Status::malformed);
+    CHECK(space.invariants_hold());
+    CHECK(!space.opened());
+    CHECK_EQ(rig.kmt().bindings(), 0u);
+    CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
+  { OpenConnection rig;
+    ChunkSpace     space(rig.connection());
+    rig.kmt().answer_next_bind_pages(chunk_pages + 1u);
+    CHECK_STATUS(space.open(chunk_pages), Status::ok);
+    CHECK_EQ(space.pages(), chunk_pages);
+    std::uint64_t offset = 0u;
+    CHECK_STATUS(space.place(chunk_pages, offset), Status::ok);
+    CHECK_STATUS(space.place(1u, offset), Status::no_memory);
+    CHECK_STATUS(space.remove(0u), Status::ok);
+    CHECK_STATUS(space.close(), Status::ok);
+    CHECK_EQ(rig.kmt().bindings(), 0u); } }
+
+/* On a device with a host window the space is a chunk of it: its resource,
+ * its view in the window, and placement exactly as over guest RAM. */
+TEST(chunk_space, opens_over_a_window_chunk_when_the_kernel_grants_one)
+{ OpenConnection rig;
+  rig.kmt().open_host_window(2u * chunk_pages * page);
+  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::create_allocation);
+  ChunkSpace space(rig.connection());
+  CHECK_STATUS(space.open(chunk_pages), Status::ok);
+  CHECK(space.invariants_hold());
+  CHECK_EQ(space.pages(), chunk_pages);
+  CHECK_EQ(space.resource_id(), MockKmt::first_window_resource);
+  CHECK(space.view() == rig.kmt().window_base());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made);
+  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(place(space, 2u), 0u);
+  CHECK_EQ(place(space, 1u), 2u * page);
+  CHECK_STATUS(space.close(), Status::invalid_state);
+  CHECK_STATUS(space.remove(0u), Status::ok);
+  CHECK_STATUS(space.remove(2u * page), Status::ok);
+  CHECK_STATUS(space.close(), Status::ok);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
 
 TEST(chunk_space, places_ranges_first_fit_at_whole_pages)
 { OpenConnection rig;

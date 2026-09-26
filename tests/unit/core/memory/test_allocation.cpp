@@ -4,14 +4,7 @@
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/resource.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
-#include "core/pci/pci_base_addresses.hpp"
-#include "core/virtio/virtio_pci_layout.hpp"
-#include "core/virtio/virtio_region.hpp"
-#include "proto/context/capset_info.hpp"
-#include "proto/context/gpu_identity.hpp"
-#include "proto/context/protocol_version.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -56,46 +49,18 @@ using av::Violation;
 
 namespace {
 
-/* What this adapter has: the aperture, and a host-visible segment only where a
- * test says the device offers one. */
+/* What this adapter has: the aperture, and nothing else. */
 class Segments {
 public:
-    explicit Segments(MockPlatform &platform) : aperture_(platform), host_visible_(platform),
-        segments_(platform, aperture_, host_visible_)
+    explicit Segments(MockPlatform &platform) : aperture_(platform), segments_(platform, aperture_)
     { CHECK_STATUS(aperture_.initialize(0x100000000), av::Status::ok); }
-
-    /* The device offers a region of `bytes`, as one with hostmem does. */
-    void offer_host_visible(MockPlatform &platform, std::uint64_t bytes);
 
     const av::MemorySegments &segments() const { return segments_; }
 
 private:
     av::ApertureSegment     aperture_;
-    av::HostVisibleSegment  host_visible_;
     av::MemorySegments      segments_;
 };
-
-void Segments::offer_host_visible(MockPlatform &platform, std::uint64_t bytes)
-{
-    std::uint8_t config[256] = {};
-    constexpr std::uint64_t bar_address = 0x4000000000ull;
-    constexpr std::uint8_t  bar = 4u;
-    const std::uint32_t low = static_cast<std::uint32_t>(bar_address) | 0xCu;
-    const std::uint32_t high = static_cast<std::uint32_t>(bar_address >> 32u);
-    std::memcpy(config + 0x10u + 4u * bar, &low, 4u);
-    std::memcpy(config + 0x14u + 4u * bar, &high, 4u);
-    const av::VirtioRegion structure(2u, 0u, 0x1000u);
-    const av::VirtioRegion region(bar, 0u, bytes);
-    const av::VirtioRegion shared[av::VirtioPciLayout::max_shared_memory_regions] = {region};
-    const std::uint8_t ids[av::VirtioPciLayout::max_shared_memory_regions] = {1u};
-    const av::VirtioPciLayout layout(structure, structure, structure, structure, 4u, shared, ids, 1u);
-    host_visible_.discover(av::PciBaseAddresses(config, sizeof config), layout);
-    host_visible_.offer(av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
-                                                           av::ProtocolVersion::current_minor),
-                                       1u, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
-                                       av::GpuIdentity()));
-    static_cast<void>(platform);
-}
 
 const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10u, 10u, 21u, 40u), 400u,
                                   ScanoutTarget());
@@ -253,11 +218,10 @@ TEST(allocation_invariants, aperture_pages_that_lost_theirs_are_detected)
   CHECK(!allocation.invariants_hold()); }
 
 /* A primary is read by the display, which has no BAR to read it through: it
- * stays in the aperture whatever the device offers. */
-TEST(allocation_report_to, a_primary_stays_in_the_aperture_where_a_region_exists)
+ * stays in the aperture. */
+TEST(allocation_report_to, a_primary_stays_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
   const AllocationDescriptor primary(AllocationKind::shared_primary, true,
                                      SurfaceLayout(64u, 64u, 21u, 256u), 64u * 256u, ScanoutTarget(0u, 60u, 1u));
   Allocation scanned_out(platform, segments.segments(), primary, 64u * 256u);
@@ -347,19 +311,12 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   AllocationProbe(allocation).set_opens(1u);
   CHECK_STATUS(allocation.close(), Status::ok); }
 
-/* Feature 041: the CPU-visible segment is reported, and nothing is asked for in
- * it yet. Three live runs said VidMm refuses every allocation whose
- * PreferredSegment is that segment, with STATUS_INVALID_PARAMETER at
- * CreateAllocation - with and without a system-memory fallback in the supported
- * sets, with and without an eviction segment, and with and without CacheCoherent
- * on the segment - while reporting the segment itself is fine and the desktop
- * runs from the aperture. What VidMm wants of an allocation in a CPU-visible
- * segment that has storage is feature 043's to find out, with a client that
- * asks for the memory. */
-TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
+/* A client's buffer is guest RAM VidMm keeps in its own system memory
+ * segment, the one after the aperture: the device's hostmem region is no
+ * segment of this adapter (docs/host-window.md). */
+TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
 { MockPlatform platform;
   Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
   const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
   const AllocationDescriptor asked[] = {client};
@@ -367,10 +324,9 @@ TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
       DxgkAllocationInfoRecord info = {};
       allocation.report_to(info);
-      /* VidMm's own system memory, which is the third segment once this adapter
-       * reports two. */
-      CHECK_EQ(info.PreferredSegment, 3u);
-      CHECK_EQ(info.SupportedReadSegmentSet, 0x4u);
+      CHECK_EQ(info.PreferredSegment, av::ApertureSegment::system_memory_segment_id);
+      CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
+      CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
       CHECK_EQ(info.EvictionSegmentSet, 0u);
       CHECK_EQ(info.Flags, 1u);   /* still CPU-visible, and still guest-backed */
   } }
@@ -382,7 +338,6 @@ TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
 TEST(allocation_report_to, the_transport_s_memory_is_pinned_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
   const AllocationDescriptor transport[] = {
       AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),

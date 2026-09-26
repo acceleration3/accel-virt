@@ -141,6 +141,27 @@ TEST(host_visible_blob, is_created_mapped_and_released_in_reverse)
   CHECK_EQ(host.answered(), 4u);
   CHECK(blob.invariants_hold()); }
 
+/* A window chunk remembers only its resource and where its blob was placed:
+ * the blob rebuilt from those is created and mapped there, and comes down with
+ * an unmap and then an unref. */
+TEST(host_visible_blob, a_blob_rebuilt_from_what_a_chunk_remembers_comes_down_in_reverse)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob placed(fixture.mapped().platform(), resource, 6u * page);
+  CHECK(placed.created());
+  CHECK(placed.mapped());
+  CHECK_EQ(placed.resource(), resource);
+  CHECK_EQ(placed.offset(), 6u * page);
+  CHECK(placed.invariants_hold());
+  CHECK_STATUS(placed.create(fixture.device(), resource, page), Status::invalid_state);
+  CHECK_STATUS(placed.destroy(fixture.device()), Status::ok);
+  CHECK(!placed.created());
+  CHECK(!placed.mapped());
+  CHECK_EQ(host.answered(), 2u);
+  CHECK_EQ(host.queue().request_type(0u), 0x0209u);   /* RESOURCE_UNMAP_BLOB */
+  CHECK_EQ(host.queue().request_type(1u), 0x0102u);   /* RESOURCE_UNREF */ }
+
 /* The answer to a map is read, not assumed: a blob the driver thinks is mapped
  * and is not would hand a process whatever else is at that offset. */
 TEST(host_visible_blob_map, a_refused_map_leaves_it_unmapped)

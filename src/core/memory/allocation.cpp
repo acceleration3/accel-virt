@@ -3,7 +3,6 @@
 #include "core/ddi/dxgk_allocation_info_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
@@ -79,32 +78,10 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     /* A user-mode driver's surface is blitted by the miniport from its pages
      * and read back into by the host, so it wants them known too. */
     const bool pinned = scanned_out || descriptor_.kind() == AllocationKind::surface || published_as_blob();
-
-    /* Nothing is asked for in host memory yet, and the segment is reported all
-     * the same. Three live experiments say VidMm refuses every allocation whose
-     * PreferredSegment is the CPU-visible segment, with STATUS_INVALID_PARAMETER
-     * at CreateAllocation: with and without a system-memory fallback in the
-     * supported sets, with and without an eviction segment, and with and
-     * without CacheCoherent on the segment. The same adapter reports the
-     * segment happily and runs its desktop out of the aperture. What VidMm
-     * wants of an allocation in a CPU-visible segment that has storage is not
-     * yet known, and the feature that can find out is the one with a user-mode
-     * client asking for such memory (043). */
     const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);
-    /* Host memory: the CPU-visible segment first. A WDDM 3.0 driver's
-     * CpuVisible allocation must also list an aperture segment it could live
-     * in (VIDMM_GLOBAL::CreateOneAllocation: "CPUVisible allocations must
-     * include an aperture segment in the supported segment set"), which is
-     * what every earlier attempt with the segment alone ran into. */
-    if (descriptor_.kind() == AllocationKind::host_memory && segments_.offers_host_visible()) {
-        info.PreferredSegment = HostVisibleSegment::segment_id;
-        info.SupportedReadSegmentSet = (1u << (ApertureSegment::segment_id - 1u)) |
-                                       (1u << (HostVisibleSegment::segment_id - 1u));
-        info.SupportedWriteSegmentSet = info.SupportedReadSegmentSet;
-    }
     info.EvictionSegmentSet = 0u;
     info.MaximumRenamingListLength = 0u;
     info.hAllocation = this;
@@ -115,7 +92,6 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * pages behind it (feature 038). */
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) |
                  (pinned ? flag_accessed_physically : 0u);
-    if (descriptor_.kind() == AllocationKind::host_memory && segments_.offers_host_visible()) info.Flags |= flag_cached;
     info.AllocationPriority = priority_normal;
     info.Flags2 = 0u;
 }

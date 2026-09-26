@@ -56,6 +56,16 @@ public:
     virtual uint8_t *map_frame(uint64_t frame) = 0;
     /* Of a view map_frame returned; never of null. Never at DISPATCH. */
     virtual void     unmap_frame(uint8_t *view) = 0;
+    /* `bytes` of device memory at physical address `physical` (both
+     * page-aligned) mapped write-back into the calling process: its address
+     * there in `view`, and what unmap_from_process takes in `mapping`.
+     * no_memory when it cannot be mapped. Passive only. */
+    [[nodiscard]] virtual Status map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view,
+                                                void *&mapping) = 0;
+    /* The mapping gone from the process it was made in, whichever process
+     * calls - or nothing more than the bookkeeping when that process has
+     * exited, which took its mappings with it. Passive only. */
+    virtual void                 unmap_from_process(void *mapping) = 0;
     virtual void zero(void *dst, size_t bytes) = 0;
     virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 

@@ -18,7 +18,7 @@
 #include "core/platform/platform.hpp"
 #include "core/platform/spin_lock.hpp"
 #include "core/platform/wait_mutex.hpp"
-#include "core/rvk/host_visible_binding.hpp"
+#include "core/rvk/context_chunk.hpp"
 #include "core/rvk/ring_submitter.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "core/rvk/submission_reader.hpp"
@@ -40,6 +40,8 @@ class ExecutionNode;
 class HwQueueSubmissions;
 class GuestPageList;
 class HostVisibleBindRecord;
+class HostWindow;
+class HostWindowRecord;
 class RegisterWindow;
 class RvkContextRecord;
 class VirtioGpuDevice;
@@ -50,7 +52,10 @@ public:
     /* One per doorbell page. */
     static constexpr uint32_t max_contexts = RingSubmitter::doorbell_pages;
 
-    RvkContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, AllocationTable &allocations);
+    /* `window` is the device's host window, which window chunks are placed in
+     * and which must outlive the table. */
+    RvkContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, AllocationTable &allocations,
+                    HostWindow &window);
     ~RvkContextTable();
     RvkContextTable(const RvkContextTable &) = delete;
     RvkContextTable &operator=(const RvkContextTable &) = delete;
@@ -112,6 +117,19 @@ public:
      * not such a chunk, or a resource not bound; no_space when every chunk slot
      * is taken; the device's refusal otherwise. Nothing is bound on failure. */
     [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
+    /* PASSIVE, inside the Escape of the process that asks (docs/host-window.md).
+     * An open takes the first run of window pages that holds `record`'s bytes
+     * rounded up to pages, makes a host blob of the context's next free chunk
+     * resource, has the device place it there, maps those pages into the
+     * calling process write-back, and answers the resource, the bytes granted
+     * and the address in `record`. A close unmaps the process's view, has the
+     * device unmap and release the blob, and only then frees the pages.
+     * invalid_parameter for a context not live or a resource that is none of
+     * its window chunks; not_supported when there is no window, or the device
+     * will not make or place the blob; no_space when the window has no run
+     * that long or every chunk slot is taken; no_memory when the process cannot
+     * be given a view. Nothing is held on failure. */
+    [[nodiscard]] Status window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
     /* DISPATCH. Whether the table still holds `context`. Destroying an
      * allocation a context runs on unbinds it there and then, so a context
@@ -152,21 +170,31 @@ private:
     [[nodiscard]] Status set_up(uint32_t slot, const RvkContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);
-    /* Releases every chunk the slot holds, on `device` when it answers. */
-    void                 release_chunks(uint32_t slot, VirtioGpuDevice *device);
+    /* Releases every chunk the slot holds, on `device` when it answers.
+     * `host_let_go` says a device that is not asked holds nothing of the
+     * context any more, so its window pages are free again. */
+    void                 release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go);
     [[nodiscard]] Status publish_chunk(uint32_t slot, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     [[nodiscard]] Status unpublish_chunk(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
+    /* The index of the slot's first free chunk slot, or chunk_slots. */
+    uint32_t             free_chunk(uint32_t slot) const;
+    [[nodiscard]] Status open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
+    [[nodiscard]] Status close_window(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
+    /* Takes a window chunk down: the process's view, then the blob on `device`
+     * when there is one to ask, then the pages. */
+    void                 take_down(ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go);
     void                 log_binding(uint32_t slot, uint32_t message, Status status);
 
     Platform                        &platform_;
     DxgkrnlInterface                &dxgkrnl_;
     AllocationTable                 &allocations_;
+    HostWindow                      &window_;
     SpinLock                         lock_;
     SubmissionReader                 reader_;
     ObjectStorage<RvkContextBinding> bindings_[max_contexts];
     void                            *contexts_[max_contexts];
     const Allocation                *uses_[max_contexts][roles];
-    HostVisibleBinding               chunks_[max_contexts][RvkContextBinding::chunk_slots];
+    ContextChunk                     chunks_[max_contexts][RvkContextBinding::chunk_slots];
     uint8_t                         *ring_views_[max_contexts];
     uint8_t                         *fence_views_[max_contexts];
     uint8_t                          orders_[max_contexts];

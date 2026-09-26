@@ -13,7 +13,6 @@
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/paging_request.hpp"
@@ -87,7 +86,7 @@ const AllocationDescriptor four_pages(AllocationKind::shadow, true, SurfaceLayou
 class Paging {
 public:
     explicit Paging(std::int32_t operation, std::uint32_t dma_size = 128u)
-        : segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+        : segment_(platform_), segments_(platform_, segment_),
           shared_(platform_), allocations_(platform_, segment_, segments_, shared_), budget_(platform_),
           dma_{}, request_{}
     {
@@ -138,7 +137,6 @@ public:
 private:
     MockPlatform                   platform_;
     ApertureSegment                segment_;
-    av::HostVisibleSegment         host_visible_;
     av::MemorySegments             segments_;
     av::SharedObjectTable shared_;
     AllocationTable                allocations_;
@@ -323,8 +321,7 @@ TEST(paging_request, is_passive_only)
   request.Operation = 5;
   platform.set_irql(Irql::dispatch);
   ApertureSegment segment(platform);
-  av::HostVisibleSegment host_visible(platform);
-  const av::MemorySegments segments(platform, segment, host_visible);
+  const av::MemorySegments segments(platform, segment);
   av::SharedObjectTable shared(platform);
   AllocationTable allocations(platform, segment, segments, shared);
   LogBudget budget(platform);

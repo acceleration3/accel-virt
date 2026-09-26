@@ -93,6 +93,7 @@ public:
         CHECK_EQ(allocator_.chunks(), 0u);
         CHECK_EQ(allocator_.placements(), 0u);
         CHECK_EQ(kmt().bindings(), 0u);
+        CHECK_EQ(kmt().window_chunks(), 0u);
         CHECK_EQ(kmt().open_objects(), OpenConnection::link_objects);
         CHECK_EQ(kmt().misuses(), 0u);
         CHECK(allocator_.invariants_hold());
@@ -201,12 +202,16 @@ TEST(chunk_allocator, a_size_that_is_no_allocation_is_refused_unasked)
 /* The chunk refused at any of its steps: nothing is imported and nothing
  * held. */
 TEST(chunk_allocator, a_chunk_refused_at_any_step_leaves_nothing)
-{ const MockKmt::Call steps[] = {MockKmt::Call::create_allocation, MockKmt::Call::make_resident,
-                                 MockKmt::Call::wait_for_fence, MockKmt::Call::lock, MockKmt::Call::escape};
-  for (const MockKmt::Call step : steps) {
+{ /* No window here: the bind is the second escape, after the window's
+   * refused open. */
+  struct Step { MockKmt::Call call; std::uint32_t nth; };
+  const Step steps[] = {{MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::make_resident, 1u},
+                        {MockKmt::Call::wait_for_fence, 1u}, {MockKmt::Call::lock, 1u},
+                        {MockKmt::Call::escape, 2u}};
+  for (const Step &step : steps) {
       Rig rig;
       const std::uint32_t commands = rig.kmt().commands();
-      rig.kmt().fail_at(step, 1u, MockKmt::invalid_parameter);
+      rig.kmt().fail_at(step.call, step.nth, MockKmt::invalid_parameter);
       ChunkPlacement *placed = nullptr;
       CHECK(rig.allocator().allocate(page, host_visible_type, placed) != Status::ok);
       CHECK(placed == nullptr);
@@ -389,3 +394,38 @@ TEST(chunk_allocator, invariants_refuse_counts_that_do_not_match)
   CHECK(rig.allocator().invariants_hold());
   rig.free(second);
   rig.free(placed); }
+
+/* On a device with a host window every chunk is the window's while it has
+ * room, each placed after the last; the chunk the window cannot hold is guest
+ * RAM, and the two kinds serve allocations side by side. Freeing gives each
+ * back its own way. */
+TEST(chunk_allocator, chunks_come_from_the_window_and_fall_back_to_guest_ram_when_it_is_full)
+{ Rig rig;
+  rig.kmt().open_host_window(2u * chunk_bytes);
+  ChunkPlacement *first = rig.allocate(chunk_bytes);
+  ChunkPlacement *second = rig.allocate(chunk_bytes);
+  CHECK_EQ(rig.allocator().chunks(), 2u);
+  CHECK_EQ(rig.kmt().window_chunks(), 2u);
+  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK(first->view() == rig.kmt().window_base());
+  CHECK(second->view() == rig.kmt().window_base() + chunk_bytes);
+  CHECK_EQ(rig.last_import().resource_id(), MockKmt::first_window_resource + 1u);
+  /* The window is full: the third chunk is guest RAM. */
+  ChunkPlacement *third = rig.allocate(page);
+  CHECK_EQ(rig.allocator().chunks(), 3u);
+  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.last_import().resource_id(), MockKmt::first_chunk_resource);
+  CHECK(third->view() == rig.kmt().view_of(rig.kmt().bound_allocation(0u)));
+  third->view()[0] = 0x11u;
+  first->view()[chunk_bytes - 1u] = 0x22u;
+  CHECK_EQ(rig.kmt().window_base()[chunk_bytes - 1u], 0x22u);
+  /* A window chunk freed makes room, and the next chunk is the window's again. */
+  rig.free(first);
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  ChunkPlacement *fourth = rig.allocate(chunk_bytes);
+  CHECK(fourth->view() == rig.kmt().window_base());
+  CHECK_EQ(rig.kmt().window_chunks(), 2u);
+  rig.free(second);
+  rig.free(third);
+  rig.free(fourth);
+  rig.check_nothing_held(); }

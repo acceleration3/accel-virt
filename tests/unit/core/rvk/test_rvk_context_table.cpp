@@ -12,7 +12,7 @@
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/host_window.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/rvk/rvk_context_table.hpp"
@@ -35,6 +35,7 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -50,7 +51,7 @@ namespace av {
 struct RvkContextTableProbe {
     static void set_live(RvkContextTable &table, std::uint32_t slot, bool live) { table.live_[slot] = live; }
     static void set_context(RvkContextTable &table, std::uint32_t slot, void *context) { table.contexts_[slot] = context; }
-    static HostVisibleBinding &chunk(RvkContextTable &table, std::uint32_t slot, std::uint32_t index)
+    static ContextChunk &chunk(RvkContextTable &table, std::uint32_t slot, std::uint32_t index)
     {
         return table.chunks_[slot][index];
     }
@@ -98,6 +99,8 @@ constexpr std::uint32_t ctx_destroy_type = 0x0201u;
 constexpr std::uint32_t create_blob_type = 0x010Cu;
 constexpr std::uint32_t unref_type = 0x0102u;
 constexpr std::uint32_t submit_3d_type = 0x0207u;
+constexpr std::uint32_t map_blob_type = 0x0208u;
+constexpr std::uint32_t unmap_blob_type = 0x0209u;
 constexpr std::uint8_t  uuid[av::GpuIdentity::uuid_bytes] = {};
 
 CapsetInfo capset()
@@ -106,14 +109,24 @@ CapsetInfo capset()
                       av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
-/* A device answering every control request with OK_NODATA from the stall
- * between the driver's polls, or refusing one at a chosen index. */
+/* A device answering every control request from the stall between the
+ * driver's polls - MAP_BLOB with the caching it offers, everything else with
+ * OK_NODATA - or refusing one at a chosen index. */
 class Host {
 public:
-    explicit Host(av::MappedVirtioFunction &mapped) : queue_(mapped.queue_device(0u))
+    explicit Host(av::MappedVirtioFunction &mapped) : queue_(mapped.queue_device(0u)), platform_(&mapped.platform())
     { mapped.platform().on_stall(&Host::stall, this); }
 
     void                 refuse_at(int index) { refuse_at_ = index; }
+    /* Refuses the next request of `type`. */
+    void                 refuse_next(std::uint32_t type) { refuse_type_ = type; }
+    void                 answer_map_with(std::uint32_t map_info) { map_info_ = map_info; }
+    /* What the window and the process looked like when the device was asked
+     * to unmap or release a blob: the order a teardown must keep. */
+    void                 watch(const av::HostWindow &window) { window_ = &window; }
+    std::uint32_t        pages_when_released() const { return pages_when_released_; }
+    std::uint32_t        views_when_unmapped() const { return views_when_unmapped_; }
+    std::uint32_t        answered() const { return answered_; }
     av::FakeVirtqueueDevice &queue() { return queue_; }
     std::uint32_t count_of(std::uint32_t type) const
     {
@@ -138,16 +151,31 @@ private:
     {
         auto *const host = static_cast<Host *>(context);
         if (host->queue_.pending_type() == 0u) return;
+        const std::uint32_t asked = host->queue_.pending_type();
+        if (asked == unref_type && host->window_ != nullptr) host->pages_when_released_ = host->window_->pages_in_use();
+        if (asked == unmap_blob_type) host->views_when_unmapped_ = host->platform_->process_mappings();
         GpuResponse answer;
-        answer.set(static_cast<int>(host->answered_) == host->refuse_at_ ? GpuResponse::err_invalid_parameter
-                                                                         : GpuResponse::ok_nodata);
+        if (asked == map_blob_type)
+            answer.set_map_info(host->map_info_);
+        else
+            answer.set(GpuResponse::ok_nodata);
+        if (static_cast<int>(host->answered_) == host->refuse_at_ || asked == host->refuse_type_) {
+            answer.set(GpuResponse::err_invalid_parameter);
+            host->refuse_type_ = asked == host->refuse_type_ ? 0u : host->refuse_type_;
+        }
         host->answered_++;
         static_cast<void>(host->queue_.respond_all(answer.bytes(), static_cast<std::uint32_t>(answer.length())));
     }
 
     av::FakeVirtqueueDevice queue_;
+    av::MockPlatform       *platform_;
+    const av::HostWindow   *window_ = nullptr;
     std::uint32_t           answered_ = 0u;
     int                     refuse_at_ = -1;
+    std::uint32_t           refuse_type_ = 0u;
+    std::uint32_t           map_info_ = GpuResponse::map_cache_cached;
+    std::uint32_t           pages_when_released_ = UINT32_MAX;
+    std::uint32_t           views_when_unmapped_ = UINT32_MAX;
 };
 
 /* One allocation of a process: created in the table, given a D3DKMT handle,
@@ -212,10 +240,9 @@ private:
 class Fixture {
 public:
     Fixture()
-        : aperture_(mapped_.platform()), host_visible_(mapped_.platform()),
-          segments_(mapped_.platform(), aperture_, host_visible_),
+        : aperture_(mapped_.platform()), segments_(mapped_.platform(), aperture_),
           shared_(mapped_.platform()), allocations_(mapped_.platform(), aperture_, segments_, shared_),
-          table_(mapped_.platform(), mapped_.interface(), allocations_),
+          window_(mapped_.platform()), table_(mapped_.platform(), mapped_.interface(), allocations_, window_),
           notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform()),
           queues_(mapped_.platform())
     {
@@ -274,6 +301,7 @@ public:
     av::VirtioGpuDevice      &device() { return *device_; }
     av::FakeHandleTable      &handles() { return handles_; }
     av::AllocationTable      &allocations() { return allocations_; }
+    av::HostWindow           &window() { return window_; }
     RvkContextTable          &table() { return table_; }
     ExecutionNode            &node() { return node_; }
     av::HwQueueSubmissions   &queues() { return queues_; }
@@ -285,10 +313,10 @@ private:
     av::MappedVirtioFunction                mapped_;
     av::FakeHandleTable                     handles_;
     av::ApertureSegment                     aperture_;
-    av::HostVisibleSegment                  host_visible_;
     av::MemorySegments                      segments_;
     av::SharedObjectTable shared_;
     av::AllocationTable                     allocations_;
+    av::HostWindow                          window_;
     RvkContextTable                         table_;
     av::InterruptNotification               notification_;
     ExecutionNode                           node_;
@@ -674,7 +702,7 @@ TEST(rvk_context_table_unbind, a_context_failed_by_its_fence_page_is_still_destr
 TEST(rvk_context_table, destruction_releases_what_is_still_bound)
 { Fixture fixture;
   Host host(fixture.mapped());
-  { RvkContextTable table(fixture.platform(), fixture.mapped().interface(), fixture.allocations());
+  { RvkContextTable table(fixture.platform(), fixture.mapped().interface(), fixture.allocations(), fixture.window());
     CHECK_STATUS(table.bind(&first_context, fixture.record(), fixture.device(),
                             fixture.mapped().function().doorbells(), capset()),
                  Status::ok);
@@ -977,18 +1005,341 @@ TEST(rvk_context_table_invariants, detect_a_broken_chunk_or_one_on_a_free_slot)
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  av::HostVisibleBinding &held = RvkContextTableProbe::chunk(fixture.table(), 0u, 3u);
-  held.take(*fixture.ring().allocation(), 0u);
+  av::ContextChunk &held = RvkContextTableProbe::chunk(fixture.table(), 0u, 3u);
+  held.take_guest(*fixture.ring().allocation(), 0u);
   CHECK(!fixture.table().invariants_hold());
   held.clear();
   CHECK(fixture.table().invariants_hold());
-  av::HostVisibleBinding &stray = RvkContextTableProbe::chunk(fixture.table(), 5u, 0u);
-  stray.take(*fixture.ring().allocation(), 7u);
+  av::ContextChunk &stray = RvkContextTableProbe::chunk(fixture.table(), 5u, 0u);
+  stray.take_guest(*fixture.ring().allocation(), 7u);
   CHECK(!fixture.table().invariants_hold());
   stray.clear();
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
+
+/* ---- window chunks (docs/host-window.md) ------------------------------------------ */
+
+/* A process asks for a chunk of the host window on its live rvk context: the
+ * driver takes pages of the window, has the device make a host blob of one of
+ * the context's chunk resources and place it there, and maps those pages into
+ * the process. */
+namespace {
+
+using av::HostWindowRecord;
+using WindowOperation = av::HostWindowRecord::Operation;
+
+constexpr std::uint64_t window_base = 0x4000000000ull;
+constexpr std::uint64_t window_pages = 16u;
+
+Status open_window(Fixture &fixture, void *context, std::uint64_t bytes, HostWindowRecord &answer)
+{
+    answer = HostWindowRecord(WindowOperation::open, bytes, 0u);
+    return fixture.table().window_chunk(context, answer, fixture.device());
+}
+
+Status close_window(Fixture &fixture, void *context, std::uint32_t resource)
+{
+    HostWindowRecord record(WindowOperation::close, 0u, resource);
+    return fixture.table().window_chunk(context, record, fixture.device());
+}
+
+/* The bound context of a fixture whose device offers a window. */
+void bind_with_window(Fixture &fixture)
+{
+    CHECK_STATUS(fixture.window().initialize(window_base, window_pages * page), Status::ok);
+    CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+}
+
+/* The 64-bit field of the nth request of `type`, at `offset`. */
+std::uint64_t field64(Host &host, std::uint32_t type, std::uint32_t nth, std::size_t offset)
+{
+    return std::uint64_t{host.field(type, nth, offset)} | std::uint64_t{host.field(type, nth, offset + 4u)} << 32u;
+}
+
+}  // namespace
+
+TEST(rvk_context_table_window_chunk, an_open_places_a_host_blob_in_the_window_and_maps_it_into_the_process)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, 0x1800u, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_EQ(answer.bytes(), 0x2000u);   /* whole pages */
+  CHECK(answer.address() != 0u);
+  CHECK(fixture.platform().maps_into_process(answer.address(), window_base, 0x2000u));
+  /* The fourth blob, after the transport's three: HOST3D, mappable, no pages of
+   * the guest's, and as long as the pages granted. */
+  CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
+  CHECK_EQ(host.field(create_blob_type, 3u, 28u), 2u);   /* VIRTIO_GPU_BLOB_MEM_HOST3D */
+  CHECK_EQ(host.field(create_blob_type, 3u, 32u), 1u);   /* VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE */
+  CHECK_EQ(host.field(create_blob_type, 3u, 36u), 0u);
+  CHECK_EQ(field64(host, create_blob_type, 3u, 48u), 0x2000u);
+  CHECK_EQ(host.field(map_blob_type, 0u, 24u), chunk_base);
+  CHECK_EQ(field64(host, map_blob_type, 0u, 32u), 0u);
+  CHECK_EQ(fixture.window().pages_in_use(), 2u);
+
+  /* The next chunk takes the next slot and the next free pages. */
+  HostWindowRecord second;
+  CHECK_STATUS(open_window(fixture, &first_context, page, second), Status::ok);
+  CHECK_EQ(second.resource_id(), chunk_base + 1u);
+  CHECK_EQ(field64(host, map_blob_type, 1u, 32u), 2u * page);
+  CHECK(fixture.platform().maps_into_process(second.address(), window_base + 2u * page, page));
+  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+
+  /* A close takes the process's view down, then the blob, then the pages. */
+  host.watch(fixture.window());
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_EQ(host.field(unmap_blob_type, 0u, 24u), chunk_base);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
+  CHECK_EQ(host.views_when_unmapped(), 1u);    /* the process's view was already gone */
+  CHECK_EQ(host.pages_when_released(), 3u);    /* the pages were not yet back */
+  CHECK_EQ(fixture.window().pages_in_use(), 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), 1u);
+  CHECK(!fixture.platform().maps_into_process(answer.address(), window_base, 0x2000u));
+
+  /* First fit from the start of the window: the pages just freed are reused,
+   * and so is the chunk slot. */
+  HostWindowRecord again;
+  CHECK_STATUS(open_window(fixture, &first_context, page, again), Status::ok);
+  CHECK_EQ(again.resource_id(), chunk_base);
+  CHECK_EQ(field64(host, map_blob_type, 2u, 32u), 0u);
+  CHECK(fixture.platform().maps_into_process(again.address(), window_base, page));
+  CHECK(fixture.table().invariants_hold());
+
+  /* Destroying the context closes what it still holds, after the context
+   * itself: the device ends a context's imports when it destroys it. */
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.window().pages_in_use(), 0u);
+  CHECK_EQ(host.count_of(unmap_blob_type), 3u);
+  std::uint32_t destroy = 0u, last_unmap = 0u;
+  for (std::uint32_t i = 0u; i < host.queue().requests(); i++) {
+      if (host.queue().request_type(i) == ctx_destroy_type) destroy = i;
+      if (host.queue().request_type(i) == unmap_blob_type) last_unmap = i;
+  }
+  CHECK(destroy < last_unmap);
+  CHECK(fixture.table().invariants_hold()); }
+
+/* Each thing an open can be refused for, and none of them leaves anything
+ * taken, placed or mapped. */
+TEST(rvk_context_table_window_chunk, refuses_what_it_cannot_serve_and_holds_nothing_after)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  HostWindowRecord answer;
+  /* No context bound, and then no window. */
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::invalid_parameter);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_supported);
+  CHECK_STATUS(fixture.window().initialize(window_base, window_pages * page), Status::ok);
+  /* More than the window, and more than a page index can count. */
+  CHECK_STATUS(open_window(fixture, &first_context, (window_pages + 1u) * page, answer), Status::no_space);
+  CHECK_STATUS(open_window(fixture, &first_context, (std::uint64_t{UINT32_MAX} + 1u) * page, answer),
+               Status::no_space);
+  /* A resource that is none of the context's window chunks. */
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
+  /* Withdrawn: the device changed, and nothing more is placed. */
+  fixture.window().withdraw();
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_supported);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_EQ(fixture.window().pages_in_use(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A guest chunk's resource is not a window chunk's: closing it through the
+ * window is refused and leaves it bound. */
+TEST(rvk_context_table_window_chunk, a_guest_chunk_is_neither_closed_as_a_window_nor_the_reverse)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord bound;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), bound), Status::ok);
+  HostWindowRecord window;
+  CHECK_STATUS(open_window(fixture, &first_context, page, window), Status::ok);
+  CHECK_EQ(window.resource_id(), chunk_base + 1u);   /* the two kinds share the slots */
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
+  CHECK(fixture.table().user_of(chunk.allocation()) == &first_context);
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 1u), Status::invalid_parameter);
+  CHECK_EQ(fixture.platform().process_mappings(), 1u);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base + 1u), Status::ok);
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Every chunk slot taken refuses the next open without taking pages or asking
+ * the device. */
+TEST(rvk_context_table_window_chunk, the_context_s_chunk_slots_full_refuses_the_next)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.window().initialize(window_base, 2u * av::RvkContextBinding::chunk_slots * page), Status::ok);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  HostWindowRecord answer;
+  for (std::uint32_t index = 0u; index < av::RvkContextBinding::chunk_slots; index++)
+      CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_space);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_EQ(fixture.window().pages_in_use(), av::RvkContextBinding::chunk_slots);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.window().pages_in_use(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u); }
+
+/* A step that fails undoes the ones before it, in reverse: the pages come back
+ * only once the device holds no blob over them. */
+TEST(rvk_context_table_window_chunk, a_failed_step_undoes_the_ones_before_it)
+{ struct Case { const char *what; std::uint32_t refused; std::uint32_t map_info; bool fail_view; Status status;
+                std::uint32_t unmaps; std::uint32_t unrefs; };
+  const Case cases[] = {
+      {"create refused", create_blob_type, GpuResponse::map_cache_cached, false, Status::not_supported, 0u, 0u},
+      {"map refused", map_blob_type, GpuResponse::map_cache_cached, false, Status::not_supported, 0u, 1u},
+      {"map not cached", 0u, 0x3u, false, Status::malformed, 0u, 1u},
+      {"no process view", 0u, GpuResponse::map_cache_cached, true, Status::no_memory, 1u, 1u},
+  };
+  for (const Case &one : cases) {
+      Fixture fixture;
+      Host host(fixture.mapped());
+      bind_with_window(fixture);
+      host.refuse_next(one.refused);
+      host.answer_map_with(one.map_info);
+      if (one.fail_view) fixture.platform().fail_process_map_at(1u);
+      HostWindowRecord answer;
+      CHECK_STATUS(open_window(fixture, &first_context, page, answer), one.status);
+      CHECK_EQ(answer.resource_id(), 0u);
+      CHECK_EQ(answer.address(), 0u);
+      CHECK_EQ(host.count_of(unmap_blob_type), one.unmaps);
+      CHECK_EQ(host.count_of(unref_type), one.unrefs);
+      CHECK_EQ(fixture.window().pages_in_use(), 0u);
+      CHECK_EQ(fixture.platform().process_mappings(), 0u);
+      /* The slot and the pages are free for the next open. */
+      host.answer_map_with(GpuResponse::map_cache_cached);
+      CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+      CHECK_EQ(answer.resource_id(), chunk_base);
+      CHECK(fixture.platform().maps_into_process(answer.address(), window_base, page));
+      CHECK(fixture.table().invariants_hold());
+      CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  } }
+
+/* A blob the device would not release may still be placed over its pages, so
+ * they stay out of the window for good - whether the open was being undone or
+ * the chunk closed - and the next chunk lands elsewhere. */
+TEST(rvk_context_table_window_chunk, pages_the_device_did_not_let_go_of_are_never_handed_out_again)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  fixture.platform().fail_process_map_at(1u);
+  host.refuse_next(unref_type);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
+  CHECK_EQ(fixture.window().pages_in_use(), 1u);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK(fixture.platform().maps_into_process(answer.address(), window_base + page, page));
+  host.refuse_next(unmap_blob_type);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);   /* the process's view is gone all the same */
+  CHECK_EQ(fixture.window().pages_in_use(), 2u);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK(fixture.platform().maps_into_process(answer.address(), window_base + 2u * page, page));
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.window().pages_in_use(), 2u); }
+
+/* A context the device no longer holds - reset, or gone - holds none of its
+ * window chunks either: the process's views come down and the pages are free,
+ * with nothing asked of the device. */
+TEST(rvk_context_table_window_chunk, a_context_the_device_let_go_of_frees_its_pages_silently)
+{ const bool abandoned[] = {true, false};
+  for (bool reset : abandoned) {
+      Fixture fixture;
+      Host host(fixture.mapped());
+      bind_with_window(fixture);
+      HostWindowRecord answer;
+      CHECK_STATUS(open_window(fixture, &first_context, 3u * page, answer), Status::ok);
+      if (reset) fixture.table().abandon_all();
+      if (reset) CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::invalid_parameter);
+      const std::uint32_t asked = host.queue().requests();
+      CHECK_STATUS(fixture.table().unbind(&first_context, reset ? &fixture.device() : nullptr), Status::ok);
+      CHECK_EQ(host.queue().requests(), asked);
+      CHECK_EQ(fixture.platform().process_mappings(), 0u);
+      CHECK_EQ(fixture.window().pages_in_use(), 0u);
+      CHECK(fixture.table().invariants_hold());
+  } }
+
+/* A device that stopped answering mid-teardown may still hold the blob placed:
+ * the view comes down, and the pages are kept. */
+TEST(rvk_context_table_window_chunk, a_device_that_stopped_answering_keeps_the_pages)
+{ Fixture fixture;
+  { Host host(fixture.mapped());
+    bind_with_window(fixture);
+    HostWindowRecord answer;
+    CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok); }
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_STATUS(fixture.device().stop(), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.window().pages_in_use(), 1u); }
+
+/* A table destroyed with a window chunk open still takes the process's view
+ * down. */
+TEST(rvk_context_table_window_chunk, destruction_unmaps_what_is_still_open)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.window().initialize(window_base, window_pages * page), Status::ok);
+  { RvkContextTable table(fixture.platform(), fixture.mapped().interface(), fixture.allocations(), fixture.window());
+    CHECK_STATUS(table.bind(&first_context, fixture.record(), fixture.device(),
+                            fixture.mapped().function().doorbells(), capset()),
+                 Status::ok);
+    HostWindowRecord answer(WindowOperation::open, page, 0u);
+    CHECK_STATUS(table.window_chunk(&first_context, answer, fixture.device()), Status::ok);
+    CHECK_EQ(fixture.platform().process_mappings(), 1u); }
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+
+/* A context the host faulted takes no window chunk either. */
+TEST(rvk_context_table_window_chunk, a_context_the_host_faulted_is_refused)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  fixture.complete_through(0u, 6u);
+  fixture.serve();
+  const std::uint32_t asked = host.queue().requests();
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(rvk_context_table_window_chunk, is_passive_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  HostWindowRecord answer(WindowOperation::open, page, 0u);
+  static_cast<void>(fixture.table().window_chunk(&first_context, answer, fixture.device()));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
+  while (fixture.platform().claim(Violation::lock_order)) {}
+  while (fixture.platform().claim(Violation::release_order)) {} }
+
+TEST(rvk_context_table_report, writes_a_window_chunk_s_pages)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_STATUS(open_window(fixture, &first_context, 2u * page, answer), Status::ok);
+  char bytes[1024];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.table().report(writer);
+  char expected[128];
+  std::snprintf(expected, sizeof expected, "rvk_context_table/0/rvk_context/0/chunk/1 resource=%u window_page=1 pages=2",
+                static_cast<unsigned>(chunk_base + 1u));
+  CHECK(std::strstr(writer.dump(), expected) != nullptr);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* ---- report -------------------------------------------------------------------- */
 

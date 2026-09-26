@@ -47,6 +47,14 @@ public:
      * other is refused with null. A view left mapped fails the test. */
     std::uint8_t *map_frame(std::uint64_t frame) override;
     void          unmap_frame(std::uint8_t *view) override;
+    /* A view of `bytes` at `physical` in the one process a test models: the
+     * memory behind it where a resolver says what that is, otherwise an
+     * address no live view overlaps and nothing may touch. Recorded until
+     * unmapped, and a view left mapped fails the test. Misaligned or empty
+     * ranges are frame misuse. */
+    Status        map_to_process(std::uint64_t physical, std::uint64_t bytes, std::uint64_t &view,
+                                 void *&mapping) override;
+    void          unmap_from_process(void *mapping) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
     Irql     current_irql() const override;
@@ -175,6 +183,17 @@ public:
     std::uint32_t mapped_frames() const;
     /* Makes the Nth map_frame from now (1-based) answer null; 0 disables. */
     void          fail_frame_map_at(std::uint32_t nth);
+    /* Process views still mapped. */
+    std::uint32_t process_mappings() const;
+    /* Whether a live process view at `view` maps `bytes` of `physical`. */
+    bool          maps_into_process(std::uint64_t view, std::uint64_t physical, std::uint64_t bytes) const;
+    /* Makes the Nth map_to_process from now (1-based) answer no_memory; 0
+     * disables. */
+    void          fail_process_map_at(std::uint32_t nth);
+    /* What a rig whose device backs device memory answers for a process view
+     * of `bytes` at `physical`: the host memory there, or null for none. */
+    using ProcessViewResolver = void *(*)(void *context, std::uint64_t physical, std::uint64_t bytes);
+    void          resolve_process_views(ProcessViewResolver resolver, void *context);
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
     std::uint32_t logged() const;
@@ -192,6 +211,10 @@ private:
     static constexpr std::uint32_t max_contiguous = 256u;
     static constexpr std::uint32_t max_page_frames = 256u;
     static constexpr std::uint32_t max_frame_views = 256u;
+    static constexpr std::uint32_t max_process_views = 256u;
+    /* Where the modelled process's views start: a user-mode address, so a test
+     * reading one back can tell it from any host pointer. */
+    static constexpr std::uint64_t first_process_view = 0x00007FF000000000ull;
     static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
         static_cast<std::uint32_t>(Violation::count);
@@ -200,6 +223,13 @@ private:
         void         *block;
         std::uint64_t physical_address;
         std::size_t   bytes;
+    };
+
+    struct ProcessView {
+        std::uint64_t physical;
+        std::uint64_t bytes;
+        std::uint64_t view;
+        bool          live;
     };
 
     struct PageFrames {
@@ -245,6 +275,12 @@ private:
     std::uint32_t frame_view_count_ = 0u;
     std::uint32_t frame_map_sequence_ = 0u;
     std::uint32_t frame_fail_at_ = 0u;
+    ProcessView   process_views_[max_process_views] = {};
+    std::uint64_t next_process_view_ = first_process_view;
+    std::uint32_t process_map_sequence_ = 0u;
+    std::uint32_t process_fail_at_ = 0u;
+    ProcessViewResolver process_resolver_ = nullptr;
+    void         *process_resolver_context_ = nullptr;
     std::uint32_t fail_at_;
     Irql          irql_;
     HeldLock      held_[lock_stack_depth];

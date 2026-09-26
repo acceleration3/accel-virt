@@ -124,15 +124,12 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNREF, 2))), hex(RESP_OK_NODATA))
         self.assertEqual(gpu.qtest.read_bytes(hostmem + 11 * PAGE, len(pattern)), bytes(len(pattern)))
 
-    def test_the_driver_s_own_region_blob_is_what_the_device_accepts(self):
-        """Feature 041: the guest driver maps the whole region as one blob at
-        offset 0 as soon as it starts, because VidMm maps a process's view
-        itself and never says where an allocation landed - so every offset it
-        can choose must already have host memory behind it. These are the exact
-        requests src/core/memory/host_visible_blob.cpp sends."""
+    def test_a_blob_as_large_as_the_window_is_placed_at_its_start(self):
+        """The largest chunk the driver's host window can hand out
+        (docs/host-window.md) is the whole BAR, placed at offset 0."""
         gpu = self.open(RVK)
         hostmem = self.hostmem(gpu)
-        resource = 0x1000   # HostVisibleBlob::first_resource_id
+        resource = 0x1000
         self.assertEqual(hex(self.send(gpu, create_blob(resource, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, HOSTMEM))),
                          hex(RESP_OK_NODATA))
         response = gpu.control(map_blob(resource, 0), 32)

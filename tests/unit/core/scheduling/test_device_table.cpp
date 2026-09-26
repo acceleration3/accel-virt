@@ -8,7 +8,6 @@
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/shared_object_table.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/device_allocation.hpp"
@@ -87,7 +86,7 @@ class Fixture {
 public:
     Fixture()
         : dxgkrnl_(platform_, function_), interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_),
-          host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+          segments_(platform_, segment_),
           shared_(platform_), allocations_(platform_, segment_, segments_, shared_), devices_(platform_, allocations_, shared_, interface_), infos_{}, descriptors_{},
           handles_{}, opens_{}
     {
@@ -248,7 +247,6 @@ private:
     int                          runtime_device_ = 0;
     Adapter                      adapter_;
     ApertureSegment              segment_;
-    av::HostVisibleSegment        host_visible_;
     av::MemorySegments            segments_;
     av::SharedObjectTable shared_;
     AllocationTable              allocations_;

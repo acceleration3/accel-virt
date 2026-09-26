@@ -17,7 +17,6 @@
 #include "core/memory/shared_object_table.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/pci/mapped_register_window.hpp"
@@ -55,8 +54,7 @@ constexpr std::uint32_t pages = 64u;
 class Doorbells {
 public:
     Doorbells()
-        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), host_visible_(platform_),
-          segments_(platform_, segment_, host_visible_), shared_(platform_), allocations_(platform_, segment_, segments_, shared_),
+        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), segments_(platform_, segment_), shared_(platform_), allocations_(platform_, segment_, segments_, shared_),
           devices_(platform_, allocations_, shared_, interface_), geometry_(platform_),
           contexts_(platform_, devices_, geometry_), queues_(platform_, contexts_),
           window_(platform_, bytes_, sizeof bytes_), table_(platform_, window_),
@@ -95,7 +93,6 @@ private:
     int                    pdo_ = 0;
     av::Adapter            adapter_;
     av::ApertureSegment    segment_;
-    av::HostVisibleSegment host_visible_;
     av::MemorySegments     segments_;
     av::SharedObjectTable shared_;
     av::AllocationTable    allocations_;

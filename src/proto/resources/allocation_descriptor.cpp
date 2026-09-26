@@ -82,7 +82,7 @@ bool AllocationDescriptor::is_valid() const
                             kind_ == AllocationKind::surface ||
                             kind_ == AllocationKind::client || kind_ == AllocationKind::context_ring ||
                             kind_ == AllocationKind::fence_page || kind_ == AllocationKind::reply_slot ||
-                            kind_ == AllocationKind::host_visible_memory || kind_ == AllocationKind::host_memory;
+                            kind_ == AllocationKind::host_visible_memory;
     if (!known_kind || size_ == 0u) return false;
     if (layout_.bytes() > size_ || layout_.pitch() < layout_.width()) return false;
     if (kind_ != AllocationKind::shared_primary && !scanout_.is_empty()) return false;
@@ -92,8 +92,7 @@ bool AllocationDescriptor::is_valid() const
     if (kind_ == AllocationKind::context_ring)
         return size_ >= page_bytes && (size_ & (size_ - 1u)) == 0u && !layout_.is_surface();
     if (kind_ == AllocationKind::fence_page) return size_ == page_bytes && !layout_.is_surface();
-    if (kind_ == AllocationKind::reply_slot || kind_ == AllocationKind::host_visible_memory ||
-        kind_ == AllocationKind::host_memory)
+    if (kind_ == AllocationKind::reply_slot || kind_ == AllocationKind::host_visible_memory)
         return size_ % page_bytes == 0u && !layout_.is_surface();
     return kind_ == AllocationKind::client || layout_.is_surface();
 }

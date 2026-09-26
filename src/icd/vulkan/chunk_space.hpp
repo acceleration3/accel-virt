@@ -1,7 +1,8 @@
 /* One host-visible chunk of a connection, and the page ranges placed in it
- * (research.md §7, contracts/host_visible_memory.md §1). The chunk is guest RAM
- * the kernel bound to the connection's context as a blob, locked into this
- * process; each range placed in it is imported separately as device memory,
+ * (research.md §7, contracts/host_visible_memory.md §1). The chunk is the
+ * kernel's resource of the connection's context, mapped into this process: a
+ * chunk of the device's host window, or guest RAM when the window has none to
+ * give (docs/host-window.md); each range placed in it is imported separately as device memory,
  * so the ranges a chunk holds are bounded as a context's imports are. Ranges
  * are whole pages, placed first fit and kept in address order. */
 #ifndef AV_ICD_CHUNK_SPACE_HPP
@@ -9,7 +10,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "guest/transport/host_visible_chunk.hpp"
+#include "guest/transport/blob_chunk.hpp"
 
 #include <stdint.h>
 
@@ -31,7 +32,7 @@ public:
 
     /* A chunk of `pages` bound through the connection. invalid_state when
      * open; invalid_parameter for no pages or more than 64 bits of bytes, not
-     * asked; malformed when the kernel bound another size; otherwise the
+     * asked; malformed when the kernel bound fewer; otherwise the
      * connection's refusal. Nothing is held unless ok. */
     [[nodiscard]] Status open(uint64_t pages);
     /* `pages` placed first fit; `offset` is its first byte. invalid_state when
@@ -62,7 +63,7 @@ private:
     uint32_t hole_before(uint64_t pages, uint64_t &first) const;
 
     Connection                     &connection_;
-    ObjectStorage<HostVisibleChunk> chunk_;
+    ObjectStorage<BlobChunk>        chunk_;
     uint64_t                        pages_;
     uint32_t                        placed_;
     /* The placed ranges in address order: first page and page count. */

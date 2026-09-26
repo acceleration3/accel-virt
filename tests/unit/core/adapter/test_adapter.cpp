@@ -41,6 +41,7 @@
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 #include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
@@ -114,6 +115,8 @@ struct AdapterProbe {
      * device object exists and is not running, which is when an interrupt
      * dxgkrnl left connected must be left alone (feature 040, US1). */
     void stop_device_object() { static_cast<void>(adapter.device_.object().stop()); }
+    /* Whether window chunks may be placed now (docs/host-window.md). */
+    bool window_offered() const { return adapter.window_.offered(); }
     Adapter &adapter;
 };
 
@@ -209,6 +212,7 @@ private:
 /* One adapter as dxgkrnl sees it: AddDevice done, StartDevice not yet. */
 constexpr std::uint32_t create_blob = 0x010Cu;       /* VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB */
 constexpr std::uint32_t map_blob = 0x0208u;          /* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
+constexpr std::uint32_t unmap_blob = 0x0209u;        /* VIRTIO_GPU_CMD_RESOURCE_UNMAP_BLOB */
 constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
 constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
 constexpr std::uint32_t resource_unref = 0x0102u;    /* VIRTIO_GPU_CMD_RESOURCE_UNREF */
@@ -280,13 +284,12 @@ public:
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
     void                   offer_opengl() { capset_ = host_capset(first_gpu, 0x3u); }
-    /* Whether the driver made its region blob and mapped it. */
-    /* A device with no room left for the region's blob. */
+    /* A device with no room left for a window chunk's blob. */
     void                   refuse_the_blob() { refuse_blob_ = true; }
-    bool                   created_blob() const { return created_blob_; }
-    bool                   mapped_region() const { return mapped_region_; }
-    /* MAP_BLOBs of the region the device answered, across power cycles. */
-    std::uint32_t          region_maps() const { return region_maps_; }
+    /* MAP_BLOBs and UNMAP_BLOBs the device answered: window chunks placed and
+     * taken down (docs/host-window.md). */
+    std::uint32_t          blob_maps() const { return blob_maps_; }
+    std::uint32_t          blob_unmaps() const { return blob_unmaps_; }
     /* A device that stops answering what it is. */
     void                   ignore_capset() { ignore_capset_ = true; }
     /* CTX_CREATE, CTX_DESTROY, SUBMIT_3D and RESOURCE_UNREF the device answered. */
@@ -306,9 +309,9 @@ private:
         /* The adapter asks the device what it is as well as what it shows, and
          * the answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = fixture->control().pending_type();
-        /* The whole host-visible region as one blob, which StartDevice creates
-         * and maps when the device offers a region (feature 041). */
-        if (asked == create_blob || asked == map_blob) {
+        /* A context's transport blobs, and a window chunk's host blob placed
+         * and taken down (docs/host-window.md). */
+        if (asked == create_blob || asked == map_blob || asked == unmap_blob) {
             av::GpuResponse answer;
             if (fixture->refuse_blob_) {
                 answer.set(av::GpuResponse::err_out_of_memory);
@@ -317,11 +320,10 @@ private:
                 return;
             }
             if (asked == map_blob) {
-                fixture->mapped_region_ = true;
-                fixture->region_maps_++;
+                fixture->blob_maps_++;
                 answer.set_map_info(av::GpuResponse::map_cache_cached);
             } else {
-                fixture->created_blob_ = true;
+                fixture->blob_unmaps_ += asked == unmap_blob ? 1u : 0u;
                 answer.set(av::GpuResponse::ok_nodata);
             }
             static_cast<void>(fixture->control().respond_all(answer.bytes(),
@@ -362,9 +364,8 @@ private:
     DisplayInfoAnswer     display_info_;
     av::CapsetInfo        capset_ = host_capset(first_gpu);
     bool                  refuse_blob_ = false;
-    bool                  created_blob_ = false;
-    bool                  mapped_region_ = false;
-    std::uint32_t         region_maps_ = 0u;
+    std::uint32_t         blob_maps_ = 0u;
+    std::uint32_t         blob_unmaps_ = 0u;
     std::uint32_t         context_requests_ = 0u;
     bool                  ignore_capset_ = false;
     Answer                answer_ = Answer::display_info;
@@ -3660,153 +3661,6 @@ TEST(adapter_set_power_state, a_device_that_changed_with_no_work_queued_tells_no
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
-/* Feature 041, US1: VidMm maps a process's view of a CPU-visible segment
- * itself and tells the driver nothing, so every offset it can place an
- * allocation at must already have host memory behind it. The driver makes that
- * true the only way it can: one blob the size of the region, mapped at offset
- * zero when the device offers a region. */
-TEST(adapter_start_device, maps_the_whole_host_visible_region_as_one_blob)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  CHECK(fixture.created_blob());
-  CHECK(fixture.mapped_region());
-
-  std::uint32_t physical_adapter = 0u;
-  av::DxgkQuerySegmentOut4Record out = {};
-  DxgkargQueryAdapterInfoRecord query = {};
-  query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
-  query.pInputData = &physical_adapter;
-  query.InputDataSize = sizeof physical_adapter;
-  query.pOutputData = &out;
-  query.OutputDataSize = sizeof out;
-  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(out.NbSegment, 2u); }
-
-/* A device with no region is the adapter as it was: one segment, and no blob
- * asked for. */
-TEST(adapter_start_device, a_device_with_no_region_asks_for_no_blob)
-{ Fixture fixture;
-  CHECK_EQ(fixture.start(), success);
-  CHECK(!fixture.created_blob());
-  CHECK(!fixture.mapped_region()); }
-
-/* A device that cannot give the driver its region is a device the driver runs
- * without one: the adapter still starts, and the segment it reported is the
- * aperture alone, because memory nobody can reach is worse than memory nobody
- * was promised (feature 041, FR-001). */
-TEST(adapter_start_device, a_region_the_device_refuses_leaves_the_adapter_without_one)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  fixture.refuse_the_blob();
-  const std::uint32_t logged = fixture.platform().logged();
-  CHECK_EQ(fixture.start(), success);
-  CHECK(fixture.platform().logged() > logged);   /* said once, with the status that stopped it */
-
-  std::uint32_t physical_adapter = 0u;
-  av::DxgkQuerySegmentOut4Record out = {};
-  DxgkargQueryAdapterInfoRecord query = {};
-  query.Type = 11;
-  query.pInputData = &physical_adapter;
-  query.InputDataSize = sizeof physical_adapter;
-  query.pOutputData = &out;
-  query.OutputDataSize = sizeof out;
-  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  /* And the segment is not offered: a segment with no storage behind it is one
-   * VidMm places allocations in and then writes into nothing. */
-  CHECK_EQ(out.NbSegment, 1u); }
-
-namespace {
-
-/* How many segments the adapter reports to VidMm now. */
-std::uint32_t reported_segments(Fixture &fixture)
-{
-    std::uint32_t                  physical_adapter = 0u;
-    av::DxgkQuerySegmentOut4Record out = {};
-    DxgkargQueryAdapterInfoRecord  query = {};
-    query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
-    query.pInputData = &physical_adapter;
-    query.InputDataSize = sizeof physical_adapter;
-    query.pOutputData = &out;
-    query.OutputDataSize = sizeof out;
-    CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-    return out.NbSegment;
-}
-
-}  // namespace
-
-/* A D3 resets the device, and the reset takes the region's blob with it; VidMm
- * still has the segment it was told about at start, so D0 on the same device
- * must make the blob again, or every offset of that segment is a BAR with
- * nothing placed in it. Found by the full-stack rig (tests/loopback). */
-TEST(adapter_set_power_state, d0_on_the_same_device_makes_the_host_visible_region_again)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  CHECK_EQ(fixture.region_maps(), 1u);
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
-  CHECK_EQ(reported_segments(fixture), 2u);   /* what VidMm holds does not change across D3 */
-  fixture.forget_control();
-  fixture.answer_asks();
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  fixture.platform().on_stall(nullptr, nullptr);
-  CHECK_EQ(fixture.region_maps(), 2u);
-  CHECK_EQ(reported_segments(fixture), 2u); }
-
-/* dxgkrnl may ask for D0 on an adapter already in D0: the device was never
- * reset, so the blob it holds is the region working and is kept. */
-TEST(adapter_set_power_state, a_second_d0_keeps_the_host_visible_region)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  fixture.answer_asks();
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  fixture.platform().on_stall(nullptr, nullptr);
-  CHECK_EQ(fixture.region_maps(), 1u);
-  CHECK_EQ(reported_segments(fixture), 2u); }
-
-/* A timeout reset is a device reset too, and the restart makes the blob again. */
-TEST(adapter_restart_from_timeout, makes_the_host_visible_region_again)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
-  fixture.forget_control();
-  fixture.answer_asks();
-  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
-  fixture.platform().on_stall(nullptr, nullptr);
-  CHECK_EQ(fixture.region_maps(), 2u);
-  CHECK_EQ(reported_segments(fixture), 2u); }
-
-/* Another device behind the function is not the one the segment was reported
- * for, so the region is closed rather than made on it. */
-TEST(adapter_set_power_state, a_device_that_changed_gets_no_host_visible_region)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
-  fixture.forget_control();
-  fixture.answer_capset_of(other_gpu);
-  fixture.answer_asks();
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  fixture.platform().on_stall(nullptr, nullptr);
-  CHECK_EQ(fixture.region_maps(), 1u);
-  CHECK_EQ(reported_segments(fixture), 1u); }
-
-/* A device that no longer says what it is cannot be given the region either. */
-TEST(adapter_set_power_state, a_device_that_stopped_saying_what_it_is_gets_no_host_visible_region)
-{ Fixture fixture;
-  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
-  CHECK_EQ(fixture.start(), success);
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
-  fixture.forget_control();
-  fixture.ignore_capset();
-  fixture.answer_asks();
-  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  fixture.platform().on_stall(nullptr, nullptr);
-  CHECK_EQ(fixture.region_maps(), 1u);
-  CHECK_EQ(reported_segments(fixture), 1u); }
-
 /* ---- rvk contexts (feature 043) ------------------------------------------------- */
 
 namespace {
@@ -4528,6 +4382,240 @@ TEST(adapter_escape, a_chunk_binding_with_no_device_is_invalid)
   int context = 0;
   escape.hContext = &context;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter); }
+
+
+/* ---- the host window (docs/host-window.md) ---------------------------------------- */
+
+namespace {
+
+/* How many segments the adapter reports to VidMm now. */
+std::uint32_t reported_segments(Fixture &fixture)
+{
+    std::uint32_t                  physical_adapter = 0u;
+    av::DxgkQuerySegmentOut4Record out = {};
+    DxgkargQueryAdapterInfoRecord  query = {};
+    query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+    query.pInputData = &physical_adapter;
+    query.InputDataSize = sizeof physical_adapter;
+    query.pOutputData = &out;
+    query.OutputDataSize = sizeof out;
+    CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+    return out.NbSegment;
+}
+
+/* A window chunk escape on `context`: `record` encoded into `data` and sent. */
+std::uint32_t window_escape(Fixture &fixture, void *context, const av::HostWindowRecord &record,
+                            std::uint8_t (&data)[av::HostWindowRecord::encoded_size])
+{
+    CHECK_STATUS(record.encode(data, sizeof data), av::Status::ok);
+    DxgkargEscapeRecord escape = {};
+    escape.pPrivateDriverData = data;
+    escape.PrivateDriverDataSize = sizeof data;
+    escape.hContext = context;
+    return nt(fixture.adapter().escape(&escape));
+}
+
+using WindowOperation = av::HostWindowRecord::Operation;
+
+constexpr std::uint32_t first_chunk_resource =
+    av::RvkContextBinding::first_resource_id + av::RvkContextBinding::transport_resources;
+
+}  // namespace
+
+/* The device's hostmem region is the driver's own window: VidMm is told of the
+ * aperture alone, and nothing is placed in the window until a process asks. */
+TEST(adapter_start_device, offers_a_host_window_and_reports_only_the_aperture)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK(AdapterProbe(fixture.adapter()).window_offered());
+  CHECK(fixture.platform().logged_line("rvkgpu: host window status 0x00000000"));
+  CHECK_EQ(reported_segments(fixture), 1u);
+  CHECK_EQ(fixture.blob_maps(), 0u); }
+
+/* A device with no region is an adapter with no window, and says nothing of one. */
+TEST(adapter_start_device, a_device_with_no_region_has_no_window)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK(!AdapterProbe(fixture.adapter()).window_offered());
+  CHECK(!fixture.platform().logged_line("rvkgpu: host window"));
+  CHECK_EQ(reported_segments(fixture), 1u); }
+
+/* A process takes a chunk of the window on its rvk context by escape, and
+ * reads back the resource, the bytes granted and its address from the same
+ * bytes; it gives the chunk back by resource. Anything else about the escape
+ * is refused before the table is asked. */
+TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_address)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  const av::HostWindowRecord open(WindowOperation::open, 0x2800u, 0u);
+  CHECK_EQ(window_escape(fixture, context.hContext, open, data), success);
+  av::HostWindowRecord answer = open;
+  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK_EQ(answer.resource_id(), first_chunk_resource);
+  CHECK_EQ(answer.bytes(), 0x3000u);
+  CHECK(fixture.platform().maps_into_process(answer.address(), host_region_address, 0x3000u));
+  CHECK_EQ(fixture.blob_maps(), 1u);
+
+  /* The same bytes again are an answer, not a request. */
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  escape.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  /* No context named, a context of no one, and the wrong length. */
+  CHECK_EQ(window_escape(fixture, nullptr, open, data), invalid_parameter);
+  int stranger = 0;
+  CHECK_EQ(window_escape(fixture, &stranger, open, data), invalid_parameter);
+  CHECK_STATUS(open.encode(data, sizeof data), av::Status::ok);
+  escape.PrivateDriverDataSize = sizeof data - 1u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  CHECK_EQ(fixture.blob_maps(), 1u);
+
+  /* Given back by resource: the view, the blob and the pages all go. */
+  const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id());
+  CHECK_EQ(window_escape(fixture, context.hContext, close, data), success);
+  av::HostWindowRecord closed = close;
+  CHECK_STATUS(closed.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK_EQ(fixture.blob_unmaps(), 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(window_escape(fixture, context.hContext, close, data), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* No window, or a device that will not back the chunk, is STATUS_NOT_SUPPORTED:
+ * the process uses guest RAM instead, and nothing is left held. */
+TEST(adapter_escape, a_window_chunk_without_a_window_is_not_supported)
+{ Fixture bare; av::FakeHandleTable handles;
+  bare.function().add_doorbell_region();
+  CHECK_EQ(bare.start(), success);
+  RvkProcess process(bare, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  CHECK_EQ(window_escape(bare, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+           not_supported);
+  CHECK_EQ(bare.blob_maps(), 0u);
+  CHECK_EQ(nt(bare.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(bare.adapter().destroy_device(process.device())), success); }
+
+TEST(adapter_escape, a_window_chunk_the_device_will_not_back_is_not_supported)
+{ Fixture refusing; av::FakeHandleTable refusing_handles;
+  refusing.function().add_doorbell_region();
+  refusing.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(refusing.start(), success);
+  RvkProcess process(refusing, refusing_handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  refusing.refuse_the_blob();
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  CHECK_EQ(window_escape(refusing, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+           not_supported);
+  CHECK_EQ(refusing.platform().process_mappings(), 0u);
+  CHECK_EQ(nt(refusing.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(refusing.adapter().destroy_device(process.device())), success); }
+
+/* A window chunk with no device to place it on is refused, however well formed. */
+TEST(adapter_escape, a_window_chunk_with_no_device_is_invalid)
+{ Fixture fixture;
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  int context = 0;
+  CHECK_EQ(window_escape(fixture, &context, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+           invalid_parameter); }
+
+/* A context destroyed with a chunk open closes it: the view, the blob and the
+ * pages. */
+TEST(adapter_escape, destroying_a_context_closes_its_window_chunks)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+           success);
+  CHECK_EQ(fixture.platform().process_mappings(), 1u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.blob_unmaps(), 1u);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A D3 resets the device and takes every blob with it: the window stays
+ * offered for the same device at D0, a chunk the abandoned context held is let
+ * go of without a request, and its pages are placed again. */
+TEST(adapter_set_power_state, the_same_device_at_d0_keeps_the_window_and_frees_what_d3_abandoned)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
+  CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
+           success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK(AdapterProbe(fixture.adapter()).window_offered());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.blob_unmaps(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  av::DxgkargCreateContextRecord again = {};
+  CHECK_EQ(process.create_context(again), success);
+  const av::HostWindowRecord open(WindowOperation::open, 0x1000u, 0u);
+  CHECK_EQ(window_escape(fixture, again.hContext, open, data), success);
+  av::HostWindowRecord answer = open;
+  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK(fixture.platform().maps_into_process(answer.address(), host_region_address, 0x1000u));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(again.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success);
+  fixture.platform().on_stall(nullptr, nullptr); }
+
+/* Another device, or one that no longer says what it is, is not the one the
+ * window was found on: nothing more is placed in it. */
+TEST(adapter_set_power_state, a_device_that_changed_or_went_quiet_withdraws_the_window)
+{ const bool changed[] = {true, false};
+  for (bool other : changed) {
+      Fixture fixture;
+      fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+      CHECK_EQ(fixture.start(), success);
+      CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+      fixture.forget_control();
+      if (other) fixture.answer_capset_of(other_gpu);
+      if (!other) fixture.ignore_capset();
+      fixture.answer_asks();
+      CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+      fixture.platform().on_stall(nullptr, nullptr);
+      CHECK(!AdapterProbe(fixture.adapter()).window_offered());
+      CHECK_EQ(reported_segments(fixture), 1u);
+  } }
+
+/* A timeout reset keeps the window, and a stop withdraws it until the next
+ * start finds the region again. */
+TEST(adapter_stop_device, withdraws_the_window_until_the_next_start)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK(AdapterProbe(fixture.adapter()).window_offered());
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK(!AdapterProbe(fixture.adapter()).window_offered());
+  CHECK_EQ(fixture.start(), success);
+  CHECK(AdapterProbe(fixture.adapter()).window_offered()); }
 
 
 namespace {

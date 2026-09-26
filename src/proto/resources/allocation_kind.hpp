@@ -27,9 +27,6 @@ enum class AllocationKind : uint16_t {
     /* Guest RAM the host GPU imports as host-visible Vulkan memory: a process
      * binds it to its rvk context and maps it with no copy (feature 045). */
     host_visible_memory = 20u,
-    /* Host memory a process maps through the device's hostmem BAR: placed by
-     * VidMm in the CPU-visible segment, whose storage is the host's. */
-    host_memory = 21u,
 };
 
 }  // namespace av

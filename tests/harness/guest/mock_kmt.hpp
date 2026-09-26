@@ -9,8 +9,9 @@
  * every wait, or a queue of them, one per wait - with the ring consumed up to
  * the last submission, as a device that finished it would. Every command a
  * transport's submission carried is journalled by id and size. An escape binds
- * and unbinds host-visible chunks as the driver does, and a test can run its
- * own callback at a chosen wait to play the host's work on the views. */
+ * and unbinds host-visible chunks as the driver does, opens and closes chunks
+ * of a host window a test gives the device, and a test can run its own
+ * callback at a chosen wait to play the host's work on the views. */
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
@@ -130,6 +131,11 @@ public:
     static constexpr std::uint32_t max_bindings = 8u;
     static constexpr std::uint32_t first_chunk_resource = 0x00100003u;
     static constexpr std::uint32_t not_supported = 0xC00000BBu;
+    /* Host window chunks held at once - the driver's free chunk slots - and
+     * the resource the first open answers, apart from the binds' so a test
+     * can tell which kind a chunk is. */
+    static constexpr std::uint32_t max_window_chunks = 16u;
+    static constexpr std::uint32_t first_window_resource = 0x00100103u;
     /* STATUS_NOT_FOUND: what a handle this mock never minted answers. */
     static constexpr std::uint32_t not_found = 0xC0000225u;
     /* The LUID the Nth adapter added answers until a test sets another:
@@ -236,7 +242,8 @@ public:
      * allocation of `device` answers first_chunk_resource + the binds so far
      * and the allocation's pages; an unbind names a resource still bound;
      * either on a lost context is refused. Destroying a bound allocation
-     * unbinds it, as the driver does when it tears the context down. */
+     * unbinds it, as the driver does when it tears the context down. A
+     * HostWindowRecord is answered as open_host_window says. */
     Status        escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                          std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
@@ -341,6 +348,25 @@ public:
     /* The next bind answers `pages` rather than the allocation's own count, as
      * a driver that miscounted would. */
     void          answer_next_bind_pages(std::uint64_t pages);
+    /* From now on the device has a host window of `bytes` (whole pages),
+     * backed by memory this mock maps so a view is written and read like the
+     * real one: an open is placed first fit from the window's start, in whole
+     * pages, and answers first_window_resource + the opens so far and the
+     * address of its place; a close names a chunk the same context holds;
+     * destroying a context closes what it holds, as the driver does. A window
+     * with no room, or max_window_chunks held, refuses with
+     * STATUS_INVALID_PARAMETER. Without a window every HostWindowRecord is
+     * STATUS_NOT_SUPPORTED, which is what the driver answers for a device
+     * started without one. */
+    void                open_host_window(std::uint64_t bytes);
+    /* The next window open answers `code`, whatever room there is. */
+    void                refuse_next_window_open(std::uint32_t code);
+    /* Window chunks held now, and opens ever granted. */
+    std::uint32_t       window_chunks() const;
+    std::uint32_t       window_opens() const;
+    /* The window's first byte, how a test plays the host on a chunk's
+     * memory; null without a window. */
+    std::uint8_t       *window_base() const;
     /* The data of the last escape as it was sent, and its size. */
     const std::uint8_t *last_escape() const;
     std::uint32_t       last_escape_size() const;
@@ -456,6 +482,13 @@ private:
     void          consume(const Object &context);
     bool          played();
     Status        bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32_t size);
+    Status        window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
+    Status        open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
+                                    std::uint64_t bytes);
+    /* The first page from the window's start where `pages` fit, or
+     * window_pages_ when none does. */
+    std::uint64_t window_fit(std::uint64_t pages) const;
+    void          close_window_chunks_of(std::uint32_t context);
     Status        close(Kind kind, std::uint32_t handle);
     SharedHandle *shared_row(std::uint64_t handle);
     Status        misuse();
@@ -490,6 +523,20 @@ private:
     std::uint32_t bound_allocations_[max_bindings];
     std::uint32_t bound_history_[max_bindings];
     std::uint32_t binds_;
+    /* One host window chunk held: the resource it answered, the context that
+     * holds it, and where it lies in the window, in pages; 0 resource is a
+     * free slot. */
+    struct WindowChunk {
+        std::uint32_t resource;
+        std::uint32_t context;
+        std::uint64_t first;
+        std::uint64_t pages;
+    };
+    std::uint8_t *window_;
+    std::uint64_t window_pages_;
+    WindowChunk   window_chunks_[max_window_chunks];
+    std::uint32_t window_opens_;
+    std::uint32_t window_refusal_;
     std::uint32_t play_countdown_;
     void        (*play_)(void *context);
     void         *play_context_;

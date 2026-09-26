@@ -1,8 +1,9 @@
 /* Where in its session's blob arena a Direct3D 12 device's CPU-visible heaps
  * live.
  *
- * An upload or readback heap is guest memory the host imports (d3d12.toml,
- * CreateHeap12): the heap's pages are a range of the arena, 64 KiB aligned
+ * An upload or readback heap is arena memory the host imports (d3d12.toml,
+ * CreateHeap12) - a host window chunk, or guest RAM where the window had no
+ * room (docs/host-window.md): the heap's pages are a range of the arena, 64 KiB aligned
  * because the host imports whole 64 KiB pages. The arena is the session's,
  * and every device of it places heaps here, from whichever thread the
  * application creates them on - so every range is handed out and given back

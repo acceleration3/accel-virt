@@ -90,7 +90,7 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
       AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::host_memory, true, SurfaceLayout(), 0x2000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x2000u, ScanoutTarget()),
   };
   for (const AllocationDescriptor &descriptor : descriptors) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -191,11 +191,6 @@ TEST(allocation_descriptor_decode, a_ring_is_a_power_of_two_of_pages_and_a_fence
       {AllocationKind::host_visible_memory, 0x4000000u, false, Status::ok},
       {AllocationKind::host_visible_memory, 0x4000001u, false, Status::malformed},
       {AllocationKind::host_visible_memory, 0x1000u, true, Status::malformed},
-      /* Host memory in the CPU-visible segment follows the same rule. */
-      {AllocationKind::host_memory, 0x1000u, false, Status::ok},
-      {AllocationKind::host_memory, 0x4000000u, false, Status::ok},
-      {AllocationKind::host_memory, 0x1800u, false, Status::malformed},
-      {AllocationKind::host_memory, 0x1000u, true, Status::malformed},
   };
   for (const Case &one : cases) {
       const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
@@ -212,7 +207,11 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
 { const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   static_cast<void>(encoded(ring, bytes));
-  const std::uint16_t past = 22u;
-  std::memcpy(bytes + 4u, &past, sizeof past);
-  AllocationDescriptor decoded;
-  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed); }
+  /* 21 was host memory VidMm placed in a CPU-visible segment, which is gone
+   * (docs/host-window.md); a stale client asking for it is refused. */
+  const std::uint16_t pasts[] = {21u, 22u};
+  for (std::uint16_t past : pasts) {
+      std::memcpy(bytes + 4u, &past, sizeof past);
+      AllocationDescriptor decoded;
+      CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed);
+  } }

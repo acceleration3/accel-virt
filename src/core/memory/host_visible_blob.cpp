@@ -13,6 +13,12 @@ HostVisibleBlob::HostVisibleBlob(Platform &platform)
         AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
     }
 
+HostVisibleBlob::HostVisibleBlob(Platform &platform, uint32_t resource, uint64_t offset)
+    : platform_(platform), resource_(resource), offset_(offset), mapped_(true), request_{}, answer_{}
+{
+    AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
+}
+
 Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, uint64_t bytes)
 {
     AV_SCOPE("HostVisibleBlob::create");

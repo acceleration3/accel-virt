@@ -13,6 +13,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/host_window_record.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/shared_object_record.hpp"
@@ -1386,3 +1387,94 @@ TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
   CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
   CHECK_STATUS(kmt.destroy_shared_allocation(creator, carrier), Status::ok);
   CHECK_EQ(kmt.misuses(), 0u); }
+
+namespace {
+
+void encode_window(av::HostWindowRecord::Operation operation, std::uint64_t bytes, std::uint32_t resource,
+                   std::uint8_t *record)
+{
+    CHECK_STATUS(av::HostWindowRecord(operation, bytes, resource).encode(record, av::HostWindowRecord::encoded_size),
+                 Status::ok);
+}
+
+}  // namespace
+
+/* As the driver answers a HostWindowRecord: NOT_SUPPORTED with no window;
+ * with one, an open placed first fit whose address is writable memory, a
+ * close only of a chunk the same context holds, a record that is no request
+ * refused, and the context's teardown closing what it still holds. */
+TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
+{ MockKmt kmt;
+  EscapeRig rig(kmt);
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::not_supported);
+  CHECK(kmt.window_base() == nullptr);
+
+  kmt.open_host_window(4u * 4096u);
+  CHECK(kmt.window_base() != nullptr);
+  encode_window(av::HostWindowRecord::Operation::open, 4097u, 0u, record);
+  av::HostWindowRecord first(av::HostWindowRecord::Operation::open, 4097u, 0u);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_STATUS(first.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(first.resource_id(), MockKmt::first_window_resource);
+  CHECK_EQ(first.bytes(), 2u * 4096u);
+  CHECK_EQ(first.address(), reinterpret_cast<std::uintptr_t>(kmt.window_base()));
+  CHECK_EQ(kmt.window_chunks(), 1u);
+  CHECK_EQ(kmt.window_opens(), 1u);
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  av::HostWindowRecord second(av::HostWindowRecord::Operation::open, 4096u, 0u);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_STATUS(second.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(second.address(), first.address() + 2u * 4096u);
+  /* One page left of four is no room for three. */
+  encode_window(av::HostWindowRecord::Operation::open, 3u * 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  /* A scripted refusal, once. */
+  kmt.refuse_next_window_open(refused_code);
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_state);
+  /* Bytes with the magic that are no request. */
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  record[24] = 1u;
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  /* A close of a resource nobody holds, then of one another context holds. */
+  encode_window(av::HostWindowRecord::Operation::close, 0u, 0x7777u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  std::uint32_t other = 0u;
+  CHECK_STATUS(kmt.create_context(rig.device(), other), Status::ok);
+  encode_window(av::HostWindowRecord::Operation::close, 0u, first.resource_id(), record);
+  CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), other, record, sizeof record), Status::invalid_parameter);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(kmt.window_chunks(), 1u);
+  /* The freed place is the next open's. */
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  av::HostWindowRecord third(av::HostWindowRecord::Operation::open, 4096u, 0u);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_STATUS(third.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(third.address(), first.address());
+  reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(third.address()))[4095] = 0x42u;
+  CHECK_EQ(kmt.window_base()[4095], 0x42u);
+  CHECK_EQ(kmt.window_chunks(), 2u);
+  CHECK_STATUS(kmt.destroy_context(other), Status::ok);
+  CHECK_EQ(kmt.window_chunks(), 2u);
+  CHECK_STATUS(kmt.destroy_context(rig.context()), Status::ok);
+  CHECK_EQ(kmt.window_chunks(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* The window's chunk slots run out as the driver's do. */
+TEST(mock_kmt_escape, a_host_window_refuses_past_its_chunk_slots)
+{ MockKmt kmt;
+  EscapeRig rig(kmt);
+  kmt.open_host_window((MockKmt::max_window_chunks + 1u) * 4096u);
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  for (std::uint32_t chunk = 0u; chunk < MockKmt::max_window_chunks; chunk++) {
+      encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+      CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  }
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  CHECK_EQ(kmt.window_chunks(), MockKmt::max_window_chunks);
+  /* A window given again starts empty. */
+  kmt.open_host_window(4096u);
+  CHECK_EQ(kmt.window_chunks(), 0u); }

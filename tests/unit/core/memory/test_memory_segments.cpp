@@ -1,45 +1,31 @@
 /* What the adapter tells VidMm it has: the aperture over guest system memory,
- * and - where the device offers it - the CPU-visible segment over the hostmem
- * region (feature 041, US1). */
+ * and nothing else. The device's hostmem region is the driver's own host
+ * window, which VidMm is never told of (docs/host-window.md). */
 #include "core/ddi/dxgk_query_segment_out4_record.hpp"
 #include "core/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "core/memory/aperture_segment.hpp"
-#include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/adapter_info_query.hpp"
-#include "core/pci/pci_base_addresses.hpp"
 #include "core/support/status.hpp"
-#include "core/virtio/virtio_pci_layout.hpp"
-#include "core/virtio/virtio_region.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
-#include "proto/context/capset_info.hpp"
-#include "proto/context/gpu_identity.hpp"
-#include "proto/context/protocol_version.hpp"
 
 #include <cstdint>
 #include <cstring>
 
 using av::AdapterInfoQuery;
 using av::ApertureSegment;
-using av::CapsetInfo;
 using av::DxgkQuerySegmentOut4Record;
 using av::DxgkSegmentDescriptor4Record;
 using av::DxgkargQueryAdapterInfoRecord;
-using av::GpuIdentity;
 using av::GuardedBuffer;
-using av::HostVisibleSegment;
 using av::Irql;
 using av::MemorySegments;
 using av::MockPlatform;
-using av::PciBaseAddresses;
-using av::ProtocolVersion;
 using av::Status;
-using av::VirtioPciLayout;
-using av::VirtioRegion;
 using av::Violation;
 
 namespace av {
@@ -48,63 +34,27 @@ struct ApertureSegmentProbe {
     static void set_size(ApertureSegment &segment, std::uint64_t size) { segment.size_ = size; }
 };
 
-struct HostVisibleSegmentProbe {
-    static void offer_a_partial_page(HostVisibleSegment &segment, std::uint64_t size)
-    {
-        segment.offered_ = true;
-        segment.size_ = size;
-    }
-};
-
 }  // namespace av
 
 namespace {
 
 constexpr std::uint64_t gib = std::uint64_t{1} << 30u;
-constexpr std::uint64_t bar_address = 0x4000000000ull;
-constexpr std::uint64_t region_bytes = 256u << 20u;
-constexpr std::uint8_t  region_bar = 4u;
 constexpr std::uint32_t vidmm_stride = 0x68u;   /* CreatePhysicalAdapterSegments */
-constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {9};
 
-/* An adapter whose device offers the region, and one whose device does not. */
 class Fixture {
 public:
-    /* The segments themselves, for a test that has to break one. */
-    ApertureSegment    &aperture() { return aperture_; }
-    HostVisibleSegment &host_visible() { return host_visible_; }
+    Fixture() : aperture_(platform_), segments_(platform_, aperture_)
+    { CHECK_STATUS(aperture_.initialize(static_cast<std::int64_t>(4u * gib)), Status::ok); }
 
-    explicit Fixture(bool with_region) : aperture_(platform_), host_visible_(platform_),
-        segments_(platform_, aperture_, host_visible_)
-    {
-        CHECK_STATUS(aperture_.initialize(static_cast<std::int64_t>(4u * gib)), Status::ok);
-        std::memset(config_, 0, sizeof config_);
-        const std::uint32_t low = static_cast<std::uint32_t>(bar_address) | 0xCu;
-        const std::uint32_t high = static_cast<std::uint32_t>(bar_address >> 32u);
-        std::memcpy(config_ + 0x10u + 4u * region_bar, &low, 4u);
-        std::memcpy(config_ + 0x14u + 4u * region_bar, &high, 4u);
-        const VirtioRegion structure(2u, 0u, 0x1000u);
-        const VirtioRegion region = with_region ? VirtioRegion(region_bar, 0u, region_bytes) : VirtioRegion();
-        const VirtioRegion shared[VirtioPciLayout::max_shared_memory_regions] = {region};
-        const std::uint8_t ids[VirtioPciLayout::max_shared_memory_regions] = {1u};
-        const VirtioPciLayout layout(structure, structure, structure, structure, 4u, shared, ids,
-                                     with_region ? 1u : 0u);
-        host_visible_.discover(PciBaseAddresses(config_, sizeof config_), layout);
-        host_visible_.offer(CapsetInfo(ProtocolVersion(ProtocolVersion::current_major,
-                                                       ProtocolVersion::current_minor),
-                                       1u, 64u, 12u, 24u, CapsetInfo::feature_host_visible_memory,
-                                       GpuIdentity(1u, 2u, GpuIdentity::discrete_gpu, uuid, 0u, 0u, "host")));
-    }
-
-    MockPlatform   &platform() { return platform_; }
-    MemorySegments &segments() { return segments_; }
+    /* The segment itself, for a test that has to break it. */
+    ApertureSegment &aperture() { return aperture_; }
+    MockPlatform    &platform() { return platform_; }
+    MemorySegments  &segments() { return segments_; }
 
 private:
-    MockPlatform       platform_;
-    ApertureSegment    aperture_;
-    HostVisibleSegment host_visible_;
-    MemorySegments     segments_;
-    std::uint8_t       config_[256];
+    MockPlatform    platform_;
+    ApertureSegment aperture_;
+    MemorySegments  segments_;
 };
 
 class SegmentQuery {
@@ -133,130 +83,92 @@ private:
 
 }  // namespace
 
-TEST(memory_segments_count, is_one_without_the_region_and_two_with_it)
-{ Fixture bare(false);
-  CHECK_EQ(bare.segments().count(), 1u);
-  Fixture offered(true);
-  CHECK_EQ(offered.segments().count(), 2u); }
+TEST(memory_segments_count, is_the_aperture_alone)
+{ Fixture fixture;
+  CHECK_EQ(fixture.segments().count(), 1u); }
 
 /* VidMm appends its own system memory segment after the last one reported, so
- * the number a non-primary allocation is sent to follows the count - it was
- * only ever 2 because there was only ever one segment. */
-TEST(memory_segments_system_memory_segment_id, follows_the_count)
-{ Fixture bare(false);
-  CHECK_EQ(bare.segments().system_memory_segment_id(), 2u);
-  Fixture offered(true);
-  CHECK_EQ(offered.segments().system_memory_segment_id(), 3u); }
+ * a non-primary allocation is sent to the one after the aperture. */
+TEST(memory_segments_system_memory_segment_id, is_the_one_after_the_aperture)
+{ Fixture fixture;
+  CHECK_EQ(fixture.segments().system_memory_segment_id(), ApertureSegment::system_memory_segment_id);
+  CHECK_EQ(fixture.segments().system_memory_segment_id(), 2u); }
 
 TEST(memory_segments_report, the_first_pass_counts_what_the_adapter_has)
-{ Fixture offered(true);
+{ Fixture fixture;
   SegmentQuery query;
-  CHECK_STATUS(query.ask(offered.platform(), offered.segments()), Status::ok);
-  CHECK_EQ(query.out().NbSegment, 2u);
+  CHECK_STATUS(query.ask(fixture.platform(), fixture.segments()), Status::ok);
+  CHECK_EQ(query.out().NbSegment, 1u);
   CHECK_EQ(query.out().PagingBufferSegmentId, 0u); }
 
-TEST(memory_segments_report, describes_the_aperture_then_the_host_visible_segment)
-{ Fixture offered(true);
+/* One descriptor, the aperture's, and nothing written past it however much room
+ * VidMm offered. */
+TEST(memory_segments_report, describes_the_aperture_and_nothing_past_it)
+{ Fixture fixture;
   GuardedBuffer descriptors(2u * vidmm_stride);
   SegmentQuery query;
   query.out().pSegmentDescriptor = descriptors.data();
   query.out().NbSegment = 2u;
   query.out().SegmentDescriptorStride = vidmm_stride;
-  CHECK_STATUS(query.ask(offered.platform(), offered.segments()), Status::ok);
+  CHECK_STATUS(query.ask(fixture.platform(), fixture.segments()), Status::ok);
 
   DxgkSegmentDescriptor4Record aperture = {};
   std::memcpy(&aperture, descriptors.data(), sizeof aperture);
   CHECK_EQ(aperture.Flags, 0x15u);              /* Aperture | CpuVisible | CacheCoherent */
   CHECK(aperture.BaseAddress == ApertureSegment::base_address);
   CHECK_EQ(aperture.Size, 4u * gib);
+  for (std::size_t byte = vidmm_stride; byte < 2u * vidmm_stride; byte++)
+      CHECK_EQ(descriptors.data()[byte], 0u);
 
-  DxgkSegmentDescriptor4Record host_visible = {};
-  std::memcpy(&host_visible, descriptors.data() + vidmm_stride, sizeof host_visible);
-  CHECK_EQ(host_visible.Flags, 0x14u);   /* CpuVisible | CacheCoherent: the host maps it write-back */
-  CHECK_EQ(host_visible.Size, region_bytes);
-  CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(bar_address));
-
-  /* The paging buffer is the aperture's, whatever else is reported. */
   CHECK_EQ(query.out().PagingBufferSegmentId, ApertureSegment::segment_id);
   CHECK_EQ(query.out().PagingBufferSize, 0x1000u);
   CHECK_EQ(query.out().PagingBufferPrivateDataSize, 0u);
-  CHECK_EQ(query.out().NbSegment, 2u);
-  CHECK(descriptors.guards_intact()); }
-
-/* An adapter with no region describes one segment and writes nothing past it. */
-TEST(memory_segments_report, without_the_region_only_the_aperture_is_described)
-{ Fixture bare(false);
-  GuardedBuffer descriptors(2u * vidmm_stride);
-  SegmentQuery query;
-  query.out().pSegmentDescriptor = descriptors.data();
-  query.out().NbSegment = 2u;
-  query.out().SegmentDescriptorStride = vidmm_stride;
-  CHECK_STATUS(query.ask(bare.platform(), bare.segments()), Status::ok);
   CHECK_EQ(query.out().NbSegment, 1u);
-  for (std::size_t byte = vidmm_stride; byte < 2u * vidmm_stride; byte++)
-      CHECK_EQ(descriptors.data()[byte], 0u);
   CHECK(descriptors.guards_intact()); }
 
-/* VidMm asking for fewer segments than the adapter has, or at a stride that
- * cannot hold a descriptor, is refused rather than half-answered. */
+/* VidMm asking for no segment at all, or at a stride that cannot hold a
+ * descriptor, is refused rather than half-answered. */
 TEST(memory_segments_report, refuses_a_request_that_cannot_hold_the_answer)
-{ Fixture offered(true);
-  GuardedBuffer descriptors(2u * vidmm_stride);
+{ Fixture fixture;
+  GuardedBuffer descriptors(vidmm_stride);
   SegmentQuery query;
   query.out().pSegmentDescriptor = descriptors.data();
-  query.out().NbSegment = 1u;
+  query.out().NbSegment = 0u;
   query.out().SegmentDescriptorStride = vidmm_stride;
-  CHECK_STATUS(query.ask(offered.platform(), offered.segments()), Status::invalid_parameter);
+  CHECK_STATUS(query.ask(fixture.platform(), fixture.segments()), Status::invalid_parameter);
 
-  query.out().NbSegment = 2u;
+  query.out().NbSegment = 1u;
   query.out().SegmentDescriptorStride = sizeof(DxgkSegmentDescriptor4Record) - 1u;
-  CHECK_STATUS(query.ask(offered.platform(), offered.segments()), Status::invalid_parameter);
+  CHECK_STATUS(query.ask(fixture.platform(), fixture.segments()), Status::invalid_parameter);
 
   query.out().SegmentDescriptorStride = vidmm_stride;
   query.index() = 1u;   /* a physical adapter this driver does not have */
-  CHECK_STATUS(query.ask(offered.platform(), offered.segments()), Status::invalid_parameter);
+  CHECK_STATUS(query.ask(fixture.platform(), fixture.segments()), Status::invalid_parameter);
   CHECK(descriptors.guards_intact()); }
 
 TEST(memory_segments_report, is_passive_only)
-{ Fixture offered(true);
+{ Fixture fixture;
   SegmentQuery query;
-  offered.platform().set_irql(Irql::dispatch);
-  static_cast<void>(query.ask(offered.platform(), offered.segments()));
-  offered.platform().set_irql(Irql::passive);
-  CHECK(offered.platform().claim(Violation::irql_ceiling));
-  while (offered.platform().claim(Violation::irql_ceiling)) {} }
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(query.ask(fixture.platform(), fixture.segments()));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }
 
 /* Before StartDevice the adapter has no memory to describe. */
 TEST(memory_segments_report, before_the_aperture_is_sized_there_is_nothing_to_report)
 { MockPlatform platform;
   ApertureSegment aperture(platform);
-  HostVisibleSegment host_visible(platform);
-  MemorySegments segments(platform, aperture, host_visible);
+  MemorySegments segments(platform, aperture);
   SegmentQuery query;
   CHECK_STATUS(query.ask(platform, segments), Status::invalid_parameter); }
 
-/* What an allocation asks before it chooses a segment: whether this adapter has
- * host memory a process can map, and how much of it (feature 041, FR-001). */
-/* The list is only as sound as the segments in it: either one broken is the
+/* The list is only as sound as the segment in it: a broken aperture is the
  * adapter telling VidMm about memory it does not have. */
-TEST(memory_segments_invariants, hold_only_while_both_segments_do)
-{ Fixture bare(false);
-  CHECK(bare.segments().invariants_hold());
-  Fixture offered(true);
-  CHECK(offered.segments().invariants_hold());
-
-  av::ApertureSegmentProbe::set_size(offered.aperture(), 4097u);
-  CHECK(!offered.segments().invariants_hold());
-  av::ApertureSegmentProbe::set_size(offered.aperture(), 4u * gib);
-  CHECK(offered.segments().invariants_hold());
-
-  av::HostVisibleSegmentProbe::offer_a_partial_page(offered.host_visible(), region_bytes + 1u);
-  CHECK(!offered.segments().invariants_hold()); }
-
-TEST(memory_segments_offers_host_visible, is_what_the_device_offered)
-{ Fixture bare(false);
-  CHECK(!bare.segments().offers_host_visible());
-  CHECK_EQ(bare.segments().host_visible_bytes(), 0u);
-  Fixture offered(true);
-  CHECK(offered.segments().offers_host_visible());
-  CHECK_EQ(offered.segments().host_visible_bytes(), region_bytes); }
+TEST(memory_segments_invariants, hold_only_while_the_aperture_does)
+{ Fixture fixture;
+  CHECK(fixture.segments().invariants_hold());
+  av::ApertureSegmentProbe::set_size(fixture.aperture(), 4097u);
+  CHECK(!fixture.segments().invariants_hold());
+  av::ApertureSegmentProbe::set_size(fixture.aperture(), 4u * gib);
+  CHECK(fixture.segments().invariants_hold()); }

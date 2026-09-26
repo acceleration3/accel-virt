@@ -32,7 +32,8 @@ Status ChunkSpace::open(uint64_t pages)
     if (pages == 0u || pages > max_pages) return Status::invalid_parameter;
     const Status status = connection_.open_chunk(chunk_, pages * page_bytes);
     if (status != Status::ok) return status;
-    if (chunk_.object().pages() != pages) {
+    /* More than was asked is room nothing is placed in. */
+    if (chunk_.object().bytes() / page_bytes < pages) {
         static_cast<void>(connection_.close_chunk(chunk_));   /* the size is the answer */
         return Status::malformed;
     }

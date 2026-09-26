@@ -1,6 +1,6 @@
-/* One host-visible allocation's memory on the device: a blob of the host's own
- * pages, placed in the hostmem region so the guest can address it through the
- * BAR (docs/protocol.md).
+/* One window chunk's memory on the device: a blob of the host's own pages,
+ * placed in the hostmem region so the guest can address it through the BAR
+ * (docs/host-window.md).
  *
  * The device is a parameter and not a member because it is not stable for this
  * object's lifetime: an allocation outlives a power transition, and the
@@ -22,12 +22,12 @@ struct HostVisibleBlobProbe;
 
 class HostVisibleBlob {
 public:
-    /* Above the cursor's and every scanout's, so a blob can never take a
-     * resource the display is using. */
-    static constexpr uint32_t first_resource_id = 0x1000u;
     static constexpr uint64_t page_bytes = 0x1000u;
 
     explicit HostVisibleBlob(Platform &platform);
+    /* The blob of `resource`, which this driver created and the device mapped
+     * at `offset`: what a chunk remembers of it, to take it down again. */
+    HostVisibleBlob(Platform &platform, uint32_t resource, uint64_t offset);
     HostVisibleBlob(const HostVisibleBlob &) = delete;
     HostVisibleBlob &operator=(const HostVisibleBlob &) = delete;
 
