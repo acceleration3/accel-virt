@@ -19,7 +19,9 @@
 #include "device/executor/d3d12_address_map.hpp"
 #include "device/executor/d3d12_arena_heaps.hpp"
 #include "device/executor/d3d12_fence_publisher.hpp"
+#include "device/executor/d3d12_fence_wake.hpp"
 #include "device/executor/d3d12_pipeline_builder.hpp"
+#include "device/executor/d3d12_queue_progress.hpp"
 #include "device/executor/d3d12_view_writer.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_server.h"
@@ -54,6 +56,11 @@ public:
     /* Publishes fences that moved; true while one is still to reach a value
      * a queue will signal. */
     bool               poll();
+    /* The mark the latest execute left, and the highest mark everything up to
+     * which the GPU has finished (D3d12QueueProgress). */
+    void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
+    /* What the host GPU reaching a mark raises, so a held batch completes. */
+    void               bind_signal(void (*signal)(void *context), void *context);
     /* The reason the guest is told its device was removed; 0 while it is not. */
     uint32_t           removed_reason() const;
 
@@ -149,6 +156,8 @@ private:
     D3dObjectTable         objects_;
     D3d12AddressMap        addresses_;
     D3d12FencePublisher    fences_;
+    D3d12FenceWake         wake_;
+    D3d12QueueProgress     progress_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     /* The decoding command's arena, which containers are written into. */

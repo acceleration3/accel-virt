@@ -291,6 +291,16 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
     return status;
 }
 
+void RvkContextTable::kick(void *context)
+{
+    AV_SCOPE("RvkContextTable::kick");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::kick");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot] || lost(slot)) return;
+    bindings_[slot].object().kick();
+}
+
 bool RvkContextTable::completed_already(void *context, uint64_t fence)
 {
     AV_SCOPE("RvkContextTable::completed_already");

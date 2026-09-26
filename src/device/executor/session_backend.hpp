@@ -42,6 +42,11 @@ public:
     /* Between batches, on the worker: publishes what the host now has for the
      * guest to read without asking; true while it still waits on the GPU. */
     virtual bool poll() = 0;
+    /* The mark the latest GPU work was given and the highest mark everything
+     * up to which the GPU has finished; both 0 for an API whose commands have
+     * finished when they return. A batch completes only once reached passes
+     * the mark it left (RingConsumer). */
+    virtual void gpu_progress(uint64_t &marked, uint64_t &reached) const = 0;
 
     /* Turns a checked handle into whatever this API holds memory as, recording
      * it on the blob. False for a handle this API cannot take - which is not a

@@ -43,6 +43,7 @@ public:
     bool lost() const override;
     void end_batch() override;
     bool poll() override;
+    void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
 
     /* The two commands whose results this backend keeps: the instance and the
      * device a dying context still owns, so shut_down can destroy them. */

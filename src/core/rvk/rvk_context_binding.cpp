@@ -63,6 +63,12 @@ Status RvkContextBinding::submit(const SubmissionDescriptor &submission)
     return context_.submit(submission);
 }
 
+void RvkContextBinding::kick()
+{
+    AV_SCOPE("RvkContextBinding::kick");
+    context_.kick();
+}
+
 void RvkContextBinding::user_mode_submits(uint64_t *progress)
 {
     AV_SCOPE("RvkContextBinding::user_mode_submits");

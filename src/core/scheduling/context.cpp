@@ -3,6 +3,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
 namespace av {
@@ -64,8 +65,9 @@ void Context::report_to(DxgkargCreateContextRecord &request)
     request.hContext = this;
     request.ContextInfoDmaBufferSize = dma_buffer_bytes;
     request.ContextInfoDmaBufferSegmentSet = ApertureSegment::segment_set;
-    request.ContextInfoDmaBufferPrivateDataSize =
-        is_rvk_ ? static_cast<uint32_t>(SubmissionDescriptor::encoded_size) : 0u;
+    /* Any other context may carry a FollowRecord (Adapter::submit_command_virtual). */
+    request.ContextInfoDmaBufferPrivateDataSize = static_cast<uint32_t>(
+        is_rvk_ ? SubmissionDescriptor::encoded_size : FollowRecord::encoded_size);
     request.ContextInfoAllocationListSize = allocation_list_entries;
     request.ContextInfoPatchLocationListSize = patch_location_entries;
     request.ContextInfoReserved = 0u;

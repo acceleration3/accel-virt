@@ -212,6 +212,7 @@ void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *cont
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (&sessions_[slot] != session) continue;
         if (apis_of_[slot] == RVK_EXECUTOR_SUB_API_OPENCL) opencl_[slot].bind_signal(signal, context);
+        if (apis_of_[slot] == RVK_EXECUTOR_SUB_API_D3D) d3d_[slot].bind_signal(signal, context);
         return;
     }
 }

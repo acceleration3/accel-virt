@@ -40,6 +40,9 @@ public:
      * invalid_state when not attached, or for a head the device could not have
      * written, which fails the ring. Refused submissions touch nothing. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
+    /* DISPATCH. Rings the doorbell with nothing new submitted: the device looks
+     * at the tail a process that publishes its own has already moved. */
+    void                 kick();
     /* DISPATCH. A doorbell was connected on this context (feature 049): the
      * process publishes this ring's tail now, and from here the header is the
      * only tail either side can trust - a submission the process falls back to

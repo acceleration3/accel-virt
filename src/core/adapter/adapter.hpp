@@ -116,6 +116,7 @@ struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
 struct AdapterProbe;
 class Context;
+class FollowRecord;
 class PciBaseAddresses;
 class StateWriter;
 
@@ -336,6 +337,8 @@ private:
     /* SubmitCommandVirtual for an rvk context: published, rung, and held on
      * the node until the fence page says the host finished it. */
     [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
+    [[nodiscard]] Status submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence,
+                                       void *&owner, uint64_t &awaited);
     /* StartDevice: which device this adapter is running on, so the one it wakes
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */

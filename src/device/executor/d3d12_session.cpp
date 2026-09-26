@@ -9,6 +9,7 @@
 #include "proto/wire/wire_arena.hpp"
 
 #include <stdio.h>
+#include <time.h>
 
 namespace av {
 
@@ -97,7 +98,7 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 }  // namespace
 
 D3d12Session::D3d12Session(GuestRegion &region)
-    : region_(region), device_(nullptr), objects_(), addresses_(), fences_(region), views_(objects_, addresses_),
+    : region_(region), device_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
       pipelines_(objects_), arena_(nullptr), drained_(nullptr), drained_value_(0u), removed_(0u)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -117,6 +118,8 @@ void D3d12Session::shut_down()
     AV_SCOPE("D3d12Session::shut_down");
     drain();
     fences_.clear();
+    progress_.clear();
+    wake_.stop();
     addresses_.clear();
     objects_.clear();
     arena_heaps_.close();
@@ -157,6 +160,19 @@ bool D3d12Session::poll()
 {
     AV_SCOPE("D3d12Session::poll");
     return fences_.update();
+}
+
+void D3d12Session::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("D3d12Session::gpu_progress");
+    marked = progress_.marked();
+    reached = progress_.reached();
+}
+
+void D3d12Session::bind_signal(void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("D3d12Session::bind_signal");
+    wake_.bind(signal, context);
 }
 
 uint32_t D3d12Session::removed_reason() const
@@ -248,7 +264,33 @@ void D3d12Session::drain()
         if (kind != D3dObjectKind::queue12) continue;
         static_cast<ID3D12CommandQueue *>(static_cast<void *>(held))->Signal(drained_, ++drained_value_);
     }
-    if (drained_->GetCompletedValue() < drained_value_) drained_->SetEventOnCompletion(drained_value_, nullptr);
+    /* The GPU usually finishes within a frame's time, and a blocked wait adds
+     * a thread's wake on top of vkd3d-proton's own: the worker looks for a
+     * while, then naps. A GPU that never finishes is a hung device, not a
+     * worker parked for good - every other D3D stream waits on this one. */
+    constexpr uint64_t spin_ns = 2000000u;
+    constexpr uint64_t hung_ns = 5000000000u;
+    constexpr long     nap_ns = 50000;
+    timespec           began;
+    clock_gettime(CLOCK_MONOTONIC, &began);
+    for (;;) {
+        if (drained_->GetCompletedValue() >= drained_value_) return;
+        timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        const uint64_t spent = static_cast<uint64_t>(now.tv_sec - began.tv_sec) * 1000000000u +
+                               static_cast<uint64_t>(now.tv_nsec) - static_cast<uint64_t>(began.tv_nsec);
+        if (spent >= hung_ns) {
+            if (removed_ == 0u) fprintf(stderr, "virtio-gpu-rvk: d3d12: the GPU did not finish in 5 s; the device is removed\n");
+            removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
+            return;
+        }
+        if (spent < spin_ns) {
+            __builtin_ia32_pause();
+            continue;
+        }
+        const timespec nap = {0, nap_ns};
+        nanosleep(&nap, nullptr);
+    }
 }
 
 // ---------------------------------------------------------------- device
@@ -295,6 +337,7 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12) return false;
     if (kind == D3dObjectKind::resource12) addresses_.remove(id);
     if (kind == D3dObjectKind::fence12) fences_.forget(id);
+    if (kind == D3dObjectKind::queue12) progress_.forget(id);
     objects_.remove(id);
     return true;
 }
@@ -617,14 +660,20 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
     constexpr uint32_t most_lists = 64u;
     ID3D12CommandQueue *const on = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     if (on == nullptr || count > most_lists) return false;
+    /* A refused command left a list short of what the guest recorded into it
+     * - a descriptor heap never bound, a view never written - and the GPU
+     * would read through the hole: the host GPU faults, and every context on
+     * it is reset with this one. Nothing runs on a removed device. */
+    if (removed_ != 0u) return true;
     ID3D12CommandList *executed[most_lists] = {};
     for (uint32_t index = 0u; index < count; index++) {
         ID3D12GraphicsCommandList *const recorded = list(lists[index]);
         if (recorded == nullptr) return false;
         executed[index] = recorded;
     }
-    if (count != 0u) on->ExecuteCommandLists(count, executed);
-    return true;
+    if (count == 0u) return true;
+    on->ExecuteCommandLists(count, executed);
+    return progress_.executed(queue, on, device_->device());
 }
 
 bool D3d12Session::on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value)

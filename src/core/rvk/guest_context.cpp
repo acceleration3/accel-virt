@@ -72,6 +72,14 @@ void GuestContext::finish_sequence()
     state_ = State::established;
 }
 
+void GuestContext::kick()
+{
+    AV_SCOPE("GuestContext::kick");
+    platform_.require_irql_at_most(Irql::dispatch, "GuestContext::kick");
+    SpinLockGuard guard(lock_);
+    if (state_ == State::established) submitter_.kick();
+}
+
 Status GuestContext::submit(const SubmissionDescriptor &submission)
 {
     AV_SCOPE("GuestContext::submit");

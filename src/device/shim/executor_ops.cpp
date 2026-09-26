@@ -234,6 +234,17 @@ uint32_t poll(void *, RvkExecutor *executor)
     return session != nullptr && session->poll() ? 1u : 0u;
 }
 
+void gpu_progress(void *, RvkExecutor *executor, uint64_t *marked, uint64_t *reached)
+{
+    AV_SCOPE("gpu_progress");
+    uint64_t                  at = 0u;
+    uint64_t                  done = 0u;
+    av::ContextSession *const session = session_of(executor);
+    if (session != nullptr) session->gpu_progress(at, done);
+    if (marked != nullptr) *marked = at;
+    if (reached != nullptr) *reached = done;
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -252,7 +263,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               read_image,
                               end_batch,
                               export_image,
-                              poll};
+                              poll,
+                              gpu_progress};
 
 }  // namespace
 

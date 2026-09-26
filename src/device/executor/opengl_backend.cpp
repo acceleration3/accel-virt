@@ -143,6 +143,13 @@ bool OpenGlBackend::poll()
     return false;
 }
 
+void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("OpenGlBackend::gpu_progress");
+    marked = 0u;
+    reached = 0u;
+}
+
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");

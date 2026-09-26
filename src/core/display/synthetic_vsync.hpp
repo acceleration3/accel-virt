@@ -59,6 +59,8 @@ public:
     uint32_t             enabled_count() const;
 
 private:
+    /* Ticks between DPCs when vsync is not being reported: ~400 ms. */
+    static constexpr uint32_t ticks_per_sweep = 24u;
     static constexpr uint64_t frame_period = 10000000u / DisplayMode::refresh_hz;   /* 100 ns */
     static constexpr uint32_t target = 0u;   /* shows source 0 */
     /* Two seconds of timer periods at the committed rate: enough to see a rate

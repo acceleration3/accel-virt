@@ -36,6 +36,13 @@ public:
     [[nodiscard]] Status submit(uint32_t fence, void *owner, uint64_t awaited);
     /* `owner`'s host has completed every fence up to `completed`. */
     void                 finish(const void *owner, uint64_t completed);
+    /* A held packet is let go once it has waited `park_deadline`: the host
+     * may take seconds over one batch (a pipeline compiled, a GPU that stalls),
+     * and dxgkrnl calls a packet that long a hung engine and resets every
+     * context on it. What the packet guarded completes a little early instead.
+     * Answers how many were let go. DISPATCH. */
+    static constexpr uint64_t park_deadline = 12000000u;   /* 1.2 s, in 100 ns */
+    uint32_t             release_overdue(uint64_t now);
     /* The latest request wins; reported once nothing is queued. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence that is done, then a preemption
@@ -82,6 +89,7 @@ private:
     void     *owners_[capacity];
     /* The host fence each packet waits for; 0 once nothing is awaited. */
     uint64_t  awaited_[capacity];
+    uint64_t  queued_at_[capacity];
 
     friend struct ExecutionNodeProbe;
 };

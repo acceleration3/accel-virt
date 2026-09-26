@@ -161,6 +161,18 @@ bool D3dBackend::poll()
     return pending;
 }
 
+void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
+{
+    AV_SCOPE("D3dBackend::bind_signal");
+    d3d12_.bind_signal(signal, context);
+}
+
+void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("D3dBackend::gpu_progress");
+    d3d12_.gpu_progress(marked, reached);
+}
+
 bool D3dBackend::lost() const
 {
     AV_SCOPE("D3dBackend::lost");

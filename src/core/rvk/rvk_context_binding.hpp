@@ -77,6 +77,7 @@ public:
     /* DISPATCH. Hands the context a batch its ring submitter rings the doorbell
      * for. invalid_state unless established. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
+    void                 kick();
     /* DISPATCH. Which side publishes this context's tail and rings its
      * doorbell, once a process has one of its own (feature 049). */
     void                 user_mode_submits(uint64_t *progress);

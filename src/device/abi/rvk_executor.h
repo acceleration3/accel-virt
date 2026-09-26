@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 10u
+#define RVK_EXECUTOR_ABI_VERSION 11u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -59,6 +59,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_BATCHES 8u
 #define RVK_EXECUTOR_ABI_VERSION_EXPORTS 9u
 #define RVK_EXECUTOR_ABI_VERSION_POLL 10u
+#define RVK_EXECUTOR_ABI_VERSION_PROGRESS 11u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -276,6 +277,14 @@ typedef struct RvkExecutorOps {
      * what the host GPU now has for the guest to read in its own memory. 1
      * while it still waits on the GPU for some of it, 0 when nothing is left. */
     uint32_t (*poll)(void *opaque, RvkExecutor *executor);
+
+    /* ABI 11: on the context's worker, after a batch or between batches: the
+     * mark the latest GPU work was given, and the highest mark everything up
+     * to which the GPU has finished. The device completes a batch only once
+     * `reached` passes the `marked` it read after running it, so a guest
+     * waiting on the batch's fence waits for its GPU work too. Both 0 for an
+     * executor whose commands have finished when they return. */
+    void (*gpu_progress)(void *opaque, RvkExecutor *executor, uint64_t *marked, uint64_t *reached);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

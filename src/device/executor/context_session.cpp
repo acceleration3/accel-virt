@@ -61,6 +61,14 @@ bool ContextSession::poll()
     return backend_ != nullptr && backend_->poll();
 }
 
+void ContextSession::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("ContextSession::gpu_progress");
+    marked = 0u;
+    reached = 0u;
+    if (backend_ != nullptr) backend_->gpu_progress(marked, reached);
+}
+
 void ContextSession::end_batch()
 {
     AV_SCOPE("ContextSession::end_batch");

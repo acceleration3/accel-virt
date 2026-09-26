@@ -18,6 +18,7 @@
 #include "guest/transport/submission_path.hpp"
 #include "guest/transport/transport_fence.hpp"
 #include "guest/transport/transport_ring.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -101,6 +102,14 @@ public:
      * retires every blob lease. */
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
     TransportResult send_async_batch(const uint8_t *framed, size_t length);
+    /* The GPU address a packet on another of this process's contexts names:
+     * the transport's DMA buffer, which every context of the process reaches
+     * and the miniport reads nothing of there. */
+    uint64_t marker_address() const;
+    /* What a packet on another of this process's contexts carries to complete
+     * no sooner than the newest batch published here (FollowRecord); a record
+     * that names no fence before the first batch. */
+    FollowRecord follow() const;
     TransportResult send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;
@@ -152,6 +161,8 @@ private:
     bool             hardware_scheduled_;
     TransportRing    ring_;
     uint64_t         newest_end_;
+    /* The fence of the newest batch published, which follow() names. */
+    uint64_t         newest_fence_;
     uint64_t         previous_end_;
     /* Feature 049: the doorbell this context submits through where the OS
      * gives it one, and the choice made per submission. A context that never

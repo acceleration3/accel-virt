@@ -130,6 +130,14 @@ Status RingSubmitter::submit(const SubmissionDescriptor &submission)
     return Status::ok;
 }
 
+void RingSubmitter::kick()
+{
+    AV_SCOPE("RingSubmitter::kick");
+    platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::kick");
+    if (ring_ == nullptr || failed_) return;
+    doorbells_.write_u32(doorbell_ * doorbell_page_bytes, 1u);
+}
+
 bool     RingSubmitter::attached() const
 {
     AV_SCOPE("RingSubmitter::attached");

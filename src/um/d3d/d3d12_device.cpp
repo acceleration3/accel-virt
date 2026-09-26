@@ -8,6 +8,7 @@
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/submission/follow_record.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -25,10 +26,17 @@ constexpr uint32_t list_copy = 3u;
  * query result slots the session keeps at its end. */
 constexpr uint64_t lent_bytes = uint64_t{32} << 20u;
 constexpr uint64_t query_slot_bytes = uint64_t{64} << 10u;
+/* Executes between the host's verdicts on what the device was sent. */
+constexpr uint64_t verdict_every = 64u;
 
 uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 {
     AV_SCOPE("list_type_of");
+    /* A direct queue is described by everything it can do - 3D, compute and
+     * copy together - so 3D decides before compute does: tested the other way
+     * every direct list was recorded for a compute queue, and its first draw
+     * was an illegal opcode that hung the host GPU. */
+    if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_3D) != 0) return list_direct;
     if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE) != 0) return list_compute;
     if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_COPY) != 0) return list_copy;
     return list_direct;
@@ -39,7 +47,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), channel_(), addresses_(),
+    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, lost_(false), logged_{}
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -61,6 +69,7 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     AV_SCOPE("D3d12Device::initialize");
     runtime_ = create.hRTDevice;
     core_ = create.p12UMCallbacks_0050;
+    kernel_ = create.pKTCallbacks;
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
@@ -332,14 +341,48 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
                   "ExecuteCommandLists12"))
             return;
     }
-    /* Finished before returning (see the class comment), and the host's
-     * verdict on everything sent since the last execute read with it: a
-     * command it refused - a pipeline it could not compile, a view of nothing -
-     * removed the device, and this is where the runtime hears of it. */
+    /* The runtime signals an application's fence on the queue's context once
+     * its packets are done: the batch goes out as any other, and a packet on
+     * that context follows it (see the class comment). */
     queue.executed++;
+    if (wire().flush() != Status::ok) {
+        lost("the queue's work could not be sent");
+        return;
+    }
+    if (!follow(queue)) return;
+    /* The host's verdict on what was sent: a command it refused - a pipeline
+     * it could not compile, a view of nothing - removed the device. Asked now
+     * and then rather than every execute, because asking is a round trip. */
+    if (queue.executed % verdict_every != 0u) return;
     uint32_t removed = 0u;
     if (!sent(d3d12proto::rvk_d3d12_Finish12(wire(), &removed), "Finish12")) return;
     if (removed != 0u) lost("the host removed the device");
+}
+
+/* A packet on the queue's context that completes once the host has completed
+ * the newest batch of the session's ring - the one that carried the execute,
+ * or one after it (FollowRecord). */
+bool D3d12Device::follow(const QueueRecord &queue)
+{
+    AV_SCOPE("D3d12Device::follow");
+    constexpr UINT marker_bytes = sizeof(uint64_t);
+    uint8_t        record[FollowRecord::encoded_size] = {};
+    if (session_.transport().follow().encode(record, sizeof record) != Status::ok) {
+        lost("the queue's work had no batch to follow");
+        return false;
+    }
+    D3DDDICB_SUBMITCOMMAND submit = {};
+    submit.Commands = session_.transport().marker_address();
+    submit.CommandLength = marker_bytes;
+    submit.BroadcastContextCount = 1u;
+    submit.BroadcastContext[0] = queue.context;
+    submit.pPrivateDriverData = record;
+    submit.PrivateDriverDataSize = sizeof record;
+    const HRESULT submitted = kernel_ != nullptr ? kernel_->pfnSubmitCommandCb(runtime_.handle, &submit) : E_FAIL;
+    if (SUCCEEDED(submitted)) return true;
+    refused("pfnSubmitCommandCb", static_cast<uint32_t>(submitted));
+    lost("the queue's context refused its packet");
+    return false;
 }
 
 /* Native fences only: D3D12Core signals and waits a monitored fence itself,

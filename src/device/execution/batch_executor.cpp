@@ -67,6 +67,12 @@ bool BatchExecutor::poll()
     return executor_.created() && executor_.poll();
 }
 
+void BatchExecutor::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("BatchExecutor::gpu_progress");
+    executor_.gpu_progress(marked, reached);
+}
+
 bool BatchExecutor::ready() const
 {
     AV_SCOPE("BatchExecutor::ready");

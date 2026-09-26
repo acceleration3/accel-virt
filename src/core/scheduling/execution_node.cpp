@@ -12,7 +12,7 @@ namespace av {
 ExecutionNode::ExecutionNode(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::execution_node), pending_{}, head_(0u), count_(0u),
       last_submitted_(0u), last_completed_(0u), preemption_fence_(0u), preemption_requested_(false),
-      stopped_(false), progress_time_(0u), owners_{}, awaited_{}
+      stopped_(false), progress_time_(0u), owners_{}, awaited_{}, queued_at_{}
       {
           AV_SCOPE("ExecutionNode::ExecutionNode");
       }
@@ -43,6 +43,7 @@ Status ExecutionNode::queue(uint32_t fence, void *owner, uint64_t awaited)
     pending_[tail] = fence;
     owners_[tail] = owner;
     awaited_[tail] = awaited;
+    queued_at_[tail] = platform_.interrupt_time();
     count_++;
     last_submitted_ = fence;
     return Status::ok;
@@ -59,6 +60,22 @@ void ExecutionNode::finish(const void *owner, uint64_t completed)
         const uint32_t slot = (head_ + index) % capacity;
         if (owners_[slot] == owner && awaited_[slot] <= completed) awaited_[slot] = 0u;
     }
+}
+
+uint32_t ExecutionNode::release_overdue(uint64_t now)
+{
+    AV_SCOPE("ExecutionNode::release_overdue");
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::release_overdue");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "release_overdue");
+    uint32_t released = 0u;
+    for (uint32_t index = 0u; index < count_; index++) {
+        const uint32_t slot = (head_ + index) % capacity;
+        if (awaited_[slot] == 0u || now - queued_at_[slot] < park_deadline) continue;
+        awaited_[slot] = 0u;
+        released++;
+    }
+    return released;
 }
 
 Status ExecutionNode::preempt(uint32_t fence)
@@ -89,7 +106,9 @@ bool ExecutionNode::take(uint32_t &fence)
  * preempted: the request is answered once the queue has run dry, naming the
  * last packet as completed. Answered earlier, VidSch would take the queued
  * packets as preempted and move its last completed fence to the preemption
- * fence, and their completions would then bugcheck 0x119/1. */
+ * fence, and their completions would then bugcheck 0x119/1. The INF turns
+ * scheduler preemption off, so this is the path for a driver that asks for it
+ * anyway; a held packet is never kept past its deadline (release_overdue). */
 bool ExecutionNode::take_preemption(uint32_t &fence, uint32_t &last_completed)
 {
     AV_SCOPE("ExecutionNode::take_preemption");

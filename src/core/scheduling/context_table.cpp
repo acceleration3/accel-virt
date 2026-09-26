@@ -2,6 +2,8 @@
 
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/platform/mutex_guard.hpp"
+#include "core/scheduling/context.hpp"
+#include "core/scheduling/device.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
@@ -67,6 +69,17 @@ Context *ContextTable::find(void *context)
     platform_.require_irql_at_most(Irql::apc, "ContextTable::find");
     MutexGuard lock(mutex_);
     return contexts_.find(context);
+}
+
+Context *ContextTable::followed(const Context &follower, uint32_t ring)
+{
+    AV_SCOPE("ContextTable::followed");
+    platform_.require_irql_at_most(Irql::apc, "ContextTable::followed");
+    MutexGuard  lock(mutex_);
+    void *const process = follower.device().process();
+    return contexts_.find_if([&](const Context &context) {
+        return context.is_rvk() && context.rvk_record().ring() == ring && context.device().process() == process;
+    });
 }
 
 uint32_t ContextTable::live() const

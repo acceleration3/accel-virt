@@ -51,7 +51,7 @@ rvkumd.dll = 1
 [Rvkgpu_Install]
 FeatureScore = F8
 CopyFiles    = Rvkgpu_Files
-AddReg       = Rvkgpu_SoftwareSettings
+AddReg       = Rvkgpu_SoftwareSettings, Rvkgpu_Scheduler
 
 ; dxgkrnl refuses the adapter outright without this value. DXGADAPTER::Initialize
 ; returns STATUS_OBJECT_NAME_NOT_FOUND when DpiGetAdapterInfo could not read
@@ -71,6 +71,13 @@ AddReg       = Rvkgpu_SoftwareSettings
 ; every process, the desktop compositor included, on WARP. PostProcessUMDFileName
 ; translates only a GPU-PV guest's names. No UserModeDriverNameWow: the 32-bit
 ; arm is feature 061's.
+; The scheduler never preempts: this adapter cannot give back a batch the host
+; was handed, so a preemption is answered only once the node has run dry, and a
+; process that keeps it fed would starve the request into a TDR. Off, the node's
+; held packets are bounded by their deadline alone (ExecutionNode::release_overdue).
+[Rvkgpu_Scheduler]
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers\Scheduler, EnablePreemption, 0x00010001, 0
+
 [Rvkgpu_SoftwareSettings]
 HKR,, UserModeDriverName, 0x00010000, "%13%\rvkumd.dll", "%13%\rvkumd.dll", "%13%\rvkumd.dll", "%13%\rvkumd.dll"
 ; The Vulkan ICD, found by the loader through this adapter alone (feature 045):

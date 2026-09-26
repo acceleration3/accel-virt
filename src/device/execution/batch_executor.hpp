@@ -55,6 +55,8 @@ public:
     bool                 ready() const;
     /* Worker thread, between batches: see SessionBackend::poll. */
     bool                 poll();
+    /* Worker: see RvkExecutorOps::gpu_progress. */
+    void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
     [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);
 
     /* Batches run, whether or not they completed. */

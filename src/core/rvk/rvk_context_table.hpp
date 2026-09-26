@@ -91,6 +91,12 @@ public:
      * - so its interrupt may have come before the packet was queued - and
      * true for a context this table cannot answer for. */
     bool                 completed_already(void *context, uint64_t fence);
+    /* DISPATCH. `context`'s device is told to look at its ring: what a packet
+     * that follows it asks, because the batch it follows may have been
+     * published by the process alone, with the host's worker asleep and the
+     * kernel's packet that would wake it held back by the scheduler behind the
+     * very packet waiting for it (FollowRecord). */
+    void                 kick(void *context);
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();

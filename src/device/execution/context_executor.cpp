@@ -102,6 +102,14 @@ bool ContextExecutor::poll()
     return executor_ != nullptr && library_.poll(executor_);
 }
 
+void ContextExecutor::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("ContextExecutor::gpu_progress");
+    marked = 0u;
+    reached = 0u;
+    if (executor_ != nullptr) library_.gpu_progress(executor_, marked, reached);
+}
+
 void ContextExecutor::end_batch()
 {
     AV_SCOPE("ContextExecutor::end_batch");

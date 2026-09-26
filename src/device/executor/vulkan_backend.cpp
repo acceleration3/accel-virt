@@ -650,6 +650,13 @@ bool VulkanBackend::poll()
     return false;
 }
 
+void VulkanBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("VulkanBackend::gpu_progress");
+    marked = 0u;
+    reached = 0u;
+}
+
 void VulkanBackend::end_batch()
 {
     AV_SCOPE("VulkanBackend::end_batch");

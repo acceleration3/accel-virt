@@ -13,6 +13,7 @@
 #define AV_RING_CONSUMER_HPP
 
 #include "core/support/status.hpp"
+#include "device/ring/held_completions.hpp"
 #include "device/ring/ring_window.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_progress.hpp"
@@ -59,8 +60,9 @@ public:
     bool     has_work() const;
     /* Worker thread: whether it is watching the ring, for the process to read. */
     void     announce_awake(bool awake);
-    /* Worker thread: the executor publishes what the guest will read; true
-     * while it still waits on the GPU. */
+    /* Worker thread: the executor publishes what the guest will read, and
+     * batches whose GPU work has finished complete; true while the executor
+     * still waits on the GPU to publish. */
     bool     poll();
     /* The Direct3D streams whose batches this one's follow. */
     void     order_with(D3dOrdering &ordering);
@@ -74,6 +76,11 @@ private:
      * anything else has faulted the context. */
     void                 serve();
     [[nodiscard]] Status consume_next();
+    /* A batch that left GPU work unfinished completes when the GPU gets
+     * there, and every batch after it no sooner. */
+    void                 complete_or_hold(uint64_t fence);
+    /* Completes what the GPU has reached; whether anything was. */
+    bool                 settle();
     void                 note_clock(uint64_t published_at);
     void                 fault(FaultCode code, const char *reason, uint64_t value);
 
@@ -82,6 +89,7 @@ private:
     BatchExecutor &executor_;
     RingWindow     ring_;
     RingProgress progress_;
+    HeldCompletions held_;
     uint64_t     head_;
     uint64_t     last_fence_;
     uint64_t     batches_;

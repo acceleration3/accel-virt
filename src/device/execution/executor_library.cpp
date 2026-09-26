@@ -185,6 +185,16 @@ bool ExecutorLibrary::poll(RvkExecutor *executor) const
            ops_->poll(ops_->opaque, executor) != 0u;
 }
 
+void ExecutorLibrary::gpu_progress(RvkExecutor *executor, uint64_t &marked, uint64_t &reached) const
+{
+    AV_SCOPE("ExecutorLibrary::gpu_progress");
+    marked = 0u;
+    reached = 0u;
+    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_PROGRESS || ops_->gpu_progress == nullptr)
+        return;
+    ops_->gpu_progress(ops_->opaque, executor, &marked, &reached);
+}
+
 void ExecutorLibrary::end_batch(RvkExecutor *executor) const
 {
     AV_SCOPE("ExecutorLibrary::end_batch");

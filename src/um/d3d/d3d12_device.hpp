@@ -11,11 +11,17 @@
  * (D3d12AddressSpace), and the pages of upload and readback heaps, which are
  * the session arena's (D3d12HeapArena) and which the host imports.
  *
- * A queue's work is finished before ExecuteCommandLists returns. D3D12Core
- * signals an application's fences itself, on the kernel context the driver
- * made for the queue, as soon as that context's earlier submissions are done
- * - and the work never went through that context, it went through the ring.
- * Waiting for the host is what keeps a fence from reaching its value early.
+ * D3D12Core signals an application's fences itself, on the kernel context
+ * the driver made for the queue, as soon as that context's earlier packets
+ * are done - and the work never went through that context, it went through
+ * the ring. So an execute is followed by a packet on the queue's context that
+ * names the ring batch carrying it (FollowRecord): the miniport holds the
+ * packet until the host has completed that batch, and the host completes a
+ * batch only once the GPU has finished the lists it executed (RingConsumer's
+ * held completions). The fence reaches its value no sooner than the work, and
+ * the guest never waits for the host to say so - unless the host takes longer
+ * than the miniport's deadline for a held packet (ExecutionNode::
+ * release_overdue), which lets it go rather than have the engine called hung.
  *
  * Written against the WDK's own DDI types, so it builds for Windows only. */
 #ifndef AV_UM_D3D12_DEVICE_HPP
@@ -84,6 +90,10 @@ private:
     uint32_t next_id();
     void     stamp(RecordHeader &header, uint32_t magic, uint32_t id);
     bool     sent(bool sent_ok, const char *what);
+    /* A packet on `queue`'s context behind the batch its execute sent; false,
+     * with the device lost, when there is none to follow or the runtime
+     * refuses it. */
+    bool     follow(const QueueRecord &queue);
 
     /* Resources and heaps (d3d12_device_resources.cpp). */
     d3d12proto::ResourceDesc resource_desc(const D3D12DDIARG_CREATERESOURCE_0109 &args) const;
@@ -116,6 +126,8 @@ private:
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
+    /* The runtime's kernel thunks: how a packet reaches a queue's context. */
+    const D3DDDI_DEVICECALLBACKS                  *kernel_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;
     d3d::D3d12AddressSpace                addresses_;
     D3d12Recorder                         recorder_;

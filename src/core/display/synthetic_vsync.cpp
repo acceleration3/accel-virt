@@ -115,6 +115,11 @@ void SyntheticVsync::tick()
         } else {
             platform_.log("rvkgpu: a vsync was refused");
         }
+    } else if (ticks_ % ticks_per_sweep == 0u) {
+        /* The DPC is also where held packets past their deadline are let go
+         * (ExecutionNode::release_overdue): it runs every few hundred
+         * milliseconds even while nobody asked for vsyncs. */
+        static_cast<void>(dxgkrnl_.queue_dpc());
     }
     if (ticks_ == ticks_per_report) report_rate();
 }

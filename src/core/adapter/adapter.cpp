@@ -21,6 +21,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkddi_feature_interface_record.hpp"
@@ -417,6 +418,8 @@ void Adapter::dpc_routine()
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     rvk_contexts_.serve(node_, hw_submissions_);
+    const uint32_t overdue = node_.release_overdue(platform_.interrupt_time());
+    if (overdue != 0u && budget_.allows()) platform_.log("rvkgpu: a held packet passed its deadline and was let go");
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
@@ -1694,14 +1697,24 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
      * and D3DKMTSubmitCommand fails for the process instead (FR-005). */
     if (identity_.changed()) return NtStatus(Status::invalid_parameter).value();
     uint64_t     awaited = 0u;
-    const Status status = context->is_rvk() ? submit_rvk(*request, awaited) : node_.submit(request->SubmissionFenceId);
+    void        *owner = request->hContext;
+    /* Every ordinary context is given room for a FollowRecord, so dxgkrnl
+     * hands its private data to every packet: only one that decodes as a
+     * record follows anything. */
+    FollowRecord follow;
+    const bool   follows =
+        !context->is_rvk() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
+                                            request->DmaBufferPrivateDataSize) == Status::ok;
+    const Status status = context->is_rvk() ? submit_rvk(*request, awaited)
+                          : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
+                                            : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
         /* Only a batch the device already finished needs this DPC: its
          * interrupt may have come before the packet was queued. One still
          * running is reported by the interrupt it raises when it finishes,
          * and a DPC per submission doubled the work dxgkrnl's DPC lock
          * serializes. */
-        if (!context->is_rvk() || rvk_contexts_.completed_already(request->hContext, awaited))
+        if (awaited == 0u || rvk_contexts_.completed_already(owner, awaited))
             static_cast<void>(dxgkrnl_.queue_dpc());
         return NtStatus(Status::ok).value();
     }
@@ -1722,6 +1735,22 @@ Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request, uin
                                                   request.DmaBufferPrivateDataSize, awaited);
     if (published != Status::ok) return published;
     return node_.submit(request.SubmissionFenceId, request.hContext, awaited);
+}
+
+/* A packet on an ordinary context that follows a batch on one of its
+ * process's rvk contexts: held on the node until that context's host has
+ * completed the batch, like the rvk context's own packet would be. */
+Status Adapter::submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence, void *&owner,
+                              uint64_t &awaited)
+{
+    AV_SCOPE("Adapter::submit_follow");
+    Context *const followed = contexts_.followed(context, follow.ring());
+    if (followed == nullptr) return Status::invalid_parameter;
+    owner = followed;
+    awaited = follow.fence();
+    const Status queued = node_.submit(fence, followed, awaited);
+    if (queued == Status::ok) rvk_contexts_.kick(followed);
+    return queued;
 }
 
 void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)

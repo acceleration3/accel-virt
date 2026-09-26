@@ -18,7 +18,7 @@ extern "C" char *getenv(const char *name);   /* freestanding: libc's own */
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
-    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("RVK_PERFETTO") != nullptr), prepared_(false),
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), held_(), head_(0u), last_fence_(0u), batches_(0u), ordering_(nullptr), clock_pairs_(getenv("RVK_PERFETTO") != nullptr), prepared_(false),
       attached_(false), faulted_(false)
       {
           AV_SCOPE("RingConsumer::RingConsumer");
@@ -75,6 +75,7 @@ void RingConsumer::service()
     host_.require_worker("RingConsumer::service");
     if (!attached_ || faulted_) return;
     serve();
+    static_cast<void>(settle());
     fences_.signal();
 }
 
@@ -123,8 +124,40 @@ Status RingConsumer::consume_next()
     batches_++;
     /* The header was just read, so its head field is inside the blob. */
     static_cast<void>(ring_.publish_head(head_));
-    fences_.complete(last_fence_);
+    complete_or_hold(last_fence_);
     return Status::ok;
+}
+
+void RingConsumer::complete_or_hold(uint64_t fence)
+{
+    AV_SCOPE("RingConsumer::complete_or_hold");
+    uint64_t marked = 0u;
+    uint64_t reached = 0u;
+    executor_.gpu_progress(marked, reached);
+    if (held_.empty() && marked <= reached) {
+        fences_.complete(fence);
+        return;
+    }
+    /* Full only when the GPU is further behind than the guest may run ahead:
+     * the guest's own fence window stops it first. */
+    while (!held_.hold(fence, marked)) {
+        static_cast<void>(settle());
+        __builtin_ia32_pause();
+    }
+    static_cast<void>(settle());
+}
+
+bool RingConsumer::settle()
+{
+    AV_SCOPE("RingConsumer::settle");
+    if (held_.empty()) return false;
+    uint64_t marked = 0u;
+    uint64_t reached = 0u;
+    executor_.gpu_progress(marked, reached);
+    const uint64_t newest = held_.release(reached);
+    if (newest == 0u) return false;
+    fences_.complete(newest);
+    return true;
 }
 
 /* The executor goes at once: the host API's objects are the device's to free,
@@ -141,7 +174,10 @@ bool RingConsumer::has_work() const
 bool RingConsumer::poll()
 {
     AV_SCOPE("RingConsumer::poll");
-    return attached_ && !faulted_ && executor_.poll();
+    if (!attached_ || faulted_) return false;
+    const bool publishing = executor_.poll();
+    if (settle()) fences_.signal();
+    return publishing;
 }
 
 void RingConsumer::announce_awake(bool awake)

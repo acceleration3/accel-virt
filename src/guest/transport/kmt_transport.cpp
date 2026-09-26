@@ -27,7 +27,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
-      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), previous_end_(0u), doorbell_(connection.kmt()),
+      dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
 {
@@ -358,6 +358,7 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     previous_end_ = newest_end_;
     newest_end_ = end;
     fence = fences_.open();
+    newest_fence_ = fence;
     fence_ends_[fence % TransportFence::max_outstanding] = end;
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
@@ -410,6 +411,18 @@ TransportResult KmtTransport::send_async_batch(const uint8_t *framed, size_t len
         return TransportResult::failed;
     uint64_t fence = 0u;
     return publish_batch(framed, static_cast<uint32_t>(length), fence);
+}
+
+uint64_t KmtTransport::marker_address() const
+{
+    AV_SCOPE("KmtTransport::marker_address");
+    return dma_address_;
+}
+
+FollowRecord KmtTransport::follow() const
+{
+    AV_SCOPE("KmtTransport::follow");
+    return FollowRecord(ring(), newest_fence_);
 }
 
 /* For a stream whose batch ends in the one command that answers. */

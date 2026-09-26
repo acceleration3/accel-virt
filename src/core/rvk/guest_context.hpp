@@ -48,6 +48,8 @@ public:
     [[nodiscard]] Status accept(const uint8_t *bytes, size_t length);
     /* DISPATCH. The submitter's answer; invalid_state unless established. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
+    /* DISPATCH. The device is told to look at the ring (RingSubmitter::kick). */
+    void                 kick();
     /* DISPATCH. A doorbell was connected on this context (feature 049): the
      * process publishes the ring's tail and rings the doorbell itself, so
      * neither the tail nor what has been submitted is the driver's to know
