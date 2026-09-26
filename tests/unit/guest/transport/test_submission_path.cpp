@@ -44,6 +44,8 @@ constexpr std::uint8_t  order = 12u;
 constexpr std::size_t   ring_bytes = 32u + (1u << order);
 /* What the ring allocation is asked for: whole pages, as a transport's is. */
 constexpr std::uint64_t ring_allocation_bytes = 8192u;
+/* The header's byte where the device's worker says it is watching the ring. */
+constexpr std::size_t   awake_byte = 5u;
 
 /* A context with a ring, a doorbell on it, and the path that chooses. */
 class Submitting {
@@ -93,8 +95,11 @@ public:
         std::uint8_t  payload[64] = {};
         std::uint64_t begin = 0u;
         std::uint64_t end = 0u;
-        return ring_.write_batch(payload, sizeof payload, fence, begin, end);
+        return ring_.write_batch(payload, sizeof payload, fence, 0u, begin, end);
     }
+
+    /* Play the device's worker saying whether it is watching the ring. */
+    void consumer_awake(bool awake) { ring_memory_[awake_byte] = awake ? 1u : 0u; }
 
     std::uint64_t published_tail()
     {
@@ -241,4 +246,40 @@ TEST(submission_path_invariants, a_submission_counted_for_an_empty_ring_is_detec
   CHECK(!submitting.path().invariants_hold());
   /* A batch written puts the ring where that count says it should be. */
   CHECK_STATUS(submitting.write_batch(1u), Status::ok);
+  CHECK(submitting.path().invariants_hold()); }
+
+/* A process that publishes its own tail leaves the kernel out of a submission
+ * the device's worker is already watching for; a worker asleep is woken the
+ * way it always was, through the kernel, with the tail already published. */
+TEST(submission_path, a_published_tail_skips_the_kernel_while_the_worker_is_awake)
+{ Submitting submitting;
+  submitting.kmt().refuse_hardware_scheduling();
+  CHECK_STATUS(submitting.open_doorbell(), Status::not_supported);
+  const std::uint8_t descriptor[24] = {};
+  /* Before it is asked to, the path publishes nothing itself: the miniport does. */
+  CHECK_STATUS(submitting.write_batch(1u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::ok);
+  CHECK_EQ(submitting.published_tail(), 0u);
+  CHECK_EQ(submitting.path().through_kernel(), 1u);
+
+  submitting.path().publish_before_kernel();
+  /* Asleep: the tail is published and the kernel still asked, to wake it. */
+  CHECK_STATUS(submitting.write_batch(2u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 2u),
+               Status::ok);
+  CHECK_EQ(submitting.published_tail(), submitting.ring().tail());
+  CHECK_EQ(submitting.path().through_kernel(), 2u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 2u);
+
+  /* Awake: published, counted, and no kernel call. */
+  submitting.consumer_awake(true);
+  CHECK_STATUS(submitting.write_batch(3u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 3u),
+               Status::ok);
+  CHECK_EQ(submitting.published_tail(), submitting.ring().tail());
+  CHECK_EQ(submitting.path().through_kernel(), 2u);
+  CHECK_EQ(submitting.path().through_doorbell(), 0u);
+  CHECK_EQ(submitting.path().submitted(), 3u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 2u);
   CHECK(submitting.path().invariants_hold()); }

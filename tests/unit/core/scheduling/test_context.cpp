@@ -4,6 +4,7 @@
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/scheduling/context.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "core/scheduling/device.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
@@ -28,7 +29,7 @@ using av::Violation;
 TEST(context, remembers_its_device_node_and_flags)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   const Context context(platform, device, geometry, 0u, 1u);
   CHECK(&context.device() == &device);
@@ -38,7 +39,7 @@ TEST(context, remembers_its_device_node_and_flags)
 TEST(context_report_to, answers_the_context_info_and_the_handle)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 0u);
   DxgkargCreateContextRecord request;
@@ -47,7 +48,8 @@ TEST(context_report_to, answers_the_context_info_and_the_handle)
   CHECK(request.hContext == &context);
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
   CHECK_EQ(request.ContextInfoDmaBufferSegmentSet, av::ApertureSegment::segment_set);
-  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 0u);
+  /* An ordinary context may carry a FollowRecord with each packet. */
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size);
   CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
   CHECK_EQ(request.ContextInfoPatchLocationListSize, 1024u);
   CHECK_EQ(request.ContextInfoReserved, 0u);
@@ -57,7 +59,7 @@ TEST(context_report_to, answers_the_context_info_and_the_handle)
 TEST(context_assign_root, bounds_the_addresses_it_admits)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 0x4u);
   CHECK(context.admits(0x8000000000ull));
@@ -69,7 +71,7 @@ TEST(context_assign_root, bounds_the_addresses_it_admits)
 TEST(context, is_legal_up_to_dispatch)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 0u);
   DxgkargCreateContextRecord request = {};
@@ -89,7 +91,7 @@ TEST(context, is_legal_up_to_dispatch)
 TEST(context, becomes_the_guest_half_of_an_rvk_context)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 4u);
   CHECK(!context.is_rvk());

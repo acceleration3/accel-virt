@@ -15,6 +15,7 @@ namespace {
 
 void *run_clock_hold(void *hold)
 {
+    AV_SCOPE("run_clock_hold");
     static_cast<GpuClockHold *>(hold)->watch();
     return nullptr;
 }

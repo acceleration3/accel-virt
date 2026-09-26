@@ -217,11 +217,9 @@ TEST(ring_submitter_submit, a_tail_the_process_published_is_taken_and_judged)
   CHECK(fixture.fences().highest_submitted() == 6u);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
 
-  /* A header that does not end where the submission does is no header of this
-   * batch: neither a tail short of it nor one past it is believed. */
+  /* A header short of the submission's end, and not at its beginning, is no
+   * header of this batch. */
   fixture.publish_tail(360u);
-  CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::invalid_parameter);
-  fixture.publish_tail(400u);
   CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::invalid_parameter);
   /* Nor is a batch that begins behind what the driver already published. */
   fixture.publish_tail(300u);
@@ -229,11 +227,62 @@ TEST(ring_submitter_submit, a_tail_the_process_published_is_taken_and_judged)
   CHECK(fixture.submitter().tail() == 320u);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
 
-  /* And the ring still fills up: a tail the device has not caught up with is
-   * no space, however it was published. */
-  fixture.publish_tail(320u + capacity + 1u);
-  CHECK_STATUS(fixture.submit(7u, 320u, 320u + capacity + 1u), Status::invalid_parameter);
+  /* A header past the end is a process that published later batches before
+   * the scheduler handed this one over: the batch is taken, and the newer tail
+   * is never stored back over. */
+  fixture.publish_tail(400u);
+  CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::ok);
+  CHECK(fixture.submitter().tail() == 384u);
+  CHECK_EQ(fixture.published_tail(), 400u);
+  CHECK_EQ(fixture.doorbells().rings(5u), 3u);
+
+  /* And the ring still fills up: a batch longer than the ring is refused,
+   * however it was published. */
+  fixture.publish_tail(384u + capacity + 1u);
+  CHECK_STATUS(fixture.submit(8u, 384u, 384u + capacity + 1u), Status::invalid_parameter);
   CHECK(fixture.submitter().invariants_hold()); }
+
+/* The driver's own tail is short of the one a process published, and the
+ * store that ends the submission moves the header only while it is: a newer
+ * tail the process stored meanwhile is left where it is. */
+TEST(ring_submitter_submit, a_shared_tail_is_only_ever_moved_forward)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.attach(), Status::ok);
+  CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
+  fixture.user_mode_publishes();
+  /* A process that has stopped publishing for itself leaves the header where
+   * the submission begins, and the driver writes the tail again. */
+  fixture.publish_tail(64u);
+  CHECK_STATUS(fixture.submit(2u, 64u, 128u), Status::ok);
+  CHECK_EQ(fixture.published_tail(), 128u);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u); }
+
+/* A kick rings the doorbell with nothing submitted - the device looks at a
+ * tail the process moved itself - and never on a ring that is not there or
+ * has failed. */
+TEST(ring_submitter_kick, rings_the_doorbell_of_an_attached_ring_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.submitter().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(5u), 0u);
+  CHECK_STATUS(fixture.attach(), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.submitter().kick();
+  fixture.submitter().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u);
+  CHECK(fixture.submitter().tail() == 0u);
+  CHECK(fixture.fences().highest_submitted() == 0u);
+  /* A head the device could not have written fails the ring; no kick after. */
+  fixture.device_consumes(64u);
+  CHECK_STATUS(fixture.submit(1u, 0u, 32u), Status::invalid_state);
+  CHECK(fixture.submitter().failed());
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.submitter().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(5u), 2u);
+  CHECK_EQ(fixture.doorbells().stray_stores(), 0u); }
 
 /* The tail goes out before the store (SubmissionPath::submit), so a batch a
  * process falls back to the driver with may be one the device has already

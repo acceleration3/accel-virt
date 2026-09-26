@@ -123,11 +123,16 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 6u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 11u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EVENTS, 5u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_SHARING, 6u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_IMAGES, 7u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_BATCHES, 8u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EXPORTS, 9u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_POLL, 10u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_PROGRESS, 11u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
@@ -384,3 +389,131 @@ TEST(executor_library_import_object, gives_nothing_back_for_a_library_that_names
   CHECK_EQ(ops.live_objects(), 0u);
   host.close_dmabuf(fd);
   library.destroy(executor); }
+
+/* ABI 8 onwards: the device tells the executor a batch is over, so one lock
+ * can be held across it. An older table, or one that leaves the call out, is
+ * told nothing, and a device with no library is not a crash. */
+namespace {
+
+std::uint32_t batches_ended = 0u;
+RvkExecutor  *batch_ended_for = nullptr;
+
+void count_end_batch(void *, RvkExecutor *executor)
+{
+    ++batches_ended;
+    batch_ended_for = executor;
+}
+
+}  // namespace
+
+TEST(executor_library_end_batch, reaches_a_library_of_the_batches_version_only)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.editable().end_batch = count_end_batch;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RvkExecutor *const executor = library.create(SubApi::vulkan, some_gpu, nullptr, nullptr);
+  batches_ended = 0u;
+  library.end_batch(executor);
+  CHECK_EQ(batches_ended, 1u);
+  CHECK(batch_ended_for == executor);
+
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_BATCHES - 1u);
+  library.end_batch(executor);
+  CHECK_EQ(batches_ended, 1u);
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_BATCHES);
+  library.end_batch(executor);
+  CHECK_EQ(batches_ended, 2u);
+  ops.editable().end_batch = nullptr;
+  library.end_batch(executor);
+  CHECK_EQ(batches_ended, 2u);
+  library.destroy(executor);
+
+  ExecutorLibrary none;
+  none.end_batch(nullptr);
+  CHECK_EQ(batches_ended, 2u); }
+
+/* ABI 11: the executor's GPU marks. Anything older, or a table without the
+ * call, answers 0 and 0 - an executor whose work is done when it returns -
+ * whatever the caller held before. */
+namespace {
+
+void report_progress(void *, RvkExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    *marked = 7u;
+    *reached = 5u;
+}
+
+}  // namespace
+
+TEST(executor_library_gpu_progress, is_the_library_s_from_the_progress_version_and_zero_before)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.editable().gpu_progress = report_progress;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RvkExecutor *const executor = library.create(SubApi::vulkan, some_gpu, nullptr, nullptr);
+  std::uint64_t marked = 1u, reached = 1u;
+  library.gpu_progress(executor, marked, reached);
+  CHECK(marked == 7u);
+  CHECK(reached == 5u);
+
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_PROGRESS - 1u);
+  library.gpu_progress(executor, marked, reached);
+  CHECK(marked == 0u);
+  CHECK(reached == 0u);
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_PROGRESS);
+  ops.editable().gpu_progress = nullptr;
+  marked = reached = 3u;
+  library.gpu_progress(executor, marked, reached);
+  CHECK(marked == 0u);
+  CHECK(reached == 0u);
+  library.destroy(executor);
+
+  ExecutorLibrary none;
+  marked = reached = 3u;
+  none.gpu_progress(nullptr, marked, reached);
+  CHECK(marked == 0u);
+  CHECK(reached == 0u); }
+
+/* ABI 9: a published image handed over as a dma-buf. Only a library of that
+ * version with the call is asked, and only its RVK_EXECUTED is an export. */
+namespace {
+
+std::uint64_t exported_key = 0u;
+
+std::uint32_t export_known_key(void *, const std::uint8_t *, std::uint64_t key, RvkExportedImage *image)
+{
+    exported_key = key;
+    if (key != 0x51u) return RVK_UNKNOWN;
+    image->fd = 12;
+    image->width = 640u;
+    image->height = 480u;
+    image->stride = 2560u;
+    return RVK_EXECUTED;
+}
+
+}  // namespace
+
+TEST(executor_library_export_image, answers_the_library_s_image_for_a_key_it_published)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_D3D);
+  ops.editable().export_image = export_known_key;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  RvkExportedImage image = {};
+  CHECK(library.export_image(some_gpu, 0x51u, image));
+  CHECK_EQ(image.fd, 12);
+  CHECK_EQ(image.width, 640u);
+  CHECK_EQ(image.height, 480u);
+  CHECK_EQ(image.stride, 2560u);
+  CHECK(!library.export_image(some_gpu, 0x52u, image));
+  CHECK(exported_key == 0x52u);
+
+  exported_key = 0u;
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_EXPORTS - 1u);
+  CHECK(!library.export_image(some_gpu, 0x51u, image));
+  CHECK(exported_key == 0u);
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_EXPORTS);
+  ops.editable().export_image = nullptr;
+  CHECK(!library.export_image(some_gpu, 0x51u, image));
+
+  ExecutorLibrary none;
+  CHECK(!none.export_image(some_gpu, 0x51u, image)); }

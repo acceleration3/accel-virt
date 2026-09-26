@@ -21,6 +21,7 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
+#include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -273,3 +274,36 @@ TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_sel
   CHECK_EQ(selected[1], device_a);
   CHECK(fixture.twelve().invariants_hold());
   CHECK_EQ(fixture.twelve().device(), 0u); }
+
+/* A deferred context's channel: what it recorded is counted and taken out of
+ * the stream under the process's lock, and an application's Flush is the
+ * stream's, under the lock too. */
+TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
+{ Fixture fixture;
+  fixture.stream().record();
+  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  fixture.trace().clear();
+  const std::size_t recorded = fixture.a().recorded_bytes();
+  /* The selection of a, then its draw. */
+  CHECK(recorded > av::CommandHeader::encoded_size);
+  std::uint8_t out[256] = {};
+  std::size_t  length = 0u;
+  CHECK_STATUS(fixture.a().take_recorded(out, recorded - 1u, length), Status::invalid_parameter);
+  CHECK_STATUS(fixture.a().take_recorded(out, sizeof out, length), Status::ok);
+  CHECK_EQ(length, recorded);
+  CHECK_EQ(fixture.a().recorded_bytes(), 0u);
+  CHECK(!fixture.lock().held());
+  CHECK(std::strcmp(fixture.trace().text(), "PpPpPpPp") == 0); }
+
+TEST(d3d_device_channel, an_application_flush_is_the_streams_under_the_lock)
+{ Fixture fixture;
+  CHECK(rvk_d3d_Draw(fixture.a(), 3u, 0u));
+  fixture.trace().clear();
+  CHECK_STATUS(fixture.a().application_flush(), Status::ok);
+  CHECK(!fixture.lock().held());
+  CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0);
+  std::uint32_t ids[8] = {}, selected[8] = {};
+  CHECK_EQ(fixture.shipped(ids, selected, 8u), 3u);
+  CHECK_EQ(ids[1], kCmd_Draw);
+  CHECK_EQ(ids[2], kCmd_Flush11);
+  CHECK_EQ(fixture.stream().recorded_bytes(), 0u); }

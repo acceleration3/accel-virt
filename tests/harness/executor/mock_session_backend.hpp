@@ -49,6 +49,7 @@ public:
     /* Holds nothing across a batch and waits on no GPU. */
     void end_batch() override;
     bool poll() override;
+    void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,

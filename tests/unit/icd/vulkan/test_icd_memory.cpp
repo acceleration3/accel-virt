@@ -492,9 +492,10 @@ TEST(icd_memory, destroying_the_device_gives_its_memory_back_first)
   CHECK_EQ(rig.kmt().command_id(commands + 1u), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands + 2u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkDestroyDevice));
   CHECK_EQ(rig.kmt().bindings(), 0u);
-  /* The memory lock around both releases and the unbind, then the destroy. */
+  /* The memory lock around both releases and the unbind, then the destroy,
+   * with nothing but root-lock lookups between. */
   const char *const trace = rig.rig().trace().text();
-  if (std::strstr(trace, "MSsSsSsmHhS") == nullptr)
+  if (std::strstr(trace, "MSsSsSsmHhHhS") == nullptr)
       av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "trace %s", trace); }
 
 /* A release the device refuses on the way out is logged, and the device still

@@ -67,6 +67,27 @@ class DesignRules(unittest.TestCase):
         result = run(CHECK, self.tree.root)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_members_after_a_nested_type_are_the_enclosing_class_s_state(self):
+        """A table of complete slots is declared after its slot type, so a
+        class's members often follow a nested struct."""
+        self.tree.write("src/device/table.hpp",
+                        "class Table {\npublic:\n    int count() const;\nprivate:\n"
+                        "    struct Slot {\n        int id_;\n    };\n"
+                        "    Slot slots_[4];\n    int count_;\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_nested_type_is_judged_as_a_class_of_its_own(self):
+        self.tree.write("src/device/table.hpp",
+                        "class Table {\nprivate:\n    struct Slot {\n        int id;\n    };\n"
+                        "    struct Pair { int a_; int b_; };\n    struct Bare { int a; };\n    static int f();\n    Slot slots_[4];\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(sorted(result.stderr.strip().splitlines()),
+                         ["src/device/table.hpp: Table::f is static",
+                          "src/device/table.hpp: class Bare has no data members",
+                          "src/device/table.hpp: class Slot has no data members"])
+
     def test_does_not_judge_whether_symbols_are_tested(self):
         self.tree.write("src/core/fine.hpp",
                         "class Fine {\npublic:\n    int never_named();\nprivate:\n    int v_;\n};\n")

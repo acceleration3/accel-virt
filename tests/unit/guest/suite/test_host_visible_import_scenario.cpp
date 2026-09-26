@@ -220,7 +220,7 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
   CHECK_EQ(rig.sent(kCmd_vkDestroyDevice), 1u);
   CHECK_EQ(rig.sent(kCmd_vkDestroyInstance), 1u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), CommandHeader::nop_id);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 4u);   /* two binds, two unbinds */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);   /* the tail's publishing, two binds, two unbinds */
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
@@ -241,8 +241,8 @@ TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_
   }, &seen);
   GuestReport report;
   rig.run(report);
-  CHECK_EQ(seen.escapes, 2u);   /* the binds only */
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 4u);
+  CHECK_EQ(seen.escapes, 3u);   /* the tail's publishing and the binds only */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);
   const std::uint32_t commands = rig.kmt().commands();
   /* Then the device the imports were made on, and its instance. */
   CHECK_EQ(rig.kmt().command_id(commands - 5u), CommandHeader::release_blob_id);
@@ -445,7 +445,7 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
        "import.src_lock"},
       {Fault::fail, MockKmt::Call::lock, 3u, 5u, "FAIL import.src_lock status=7 code=0xC0000001\n",
        "import.src_bind"},
-      {Fault::fail, MockKmt::Call::escape, 1u, 5u, "FAIL import.src_bind status=7 code=0xC0000001\n",
+      {Fault::fail, MockKmt::Call::escape, 2u, 5u, "FAIL import.src_bind status=7 code=0xC0000001\n",
        "import.src_pages"},
       {Fault::zero_escape, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_bind status=9 code=0x00000000\n",
        "import.src_pages"},
@@ -454,7 +454,7 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
        "import.dst_lock"},
       {Fault::fail, MockKmt::Call::lock, 4u, 9u, "FAIL import.dst_lock status=7 code=0xC0000001\n",
        "import.dst_bind"},
-      {Fault::fail, MockKmt::Call::escape, 2u, 9u, "FAIL import.dst_bind status=7 code=0xC0000001\n",
+      {Fault::fail, MockKmt::Call::escape, 3u, 9u, "FAIL import.dst_bind status=7 code=0xC0000001\n",
        "import.dst_pages"},
       {Fault::fail, MockKmt::Call::wait_for_context, 8u, 7u, "FAIL import.src_import status=7 0\n",
        "import.src_bind_buffer"},
@@ -466,7 +466,8 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       Rig rig;
       answer_until(rig, one.answers);
       if (one.fault == Fault::fail) rig.kmt().fail_at(one.call, one.nth, refused);
-      if (one.fault == Fault::zero_escape) rig.kmt().zero_next(MockKmt::Call::escape);
+      /* The first escape is the transport's own, publishing its ring tail. */
+      if (one.fault == Fault::zero_escape) rig.kmt().zero_at(MockKmt::Call::escape, 2u);
       if (one.fault == Fault::short_pages) rig.kmt().answer_next_bind_pages(1u);
       GuestReport report;
       rig.run(report);
@@ -613,7 +614,7 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       rig.host().nop();
       if (one.fault == 2u) rig.host().vk_result(0);
       else rig.host().nop();
-      if (one.fault == 1u) rig.kmt().fail_at(MockKmt::Call::escape, 3u, refused);
+      if (one.fault == 1u) rig.kmt().fail_at(MockKmt::Call::escape, 4u, refused);
       rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
       GuestReport report;
       rig.run(report);
@@ -621,7 +622,7 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       CHECK(has_line(report, one.line));
       CHECK_EQ(report.failed(), 1u);
       CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 2u);
-      CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 4u);
+      CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);
       CHECK_EQ(rig.kmt().open_objects(), 1u);
       CHECK_EQ(rig.kmt().queued_answers(), 0u);
       CHECK_EQ(rig.kmt().misuses(), 0u);

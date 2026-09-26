@@ -44,10 +44,10 @@ void QueryResultPublisher::ended(uint32_t id, ID3D11Query *query)
     unflushed_ = true;
     query->AddRef();
     for (uint32_t i = 0u; i < count_; i++) {
-        if (pending_[i].id != id) continue;
-        pending_[i].query->Release();
-        pending_[i].query = query;
-        pending_[i].end = ends_;
+        if (pending_[i].id_ != id) continue;
+        pending_[i].query_->Release();
+        pending_[i].query_ = query;
+        pending_[i].end_ = ends_;
         return;
     }
     if (count_ < pending_capacity) pending_[count_++] = Pending{id, query, ends_};
@@ -58,8 +58,8 @@ void QueryResultPublisher::forget(uint32_t id)
 {
     AV_SCOPE("QueryResultPublisher::forget");
     for (uint32_t i = 0u; i < count_; i++) {
-        if (pending_[i].id != id) continue;
-        pending_[i].query->Release();
+        if (pending_[i].id_ != id) continue;
+        pending_[i].query_->Release();
         pending_[i] = pending_[--count_];
         return;
     }
@@ -70,7 +70,7 @@ void QueryResultPublisher::forget(uint32_t id)
 void QueryResultPublisher::release_all()
 {
     AV_SCOPE("QueryResultPublisher::release_all");
-    for (uint32_t i = 0u; i < count_; i++) pending_[i].query->Release();
+    for (uint32_t i = 0u; i < count_; i++) pending_[i].query_->Release();
     count_ = 0u;
 }
 
@@ -92,15 +92,15 @@ bool QueryResultPublisher::publish(ID3D11DeviceContext4 *context)
     uint8_t data[slot_bytes - data_at] = {};
     for (uint32_t i = 0u; i < count_;) {
         const Pending pending = pending_[i];
-        const UINT    size = pending.query->GetDataSize();
+        const UINT    size = pending.query_->GetDataSize();
         if (size > sizeof data ||
-            context->GetData(pending.query, size == 0u ? nullptr : data, size, D3D11_ASYNC_GETDATA_DONOTFLUSH) !=
+            context->GetData(pending.query_, size == 0u ? nullptr : data, size, D3D11_ASYNC_GETDATA_DONOTFLUSH) !=
                 S_OK) {
             i++;
             continue;
         }
-        write(pending.id, data, size, pending.end);
-        pending.query->Release();
+        write(pending.id_, data, size, pending.end_);
+        pending.query_->Release();
         pending_[i] = pending_[--count_];
     }
     return count_ != 0u;

@@ -8,6 +8,7 @@
 #include "icd/opengl/gl_entry_points.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 
@@ -105,8 +106,12 @@ constexpr GLenum        gl_viewport = 0x0BA2u;
 constexpr GLenum        gl_num_extensions = 0x821Du;
 constexpr GLenum        gl_invalid_operation = 0x0502u;
 
+/* How many commands of `id` reached the host, the current context's held
+ * calls flushed first. */
 std::uint32_t sent(const GlIcdRig &rig, std::uint32_t id)
 {
+    av::glicd::GuestGlContext *const current = const_cast<GlIcdRig &>(rig).root().current();
+    if (current != nullptr) current->flush();
     std::uint32_t count = 0u;
     for (std::uint32_t index = 0u; index < const_cast<GlIcdRig &>(rig).kmt().commands(); index++)
         if (const_cast<GlIcdRig &>(rig).kmt().command_id(index) == id) count++;
@@ -462,8 +467,8 @@ TEST(gl_icd_root, a_display_list_is_compiled_once_and_called_with_one_command)
   rig.opengl32().gl<NewListFn>(slot_new_list)(7u, 0x1300u /* GL_COMPILE */);
   rig.opengl32().gl<BeginFn>(slot_begin)(0x0004u /* GL_TRIANGLES */);
   rig.opengl32().gl<EndListFn>(slot_end_list)();
-  const std::uint32_t after_compile = rig.kmt().commands();
   CHECK_EQ(sent(rig, av::glproto::kCmd_glNewList), 1u);
+  const std::uint32_t after_compile = rig.kmt().commands();
   CHECK_EQ(sent(rig, av::glproto::kCmd_glBegin), 1u);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glEndList), 1u);
 
@@ -474,7 +479,7 @@ TEST(gl_icd_root, a_display_list_is_compiled_once_and_called_with_one_command)
       rig.opengl32().gl<CallListsFn>(slot_call_lists)(2, 0x1401u /* GL_UNSIGNED_BYTE */, names);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glCallLists), 3u);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glBegin), 1u);
-  CHECK(rig.kmt().commands() - after_compile <= 3u);
+  CHECK_EQ(rig.kmt().commands() - after_compile, 3u);
   CHECK(after_compile > compiled); }
 
 /* The call that faulted answers nothing; the loss is glGetError's next
@@ -864,7 +869,7 @@ TEST(gl_icd_root, binds_itself_for_its_life)
   }
   CHECK(!av::glicd::gl_icd_binding.bound()); }
 
-TEST(gl_icd_root, a_create_and_a_call_take_the_root_lock_then_the_send_lock)
+TEST(gl_icd_root, a_create_takes_the_root_lock_a_call_takes_none_and_a_flush_the_send_lock)
 { GlIcdRig rig;
   rig.load_with_format();
   void *const context = rig.opengl32().create_context(rig.dc());
@@ -873,12 +878,16 @@ TEST(gl_icd_root, a_create_and_a_call_take_the_root_lock_then_the_send_lock)
   rig.host().gl_policy(0);
   rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
-  const char *const made = rig.trace().text();
-  CHECK_EQ(made[0], 'H');
-  CHECK_EQ(made[1], 'S');
-  CHECK_EQ(made[std::strlen(made) - 1u], 'h');
+  /* The make's own calls are held in the context's batch, not sent under a lock. */
+  CHECK(std::strcmp(rig.trace().text(), "Hh") == 0);
   rig.trace().clear();
+  /* A context is current on one thread at a time and has a transport of its
+   * own, so its calls serialise against nothing. */
   rig.opengl32().gl<ClearFn>(slot_clear)(0x4000u);
+  CHECK(std::strcmp(rig.trace().text(), "") == 0);
+  /* Sending what was held is what takes the send lock. */
+  CHECK(rig.root().current() != nullptr);
+  if (rig.root().current() != nullptr) rig.root().current()->flush();
   CHECK(std::strcmp(rig.trace().text(), "Ss") == 0); }
 
 TEST(gl_icd_root_invariants, fail_for_state_no_entry_makes)

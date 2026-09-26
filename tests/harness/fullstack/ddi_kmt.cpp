@@ -643,6 +643,15 @@ Status DdiKmt::destroy_context(std::uint32_t context)
 {
     Context *const found = find_context(context);
     if (found == nullptr) return refuse(Status::invalid_parameter);
+    /* dxgkrnl lets a context's queued packets finish before it destroys it:
+     * a packet the driver still holds for its host belongs to the context and
+     * would otherwise stay on the node, ahead of every other context's work. */
+    const std::uint64_t deadline = now_ms() + patience_ms;
+    while (fences_.settled(slot_of(*found)) == Status::not_found && now_ms() < deadline) {
+        static_cast<void>(fabric_.deliver());
+        pump_.deliver();
+        sched_yield();
+    }
     const Status destroyed =
         answer(routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyContext)(found->driver));
     fences_.forget(slot_of(*found));

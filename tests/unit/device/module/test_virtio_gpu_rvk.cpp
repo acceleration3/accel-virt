@@ -46,7 +46,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_,
-                                                 table.library_, table.shares_, table.recorder_, id));
+                                                 table.library_, table.shares_, table.recorder_, table.ordering_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -414,14 +414,16 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_the_blob_table_is_refuse
   device.reset(); }
 
 /* Feature 050: the contexts' shared executors need a lock of their own, and a
- * host with none refuses the realize with that said; the next one completes. */
+ * host with none refuses the realize with that said; the next one completes.
+ * The Direct3D streams' ordering takes the lock before theirs, and its
+ * refusal is the contexts' too. */
 TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_shared_executors_refuses_the_realize)
 { MockHost host;
   host.add_gpu(first);
   VirtioGpuRvk device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(4u);
+  host.fail_mutex_at(5u);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::no_memory);
   CHECK(std::strstr(message.text(), "no mutex for the contexts' shared executors") != nullptr);
   CHECK(!device.realized());
@@ -438,8 +440,8 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_rea
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(5u);   /* the fence interrupts, the blob table, the shared objects and the shared
-                             * executors take the first four */
+  host.fail_mutex_at(6u);   /* the fence interrupts, the blob table, the shared objects, the D3D
+                             * ordering and the shared executors take the first five */
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -763,15 +765,16 @@ TEST(virtio_gpu_rvk_scanout, a_desktop_is_bound_flushed_rebound_and_let_go_witho
       return send(request);
   };
 
-  /* The capset the guest reads carries the scanout bit, because by the time it
-   * asks, QEMU has registered its display. The features are a u64 24 bytes
-   * into the capset, which is 24 bytes into the response. */
+  /* The capset the guest reads leaves the scanout bit clear even with a GL
+   * display: the scanout shows host images by key, which a blob's dma-buf
+   * cannot carry, so the guest keeps the 2D path. The device still scans a
+   * blob out when asked. The features are a u64 24 bytes into the capset,
+   * which is 24 bytes into the response. */
   GpuRequestBuilder capset(0x0109u);
   capset.u32(av::CapsetInfo::capset_id).u32(1u);
   MockRequest read(capset.bytes(), capset.size());
   CHECK(device.control(&read, 0x0109u));
-  CHECK_EQ(read.response_u32(48u) & av::CapsetInfo::feature_dmabuf_scanout,
-           av::CapsetInfo::feature_dmabuf_scanout);
+  CHECK_EQ(read.response_u32(48u) & av::CapsetInfo::feature_dmabuf_scanout, 0u);
 
   create_blob(1u, ram);
   create_blob(2u, ram + 0x10000u);

@@ -1,5 +1,6 @@
 /* The module's devices through the C ABI the QEMU glue calls, over a C host
  * table that reaches the MockHost. */
+#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
@@ -30,12 +31,27 @@ namespace {
 
 constexpr std::uint8_t gpu[16] = {0x7b, 0x7a};
 
+/* A module holds every device slot's device by value - megabytes, more than a
+ * test's stack - so each test's module lives in static storage, as the
+ * process's own does, made fresh for the test and gone at its end. */
+av::ObjectStorage<DeviceModule> module_storage;
+
+class FreshModule {
+public:
+    FreshModule() { CHECK_STATUS(module_storage.construct(), Status::ok); }
+    ~FreshModule() { module_storage.destroy(); }
+    FreshModule(const FreshModule &) = delete;
+    FreshModule &operator=(const FreshModule &) = delete;
+    DeviceModule &module() { return module_storage.object(); }
+};
+
 }  // namespace
 
 TEST(device_module_create, realizes_a_device_on_the_named_gpu)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
-  DeviceModule module;
+  FreshModule fresh;
+  DeviceModule &module = fresh.module();
   char error[96] = "untouched";
   DeviceInstance *const instance = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
   CHECK(instance != nullptr);
@@ -53,7 +69,8 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
 TEST(device_module_report, writes_every_live_device_under_its_slot)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
-  DeviceModule module;
+  FreshModule fresh;
+  DeviceModule &module = fresh.module();
   av::StateReporter &root = module;
   char dump[512];
   av::StateWriter none(dump, sizeof dump);
@@ -75,7 +92,8 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
 TEST(device_module_destroy, finds_the_device_named_among_others)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
-  DeviceModule module;
+  FreshModule fresh;
+  DeviceModule &module = fresh.module();
   char error[96] = {};
   DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
   DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, error, sizeof error);
@@ -85,7 +103,8 @@ TEST(device_module_destroy, finds_the_device_named_among_others)
 
 TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
 { MockHost host; MockHostOps ops(host);
-  DeviceModule module;
+  FreshModule fresh;
+  DeviceModule &module = fresh.module();
   char error[96] = {};
   CHECK(module.create(&ops.table(), nullptr, "not-a-uuid", false, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "is neither auto nor a device UUID") != nullptr);
@@ -96,7 +115,8 @@ TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
 TEST(device_module_create, one_device_per_slot)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
-  DeviceModule module;
+  FreshModule fresh;
+  DeviceModule &module = fresh.module();
   char error[96] = {};
   DeviceInstance *instances[DeviceModule::max_devices] = {};
   for (DeviceInstance *&instance : instances) {

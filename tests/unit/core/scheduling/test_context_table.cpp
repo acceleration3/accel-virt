@@ -11,6 +11,7 @@
 #include "core/scheduling/context.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/submission/follow_record.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/support/status.hpp"
@@ -72,6 +73,7 @@ public:
 
     MockPlatform &platform() { return platform_; }
     DeviceTable  &devices() { return devices_; }
+    Adapter      &adapter() { return adapter_; }
     ContextTable &contexts() { return contexts_; }
     void         *device() const { return device_; }
 
@@ -205,7 +207,9 @@ TEST(context_table_create, a_context_with_no_private_data_is_not_rvk)
   DxgkargCreateContextRecord request = {};
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
   CHECK(!fixture.contexts().find(request.hContext)->is_rvk());
-  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 0u); }
+  /* Room for a FollowRecord, so dxgkrnl hands every packet's private data on
+   * (Adapter::submit_command_virtual). */
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size); }
 
 /* Private data the size of a record but not a valid one is refused, and no
  * context is left behind. */
@@ -253,3 +257,54 @@ TEST(context_table_report, writes_each_context_and_its_device)
   CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
   CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
   fixture.platform().set_irql(av::Irql::passive); }
+
+namespace {
+
+/* A context on `device`: an rvk one whose ring is allocation 2 when `rvk`. */
+void *context_on(Fixture &fixture, void *device, bool rvk)
+{ std::uint8_t data[RvkContextRecord::encoded_size] = {};
+  DxgkargCreateContextRecord request = {};
+  request.Flags = 0x4u;
+  if (rvk) {
+      request.pPrivateDriverData = data;
+      request.PrivateDriverDataSize = static_cast<std::uint32_t>(rvk_private_data(data, sizeof data));
+  }
+  CHECK_STATUS(fixture.contexts().create(device, request), Status::ok);
+  return request.hContext; }
+
+void *device_in(Fixture &fixture, void *process)
+{ DxgkargCreateDeviceRecord request = {};
+  request.hKmdProcess = process;
+  CHECK_STATUS(fixture.devices().create(fixture.adapter(), request), Status::ok);
+  return request.hDevice; }
+
+}  // namespace
+
+/* A packet on an ordinary context that carries a FollowRecord waits for the
+ * rvk context whose ring the record names - its process's own, since a handle
+ * names an allocation only in the process that made it. */
+TEST(context_table_followed, finds_the_rvk_context_of_the_same_process_by_its_ring)
+{ Fixture fixture;
+  void *const rvk = context_on(fixture, fixture.device(), true);
+  const Context &follower = *fixture.contexts().find(context_on(fixture, fixture.device(), false));
+  CHECK(fixture.contexts().followed(follower, 2u) == fixture.contexts().find(rvk));
+  CHECK(fixture.contexts().followed(follower, 3u) == nullptr);
+  CHECK(fixture.contexts().invariants_hold()); }
+
+TEST(context_table_followed, another_process_s_ring_is_never_followed)
+{ Fixture fixture;
+  int other_process = 0;
+  static_cast<void>(context_on(fixture, fixture.device(), true));
+  void *const elsewhere = device_in(fixture, &other_process);
+  const Context &follower = *fixture.contexts().find(context_on(fixture, elsewhere, false));
+  CHECK(fixture.contexts().followed(follower, 2u) == nullptr);
+  /* The same ring in the follower's own process is found. */
+  void *const own = context_on(fixture, elsewhere, true);
+  CHECK(fixture.contexts().followed(follower, 2u) == fixture.contexts().find(own)); }
+
+/* An ordinary context has no ring, whatever its record reads as. */
+TEST(context_table_followed, an_ordinary_context_is_never_followed)
+{ Fixture fixture;
+  const Context &follower = *fixture.contexts().find(context_on(fixture, fixture.device(), false));
+  static_cast<void>(context_on(fixture, fixture.device(), false));
+  CHECK(fixture.contexts().followed(follower, follower.rvk_record().ring()) == nullptr); }

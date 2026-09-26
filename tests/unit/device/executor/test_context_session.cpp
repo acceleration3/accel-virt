@@ -5,6 +5,7 @@
 #include "harness/wire/wire_arena_probe.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "device/executor/decode_arena.hpp"
+#include "device/executor/gpu_clock_hold.hpp"
 #include "device/executor/import_table.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "harness/executor/context_session_probe.hpp"
@@ -410,3 +411,24 @@ TEST(context_session, a_faulted_session_shares_nothing)
   CHECK_EQ(made, 0u);
   CHECK_EQ(bound.backend().exported_objects(), 0u);
   ContextSessionProbe(bound.session()).set_faulted(false); }
+
+/* ContextSession::hold_clocks: the session tells its GPU's clock hold of every
+ * command it runs. A hold the host could not open is told and does nothing, so
+ * the session answers exactly as one with no hold - and a released session
+ * forgets the hold, so a later one on the slot is not tied to it. */
+TEST(context_session_hold_clocks, a_session_holding_clocks_runs_its_commands_as_before)
+{ Bound bound;
+  CHECK_STATUS(bound.status(), Status::ok);
+  av::GpuClockHold clocks;
+  CHECK(!clocks.open(-1));
+  bound.session().hold_clocks(clocks);
+  std::uint8_t reply[16] = {};
+  std::size_t  answer = 0u;
+  CHECK_EQ(bound.session().execute(MockSessionBackend::echo_id, payload, sizeof payload, reply, sizeof reply, answer),
+           std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(answer, sizeof payload);
+  CHECK_EQ(reply[7], payload[7]);
+  CHECK_EQ(bound.backend().ran(), 1u);
+  bound.session().release();
+  CHECK(!bound.session().live());
+  CHECK(bound.session().invariants_hold()); }

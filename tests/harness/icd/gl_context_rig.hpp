@@ -21,6 +21,9 @@ class GlContextRig {
 public:
     /* The adapter, the device and its paging queue. */
     static constexpr std::uint32_t link_objects = 3u;
+    /* How far the guest's clock moves each time the ICD reads it: a tenth of a
+     * millisecond, so a spin for a reply gives up after ten reads. */
+    static constexpr std::uint64_t transport_clock_step = 1000u;
 
     GlContextRig();
     GlContextRig(const GlContextRig &) = delete;

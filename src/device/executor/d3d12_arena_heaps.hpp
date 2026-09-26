@@ -39,9 +39,9 @@ public:
 
 private:
     struct Range {
-        uint32_t id;
-        uint64_t base;
-        uint64_t size;
+        uint32_t id_;
+        uint64_t base_;
+        uint64_t size_;
     };
 
     uint32_t index_of(uint32_t id) const;

@@ -156,13 +156,13 @@ TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
   CHECK(!connection.open());
   CHECK_EQ(connection.opens(), 0u);
 
-  CHECK_STATUS(connection.acquire(), Status::ok);
+  CHECK_STATUS(connection.acquire(0u), Status::ok);
   CHECK(connection.open());
   const std::uint32_t adapter = connection.adapter();
   CHECK(adapter != 0u);
   CHECK_EQ(kmt.open_objects(), 1u);
 
-  CHECK_STATUS(connection.acquire(), Status::ok);
+  CHECK_STATUS(connection.acquire(0u), Status::ok);
   CHECK_EQ(connection.opens(), 2u);
   CHECK_EQ(connection.adapter(), adapter);
   CHECK_EQ(kmt.open_objects(), 1u);
@@ -183,17 +183,36 @@ TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
 TEST(umd_connection, no_rvkgpu_adapter_is_not_supported_and_holds_nothing)
 { MockKmt kmt;
   UmdConnection connection(kmt);
-  CHECK_STATUS(connection.acquire(), Status::not_supported);
+  CHECK_STATUS(connection.acquire(0u), Status::not_supported);
   CHECK(!connection.open());
   CHECK_EQ(connection.opens(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
+/* The runtime opens a UMD on one adapter: with two rvkgpu adapters the
+ * connection holds the one whose LUID it was given, not the first enumerated,
+ * and a LUID no adapter has finds nothing. */
+TEST(umd_connection, holds_the_adapter_with_the_luid_it_was_given)
+{ MockKmt kmt;
+  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  UmdConnection second(kmt);
+  CHECK_STATUS(second.acquire(MockKmt::first_luid + 1u), Status::ok);
+  std::uint64_t luid = 0u;
+  CHECK_STATUS(kmt.adapter_luid(second.adapter(), luid), Status::ok);
+  CHECK_EQ(luid, MockKmt::first_luid + 1u);
+  CHECK_EQ(kmt.open_objects(), 1u);
+  UmdConnection absent(kmt);
+  CHECK_STATUS(absent.acquire(MockKmt::first_luid + 7u), Status::not_supported);
+  CHECK(!absent.open());
+  CHECK_EQ(kmt.open_objects(), 1u);
+  CHECK_STATUS(second.release(), Status::ok); }
+
 TEST(umd_connection, reports_what_it_holds)
 { MockKmt kmt;
   kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
   UmdConnection connection(kmt);
-  CHECK_STATUS(connection.acquire(), Status::ok);
+  CHECK_STATUS(connection.acquire(0u), Status::ok);
   char bytes[256] = {};
   av::StateWriter writer(bytes, sizeof bytes);
   writer.open("connection", 0u);

@@ -22,6 +22,7 @@
 
 #include <CL/cl_ext.h>
 #include <cstdint>
+#include <cstring>
 
 using av::ClIcdRig;
 using av::FakeClLoader;
@@ -142,6 +143,18 @@ TEST(cl_enqueue_paths, a_kernel_of_no_name_or_of_something_that_is_not_a_program
   CHECK_EQ(error, CL_INVALID_KERNEL_NAME);
   CHECK(rig.root().invariants_hold()); }
 
+/* Whether `value`'s eight bytes appear in the journalled command at `index`. */
+bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t value)
+{
+    const std::uint8_t *const frame = kmt.command_bytes(index);
+    if (frame == nullptr) return false;
+    const std::uint32_t size = kmt.command_size(index) < av::MockKmt::journal_bytes ? kmt.command_size(index)
+                                                                                     : av::MockKmt::journal_bytes;
+    for (std::uint32_t at = 0u; at + sizeof value <= size; at++)
+        if (std::memcmp(frame + at, &value, sizeof value) == 0) return true;
+    return false;
+}
+
 TEST(cl_enqueue_paths, an_argument_the_size_of_a_buffer_crosses_as_the_host_s_number_for_it)
 { ClIcdRig rig;
   Running  run(rig);
@@ -150,36 +163,47 @@ TEST(cl_enqueue_paths, an_argument_the_size_of_a_buffer_crosses_as_the_host_s_nu
 
   /* The application passes the address of its own cl_mem, and what crosses
    * is the number the host knows that buffer by - never the guest pointer,
-   * which the host would happily use as an address. */
+   * which the host would happily use as an address. An argument goes without
+   * waiting for its answer, so each is held until a command that is answered. */
   const cl_mem        named = run.buffer();
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof named, &named), CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 1u);
-  CHECK_EQ(rig.kmt().command_id(sent),
-           static_cast<std::uint32_t>(av::clproto::kCmd_clSetKernelArg));
+  CHECK_EQ(rig.kmt().commands(), sent);
 
   /* The same size, but not a buffer this ICD made: it is bytes, and they
    * cross as bytes. A pointer-shaped value the application invented must not
    * be mistaken for an object. */
   void *const invented = reinterpret_cast<void *>(std::uintptr_t{0x1234});
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 1u, sizeof invented, &invented),
            CL_SUCCESS);
 
   /* A local-memory argument: a size and no value at all. */
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 2u, 64u, nullptr), CL_SUCCESS);
 
   /* And a scalar, which is neither. */
   const std::uint32_t scalar = 7u;
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 3u, sizeof scalar, &scalar), CL_SUCCESS);
+
+  /* The launch that wants an event is answered, and takes the four with it. */
+  const std::size_t global = 64u;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  cl_event event = nullptr;
+  CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr, &event),
+           CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  for (std::uint32_t index = 0u; index < 4u; index++)
+      CHECK_EQ(rig.kmt().command_id(sent + index), static_cast<std::uint32_t>(av::clproto::kCmd_clSetKernelArg));
+  CHECK_EQ(rig.kmt().command_id(sent + 4u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueNDRangeKernel));
+  CHECK(carries(rig.kmt(), sent, host_buffer));
+  CHECK(!carries(rig.kmt(), sent, reinterpret_cast<std::uint64_t>(named)));
+  CHECK(carries(rig.kmt(), sent + 1u, 0x1234u));
+  CHECK(!carries(rig.kmt(), sent + 1u, host_buffer));
 
   /* Something that is not a kernel is refused before any of that. */
   CHECK_EQ(rig.root().set_kernel_argument(reinterpret_cast<cl_kernel>(run.queue()), 0u,
                                           sizeof named, &named),
            CL_INVALID_KERNEL);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_without_hands_none)
@@ -205,8 +229,8 @@ TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_withou
            CL_SUCCESS);
   CHECK(event != nullptr);
 
-  /* Not asked for: nothing is handed over, and nothing is left behind. */
-  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  /* Not asked for: the launch goes without waiting for an answer, nothing is
+   * handed over, and nothing is left behind. */
   CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr,
                                      nullptr),
            CL_SUCCESS);
@@ -219,6 +243,7 @@ TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_withou
                                      &refused),
            CL_OUT_OF_RESOURCES);
   CHECK(refused == nullptr);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_enqueue_paths, a_transfer_of_nothing_or_to_nowhere_is_refused_before_it_is_sent)
@@ -275,28 +300,10 @@ bool write_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
     return blocking != 0u;
 }
 
-TEST(cl_enqueue_paths, a_write_the_host_refuses_makes_no_event)
-{ ClIcdRig rig;
-  Running  run(rig);
-  CHECK(run.made());
-  if (!run.made()) return;
-  unsigned char bytes[8] = {};
-
-  /* The queue drained, and then the write itself failed: there is nothing to
-   * hand back, so no marker is asked for either. */
-  drains(rig);
-  rig.host().cl_result(CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  cl_event event = nullptr;
-  const std::uint32_t sent = rig.kmt().commands();
-  CHECK_EQ(rig.root().enqueue_write(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof bytes, bytes,
-                                    &event),
-           CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  CHECK(event == nullptr);
-  CHECK_EQ(rig.kmt().commands(), sent + 5u);
-  CHECK_EQ(rig.kmt().command_id(sent + 4u),
-           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueWriteBuffer));
-  CHECK(rig.root().invariants_hold()); }
-
+/* A write's pieces go unanswered, behind the drain that emptied its queue:
+ * the host makes every write blocking and in order, so the next command the
+ * queue answers is the answer for it, and the write reaches the host with that
+ * command's batch. */
 TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_whatever_it_was_asked)
 { ClIcdRig rig;
   Running  run(rig);
@@ -304,23 +311,21 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   if (!run.made()) return;
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
 
-  /* Non-blocking, no event: the drain, then the write, and nothing more. The
+  /* Non-blocking, no event: the drain, and the write held behind it. The
    * bytes cross into the device's decode arena, which the next command
-   * reuses, so the host must have copied them before it answers. */
+   * reuses, so the host must have copied them before it takes another. */
   drains(rig);
-  rig.host().cl_result(CL_SUCCESS);
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_write(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
                                     nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.kmt().commands(), sent + 4u);
   CHECK_EQ(rig.kmt().command_id(sent),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
-  CHECK(write_asks_the_host_to_block(rig.kmt(), sent + 4u));
 
-  /* With an event: a marker after the write is what the application holds. */
+  /* With an event: the write goes with the marker after it, which is what the
+   * application holds - and the write held from before leads the next drain. */
   drains(rig);
-  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   cl_event event = nullptr;
   sent = rig.kmt().commands();
@@ -328,13 +333,17 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
                                     &event),
            CL_SUCCESS);
   CHECK(event != nullptr);
-  CHECK_EQ(rig.kmt().command_id(sent + 5u),
+  CHECK_EQ(rig.kmt().commands(), sent + 7u);
+  CHECK(write_asks_the_host_to_block(rig.kmt(), sent));
+  CHECK_EQ(rig.kmt().command_id(sent + 1u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
+  CHECK(write_asks_the_host_to_block(rig.kmt(), sent + 5u));
+  CHECK_EQ(rig.kmt().command_id(sent + 6u),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
 
   /* A marker the host would not make for the event is the application's
    * error, after the bytes were written. */
   drains(rig);
-  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   event = nullptr;
   CHECK_EQ(rig.root().enqueue_write(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof bytes, bytes,
@@ -349,6 +358,9 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
                                     nullptr),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_enqueue_paths, a_non_blocking_read_the_marker_fails_for_never_becomes_a_row)

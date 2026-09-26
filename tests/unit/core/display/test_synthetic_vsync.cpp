@@ -24,7 +24,9 @@ using av::Violation;
 
 namespace {
 
-constexpr std::uint64_t frame = 10000000u / 60u;
+/* The blanks keep an absolute schedule, the nth at n * 10^7 / 60 after the
+ * first enable: a period rounded down would fall a tick short of it. */
+constexpr std::uint64_t frame = (10000000u + 59u) / 60u;
 /* Four seconds off the wall clock, as a hibernation is. */
 constexpr std::uint64_t asleep = 40000000u;
 constexpr std::int32_t  crtc_vsync = 3;
@@ -222,7 +224,7 @@ TEST(synthetic_vsync_suspend, a_rate_window_does_not_span_a_power_transition)
   fixture.platform().advance_time(asleep);
   CHECK_STATUS(fixture.vsync().resume(), Status::ok);
   fixture.platform().run_timers(frame * 120u);
-  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 19999920 ticks, 120 reported") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 20000000 ticks, 120 reported") != nullptr);
   CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr);
   fixture.vsync().destroy(); }
 
@@ -248,6 +250,77 @@ TEST(synthetic_vsync_reported, the_window_measures_the_timer_and_not_the_waiters
   fixture.platform().run_timers(frame * 10u);
   fixture.vsync().disable();
   fixture.platform().run_timers(frame * 110u);
-  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 19999920 ticks, 10 reported") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 20000000 ticks, 10 reported") != nullptr);
   CHECK_EQ(fixture.vsync().reported(), 0u);
+  fixture.vsync().destroy(); }
+
+/* The timer fires on the system clock's millisecond, so each tick arms the
+ * next against the schedule the enable started: the nth blank is at
+ * n * 10^7 / 60, whatever the period rounds to. A second of blanks is sixty,
+ * not 58.8. */
+TEST(synthetic_vsync_rearm, arms_the_next_blank_against_the_schedule)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().rearm();
+  fixture.platform().set_irql(Irql::passive);
+  /* Armed for the second blank of the schedule, not a period from now. */
+  fixture.platform().run_timers(2u * 10000000u / 60u - 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.platform().run_timers(1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  fixture.vsync().destroy(); }
+
+TEST(synthetic_vsync_rearm, a_second_of_blanks_is_sixty)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().run_timers(10000000u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 60u);
+  fixture.vsync().destroy(); }
+
+/* A tick that finds itself past the schedule - the machine was busy, or the
+ * clock jumped - starts it anew a period from now instead of firing every
+ * blank it missed at once. */
+TEST(synthetic_vsync_rearm, a_late_tick_starts_the_schedule_again)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().advance_time(10u * frame);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().rearm();
+  fixture.platform().set_irql(Irql::passive);
+  fixture.platform().run_timers(10000000u / 60u - 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.platform().run_timers(1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  fixture.vsync().destroy(); }
+
+/* Held packets past their deadline are let go in the DPC, so the timer asks
+ * for one every 24 periods (~400 ms) while no blank is being reported - and
+ * for none in between, which would cost dxgkrnl's DPC lock for nothing. */
+TEST(synthetic_vsync_tick, queues_a_dpc_every_24_periods_while_not_reporting)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.vsync().disable();
+  fixture.platform().run_timers(23u * frame);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 0u);
+  fixture.platform().run_timers(frame);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 1u);
+  fixture.platform().run_timers(23u * frame);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 1u);
+  fixture.platform().run_timers(frame);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.vsync().destroy(); }
+
+/* A reported blank queues the DPC that shows the newest image each period. */
+TEST(synthetic_vsync_tick, a_reported_blank_queues_a_dpc_every_period)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().run_timers(3u * frame);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 3u);
   fixture.vsync().destroy(); }

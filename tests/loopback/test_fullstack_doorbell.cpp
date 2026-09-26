@@ -90,14 +90,18 @@ public:
     /* Stores the device's own doorbell page has taken, whoever made them. */
     std::uint32_t device_stores() { return rig_.device().doorbells().stores(); }
 
-    /* One echo: whether exactly the payload sent came back. */
+    /* One echo: whether exactly the payload sent came back. A worker still
+     * watching the ring takes the batch from its tail before the store gets
+     * there, so the answer can arrive first; the bus still carries the store,
+     * and it is carried here, after the answer. */
     bool echoes(std::uint64_t payload)
     {
         WireWriter request = transport_.request_writer();
         request.write_u64(payload);
         WireReader reply(nullptr, 0u);
-        if (transport_.send_sync(echo_command, request, reply) != TransportResult::ok) return false;
-        return reply.remaining() == sizeof payload && reply.read_u64() == payload;
+        const bool answered = transport_.send_sync(echo_command, request, reply) == TransportResult::ok;
+        static_cast<void>(rig_.kmt().fabric().deliver());
+        return answered && reply.remaining() == sizeof payload && reply.read_u64() == payload;
     }
 
 private:
@@ -154,8 +158,10 @@ TEST(fullstack_doorbell, a_store_to_a_disconnected_doorbell_reaches_nothing)
   CHECK(submitting.echoes(echo_payload ^ 2u));
   CHECK_EQ(submitting.transport().submissions_through_doorbell(), through_doorbell);
   CHECK_EQ(submitting.transport().submissions_through_kernel(), 1u);
-  /* The driver rang the page for it, so the device saw exactly one more. */
-  CHECK_EQ(submitting.device_stores(), stores + 1u); }
+  /* The process published the tail before it fell back, so a worker still
+   * watching took the batch and the driver rang nothing; one asleep was rung
+   * by the driver. Either way the device saw at most that one store. */
+  CHECK(submitting.device_stores() <= stores + 1u); }
 
 /* US2 scenario 2: a disconnect mid-stream loses nothing and repeats nothing.
  * Every echo carries its own payload, so a batch executed twice or dropped

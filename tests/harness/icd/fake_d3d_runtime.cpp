@@ -32,8 +32,10 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
 
 /* The runtime's QueryAdapterInfo callback, which the driver asks for the LUID
  * the kernel driver answers: this fake has no kernel driver, so it refuses,
- * and the driver takes the first rvkgpu adapter. */
-std::int32_t refuse_adapter_info(void *, void *) { return -1; }
+ * and the driver takes the first rvkgpu adapter. The driver calls it through
+ * a pointer to its own function-local argument struct, which no type here can
+ * name, so -fsanitize=function would see a mismatch that the ABI does not. */
+__attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
 }  // namespace
 

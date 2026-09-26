@@ -323,7 +323,8 @@ TEST(worker_run, a_doorbell_that_raced_the_attachment_is_not_lost)
   fixture.guest().publish();
   CHECK(fixture.host().ring_doorbell(0u));   /* served before the ring is attached: nothing */
   CHECK_STATUS(fixture.worker().post(WorkItem(&attach, nullptr, &fixture.ring())), Status::ok);
-  CHECK(fixture.published(16u));
+  CHECK(fixture.published(fixture.guest().tail()));   /* the whole empty batch, its header alone */
+  CHECK_EQ(fixture.guest().tail(), 32u);
   CHECK_EQ(fixture.host().run_main_loop(), 0u); }
 
 TEST(worker_disconnect_doorbell, a_disconnected_page_rings_nothing_and_can_be_connected_again)

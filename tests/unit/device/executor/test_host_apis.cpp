@@ -68,3 +68,14 @@ TEST(host_apis, a_host_with_no_gpu_answers_none)
   HostApis &apis = mock;
   CHECK_EQ(apis.gpu_count(), 0u);
   CHECK_EQ(apis.sub_apis(0u), 0u); }
+
+/* HostApis::render_minor: -1 wherever the driver does not name a render node,
+ * which is what the clock hold takes as "leave the clocks to the driver". The
+ * mock's GPUs never name one, and an index nobody has cannot. */
+TEST(host_apis, a_gpu_whose_driver_names_no_render_node_answers_minus_one)
+{ MockHostApis mock;
+  mock.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  HostApis &apis = mock;
+  CHECK_EQ(apis.render_minor(0u), -1);
+  CHECK_EQ(apis.render_minor(1u), -1);
+  CHECK_EQ(apis.render_minor(0xFFFFFFFFu), -1); }

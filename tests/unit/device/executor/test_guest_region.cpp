@@ -5,6 +5,9 @@
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 using av::GuestRegion;
 using av::GuestRegionProbe;
@@ -70,3 +73,48 @@ TEST(guest_region_invariants, a_length_with_no_mapping_behind_it_breaks_them)
 { GuestRegion region;
   GuestRegionProbe(region).set_length(sizeof mapping);
   CHECK(!region.invariants_hold()); }
+
+/* GuestRegion::take_shared: the region taken as a dma-buf is mapped here, and
+ * the mapping and descriptor are the region's until it gives them back. What
+ * cannot be mapped is refused with the descriptor still the caller's. A memfd
+ * stands in for the dma-buf: both are shareable files mmap maps. */
+TEST(guest_region_take_shared, maps_the_descriptor_and_gives_both_back)
+{ const int shared = memfd_create("guest-region", 0);
+  CHECK(shared >= 0);
+  CHECK_EQ(ftruncate(shared, 8192), 0);
+  const std::uint8_t written = 0x5Au;
+  CHECK_EQ(pwrite(shared, &written, 1u, 4100), 1);
+  GuestRegion region;
+  CHECK(region.take_shared(shared, 8192u));
+  CHECK_EQ(region.descriptor(), shared);
+  CHECK_EQ(region.length(), 8192u);
+  const std::uint8_t *const byte = region.at(4100u, 1u);
+  CHECK(byte != nullptr);
+  CHECK_EQ(*byte, 0x5Au);
+  CHECK(region.at(8192u, 1u) == nullptr);
+  CHECK(region.invariants_hold());
+  region.give_back();
+  CHECK_EQ(region.descriptor(), -1);
+  CHECK_EQ(region.length(), 0u);
+  CHECK(region.at(0u, 1u) == nullptr);
+  /* The descriptor went with the region. */
+  CHECK_EQ(fcntl(shared, F_GETFD), -1); }
+
+TEST(guest_region_take_shared, refuses_what_cannot_be_mapped_and_leaves_the_descriptor_alone)
+{ GuestRegion region;
+  CHECK(!region.take_shared(-1, 4096u));
+  const int shared = memfd_create("guest-region", 0);
+  CHECK(shared >= 0);
+  CHECK(!region.take_shared(shared, 0u));
+  int pipes[2] = {-1, -1};
+  CHECK_EQ(pipe(pipes), 0);
+  CHECK(!region.take_shared(pipes[0], 4096u));   /* a pipe maps nothing */
+  CHECK_EQ(region.descriptor(), -1);
+  CHECK(region.at(0u, 0u) == nullptr);
+  /* Each descriptor is still the caller's to close. */
+  CHECK(fcntl(shared, F_GETFD) != -1);
+  CHECK(fcntl(pipes[0], F_GETFD) != -1);
+  close(shared);
+  close(pipes[0]);
+  close(pipes[1]);
+  region.give_back(); }

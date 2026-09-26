@@ -2,6 +2,7 @@
 
 #include <sys/prctl.h>
 
+#include "core/trace/event_ring_layout.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/trace_layout.hpp"
@@ -100,7 +101,7 @@ Status HostTrace::start(const char *module)
     constexpr uint32_t events_per_slot = 1u << 22u;
     const char *const  wanted = getenv("RVK_PERFETTO");
     if (wanted != nullptr && wanted[0] == '1' &&
-        events_region_.open("/rvk-events-", module, EventRing::bytes_for(slots, events_per_slot)) == Status::ok &&
+        events_region_.open("/rvk-events-", module, EventRingLayout(slots, events_per_slot).bytes()) == Status::ok &&
         events_.initialize(events_region_.region(), events_region_.bytes(), slots, events_per_slot) == Status::ok)
     {
         host_.precise();

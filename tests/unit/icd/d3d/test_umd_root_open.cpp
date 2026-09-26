@@ -157,7 +157,7 @@ TEST(umd_root_open, the_table_slots_refuse_an_adapter_handle_this_driver_never_g
   CHECK_EQ(rig.root().create_device12(&forged, nullptr), hr_invalid_arg);
   CHECK_EQ(rig.root().close_adapter(&forged), hr_invalid_arg);
   CHECK_EQ(rig.root().optional_ddi_tables(&forged, &entries, nullptr), hr_invalid_arg);
-  CHECK_EQ(rig.root().fill_ddi_table(&forged, 0u, &forged, sizeof forged), hr_invalid_arg);
+  CHECK_EQ(rig.root().fill_ddi_table(&forged, 0u, &forged, sizeof forged, 0u, nullptr), hr_invalid_arg);
   /* A null handle is the same answer and is never dereferenced. */
   CHECK_EQ(rig.root().close_adapter(nullptr), hr_invalid_arg);
   CHECK(rig.root().invariants_hold());

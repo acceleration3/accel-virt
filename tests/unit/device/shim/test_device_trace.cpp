@@ -6,6 +6,7 @@
 #include "core/trace/scope_name.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
+#include "core/trace/trace_layout.hpp"
 #include "core/trace/trace_snapshot.hpp"
 #include "core/trace/trace_table.hpp"
 #include "device/shim/device_trace.hpp"
@@ -17,6 +18,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <signal.h>
@@ -173,6 +175,9 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   /* An ignored signal: the chain gives it back and raises it again, which an
    * ignored disposition drops. */
   signal(SIGILL, SIG_IGN);
+  /* Scopes cost every call they open, so the table is bound only where a
+   * trace is asked for; this test asks. */
+  setenv("RVK_TRACE_SCOPES", "1", 1);
   services.start(root, &schedule, &forward_crash);
   services.start(root, &schedule, &forward_crash);
 
@@ -187,7 +192,9 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   close(table_file);
   TraceSnapshot snapshot;
   CHECK_STATUS(snapshot.read(bytes, static_cast<std::size_t>(file.st_size)), Status::ok);
-  CHECK_EQ(snapshot.slots(), HostTrace::slots);
+  /* As many as the layout holds: HostTrace asks for more than a table may have. */
+  CHECK_EQ(snapshot.slots(), av::TraceLayout(HostTrace::slots).slots());
+  CHECK_EQ(snapshot.slots(), static_cast<std::uint32_t>(av::TraceLayout::max_slots));
   CHECK(std::strcmp(snapshot.module(), "device") == 0);
   CHECK_EQ(snapshot.process(), static_cast<std::uint32_t>(getpid()));
   CHECK(av::scope_binding.table() != nullptr);

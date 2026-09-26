@@ -25,8 +25,7 @@ public:
     EventRing(const EventRing &) = delete;
     EventRing &operator=(const EventRing &) = delete;
 
-    static size_t bytes_for(uint32_t slots, uint32_t events_per_slot);
-    /* The region must hold bytes_for(slots, events_per_slot). */
+    /* The region must hold EventRingLayout(slots, events_per_slot).bytes(). */
     [[nodiscard]] Status initialize(uint8_t *region, size_t bytes, uint32_t slots, uint32_t events_per_slot);
     bool                 recording() const;
     /* The stamps' unit, in the header's bytes 16..23, for a reader. */

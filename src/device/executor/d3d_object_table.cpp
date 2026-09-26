@@ -40,6 +40,7 @@ namespace {
 
 bool view_kind(D3dObjectKind kind)
 {
+    AV_SCOPE("view_kind");
     return kind == D3dObjectKind::shader_resource_view || kind == D3dObjectKind::render_target_view ||
            kind == D3dObjectKind::depth_stencil_view || kind == D3dObjectKind::unordered_access_view;
 }

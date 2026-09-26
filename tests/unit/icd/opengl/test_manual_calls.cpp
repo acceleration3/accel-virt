@@ -54,23 +54,39 @@ public:
     {
         rig_.load_with_format();
         CHECK(rig_.current_context() != nullptr);
+        if (rig_.current_context() != nullptr) context().flush();
         commands_ = rig_.kmt().commands();
     }
     GlIcdRig                  &rig() { return rig_; }
     av::glicd::GuestGlContext &context() { return *rig_.root().current(); }
     /* The ids sent since the context was made, in order, as one comparable number list. */
-    std::uint32_t sent_since(std::uint32_t index) { return rig_.kmt().command_id(commands_ + index); }
+    std::uint32_t sent_since(std::uint32_t index)
+    {
+        context().flush();
+        return rig_.kmt().command_id(commands_ + index);
+    }
     /* The `nth` varint argument of the command sent `index`-th since the make. */
     std::uint64_t argument_since(std::uint32_t index, std::uint32_t nth)
     {
+        context().flush();
         av::WireReader reader(rig_.kmt().command_bytes(commands_ + index) + av::CommandHeader::encoded_size,
                               av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
         std::uint64_t  value = 0u;
         for (std::uint32_t at = 0u; at <= nth; at++) CHECK(reader.read_varint(value));
         return value;
     }
-    std::uint32_t sent() { return rig_.kmt().commands() - commands_; }
-    const std::uint8_t *command_since(std::uint32_t index) { return rig_.kmt().command_bytes(commands_ + index); }
+    /* The context holds its calls in a batch until a flush: what reached the
+     * host is read with the held ones sent. */
+    std::uint32_t sent()
+    {
+        context().flush();
+        return rig_.kmt().commands() - commands_;
+    }
+    const std::uint8_t *command_since(std::uint32_t index)
+    {
+        context().flush();
+        return rig_.kmt().command_bytes(commands_ + index);
+    }
     /* glGetError as opengl32's table holds it: the ICD's own entry. */
     std::uint32_t error() { return av::glicd::entry::get_error(); }
 
@@ -932,6 +948,7 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
   /* Now the use: the body names the host's object, not the application's. */
   calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
+  context.flush();   /* the call is held in the context's batch until a flush */
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u),
            static_cast<std::uint32_t>(ids::kCmd_glBufferStorageMemEXT));
   { av::WireReader body(rig.kmt().command_bytes(rig.kmt().commands() - 1u) + av::CommandHeader::encoded_size,
@@ -1020,24 +1037,32 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
 
   /* Each of the three commands that names one goes out with the host's number,
    * which is the first argument of each. */
+  context.flush();
   std::uint32_t before = rig.kmt().commands();
   calls.buffer_storage_mem(array_buffer, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
+  context.flush();
   CHECK(rig.kmt().commands() > before);
 
+  context.flush();
   before = rig.kmt().commands();
   calls.texture_storage_mem_2d(1u, 1, 0x8058u, 16, 16, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
+  context.flush();
   CHECK(rig.kmt().commands() > before);
 
+  context.flush();
   before = rig.kmt().commands();
   calls.wait_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
   CHECK_EQ(context.take_error(), 0u);
+  context.flush();
   CHECK(rig.kmt().commands() > before);
 
+  context.flush();
   before = rig.kmt().commands();
   calls.signal_semaphore(semaphore, 0u, nullptr, 0u, nullptr, nullptr);
   CHECK_EQ(context.take_error(), 0u);
+  context.flush();
   CHECK(rig.kmt().commands() > before); }
 
 /* Every storage command GL_EXT_memory_object has, not the two this feature
@@ -1057,6 +1082,11 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   rig.host().gl_make("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
+  /* The calls are held in the context's batch until a flush. */
+  const auto sent_id = [&](std::uint32_t at) {
+      context.flush();
+      return rig.kmt().command_id(at);
+  };
 
   constexpr std::uint32_t host_memory = 0x4200u;
   GLuint memory = 0u;
@@ -1078,43 +1108,44 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   const std::uint32_t named_at = rig.kmt().commands();
   calls.named_buffer_storage_mem(1u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
-  CHECK_EQ(rig.kmt().command_id(named_at), static_cast<std::uint32_t>(ids::kCmd_glNamedBufferStorageMemEXT));
+  CHECK_EQ(sent_id(named_at), static_cast<std::uint32_t>(ids::kCmd_glNamedBufferStorageMemEXT));
 
   before = rig.kmt().commands();
   calls.tex_storage_mem_1d(0x0DE0u, 1, 0x8058u, 16, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem1DEXT));
+  CHECK_EQ(sent_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem1DEXT));
   before = rig.kmt().commands();
   calls.tex_storage_mem_2d(0x0DE1u, 1, 0x8058u, 16, 16, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem2DEXT));
+  CHECK_EQ(sent_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem2DEXT));
   before = rig.kmt().commands();
   calls.tex_storage_mem_2d_multisample(0x9100u, 4, 0x8058u, 16, 16, true, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before),
+  CHECK_EQ(sent_id(before),
            static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem2DMultisampleEXT));
   before = rig.kmt().commands();
   calls.tex_storage_mem_3d(0x806Fu, 1, 0x8058u, 16, 16, 4, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem3DEXT));
+  CHECK_EQ(sent_id(before), static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem3DEXT));
   before = rig.kmt().commands();
   calls.tex_storage_mem_3d_multisample(0x9102u, 4, 0x8058u, 16, 16, 4, true, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before),
+  CHECK_EQ(sent_id(before),
            static_cast<std::uint32_t>(ids::kCmd_glTexStorageMem3DMultisampleEXT));
   before = rig.kmt().commands();
   calls.texture_storage_mem_1d(2u, 1, 0x8058u, 16, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem1DEXT));
+  CHECK_EQ(sent_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem1DEXT));
   before = rig.kmt().commands();
   calls.texture_storage_mem_2d_multisample(3u, 4, 0x8058u, 16, 16, false, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before),
+  CHECK_EQ(sent_id(before),
            static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem2DMultisampleEXT));
   before = rig.kmt().commands();
   calls.texture_storage_mem_3d(4u, 1, 0x8058u, 16, 16, 4, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DEXT));
+  CHECK_EQ(sent_id(before), static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DEXT));
   before = rig.kmt().commands();
   calls.texture_storage_mem_3d_multisample(5u, 4, 0x8058u, 16, 16, 4, false, memory, 0u);
-  CHECK_EQ(rig.kmt().command_id(before),
+  CHECK_EQ(sent_id(before),
            static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DMultisampleEXT));
   CHECK_EQ(context.take_error(), 0u);
 
   /* The host's name is what each carried: read out of the named-buffer one,
    * whose memory argument is its third - buffer, size, memory, offset. */
+  context.flush();
   { av::WireReader body(rig.kmt().command_bytes(named_at) + av::CommandHeader::encoded_size,
                         av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
     std::uint64_t buffer = 0u;

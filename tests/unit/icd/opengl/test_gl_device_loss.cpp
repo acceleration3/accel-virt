@@ -7,6 +7,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/submission/command_header.hpp"
@@ -87,11 +88,19 @@ struct LossRig {
 
     /* What a glClear costs the Kmt: every call it made and every command it
      * put on a ring - a working context submits one command. */
+    /* The Kmt calls a glClear costs once it reaches the host: the context
+     * holds it in a batch, so the held calls are flushed before and after. */
     std::uint32_t clear_calls()
     {
+        flush_current();
         const std::uint32_t before = total_calls();
         rig.opengl32().gl<ClearFn>(slot_clear)(color_buffer_bit);
+        flush_current();
         return total_calls() - before;
+    }
+    void flush_current()
+    {
+        if (rig.root().current() != nullptr) rig.root().current()->flush();
     }
 
     std::uint32_t total_calls()
@@ -245,6 +254,7 @@ TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
   /* Nothing current: no reset to report either. */
   CHECK_EQ(loss.reset_status(), 0u);
   CHECK(loss.made_on(1u) != nullptr);
+  loss.flush_current();
   const std::uint32_t commands = rig.kmt().commands();
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(force(), 1);

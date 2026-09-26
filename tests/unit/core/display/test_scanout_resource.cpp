@@ -488,3 +488,41 @@ TEST(scanout_resource_refresh, explains_a_backing_it_cannot_attach_once_per_addr
   CHECK_STATUS(fixture.scanout().refresh(0x900000u, broken.pages(), false), Status::invalid_parameter);
   CHECK_EQ(fixture.platform().logged(), logged + 2u);
   CHECK(fixture.scanout().invariants_hold()); }
+
+/* A primary the host drew is shown from the host's own copy by its key: the
+ * first time through the pages like any other, then each flip is the new key
+ * and a flush - never a detach and attach of the frame's pages - and an
+ * unkeyed refresh goes back to carrying the guest's pixels. */
+TEST(scanout_resource_refresh, a_keyed_image_is_copied_from_the_host_and_flips_by_key)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  constexpr std::uint32_t scanout_image = 0x02F0u;
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 480u)), Status::ok);
+  CHECK(!fixture.scanout().keyed());
+  fixture.frame().describe(0x200000u, pages_for(640u, 480u));
+  CHECK_STATUS(fixture.scanout().refresh(0x200000u, fixture.frame().pages(), false, 0x77u), Status::ok);
+  CHECK(fixture.scanout().keyed());
+  CHECK(fixture.scanout().scanning_out());
+  CHECK_EQ(control.respond_all(ok_nodata), 5u);
+  CHECK_EQ(control.request_type(1u), attach);
+  CHECK_EQ(control.request_type(2u), set_scanout);
+  CHECK_EQ(control.request_type(3u), scanout_image);
+  CHECK_EQ(u32(control.request(3u), 24u), ScanoutResource::first_resource_id);
+  CHECK_EQ(u32(control.request(3u), 32u), 0x77u);
+  CHECK_EQ(control.request_type(4u), flush);
+
+  /* A flip to another keyed image at another address: no pages at all. */
+  CHECK_STATUS(fixture.scanout().refresh(0x900000u, GuestPageList(nullptr, 0u), false, 0x88u), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 2u);
+  CHECK_EQ(control.request_type(5u), scanout_image);
+  CHECK_EQ(u32(control.request(5u), 32u), 0x88u);
+  CHECK_EQ(control.request_type(6u), flush);
+  CHECK(fixture.scanout().keyed());
+
+  /* Unkeyed at the address the flip left: a present carries the guest's pixels. */
+  CHECK_STATUS(fixture.scanout().refresh(0x900000u, GuestPageList(nullptr, 0u), true, 0u), Status::ok);
+  CHECK(!fixture.scanout().keyed());
+  CHECK_EQ(control.respond_all(ok_nodata), 2u);
+  CHECK_EQ(control.request_type(7u), transfer);
+  CHECK_EQ(control.request_type(8u), flush);
+  CHECK(fixture.scanout().invariants_hold()); }

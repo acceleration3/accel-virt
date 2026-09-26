@@ -72,6 +72,10 @@ def main():
         # (feature 042).
         if is_shim(declared.header):
             continue
+        # A type private to its class is covered through that class's public
+        # surface, as its private methods are.
+        if declared.is_private_nested:
+            continue
         if not re.search(r"\b" + re.escape(declared.name) + r"\b", corpus):
             violations.append(f"{declared.header}: class {declared.name} has no test naming it")
         for method in declared.public_methods:

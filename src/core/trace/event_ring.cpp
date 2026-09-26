@@ -1,5 +1,7 @@
 #include "core/trace/event_ring.hpp"
 
+#include "core/trace/event_ring_layout.hpp"
+
 namespace av {
 
 namespace {
@@ -20,14 +22,9 @@ void put64(uint8_t *at, uint64_t value)
 
 EventRing::EventRing() : region_(nullptr), slots_(0u), events_per_slot_(0u) {}
 
-size_t EventRing::bytes_for(uint32_t slots, uint32_t events_per_slot)
-{
-    return header_bytes + static_cast<size_t>(slots) * (slot_header_bytes + static_cast<size_t>(events_per_slot) * event_bytes);
-}
-
 Status EventRing::initialize(uint8_t *region, size_t bytes, uint32_t slots, uint32_t events_per_slot)
 {
-    if (region == nullptr || slots == 0u || events_per_slot == 0u || bytes < bytes_for(slots, events_per_slot))
+    if (region == nullptr || slots == 0u || events_per_slot == 0u || bytes < EventRingLayout(slots, events_per_slot).bytes())
         return Status::invalid_parameter;
     put32(region, magic);
     put32(region + 4u, version);

@@ -363,9 +363,12 @@ TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
   CHECK(rig.connection().invariants_hold());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 0u);
-  CHECK_EQ(rig.kmt().commands(), 1u);
-  CHECK_EQ(rig.kmt().command_id(0u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCmdDraw));
-  CHECK_EQ(rig.kmt().command_size(0u), 16u);
+  /* One submission, and the device finds every command framed in it. */
+  CHECK_EQ(rig.kmt().commands(), 3u);
+  for (std::uint32_t index = 0u; index < 3u; index++) {
+      CHECK_EQ(rig.kmt().command_id(index), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCmdDraw) + index);
+      CHECK_EQ(rig.kmt().command_size(index), 16u);
+  }
   CHECK(std::strcmp(rig.trace().text(), "Ss") == 0); }
 
 TEST(connection, a_batch_that_does_not_frame_is_refused_before_it_is_published)

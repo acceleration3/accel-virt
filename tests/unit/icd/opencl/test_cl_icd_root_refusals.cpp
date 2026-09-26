@@ -423,7 +423,7 @@ TEST(cl_icd_root_refusals, an_event_of_nothing_is_kept_by_nobody_and_released_by
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   rig.host().cl_result(CL_SUCCESS);
-  rig.host().cl_result(CL_SUCCESS);
+  /* The write itself goes unanswered: the marker after it is its answer. */
   rig.host().cl_enqueued(CL_SUCCESS, 0u);
   const std::uint32_t before = rig.kmt().commands();
   cl_event            event = nullptr;
@@ -437,6 +437,7 @@ TEST(cl_icd_root_refusals, an_event_of_nothing_is_kept_by_nobody_and_released_by
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueWriteBuffer));
   CHECK_EQ(rig.kmt().command_id(before + 5u),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
 /* An object of the wrong kind is told which kind it should have been. The

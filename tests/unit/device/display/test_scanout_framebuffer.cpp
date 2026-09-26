@@ -227,3 +227,36 @@ TEST(scanout_framebuffer_invariants, a_framebuffer_that_holds_something_while_cl
   /* And one that claims to hold something while holding nothing. */
   probe.set_adopted(true);
   CHECK(!framebuffer.invariants_hold()); }
+
+/* Two adoptions show the same picture only when every field a display reads
+ * agrees: one differing field, or either side never adopted, is another one. */
+TEST(scanout_framebuffer_same_picture, every_field_a_display_reads_must_agree)
+{ ScanoutFramebuffer shown;
+  CHECK_STATUS(shown.adopt(Request().decoded(), desktop_bytes), Status::ok);
+  ScanoutFramebuffer again;
+  CHECK_STATUS(again.adopt(Request().decoded(), desktop_bytes), Status::ok);
+  CHECK(shown.same_picture(again));
+  CHECK(again.same_picture(shown));
+
+  ScanoutFramebuffer never;
+  CHECK(!shown.same_picture(never));
+  CHECK(!never.same_picture(shown));
+  CHECK(!never.same_picture(never));
+
+  Request variants[] = {Request().format(ScanoutFormat::b8g8r8x8), Request().size(1280u, 799u).rect(0u, 0u, 1280u, 799u),
+                        Request().stride(5184u), Request().offset(4096u), Request().rect(1u, 0u, 1279u, 800u),
+                        Request().rect(0u, 1u, 1280u, 799u), Request().rect(0u, 0u, 1279u, 800u),
+                        Request().rect(0u, 0u, 1280u, 799u)};
+  /* In a blob with room for every variant, so the blob size is not what
+   * tells them apart. */
+  ScanoutFramebuffer roomy;
+  CHECK_STATUS(roomy.adopt(Request().decoded(), desktop_bytes + 65536u), Status::ok);
+  for (Request &variant : variants) {
+      ScanoutFramebuffer other;
+      CHECK_STATUS(other.adopt(variant.decoded(), desktop_bytes + 65536u), Status::ok);
+      CHECK(!roomy.same_picture(other));
+      CHECK(other.same_picture(other));
+  }
+  ScanoutFramebuffer larger_blob;
+  CHECK_STATUS(larger_blob.adopt(Request().decoded(), desktop_bytes + 4096u), Status::ok);
+  CHECK(!shown.same_picture(larger_blob)); }

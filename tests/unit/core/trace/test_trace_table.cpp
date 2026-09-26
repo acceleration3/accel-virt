@@ -1,3 +1,5 @@
+#include "core/trace/event_ring.hpp"
+#include "core/trace/event_ring_layout.hpp"
 #include "core/trace/scope_name.hpp"
 #include "core/trace/trace_layout.hpp"
 #include "core/trace/trace_table.hpp"
@@ -503,3 +505,87 @@ TEST(trace_table_enter, a_thread_whose_hashed_slot_is_taken_nests_on_its_own)
   CHECK_EQ(u32_at(fixture.bytes(), slot_at(second) + 8u), 2u);
   CHECK_EQ(u32_at(fixture.bytes(), slot_at(first) + 8u), 1u);
   CHECK(fixture.table.invariants_hold()); }
+
+namespace {
+
+/* One slot's events of a ring the table records into. */
+struct Events {
+    static constexpr std::uint32_t slots = 4u;
+    static constexpr std::uint32_t per_slot = 8u;
+    alignas(8) std::uint8_t bytes[32u + slots * (16u + per_slot * 16u)] = {};
+    av::EventRing ring;
+
+    Events() { CHECK_STATUS(ring.initialize(bytes, sizeof bytes, slots, per_slot), Status::ok); }
+    std::uint64_t count(std::uint32_t slot) const { return u64_at(bytes, 32u + slot * (16u + per_slot * 16u)); }
+    std::size_t   at(std::uint32_t slot, std::uint32_t index) const
+    {
+        return 32u + slot * (16u + per_slot * 16u) + 16u + index * 16u;
+    }
+};
+
+}  // namespace
+
+/* Once given a ring, every enter is a begin event with the scope's name and
+ * every leave an end event, stamped with the host's clock and thread. */
+TEST(trace_table_record_events, each_enter_and_leave_is_an_event)
+{ TableFixture fixture;
+  Events events;
+  fixture.host.run_as(0x10u, 7u);
+  const std::uint32_t before = fixture.table.enter(outer);
+  fixture.table.leave(before);
+  CHECK(events.count(before) == 0u);   /* nothing before the ring was given */
+  fixture.table.record_events(events.ring);
+  fixture.host.set_clock(600u);
+  const std::uint32_t slot = fixture.table.enter(outer);
+  fixture.host.set_clock(650u);
+  fixture.table.leave(slot);
+  CHECK(events.count(slot) == 2u);
+  CHECK(u64_at(events.bytes, events.at(slot, 0u)) == 600u);
+  CHECK_EQ(u32_at(events.bytes, events.at(slot, 0u) + 8u), outer.id());
+  CHECK_EQ(u32_at(events.bytes, events.at(slot, 0u) + 12u), 7u | 0x80000000u);
+  CHECK(u64_at(events.bytes, events.at(slot, 1u)) == 650u);
+  CHECK_EQ(u32_at(events.bytes, events.at(slot, 1u) + 12u), 7u);
+  CHECK(fixture.table.invariants_hold()); }
+
+/* Past the depth limit a scope is neither pushed nor recorded, and its leave
+ * touches nothing; 0 is no limit. */
+TEST(trace_table_limit_depth, scopes_past_the_limit_are_neither_pushed_nor_recorded)
+{ TableFixture fixture;
+  Events events;
+  fixture.table.record_events(events.ring);
+  fixture.table.limit_depth(2u);
+  const std::uint32_t first = fixture.table.enter(outer);
+  const std::uint32_t second = fixture.table.enter(middle);
+  const std::uint32_t third = fixture.table.enter(inner);
+  CHECK_EQ(second, first);
+  CHECK_EQ(third, TraceTable::no_slot);
+  CHECK_EQ(u32_at(fixture.bytes(), slot_at(first) + 8u), 2u);   /* the depth stayed at the limit */
+  CHECK(events.count(first) == 2u);
+  fixture.table.leave(third);
+  CHECK(events.count(first) == 2u);
+  fixture.table.leave(second);
+  fixture.table.leave(first);
+  CHECK(events.count(first) == 4u);
+
+  fixture.table.limit_depth(0u);
+  const std::uint32_t a = fixture.table.enter(outer);
+  const std::uint32_t b = fixture.table.enter(middle);
+  const std::uint32_t c = fixture.table.enter(inner);
+  CHECK_EQ(c, a);
+  fixture.table.leave(c);
+  fixture.table.leave(b);
+  fixture.table.leave(a);
+  CHECK(fixture.table.invariants_hold()); }
+
+/* A scope named by only() is traced at any depth: the limit is for tracing
+ * everything, not the few legs a measurement asked for. */
+TEST(trace_table_limit_depth, does_not_apply_to_the_scopes_only_names)
+{ TableFixture fixture;
+  fixture.table.limit_depth(1u);
+  fixture.table.only("Outer::run,Inner::leaf");
+  const std::uint32_t first = fixture.table.enter(outer);
+  const std::uint32_t second = fixture.table.enter(inner);
+  CHECK(first != TraceTable::no_slot);
+  CHECK_EQ(second, first);
+  fixture.table.leave(second);
+  fixture.table.leave(first); }

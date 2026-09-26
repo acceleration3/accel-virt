@@ -73,7 +73,13 @@ struct Rig {
         for (int index = 0; index < 10; index++) surface.add_dc(&dcs[index], &windows[index], 8u, 4u);
     }
     av::ClientTransport &wire() { return *context.wire(); }
-    std::uint32_t        commands() { return context_rig.kmt().commands(); }
+    /* What reached the host: the context holds its calls in a batch until a
+     * flush, so the held ones are sent first. */
+    std::uint32_t        commands()
+    {
+        context.flush();
+        return context_rig.kmt().commands();
+    }
     std::uint32_t        id(std::uint32_t index) { return context_rig.kmt().command_id(index); }
     std::uint64_t        argument(std::uint32_t index, std::uint32_t nth)
     {

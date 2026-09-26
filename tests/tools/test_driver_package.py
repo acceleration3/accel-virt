@@ -25,7 +25,12 @@ class DriverPackage(unittest.TestCase):
         cls.inf = configparser.RawConfigParser(strict=False, comment_prefixes=(";",), delimiters=("=",))
         cls.inf.optionxform = str
         cls.inf.read_string("\n".join(line for line in text.splitlines()
-                                      if not line.startswith("HKR") and line.strip() not in PACKAGE_FILES))
+                                      if not line.startswith(("HKR", "HKLM"))
+                                      and line.strip() not in PACKAGE_FILES))
+
+    def software_section(self):
+        """The software key's section: the first the install section adds."""
+        return self.inf["Rvkgpu_Install"]["AddReg"].split(",")[0].strip()
 
     def test_is_a_display_class_package_with_a_catalog(self):
         version = self.inf["Version"]
@@ -59,7 +64,7 @@ class DriverPackage(unittest.TestCase):
         (@140250b00) cannot read UserModeDriverName from the software key -
         DpiOpenPnpRegistryKey(dev, 2, ...), which is HKR under the install
         section, not under .HW. Feature 036's live run hit exactly this."""
-        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        software = self.software_section()
         self.assertRegex(
             self.text,
             rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"%13%\\rvkumd\.dll",
@@ -74,11 +79,14 @@ class DriverPackage(unittest.TestCase):
         REG_MULTI_SZ or REG_SZ - never REG_EXPAND_SZ - and takes it as an
         absolute manifest path; a global Khronos key would list the device
         twice."""
-        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        software = self.software_section()
         section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         self.assertRegex(section, r'HKR,+\s*VulkanDriverName,\s*0x00010000,\s*"%13%\\rvkvk\.json"')
         self.assertNotIn("Khronos", self.text)
-        self.assertNotIn("HKLM", self.text)
+        # The one machine-wide value is the scheduler's; no ICD is listed there.
+        machine = [line for line in self.text.splitlines() if line.startswith("HKLM")]
+        self.assertEqual(machine, ["HKLM, System\\CurrentControlSet\\Control\\GraphicsDrivers\\Scheduler, "
+                                   "EnablePreemption, 0x00010001, 0"])
         for image in ("rvkvk.dll", "rvkvk.json"):
             self.assertIn(f"{image} = 1", self.text)
             files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
@@ -92,7 +100,7 @@ class DriverPackage(unittest.TestCase):
         pixel formats itself and never asks the ICD. The WOW values wait for
         a 32-bit ICD (061), and the global OpenGLDrivers key is the pre-WDDM
         path FR-001 forbids."""
-        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        software = self.software_section()
         section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         values = {match.group(1): (match.group(2), match.group(3))
                   for match in re.finditer(r"^HKR,,\s*(OpenGL\w*),\s*(0x[0-9A-Fa-f]{8}),\s*(.+?)\s*$",
@@ -119,7 +127,7 @@ class DriverPackage(unittest.TestCase):
         found on one path and silently missed on the other. OpenCLDriverNameWow
         waits for a 32-bit ICD (061), and the global Khronos vendors key is the
         path FR-001 forbids."""
-        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        software = self.software_section()
         section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
         values = {match.group(1): (match.group(2), match.group(3))
                   for match in re.finditer(r"^HKR,,\s*(OpenCL\w*),\s*(0x[0-9A-Fa-f]{8}),\s*(.+?)\s*$",
@@ -146,6 +154,14 @@ class DriverPackage(unittest.TestCase):
                       self.text)
         self.assertIn('MessageNumberLimit, 0x00010001, 11', self.text)
         self.assertEqual(self.inf["Rvkgpu_Install.HW"]["AddReg"], "Rvkgpu_Interrupts")
+
+    def test_turns_scheduler_preemption_off_at_install(self):
+        """A held packet is bounded by its deadline alone, so the scheduler must
+        never ask this adapter to preempt one."""
+        self.assertIn("HKLM, System\\CurrentControlSet\\Control\\GraphicsDrivers\\Scheduler, "
+                      "EnablePreemption, 0x00010001, 0", self.text)
+        added = [name.strip() for name in self.inf["Rvkgpu_Install"]["AddReg"].split(",")]
+        self.assertIn("Rvkgpu_Scheduler", added)
 
 
 if __name__ == "__main__":

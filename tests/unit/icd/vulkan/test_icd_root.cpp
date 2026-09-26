@@ -806,8 +806,10 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
   rig.entry<CmdDraw>(instance, "vkCmdDraw")(command_buffer, 3u, 1u, 0u, 0u);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK_EQ(rig.entry<EndCommandBuffer>(instance, "vkEndCommandBuffer")(command_buffer), VK_SUCCESS);
-  WireReader drawn = body_of(rig.kmt(), rig.kmt().commands() - 1u);
-  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  /* The draw, and the end that closes the batch after it. */
+  WireReader drawn = body_of(rig.kmt(), rig.kmt().commands() - 2u);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 2u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkEndCommandBuffer));
   CHECK_EQ(drawn.read_u64(), command_buffer_host);
   CHECK_EQ(drawn.read_u32(), 3u);
   CHECK_EQ(rig.entry<ResetCommandBuffer>(instance, "vkResetCommandBuffer")(command_buffer, 0u), VK_SUCCESS);

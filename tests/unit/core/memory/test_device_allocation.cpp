@@ -20,7 +20,7 @@ using av::MockPlatform;
 TEST(device_allocation, joins_one_device_to_one_allocation_and_names_no_shared_object)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   av::ApertureSegment aperture(platform);
   av::HostVisibleSegment host_visible(platform);
   const av::MemorySegments segments(platform, aperture, host_visible);
@@ -35,7 +35,7 @@ TEST(device_allocation, joins_one_device_to_one_allocation_and_names_no_shared_o
 TEST(device_allocation, carries_the_shared_object_its_open_counted)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   av::ApertureSegment aperture(platform);
   av::HostVisibleSegment host_visible(platform);
   const av::MemorySegments segments(platform, aperture, host_visible);

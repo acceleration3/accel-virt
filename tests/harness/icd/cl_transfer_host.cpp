@@ -38,8 +38,8 @@ ClTransferHost::ClTransferHost()
       reply_(static_cast<std::uint8_t *>(std::calloc(1u, reply_bytes))),
       buffer_(static_cast<std::uint8_t *>(std::calloc(1u, buffer_bytes))),
       image_(static_cast<std::uint8_t *>(std::calloc(1u, image_bytes))),
-      scratch_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
-      seen_(static_cast<Command *>(std::calloc(max_commands, sizeof(Command)))), commands_(0u),
+      scratch_(static_cast<std::uint8_t *>(std::calloc(1u, scratch_bytes))),
+      seen_(static_cast<Command *>(std::calloc(max_commands, sizeof(Command)))), commands_(0u), answered_(0u),
       refused_at_(nobody), refusal_(CL_SUCCESS), arena_(nullptr, 0u), blobs_()
 {
 }
@@ -68,7 +68,7 @@ void ClTransferHost::fill(std::uint8_t seed)
 
 std::uint32_t ClTransferHost::texel_of(std::size_t x, std::size_t y, std::size_t z) const
 {
-    return static_cast<std::uint32_t>(x) | static_cast<std::uint32_t>(y) << 17u | static_cast<std::uint32_t>(z) << 24u |
+    return static_cast<std::uint32_t>(x) | static_cast<std::uint32_t>(y) << 19u | static_cast<std::uint32_t>(z) << 24u |
            0x80000000u;
 }
 
@@ -98,11 +98,24 @@ const ClTransferHost::Command &ClTransferHost::command(std::uint32_t index) cons
 
 WireWriter ClTransferHost::request_writer() { return WireWriter(request_, request_bytes); }
 
-TransportResult ClTransferHost::send_async(std::uint32_t, WireWriter &) { return TransportResult::failed; }
+/* A command sent without waiting for its answer is applied as the host would
+ * apply it, and its answer goes nowhere: a refusal of one is not the caller's
+ * to see. */
+TransportResult ClTransferHost::send_async(std::uint32_t command_id, WireWriter &writer)
+{
+    return apply(command_id, writer) ? TransportResult::ok : TransportResult::failed;
+}
 
 TransportResult ClTransferHost::send_sync(std::uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
-    if (writer.status() != Status::ok || commands_ == max_commands) return TransportResult::failed;
+    if (!apply(command_id, writer)) return TransportResult::failed;
+    reply = WireReader(reply_, answered_);
+    return TransportResult::ok;
+}
+
+bool ClTransferHost::apply(std::uint32_t command_id, WireWriter &writer)
+{
+    if (writer.status() != Status::ok || commands_ == max_commands) return false;
     WireReader payload(request_, writer.offset());
     WireWriter answer(reply_, reply_bytes);
     Command   &seen = seen_[commands_];
@@ -112,9 +125,8 @@ TransportResult ClTransferHost::send_sync(std::uint32_t command_id, WireWriter &
                           ? buffer_command(command_id, payload, seen, answer)
                           : image_command(command_id, payload, seen, answer);
     ++commands_;
-    if (!read || answer.status() != Status::ok) return TransportResult::failed;
-    reply = WireReader(reply_, answer.offset());
-    return TransportResult::ok;
+    answered_ = answer.offset();
+    return read && answer.status() == Status::ok;
 }
 
 bool ClTransferHost::buffer_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer)

@@ -13,6 +13,7 @@ namespace {
 
 void *run_d3d12_fence_wake(void *wake)
 {
+    AV_SCOPE("run_d3d12_fence_wake");
     static_cast<D3d12FenceWake *>(wake)->run();
     return nullptr;
 }

@@ -962,8 +962,9 @@ TEST(mock_kmt, a_large_allocation_is_viewed_whole)
   CHECK_EQ(whole[0], 0u);
   CHECK_EQ(whole[bytes - 1u], 0u);
   whole[bytes - 1u] = 0x5Au;
-  CHECK_EQ(kmt.view_filled(), 0u);   /* only the inline views are counted */
+  CHECK_EQ(kmt.view_filled(), 0u);   /* a large view is counted when it is let go */
   CHECK_STATUS(kmt.unlock(rig.device(), large), Status::ok);
+  CHECK_EQ(kmt.view_filled(), 1u);
   CHECK(kmt.view_of(large) == nullptr);
   CHECK_STATUS(kmt.lock(rig.device(), large, view), Status::ok);   /* locked again: a fresh view */
   CHECK_EQ(static_cast<std::uint8_t *>(view)[bytes - 1u], 0u);

@@ -436,18 +436,21 @@ TEST(shared_object_probe, the_size_sweep_measures_every_length_and_fails_none_of
                                  "shared.carrier_size_96", "shared.carrier_size_128"};
   for (const char *const step : lengths)
       if (!rig.holds(step)) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, step);
-  /* The two this driver has shapes for are taken and measure nothing; the mock
-   * answers the rest not_supported, as the miniport does. */
-  CHECK(rig.holds("ok shared.carrier_size_48 0"));
-  CHECK(rig.holds("ok shared.carrier_size_88 0"));
+  /* The two this driver has shapes for - the 56-byte descriptor alone and it
+   * with a 40-byte record - are taken and measure nothing; the mock answers
+   * the rest not_supported, as the miniport does, the old 48 and 88 among
+   * them. */
+  CHECK(rig.holds("ok shared.carrier_size_56 0"));
+  CHECK(rig.holds("ok shared.carrier_size_96 0"));
+  CHECK(rig.holds("ok shared.carrier_size_48 3221225659"));
+  CHECK(rig.holds("ok shared.carrier_size_88 3221225659"));
   CHECK(rig.holds("ok shared.carrier_size_64 3221225659"));
+  CHECK(rig.holds("ok shared.carrier_size_128 3221225659"));
   /* And not one of them failed the run. */
   CHECK(!rig.holds("FAIL shared.carrier_size"));
-  /* The one length that carries a real record rather than filler: it is a
-   * length no shape is known for, so what it must show is the same refusal the
-   * filler got there - the bytes are not what is being refused. */
-  CHECK(rig.holds("ok shared.carrier_size_96 3221225659"));
-  CHECK(rig.holds("ok shared.carrier_size_96_valid 3221225659")); }
+  /* A real unassigned record at the shareable length is taken like the
+   * filler: the length is what is judged first. */
+  CHECK(rig.holds("ok shared.carrier_size_96_valid 0")); }
 
 /* The host's answer to "do you have external memory at all" is read, not
  * assumed, and every way it can go wrong stops the run at that question

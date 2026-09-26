@@ -129,6 +129,20 @@ class ScopeMarks(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("twice is exempt and must not be marked", result.stderr)
 
+    def test_a_sample_application_is_not_judged(self):
+        """A sample builds without the driver's sources: marking it would not
+        compile, so --apply leaves it as written."""
+        sample = "struct Sample {\n    void run();\n    int n_;\n};\nvoid Sample::run()\n{\n}\n"
+        self.tree.write("src/um/sample/one.cpp", sample)
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.apply().returncode, 0)
+        self.assertEqual(self.read("src/um/sample/one.cpp"), sample)
+        self.tree.write("src/um/other/one.cpp", sample)
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Sample::run has no scope mark", result.stderr)
+
     def test_wire_primitives_and_trace_hosts_are_never_marked(self):
         """The per-member wire reads and writes run dozens of times per command
         and cannot block, and a trace host is what every scope calls: neither

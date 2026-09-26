@@ -371,3 +371,47 @@ TEST(execution_node_report, writes_the_fences_and_each_pending_packet_in_order)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::dispatch); }
+
+/* A host that never finishes a batch must not hold its packet past the
+ * deadline: dxgkrnl would call the engine hung and reset every context. */
+TEST(execution_node_release_overdue, lets_go_of_a_held_packet_only_once_it_has_waited_the_deadline)
+{ Fixture fixture;
+  int owner = 0;
+  CHECK_STATUS(fixture.node().submit(1u, &owner, 9u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u), Status::ok);
+  const std::uint64_t queued = fixture.platform().interrupt_time();
+  CHECK_EQ(fixture.node().release_overdue(queued + ExecutionNode::park_deadline - 1u), 0u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);   /* still held one tick short of the deadline */
+
+  CHECK_EQ(fixture.node().release_overdue(queued + ExecutionNode::park_deadline), 1u);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);   /* the held packet and the one behind it */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 2u);
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_EQ(fixture.node().release_overdue(queued + 10u * ExecutionNode::park_deadline), 0u); }
+
+TEST(execution_node_release_overdue, leaves_plain_packets_and_finished_packets_alone)
+{ Fixture fixture;
+  int owner = 0;
+  CHECK_STATUS(fixture.node().submit(1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u, &owner, 4u), Status::ok);
+  fixture.node().finish(&owner, 4u);
+  const std::uint64_t later = fixture.platform().interrupt_time() + 2u * ExecutionNode::park_deadline;
+  CHECK_EQ(fixture.node().release_overdue(later), 0u);   /* nothing was still waiting */
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u); }
+
+TEST(execution_node_release_overdue, only_the_overdue_packet_goes_a_younger_one_stays_held)
+{ Fixture fixture;
+  int first = 0;
+  int second = 0;
+  CHECK_STATUS(fixture.node().submit(1u, &first, 3u), Status::ok);
+  fixture.platform().advance_time(ExecutionNode::park_deadline / 2u);
+  CHECK_STATUS(fixture.node().submit(2u, &second, 5u), Status::ok);
+  fixture.platform().advance_time(ExecutionNode::park_deadline / 2u);
+  CHECK_EQ(fixture.node().release_overdue(fixture.platform().interrupt_time()), 1u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   /* the second still waits on its host */
+  CHECK_EQ(fixture.node().pending(), 1u); }

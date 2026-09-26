@@ -43,8 +43,8 @@ bool D3d12ArenaHeaps::place(uint32_t id, uint64_t offset, uint64_t bytes, uint64
     const uint32_t index = index_of(id);
     if (index == none) return false;
     const Range &range = ranges_[index];
-    if (offset > range.size || bytes > range.size - offset) return false;
-    at = range.base + offset;
+    if (offset > range.size_ || bytes > range.size_ - offset) return false;
+    at = range.base_ + offset;
     return true;
 }
 
@@ -75,7 +75,7 @@ uint32_t D3d12ArenaHeaps::index_of(uint32_t id) const
 {
     AV_SCOPE("D3d12ArenaHeaps::index_of");
     for (uint32_t index = 0u; index < count_; index++)
-        if (ranges_[index].id == id) return index;
+        if (ranges_[index].id_ == id) return index;
     return none;
 }
 

@@ -179,6 +179,7 @@ public:
          * (research.md §15). */
         const av::Allocation *const made = allocations_.find(infos_[i].hAllocation);
         CHECK(made != nullptr);
+        if (made == nullptr) return av::SharedObjectRecord();
         const av::SharedObjectRecord minted(made->shared_id(),
                                             av::SharedObjectKind(av::SharedObjectKind::memory),
                                             shared_.adapter(), 0x1000u);
@@ -725,6 +726,8 @@ TEST(device_table_open, the_creating_devices_open_of_an_identity_the_table_lost_
   static_cast<void>(fixture.share(0u));
   const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 0x1000u);
   CHECK_STATUS(asking.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
+  CHECK(fixture.allocation(0u) != nullptr);
+  if (fixture.allocation(0u) == nullptr) return;
   fixture.allocation(0u)->shared_as(fixture.allocation(0u)->shared_id() + 0x1000u);
   void *const device = fixture.create_device();
   DxgkargOpenAllocationRecord open = fixture.open_request(1u);

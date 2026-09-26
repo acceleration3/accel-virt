@@ -45,6 +45,19 @@ class SymbolTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("symbol_tests: ok", result.stdout)
 
+    def test_a_private_nested_type_is_covered_through_its_class(self):
+        self.tree.write("src/core/table.hpp",
+                        "class Table {\npublic:\n    int size();\n    struct Row {\n        int v_;\n    };\n"
+                        "private:\n    struct Slot {\n        int id_;\n    };\n    Slot slots_[4];\n"
+                        "public:\n    int after();\n};\n")
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named(); w.unnamed();\n")
+        self.tree.write("tests/unit/test_table.cpp", "Table t; t.size();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(sorted(result.stderr.strip().splitlines()),
+                         ["src/core/table.hpp: Table::after has no test naming it",
+                          "src/core/table.hpp: class Row has no test naming it"])
+
     def test_calls_inside_an_inline_template_body_are_not_declarations(self):
         self.tree.write("src/core/holder.hpp", """template <typename T>
 class Holder {

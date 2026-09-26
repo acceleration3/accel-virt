@@ -39,7 +39,9 @@ FNV_PRIME = 16777619
 # The wire's reads and writes are leaf primitives called once per struct
 # member: they cannot block, so a hang is never inside one, and their scopes
 # tripled the time a bound device took to decode a command.
-EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/")
+# A sample is a standalone test application built without the driver's
+# sources, so it has no trace table to mark.
+EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/", "src/um/sample/")
 EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp",
                   "src/um/d3d/umd_record_layout.cpp",
                   "src/um/trace/interrupt_clock.cpp",

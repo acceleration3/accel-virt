@@ -675,7 +675,10 @@ TEST(cl_buffer_paths, an_unmap_the_host_refuses_writes_nothing_back)
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_buffer_paths, a_write_back_the_host_refuses_is_what_the_unmap_answers)
+/* The write-back follows the unmap without waiting for its answer: the host
+ * makes every write blocking and in queue order, so what answers it is the
+ * next command the queue answers, and the unmap answers only for itself. */
+TEST(cl_buffer_paths, a_write_back_goes_unanswered_after_the_unmap_it_follows)
 { ClIcdRig rig;
   Opened   opened(rig, false);
   CHECK(opened.made());
@@ -692,14 +695,26 @@ TEST(cl_buffer_paths, a_write_back_the_host_refuses_is_what_the_unmap_answers)
   CHECK(mapped != nullptr);
   if (mapped == nullptr) return;
 
-  /* The unmap succeeds and the write-back behind it does not. The
-   * application wrote through that mapping, so a failure to put the bytes
-   * where it asked is the unmap's failure and not something to swallow. */
   rig.host().cl_result(CL_SUCCESS);
-  rig.host().cl_result(CL_OUT_OF_RESOURCES);
-  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_OUT_OF_RESOURCES);
-  /* The mapping is gone either way: it is the host's that was ended. */
-  CHECK(rig.root().invariants_hold()); }
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
+  /* The mapping is gone, and nothing was left waiting for an answer. */
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold());
+
+  /* The next answered command carries the write-back ahead of itself. */
+  rig.host().cl_enqueued(CL_SUCCESS, 0x6900u);
+  rig.host().cl_result(CL_SUCCESS);
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().finish(opened.queue()), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueWriteBuffer));
+  CHECK_EQ(rig.kmt().command_id(sent + 2u),
+           static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 /* ---- the arena path's own refusals, and the events both paths hand back --- */
 
@@ -823,9 +838,9 @@ TEST(cl_buffer_paths, a_map_asked_for_an_event_hands_one_back_on_either_path)
     CHECK_EQ(error, CL_SUCCESS);
     CHECK(mapped != nullptr);
     CHECK(event != nullptr);
-    /* The unmap answers an event too, and the write-back follows it. */
+    /* The unmap answers an event too, and the write-back follows it,
+     * unanswered. */
     rig.host().cl_enqueued(CL_SUCCESS, 0x6901u);
-    rig.host().cl_result(CL_SUCCESS);
     cl_event given_back = nullptr;
     CHECK_EQ(rig.root().unmap(opened.queue(), buffer, mapped, &given_back), CL_SUCCESS);
     CHECK(given_back != nullptr);

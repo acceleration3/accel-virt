@@ -1,6 +1,7 @@
 #include "harness/device/fake_register_bytes.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/platform/service_value.hpp"
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
@@ -11,6 +12,7 @@ using av::Irql;
 using av::LockRank;
 using av::MockPlatform;
 using av::Pool;
+using av::ServiceValue;
 using av::TestRegistry;
 using av::Violation;
 
@@ -551,3 +553,16 @@ TEST(mock_platform_map_frame, refuses_misuse_and_fails_on_request)
   CHECK(platform.claim(Violation::blocking_at_dispatch));
   CHECK(platform.claim(Violation::blocking_at_dispatch));
   platform.release_contiguous(block, 0x1000u); }
+
+/* DriverEntry reads its service key through the platform, which a test builds
+ * with the one value it wants there: the name must match, and anything else
+ * reads as the caller's fallback, as a missing registry value does. */
+TEST(mock_platform_service, answers_its_one_value_and_falls_back_for_the_rest)
+{ int registry_path = 0;
+  const ServiceValue scopes("TraceScopes", 7u);
+  MockPlatform platform(0u, scopes);
+  CHECK_EQ(platform.read_service_u32(&registry_path, "TraceScopes", 3u), 7u);
+  CHECK_EQ(platform.read_service_u32(&registry_path, "TraceScope", 3u), 3u);
+  CHECK_EQ(platform.read_service_u32(&registry_path, "Other", 9u), 9u);
+  MockPlatform plain;
+  CHECK_EQ(plain.read_service_u32(&registry_path, "TraceScopes", 3u), 3u); }

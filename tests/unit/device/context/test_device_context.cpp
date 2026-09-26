@@ -1,6 +1,7 @@
 /* Binding one context to its ring: the blobs pinned, the ring prepared, the
  * doorbell connected and the ring attached on the worker - all of it, or none. */
 #include "core/support/status.hpp"
+#include "device/context/d3d_ordering.hpp"
 #include "device/context/device_context.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/execution/executor_library.hpp"
@@ -90,9 +91,10 @@ class Fixture {
 public:
     Fixture()
         : blobs_(host_), shared_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
-          shares_(host_, library_), recorder_(host_),
-          context_(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, 5u)
+          shares_(host_, library_), recorder_(host_), ordering_(host_),
+          context_(host_, blobs_, shared_, interrupts_, library_, shares_, recorder_, ordering_, 5u)
     {
+        static_cast<void>(ordering_.initialize());
         static_cast<void>(blobs_.initialize());
         static_cast<void>(shared_.initialize());
         static_cast<void>(shares_.initialize());
@@ -153,6 +155,7 @@ private:
     av::ExecutorLibrary library_;
     av::ExecutorShares  shares_;
     av::WireRecorder    recorder_;
+    av::D3dOrdering     ordering_;
     DeviceContext       context_;
 };
 
@@ -198,6 +201,10 @@ TEST(device_context_bind, a_host_that_finishes_on_its_own_thread_reaches_the_gue
 
   const std::uint32_t before = fixture.host().raised(3u);
   const std::uint64_t completed = fixture.page().completed_fence();
+  /* The worker watches its ring for a spell of the host's clock before it
+   * sleeps, and only a wake or a pass through its loop drains the signal:
+   * on a clock that never moves the spell never ends. */
+  fixture.host().advance_clock_per_read(1000u);
   /* The host's own thread, which is neither the worker nor the main loop, says
    * a callback fired. */
   CHECK(fixture.ops().fire_signal());
@@ -379,7 +386,8 @@ TEST(device_context_bind, options_an_older_library_cannot_make_bind_nothing)
   CHECK_STATUS(old.accept(&ops.table()), Status::ok);
   av::ExecutorShares     shares(host, old);
   av::WireRecorder       recorder(host);
-  DeviceContext          context(host, blobs, shared, interrupts, old, shares, recorder, 9u);
+  av::D3dOrdering        ordering(host);
+  DeviceContext          context(host, blobs, shared, interrupts, old, shares, recorder, ordering, 9u);
   const ContextSetup with_options(ProtocolVersion(1u, 1u), SubApi::opengl, ring, 12u, fence, 3u, 0u,
                                   av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u));
   CHECK_STATUS(context.bind(with_options, capset()), Status::invalid_parameter);

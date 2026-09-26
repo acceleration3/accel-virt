@@ -341,3 +341,25 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
   CHECK_EQ(fixture.context().completed(), 4u); }
+
+/* A kick rings the context's doorbell only once it is established - before
+ * then there is no ring the device could look at, and once it is being torn
+ * down there is nothing more to look for. */
+TEST(guest_context_kick, rings_an_established_context_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(2u), 0u);
+  fixture.established();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(2u), 1u);
+  CHECK(fixture.context().tail() == 0u);
+  CHECK_STATUS(fixture.at_dispatch(&GuestContext::tear_down), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().kick();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.doorbells().rings(2u), 1u);
+  CHECK_EQ(fixture.answer_all(), 4u); }

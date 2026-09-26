@@ -2237,7 +2237,7 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("max_outputs=1,vectors=11,hostmem=256M", self.journal_lines()[0])
-        self.assertIn("guest: segments ok: 2 reported, the second 256 MiB of host memory at 0xc0000000",
+        self.assertIn("guest: segments ok: 2 reported, the second host memory: 256 MiB at 0xc0000000",
                       result.stdout)
         # A suite that wrote no pattern is said and skipped, not failed: the
         # scenario is the guest's to run.
@@ -2336,7 +2336,7 @@ class GuestSuiteRun(unittest.TestCase):
                              "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
         result = self.run_suite("--hostmem", "4", "--require-host-visible")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not hold the 4096 bytes the guest wrote", (self.work / "verdict.txt").read_text())
+        self.assertIn("no hostmem BAR (0xc0000000) holds the 4096 bytes the guest wrote", (self.work / "verdict.txt").read_text())
         self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED},
                     hostmem_written={"offset": 0, "bytes": 4096}, pmemsave_nothing=True)

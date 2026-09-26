@@ -8,6 +8,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/log_record.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/platform/service_value.hpp"
 #include "harness/trace/mock_trace_host.hpp"
 
 #include <cstdint>
@@ -18,6 +19,7 @@ using av::FakeDxgkrnl;
 using av::ImageRange;
 using av::MockTraceHost;
 using av::MockPlatform;
+using av::ServiceValue;
 using av::Status;
 
 namespace av {
@@ -39,6 +41,8 @@ namespace {
 
 int driver_object = 0;
 int registry_path = 0;
+/* The service value that asks for the trace table; without it there is none. */
+const ServiceValue trace_scopes("TraceScopes", 1u);
 
 /* An image lives in static storage in the kernel; here each test gets one and
  * tears it down the way the shim never has to. */
@@ -48,6 +52,11 @@ public:
     Image &image() { return image_; }
     /* DriverEntry with no image range and nothing to run at a bugcheck. */
     std::int32_t enter() { return image_.enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr); }
+    /* The same, with the service asking for the trace table. */
+    std::int32_t enter_traced()
+    {
+        return image_.enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0u, trace_scopes);
+    }
 
 private:
     Image image_;
@@ -64,19 +73,37 @@ TEST(driver_image_enter, registers_the_miniport_table_and_binds_the_root)
   CHECK(av::miniport_binding.miniport() != nullptr);
   FakeDxgkrnl dxgkrnl;
   CHECK_STATUS(dxgkrnl.initialize(platform.registered_table()), Status::ok);
-  CHECK_EQ(platform.logged(), 2u); }
+  CHECK_EQ(platform.logged(), 1u); }   /* DriverEntry; no trace table was asked for */
 
 /* The table is up before the miniport exists, its address is where the host
  * reads it from (docs/trace.md's line, which tools/mcp/rvk_inspect.py parses),
  * and it is gone once the image is left. */
 TEST(driver_image_enter, lays_the_trace_table_out_first_and_logs_where_it_is)
 { Entered entered;
-  CHECK_EQ(entered.enter(), 0);
+  CHECK_EQ(entered.enter_traced(), 0);
   MockPlatform &platform = entered.image().platform();
   CHECK(platform.logged_line("rvkgpu: trace table at physical 0x0000000100000000 bytes 52832\n"));
   CHECK(av::scope_binding.table() != nullptr);
   CHECK(!platform.bugcheck_registered());
   entered.image().leave();
+  CHECK(av::scope_binding.table() == nullptr); }
+
+/* Every scope costs the DPC it runs in, and dxgkrnl's other DPCs spin on the
+ * lock that DPC holds: a service that does not ask for the table gets none,
+ * and nothing is allocated for it. */
+TEST(driver_image_enter, keeps_no_trace_table_unless_the_service_asks)
+{ Entered entered;
+  CHECK_EQ(entered.enter(), 0);
+  MockPlatform &platform = entered.image().platform();
+  CHECK(av::scope_binding.table() == nullptr);
+  CHECK(!platform.logged_line("trace table"));
+  CHECK_EQ(platform.live_allocations(), 0u);
+  CHECK(av::miniport_binding.miniport() != nullptr); }
+
+TEST(driver_image_enter, a_trace_scopes_value_of_zero_keeps_none)
+{ Entered entered;
+  const ServiceValue off("TraceScopes", 0u);
+  CHECK_EQ(entered.image().enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0u, off), 0);
   CHECK(av::scope_binding.table() == nullptr); }
 
 /* The refusal releases the platform that logged it, so the line is asserted
@@ -90,7 +117,7 @@ TEST(driver_image_enter, a_registration_dxgkrnl_refuses_unbinds_and_logs_its_sta
                entered.image().enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0xC0000059u, record)),
            0xC0000059u);
   CHECK(av::miniport_binding.miniport() == nullptr);
-  CHECK_EQ(record.count(), 3u);   /* DriverEntry, the trace table, then the refusal */
+  CHECK_EQ(record.count(), 2u);   /* DriverEntry, then the refusal: no trace table was asked for */
   CHECK(std::strstr(record.last(), "DxgkInitialize refused") != nullptr);
   CHECK(std::strstr(record.last(), "C0000059") != nullptr); }
 
@@ -133,7 +160,7 @@ TEST(driver_image_bugcheck, writes_the_table_through_the_registered_routine)
 { Entered entered;
   bugchecking = &entered.image();
   CHECK_EQ(entered.image().enter(&driver_object, &registry_path, ImageRange(0u, 0xFFFFFFFFFFFFFFFFull),
-                                 &run_bugcheck), 0);
+                                 &run_bugcheck, 0u, trace_scopes), 0);
   MockPlatform &platform = entered.image().platform();
   CHECK(platform.bugcheck_registered());
   CHECK_EQ(platform.bugcheck_bytes(), 52832u);

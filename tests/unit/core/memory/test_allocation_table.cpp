@@ -424,6 +424,8 @@ TEST(allocation_table_create, mints_an_identity_for_a_creator_that_asked_for_one
   const av::SharedObjectRecord record = fixture.minted(0u);
   CHECK(!record.assigned());
   const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  CHECK(allocation != nullptr);
+  if (allocation == nullptr) return;
   CHECK(allocation->shared_id() != 0u);
   /* And the object it minted is the one the record asked for: an open with a
    * record naming it agrees about the kind and the size, which is the only
@@ -448,7 +450,10 @@ TEST(allocation_table_create, refuses_private_data_of_any_other_length_than_the_
 { const std::uint32_t lengths[] = {0u, 1u, AllocationDescriptor::encoded_size - 1u,
                                    AllocationDescriptor::encoded_size + 1u,
                                    AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size - 1u,
-                                   AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size + 1u};
+                                   AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size + 1u,
+                                   /* the shareable length before the descriptor grew its host key: a
+                                    * record read at 56 would run eight bytes past it */
+                                   48u + av::SharedObjectRecord::encoded_size};
   for (const std::uint32_t length : lengths) {
       Fixture fixture;
       fixture.ask_to_share(0u, 4096u);
@@ -491,6 +496,8 @@ TEST(allocation_table_create, a_record_may_name_an_object_bigger_than_the_alloca
    * page: an open naming 8192 agrees with the object, and one naming the
    * allocation's own size does not. */
   const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
+  CHECK(allocation != nullptr);
+  if (allocation == nullptr) return;
   const av::SharedObjectRecord names(allocation->shared_id(), av::SharedObjectKind(av::SharedObjectKind::memory),
                                      fixture.shared().adapter(), 8192u);
   av::SharedObject *object = nullptr;

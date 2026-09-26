@@ -165,3 +165,42 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
   CHECK_EQ(benchmark.doorbell_ns(), 0u);
   CHECK_EQ(benchmark.kernel_ns(), 0u);
   rig.close(); }
+
+/* Answered no-ops one at a time: every percentile of their cost, in order, and
+ * what a read of the clock costs beside them. */
+TEST(submit_benchmark, round_trips_report_their_spread_in_order)
+{ Rig rig;
+  rig.kmt().spend_on_wait(10u);   /* a microsecond a trip, after the reply-slot watch */
+  GuestReport     report;
+  SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+  benchmark.round_trips();
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(has_line(report, "ok submit.warm\n"));
+  const char *const steps[] = {"trip_min_ns", "trip_p10_ns", "trip_p25_ns", "trip_median_ns",
+                               "trip_p75_ns", "trip_p90_ns", "trip_p99_ns", "trip_mean_ns", "clock_read_ns"};
+  for (const char *step : steps) CHECK(has_line(report, step));
+  /* No trip is faster than the wait it paid for. */
+  CHECK(!has_line(report, "ok submit.trip_min_ns 0\n"));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), SubmitBenchmark::trips + 1u);
+  rig.close(); }
+
+TEST(submit_benchmark, round_trips_stop_at_the_first_no_op_that_fails)
+{ Rig rig;
+  rig.kmt().fail_at(MockKmt::Call::wait_for_context, 3u, 0xC0000001u);
+  GuestReport     report;
+  SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+  benchmark.round_trips();
+  CHECK(has_line(report, "ok submit.warm\n"));
+  CHECK(has_line(report, "FAIL submit.nop"));
+  CHECK(!has_line(report, "trip_min_ns"));
+  CHECK_EQ(report.failed(), 1u);
+  rig.close();
+
+  Rig cold;
+  cold.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  GuestReport     refused;
+  SubmitBenchmark again(cold.kmt(), refused, cold.search());
+  again.round_trips();
+  CHECK(has_line(refused, "FAIL submit.warm"));
+  CHECK(!has_line(refused, "submit.nop"));
+  cold.close(); }

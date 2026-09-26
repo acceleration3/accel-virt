@@ -62,6 +62,9 @@ class DeclaredClass:
     public_methods: list = field(default_factory=list)
     static_methods: list = field(default_factory=list)
     is_record: bool = False
+    # Declared in a private section of another class: part of that class's
+    # implementation, reached only through its public surface.
+    is_private_nested: bool = False
 
     def is_contract(self):
         """A pure abstract interface has no state by definition."""
@@ -92,14 +95,23 @@ def declared_classes(root):
 
 def classes_in(lines, relative):
     """Only lines at the class body's own brace level declare members; a call
-    inside an inline body (templates must define in the header) does not."""
+    inside an inline body (templates must define in the header) does not. A
+    type declared in a class body is read as a class of its own, and the
+    enclosing class's reading resumes after it: a table of complete nested
+    slots is declared after the slot type, and its members are the class's
+    state all the same."""
     current, public, depth, opened = None, True, 0, False
+    enclosing = []
     for line in lines:
         match = CLASS_RE.match(line)
         if match:
-            if current:
+            nested = current is not None and depth == 1
+            if current and not nested:
                 yield current
+            if nested:
+                enclosing.append((current, public, depth, opened))
             current = DeclaredClass(match.group(1), relative)
+            current.is_private_nested = nested and not public
             public = line.lstrip().startswith("struct")
             # A DDI record overlays a structure its caller owns - dxgkrnl's, or a
             # Direct3D runtime's - so its fields keep the WDK's names.
@@ -107,6 +119,11 @@ def classes_in(lines, relative):
                                  and current.name.endswith("Record"))
             depth = line.count("{") - line.count("}")
             opened = depth > 0
+            if nested and not opened and "}" in line:
+                body = line[line.index("{") + 1:line.rindex("}")] if "{" in line else ""
+                current.has_state = any(MEMBER_RE.match(f"{piece};") for piece in body.split(";") if piece.strip())
+                yield current
+                current, public, depth, opened = enclosing.pop()
             continue
         if current is None:
             continue
@@ -116,7 +133,7 @@ def classes_in(lines, relative):
             opened = True
         elif opened:
             yield current
-            current = None
+            current, public, depth, opened = enclosing.pop() if enclosing else (None, True, 0, False)
             continue
         if not at_body_level:
             continue
@@ -145,3 +162,5 @@ def classes_in(lines, relative):
             current.public_methods.append(name)
     if current:
         yield current
+    for unclosed, _public, _depth, _opened in reversed(enclosing):
+        yield unclosed

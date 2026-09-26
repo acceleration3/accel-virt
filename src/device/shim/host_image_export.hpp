@@ -43,13 +43,13 @@ public:
 
 private:
     struct Image {
-        VkImage          image;
-        VkDeviceMemory   memory;
-        ID3D11Texture2D *texture;
-        ID3D11Query     *done;
-        int              fd;
-        uint32_t         stride;
-        uint32_t         offset;
+        VkImage          image_;
+        VkDeviceMemory   memory_;
+        ID3D11Texture2D *texture_;
+        ID3D11Query     *done_;
+        int              fd_;
+        uint32_t         stride_;
+        uint32_t         offset_;
     };
 
     [[nodiscard]] bool connect(ID3D11Device5 *device);

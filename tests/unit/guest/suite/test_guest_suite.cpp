@@ -90,7 +90,16 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok host_visible.adapter\n"
                     "ok host_visible.device\n"
                     "ok host_visible.allocation\n"
+                    "ok host_visible.paging_queue\n"
+                    "ok host_visible.resident\n"
+                    "ok host_visible.local_budget_kib 262144\n"
+                    "ok host_visible.local_usage_kib 0\n"
+                    "ok host_visible.non_local_budget_kib 1048576\n"
+                    "ok host_visible.non_local_usage_kib 0\n"
                     "ok host_visible.lock\n"
+                    "ok host_visible.first_write_mbps 0\n"
+                    "ok host_visible.write_mbps 0\n"
+                    "ok host_visible.read_mbps 0\n"
                     "ok host_visible.pattern 4096\n"
                     "ok host_visible.unlock\n"
                     "ok host_visible.teardown\n"
@@ -104,12 +113,12 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok transport.connection\n"
                     "ok transport.initialize\n"
                     "ok transport.nop 0\n"
-                    "ok transport.latency 0\n"
+                    "ok transport.latency 1000\n"
                     "ok transport.warm_nop 31\n"
-                    "ok transport.warm_median 0\n"
-                    "ok transport.warm_fastest 0\n"
+                    "ok transport.warm_median 1000\n"
+                    "ok transport.warm_fastest 1000\n"
                     "ok suite.close_adapter\n"
-                    "rvktest: 44 passed, 0 failed\n") == 0);
+                    "rvktest: 53 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
@@ -225,9 +234,10 @@ TEST(host_visible_scenario, writes_a_pattern_through_the_view_and_reads_every_by
   CHECK(has_line(report, "ok host_visible.unlock"));
   CHECK(has_line(report, "ok host_visible.teardown"));
   CHECK_EQ(host_visible.matched_bytes(), HostVisibleScenario::pattern_bytes);
-  /* The bytes reached the memory the mock handed out, and every one of them:
-   * a scenario that read back its own local copy would leave the view empty. */
-  CHECK_EQ(kmt.view_filled(), HostVisibleScenario::pattern_bytes);
+  /* The bytes reached the memory the mock handed out: a scenario that read
+   * back its own local copy would leave the view empty. The measurement's
+   * words fill the rest of the 16 MiB, all but the first word's. */
+  CHECK(kmt.view_filled() >= HostVisibleScenario::pattern_bytes);
   CHECK_STATUS(search.close(), Status::ok);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
@@ -791,3 +801,33 @@ TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_fi
                                "FAIL submit.adapter status=3"};
   for (const char *line : lines) CHECK(std::strstr(report.text(), line) != nullptr);
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }
+
+/* The round trip alone: the adapter found, which adapter answered, the no-ops
+ * timed, and the adapter closed - none of the driver's own scenarios. */
+TEST(guest_suite_run_round_trip, measures_answered_no_ops_on_the_adapter_it_names)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.set_adapter_luid(0u, 0x1234u);
+  kmt.answer_waits(nullptr, 0u);
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_round_trip(), 0u);
+  CHECK(has_line(report, "ok adapter.find\n"));
+  CHECK(has_line(report, "ok trip.adapter_luid 4660\n"));
+  CHECK(has_line(report, "ok submit.trip_median_ns"));
+  CHECK(has_line(report, "ok suite.close_adapter\n"));
+  CHECK(!has_line(report, "allocation."));
+  CHECK(!has_line(report, "vsync."));
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(guest_suite_run_round_trip, a_failed_no_op_is_counted_among_the_failures)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.answer_waits(nullptr, 0u);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_round_trip(), 1u);
+  CHECK(has_line(report, "FAIL submit.warm"));
+  CHECK_EQ(kmt.open_objects(), 0u); }

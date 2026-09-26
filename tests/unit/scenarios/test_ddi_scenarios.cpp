@@ -400,9 +400,9 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(fdos[i].add_device(), 0);
   CHECK_EQ(nt(fdos[8].add_device()), no_memory);
   CHECK(fdos[8].context() == nullptr);
-  /* DriverEntry, the trace table, a line for each adapter added, and the
-   * refusal naming why. */
-  CHECK_EQ(driver.platform().logged(), 11u);
+  /* DriverEntry, a line for each adapter added, and the refusal naming why.
+   * No trace table: the service here sets no TraceScopes. */
+  CHECK_EQ(driver.platform().logged(), 10u);
   CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
 
 /* ---- Capability reporting (feature 007) ------------------------------------ */
@@ -645,6 +645,9 @@ private:
 
 }  // namespace
 
+/* How often the DPC refreshes a scanout, in 100 ns. */
+constexpr std::uint64_t display_period = 10000000u / 60u;
+
 /* The whole display path through the DDI table dxgkrnl calls: a committed mode
  * makes the host's resource, the primary dxgkrnl hands over at device IRQL is
  * attached and scanned out, and the frame is carried once. */
@@ -679,6 +682,9 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
                table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter, &address),
            0);
+  /* The DPC refreshes the scanout once a display period at most, counted
+   * from boot. */
+  driver.platform().advance_time(display_period);
   driver.platform().set_irql(av::Irql::dispatch);
   reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
   driver.platform().set_irql(av::Irql::passive);
@@ -734,6 +740,7 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   const auto dpc = reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine));
   driver.platform().set_irql(av::Irql::isr);
   CHECK_EQ(set_address(adapter, &address), 0);
+  driver.platform().advance_time(display_period);
   driver.platform().set_irql(av::Irql::dispatch);
   dpc(adapter);
   driver.platform().set_irql(av::Irql::passive);
@@ -756,6 +763,7 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
    * is what puts the pages and the scanout back. */
   driver.platform().set_irql(av::Irql::isr);
   CHECK_EQ(set_address(adapter, &address), 0);
+  driver.platform().advance_time(display_period);
   driver.platform().set_irql(av::Irql::dispatch);
   dpc(adapter);
   driver.platform().set_irql(av::Irql::passive);
@@ -931,7 +939,7 @@ public:
     template <typename Routine>
     Routine routine(DdiSlot slot) const { return reinterpret_cast<Routine>(table_.routine(slot)); }
 
-    /* A create that asks for an identity: 48 bytes of descriptor and 40 of an
+    /* A create that asks for an identity: 56 bytes of descriptor and 40 of an
      * unassigned record. `size` other than the allocation's is what a creator
      * lying about what it is sharing looks like. */
     std::int32_t create(std::uint64_t record_size, std::uint32_t kind = av::SharedObjectKind::memory)
@@ -1376,7 +1384,9 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
     CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
   Runtime runtime(driver.table(), device.fdo().context(), 1280u, 800u);
   CHECK_EQ(runtime.create_primary(), 0);
-  const std::uint64_t frame = 10000000u / 60u;
+  /* The blanks keep an absolute schedule, the nth at n * 10^7 / 60: a period
+   * rounded down would fall a tick short of the second. */
+  const std::uint64_t frame = (10000000u + 59u) / 60u;
   CHECK_EQ(dmm.show_primary(runtime.primary(), 0x0000000200000000ll), 0);
   CHECK_EQ(dmm.set_visible(true), 0);
   CHECK_EQ(dmm.control_vsync(true), 0);
@@ -2058,7 +2068,9 @@ TEST(ddi_scenario, a_device_with_host_memory_offers_a_second_segment_and_maps_it
   CHECK_EQ(ask(adapter, &query), 0);
   av::DxgkSegmentDescriptor4Record host_visible = {};
   std::memcpy(&host_visible, descriptors + stride, sizeof host_visible);
-  CHECK_EQ(host_visible.Flags, 0x4u);   /* CpuVisible alone: a BAR is not coherent RAM */
+  /* CpuVisible | CacheCoherent: the host maps its memory write-back, so a
+   * process's view is cached like the host's own. */
+  CHECK_EQ(host_visible.Flags, 0x14u);
   CHECK_EQ(host_visible.Size, host_region_bytes);
   CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(host_region_address));
 

@@ -9,8 +9,11 @@
 #include "harness/icd/fake_d3d_runtime.hpp"
 #include "harness/icd/recording_host_driver.hpp"
 #include "harness/icd/umd_rig.hpp"
+#include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/runtime_kind.hpp"
+#include "icd/d3d/umd_host_driver.hpp"
+#include "icd/d3d/umd_root.hpp"
 
 #include <cstdint>
 
@@ -103,3 +106,30 @@ TEST(umd_root_d3d12, a_caps_question_reaches_the_host_driver_naming_the_d3d12_ad
   CHECK_EQ(host.caps_type(), caps_pipeline_level);
   CHECK(host.kmt_adapter() != 0u);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
+
+/* D3D12Core's create record, as the root reads it: the runtime's block is
+ * where the device lives, and a record naming no block, or an adapter this
+ * root never opened, is refused before the host driver is asked. */
+TEST(umd_root_d3d12, a_create_record_without_a_block_or_on_no_adapter_is_refused_unasked)
+{ RecordingHostDriver host;
+  av::d3d::UmdHostDriver *const builder = &host;
+  UmdRig rig(builder);
+  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
+  CHECK_EQ(runtime.open(), hr_ok);
+  alignas(16) static std::uint8_t block[4096];
+  av::d3d::D3d12ddiargCreateDeviceRecord create = {};
+  CHECK_EQ(rig.root().create_device12(runtime.adapter(), nullptr), hr_invalid_arg);
+  CHECK_EQ(rig.root().create_device12(runtime.adapter(), &create), hr_invalid_arg);
+  create.hDrvDevice = block;
+  int stranger = 0;
+  CHECK_EQ(rig.root().create_device12(&stranger, &create), hr_invalid_arg);
+  CHECK_EQ(host.builds12(), 0u);
+  /* The same record on the open adapter reaches the host driver's build12. */
+  CHECK_EQ(rig.root().create_device12(runtime.adapter(), &create), hr_ok);
+  CHECK_EQ(host.builds12(), 1u);
+  CHECK(host.built_block() == block);
+  CHECK(rig.root().device_of(block) != nullptr);
+  rig.root().destroy_device(block);
+  CHECK(rig.root().device_of(block) == nullptr);
+  CHECK_EQ(runtime.close_adapter(), hr_ok);
+  CHECK(rig.root().invariants_hold()); }

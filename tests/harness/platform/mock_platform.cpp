@@ -1,6 +1,7 @@
 #include "harness/platform/mock_platform.hpp"
 
 #include "harness/platform/log_record.hpp"
+#include "harness/platform/service_value.hpp"
 
 #include "harness/framework/test_registry.hpp"
 
@@ -36,6 +37,12 @@ MockPlatform::MockPlatform(std::uint32_t registration_status, LogRecord &record)
     : MockPlatform(registration_status)
 {
     record_ = &record;
+}
+
+MockPlatform::MockPlatform(std::uint32_t registration_status, const ServiceValue &service)
+    : MockPlatform(registration_status)
+{
+    service_ = &service;
 }
 
 MockPlatform::MockPlatform(std::uint32_t registration_status) : MockPlatform()
@@ -568,9 +575,9 @@ Status MockPlatform::write_driver_text(void *physical_device_object, const char 
     return Status::ok;
 }
 
-std::uint32_t MockPlatform::read_service_u32(void *, const char *, std::uint32_t fallback)
+std::uint32_t MockPlatform::read_service_u32(void *, const char *name, std::uint32_t fallback)
 {
-    return fallback;
+    return service_ != nullptr ? service_->read(name, fallback) : fallback;
 }
 
 Status MockPlatform::write_driver_u32(void *physical_device_object, const char *name, std::uint32_t number)

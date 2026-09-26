@@ -24,9 +24,10 @@ class ClTransferHost final : public ClientTransport {
 public:
     static constexpr std::uint64_t buffer_handle = 0x6600u;
     static constexpr std::uint64_t image_handle = 0x6601u;
-    static constexpr std::size_t   buffer_bytes = 1u << 20;
-    /* The image: 4-byte texels, as RGBA8 has. */
-    static constexpr std::size_t   image_width = 70000u;
+    /* Room for a read of several replies' worth. */
+    static constexpr std::size_t   buffer_bytes = 4u << 20;
+    /* The image: 4-byte texels, as RGBA8 has, and a row longer than a reply. */
+    static constexpr std::size_t   image_width = 1u << 18;
     static constexpr std::size_t   image_height = 16u;
     static constexpr std::size_t   image_depth = 3u;
     static constexpr std::size_t   element_bytes = 4u;
@@ -69,10 +70,17 @@ public:
     ClientBlobArena &blobs() override;
 
 private:
+    /* A context's staging room and its reply slot, which bound what one
+     * command carries each way. */
     static constexpr std::size_t request_bytes = 256u * 1024u;
-    static constexpr std::size_t reply_bytes = 64u * 1024u;
+    static constexpr std::size_t reply_bytes = 1024u * 1024u;
+    /* Holds a write's bytes or a read's, whichever is larger. */
+    static constexpr std::size_t scratch_bytes = request_bytes > reply_bytes ? request_bytes : reply_bytes;
     static constexpr std::size_t image_bytes = image_width * image_height * image_depth * element_bytes;
 
+    /* Applies the command `writer` framed, its answer left in the reply slot;
+     * false for one it cannot read. */
+    bool apply(std::uint32_t command_id, WireWriter &writer);
     /* Applies one command and writes its answer; false for one it cannot read. */
     bool buffer_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer);
     bool image_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer);
@@ -85,6 +93,7 @@ private:
     std::uint8_t   *scratch_;
     Command        *seen_;
     std::uint32_t   commands_;
+    std::size_t     answered_;
     std::uint32_t   refused_at_;
     std::int32_t    refusal_;
     WireArena       arena_;

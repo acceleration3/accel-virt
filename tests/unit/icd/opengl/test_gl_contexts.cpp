@@ -13,6 +13,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -64,12 +65,19 @@ struct Scenario {
         return rig.kmt().calls(MockKmt::Call::create_context_virtual) - rig.kmt().calls(MockKmt::Call::destroy_context);
     }
 
-    /* A glClear from the calling thread's table: one command on its ring. */
+    /* A glClear from the calling thread's table: one command on its ring,
+     * once the context's held calls are flushed. */
     std::uint32_t clear_sends()
     {
+        flush_current();
         const std::uint32_t before = rig.kmt().commands();
         rig.opengl32().gl<ClearFn>(slot_clear)(color_buffer_bit);
+        flush_current();
         return rig.kmt().commands() - before;
+    }
+    void flush_current()
+    {
+        if (rig.root().current() != nullptr) rig.root().current()->flush();
     }
 };
 

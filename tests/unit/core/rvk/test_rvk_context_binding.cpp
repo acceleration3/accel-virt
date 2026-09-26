@@ -6,6 +6,7 @@
  * established; teardown reverses what setup created and lets go of the pages. */
 #include "core/rvk/context_memory.hpp"
 #include "core/rvk/context_pages.hpp"
+#include "core/rvk/ring_submitter.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "core/support/status.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
@@ -167,7 +168,7 @@ private:
 TEST(rvk_context_binding, is_idle_before_it_is_set_up)
 { MappedVirtioFunction mapped;
   FakeDoorbellPages doorbells;
-  RvkContextBinding binding(mapped.platform(), doorbells, record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(mapped.platform(), doorbells, record(), slot, 0u, lent, sizeof lent);
   CHECK(binding.state() == GuestContext::State::idle);
   CHECK(!binding.established());
   CHECK(binding.invariants_hold()); }
@@ -176,7 +177,7 @@ TEST(rvk_context_binding, drives_the_sequence_to_established)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established());
   /* CTX_CREATE, three blobs and the setup: one context command and three blob
@@ -192,7 +193,7 @@ TEST(rvk_context_binding, names_the_blobs_by_the_ids_it_was_given)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   constexpr std::size_t blob_resource = 24u;
   constexpr std::size_t blob_first_address = 56u;
@@ -226,7 +227,7 @@ TEST(rvk_context_binding, a_scattered_ring_reaches_the_device_as_one_wide_blob)
   const ContextPages memory = fixture.pages();
   const ContextPages scattered(GuestPageList(ring_frames, pages), memory.fence(), memory.reply(), memory.ring_view(),
                                memory.fence_view());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), scattered), Status::ok);
   CHECK(binding.established());
   constexpr std::size_t blob_entries = 36u;
@@ -238,7 +239,7 @@ TEST(rvk_context_binding, pages_not_complete_are_refused_locally)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), ContextPages()), Status::invalid_parameter);
   CHECK(binding.state() == GuestContext::State::idle);
   CHECK_EQ(host.count_of(ctx_create_type), 0u); }
@@ -248,7 +249,7 @@ TEST(rvk_context_binding, a_setup_the_device_refuses_leaves_the_binding_unestabl
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   host.refuse_at(4);   /* the setup step, after CTX_CREATE and three blobs */
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK(binding.set_up(fixture.device(), capset(), fixture.pages()) != Status::ok);
   CHECK(!binding.established());
   CHECK(binding.state() == GuestContext::State::failed); }
@@ -262,7 +263,7 @@ TEST(rvk_context_binding, a_setup_the_capset_forbids_is_refused_locally)
   /* Order 12 is fine, but a capset whose range starts at 16 forbids it. */
   const CapsetInfo strict(ProtocolVersion(1u, 0u), 0x7u, 64u, 16u, 20u, 0u,
                           GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK(binding.set_up(fixture.device(), strict, fixture.pages()) != Status::ok);
   CHECK(!binding.established());
   CHECK_EQ(host.count_of(ctx_create_type), 0u); }
@@ -271,7 +272,7 @@ TEST(rvk_context_binding, teardown_reverses_setup)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK_STATUS(binding.tear_down(fixture.device()), Status::ok);
   CHECK(binding.state() == GuestContext::State::idle);
@@ -283,7 +284,7 @@ TEST(rvk_context_binding, forwards_a_submission_and_a_serve_once_established)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   /* The device writes the fence page; a no-progress page is what serve reads
    * before any batch completes. */
@@ -302,7 +303,7 @@ TEST(rvk_context_binding, service_before_setup_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.tear_down(fixture.device()), Status::invalid_state);
   fixture.mapped().platform().set_irql(Irql::dispatch);
   CHECK_STATUS(binding.submit(SubmissionDescriptor(1u, 0u, 16u)), Status::invalid_state);
@@ -316,7 +317,7 @@ TEST(rvk_context_binding, a_silent_device_does_not_establish)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   host.answer_nothing();
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK(binding.set_up(fixture.device(), capset(), fixture.pages()) != Status::ok);
   CHECK(!binding.established()); }
 
@@ -326,7 +327,7 @@ TEST(rvk_context_binding_abandon, lets_go_without_a_request_and_sets_up_again)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   const std::uint32_t asked = host.queue().requests();
   binding.abandon();
@@ -343,11 +344,11 @@ TEST(rvk_context_binding_chunks, a_chunk_is_a_blob_of_the_context_s_range)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_EQ(binding.chunk_resource(0u), first_resource + RvkContextBinding::transport_resources);
   CHECK_EQ(binding.chunk_resource(RvkContextBinding::chunk_slots - 1u), first_resource + 66u);
   /* The next slot's first resource is one past this slot's last chunk. */
-  RvkContextBinding next(fixture.mapped().platform(), fixture.doorbells(), record(), slot + 1u, lent, sizeof lent);
+  RvkContextBinding next(fixture.mapped().platform(), fixture.doorbells(), record(), slot + 1u, 0u, lent, sizeof lent);
   CHECK_EQ(next.chunk_resource(0u) - RvkContextBinding::transport_resources,
            binding.chunk_resource(RvkContextBinding::chunk_slots - 1u) + 1u);
   const av::GuestPageList pages = fixture.pages().reply();
@@ -359,20 +360,35 @@ TEST(rvk_context_binding_chunks, a_chunk_is_a_blob_of_the_context_s_range)
   CHECK_EQ(host.count_of(unref_type), 1u);
   CHECK_EQ(host.field(unref_type, 0u, 24u), binding.chunk_resource(5u)); }
 
+/* A later binding of a slot takes ids past every slot's earlier ones, so what
+ * an unfinished teardown left behind never collides with it; the generation
+ * wraps after RvkContextBinding::generations. */
+TEST(rvk_context_binding_chunks, a_later_generation_of_a_slot_takes_ids_of_its_own)
+{ MappedVirtioFunction mapped;
+  FakeDoorbellPages doorbells;
+  RvkContextBinding first(mapped.platform(), doorbells, record(), slot, 0u, lent, sizeof lent);
+  RvkContextBinding second(mapped.platform(), doorbells, record(), slot, 1u, lent, sizeof lent);
+  RvkContextBinding wrapped(mapped.platform(), doorbells, record(), slot, RvkContextBinding::generations, lent,
+                            sizeof lent);
+  CHECK_EQ(first.chunk_resource(0u), first_resource + RvkContextBinding::transport_resources);
+  CHECK_EQ(second.chunk_resource(0u),
+           first.chunk_resource(0u) + RvkContextBinding::resources_per_context * av::RingSubmitter::doorbell_pages);
+  CHECK_EQ(wrapped.chunk_resource(0u), first.chunk_resource(0u)); }
+
 TEST(rvk_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_published)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   const av::GuestPageList pages = fixture.pages().reply();
   { Host host(fixture.mapped());
-    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
     host.refuse_at(0);
     CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::not_supported); }
   { Host host(fixture.mapped());
-    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
     host.answer_short();
     CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::malformed); }
   { Host host(fixture.mapped());
-    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
     host.answer_nothing();
     CHECK(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages) != Status::ok);
     /* A release the device does not answer is let go of all the same. */
@@ -380,7 +396,7 @@ TEST(rvk_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_publi
   /* A request buffer too small for the blob writes nothing and asks nothing. */
   Host host(fixture.mapped());
   std::uint8_t tiny[16] = {};
-  RvkContextBinding cramped(fixture.mapped().platform(), fixture.doorbells(), record(), slot, tiny, sizeof tiny);
+  RvkContextBinding cramped(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, tiny, sizeof tiny);
   CHECK(cramped.publish_chunk(fixture.device(), cramped.chunk_resource(0u), pages) != Status::ok);
   cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u));
   CHECK_EQ(host.queue().requests(), 0u); }
@@ -393,7 +409,7 @@ TEST(rvk_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host              host(fixture.mapped());
-  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established());
   std::uint64_t progress = 0u;

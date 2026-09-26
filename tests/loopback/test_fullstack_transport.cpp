@@ -27,6 +27,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <sched.h>
 
 namespace av {
 
@@ -75,6 +76,21 @@ bool echoes(KmtTransport &transport, std::uint64_t payload)
     WireReader reply(nullptr, 0u);
     if (transport.send_sync(echo_command, request, reply) != TransportResult::ok) return false;
     return reply.remaining() == sizeof payload && reply.read_u64() == payload;
+}
+
+/* How many of the driver's fences have completed once every one `transport`
+ * handed it has, or the rig gave up: a process that read its answer from its
+ * own memory made no wait, and the driver's completion reaches the rig with
+ * the next interrupt the rig delivers. */
+std::uint32_t settled_fences(FullStackRig &rig, const KmtTransport &transport)
+{
+    constexpr std::uint32_t passes = 20000u;
+    for (std::uint32_t pass = 0u; pass < passes; pass++) {
+        if (rig.kmt().fences().completed() >= transport.submissions_through_kernel()) break;
+        rig.pump().deliver();
+        sched_yield();
+    }
+    return rig.kmt().fences().completed();
 }
 
 }  // namespace
@@ -176,7 +192,10 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK(rig.device().doorbells().stores() >= 1u);
   /* A second batch on the same ring, after the first moved its head. */
   CHECK(echoes(transport, ~echo_payload));
-  CHECK_EQ(kmt.fences().completed(), 2u);
+  /* The process publishes its tail first and calls the kernel only for a
+   * worker that is asleep: every batch it did hand the driver completed. */
+  CHECK_EQ(transport.submissions(), 2u);
+  CHECK_EQ(settled_fences(rig, transport), transport.submissions_through_kernel());
 
   CHECK_EQ(rig.device().device().blobs(), 4u);   /* the region, and the ring, fence page and reply slot */
   transport.teardown();
@@ -279,7 +298,7 @@ TEST(fullstack_transport, a_batch_the_host_finishes_later_completes_on_its_fence
   const std::uint32_t delivered = rig.pump().delivered();
   rig.pump().deliver();
   CHECK(rig.pump().delivered() > delivered);
-  CHECK_EQ(kmt.fences().completed(), 1u);
+  CHECK_EQ(settled_fences(rig, transport), transport.submissions_through_kernel());
 
   CHECK(echoes(transport, echo_payload));
   transport.teardown();
@@ -308,9 +327,12 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   request.write_u64(echo_payload);
   WireReader reply(nullptr, 0u);
   const std::uint32_t completed = kmt.fences().completed();
+  const std::uint64_t through_kernel = doomed.submissions_through_kernel();
   CHECK(doomed.send_sync(MockExecutorOps::undecodable_id, request, reply) == TransportResult::failed);
   CHECK(doomed.faulted());
-  CHECK_EQ(kmt.fences().completed(), completed + 1u);   /* the wait completed; the reply is what is missing */
+  /* The wait completed - through the driver, when the batch went that way -
+   * and the reply is what is missing. */
+  CHECK_EQ(kmt.fences().completed(), completed + (doomed.submissions_through_kernel() - through_kernel));
   CHECK_EQ(kmt.last_code(), 0u);
   /* With the transport's own latch lifted the send reaches the driver, which
    * refuses it before the doorbell rings. */
@@ -441,7 +463,8 @@ TEST(fullstack_transport, the_smallest_ring_wraps_many_times_and_every_echo_retu
   for (std::uint32_t batch = 0u; batch < batches; batch++)
       returned += echoes(transport, echo_payload ^ batch) ? 1u : 0u;
   CHECK_EQ(returned, batches);
-  CHECK_EQ(rig.kmt().fences().completed(), batches);
+  CHECK_EQ(transport.submissions(), batches);
+  CHECK_EQ(settled_fences(rig, transport), transport.submissions_through_kernel());
   transport.teardown();
   connection.close(); }
 

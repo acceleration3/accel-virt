@@ -77,11 +77,25 @@ struct Rig {
     av::ScriptedHost    &host() { return context_rig.host(); }
     av::MockKmt         &kmt() { return context_rig.kmt(); }
     av::ClientTransport &wire() { return *context.wire(); }
-    std::uint32_t        commands() { return kmt().commands(); }
-    std::uint32_t        id(std::uint32_t index) { return kmt().command_id(index); }
+    /* What reached the host: the context holds its calls in a batch until a
+     * flush, so the held ones are sent first. */
+    std::uint32_t        commands()
+    {
+        context.flush();
+        return kmt().commands();
+    }
+    std::uint32_t        id(std::uint32_t index)
+    {
+        context.flush();
+        return kmt().command_id(index);
+    }
     av::WireReader       reader(std::uint32_t index)
     {
-        return av::WireReader(kmt().command_bytes(index) + av::CommandHeader::encoded_size,
+        context.flush();
+        const std::uint8_t *const bytes = kmt().command_bytes(index);
+        CHECK(bytes != nullptr);
+        if (bytes == nullptr) return av::WireReader(nullptr, 0u);
+        return av::WireReader(bytes + av::CommandHeader::encoded_size,
                               av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
     }
     /* A glGetNamedBufferSubData's buffer, offset and size. */

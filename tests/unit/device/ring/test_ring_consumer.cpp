@@ -2,6 +2,7 @@
  * head published after each, and any ring no valid producer could write
  * stopping the context for good. Service runs on a mock worker thread. */
 #include "core/support/status.hpp"
+#include "device/context/d3d_ordering.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
@@ -21,6 +22,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 
 using av::BlobWindow;
 using av::FenceInterrupts;
@@ -50,7 +52,7 @@ struct RingConsumerProbe {
     static void attach_unprepared(RingConsumer &consumer) { consumer.attached_ = true; consumer.prepared_ = false; }
     static void move_unprepared(RingConsumer &consumer) { consumer.head_ = 8u; }
     static void break_progress(RingConsumer &consumer) { RingProgressProbe::forget_order(consumer.progress_); }
-    static void lose_fence(RingConsumer &consumer) { consumer.batches_ = 1u; consumer.head_ = 16u; consumer.last_fence_ = 0u; }
+    static void lose_fence(RingConsumer &consumer) { consumer.batches_ = 1u; consumer.head_ = 32u; consumer.last_fence_ = 0u; }
 };
 
 
@@ -116,6 +118,14 @@ public:
         on_worker([](RingConsumer &consumer) { consumer.attach(); });
         CHECK(consumer_.attached());
     }
+    /* The worker's poll between batches. */
+    bool poll()
+    {
+        bool publishing = true;
+        on_worker([&publishing](RingConsumer &consumer) { publishing = consumer.poll(); });
+        CHECK(consumer_.invariants_hold());
+        return publishing;
+    }
     void serve()
     {
         on_worker([](RingConsumer &consumer) { consumer.service(); });
@@ -165,10 +175,13 @@ TEST(ring_consumer_service, consumes_every_complete_batch_and_publishes_head)
   CHECK(!fixture.consumer().faulted());
   CHECK_EQ(fixture.consumer().batches(), 3u);
   CHECK_EQ(fixture.consumer().last_fence(), 9u);
-  CHECK_EQ(fixture.consumer().head(), 16u + 32u + 80u);
+  /* A 32-byte header each, and the payloads rounded up to 8. */
+  CHECK_EQ(fixture.consumer().head(), 32u + 48u + 96u);
   CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
   CHECK_EQ(fixture.page().completed_fence(), 9u);
-  CHECK_EQ(fixture.page().progress(), 5u);   /* three batches, two of them with a command */
+  /* Three batches, and one heartbeat: the first command run, the next being
+   * 256 commands on. */
+  CHECK_EQ(fixture.page().progress(), 4u);
   CHECK_EQ(fixture.host().raised(0u), 1u);
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 3u);
@@ -180,13 +193,13 @@ TEST(ring_consumer_service, stops_at_a_batch_the_guest_has_not_finished)
   fixture.bind();
   fixture.ring().write_batch(1u, 8u);
   fixture.ring().write_batch(2u, 100u);
-  fixture.ring().publish(24u + 15u);   /* inside the second header */
+  fixture.ring().publish(40u + 15u);   /* inside the second header */
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 1u);
-  CHECK_EQ(fixture.ring().head(), 24u);
+  CHECK_EQ(fixture.ring().head(), 40u);
   fixture.ring().publish(fixture.ring().tail() - 1u);
   fixture.serve();
-  CHECK_EQ(fixture.consumer().head(), 24u);
+  CHECK_EQ(fixture.consumer().head(), 40u);
   fixture.ring().publish();
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 2u);
@@ -213,12 +226,12 @@ TEST(ring_consumer_service, a_full_ring_is_consumed_whole)
 { Fixture fixture;
   fixture.bind();
   fixture.ring().write_batch(1u, 2000u);
-  fixture.ring().write_batch(2u, capacity - 2016u - 16u);
+  fixture.ring().write_batch(2u, capacity - 2032u - 32u);
   CHECK_EQ(fixture.ring().tail(), capacity);
   fixture.ring().publish();
   fixture.serve();
   CHECK_EQ(fixture.consumer().head(), capacity);
-  fixture.ring().write_batch(3u, capacity - 16u);
+  fixture.ring().write_batch(3u, capacity - 32u);
   fixture.ring().publish();
   fixture.serve();
   CHECK_EQ(fixture.consumer().head(), 2u * capacity);
@@ -256,7 +269,7 @@ TEST(ring_consumer_service, a_batch_that_cannot_run_faults_the_context_before_it
       fixture.ring().publish();
       fixture.serve();
       fixture.ring().write_batch(2u, c.length);
-      if (c.command != 0u) std::memcpy(&fixture.ring().data(24u + 16u), &c.command, 4u);   /* the second batch's command */
+      if (c.command != 0u) std::memcpy(&fixture.ring().data(40u + 32u), &c.command, 4u);   /* the second batch's command */
       fixture.ring().publish();
       fixture.serve();
       if (fixture.page().fault_code() != static_cast<std::uint32_t>(c.code))
@@ -264,7 +277,7 @@ TEST(ring_consumer_service, a_batch_that_cannot_run_faults_the_context_before_it
       CHECK(fixture.consumer().faulted());
       CHECK_EQ(fixture.page().completed_fence(), 1u);
       CHECK_EQ(fixture.ops().live(), 0u);
-      CHECK_EQ(fixture.consumer().head(), 24u);
+      CHECK_EQ(fixture.consumer().head(), 40u);
       CHECK_EQ(fixture.host().logged(), 1u);
   } }
 
@@ -289,12 +302,12 @@ TEST(ring_consumer_service, the_head_the_guest_writes_is_ignored)
   fixture.ring().publish();
   fixture.ring().store(head_offset, 0xDEADu);
   fixture.serve();
-  CHECK_EQ(fixture.ring().head(), 16u);
+  CHECK_EQ(fixture.ring().head(), 32u);
   fixture.ring().store(head_offset, 0u);
   fixture.ring().write_batch(2u, 0u);
   fixture.ring().publish();
   fixture.serve();
-  CHECK_EQ(fixture.ring().head(), 32u);
+  CHECK_EQ(fixture.ring().head(), 64u);
   CHECK(!fixture.consumer().faulted()); }
 
 TEST(ring_consumer_service, a_hostile_ring_faults_the_context_logs_once_and_ignores_later_doorbells)
@@ -307,16 +320,16 @@ TEST(ring_consumer_service, a_hostile_ring_faults_the_context_logs_once_and_igno
       {"header magic", [](GuestRing &ring) { ring.bytes()[0] = 0u; }, FaultCode::ring_header},
       {"order changed", [](GuestRing &ring) { ring.bytes()[4] = 13u; }, FaultCode::ring_header},
       {"tail backwards", [](GuestRing &ring) { ring.publish(8u); }, FaultCode::ring_tail},
-      {"tail past a whole ring", [](GuestRing &ring) { ring.publish(16u + capacity + 1u); }, FaultCode::ring_tail},
+      {"tail past a whole ring", [](GuestRing &ring) { ring.publish(32u + capacity + 1u); }, FaultCode::ring_tail},
       {"tail far away", [](GuestRing &ring) { ring.publish(~std::uint64_t{0}); }, FaultCode::ring_tail},
-      {"batch magic", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u) = 0u; ring.publish(); },
+      {"batch magic", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(32u) = 0u; ring.publish(); },
        FaultCode::batch_header},
-      {"fence zero", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u + 8u) = 0u; ring.publish(); },
+      {"fence zero", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(32u + 8u) = 0u; ring.publish(); },
        FaultCode::batch_header},
       {"fence repeated", [](GuestRing &ring) { ring.write_batch(5u, 0u); ring.publish(); }, FaultCode::batch_order},
       {"fence lower", [](GuestRing &ring) { ring.write_batch(4u, 0u); ring.publish(); }, FaultCode::batch_order},
-      {"batch longer than the ring", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u + 6u) = 1u;
-                                                           ring.publish(16u + capacity); }, FaultCode::batch_header},
+      {"batch longer than the ring", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(32u + 6u) = 1u;
+                                                           ring.publish(32u + capacity); }, FaultCode::batch_header},
   };
   for (const Case &c : cases) {
       Fixture fixture;
@@ -324,23 +337,23 @@ TEST(ring_consumer_service, a_hostile_ring_faults_the_context_logs_once_and_igno
       fixture.ring().write_batch(5u, 0u);
       fixture.ring().publish();
       fixture.serve();
-      CHECK_EQ(fixture.consumer().head(), 16u);
+      CHECK_EQ(fixture.consumer().head(), 32u);
       c.spoil(fixture.ring());
       fixture.serve();
       if (!fixture.consumer().faulted() || fixture.page().fault_code() != static_cast<std::uint32_t>(c.code))
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK(fixture.page().faulted());
       CHECK_EQ(fixture.host().logged(), 1u);
-      CHECK_EQ(fixture.consumer().head(), 16u);
+      CHECK_EQ(fixture.consumer().head(), 32u);
       CHECK_EQ(fixture.page().completed_fence(), 5u);
       CHECK_EQ(fixture.page().progress(), 1u);
       CHECK_EQ(fixture.host().raised(0u), 2u);   /* the completion's service, then the fault's */
       CHECK_EQ(fixture.ops().live(), 0u);        /* the executor went with the fault */
       static_cast<void>(RingHeader(12u, 0u, 0u).encode(fixture.ring().bytes(), 32u));
-      fixture.ring().store(head_offset, 16u);
+      fixture.ring().store(head_offset, 32u);
       fixture.serve();
       CHECK_EQ(fixture.host().logged(), 1u);
-      CHECK_EQ(fixture.consumer().head(), 16u);
+      CHECK_EQ(fixture.consumer().head(), 32u);
       CHECK_EQ(fixture.host().raised(0u), 2u);
   } }
 
@@ -361,7 +374,7 @@ TEST(ring_consumer_service, a_ring_the_blob_cannot_hold_faults_without_reading_o
   unreadable_data.ring().write_batch(2u, 0u);
   unreadable_data.ring().publish();
   void         *pointer = unreadable_data.ring().bytes();
-  std::uint64_t length = 32u + 20u;
+  std::uint64_t length = 32u + 32u + 20u;   /* the first batch whole, the second's header cut short */
   av::RingConsumerProbe::replace_ring(unreadable_data.consumer(), RingWindow(BlobWindow(&pointer, &length, 1u, length), 12u));
   unreadable_data.serve();
   CHECK(unreadable_data.consumer().faulted());
@@ -478,3 +491,245 @@ TEST(ring_consumer_invariants, more_batches_than_bytes_or_a_head_past_the_tail_i
   fenceless.bind();
   av::RingConsumerProbe::lose_fence(fenceless.consumer());
   CHECK(!fenceless.consumer().invariants_hold()); }
+
+/* ---- what other threads ask of a ring, and GPU work that outlives its batch -- */
+
+namespace {
+
+/* The guest's stamp on the batch at `counter`: its performance counter when it
+ * wrote the batch, 16 bytes into the header. */
+void stamp(GuestRing &ring, std::uint64_t counter, std::uint64_t published_at)
+{
+    for (std::uint64_t i = 0u; i < 8u; i++)
+        ring.data(counter + 16u + i) = static_cast<std::uint8_t>(published_at >> (8u * i));
+}
+
+std::uint64_t gpu_marked = 0u;
+std::uint64_t gpu_reached = 0u;
+
+void scripted_progress(void *, RvkExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    *marked = gpu_marked;
+    *reached = gpu_reached;
+}
+
+std::uint64_t now_ns()
+{
+    timespec now = {};
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return static_cast<std::uint64_t>(now.tv_sec) * 1000000000u + static_cast<std::uint64_t>(now.tv_nsec);
+}
+
+}  // namespace
+
+TEST(ring_consumer_has_work, only_an_attached_healthy_ring_with_a_whole_header_published_has_work)
+{ Fixture fixture;
+  fixture.ring().write_batch(1u, 0u);
+  fixture.ring().publish();
+  CHECK(!fixture.consumer().has_work());   /* not attached */
+  fixture.bind();
+  CHECK(fixture.consumer().has_work());
+  fixture.serve();
+  CHECK(!fixture.consumer().has_work());
+  fixture.ring().write_batch(2u, 0u);
+  fixture.ring().publish(fixture.ring().tail() - 1u);   /* a header short of whole */
+  CHECK(!fixture.consumer().has_work());
+  fixture.ring().publish();
+  CHECK(fixture.consumer().has_work());
+  fixture.ring().bytes()[0] = 0u;   /* a header no producer writes */
+  CHECK(!fixture.consumer().has_work());
+  fixture.serve();
+  CHECK(fixture.consumer().faulted());
+  static_cast<void>(RingHeader(12u, fixture.ring().tail(), 0u).encode(fixture.ring().bytes(), 32u));
+  CHECK(!fixture.consumer().has_work()); }
+
+TEST(ring_consumer_earliest_pending, is_the_stamp_of_the_oldest_published_batch_not_run)
+{ Fixture fixture;
+  fixture.ring().write_batch(1u, 0u);
+  stamp(fixture.ring(), 0u, 700u);
+  fixture.ring().write_batch(2u, 0u);
+  stamp(fixture.ring(), 32u, 900u);
+  fixture.ring().publish();
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX);   /* not attached */
+  fixture.bind();
+  CHECK(fixture.consumer().earliest_pending() == 700u);
+  fixture.serve();
+  /* Nothing published is left: nothing to wait for. */
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX);
+  fixture.ring().write_batch(3u, 0u);
+  fixture.ring().publish(fixture.ring().tail() - 1u);
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX);
+  fixture.ring().publish();
+  fixture.ring().data(64u) = 0u;   /* torn by an owner moving on: due now */
+  CHECK(fixture.consumer().earliest_pending() == 0u);
+  fixture.serve();
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX); }
+
+TEST(ring_consumer_earliest_pending, a_ring_whose_executor_was_never_made_holds_nothing_up)
+{ Fixture fixture;
+  fixture.ops().fail_create_at(1u);
+  fixture.ring().write_batch(1u, 0u);
+  stamp(fixture.ring(), 0u, 5u);
+  fixture.ring().publish();
+  fixture.bind();
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX); }
+
+TEST(ring_consumer_announce_awake, writes_the_flag_the_process_reads_once_attached)
+{ Fixture fixture;
+  constexpr std::size_t awake_at = 5u;
+  fixture.consumer().announce_awake(true);
+  CHECK_EQ(fixture.ring().bytes()[awake_at], 0u);   /* no ring attached to write it in */
+  fixture.bind();
+  fixture.consumer().announce_awake(true);
+  CHECK_EQ(fixture.ring().bytes()[awake_at], 1u);
+  fixture.consumer().announce_awake(false);
+  CHECK_EQ(fixture.ring().bytes()[awake_at], 0u); }
+
+TEST(ring_window_announce_awake, writes_one_byte_and_is_refused_by_a_blob_too_short)
+{ std::uint8_t  bytes[32u + capacity] = {};
+  GuestRing     guest(bytes, 12u);
+  void         *pointer = bytes;
+  std::uint64_t length = sizeof bytes;
+  const RingWindow window(BlobWindow(&pointer, &length, 1u, length), 12u);
+  CHECK_STATUS(window.announce_awake(true), Status::ok);
+  CHECK_EQ(bytes[5], 1u);
+  CHECK_EQ(bytes[4], 12u);   /* the order beside it untouched */
+  CHECK_EQ(bytes[6], 0u);
+  CHECK_STATUS(window.announce_awake(false), Status::ok);
+  CHECK_EQ(bytes[5], 0u);
+  std::uint8_t  short_bytes[4] = {};
+  void         *short_pointer = short_bytes;
+  std::uint64_t short_length = sizeof short_bytes;
+  const RingWindow cut(BlobWindow(&short_pointer, &short_length, 1u, 4u), 12u);
+  CHECK(cut.announce_awake(true) != Status::ok);
+  CHECK_EQ(short_bytes[0], 0u); }
+
+/* A batch whose GPU work has not finished is held, not completed: the guest
+ * waiting on its fence waits for the GPU too. Held ones complete oldest first
+ * as the GPU passes their marks, from the worker's poll between batches. */
+TEST(ring_consumer_poll, completes_held_batches_as_the_gpu_reaches_their_marks)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 4u;
+  gpu_reached = 1u;
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.consumer().batches(), 1u);
+  CHECK_EQ(fixture.page().completed_fence(), 0u);   /* held for mark 4 */
+  CHECK(!fixture.poll());
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  gpu_marked = 6u;
+  fixture.ring().write_batch(2u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  gpu_reached = 4u;
+  const std::uint32_t raised = fixture.host().raised(0u);
+  CHECK(!fixture.poll());
+  CHECK_EQ(fixture.page().completed_fence(), 1u);
+  CHECK(fixture.host().raised(0u) > raised);
+  gpu_reached = 6u;
+  CHECK(!fixture.poll());
+  CHECK_EQ(fixture.page().completed_fence(), 2u);
+  /* Nothing held and the GPU caught up: the next completes at once. */
+  gpu_marked = 7u;
+  gpu_reached = 7u;
+  fixture.ring().write_batch(3u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.page().completed_fence(), 3u);
+  CHECK(fixture.consumer().invariants_hold()); }
+
+TEST(ring_consumer_poll, a_ring_not_attached_or_faulted_polls_nothing)
+{ Fixture fixture;
+  CHECK(!fixture.poll());
+  fixture.bind();
+  fixture.ring().bytes()[0] = 0u;
+  fixture.ring().publish(32u);
+  fixture.serve();
+  CHECK(fixture.consumer().faulted());
+  CHECK(!fixture.poll()); }
+
+/* Two Direct3D streams: a batch waits for the other stream's batches the guest
+ * published before it, and a batch published first does not wait. The other
+ * stream never runs here, so a wait is the ordering's whole bound: 1000 pauses
+ * of at least 20 us. */
+TEST(ring_consumer_order_with, a_batch_waits_for_an_earlier_one_on_another_stream_and_not_a_later)
+{ Fixture waiting;
+  Fixture other;
+  av::D3dOrdering ordering(waiting.host());
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  other.ring().write_batch(1u, 0u);
+  stamp(other.ring(), 0u, 500u);
+  other.ring().publish();
+  other.bind();
+  waiting.bind();
+  ordering.add(waiting.consumer());
+  ordering.add(other.consumer());
+  waiting.consumer().order_with(ordering);
+
+  waiting.ring().write_batch(1u, 0u);
+  stamp(waiting.ring(), 0u, 400u);   /* published before the other stream's */
+  waiting.ring().publish();
+  std::uint64_t started = now_ns();
+  waiting.serve();
+  const std::uint64_t unhindered = now_ns() - started;
+  CHECK(unhindered < 20000000u);
+  CHECK_EQ(waiting.consumer().batches(), 1u);
+
+  waiting.ring().write_batch(2u, 0u);
+  stamp(waiting.ring(), 32u, 600u);   /* after it: waits the bound out */
+  waiting.ring().publish();
+  started = now_ns();
+  waiting.serve();
+  CHECK(now_ns() - started >= 20000000u);
+  CHECK_EQ(waiting.consumer().batches(), 2u);
+
+  /* Unstamped, or the other stream gone: nothing to wait for. */
+  ordering.remove(other.consumer());
+  waiting.ring().write_batch(3u, 0u);
+  stamp(waiting.ring(), 64u, 700u);
+  waiting.ring().publish();
+  started = now_ns();
+  waiting.serve();
+  CHECK(now_ns() - started < 20000000u);
+  CHECK_EQ(waiting.consumer().batches(), 3u);
+  ordering.remove(waiting.consumer()); }
+
+TEST(d3d_ordering, an_ordering_never_initialized_or_an_unstamped_batch_waits_for_nothing)
+{ Fixture waiting;
+  Fixture other;
+  av::D3dOrdering ordering(waiting.host());
+  other.ring().write_batch(1u, 0u);
+  stamp(other.ring(), 0u, 1u);
+  other.ring().publish();
+  other.bind();
+  waiting.bind();
+  ordering.add(other.consumer());   /* no mutex: not added */
+  ordering.add(waiting.consumer());
+  /* Waiting would take 1000 pauses of 20 us at least. */
+  std::uint64_t started = now_ns();
+  ordering.wait_before(waiting.consumer(), 900u);
+  CHECK(now_ns() - started < 20000000u);
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  ordering.add(other.consumer());
+  started = now_ns();
+  ordering.wait_before(waiting.consumer(), 0u);
+  CHECK(now_ns() - started < 20000000u);
+  started = now_ns();
+  ordering.wait_before(waiting.consumer(), 900u);
+  CHECK(now_ns() - started >= 20000000u);
+  /* Settling waits for every stream, its bound 100 pauses. */
+  started = now_ns();
+  ordering.settle();
+  CHECK(now_ns() - started >= 2000000u);
+  ordering.remove(other.consumer());
+  ordering.remove(other.consumer());
+  started = now_ns();
+  ordering.wait_before(waiting.consumer(), 900u);
+  CHECK(now_ns() - started < 20000000u); }

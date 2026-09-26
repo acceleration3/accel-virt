@@ -206,7 +206,7 @@ TEST(umd_connection, an_enumeration_the_kernel_refuses_is_not_a_missing_adapter)
   kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
   UmdConnection connection(kmt);
-  const Status asked = connection.acquire();
+  const Status asked = connection.acquire(0u);
   CHECK(asked != Status::ok);
   CHECK(asked != Status::not_supported);
   CHECK(!connection.open());

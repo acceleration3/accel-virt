@@ -17,6 +17,7 @@
 namespace av {
 
 class LogRecord;
+class ServiceValue;
 
 class MockPlatform final : public Platform {
 public:
@@ -29,6 +30,8 @@ public:
     explicit MockPlatform(std::uint32_t registration_status);
     /* The same, with every line also written where it outlives this platform. */
     MockPlatform(std::uint32_t registration_status, LogRecord &record);
+    /* The same, with one value under the service key for DriverEntry to read. */
+    MockPlatform(std::uint32_t registration_status, const ServiceValue &service);
     ~MockPlatform();
     MockPlatform(const MockPlatform &) = delete;
     MockPlatform &operator=(const MockPlatform &) = delete;
@@ -255,6 +258,7 @@ private:
     char          lines_[log_capacity] = {};
     std::size_t   lines_used_ = 0u;
     LogRecord    *record_ = nullptr;
+    const ServiceValue *service_ = nullptr;
     StallCallback acquire_callback_ = nullptr;
     void         *acquire_context_ = nullptr;
     bool          holding_elsewhere_ = false;

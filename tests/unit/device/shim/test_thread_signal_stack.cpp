@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <pthread.h>
@@ -162,6 +163,9 @@ TEST(device_trace, a_stack_overflow_on_any_thread_writes_the_crash_file)
 { const pid_t child = fork();
   CHECK(child >= 0);
   if (child == 0) {
+    /* The frames a crash file lists are the bound table's, and the table is
+     * bound only where a trace is asked for. */
+    setenv("RVK_TRACE_SCOPES", "1", 1);
     services.start(root, &never_scheduled, &forward_crash);
     pthread_attr_t attributes = {};
     pthread_attr_init(&attributes);

@@ -71,7 +71,10 @@ private:
 TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its_latency)
 { Rig rig;
   rig.kmt().answer_waits(nullptr, 0u);
-  rig.kmt().spend_on_wait(2500u);   /* a quarter of a millisecond at 10 000 000 ticks a second */
+  /* A quarter of a millisecond at 10 000 000 ticks a second, after the
+   * millisecond the transport watches the reply slot for before it asks the
+   * kernel to wait: this device answers only at the wait. */
+  rig.kmt().spend_on_wait(2500u);
   GuestReport report;
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
@@ -80,10 +83,10 @@ TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its
                     "ok transport.connection\n"
                     "ok transport.initialize\n"
                     "ok transport.nop 0\n"
-                    "ok transport.latency 250\n"
+                    "ok transport.latency 1250\n"
                     "ok transport.warm_nop 31\n"
-                    "ok transport.warm_median 250\n"
-                    "ok transport.warm_fastest 250\n") == 0);
+                    "ok transport.warm_median 1250\n"
+                    "ok transport.warm_fastest 1250\n") == 0);
   CHECK_EQ(report.failed(), 0u);
   /* The connection used the adapter the search kept, never enumerating again. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 1u);
@@ -146,11 +149,12 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
 TEST(transport_scenario, the_warm_no_ops_report_their_median_and_fastest)
 { struct Case { std::uint32_t slow_nth; const char *median; const char *fastest; const char *first; };
   /* Waits are counted from the first no-op, so every 2nd slow is 16 of the 31
-   * warm ones and every 3rd is 10; the first is never slow here. */
-  const Case cases[] = {{3u, "ok transport.warm_median 1000\n", "ok transport.warm_fastest 1000\n",
-                         "ok transport.latency 1000\n"},
-                        {2u, "ok transport.warm_median 6000\n", "ok transport.warm_fastest 1000\n",
-                         "ok transport.latency 1000\n"}};
+   * warm ones and every 3rd is 10; the first is never slow here. Each also
+   * spends the millisecond the reply slot is watched before the wait. */
+  const Case cases[] = {{3u, "ok transport.warm_median 2000\n", "ok transport.warm_fastest 2000\n",
+                         "ok transport.latency 2000\n"},
+                        {2u, "ok transport.warm_median 7000\n", "ok transport.warm_fastest 2000\n",
+                         "ok transport.latency 2000\n"}};
   for (const Case &one : cases) {
       Rig rig;
       rig.kmt().answer_waits(nullptr, 0u);
@@ -178,7 +182,7 @@ TEST(transport_scenario, a_warm_no_op_that_fails_stops_the_warm_rounds)
   GuestReport report;
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
-  CHECK(has_line(report, "ok transport.latency 5000\n"));
+  CHECK(has_line(report, "ok transport.latency 6000\n"));
   CHECK(has_line(report, "FAIL transport.warm_nop status=9 4\n"));
   CHECK(!has_line(report, "transport.warm_median"));
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 2u);
@@ -191,7 +195,7 @@ TEST(transport_scenario, a_warm_no_op_that_fails_stops_the_warm_rounds)
   GuestReport lost;
   TransportScenario again(second.kmt(), lost, second.search(), av::SubApi::vulkan, "transport");
   again.run();
-  CHECK(has_line(lost, "ok transport.latency 0\n"));
+  CHECK(has_line(lost, "ok transport.latency 1000\n"));
   CHECK(has_line(lost, "FAIL transport.warm_nop status=7"));
   CHECK(!has_line(lost, "transport.warm_fastest"));
   CHECK_EQ(lost.failed(), 1u);

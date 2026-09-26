@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 
 using av::BlobTable;
 using av::DeviceContext;
@@ -41,7 +42,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.shared_, table.interrupts_, table.library_, table.shares_,
-                                                table.recorder_, id));
+                                                table.recorder_, table.ordering_, id));
                 if (started) static_cast<void>(slot.object().start());
                 return;
             }
@@ -184,3 +185,23 @@ TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_work
   DeviceContextTable stopped(host, blobs, shared, interrupts, library, recorder);
   av::DeviceContextTableProbe::place(stopped, 9u, false);
   CHECK(!stopped.invariants_hold()); }
+
+/* Before the scanout reads an image, every Direct3D stream runs what it
+ * published. A table with no Direct3D stream bound - none at all, or only
+ * contexts of another API - has nothing to wait for, and settling is then a
+ * look under the ordering's lock rather than its 100 pauses; nor does a table
+ * whose ordering was never initialized wait. */
+TEST(device_context_table_settle_d3d, a_table_with_no_direct3d_stream_does_not_wait)
+{ MockHost host; BlobTable blobs(host); av::HostSharedObjects shared(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
+  DeviceContextTable table(host, blobs, shared, interrupts, library, recorder);
+  timespec before = {}, after = {};
+  clock_gettime(CLOCK_MONOTONIC, &before);
+  table.settle_d3d();
+  CHECK_STATUS(table.initialize(), Status::ok);
+  CHECK_STATUS(table.create(3u), Status::ok);
+  table.settle_d3d();
+  clock_gettime(CLOCK_MONOTONIC, &after);
+  const long long waited = (after.tv_sec - before.tv_sec) * 1000000000ll + (after.tv_nsec - before.tv_nsec);
+  CHECK(waited < 2000000ll);
+  CHECK_EQ(table.live(), 1u);
+  CHECK(table.invariants_hold()); }

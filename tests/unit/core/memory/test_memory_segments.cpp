@@ -172,7 +172,7 @@ TEST(memory_segments_report, describes_the_aperture_then_the_host_visible_segmen
 
   DxgkSegmentDescriptor4Record host_visible = {};
   std::memcpy(&host_visible, descriptors.data() + vidmm_stride, sizeof host_visible);
-  CHECK_EQ(host_visible.Flags, 0x4u);           /* CpuVisible alone: a BAR is not coherent RAM */
+  CHECK_EQ(host_visible.Flags, 0x14u);   /* CpuVisible | CacheCoherent: the host maps it write-back */
   CHECK_EQ(host_visible.Size, region_bytes);
   CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(bar_address));
 

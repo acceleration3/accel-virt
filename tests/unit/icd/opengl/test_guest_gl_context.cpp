@@ -37,10 +37,11 @@ struct GuestGlContextProbe {
         context.link_ = connected ? 0u : av::icd::IcdConnection::no_link;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
-    static void drop_lock(GuestGlContext &context) { context.locked_.destroy(); }
-    static void restore_lock(GuestGlContext &context)
+    static void drop_batch(GuestGlContext &context) { context.batched_.destroy(); }
+    static void restore_batch(GuestGlContext &context)
     {
-        static_cast<void>(context.locked_.construct(context.transport_.object(), context.send_lock_));
+        static_cast<void>(context.batched_.construct(context.transport_.object(), context.batch_block_,
+                                                     GuestGlContext::batch_bytes, GuestGlContext::staging_bytes));
     }
 };
 
@@ -530,9 +531,9 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(made->make(), Status::ok);
   CHECK(made->invariants_hold());
-  GuestGlContextProbe::drop_lock(*made);
+  GuestGlContextProbe::drop_batch(*made);
   CHECK(!made->invariants_hold());
-  GuestGlContextProbe::restore_lock(*made);
+  GuestGlContextProbe::restore_batch(*made);
   CHECK(made->invariants_hold());
   GuestGlContextProbe::connect(*made, false);
   CHECK(!made->invariants_hold());

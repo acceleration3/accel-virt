@@ -147,7 +147,8 @@ TEST(host_visible_chunk, each_step_out_of_order_is_refused_without_a_call)
   CHECK_STATUS(chunk.lock(), Status::invalid_state);
   CHECK_STATUS(chunk.bind(), Status::invalid_state);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::lock), 2u);   /* the transport's ring and reply */
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 0u);
+  /* The one escape so far is the transport's own, publishing its ring tail. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 1u);
   CHECK_STATUS(chunk.allocate(chunk_bytes), Status::ok);
   CHECK_STATUS(chunk.allocate(chunk_bytes), Status::invalid_state);
   CHECK_STATUS(chunk.lock(), Status::ok);
@@ -155,7 +156,7 @@ TEST(host_visible_chunk, each_step_out_of_order_is_refused_without_a_call)
   CHECK_STATUS(chunk.bind(), Status::ok);
   CHECK_STATUS(chunk.bind(), Status::invalid_state);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), 5u);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 1u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 2u);
   CHECK_STATUS(chunk.release(), Status::ok);
   rig.check_only_the_link_is_left(); }
 

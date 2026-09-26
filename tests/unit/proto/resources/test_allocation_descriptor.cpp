@@ -63,7 +63,18 @@ TEST(allocation_descriptor_encode, places_every_field_at_its_offset)
   CHECK(layout.at(36u, 4u) == 1u);
   CHECK(layout.at(40u, 4u) == 0u);
   CHECK(layout.at(44u, 4u) == 0u);
+  CHECK(layout.at(48u, 8u) == 0u);
   CHECK(bytes.guards_intact()); }
+
+TEST(allocation_descriptor_encode, places_the_host_key_last_and_decodes_it_back)
+{ const AllocationDescriptor shown(AllocationKind::client, false, SurfaceLayout(), 0x1000u, ScanoutTarget(),
+                                   0x1122334455667788u);
+  std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  const ByteLayout layout(encoded(shown, bytes), sizeof bytes);
+  CHECK(layout.at(48u, 8u) == 0x1122334455667788u);
+  AllocationDescriptor decoded;
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
+  CHECK(decoded.host_key() == 0x1122334455667788u); }
 
 TEST(allocation_descriptor_encode, refuses_a_short_destination)
 { std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -79,6 +90,7 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
       AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::host_memory, true, SurfaceLayout(), 0x2000u, ScanoutTarget()),
   };
   for (const AllocationDescriptor &descriptor : descriptors) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -141,17 +153,18 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
   sweep.run();
   CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size);
   /* A primary is the most constrained descriptor there is, and the sweep says
-   * so. Free: the format (32 bits) and the scanout's source and refresh, which
-   * only a primary may carry at all (96). Judged: clearing the CPU-visible flag
+   * so. Free: the format (32 bits), the scanout's source and refresh, which
+   * only a primary may carry at all (96), and the host key (64), which names a
+   * host image and is the device's to judge. Judged: clearing the CPU-visible flag
    * is the one flag a reader knows (1); of the width, the eleven flips that
    * keep it non-zero and no wider than the 4096-byte pitch (11); of the height,
    * the two that keep pitch * height inside the allocation (2); of the size,
    * every flip but the two that drop it below that product (62); and no flip of
    * the pitch or the kind survives, a wider pitch overflowing the allocation
    * and any other kind forbidding the scanout this one carries. Every shorter
-   * input is short of 48 bytes, all-zero and all-ones carry no magic, and the
+   * input is short of 56 bytes, all-zero and all-ones carry no magic, and the
    * untouched descriptor is the last acceptance. */
-  const std::uint32_t acceptable = 32u + 96u + 1u + 11u + 2u + 62u + 1u;
+  const std::uint32_t acceptable = 32u + 96u + 64u + 1u + 11u + 2u + 62u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 /* Feature 041, US2: the pages an rvk context runs on. A ring the device reads
@@ -178,6 +191,11 @@ TEST(allocation_descriptor_decode, a_ring_is_a_power_of_two_of_pages_and_a_fence
       {AllocationKind::host_visible_memory, 0x4000000u, false, Status::ok},
       {AllocationKind::host_visible_memory, 0x4000001u, false, Status::malformed},
       {AllocationKind::host_visible_memory, 0x1000u, true, Status::malformed},
+      /* Host memory in the CPU-visible segment follows the same rule. */
+      {AllocationKind::host_memory, 0x1000u, false, Status::ok},
+      {AllocationKind::host_memory, 0x4000000u, false, Status::ok},
+      {AllocationKind::host_memory, 0x1800u, false, Status::malformed},
+      {AllocationKind::host_memory, 0x1000u, true, Status::malformed},
   };
   for (const Case &one : cases) {
       const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
@@ -194,7 +212,7 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
 { const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   static_cast<void>(encoded(ring, bytes));
-  const std::uint16_t past = 21u;
+  const std::uint16_t past = 22u;
   std::memcpy(bytes + 4u, &past, sizeof past);
   AllocationDescriptor decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed); }

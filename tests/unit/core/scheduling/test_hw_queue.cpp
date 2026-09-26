@@ -21,7 +21,7 @@ using av::Violation;
 TEST(hw_queue_context, is_the_context_it_runs_on_and_leads_to_the_adapter)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
-  Device device(platform, adapter, nullptr, 0u);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 0x14u);
   std::uint64_t progress = 0u;

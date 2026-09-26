@@ -87,12 +87,25 @@ struct Rig {
     av::ScriptedHost    &host() { return context_rig.host(); }
     av::MockKmt         &kmt() { return context_rig.kmt(); }
     av::ClientTransport &wire() { return *context.wire(); }
-    std::uint32_t        commands() { return kmt().commands(); }
-    std::uint32_t        id(std::uint32_t index) { return kmt().command_id(index); }
+    /* What reached the host: the context holds its calls in a batch until a
+     * flush, so the held ones are sent first. */
+    std::uint32_t        commands()
+    {
+        context.flush();
+        return kmt().commands();
+    }
+    std::uint32_t        id(std::uint32_t index)
+    {
+        context.flush();
+        return kmt().command_id(index);
+    }
     /* The `nth` varint argument of command `index`. */
     std::uint64_t argument(std::uint32_t index, std::uint32_t nth)
     {
+        context.flush();
         const std::uint8_t *bytes = kmt().command_bytes(index);
+        CHECK(bytes != nullptr);
+        if (bytes == nullptr) return 0u;
         av::WireReader      reader(bytes + av::CommandHeader::encoded_size,
                                    av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
         std::uint64_t       value = 0u;

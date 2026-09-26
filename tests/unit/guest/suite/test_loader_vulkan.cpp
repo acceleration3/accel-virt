@@ -420,11 +420,16 @@ TEST(loader_vulkan, every_call_reaches_the_host_as_its_own_command)
   rig.host().vk_result(0);
   CHECK_EQ(vk.wait_for_fence(device, fence, 0u), VK_SUCCESS);
   rig.sent(kCmd_vkWaitForFences);
-  /* The device waits idle on a fence of its own on its one queue. */
+  /* The device waits idle on a fence of its own on its one queue, kept for
+   * the next idle wait and destroyed with the device. */
   rig.host().vk_handle(0, made + 15u);
   rig.host().vk_result(0);
   CHECK_EQ(vk.device_wait_idle(device), VK_SUCCESS);
-  rig.sent(kCmd_vkDestroyFence);
+  rig.sent(kCmd_vkWaitForFences);
+  /* Nothing sent since: still idle, answered without the host. */
+  const std::uint32_t idle = rig.commands();
+  CHECK_EQ(vk.device_wait_idle(device), VK_SUCCESS);
+  rig.quiet(idle);
 
   vk.destroy_fence(device, fence);
   rig.sent(kCmd_vkDestroyFence);

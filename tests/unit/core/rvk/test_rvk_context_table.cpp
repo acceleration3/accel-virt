@@ -1309,3 +1309,73 @@ TEST(rvk_context_table, tells_the_context_whose_process_submits_for_itself)
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* SubmitCommandVirtual asks for a DPC only for a batch the host already
+ * finished, whose interrupt may have come before the packet was queued; the
+ * answer reads the fence page as it is now. A context that is not there, or
+ * is lost, has nothing still running. */
+TEST(rvk_context_table_completed_already, reads_the_fence_page_now)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  fixture.complete_through(1u);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.table().completed_already(&first_context, 1u));
+  CHECK(!fixture.table().completed_already(&first_context, 2u));
+  CHECK(fixture.table().completed_already(&second_context, 2u));   /* never bound */
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(2u);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.table().completed_already(&first_context, 2u));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(rvk_context_table_completed_already, a_lost_context_has_nothing_running)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  fixture.complete_through(0u, 6u);
+  fixture.serve();
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.table().completed_already(&first_context, 2u));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A packet that follows a batch the process published by itself kicks the
+ * batch's context: its doorbell rings with nothing submitted, so a host worker
+ * asleep since the process's own store looks at the ring. A context that is
+ * not bound, or is lost, is rung for nothing. */
+TEST(rvk_context_table_kick, rings_a_live_context_s_doorbell_and_nothing_else)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.table().kick(&first_context);
+  fixture.table().kick(&second_context);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u);
+  std::uint64_t tail = 0u;
+  std::memcpy(&tail, fixture.ring().bytes() + 8u, sizeof tail);
+  CHECK_EQ(tail, 0u);                                   /* nothing was published */
+
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  fixture.complete_through(0u, 6u);
+  fixture.serve();
+  const std::uint32_t rings = fixture.mapped().function().doorbells().rings(0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.table().kick(&first_context);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.table().kick(&first_context);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings); }

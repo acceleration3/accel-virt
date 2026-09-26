@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 using av::FullStackRig;
@@ -28,6 +29,16 @@ bool reported(const GuestReport &report, const char *line)
     return false;
 }
 
+/* The number a measured line `ok <name> <value>` carries; 0 when the report
+ * has no such line. */
+std::uint64_t measured(const GuestReport &report, const char *name)
+{
+    char prefix[64];
+    std::snprintf(prefix, sizeof prefix, "\nok %s ", name);
+    const char *const at = std::strstr(report.text(), prefix);
+    return at == nullptr ? 0u : std::strtoull(at + std::strlen(prefix), nullptr, 10);
+}
+
 void print(const GuestReport &report)
 {
     std::fwrite(report.text(), 1u, report.length(), stderr);
@@ -36,7 +47,7 @@ void print(const GuestReport &report)
 }  // namespace
 
 /* Every scenario rvktest.exe runs in the guest passes here too, with the same
- * 41 steps the 043 guest run reported. host_visible passes as it does in the
+ * steps the guest run reports. host_visible passes as it does in the
  * guest today: its allocation is a client allocation VidMm keeps in system
  * memory (feature 041 parked the CPU-visible segment), so the lock is a view
  * of guest pages, not of the hostmem BAR. vsync measures the driver's timer
@@ -51,17 +62,22 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
     failed = suite.run(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK_EQ(report.passed(), 44u);
-  CHECK(reported(report, "rvktest: 44 passed, 0 failed"));
+  CHECK_EQ(report.passed(), 53u);
+  CHECK(reported(report, "rvktest: 53 passed, 0 failed"));
   CHECK(reported(report, "ok adapter.driver_version"));
   CHECK(reported(report, "ok allocation.refuse_hostile"));
   CHECK(reported(report, "ok mapping.map"));
   CHECK(reported(report, "ok submission.wait"));
   CHECK(reported(report, "ok host_visible.pattern 4096"));
   CHECK(std::strstr(report.text(), "\nok vsync.rate 60") != nullptr);
-  CHECK(reported(report, "ok vsync.caught 6000"));
+  /* The blanks keep the mode's absolute 60 Hz schedule; the rig's clock moves
+   * in 100 us steps, so a wait sees its blank up to a step late and what the
+   * process caught is 60 Hz less at most that step over the window. */
+  CHECK(measured(report, "vsync.caught") >= 5995u && measured(report, "vsync.caught") <= 6000u);
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(std::strstr(report.text(), "\nok transport.latency ") != nullptr);
+  CHECK(std::strstr(report.text(), "\nok transport.warm_nop ") != nullptr);
+  CHECK(std::strstr(report.text(), "\nok host_visible.local_budget_kib ") != nullptr);
   /* The device core answered the no-op itself: the executor behind it ran nothing. */
   CHECK_EQ(rig.device().executor().executed(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
@@ -81,8 +97,15 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
     failed = suite.run(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK(reported(report, "ok stress.fences 3840"));
-  CHECK(reported(report, "ok stress.blanks 60")); }
+  /* A blank after every sixty-four fences, until the second is up. The
+   * process's counter is the mock clock plus the real time the run took
+   * (the transport's spins need a clock that moves), so the second holds at
+   * most sixty blanks, fewer on a loaded machine, and the run may stop
+   * between two blanks. */
+  const std::uint64_t blanks = measured(report, "stress.blanks");
+  const std::uint64_t fences = measured(report, "stress.fences");
+  CHECK(blanks >= 40u && blanks <= 60u);
+  CHECK(fences >= blanks * 64u && fences < (blanks + 1u) * 64u); }
 
 /* The timeout run cannot pass on this rig, and this says exactly where. The
  * scenario needs dxgkrnl's timeout detection - VidSch seeing the held node

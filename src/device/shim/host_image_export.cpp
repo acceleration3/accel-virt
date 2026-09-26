@@ -19,6 +19,7 @@ constexpr uint32_t fourcc(char a, char b, char c, char d)
 /* The DRM format whose bytes are the DXGI format's, or 0. */
 uint32_t drm_format(uint32_t format)
 {
+    AV_SCOPE("drm_format");
     switch (format) {
     case DXGI_FORMAT_B8G8R8A8_UNORM: return fourcc('A', 'R', '2', '4');
     case DXGI_FORMAT_B8G8R8X8_UNORM: return fourcc('X', 'R', '2', '4');
@@ -29,6 +30,7 @@ uint32_t drm_format(uint32_t format)
 
 VkFormat vk_format(uint32_t format)
 {
+    AV_SCOPE("vk_format");
     switch (format) {
     case DXGI_FORMAT_B8G8R8A8_UNORM:
     case DXGI_FORMAT_B8G8R8X8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
@@ -45,7 +47,7 @@ HostImageExport::HostImageExport()
       unavailable_(false)
 {
     AV_SCOPE("HostImageExport::HostImageExport");
-    for (Image &image : images_) image.fd = -1;
+    for (Image &image : images_) image.fd_ = -1;
 }
 
 HostImageExport::~HostImageExport()
@@ -94,9 +96,9 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.tiling = VK_IMAGE_TILING_LINEAR;
     created.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     created.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (create_image_(device_, &created, nullptr, &image.image) != VK_SUCCESS) return false;
+    if (create_image_(device_, &created, nullptr, &image.image_) != VK_SUCCESS) return false;
     VkMemoryRequirements needs = {};
-    requirements_(device_, image.image, &needs);
+    requirements_(device_, image.image_, &needs);
     VkPhysicalDeviceMemoryProperties memory = {};
     vkGetPhysicalDeviceMemoryProperties(physical_, &memory);
     uint32_t type = memory.memoryTypeCount;
@@ -107,21 +109,21 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     for (uint32_t index = 0u; index < memory.memoryTypeCount && type == memory.memoryTypeCount; index++)
         if ((needs.memoryTypeBits & (1u << index)) != 0u) type = index;
     if (type == memory.memoryTypeCount) return false;
-    VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, nullptr, image.image,
+    VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, nullptr, image.image_,
                                                VK_NULL_HANDLE};
     VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, &dedicated,
                                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
     VkMemoryAllocateInfo allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &exported, needs.size, type};
-    if (allocate_(device_, &allocation, nullptr, &image.memory) != VK_SUCCESS) return false;
-    if (bind_(device_, image.image, image.memory, 0u) != VK_SUCCESS) return false;
-    VkMemoryGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, image.memory,
+    if (allocate_(device_, &allocation, nullptr, &image.memory_) != VK_SUCCESS) return false;
+    if (bind_(device_, image.image_, image.memory_, 0u) != VK_SUCCESS) return false;
+    VkMemoryGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, image.memory_,
                                   VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    if (memory_fd_(device_, &asked, &image.fd) != VK_SUCCESS) return false;
+    if (memory_fd_(device_, &asked, &image.fd_) != VK_SUCCESS) return false;
     const VkImageSubresource plane = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u};
     VkSubresourceLayout laid = {};
-    layout_(device_, image.image, &plane, &laid);
-    image.stride = static_cast<uint32_t>(laid.rowPitch);
-    image.offset = static_cast<uint32_t>(laid.offset);
+    layout_(device_, image.image_, &plane, &laid);
+    image.stride_ = static_cast<uint32_t>(laid.rowPitch);
+    image.offset_ = static_cast<uint32_t>(laid.offset);
     D3D11_TEXTURE2D_DESC1 described = {};
     described.Width = width_;
     described.Height = height_;
@@ -131,15 +133,15 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
     auto *const interop = static_cast<IDXGIVkInteropDevice1 *>(interop_);
-    if (FAILED(interop->CreateTexture2DFromVkImage(&described, image.image, &image.texture))) return false;
+    if (FAILED(interop->CreateTexture2DFromVkImage(&described, image.image_, &image.texture_))) return false;
     const D3D11_QUERY_DESC query = {D3D11_QUERY_EVENT, 0u};
-    return SUCCEEDED(device->CreateQuery(&query, &image.done));
+    return SUCCEEDED(device->CreateQuery(&query, &image.done_));
 }
 
 bool HostImageExport::make(ID3D11Device5 *device, uint32_t width, uint32_t height, uint32_t format)
 {
     AV_SCOPE("HostImageExport::make");
-    if (width == width_ && height == height_ && format == format_ && images_[0].texture != nullptr) return true;
+    if (width == width_ && height == height_ && format == format_ && images_[0].texture_ != nullptr) return true;
     for (Image &image : images_) drop(image);
     width_ = width;
     height_ = height;
@@ -166,8 +168,8 @@ bool HostImageExport::stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context
     }
     slot = next_;
     next_ = (next_ + 1u) % images;
-    context->CopySubresourceRegion(images_[slot].texture, 0u, 0u, 0u, 0u, source, 0u, nullptr);
-    context->End(images_[slot].done);
+    context->CopySubresourceRegion(images_[slot].texture_, 0u, 0u, 0u, 0u, source, 0u, nullptr);
+    context->End(images_[slot].done_);
     context->Flush();
     return true;
 }
@@ -176,19 +178,19 @@ bool HostImageExport::copied(ID3D11DeviceContext4 *context, uint32_t slot) const
 {
     AV_SCOPE("HostImageExport::copied");
     BOOL done = FALSE;
-    return context->GetData(images_[slot].done, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
+    return context->GetData(images_[slot].done_, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
 }
 
 void HostImageExport::describe(uint32_t slot, RvkExportedImage &image) const
 {
     AV_SCOPE("HostImageExport::describe");
     const Image &shown = images_[slot];
-    image.fd = shown.fd;
+    image.fd = shown.fd_;
     image.slot = slot;
     image.width = width_;
     image.height = height_;
-    image.stride = shown.stride;
-    image.offset = shown.offset;
+    image.stride = shown.stride_;
+    image.offset = shown.offset_;
     image.fourcc = drm_format(format_);
     image.reserved = 0u;
     image.modifier = 0u;   /* DRM_FORMAT_MOD_LINEAR */
@@ -197,11 +199,11 @@ void HostImageExport::describe(uint32_t slot, RvkExportedImage &image) const
 void HostImageExport::drop(Image &image)
 {
     AV_SCOPE("HostImageExport::drop");
-    if (image.done != nullptr) image.done->Release();
-    if (image.texture != nullptr) image.texture->Release();
-    if (image.fd >= 0) close(image.fd);
-    if (image.image != VK_NULL_HANDLE) destroy_image_(device_, image.image, nullptr);
-    if (image.memory != VK_NULL_HANDLE) free_(device_, image.memory, nullptr);
+    if (image.done_ != nullptr) image.done_->Release();
+    if (image.texture_ != nullptr) image.texture_->Release();
+    if (image.fd_ >= 0) close(image.fd_);
+    if (image.image_ != VK_NULL_HANDLE) destroy_image_(device_, image.image_, nullptr);
+    if (image.memory_ != VK_NULL_HANDLE) free_(device_, image.memory_, nullptr);
     image = Image{VK_NULL_HANDLE, VK_NULL_HANDLE, nullptr, nullptr, -1, 0u, 0u};
 }
 

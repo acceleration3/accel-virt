@@ -108,13 +108,25 @@ TEST(cl_transfer_chunks, a_refused_piece_ends_the_transfer_with_the_hosts_error)
   const std::size_t bytes = 3u * ClTransferChunks::read_room;
   Memory            into(bytes);
   CHECK_EQ(chunks.read(ClTransferHost::buffer_handle, 0u, bytes, into.at(0u)), CL_INVALID_VALUE);
-  CHECK_EQ(host.commands(), 2u);
+  CHECK_EQ(host.commands(), 2u); }
 
-  ClTransferHost refusing;
+/* A write's pieces go without waiting for an answer each: the host makes every
+ * write blocking and in queue order, and the caller's drain after the last is
+ * the answer for all of them. So a piece the host refuses stops nothing here,
+ * and only its own bytes are missing. */
+TEST(cl_transfer_chunks, a_write_sends_every_piece_whatever_the_host_answers_one)
+{ ClTransferHost refusing;
   refusing.refuse(0u, CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  ClTransferChunks writes(refusing, queue);
-  CHECK_EQ(writes.write(ClTransferHost::buffer_handle, 0u, bytes, into.at(0u)), CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  CHECK_EQ(refusing.commands(), 1u); }
+  ClTransferChunks  writes(refusing, queue);
+  const std::size_t bytes = 2u * ClTransferChunks::write_room + 5u;
+  Memory            from(bytes);
+  std::memset(from.at(0u), 0x5A, bytes);
+  CHECK_EQ(writes.write(ClTransferHost::buffer_handle, 0u, bytes, from.at(0u)), CL_SUCCESS);
+  CHECK_EQ(refusing.commands(), 3u);
+  CHECK_EQ(writes.commands(), 3u);
+  CHECK(refusing.buffer_at(0u) != 0x5Au);
+  CHECK_EQ(refusing.buffer_at(ClTransferChunks::write_room), 0x5Au);
+  CHECK_EQ(refusing.buffer_at(bytes - 1u), 0x5Au); }
 
 TEST(cl_transfer_chunks, a_transport_that_fails_is_the_apis_out_of_resources)
 { ClTransferHost host;
@@ -137,17 +149,19 @@ TEST(cl_transfer_chunks, packed_image_rows_come_back_as_runs_that_fit_a_reply)
 { ClTransferHost host;
   host.fill(0u);
   ClTransferChunks  chunks(host, queue);
-  /* 1000 texels a row is 4000 bytes: fifteen rows fit a reply, sixteen do not. */
-  const std::size_t   origin[3] = {100u, 0u, 1u}, extent[3] = {1000u, 16u, 1u};
+  /* 60000 texels a row is 240000 bytes: four rows fit a reply, five do not. */
+  constexpr std::size_t width = 60000u;
+  const std::size_t   origin[3] = {100u, 0u, 1u}, extent[3] = {width, 16u, 1u};
   const ClImageRegion region(origin, extent, 0u, 0u, element);
-  Memory              into(16u * 4000u);
+  Memory              into(16u * width * element);
   CHECK_EQ(chunks.read_image(ClTransferHost::image_handle, region, into.at(0u)), CL_SUCCESS);
   bool every_texel = true;
   for (std::size_t y = 0u; y < 16u; ++y)
-      for (std::size_t x = 0u; x < 1000u; ++x)
-          every_texel = every_texel && into.texel((y * 1000u + x) * element) == host.texel_of(100u + x, y, 1u);
+      for (std::size_t x = 0u; x < width; ++x)
+          every_texel = every_texel && into.texel((y * width + x) * element) == host.texel_of(100u + x, y, 1u);
   CHECK(every_texel);
-  const std::size_t per_command = ClTransferChunks::read_room / 4000u;
+  const std::size_t per_command = ClTransferChunks::read_room / (width * element);
+  CHECK_EQ(per_command, 4u);
   CHECK_EQ(host.command(0u).region[1], per_command);
   CHECK_EQ(host.commands(), static_cast<std::uint32_t>((16u + per_command - 1u) / per_command));
   CHECK_EQ(host.command(1u).origin[1], per_command); }
@@ -223,7 +237,7 @@ TEST(cl_transfer_chunks, image_rows_go_to_the_host_in_runs_at_the_applications_o
 TEST(cl_transfer_chunks, an_image_row_longer_than_the_staging_room_goes_in_pieces_of_whole_texels)
 { ClTransferHost host;
   ClTransferChunks    chunks(host, queue);
-  const std::size_t   width = ClTransferHost::image_width;
+  const std::size_t   width = ClTransferChunks::write_room / element + 1000u;
   const std::size_t   origin[3] = {0u, 7u, 0u}, extent[3] = {width, 1u, 1u};
   const ClImageRegion region(origin, extent, 0u, 0u, element);
   Memory              from(width * element);

@@ -43,9 +43,9 @@ public:
 
 private:
     struct Pending {
-        uint32_t     id;
-        ID3D11Query *query;
-        uint64_t     end;
+        uint32_t     id_;
+        ID3D11Query *query_;
+        uint64_t     end_;
     };
     void write(uint32_t id, const uint8_t *data, uint32_t size, uint64_t end) const;
 

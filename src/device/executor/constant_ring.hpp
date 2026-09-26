@@ -64,22 +64,22 @@ private:
     static constexpr uint32_t none = ~0u;
 
     struct Kept {
-        uint32_t id;
-        uint32_t bytes;
-        uint32_t offset;
-        uint8_t  shadow[largest];
+        uint32_t id_;
+        uint32_t bytes_;
+        uint32_t offset_;
+        uint8_t  shadow_[largest];
     };
     struct Binding {
-        uint32_t id;
-        uint32_t offset;    /* where the window was put; none for the buffer's own storage */
-        uint32_t first;     /* the guest's own window, in constants */
-        uint32_t count;
+        uint32_t id_;
+        uint32_t offset_;    /* where the window was put; none for the buffer's own storage */
+        uint32_t first_;     /* the guest's own window, in constants */
+        uint32_t count_;
         /* The guest's buffer, not held: what the slot goes back to. */
-        ID3D11Buffer *buffer;
+        ID3D11Buffer *buffer_;
     };
     struct DeviceBindings {
-        uint32_t device;
-        Binding  slots[stage_count][slot_count];
+        uint32_t device_;
+        Binding  slots_[stage_count][slot_count];
     };
 
     uint32_t        kept_index(uint32_t id) const;

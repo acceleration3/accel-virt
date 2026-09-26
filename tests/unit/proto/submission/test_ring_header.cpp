@@ -16,13 +16,21 @@ using av::Status;
 
 namespace {
 
+/* Byte 5 is the device's awake flag and bytes 24..31 the fence the guest last
+ * published: the header reads past both, so neither is part of a round trip. */
+constexpr std::size_t awake_offset = 5u;
+constexpr std::size_t published_fence_offset = 24u;
+
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
     RingHeader header;
     const Status status = header.decode(bytes, length);
     if (status == Status::ok) {
         std::uint8_t again[RingHeader::encoded_size] = {};
-        if (header.encode(again, sizeof again) != Status::ok || std::memcmp(again, bytes, sizeof again) != 0)
+        const bool encoded = header.encode(again, sizeof again) == Status::ok;
+        again[awake_offset] = bytes[awake_offset];
+        std::memcpy(again + published_fence_offset, bytes + published_fence_offset, 8u);
+        if (!encoded || std::memcmp(again, bytes, sizeof again) != 0)
             av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "accepted input did not round trip");
     }
     return status != Status::ok;
@@ -62,7 +70,7 @@ TEST(ring_header_decode, accepts_orders_12_and_24)
 
 TEST(ring_header_decode, rejects_each_malformed_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
-  const Case cases[] = {{0u, 0u}, {4u, 11u}, {4u, 25u}, {6u, 1u}, {30u, 1u}};
+  const Case cases[] = {{0u, 0u}, {4u, 11u}, {4u, 25u}, {6u, 1u}, {7u, 0x80u}};
   for (const Case &c : cases) {
       std::uint8_t bytes[RingHeader::encoded_size] = {};
       CHECK_STATUS(RingHeader(16u, 8u, 4u).encode(bytes, sizeof bytes), Status::ok);
@@ -71,6 +79,18 @@ TEST(ring_header_decode, rejects_each_malformed_field)
       CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed);
       CHECK_EQ(decoded.order(), 20u);
   } }
+
+TEST(ring_header_decode, reads_past_the_awake_flag_and_the_published_fence)
+{ std::uint8_t bytes[RingHeader::encoded_size] = {};
+  CHECK_STATUS(RingHeader(16u, 8u, 4u).encode(bytes, sizeof bytes), Status::ok);
+  bytes[awake_offset] = 1u;
+  const std::uint64_t published = 0x8877665544332211u;
+  std::memcpy(bytes + published_fence_offset, &published, sizeof published);
+  RingHeader decoded;
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(decoded.order(), 16u);
+  CHECK(decoded.tail() == 8u);
+  CHECK(decoded.head() == 4u); }
 
 TEST(ring_header_encode, a_short_destination_is_too_large_and_untouched)
 { GuardedBuffer buffer(RingHeader::encoded_size - 1u);
@@ -83,11 +103,12 @@ TEST(ring_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* The format constrains the magic, the order and two reserved runs, and
-   * leaves the counters to RingProgress. So the acceptable flips are the 128
-   * bits of tail and head, plus the four flips of order 16 that land inside
-   * [12, 24] - 17, 18, 20 and 24. Every shorter input is short of 32 bytes,
-   * all-zero and all-ones carry no magic, and the untouched input is the last
-   * acceptance. */
-  const std::uint32_t acceptable = 128u + 4u + 1u;
+  /* The format constrains the magic, the order and one reserved pair, and
+   * leaves the counters to RingProgress and the awake flag and published fence
+   * to their readers. So the acceptable flips are the 128 bits of tail and head,
+   * the 8 of the awake flag and the 64 of the published fence, plus the four
+   * flips of order 16 that land inside [12, 24] - 17, 18, 20 and 24. Every
+   * shorter input is short of 32 bytes, all-zero and all-ones carry no magic,
+   * and the untouched input is the last acceptance. */
+  const std::uint32_t acceptable = 128u + 8u + 64u + 4u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

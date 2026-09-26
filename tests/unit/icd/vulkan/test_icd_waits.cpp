@@ -120,7 +120,9 @@ TEST(icd_waits, a_1200_ms_fence_wait_is_three_host_waits_of_at_most_500_ms_and_t
   CHECK_EQ(rig.wait_for_fence(1200u * ms), VK_TIMEOUT);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), waits + 3u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
-  const std::uint64_t sent[] = {200u * ms, 500u * ms, 500u * ms};
+  /* The last slice is what is left: each of the first two also spent the
+   * millisecond the transport watches its reply slot before the kernel's wait. */
+  const std::uint64_t sent[] = {198u * ms, 500u * ms, 500u * ms};
   for (std::uint32_t back = 0u; back < 3u; back++) {
       CHECK_EQ(rig.id_back(back), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
       CHECK_EQ(rig.timeout_back(back), sent[back]);
@@ -183,7 +185,8 @@ TEST(icd_waits, semaphores_wait_in_the_same_slices_under_either_spelling)
       CHECK_EQ(rig.entry<WaitSemaphores>(name)(rig.device(), &info, 1200u * ms), VK_TIMEOUT);
       CHECK(rig.rig().root().invariants_hold());
       CHECK_EQ(rig.kmt().commands(), sent + 3u);
-      const std::uint64_t slices[] = {200u * ms, 500u * ms, 500u * ms};
+      /* Less the millisecond each earlier wait watched its reply slot. */
+      const std::uint64_t slices[] = {198u * ms, 500u * ms, 500u * ms};
       for (std::uint32_t back = 0u; back < 3u; back++) {
           CHECK_EQ(rig.id_back(back), static_cast<std::uint32_t>(kCmd_vkWaitSemaphores));
           CHECK_EQ(rig.timeout_back(back), slices[back]);
@@ -210,7 +213,8 @@ TEST(icd_waits, a_wait_on_a_device_it_did_not_make_is_lost)
   CHECK_EQ(rig.rig().log().holding("vkQueueWaitIdle on a queue this driver did not make through a device"), 1u); }
 
 /* An empty submission completes after everything already submitted on its
- * queue, so its fence signals when the queue is idle. */
+ * queue, so its fence signals when the queue is idle. The fence is the
+ * queue's own from then on, kept for its next idle wait. */
 TEST(icd_waits, a_queue_waits_idle_on_a_fence_submitted_with_nothing_in_slices)
 { WaitRig rig;
   const VkQueue queue = rig.queue(queue_host);
@@ -221,22 +225,57 @@ TEST(icd_waits, a_queue_waits_idle_on_a_fence_submitted_with_nothing_in_slices)
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.entry<QueueWaitIdle>("vkQueueWaitIdle")(queue), VK_SUCCESS);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK_EQ(rig.kmt().commands(), sent + 6u);
-  CHECK_EQ(rig.id_back(5u), static_cast<std::uint32_t>(kCmd_vkCreateFence));
-  CHECK_EQ(rig.body_back(5u).read_u64(), ScriptedHost::vk_device);
-  CHECK_EQ(rig.id_back(4u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
-  WireReader submitted = rig.body_back(4u);
+  CHECK_EQ(rig.kmt().commands(), sent + 5u);
+  CHECK_EQ(rig.id_back(4u), static_cast<std::uint32_t>(kCmd_vkCreateFence));
+  CHECK_EQ(rig.body_back(4u).read_u64(), ScriptedHost::vk_device);
+  CHECK_EQ(rig.id_back(3u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  WireReader submitted = rig.body_back(3u);
   CHECK_EQ(submitted.read_u64(), queue_host);
   CHECK_EQ(submitted.read_u32(), 0u);
   CHECK_EQ(submitted.read_u64(), fence_host);
-  for (std::uint32_t back = 1u; back <= 3u; back++) {
+  for (std::uint32_t back = 0u; back <= 2u; back++) {
       CHECK_EQ(rig.id_back(back), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
       CHECK_EQ(rig.timeout_back(back), 500u * ms);
   }
-  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkDestroyFence));
-  WireReader destroyed = rig.body_back(0u);
-  CHECK_EQ(destroyed.read_u64(), ScriptedHost::vk_device);
-  CHECK_EQ(destroyed.read_u64(), fence_host); }
+  /* Nothing sent since the queue was found idle: it is still idle, and the
+   * host is not asked. */
+  const std::uint32_t idle = rig.kmt().commands();
+  CHECK_EQ(rig.entry<QueueWaitIdle>("vkQueueWaitIdle")(queue), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), idle); }
+
+/* Once something was sent, the kept fence is reset rather than made again. */
+TEST(icd_waits, a_queue_idle_after_a_send_resets_the_fence_it_kept)
+{ WaitRig rig;
+  const VkQueue first = rig.queue(queue_host);
+  const VkQueue second = rig.queue(queue_host + 1u);
+  rig.rig().host().vk_handle(0, fence_host);
+  rig.answer(VK_SUCCESS, 1u);
+  CHECK_EQ(rig.rig().root().queue_wait_idle(first), VK_SUCCESS);
+  /* The other queue's wait is a send on the same connection. */
+  rig.rig().host().vk_handle(0, fence_host + 1u);
+  rig.answer(VK_SUCCESS, 1u);
+  CHECK_EQ(rig.rig().root().queue_wait_idle(second), VK_SUCCESS);
+  rig.answer(VK_SUCCESS, 1u);   /* the wait; the reset is not answered */
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().queue_wait_idle(first), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  CHECK_EQ(rig.id_back(2u), static_cast<std::uint32_t>(kCmd_vkResetFences));
+  CHECK_EQ(rig.id_back(1u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  WireReader submitted = rig.body_back(1u);
+  CHECK_EQ(submitted.read_u64(), queue_host);
+  CHECK_EQ(submitted.read_u32(), 0u);
+  CHECK_EQ(submitted.read_u64(), fence_host);
+  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
+  /* The first queue's own wait was the last send: it is idle again, and the
+   * second, sent past, is not. */
+  const std::uint32_t idle = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().queue_wait_idle(first), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), idle);
+  rig.answer(VK_SUCCESS, 1u);   /* the wait; the reset is not answered */
+  CHECK_EQ(rig.rig().root().queue_wait_idle(second), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), idle + 3u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.rig().root().invariants_hold()); }
 
 TEST(icd_waits, a_queue_idle_passes_on_a_refused_fence_a_refused_submission_and_a_lost_wait)
 { WaitRig rig;
@@ -249,13 +288,15 @@ TEST(icd_waits, a_queue_idle_passes_on_a_refused_fence_a_refused_submission_and_
   rig.answer(VK_ERROR_DEVICE_LOST, 1u);
   sent = rig.kmt().commands();
   CHECK_EQ(rig.rig().root().queue_wait_idle(queue), VK_ERROR_DEVICE_LOST);
-  CHECK_EQ(rig.kmt().commands(), sent + 4u);
-  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkDestroyFence));
-  /* The fence's submission is the second from here: refused, it loses the context. */
-  rig.rig().host().vk_handle(0, fence_host);
+  /* The fence made, the submission and the wait; the fence is kept. */
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
+  /* The kept fence is reset, unanswered, and the fence's submission after it -
+   * the second submission from here - is refused, which loses the context. */
   rig.kmt().fail_at(MockKmt::Call::submit, 2u, MockKmt::invalid_parameter);
   CHECK_EQ(rig.rig().root().queue_wait_idle(queue), VK_ERROR_DEVICE_LOST);
   CHECK(av::icd::connection_of(queue)->faulted());
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.rig().root().invariants_hold()); }
 
 TEST(icd_waits, a_queue_not_made_through_a_device_cannot_wait_idle)
@@ -282,17 +323,24 @@ TEST(icd_waits, a_device_waits_idle_on_every_queue_it_handed_out_in_turn)
   sent = rig.kmt().commands();
   CHECK_EQ(rig.rig().root().device_wait_idle(rig.device()), VK_SUCCESS);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK_EQ(rig.kmt().commands(), sent + 8u);
-  WireReader later = rig.body_back(2u);
-  WireReader earlier = rig.body_back(6u);
-  CHECK_EQ(rig.id_back(2u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
-  CHECK_EQ(rig.id_back(6u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  /* Each queue: its fence made, the empty submission, the wait. */
+  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  WireReader later = rig.body_back(1u);
+  WireReader earlier = rig.body_back(4u);
+  CHECK_EQ(rig.id_back(1u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  CHECK_EQ(rig.id_back(4u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
   const std::uint64_t submitted[] = {earlier.read_u64(), later.read_u64()};
   CHECK(submitted[0] != submitted[1]);
   CHECK(submitted[0] == queue_host || submitted[0] == queue_host + 1u);
   CHECK(submitted[1] == queue_host || submitted[1] == queue_host + 1u);
-  /* The first queue's failure is the answer, and the second is not asked. */
-  rig.rig().host().vk_handle(VK_ERROR_OUT_OF_HOST_MEMORY, 0u);
+  /* The first queue waited before the second's sends, so only the second is
+   * idle now; a device wait asks the first again, on the fence it kept. Its
+   * failed wait is the answer, and the second is not asked. */
+  rig.answer(VK_ERROR_OUT_OF_HOST_MEMORY, 1u);
   sent = rig.kmt().commands();
   CHECK_EQ(rig.rig().root().device_wait_idle(rig.device()), VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK_EQ(rig.kmt().commands(), sent + 1u); }
+  CHECK_EQ(rig.kmt().commands(), sent + 3u);
+  CHECK_EQ(rig.id_back(2u), static_cast<std::uint32_t>(kCmd_vkResetFences));
+  CHECK_EQ(rig.id_back(1u), static_cast<std::uint32_t>(kCmd_vkQueueSubmit));
+  CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }

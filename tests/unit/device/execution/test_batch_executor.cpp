@@ -260,7 +260,9 @@ TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_re
   CHECK_EQ(fixture.ops().size_at(2u), 40u);
   CHECK_EQ(fixture.batches().commands(), 2u);
   CHECK_EQ(fixture.batches().skipped(), 3u);
-  CHECK_EQ(fixture.progress(), 2u);   /* a heartbeat for each command run, none for those skipped */
+  /* One heartbeat for the first command run, and none for those skipped: the
+   * next is 256 commands on. */
+  CHECK_EQ(fixture.progress(), 1u);
   CHECK(fixture.batches().fault() == FaultCode::none);
   CHECK_EQ(fixture.reply()[0], 0xEEu);   /* nothing asked for an answer */
   CHECK_EQ(fixture.ops().misuses(), 0u); }
@@ -553,6 +555,21 @@ TEST(batch_executor_run, a_refused_import_is_answered_in_the_slot_and_the_contex
   av::BlobImportAnswer answer;
   CHECK_STATUS(answer.decode(fixture.reply() + 32u, av::BlobImportAnswer::encoded_size), Status::ok);
   CHECK_EQ(answer.status(), av::BlobImportAnswer::unknown_resource);
+  CHECK_EQ(fixture.progress(), 1u); }
+
+/* A heartbeat is a store the guest's DPC pulls back across, so a long batch
+ * gives one every 256 commands run rather than one per command. */
+TEST(batch_executor_run, a_heartbeat_goes_out_every_256_commands_run)
+{ Fixture fixture;
+  Commands commands;
+  for (std::uint32_t i = 0u; i < 256u; i++) commands.add(0x10001u, 0u);
+  CHECK_STATUS(fixture.run(1u, commands), Status::ok);
+  CHECK_EQ(fixture.batches().commands(), 256u);
+  CHECK_EQ(fixture.progress(), 1u);
+  Commands one_more;
+  one_more.add(0x10001u, 0u);
+  CHECK_STATUS(fixture.run(2u, one_more), Status::ok);
+  CHECK_EQ(fixture.batches().commands(), 257u);
   CHECK_EQ(fixture.progress(), 2u); }
 
 TEST(batch_executor_run, a_blob_command_framed_with_the_wrong_body_faults_the_context_as_misframed)

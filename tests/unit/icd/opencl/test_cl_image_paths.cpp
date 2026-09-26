@@ -205,35 +205,42 @@ TEST(cl_image_paths, a_copy_and_a_fill_are_enqueued_with_the_hosts_numbers_and_i
   cl_mem other = rig.root().create_buffer(run.context(), CL_MEM_READ_WRITE, 256u, nullptr, nullptr, nullptr);
   CHECK(other != nullptr);
 
-  /* Asked for no event: the host is asked for none. */
+  /* Asked for no event: the host is asked for none, and the copy goes without
+   * waiting for its answer - held until a command that is answered. */
   std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(table_of(run.queue())->clEnqueueCopyBuffer(run.queue(), run.buffer(), other, 4u, 8u, 64u, 0u,
                                                                     nullptr, nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueCopyBuffer);
-  CHECK(carries(rig.kmt(), sent, host_buffer));
-  CHECK(carries(rig.kmt(), sent, host_buffer + 1u));
+  CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* Asked for one: the application is handed an object of its own. */
+  /* Asked for one: the application is handed an object of its own, and the
+   * held copy goes ahead of it. */
   cl_event event = nullptr;
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), other, 0u, 0u, 64u, &event), CL_SUCCESS);
   CHECK(event != nullptr);
   CHECK(table_of(event) != nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueCopyBuffer);
+  CHECK(carries(rig.kmt(), sent, host_buffer));
+  CHECK(carries(rig.kmt(), sent, host_buffer + 1u));
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueCopyBuffer);
 
   const std::uint32_t pattern = 0xDEADBEEFu;
   sent = rig.kmt().commands();
-  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(table_of(run.queue())->clEnqueueFillBuffer(run.queue(), run.buffer(), &pattern,
                                                                     sizeof pattern, 0u, 256u, 0u, nullptr, nullptr),
            CL_SUCCESS);
-  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueFillBuffer);
+  CHECK_EQ(rig.kmt().commands(), sent);
   cl_event filled = nullptr;
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   CHECK_EQ(rig.root().enqueue_fill_buffer(run.queue(), run.buffer(), &pattern, sizeof pattern, 0u, 256u, &filled),
            CL_SUCCESS);
   CHECK(filled != nullptr);
+  CHECK_EQ(rig.kmt().commands(), sent + 2u);
+  CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueFillBuffer);
+  CHECK(carries(rig.kmt(), sent, host_buffer));
+  CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueFillBuffer);
 
   /* The host's refusal is the application's, and no event is made of it. */
   cl_event refused = nullptr;
@@ -245,6 +252,7 @@ TEST(cl_image_paths, a_copy_and_a_fill_are_enqueued_with_the_hosts_numbers_and_i
   CHECK_EQ(rig.root().enqueue_fill_buffer(run.queue(), run.buffer(), &pattern, 3u, 0u, 256u, &refused),
            CL_INVALID_VALUE);
   CHECK(refused == nullptr);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_image_paths, a_copy_or_a_fill_of_something_that_is_not_its_object_asks_the_host_nothing)
@@ -659,21 +667,23 @@ TEST(cl_image_paths, a_sampler_is_made_from_the_three_properties_and_nothing_els
   CHECK_EQ(value, static_cast<std::uint64_t>(CL_TRUE));
 
   /* An argument the size of a sampler that is one crosses as the host's
-   * number for it. */
-  rig.host().cl_result(CL_SUCCESS);
+   * number for it - unanswered, held until the next command that is. */
   const std::uint32_t set = rig.kmt().commands();
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof sampler, &sampler), CL_SUCCESS);
-  CHECK(carries(rig.kmt(), set, host_sampler));
+  CHECK_EQ(rig.kmt().commands(), set);
 
-  /* Retained once, released twice: the host is told at the second. */
+  /* Retained once, released twice: the host is told at the second, and the
+   * held argument goes ahead of it. */
   CHECK_EQ(table_of(sampler)->clRetainSampler(sampler), CL_SUCCESS);
   CHECK_EQ(table_of(sampler)->clReleaseSampler(sampler), CL_SUCCESS);
   const std::uint32_t before = rig.kmt().commands();
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(table_of(sampler)->clReleaseSampler(sampler), CL_SUCCESS);
-  CHECK_EQ(rig.kmt().commands(), before + 1u);
-  CHECK_EQ(rig.kmt().command_id(before), av::clproto::kCmd_clReleaseSampler);
+  CHECK_EQ(rig.kmt().commands(), before + 2u);
+  CHECK_EQ(rig.kmt().command_id(before), av::clproto::kCmd_clSetKernelArg);
   CHECK(carries(rig.kmt(), before, host_sampler));
+  CHECK_EQ(rig.kmt().command_id(before + 1u), av::clproto::kCmd_clReleaseSampler);
+  CHECK(carries(rig.kmt(), before + 1u, host_sampler));
   CHECK_EQ(rig.root().release(sampler, av::clicd::ClObject::Kind::sampler), CL_INVALID_SAMPLER);
   CHECK(rig.root().invariants_hold()); }
 
@@ -687,11 +697,10 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   for (std::size_t index = 0u; index < bytes; ++index) from[index] = static_cast<std::uint8_t>(index);
 
   /* The create names no bytes and no copy; three writes on a queue of the
-   * ICD's own follow, and the queue goes. */
+   * ICD's own follow, unanswered, and the queue goes. */
   std::uint32_t sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
-  for (int piece = 0; piece < 3; ++piece) rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_result(CL_SUCCESS);
   cl_int error = CL_INVALID_VALUE;
   cl_mem buffer = rig.root().create_buffer(run.context(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, from,
@@ -721,20 +730,19 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, 64u, from, nullptr, &error) != nullptr);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
 
-  /* A write the host refuses gives the buffer back, and the application is
-   * told the host's error. */
+  /* The pieces are not answered one by one: a write the host refuses is the
+   * next answered command's to report, and the buffer is made. */
   sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 4u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
-  rig.host().cl_result(CL_MEM_OBJECT_ALLOCATION_FAILURE);
   rig.host().cl_result(CL_SUCCESS);
-  rig.host().cl_result(CL_SUCCESS);
-  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) == nullptr);
-  CHECK_EQ(error, CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
-  CHECK(carries(rig.kmt(), rig.kmt().commands() - 1u, host_buffer + 4u));
+  CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, bytes, from, nullptr, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 6u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
 
-  /* And a queue the host will not make does the same. */
+  /* A queue the host will not make gives the buffer back, and the application
+   * is told the host's error. */
   rig.host().cl_handle(host_buffer + 5u, CL_SUCCESS);
   rig.host().cl_handle(0u, CL_OUT_OF_RESOURCES);
   rig.host().cl_result(CL_SUCCESS);

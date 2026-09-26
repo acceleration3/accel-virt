@@ -76,7 +76,13 @@ struct Rig {
     }
     av::ScriptedHost    &host() { return context_rig.host(); }
     av::ClientTransport &wire() { return *context.wire(); }
-    std::uint32_t        commands() { return context_rig.kmt().commands(); }
+    /* What reached the host: the context holds its calls in a batch until a
+     * flush, so the held ones are sent first. */
+    std::uint32_t        commands()
+    {
+        context.flush();
+        return context_rig.kmt().commands();
+    }
     std::uint32_t        id(std::uint32_t index) { return context_rig.kmt().command_id(index); }
     void                 size(std::int64_t bytes)
     {
