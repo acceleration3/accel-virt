@@ -244,6 +244,9 @@ def arguments():
     parser.add_argument("--qemu", default=str(ROOT / "build-qemu" / "qemu" / "qemu-system-x86_64"))
     parser.add_argument("--qemu-img", default="qemu-img")
     parser.add_argument("--executor", default=str(ROOT / "build-qemu" / "librvk_echo_executor.so"))
+    parser.add_argument("--renderer", default="",
+                        help="run each device's contexts in this rvk-renderer (docs/renderer.md); the executor "
+                             "is loaded there instead of in QEMU")
     parser.add_argument("--host-gpu", default="auto",
                         help="the device's host-gpu property: auto, or a Vulkan device UUID (tools/host/list_gpus.py)")
     parser.add_argument("--all-gpus", action="store_true",
@@ -444,6 +447,8 @@ def qemu_command(args, work, disk, rescue, gpus=()):
         # it is a run against an adapter that must fall back (feature 041, FR-001).
         if args.hostmem:
             properties.append(f"hostmem={args.hostmem}M")
+        if args.renderer:
+            properties.append(f"renderer={args.renderer}")
         # A desktop someone uses is on the first GPU; the rest render and drive
         # no monitor, as a hybrid machine's second GPU does, so the desktop's
         # GPU is DXGI's first adapter and no window is composed across GPUs.

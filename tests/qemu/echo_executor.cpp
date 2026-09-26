@@ -17,6 +17,9 @@
 //   0x10006 poke         payload u64 handle, u64 offset, then bytes written at
 //                        `offset` of the import's pointer, as a host GPU would
 //                        write them: the answer is u32 1 when they were written
+//   0x10007 crash        with RVK_ECHO_ALLOW_CRASH set, aborts the process the
+//                        executor runs in, as a driver crash would; otherwise
+//                        RVK_UNKNOWN
 //
 //   0x30007 options      on an OpenGL context: the answer is the u8 major,
 //                        minor, profile and flags it was created with, then
@@ -60,6 +63,7 @@ namespace {
 constexpr std::uint32_t echo = 0x10001u;
 constexpr std::uint32_t undecodable = 0x10002u;
 constexpr std::uint32_t lose_device = 0x10003u;
+constexpr std::uint32_t crash = 0x10007u;
 constexpr std::uint32_t count = 0x10004u;
 constexpr std::uint32_t peek = 0x10005u;
 constexpr std::uint32_t poke = 0x10006u;
@@ -238,6 +242,9 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
         break;
     case undecodable: return RVK_UNDECODABLE;
     case lose_device: return RVK_DEVICE_LOST;
+    case crash:
+        if (std::getenv("RVK_ECHO_ALLOW_CRASH") == nullptr) return RVK_UNKNOWN;
+        std::abort();
     case peek: answer_peek(executor, payload, size, reply, capacity, reply_size); break;
     case poke: answer_poke(executor, payload, size, reply, capacity, reply_size); break;
     case options_asked: {

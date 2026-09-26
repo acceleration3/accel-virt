@@ -190,6 +190,43 @@ typedef struct RvkHostOps {
      * count in *length: nonzero when it cannot be read. NULL: the host reads
      * no files, and the device keeps virtio-gpu's own PCI identity. */
     int (*read_file)(void *opaque, const char *path, char *buffer, size_t size, size_t *length);
+
+    /* The renderer process (docs/renderer.md). Main loop, all of them. NULL,
+     * any of them: the host does not support renderer mode. A descriptor
+     * answered is a duplicate the caller closes with close_descriptor, except
+     * event_descriptor's; one passed in stays the caller's. */
+    /* The eventfd behind an event create_event made, not duplicated: -1 when
+     * it has none. */
+    int (*event_descriptor)(void *opaque, void *event);
+    /* Fence queue `line`'s guest notifier while the fence interrupts are
+     * connected; -1 for a line with none. */
+    int (*fence_interrupt_descriptor)(void *opaque, uint32_t line);
+    /* Guest RAM as the RAMBlocks QEMU maps it from: how many, and block
+     * `index`'s region number, memfd and the bytes of it a renderer maps from
+     * file offset 0. Nonzero for a block with no shared file behind it. */
+    uint32_t (*guest_region_count)(void *opaque);
+    int (*guest_region)(void *opaque, uint32_t index, uint32_t *region, int *descriptor, uint64_t *size);
+    /* The region holding all `length` bytes at `pointer`, and their offset in
+     * the region's file: nonzero when no region does. */
+    int (*locate_guest)(void *opaque, const void *pointer, uint64_t length, uint32_t *region, uint64_t *offset);
+    /* The memfd behind a block create_host_memory made; -1 when it has none. */
+    int (*host_memory_descriptor)(void *opaque, void *memory);
+    void (*close_descriptor)(void *opaque, int descriptor);
+    /* The renderer at `path` started with its socket as descriptor 3; the glue
+     * calls rvk_device_renderer_lost once when it dies or its socket closes.
+     * Nonzero when it could not be started. */
+    int (*start_renderer)(void *opaque, const char *path);
+    /* One datagram and its descriptors: nonzero once the renderer is gone. */
+    int (*send_renderer)(void *opaque, const uint8_t *bytes, size_t length, const int *descriptors,
+                         uint32_t count);
+    /* The next datagram, its length in *length - past `capacity` for one that
+     * did not fit - and up to `capacity_descriptors` descriptors, the caller's,
+     * in *count; waits at most `timeout_ms`. 0 received, 1 nothing came in
+     * time, 2 the renderer is gone. */
+    int (*receive_renderer)(void *opaque, uint8_t *buffer, size_t capacity, size_t *length, int *descriptors,
+                            uint32_t capacity_descriptors, uint32_t *count, uint32_t timeout_ms);
+    /* SIGKILL; the death is reported through rvk_device_renderer_lost. */
+    void (*kill_renderer)(void *opaque);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -218,11 +255,14 @@ void rvk_device_trace_start(RvkMainLoopScheduler schedule);
 
 /* Realizes a device on the host GPU `host_gpu` names ("auto", a UUID, or NULL
  * for auto), running commands through `executor` (NULL: no capset);
- * `base_blobs` is the base class's blob property. NULL on failure, with the
- * reason in `error`. `ops` and `executor` must outlive the device. Main loop. */
+ * `base_blobs` is the base class's blob property. `renderer` is the
+ * rvk-renderer to run the contexts in (NULL: they run in QEMU, through
+ * `executor`), which is told to load `executor_path` itself. NULL on failure,
+ * with the reason in `error`. `ops` and `executor` must outlive the device.
+ * Main loop. */
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, const RvkRecordingOptions *recording, char *error,
-                             size_t error_size);
+                             int base_blobs, const RvkRecordingOptions *recording, const char *renderer,
+                             const char *executor_path, char *error, size_t error_size);
 /* Nonzero when the core answered the control request (a
  * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
@@ -245,6 +285,8 @@ void rvk_device_status(RvkDevice *device, uint8_t status);
 /* A virtio reset: every context is destroyed, the fence interrupts released,
  * then every blob. Main loop. */
 void rvk_device_reset(RvkDevice *device);
+/* The renderer died or its socket closed. Main loop. */
+void rvk_device_renderer_lost(RvkDevice *device);
 /* Nonzero for a device this module never created. Main loop. */
 int rvk_device_destroy(RvkDevice *device);
 

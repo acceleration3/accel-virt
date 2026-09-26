@@ -11,7 +11,7 @@ namespace av {
 
 class ControlRequest;
 class DeviceCapset;
-class DeviceContextTable;
+class ContextPlane;
 class GpuResponse;
 class Host;
 
@@ -25,7 +25,7 @@ public:
         submit_3d = 0x0207u,
     };
 
-    ContextCommands(Host &host, DeviceContextTable &contexts, const DeviceCapset &capset);
+    ContextCommands(Host &host, ContextPlane &contexts, const DeviceCapset &capset);
     ContextCommands(const ContextCommands &) = delete;
     ContextCommands &operator=(const ContextCommands &) = delete;
 
@@ -40,7 +40,7 @@ private:
     uint32_t submit(ControlRequest &request);
 
     Host               &host_;
-    DeviceContextTable &contexts_;
+    ContextPlane       &contexts_;
     const DeviceCapset &capset_;
 };
 

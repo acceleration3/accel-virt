@@ -6,6 +6,7 @@
 #include "device/control/context_commands.hpp"
 #include "device/control/scanout_commands.hpp"
 #include "device/control/control_request.hpp"
+#include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
 #include "core/support/text_buffer.hpp"
 
@@ -16,15 +17,16 @@ namespace av {
 constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), pci_(host), library_(), feasibility_(host), capset_(host), recorder_(host),
-      blobs_(host), shared_(host), heads_(host, blobs_), interrupts_(host), status_(host, interrupts_),
-      contexts_(host, blobs_, shared_, interrupts_, library_, recorder_)
+    : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
+      heads_(host, blobs_), interrupts_(host), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      remote_(host, blobs_, interrupts_), contexts_(&local_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
       }
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
-                             const RvkRecordingOptions *recording, TextBuffer &message)
+                             const RvkRecordingOptions *recording, const char *renderer, const char *executor_path,
+                             TextBuffer &message)
 {
     AV_SCOPE("VirtioGpuRvk::realize");
     host_.require_main_loop("VirtioGpuRvk::realize");
@@ -34,7 +36,14 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         host_.log(message.text());
         return Status::invalid_parameter;
     }
-    if (library_.accept(executor) == Status::invalid_parameter) {
+    const bool isolated = renderer != nullptr && renderer[0] != '\0';
+    contexts_ = isolated ? static_cast<ContextPlane *>(&remote_) : &local_;
+    if (isolated && remote_.configure(renderer, executor_path) != Status::ok) {
+        message.append("virtio-gpu-rvk: renderer= needs executor= naming the library it loads, each a path it can carry");
+        host_.log(message.text());
+        return Status::invalid_parameter;
+    }
+    if (contexts_->accept(executor) == Status::invalid_parameter) {
         message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 to 4, or lacks an operation");
         host_.log(message.text());
         return Status::invalid_parameter;
@@ -50,13 +59,8 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         host_.log(message.text());
         return Status::no_memory;
     }
-    if (shared_.initialize() == Status::no_memory) {
-        message.append("virtio-gpu-rvk: the host has no mutex for the shared objects");
-        host_.log(message.text());
-        return Status::no_memory;
-    }
-    if (contexts_.initialize() == Status::no_memory) {
-        message.append("virtio-gpu-rvk: the host has no mutex for the contexts' shared executors");
+    if (contexts_->initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex for the contexts' shared objects and executors");
         host_.log(message.text());
         return Status::no_memory;
     }
@@ -67,12 +71,26 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
      * probe that fails leaves its bit clear and the device starts anyway. */
     feasibility_.decide(guest_probe_address);
     if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
-    capset_.describe(binding_.index(), library_.sub_apis(), feasibility_.features());
+    /* A renderer answers what its library offers only once started, and it is
+     * started with a capset: one offering every sub-API, which QEMU narrows
+     * to the answer before any guest reads it. QEMU checks each context's
+     * setup against the narrowed one before the renderer sees it. */
+    if (isolated) {
+        capset_.describe(binding_.index(), ExecutorLibrary::known_sub_apis, feasibility_.features());
+        const Status started = contexts_->start(capset_.info().gpu().uuid(), capset_.info());
+        if (started != Status::ok) {
+            message.append("virtio-gpu-rvk: the renderer did not start, or did not answer: status ");
+            message.append_decimal(static_cast<uint32_t>(started));
+            host_.log(message.text());
+            return started;
+        }
+    }
+    capset_.describe(binding_.index(), contexts_->sub_apis(), feasibility_.features());
     /* The probe proved this device can hand a guest blob to a host API; only
      * the library knows whether the API will take one. Both have to be true
      * before the guest is told its memory arrives without a copy. */
     if (capset_.described() &&
-        library_.import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
+        contexts_->import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
         capset_.withdraw_guest_import();
     return start_recording(recording, message);
 }
@@ -96,11 +114,10 @@ void VirtioGpuRvk::reset()
 {
     AV_SCOPE("VirtioGpuRvk::reset");
     host_.require_main_loop("VirtioGpuRvk::reset");
-    contexts_.destroy_all();
+    contexts_->destroy_all();
+    const bool connected = interrupts_.connected();
     status_.reset();
-    /* After the contexts, which drop their references as they go: a reset
-     * leaves no context to hold one, so whatever is left goes too. */
-    shared_.release_all();
+    if (connected && !interrupts_.connected()) contexts_->interrupts_changed(false);
     /* Before the blobs: a head holds a pin on the blob it shows, so every head
      * lets go before the table it pinned from does. */
     heads_.release_all();
@@ -114,7 +131,18 @@ void VirtioGpuRvk::status(uint8_t status)
     AV_SCOPE("VirtioGpuRvk::status");
     host_.require_main_loop("VirtioGpuRvk::status");
     if (!binding_.bound()) return;
+    const bool connected = interrupts_.connected();
     status_.set(status);
+    if (interrupts_.connected() != connected) contexts_->interrupts_changed(interrupts_.connected());
+}
+
+/* The glue watches the renderer's process and socket; either ending lands
+ * here once. */
+void VirtioGpuRvk::renderer_lost()
+{
+    AV_SCOPE("VirtioGpuRvk::renderer_lost");
+    host_.require_main_loop("VirtioGpuRvk::renderer_lost");
+    contexts_->renderer_lost();
 }
 
 bool VirtioGpuRvk::control(void *request, uint32_t type)
@@ -130,8 +158,8 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
      * display could take a dma-buf - a GL window, which then only draws. */
     if (!capset_.display_resolved()) capset_.resolve_display(false);
     ControlRequest control(host_, request);
-    return ContextCommands(host_, contexts_, capset_).answer(control, type) ||
-           BlobCommands(host_, blobs_, recorder_).answer(control, type) ||
+    return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
+           BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type);
 }
 
@@ -167,20 +195,20 @@ Status VirtioGpuRvk::create_context(uint32_t id)
     AV_SCOPE("VirtioGpuRvk::create_context");
     host_.require_main_loop("VirtioGpuRvk::create_context");
     if (!binding_.bound() || !interrupts_.connected()) return Status::invalid_state;
-    return contexts_.create(id);
+    return contexts_->create(id);
 }
 
 Status VirtioGpuRvk::destroy_context(uint32_t id)
 {
     AV_SCOPE("VirtioGpuRvk::destroy_context");
     host_.require_main_loop("VirtioGpuRvk::destroy_context");
-    return contexts_.destroy(id);
+    return contexts_->destroy(id);
 }
 
 uint32_t VirtioGpuRvk::contexts() const
 {
     AV_SCOPE("VirtioGpuRvk::contexts");
-    return contexts_.live();
+    return contexts_->live();
 }
 
 bool VirtioGpuRvk::realized() const
@@ -193,16 +221,14 @@ bool VirtioGpuRvk::export_image(uint64_t key, RvkExportedImage &image)
 {
     AV_SCOPE("VirtioGpuRvk::export_image");
     if (!realized()) return false;
-    contexts_.settle_d3d();
-    return library_.export_image(capset_.info().gpu().uuid(), key, image);
+    return contexts_->export_image(capset_.info().gpu().uuid(), key, image);
 }
 
 bool VirtioGpuRvk::read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height)
 {
     AV_SCOPE("VirtioGpuRvk::read_image");
     if (!realized()) return false;
-    contexts_.settle_d3d();
-    return library_.read_image(capset_.info().gpu().uuid(), key, pixels, stride, width, height);
+    return contexts_->read_image(capset_.info().gpu().uuid(), key, pixels, stride, width, height);
 }
 
 uint32_t VirtioGpuRvk::gpu_index() const
@@ -223,18 +249,17 @@ void VirtioGpuRvk::report(StateWriter &writer)
         writer.number("contexts", contexts());
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
-    shared_.report(writer);
     heads_.report(writer);
-    contexts_.report(writer);
+    contexts_->report(writer);
 }
 
 /* Contexts exist only on a realized device. */
 bool VirtioGpuRvk::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuRvk::invariants_hold");
-    return contexts_.invariants_hold() && blobs_.invariants_hold() && shared_.invariants_hold() &&
+    return contexts_->invariants_hold() && blobs_.invariants_hold() &&
            heads_.invariants_hold() && interrupts_.invariants_hold() &&
-           status_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
+           status_.invariants_hold() && (binding_.bound() || contexts_->live() == 0u);
 }
 
 }  // namespace av

@@ -1,0 +1,60 @@
+/* A ContextPlane that runs nothing and remembers what it was told: which
+ * blobs were made and let go, whether the interrupts were connected, and how
+ * often the renderer was lost. For tests of the control plane's commands. */
+#ifndef AV_RECORDING_CONTEXT_PLANE_HPP
+#define AV_RECORDING_CONTEXT_PLANE_HPP
+
+#include "device/context/context_plane.hpp"
+
+#include <cstdint>
+
+namespace av {
+
+class RecordingContextPlane final : public ContextPlane {
+public:
+    static constexpr std::uint32_t capacity = 64u;
+
+    Status        accept(const RvkExecutorOps *) override { return Status::ok; }
+    Status        initialize() override { return Status::ok; }
+    Status        start(const std::uint8_t *, const CapsetInfo &) override { return Status::ok; }
+    std::uint32_t sub_apis() const override { return 0u; }
+    std::uint32_t import_kinds(SubApi, const std::uint8_t *) const override { return 0u; }
+    Status        create(std::uint32_t) override { return Status::not_supported; }
+    Status        destroy(std::uint32_t) override { return Status::not_found; }
+    void          destroy_all() override {}
+    bool          holds(std::uint32_t) override { return false; }
+    Status        bind(std::uint32_t, const ContextSetup &, const CapsetInfo &) override { return Status::not_supported; }
+    bool          holds_doorbell(std::uint32_t) override { return false; }
+    bool          can_share(std::uint32_t, std::uint32_t) override { return false; }
+    std::uint32_t live() const override { return 0u; }
+    void          blob_created(std::uint32_t id) override { if (created_count_ < capacity) created_[created_count_++] = id; }
+    void          blob_released(std::uint32_t id) override { if (released_count_ < capacity) released_[released_count_++] = id; }
+    void          interrupts_changed(bool connected) override { connected_ = connected; changes_++; }
+    void          renderer_lost() override { losses_++; }
+    bool export_image(const std::uint8_t *, std::uint64_t, RvkExportedImage &) override { return false; }
+    bool read_image(const std::uint8_t *, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t) override
+    { return false; }
+    void report(StateWriter &) override {}
+    bool invariants_hold() const override { return true; }
+
+    std::uint32_t created(std::uint32_t index) const { return created_[index]; }
+    std::uint32_t created_count() const { return created_count_; }
+    std::uint32_t released(std::uint32_t index) const { return released_[index]; }
+    std::uint32_t released_count() const { return released_count_; }
+    bool          connected() const { return connected_; }
+    std::uint32_t changes() const { return changes_; }
+    std::uint32_t losses() const { return losses_; }
+
+private:
+    std::uint32_t created_[capacity] = {};
+    std::uint32_t created_count_ = 0u;
+    std::uint32_t released_[capacity] = {};
+    std::uint32_t released_count_ = 0u;
+    bool          connected_ = false;
+    std::uint32_t changes_ = 0u;
+    std::uint32_t losses_ = 0u;
+};
+
+}  // namespace av
+
+#endif  // AV_RECORDING_CONTEXT_PLANE_HPP

@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/capset/device_capset.hpp"
 #include "device/context/device_context.hpp"
-#include "device/context/device_context_table.hpp"
+#include "device/context/context_plane.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
 #include "proto/context/capset_info.hpp"
@@ -15,7 +15,7 @@
 
 namespace av {
 
-ContextCommands::ContextCommands(Host &host, DeviceContextTable &contexts, const DeviceCapset &capset)
+ContextCommands::ContextCommands(Host &host, ContextPlane &contexts, const DeviceCapset &capset)
     : host_(host), contexts_(contexts), capset_(capset)
     {
         AV_SCOPE("ContextCommands::ContextCommands");
@@ -105,8 +105,7 @@ uint32_t ContextCommands::submit(ControlRequest &request)
     WireReader     reader(bytes, request.read(0u, bytes, sizeof bytes));
     ContextRequest submit;
     if (submit.decode_submit(reader) != Status::ok) return GpuResponse::err_invalid_parameter;
-    DeviceContext *const context = contexts_.find(submit.context_id());
-    if (context == nullptr) return GpuResponse::err_invalid_context_id;
+    if (!contexts_.holds(submit.context_id())) return GpuResponse::err_invalid_context_id;
     uint8_t      command[ContextSetup::encoded_size] = {};
     ContextSetup setup;
     if (submit.command_size() > sizeof command ||
@@ -115,7 +114,7 @@ uint32_t ContextCommands::submit(ControlRequest &request)
         return GpuResponse::err_invalid_parameter;
     const uint32_t share = setup.options().share_context();
     if (share != 0u && !contexts_.can_share(submit.context_id(), share)) return GpuResponse::err_invalid_parameter;
-    switch (context->bind(setup, capset_.info())) {
+    switch (contexts_.bind(submit.context_id(), setup, capset_.info())) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::not_found: return GpuResponse::err_invalid_resource_id;
     case Status::no_memory: return GpuResponse::err_out_of_memory;

@@ -82,6 +82,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(qdev);
     VirtIOGPU *g = VIRTIO_GPU(qdev);
     const RvkExecutorOps *executor = NULL;
+    const char *renderer = r->renderer && r->renderer[0] ? r->renderer : NULL;
     const RvkRecordingOptions recording = {
         .path = r->record,
         .limit_bytes = r->record_limit,
@@ -106,7 +107,9 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
                                    b->conf.hostmem, map);
         memory_region_add_subregion(&b->hostmem, 0, &r->hostmem_background);
     }
-    if (r->executor && r->executor[0]) {
+    /* With a renderer, the library is loaded in that process and never here:
+     * a crash inside it must not take the VM (docs/renderer.md). */
+    if (r->executor && r->executor[0] && !renderer) {
         RvkExecutorOpsFunction ops = NULL;
 
         r->executor_library = g_module_open(r->executor, G_MODULE_BIND_LOCAL);
@@ -133,7 +136,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     rvk_device_trace_start(virtio_gpu_rvk_schedule);
     virtio_gpu_rvk_host_init(r);
     r->core = rvk_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
-                                &recording, error, sizeof(error));
+                                &recording, renderer, r->executor, error, sizeof(error));
     if (!r->core) {
         error_setg(errp, "%s", error);
         return;
@@ -294,12 +297,15 @@ static void virtio_gpu_rvk_reset(VirtIODevice *vdev)
 
 /* After unrealize, or after a realize that failed. The hostmem reservation
  * stays mapped, as virtio-gpu-gl's does: the region may outlive the device.
- * The executor library is closed after the core, which calls into it. */
+ * The executor library is closed after the core, which calls into it, and the
+ * renderer ended after it, which may still send it its last messages. */
 static void virtio_gpu_rvk_finalize(Object *obj)
 {
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
 
     (void)rvk_device_destroy(r->core);
+    r->core = NULL;
+    virtio_gpu_rvk_renderer_finish(r);
     virtio_gpu_rvk_host_finish(r);
     if (r->executor_library) {
         g_module_close(r->executor_library);
@@ -326,6 +332,7 @@ static void virtio_gpu_rvk_instance_init(Object *obj)
 {
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
 
+    virtio_gpu_rvk_renderer_init(r);
     memory_region_init_io(&r->doorbells, obj, &virtio_gpu_rvk_doorbell_ops, r, "virtio-gpu-rvk-doorbells",
                           (uint64_t)RVK_DEVICE_DOORBELLS * RVK_DEVICE_DOORBELL_PAGE);
 }
@@ -333,6 +340,7 @@ static void virtio_gpu_rvk_instance_init(Object *obj)
 static const Property virtio_gpu_rvk_properties[] = {
     DEFINE_PROP_STRING("host-gpu", VirtIOGPURvk, host_gpu),
     DEFINE_PROP_STRING("executor", VirtIOGPURvk, executor),
+    DEFINE_PROP_STRING("renderer", VirtIOGPURvk, renderer),
     DEFINE_PROP_STRING("record", VirtIOGPURvk, record),
     DEFINE_PROP_UINT64("record-limit", VirtIOGPURvk, record_limit, 0),
     DEFINE_PROP_STRING("record-kinds", VirtIOGPURvk, record_kinds),

@@ -117,6 +117,9 @@ list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
 # second main wherever that library is linked (feature 065).
 set(AV_RECORD_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/recording_tool.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RECORD_ENTRY})
+# rvk-renderer's entry point, likewise (docs/renderer.md).
+set(AV_RENDERER_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/renderer_main.cpp)
+list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_RENDERER_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
@@ -226,6 +229,9 @@ list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 # The Direct3D translation runs in the executor library, never in the device:
 # it loads DXVK through the environment the freestanding device cannot read.
 list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim|executor)/(d3d|dxbc)[^/]*\\.cpp$")
+# The renderer's own process code: it is linked into rvk-renderer, never into
+# the freestanding module QEMU loads.
+list(FILTER AV_DEVICE_SOURCES EXCLUDE REGEX "/src/device/(shim/(posix_renderer|renderer_main)|renderer/)[^/]*\\.cpp$")
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
 list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_NAMES})
 if(AV_GENERATED)
@@ -284,6 +290,13 @@ add_executable(rvkrecord ${AV_RECORD_ENTRY})
 target_link_libraries(rvkrecord PRIVATE av_core ${CMAKE_DL_LIBS})
 target_include_directories(rvkrecord PRIVATE src)
 
+# ---- rvk-renderer: the host GPU stack in a process of its own ----------------
+# Built wherever rvkrecord is: it drives the same rvk_executor.h a device does,
+# for a device that runs its contexts outside QEMU (docs/renderer.md).
+add_executable(rvk-renderer ${AV_RENDERER_ENTRY})
+target_link_libraries(rvk-renderer PRIVATE av_core ${CMAKE_DL_LIBS} pthread)
+target_include_directories(rvk-renderer PRIVATE src)
+
 # ---- two libraries that exist to be held to the ABI ------------------------
 # Built in every configuration, before AV_QEMU's return: the qemu smoke and
 # virtio-gpu suites load them, and so does the conformance suite, which is only
@@ -312,7 +325,7 @@ if(AV_QEMU)
   add_test(NAME qemu_virtio_gpu
            COMMAND python3 -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/qemu -p "test_*.py")
   set_tests_properties(qemu_virtio_gpu PROPERTIES
-    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>;AV_REAL_EXECUTOR=$<TARGET_FILE:rvk_executor>")
+    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>;AV_RENDERER=$<TARGET_FILE:rvk-renderer>;AV_REAL_EXECUTOR=$<TARGET_FILE:rvk_executor>")
   return()
 endif()
 
@@ -476,6 +489,14 @@ foreach(src ${AV_UNIT_TESTS})
   endif()
   if(name STREQUAL "test_fullstack_rvk")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
+  endif()
+  # The renderer's process code, for real (docs/renderer.md): its host loads
+  # the echo executor, and the process test spawns the built rvk-renderer.
+  if(name STREQUAL "test_posix_renderer_host" OR name STREQUAL "test_renderer_process")
+    target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS})
+    add_dependencies(${name} rvk_echo_executor rvk-renderer)
+    target_compile_definitions(${name} PRIVATE AV_ECHO_EXECUTOR="$<TARGET_FILE:rvk_echo_executor>"
+                                               AV_RENDERER_BINARY="$<TARGET_FILE:rvk-renderer>")
   endif()
   # The ICD's tests link its core, which no other test may: its hooks replace
   # the generated defaults every other binary relies on. The probe's loader

@@ -43,6 +43,12 @@ EXCLUDE = {
     "src/device/executor/session_backend.hpp": "what a session requires of a host API, implemented "
                              "by the Vulkan, OpenGL and OpenCL backends and by MockSessionBackend "
                              "in tests/harness, and exercised through every session test",
+    "src/device/context/context_plane.hpp": "where a device's contexts run, implemented by LocalContextPlane, "
+                             "RendererContextPlane and RecordingContextPlane in tests/harness, and exercised "
+                             "through every plane and control-command test",
+    "src/device/renderer/renderer_resources.hpp": "what the renderer's service requires of its process, "
+                             "implemented by PosixRendererHost and by MockRendererResources in tests/harness, "
+                             "and exercised through every renderer service test",
 }
 
 

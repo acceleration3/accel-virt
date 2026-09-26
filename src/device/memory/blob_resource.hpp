@@ -47,6 +47,8 @@ public:
     bool     pinned() const;
     /* The blob's memory for a worker: valid while pinned. */
     BlobWindow window() const;
+    /* The host memory behind a host blob, or null for guest pages. */
+    void      *host_memory() const;
     /* Any thread, while nothing can release it: its guest pages as one host
      * range, made for the first holder and shared by the rest, and as the
      * extents they are - a holder needs both, and only the hold keeps either

@@ -9,6 +9,7 @@
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/memory/guest_page_alias.hpp"
+#include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -45,7 +46,7 @@ GpuRequestBuilder create_blob(std::uint32_t id, std::uint32_t memory, std::uint3
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), recorder_(host_), commands_(host_, blobs_, recorder_)
+    Fixture() : blobs_(host_), recorder_(host_), commands_(host_, blobs_, recorder_, plane_)
     {
         static_cast<void>(blobs_.initialize());
         host_.add_guest_ram(ram, 0x10000u);
@@ -74,12 +75,14 @@ public:
     MockHost  &host() { return host_; }
     BlobTable &blobs() { return blobs_; }
     WireRecorder &recorder() { return recorder_; }
+    av::RecordingContextPlane &plane() { return plane_; }
 
 private:
-    MockHost     host_;
-    BlobTable    blobs_;
-    WireRecorder recorder_;
-    BlobCommands commands_;
+    MockHost                  host_;
+    BlobTable                 blobs_;
+    WireRecorder              recorder_;
+    av::RecordingContextPlane plane_;
+    BlobCommands              commands_;
 };
 
 }  // namespace
@@ -289,6 +292,25 @@ TEST(blob_commands_create, records_a_blob_created_and_a_blob_released)
   }
   CHECK_EQ(file.remaining(), 0u);
   fixture.recorder().close(); }
+
+/* Contexts in another process keep a copy of the blob table: every blob made
+ * and let go is told to them, and one the device refused is not. */
+TEST(blob_commands, tells_the_contexts_of_every_blob_made_and_let_go)
+{ Fixture fixture;
+  GpuRequestBuilder request = create_blob(1u, guest, 0u, 1u, 0u, 0x1000u);
+  request.u64(ram).u32(0x1000u).u32(0u);
+  CHECK_EQ(fixture.send(request), ok_nodata);
+  CHECK_EQ(fixture.send(create_blob(2u, host3d, mappable, 0u, 0u, 0x2000u)), ok_nodata);
+  CHECK_EQ(fixture.send(create_blob(3u, host3d, 0u, 0u, 0u, 0x2000u)), err_invalid_parameter);
+  CHECK_EQ(fixture.plane().created_count(), 2u);
+  CHECK_EQ(fixture.plane().created(0u), 1u);
+  CHECK_EQ(fixture.plane().created(1u), 2u);
+  CHECK_EQ(fixture.plane().released_count(), 0u);
+  CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::resource_unref).u32(2u).u32(0u)), ok_nodata);
+  CHECK_EQ(fixture.plane().released_count(), 1u);
+  CHECK_EQ(fixture.plane().released(0u), 2u);
+  CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::resource_unref).u32(9u).u32(0u)), 0u);
+  CHECK_EQ(fixture.plane().released_count(), 1u); }
 
 TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
 { Fixture fixture;

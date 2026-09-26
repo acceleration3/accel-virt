@@ -23,6 +23,15 @@ Status FenceWindow::publish(const FencePage &page) const
     return blob_.write(0u, bytes, sizeof bytes);
 }
 
+Status FenceWindow::read(FencePage &page) const
+{
+    AV_SCOPE("FenceWindow::read");
+    uint8_t      bytes[FencePage::encoded_size] = {};
+    const Status status = blob_.read(0u, bytes, sizeof bytes);
+    if (status != Status::ok) return status;
+    return page.decode(bytes, sizeof bytes);
+}
+
 bool FenceWindow::invariants_hold() const
 {
     AV_SCOPE("FenceWindow::invariants_hold");

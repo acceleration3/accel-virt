@@ -32,8 +32,8 @@ public:
 
     /* A realized device, or null with the reason in `error`. */
     DeviceInstance      *create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                                bool base_blobs, const RvkRecordingOptions *recording, char *error,
-                                size_t error_size);
+                                bool base_blobs, const RvkRecordingOptions *recording, const char *renderer,
+                                const char *executor_path, char *error, size_t error_size);
     [[nodiscard]] Status destroy(DeviceInstance *instance);
     uint32_t             live() const;
     /* Main loop: the module's line, then each live device by slot. */

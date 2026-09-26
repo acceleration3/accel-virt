@@ -185,6 +185,7 @@ src/device/                       QEMU device core — freestanding C++23, librv
   fence/  execution/                fence pages and interrupts; executors, command streams, replies
   recording/                        wire recordings: the format, the recorder, the reader, the printer, the replay
   module/                           the device object and the module holding every device
+  renderer/                         the renderer process's state: guest RAM regions, doorbell offers, forwarded requests
   qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides
   wire/  context/  submission/      codecs; context setup and capsets; rings and fences

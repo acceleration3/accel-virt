@@ -27,10 +27,12 @@
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_host_ops.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/host/renderer_peer.hpp"
 #include "harness/trace/mock_trace_host.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <unistd.h>
 
 using av::GpuIdentity;
 using av::Host;
@@ -497,3 +499,230 @@ TEST(table_host_scanout, a_display_that_refuses_the_descriptor_answers_not_suppo
   CHECK(mock.claim(av::HostViolation::scanout_misuse));
   CHECK(mock.claim(av::HostViolation::scanout_misuse));
   CHECK(mock.claim(av::HostViolation::scanout_misuse)); }
+
+namespace {
+
+/* The renderer's end of the socket, scripted: it keeps what it was sent and
+ * answers what the test queued, including answers no glue should give. */
+class ScriptedPeer final : public av::RendererPeer {
+public:
+    void deliver(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
+                 std::uint32_t count) override
+    {
+        delivered_++;
+        last_length_ = length;
+        last_byte_ = length != 0u ? bytes[0] : 0u;
+        last_descriptor_ = count != 0u ? descriptors[0] : -1;
+    }
+    bool answer(std::uint8_t *buffer, std::size_t, std::size_t &length, int *descriptors, std::uint32_t,
+                std::uint32_t &count) override
+    {
+        if (!answering_) return false;
+        answering_ = false;
+        buffer[0] = 0x5Au;
+        length = answer_length_;
+        count = answer_descriptor_ >= 0 ? answer_count_ : 0u;
+        if (answer_descriptor_ >= 0) descriptors[0] = answer_descriptor_;
+        return true;
+    }
+    void script(std::size_t length, int descriptor, std::uint32_t count)
+    {
+        answering_ = true;
+        answer_length_ = length;
+        answer_descriptor_ = descriptor;
+        answer_count_ = count;
+    }
+
+    std::uint32_t delivered_ = 0u;
+    std::size_t   last_length_ = 0u;
+    std::uint8_t  last_byte_ = 0u;
+    int           last_descriptor_ = -1;
+
+private:
+    bool          answering_ = false;
+    std::size_t   answer_length_ = 0u;
+    int           answer_descriptor_ = -1;
+    std::uint32_t answer_count_ = 0u;
+};
+
+}  // namespace
+
+/* What a renderer is handed of QEMU's: an event's own eventfd, a fence line's
+ * notifier while the lines are connected, each guest RAM block's memfd and
+ * where a pointer falls in one, and a host blob's memfd. Everything but the
+ * event's is a duplicate the caller closes through the table. */
+TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_handed)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *event = nullptr;
+  CHECK_STATUS(host.create_event(event), Status::ok);
+  const int eventfd = host.event_descriptor(event);
+  CHECK(mock.descriptor_open(eventfd));
+  CHECK_EQ(host.event_descriptor(event), eventfd);   /* the event's own, not a copy */
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+  host.destroy_event(event);
+  CHECK(!mock.descriptor_open(eventfd));
+
+  CHECK_EQ(host.fence_interrupt_descriptor(0u), -1);  /* nothing connected yet */
+  CHECK_STATUS(host.connect_fence_interrupts(), Status::ok);
+  const int line = host.fence_interrupt_descriptor(63u);
+  CHECK(mock.descriptor_open(line));
+  CHECK_EQ(mock.live_dmabufs(), 1u);
+  CHECK_EQ(host.fence_interrupt_descriptor(64u), -1);  /* past the fence queues */
+  host.close_descriptor(line);
+  CHECK(!mock.descriptor_open(line));
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+  host.disconnect_fence_interrupts();
+
+  std::uint8_t ram[0x2000] = {};
+  CHECK_EQ(host.guest_region_count(), 0u);
+  const int owned = mock.add_guest_region(4u, ram, sizeof ram);
+  mock.add_guest_region(5u, nullptr, 0x1000u);
+  CHECK_EQ(host.guest_region_count(), 2u);
+  std::uint32_t region = 0u;
+  int           descriptor = -1;
+  std::uint64_t size = 0u;
+  CHECK_STATUS(host.guest_region(0u, region, descriptor, size), Status::ok);
+  CHECK_EQ(region, 4u);
+  CHECK_EQ(size, sizeof ram);
+  CHECK(descriptor != owned && mock.descriptor_open(descriptor));
+  CHECK(mock.guest_region_mapping(descriptor, sizeof ram) == ram);
+  CHECK(mock.guest_region_mapping(descriptor, sizeof ram + 1u) == nullptr);
+  CHECK_EQ(mock.live_dmabufs(), 1u);
+  host.close_descriptor(descriptor);
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+  CHECK(mock.descriptor_open(owned));
+  int refused = 7;
+  CHECK_STATUS(host.guest_region(1u, region, refused, size), Status::not_supported);  /* no shared file */
+  CHECK_EQ(refused, -1);
+  CHECK_STATUS(host.guest_region(2u, region, refused, size), Status::not_supported);
+  std::uint64_t offset = 0u;
+  region = 0u;
+  CHECK_STATUS(host.locate_guest(ram + 0x10u, 0x20u, region, offset), Status::ok);
+  CHECK_EQ(region, 4u);
+  CHECK_EQ(offset, 0x10u);
+  CHECK_STATUS(host.locate_guest(ram + 0x1FF0u, 0x20u, region, offset), Status::not_found);
+  CHECK_STATUS(host.locate_guest(&mock, 1u, region, offset), Status::not_found);
+
+  void *view = nullptr;
+  void *const memory = host.create_host_memory(0x1000u, view);
+  const int memfd = host.host_memory_descriptor(memory);
+  CHECK(mock.descriptor_open(memfd));
+  CHECK_EQ(mock.live_dmabufs(), 1u);
+  host.close_descriptor(memfd);
+  host.close_descriptor(-1);   /* nothing to close is not a close */
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+  host.destroy_host_memory(memory); }
+
+/* The renderer's socket through the table: a start that fails and one that
+ * does, a datagram whose descriptor the peer gets its own copy of, a receive
+ * with nothing to receive, an answer with a descriptor that becomes the
+ * device's, and answers no glue may give, refused whole. */
+TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_the_table)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  ScriptedPeer peer;
+  mock.connect_renderer(peer);
+  const std::uint8_t datagram[] = {0x11u, 0x22u};
+  CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);  /* none started */
+  mock.fail_renderer_start_at(1u);
+  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::not_found);
+  CHECK(!mock.renderer_running());
+  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::ok);
+  CHECK(std::strcmp(mock.started_renderer(), "/opt/rvk-renderer") == 0);
+  CHECK_EQ(mock.renderer_starts(), 1u);
+
+  const int sent = mock.open_descriptor();
+  CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, &sent, 1u), Status::ok);
+  CHECK_EQ(peer.delivered_, 1u);
+  CHECK_EQ(peer.last_length_, sizeof datagram);
+  CHECK_EQ(peer.last_byte_, 0x11u);
+  CHECK(peer.last_descriptor_ != sent && mock.descriptor_open(peer.last_descriptor_));
+  CHECK(mock.descriptor_open(sent));   /* the caller's stays the caller's */
+  ::close(peer.last_descriptor_);
+  host.close_descriptor(sent);
+
+  std::uint8_t  buffer[16] = {};
+  int           descriptors[1] = {-1};
+  std::size_t   length = 99u;
+  std::uint32_t count = 99u;
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u),
+               Status::invalid_state);
+  CHECK_EQ(length, 0u);
+  CHECK_EQ(count, 0u);
+  peer.script(3u, mock.open_descriptor(), 1u);
+  CHECK_EQ(mock.live_dmabufs(), 1u);
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::ok);
+  CHECK_EQ(length, 3u);
+  CHECK_EQ(buffer[0], 0x5Au);
+  CHECK_EQ(count, 1u);
+  CHECK(mock.descriptor_open(descriptors[0]));
+  host.close_descriptor(descriptors[0]);
+
+  /* Longer than the buffer: the descriptor that came with it is closed. */
+  const int cut = mock.open_descriptor();
+  peer.script(sizeof buffer + 1u, cut, 1u);
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u),
+               Status::too_large);
+  CHECK_EQ(length, 0u);
+  CHECK_EQ(count, 0u);
+  CHECK(!mock.descriptor_open(cut));
+  /* More descriptors than there was room for: those that fit are closed. */
+  const int excess = mock.open_descriptor();
+  peer.script(1u, excess, 2u);
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u),
+               Status::too_large);
+  CHECK(!mock.descriptor_open(excess));
+
+  host.kill_renderer();
+  CHECK_EQ(mock.renderer_kills(), 1u);
+  CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::not_found);
+  CHECK_STATUS(host.start_renderer("/opt/rvk-renderer"), Status::ok);
+  mock.renderer_gone();
+  CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::not_found);
+  CHECK_EQ(mock.renderer_datagrams(), 1u); }
+
+/* A table from before renderer mode: a host that runs every context in QEMU,
+ * with nothing to hand a renderer and no renderer to start. */
+TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
+{ MockHost mock; MockHostOps ops(mock);
+  RvkHostOps older = ops.table();
+  older.event_descriptor = nullptr;
+  older.fence_interrupt_descriptor = nullptr;
+  older.guest_region_count = nullptr;
+  older.guest_region = nullptr;
+  older.locate_guest = nullptr;
+  older.host_memory_descriptor = nullptr;
+  older.close_descriptor = nullptr;
+  older.start_renderer = nullptr;
+  older.send_renderer = nullptr;
+  older.receive_renderer = nullptr;
+  older.kill_renderer = nullptr;
+  TableHost before(older);
+  std::uint8_t ram[0x1000] = {};
+  mock.add_guest_region(0u, ram, sizeof ram);
+  CHECK_STATUS(mock.connect_fence_interrupts(), Status::ok);
+  CHECK_EQ(before.event_descriptor(&mock), -1);
+  CHECK_EQ(before.fence_interrupt_descriptor(0u), -1);
+  CHECK_EQ(before.guest_region_count(), 0u);
+  std::uint32_t region = 0u;
+  int           descriptor = 5;
+  std::uint64_t size = 0u;
+  CHECK_STATUS(before.guest_region(0u, region, descriptor, size), Status::not_supported);
+  CHECK_EQ(descriptor, -1);
+  std::uint64_t offset = 0u;
+  CHECK_STATUS(before.locate_guest(ram, 1u, region, offset), Status::not_found);
+  CHECK_EQ(before.host_memory_descriptor(&mock), -1);
+  const int kept = mock.open_descriptor();
+  before.close_descriptor(kept);
+  CHECK(mock.descriptor_open(kept));
+  mock.close_descriptor(kept);
+  CHECK_STATUS(before.start_renderer("/opt/rvk-renderer"), Status::not_supported);
+  CHECK_STATUS(before.send_renderer(ram, 1u, nullptr, 0u), Status::not_supported);
+  std::size_t   length = 9u;
+  std::uint32_t count = 9u;
+  CHECK_STATUS(before.receive_renderer(ram, sizeof ram, length, nullptr, 0u, count, 0u), Status::not_supported);
+  CHECK_EQ(length, 0u);
+  CHECK_EQ(count, 0u);
+  before.kill_renderer();
+  CHECK_EQ(mock.renderer_kills(), 0u);
+  mock.disconnect_fence_interrupts(); }

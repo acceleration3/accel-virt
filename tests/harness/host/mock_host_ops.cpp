@@ -162,6 +162,40 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         host_of(opaque).update_scanout(head, x, y, width, height);
     };
     table_.hide_scanout = [](void *opaque, std::uint32_t head) { host_of(opaque).hide_scanout(head); };
+    table_.event_descriptor = [](void *opaque, void *event) { return host_of(opaque).event_descriptor(event); };
+    table_.fence_interrupt_descriptor = [](void *opaque, std::uint32_t line) {
+        return host_of(opaque).fence_interrupt_descriptor(line);
+    };
+    table_.guest_region_count = [](void *opaque) { return host_of(opaque).guest_region_count(); };
+    table_.guest_region = [](void *opaque, std::uint32_t index, std::uint32_t *region, int *descriptor,
+                             std::uint64_t *size) {
+        return host_of(opaque).guest_region(index, *region, *descriptor, *size) == Status::ok ? 0 : 1;
+    };
+    table_.locate_guest = [](void *opaque, const void *pointer, std::uint64_t length, std::uint32_t *region,
+                             std::uint64_t *offset) {
+        return host_of(opaque).locate_guest(pointer, length, *region, *offset) == Status::ok ? 0 : 1;
+    };
+    table_.host_memory_descriptor = [](void *opaque, void *memory) {
+        return host_of(opaque).host_memory_descriptor(memory);
+    };
+    table_.close_descriptor = [](void *opaque, int descriptor) { host_of(opaque).close_descriptor(descriptor); };
+    table_.start_renderer = [](void *opaque, const char *path) {
+        return host_of(opaque).start_renderer(path) == Status::ok ? 0 : 1;
+    };
+    table_.send_renderer = [](void *opaque, const std::uint8_t *bytes, std::size_t length, const int *descriptors,
+                              std::uint32_t count) {
+        return host_of(opaque).send_renderer(bytes, length, descriptors, count) == Status::ok ? 0 : 1;
+    };
+    /* 0 received, 1 nothing in time, 2 gone: the glue's three answers. */
+    table_.receive_renderer = [](void *opaque, std::uint8_t *buffer, std::size_t capacity, std::size_t *length,
+                                 int *descriptors, std::uint32_t capacity_descriptors, std::uint32_t *count,
+                                 std::uint32_t timeout_ms) {
+        const Status received = host_of(opaque).receive_renderer(buffer, capacity, *length, descriptors,
+                                                                 capacity_descriptors, *count, timeout_ms);
+        if (received == Status::ok) return 0;
+        return received == Status::invalid_state ? 1 : 2;
+    };
+    table_.kill_renderer = [](void *opaque) { host_of(opaque).kill_renderer(); };
 }
 
 const RvkHostOps &MockHostOps::table() const

@@ -17,6 +17,8 @@
 
 namespace av {
 
+class RendererPeer;
+
 class MockHost final : public Host {
 public:
     static constexpr std::uint32_t no_gpu = 0xFFFFFFFFu;
@@ -94,6 +96,21 @@ public:
     void     update_scanout(std::uint32_t head, std::uint32_t x, std::uint32_t y, std::uint32_t width,
                             std::uint32_t height) override;
     void     hide_scanout(std::uint32_t head) override;
+    int      event_descriptor(void *event) override;
+    int      fence_interrupt_descriptor(std::uint32_t line) override;
+    std::uint32_t guest_region_count() override;
+    Status   guest_region(std::uint32_t index, std::uint32_t &region, int &descriptor, std::uint64_t &size) override;
+    Status   locate_guest(const void *pointer, std::uint64_t length, std::uint32_t &region,
+                          std::uint64_t &offset) override;
+    int      host_memory_descriptor(void *memory) override;
+    void     close_descriptor(int descriptor) override;
+    Status   start_renderer(const char *path) override;
+    Status   send_renderer(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
+                           std::uint32_t count) override;
+    Status   receive_renderer(std::uint8_t *buffer, std::size_t capacity, std::size_t &length, int *descriptors,
+                              std::uint32_t capacity_descriptors, std::uint32_t &count,
+                              std::uint32_t timeout_ms) override;
+    void     kill_renderer() override;
 
     /* The plane a head was told to show, field for field as it crossed the
      * boundary, so a test asserts the picture rather than that something was
@@ -203,6 +220,40 @@ public:
      * that a descriptor was closed exactly once rather than counted down. */
     bool          descriptor_open(int fd) const;
 
+    /* Guest RAM as QEMU hands it to a renderer: region `region`, `size` bytes
+     * this process sees at `pointer`, behind a descriptor the mock owns and
+     * answers here. guest_region hands out a counted duplicate of it. A null
+     * pointer is RAM with no shared file behind it, which guest_region
+     * refuses. */
+    int           add_guest_region(std::uint32_t region, void *pointer, std::uint64_t size);
+    /* Where a renderer mapping `size` bytes of `descriptor` - any duplicate of
+     * a region's - sees them: the region's pointer, or null for a descriptor
+     * that is no region's or a size past the region. */
+    void         *guest_region_mapping(int descriptor, std::uint64_t size);
+    /* The Nth event_descriptor from now answers -1, as an event with no
+     * eventfd behind it would. */
+    void          fail_event_descriptor_at(std::uint32_t nth);
+    /* This is a renderer's host: the requests it reads are the ForwardedRequest
+     * its service makes of QEMU's bytes, not a MockRequest. */
+    void          forward_requests();
+    /* The renderer socket's far end; the mock keeps no ownership. */
+    void          connect_renderer(RendererPeer &peer);
+    /* The Nth start_renderer from now fails, as a path that does not spawn. */
+    void          fail_renderer_start_at(std::uint32_t nth);
+    /* The renderer died: every send and receive answers not_found until the
+     * next start. */
+    void          renderer_gone();
+    bool          renderer_running();
+    std::uint32_t renderer_starts();
+    std::uint32_t renderer_kills();
+    /* The path the last start named, empty before the first. */
+    const char   *started_renderer();
+    /* Datagrams sent while a renderer ran, delivered to a peer or not. */
+    std::uint32_t renderer_datagrams();
+    /* The milliseconds the last receive_renderer was allowed, 0 before the
+     * first. */
+    std::uint32_t last_receive_timeout();
+
     /* Display heads whose console can show a dma-buf. Zero - the default - is
      * a host with no GL display, which is what `-display none` gives and what
      * the fallback has to keep working on. */
@@ -288,12 +339,21 @@ private:
         pthread_cond_t  signalled;
         bool            set;
         bool            live;
+        int             descriptor;   /* made on the first event_descriptor, -1 before */
     };
     struct Mutex {
         pthread_mutex_t lock;
         bool            locked;
         bool            elsewhere;
         bool            live;
+    };
+    struct RendererRegion {
+        std::uint32_t region;
+        void         *pointer;
+        std::uint64_t size;
+        int           descriptor;
+        std::uint64_t device;
+        std::uint64_t inode;
     };
     struct MainLoopWork {
         HostRoutine routine;
@@ -320,6 +380,8 @@ private:
      * by GuestPageAlias::max_runs; this is the harness's own smaller bound,
      * since no test aliases more. */
     static constexpr std::uint32_t max_dmabuf_runs = 256u;
+    static constexpr std::uint32_t max_renderer_regions = 16u;
+    static constexpr std::uint32_t max_renderer_descriptors = 64u;
 
     struct GuestRegion {
         std::uint64_t base;
@@ -378,6 +440,8 @@ private:
     Mutex  *mutex_of(void *mutex);
     RecordingFile *recording_of(void *file);
     RecordingFile *recording_at(const char *path);
+    /* A pipe's read end, uncounted: -1 where the kernel gives none. */
+    int             fresh_descriptor();
 
     pthread_t       main_loop_;
     pthread_mutex_t state_;
@@ -448,6 +512,18 @@ private:
     std::uint32_t   refuse_scanout_;
     Scanout         scanouts_[max_scanout_heads];
     std::uint32_t   update_rects_[max_scanout_heads][4];
+    RendererRegion  renderer_regions_[max_renderer_regions];
+    std::uint32_t   renderer_region_count_;
+    RendererPeer   *renderer_peer_;
+    bool            renderer_running_;
+    std::uint32_t   fail_renderer_start_;
+    std::uint32_t   renderer_starts_;
+    std::uint32_t   renderer_kills_;
+    std::uint32_t   renderer_datagrams_;
+    std::uint32_t   receive_timeout_;
+    bool            forward_requests_;
+    std::uint32_t   fail_event_descriptor_;
+    char            started_renderer_[max_path];
 };
 
 }  // namespace av

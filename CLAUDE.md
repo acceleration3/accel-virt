@@ -39,7 +39,8 @@ root behind the `Drv*` exports (`src/um/opengl/rvkgl_exports.cpp`) and
 `GlIcdBinding`'s pointer to it (`src/icd/opengl/gl_hooks.cpp`), and the D3D
 user-mode driver's root behind `OpenAdapter10_2` and `OpenAdapter12`
 (`src/um/d3d/rvkumd_exports.cpp`) with `UmdBinding`'s pointer to it
-(`src/icd/d3d/umd_binding.cpp`) are the only
+(`src/icd/d3d/umd_binding.cpp`), and rvk-renderer's `RendererProcess` behind its
+`main` (`src/device/shim/renderer_main.cpp`) are the only
 process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single
 translation unit defining those entry points.

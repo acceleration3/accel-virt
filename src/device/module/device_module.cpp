@@ -7,7 +7,8 @@
 namespace av {
 
 DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                                     bool base_blobs, const RvkRecordingOptions *recording, char *error,
+                                     bool base_blobs, const RvkRecordingOptions *recording,
+                                     const char *renderer, const char *executor_path, char *error,
                                      size_t error_size)
 {
     AV_SCOPE("DeviceModule::create");
@@ -18,7 +19,8 @@ DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const RvkExecutorOps
     }
     for (ObjectStorage<DeviceInstance> &slot : slots_) {
         if (slot.construct(*ops) != Status::ok) continue;   /* occupied */
-        if (slot.object().device().realize(host_gpu, base_blobs, executor, recording, message) == Status::ok)
+        if (slot.object().device().realize(host_gpu, base_blobs, executor, recording, renderer, executor_path,
+                                           message) == Status::ok)
             return &slot.object();
         slot.destroy();
         return nullptr;

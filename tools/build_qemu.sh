@@ -29,7 +29,7 @@ if [ ! -f "$source/.rvk-patch" ] || [ "$(cat "$source/.rvk-patch")" != "$stamp" 
     echo "$stamp" > "$source/.rvk-patch"
 fi
 install -C -m 644 "$glue/virtio-gpu-rvk.h" "$source/include/hw/virtio/virtio-gpu-rvk.h"
-for file in virtio-gpu-rvk.c virtio-gpu-rvk-host.c virtio-gpu-pci-rvk.c; do
+for file in virtio-gpu-rvk.c virtio-gpu-rvk-host.c virtio-gpu-rvk-renderer.c virtio-gpu-pci-rvk.c; do
     install -C -m 644 "$glue/$file" "$source/hw/display/$file"
 done
 

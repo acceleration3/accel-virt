@@ -70,6 +70,18 @@ public:
     Status   show_scanout(uint32_t head, int fd, const ScanoutFramebuffer &frame) override;
     void     update_scanout(uint32_t head, uint32_t x, uint32_t y, uint32_t width, uint32_t height) override;
     void     hide_scanout(uint32_t head) override;
+    int      event_descriptor(void *event) override;
+    int      fence_interrupt_descriptor(uint32_t line) override;
+    uint32_t guest_region_count() override;
+    Status   guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size) override;
+    Status   locate_guest(const void *pointer, uint64_t length, uint32_t &region, uint64_t &offset) override;
+    int      host_memory_descriptor(void *memory) override;
+    void     close_descriptor(int descriptor) override;
+    Status   start_renderer(const char *path) override;
+    Status   send_renderer(const uint8_t *bytes, size_t length, const int *descriptors, uint32_t count) override;
+    Status   receive_renderer(uint8_t *buffer, size_t capacity, size_t &length, int *descriptors,
+                              uint32_t capacity_descriptors, uint32_t &count, uint32_t timeout_ms) override;
+    void     kill_renderer() override;
 
 private:
     void violated(const char *rule, const char *function);

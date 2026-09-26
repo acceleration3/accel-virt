@@ -1,6 +1,7 @@
 #include "device/control/blob_commands.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/context/context_plane.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -13,8 +14,8 @@
 
 namespace av {
 
-BlobCommands::BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder)
-    : host_(host), blobs_(blobs), recorder_(recorder)
+BlobCommands::BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder, ContextPlane &contexts)
+    : host_(host), blobs_(blobs), recorder_(recorder), contexts_(contexts)
 {
     AV_SCOPE("BlobCommands::BlobCommands");
 }
@@ -47,7 +48,10 @@ bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
     AV_SCOPE("BlobCommands::unref");
     const uint32_t resource = named_resource(request);
     switch (blobs_.release(resource)) {
-    case Status::ok: recorder_.record_blob(0u, BlobAction::released, 0u, resource, 0u, 0u); return true;
+    case Status::ok:
+        recorder_.record_blob(0u, BlobAction::released, 0u, resource, 0u, 0u);
+        contexts_.blob_released(resource);
+        return true;
     case Status::invalid_state: response.set(GpuResponse::err_invalid_parameter); return true;
     default: return false;
     }
@@ -83,7 +87,9 @@ uint32_t BlobCommands::create_guest(ControlRequest &request, uint32_t id, uint32
 {
     AV_SCOPE("BlobCommands::create_guest");
     const uint32_t answer = create_answer(blobs_.create_guest(id, size, request, CreateBlobRequest::fixed_size, entries));
-    if (answer == GpuResponse::ok_nodata) recorder_.record_blob(0u, BlobAction::created, 0u, id, 0u, size);
+    if (answer != GpuResponse::ok_nodata) return answer;
+    recorder_.record_blob(0u, BlobAction::created, 0u, id, 0u, size);
+    contexts_.blob_created(id);
     return answer;
 }
 
@@ -93,7 +99,9 @@ uint32_t BlobCommands::create_host(uint32_t id, uint32_t flags, uint32_t entries
     AV_SCOPE("BlobCommands::create_host");
     if ((flags & CreateBlobRequest::flag_mappable) == 0u || entries != 0u) return GpuResponse::err_invalid_parameter;
     const uint32_t answer = create_answer(blobs_.create_host(id, size));
-    if (answer == GpuResponse::ok_nodata) recorder_.record_blob(0u, BlobAction::created, 0u, id, 0u, size);
+    if (answer != GpuResponse::ok_nodata) return answer;
+    recorder_.record_blob(0u, BlobAction::created, 0u, id, 0u, size);
+    contexts_.blob_created(id);
     return answer;
 }
 

@@ -2,6 +2,8 @@
 
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/host/renderer_peer.hpp"
+#include "device/renderer/forwarded_request.hpp"
 #include "device/display/scanout_framebuffer.hpp"
 #include "device/gpu/pci_address.hpp"
 
@@ -14,6 +16,7 @@
 #include <linux/udmabuf.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace av {
@@ -48,7 +51,9 @@ MockHost::MockHost()
       fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u),
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
       fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{},
-      update_rects_{}
+      update_rects_{}, renderer_regions_{}, renderer_region_count_(0u), renderer_peer_(nullptr),
+      renderer_running_(false), fail_renderer_start_(0u), renderer_starts_(0u), renderer_kills_(0u),
+      renderer_datagrams_(0u), receive_timeout_(0u), forward_requests_(false), fail_event_descriptor_(0u), started_renderer_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -102,6 +107,10 @@ MockHost::~MockHost()
     }
     for (HostBlock &block : host_blocks_)
         if (block.live) std::free(block.pointer);
+    for (std::uint32_t index = 0u; index < renderer_region_count_; index++)
+        if (renderer_regions_[index].descriptor >= 0) ::close(renderer_regions_[index].descriptor);
+    for (Event &event : events_)
+        if (event.live && event.descriptor >= 0) ::close(event.descriptor);
     pthread_cond_destroy(&work_queued_);
     pthread_mutex_destroy(&state_);
 }
@@ -209,6 +218,7 @@ Status MockHost::create_event(void *&event)
         pthread_cond_init(&candidate.signalled, nullptr);
         candidate.set = false;
         candidate.live = true;
+        candidate.descriptor = -1;
         event = &candidate;
         return Status::ok;
     }
@@ -229,6 +239,8 @@ void MockHost::destroy_event(void *event)
     pthread_cond_destroy(&slot->signalled);
     pthread_mutex_destroy(&slot->lock);
     StateLock lock(state_);
+    if (slot->descriptor >= 0) ::close(slot->descriptor);
+    slot->descriptor = -1;
     slot->live = false;
 }
 
@@ -921,13 +933,18 @@ std::uint32_t MockHost::live_dmabufs() const { return dmabufs_; }
  * once" a thing the kernel answers rather than a counter. */
 int MockHost::open_descriptor()
 {
+    const int descriptor = fresh_descriptor();
+    if (descriptor < 0) return -1;
+    StateLock lock(state_);
+    dmabufs_++;
+    return descriptor;
+}
+
+int MockHost::fresh_descriptor()
+{
     int ends[2] = {-1, -1};
-    if (::pipe(ends) != 0) return -1;
+    if (::pipe2(ends, O_CLOEXEC) != 0) return -1;
     ::close(ends[1]);
-    {
-        StateLock lock(state_);
-        dmabufs_++;
-    }
     return ends[0];
 }
 
@@ -1130,6 +1147,7 @@ void MockHost::remove_from_hostmem(std::uint64_t offset, std::uint64_t size)
 std::size_t MockHost::read_request(void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size)
 {
     require_main_loop("MockHost::read_request");
+    if (forward_requests_) return static_cast<const ForwardedRequest *>(request)->read(offset, buffer, size);
     return static_cast<MockRequest *>(request)->read(offset, buffer, size);
 }
 
@@ -1438,5 +1456,215 @@ std::uint32_t MockHost::live_recordings()
     for (const RecordingFile &recording : recordings_) live += recording.live ? 1u : 0u;
     return live;
 }
+
+/* The descriptor stands for the eventfd a QEMU event is; the mock's events
+ * are condition variables, so it only has to be a real file the renderer can
+ * be handed and close. */
+int MockHost::event_descriptor(void *event)
+{
+    require_main_loop("MockHost::event_descriptor");
+    Event *const slot = event_of(event);
+    if (slot == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::event_descriptor");
+        return -1;
+    }
+    StateLock lock(state_);
+    if (fail_now(fail_event_descriptor_)) return -1;
+    if (slot->descriptor < 0) slot->descriptor = fresh_descriptor();
+    return slot->descriptor;
+}
+
+int MockHost::fence_interrupt_descriptor(std::uint32_t line)
+{
+    require_main_loop("MockHost::fence_interrupt_descriptor");
+    {
+        StateLock lock(state_);
+        if (!fence_connected_ || line >= max_doorbells) return -1;
+    }
+    return open_descriptor();
+}
+
+std::uint32_t MockHost::guest_region_count()
+{
+    require_main_loop("MockHost::guest_region_count");
+    StateLock lock(state_);
+    return renderer_region_count_;
+}
+
+Status MockHost::guest_region(std::uint32_t index, std::uint32_t &region, int &descriptor, std::uint64_t &size)
+{
+    require_main_loop("MockHost::guest_region");
+    descriptor = -1;
+    RendererRegion scripted = {};
+    {
+        StateLock lock(state_);
+        if (index >= renderer_region_count_) return Status::not_supported;
+        scripted = renderer_regions_[index];
+    }
+    if (scripted.pointer == nullptr) return Status::not_supported;
+    const int duplicate = ::fcntl(scripted.descriptor, F_DUPFD_CLOEXEC, 0);
+    if (duplicate < 0) return Status::not_supported;
+    StateLock lock(state_);
+    dmabufs_++;
+    region = scripted.region;
+    descriptor = duplicate;
+    size = scripted.size;
+    return Status::ok;
+}
+
+Status MockHost::locate_guest(const void *pointer, std::uint64_t length, std::uint32_t &region,
+                              std::uint64_t &offset)
+{
+    require_main_loop("MockHost::locate_guest");
+    StateLock lock(state_);
+    const auto *const byte = static_cast<const std::uint8_t *>(pointer);
+    for (std::uint32_t index = 0u; index < renderer_region_count_; index++) {
+        const RendererRegion &scripted = renderer_regions_[index];
+        const auto *const base = static_cast<const std::uint8_t *>(scripted.pointer);
+        if (base == nullptr || byte < base) continue;
+        const std::uint64_t at = static_cast<std::uint64_t>(byte - base);
+        if (at >= scripted.size || length > scripted.size - at) continue;
+        region = scripted.region;
+        offset = at;
+        return Status::ok;
+    }
+    return Status::not_found;
+}
+
+int MockHost::host_memory_descriptor(void *memory)
+{
+    require_main_loop("MockHost::host_memory_descriptor");
+    if (block_of(memory) == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::host_memory_descriptor");
+        return -1;
+    }
+    return open_descriptor();
+}
+
+/* Counted against the same total open_descriptor adds to, so a test says no
+ * descriptor the device was handed outlived it; one that is not open is a
+ * double close. */
+void MockHost::close_descriptor(int descriptor)
+{
+    if (!descriptor_open(descriptor)) {
+        record(HostViolation::unknown_handle, "MockHost::close_descriptor");
+        return;
+    }
+    ::close(descriptor);
+    StateLock lock(state_);
+    dmabufs_--;
+}
+
+Status MockHost::start_renderer(const char *path)
+{
+    require_main_loop("MockHost::start_renderer");
+    RendererPeer *peer = nullptr;
+    {
+        StateLock lock(state_);
+        if (fail_now(fail_renderer_start_)) return Status::not_found;
+        renderer_running_ = true;
+        renderer_starts_++;
+        std::snprintf(started_renderer_, sizeof started_renderer_, "%s", path != nullptr ? path : "");
+        peer = renderer_peer_;
+    }
+    if (peer != nullptr) peer->started();
+    return Status::ok;
+}
+
+/* The peer gets duplicates, as a socket gives the far process its own: the
+ * caller's stay the caller's. */
+Status MockHost::send_renderer(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
+                               std::uint32_t count)
+{
+    require_main_loop("MockHost::send_renderer");
+    RendererPeer *peer = nullptr;
+    {
+        StateLock lock(state_);
+        if (!renderer_running_) return Status::not_found;
+        renderer_datagrams_++;
+        peer = renderer_peer_;
+    }
+    if (peer == nullptr || count > max_renderer_descriptors) return Status::ok;
+    int delivered[max_renderer_descriptors] = {};
+    for (std::uint32_t index = 0u; index < count; index++)
+        delivered[index] = descriptors[index] >= 0 ? ::fcntl(descriptors[index], F_DUPFD_CLOEXEC, 0) : -1;
+    peer->deliver(bytes, length, delivered, count);
+    return Status::ok;
+}
+
+Status MockHost::receive_renderer(std::uint8_t *buffer, std::size_t capacity, std::size_t &length, int *descriptors,
+                                  std::uint32_t capacity_descriptors, std::uint32_t &count, std::uint32_t timeout_ms)
+{
+    require_main_loop("MockHost::receive_renderer");
+    length = 0u;
+    count = 0u;
+    RendererPeer *peer = nullptr;
+    {
+        StateLock lock(state_);
+        receive_timeout_ = timeout_ms;
+        if (!renderer_running_) return Status::not_found;
+        peer = renderer_peer_;
+    }
+    std::size_t   got = 0u;
+    std::uint32_t taken = 0u;
+    if (peer == nullptr || !peer->answer(buffer, capacity, got, descriptors, capacity_descriptors, taken))
+        return Status::invalid_state;
+    length = got;
+    count = taken;
+    StateLock lock(state_);
+    dmabufs_ += taken;
+    return Status::ok;
+}
+
+void MockHost::kill_renderer()
+{
+    require_main_loop("MockHost::kill_renderer");
+    StateLock lock(state_);
+    renderer_kills_++;
+    renderer_running_ = false;
+}
+
+int MockHost::add_guest_region(std::uint32_t region, void *pointer, std::uint64_t size)
+{
+    StateLock lock(state_);
+    if (renderer_region_count_ == max_renderer_regions) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "too many guest regions");
+        return -1;
+    }
+    const int descriptor = fresh_descriptor();
+    struct stat file = {};
+    if (descriptor < 0 || ::fstat(descriptor, &file) != 0) std::abort();
+    renderer_regions_[renderer_region_count_++] =
+        RendererRegion{region, pointer, size, descriptor, static_cast<std::uint64_t>(file.st_dev),
+                       static_cast<std::uint64_t>(file.st_ino)};
+    return descriptor;
+}
+
+void *MockHost::guest_region_mapping(int descriptor, std::uint64_t size)
+{
+    struct stat file = {};
+    if (descriptor < 0 || ::fstat(descriptor, &file) != 0) return nullptr;
+    StateLock lock(state_);
+    for (std::uint32_t index = 0u; index < renderer_region_count_; index++) {
+        const RendererRegion &scripted = renderer_regions_[index];
+        if (scripted.device != static_cast<std::uint64_t>(file.st_dev) ||
+            scripted.inode != static_cast<std::uint64_t>(file.st_ino))
+            continue;
+        return size <= scripted.size ? scripted.pointer : nullptr;
+    }
+    return nullptr;
+}
+
+void MockHost::fail_event_descriptor_at(std::uint32_t nth) { StateLock lock(state_); fail_event_descriptor_ = nth; }
+void MockHost::forward_requests() { StateLock lock(state_); forward_requests_ = true; }
+void MockHost::connect_renderer(RendererPeer &peer) { StateLock lock(state_); renderer_peer_ = &peer; }
+void MockHost::fail_renderer_start_at(std::uint32_t nth) { StateLock lock(state_); fail_renderer_start_ = nth; }
+void MockHost::renderer_gone() { StateLock lock(state_); renderer_running_ = false; }
+bool MockHost::renderer_running() { StateLock lock(state_); return renderer_running_; }
+std::uint32_t MockHost::renderer_starts() { StateLock lock(state_); return renderer_starts_; }
+std::uint32_t MockHost::renderer_kills() { StateLock lock(state_); return renderer_kills_; }
+const char *MockHost::started_renderer() { StateLock lock(state_); return started_renderer_; }
+std::uint32_t MockHost::renderer_datagrams() { StateLock lock(state_); return renderer_datagrams_; }
+std::uint32_t MockHost::last_receive_timeout() { StateLock lock(state_); return receive_timeout_; }
 
 }  // namespace av

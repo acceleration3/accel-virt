@@ -1,6 +1,8 @@
 /* The scanout commands the core answers, request byte by request byte: every
  * refusal of contracts/scanout_blob.md, and what the base class is left. */
 #include "core/support/status.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/context/local_context_plane.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/control/control_request.hpp"
@@ -231,8 +233,10 @@ TEST(scanout_commands, a_blob_a_head_shows_cannot_be_unreferenced_until_it_is_hi
 { Fixture fixture(1u);
   if (!fixture.udmabuf_here()) return;
   MockHost        &host = fixture.host();
-  av::WireRecorder recorder(host);
-  av::BlobCommands blobs(host, fixture.blobs(), recorder);
+  av::WireRecorder       recorder(host);
+  av::FenceInterrupts    interrupts(host);
+  av::LocalContextPlane  plane(host, fixture.blobs(), interrupts, recorder);
+  av::BlobCommands       blobs(host, fixture.blobs(), recorder, plane);
   const auto       unref = [&](std::uint32_t id) {
       GpuRequestBuilder request(av::BlobCommands::resource_unref);
       request.u32(id).u32(0u);

@@ -51,7 +51,8 @@ void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t 
     TextBuffer message(bytes, sizeof bytes);
     const RvkRecordingOptions recording = {record, 0u, "all", 0};
     static_cast<void>(
-        device_.realize("auto", false, &executor, record != nullptr ? &recording : nullptr, message));
+        device_.realize("auto", false, &executor, record != nullptr ? &recording : nullptr, nullptr,
+                        nullptr, message));
     device_.status(DriverStatus::driver_ok);
 }
 

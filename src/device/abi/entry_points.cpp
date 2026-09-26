@@ -26,9 +26,9 @@ void rvk_device_trace_start(RvkMainLoopScheduler schedule)
 
 __attribute__((visibility("default")))
 RvkDevice *rvk_device_create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
-                             int base_blobs, const RvkRecordingOptions *recording, char *error,
-                             size_t error_size)
-{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, error, error_size)); }
+                             int base_blobs, const RvkRecordingOptions *recording, const char *renderer,
+                             const char *executor_path, char *error, size_t error_size)
+{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, executor, host_gpu, base_blobs != 0, recording, renderer, executor_path, error, error_size)); }
 
 __attribute__((visibility("default")))
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
@@ -56,6 +56,10 @@ void rvk_device_status(RvkDevice *device, uint8_t status)
 __attribute__((visibility("default")))
 void rvk_device_reset(RvkDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().reset(); }
+
+__attribute__((visibility("default")))
+void rvk_device_renderer_lost(RvkDevice *device)
+{ reinterpret_cast<av::DeviceInstance *>(device)->device().renderer_lost(); }
 
 __attribute__((visibility("default")))
 int rvk_device_destroy(RvkDevice *device)

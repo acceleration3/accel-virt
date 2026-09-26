@@ -10,6 +10,7 @@
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/abi/rvk_executor.h"
+#include "harness/context/local_context_plane_probe.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -106,15 +107,13 @@ class Fixture {
 public:
     /* A device offering `sub_apis`, over a library of `abi_version`. */
     explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = RVK_EXECUTOR_ABI_VERSION)
-        : blobs_(host_), shared_(host_), interrupts_(host_), ops_(sub_apis), library_(), recorder_(host_),
-          contexts_(host_, blobs_, shared_, interrupts_, library_, recorder_), capset_(host_),
-          commands_(host_, contexts_, capset_)
+        : blobs_(host_), interrupts_(host_), ops_(sub_apis), recorder_(host_), plane_(host_, blobs_, interrupts_, recorder_),
+          capset_(host_), commands_(host_, plane_, capset_)
     {
         static_cast<void>(blobs_.initialize());
-        static_cast<void>(shared_.initialize());
-        static_cast<void>(contexts_.initialize());
+        static_cast<void>(plane_.initialize());
         ops_.editable().abi_version = abi_version;
-        static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(plane_.accept(&ops_.table()));
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
         capset_.describe(0u, sub_apis, av::CapsetInfo::feature_host_visible_memory);
@@ -147,18 +146,17 @@ public:
     std::size_t         last_size() const { return last_size_; }
     MockHost           &host() { return host_; }
     BlobTable          &blobs() { return blobs_; }
-    DeviceContextTable &contexts() { return contexts_; }
+    DeviceContextTable &contexts() { return av::LocalContextPlaneProbe::table(plane_); }
+    av::LocalContextPlane &plane() { return plane_; }
     av::MockExecutorOps &ops() { return ops_; }
 
 private:
-    MockHost            host_;
-    BlobTable           blobs_;
-    av::HostSharedObjects shared_;
-    av::FenceInterrupts interrupts_;
-    av::MockExecutorOps ops_;
-    av::ExecutorLibrary library_;
-    av::WireRecorder    recorder_;
-    DeviceContextTable  contexts_;
+    MockHost              host_;
+    BlobTable             blobs_;
+    av::FenceInterrupts   interrupts_;
+    av::MockExecutorOps   ops_;
+    av::WireRecorder      recorder_;
+    av::LocalContextPlane plane_;
     DeviceCapset       capset_;
     ContextCommands    commands_;
     std::uint8_t       last_[256] = {};
@@ -311,11 +309,9 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
 { MockHost host;
   host.add_gpu(uuid);
   BlobTable blobs(host);
-  av::HostSharedObjects shared(host);
   av::FenceInterrupts interrupts(host);
-  av::ExecutorLibrary library;
   av::WireRecorder recorder(host);
-  DeviceContextTable contexts(host, blobs, shared, interrupts, library, recorder);
+  av::LocalContextPlane contexts(host, blobs, interrupts, recorder);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u, 0u);
@@ -342,7 +338,7 @@ TEST(context_commands, answer_is_main_loop_only)
       ContextCommands *commands;
   };
   DeviceCapset capset(fixture.host());
-  ContextCommands commands(fixture.host(), fixture.contexts(), capset);
+  ContextCommands commands(fixture.host(), fixture.plane(), capset);
   Call call = {&fixture.host(), &commands};
   void *thread = nullptr;
   CHECK_STATUS(fixture.host().start_thread(

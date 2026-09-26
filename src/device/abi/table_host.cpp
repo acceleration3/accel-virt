@@ -15,6 +15,10 @@ namespace {
  * contracts/executor_scanout_export.md). */
 constexpr uint64_t drm_format_mod_linear = 0u;
 
+/* What the table's receive_renderer answers. */
+constexpr int receive_ok = 0;
+constexpr int receive_timed_out = 1;
+
 }  // namespace
 
 TableHost::TableHost(const RvkHostOps &ops) : ops_(ops)
@@ -423,6 +427,116 @@ void TableHost::hide_scanout(uint32_t head)
 {
     AV_SCOPE("TableHost::hide_scanout");
     if (ops_.hide_scanout != nullptr) ops_.hide_scanout(ops_.opaque, head);
+}
+
+/* A table from before renderer mode has none of these, which is a host that
+ * runs every context in QEMU: no descriptors, no regions, no renderer. */
+int TableHost::event_descriptor(void *event)
+{
+    AV_SCOPE("TableHost::event_descriptor");
+    if (ops_.event_descriptor == nullptr) return -1;
+    return ops_.event_descriptor(ops_.opaque, event);
+}
+
+int TableHost::fence_interrupt_descriptor(uint32_t line)
+{
+    AV_SCOPE("TableHost::fence_interrupt_descriptor");
+    if (ops_.fence_interrupt_descriptor == nullptr) return -1;
+    return ops_.fence_interrupt_descriptor(ops_.opaque, line);
+}
+
+uint32_t TableHost::guest_region_count()
+{
+    AV_SCOPE("TableHost::guest_region_count");
+    if (ops_.guest_region_count == nullptr) return 0u;
+    return ops_.guest_region_count(ops_.opaque);
+}
+
+Status TableHost::guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size)
+{
+    AV_SCOPE("TableHost::guest_region");
+    descriptor = -1;
+    if (ops_.guest_region == nullptr) return Status::not_supported;
+    uint32_t number = 0u;
+    int      made = -1;
+    uint64_t bytes = 0u;
+    if (ops_.guest_region(ops_.opaque, index, &number, &made, &bytes) != 0) return Status::not_supported;
+    region = number;
+    descriptor = made;
+    size = bytes;
+    return Status::ok;
+}
+
+Status TableHost::locate_guest(const void *pointer, uint64_t length, uint32_t &region, uint64_t &offset)
+{
+    AV_SCOPE("TableHost::locate_guest");
+    if (ops_.locate_guest == nullptr) return Status::not_found;
+    uint32_t number = 0u;
+    uint64_t at = 0u;
+    if (ops_.locate_guest(ops_.opaque, pointer, length, &number, &at) != 0) return Status::not_found;
+    region = number;
+    offset = at;
+    return Status::ok;
+}
+
+int TableHost::host_memory_descriptor(void *memory)
+{
+    AV_SCOPE("TableHost::host_memory_descriptor");
+    if (ops_.host_memory_descriptor == nullptr) return -1;
+    return ops_.host_memory_descriptor(ops_.opaque, memory);
+}
+
+void TableHost::close_descriptor(int descriptor)
+{
+    AV_SCOPE("TableHost::close_descriptor");
+    if (ops_.close_descriptor != nullptr && descriptor >= 0) ops_.close_descriptor(ops_.opaque, descriptor);
+}
+
+Status TableHost::start_renderer(const char *path)
+{
+    AV_SCOPE("TableHost::start_renderer");
+    if (ops_.start_renderer == nullptr) return Status::not_supported;
+    return ops_.start_renderer(ops_.opaque, path) == 0 ? Status::ok : Status::not_found;
+}
+
+Status TableHost::send_renderer(const uint8_t *bytes, size_t length, const int *descriptors, uint32_t count)
+{
+    AV_SCOPE("TableHost::send_renderer");
+    if (ops_.send_renderer == nullptr) return Status::not_supported;
+    return ops_.send_renderer(ops_.opaque, bytes, length, descriptors, count) == 0 ? Status::ok : Status::not_found;
+}
+
+/* A datagram longer than the buffer arrived cut, so it is refused whole and
+ * the descriptors that came with it closed: the caller never sees half a
+ * message. A table claiming more descriptors than it had room for is refused
+ * the same way. */
+Status TableHost::receive_renderer(uint8_t *buffer, size_t capacity, size_t &length, int *descriptors,
+                                   uint32_t capacity_descriptors, uint32_t &count, uint32_t timeout_ms)
+{
+    AV_SCOPE("TableHost::receive_renderer");
+    length = 0u;
+    count = 0u;
+    if (ops_.receive_renderer == nullptr) return Status::not_supported;
+    size_t   got = 0u;
+    uint32_t taken = 0u;
+    const int answer = ops_.receive_renderer(ops_.opaque, buffer, capacity, &got, descriptors, capacity_descriptors,
+                                             &taken, timeout_ms);
+    if (answer == receive_timed_out) return Status::invalid_state;
+    if (answer != receive_ok) return Status::not_found;
+    if (got > capacity || taken > capacity_descriptors) {
+        for (uint32_t index = 0u; index < taken && index < capacity_descriptors; index++)
+            close_descriptor(descriptors[index]);
+        return Status::too_large;
+    }
+    length = got;
+    count = taken;
+    return Status::ok;
+}
+
+void TableHost::kill_renderer()
+{
+    AV_SCOPE("TableHost::kill_renderer");
+    if (ops_.kill_renderer != nullptr) ops_.kill_renderer(ops_.opaque);
 }
 
 }  // namespace av

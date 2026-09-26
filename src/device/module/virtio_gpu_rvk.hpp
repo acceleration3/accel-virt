@@ -6,15 +6,14 @@
 
 #include "core/support/status.hpp"
 #include "device/capset/device_capset.hpp"
-#include "device/context/device_context_table.hpp"
+#include "device/context/local_context_plane.hpp"
+#include "device/isolation/renderer_context_plane.hpp"
 #include "device/display/display_heads.hpp"
-#include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/gpu/host_pci_identity.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/host_shared_objects.hpp"
 #include "device/probe/host_feasibility.hpp"
 #include "device/recording/wire_recorder.hpp"
 
@@ -40,7 +39,8 @@ public:
      * accepts; otherwise the binding's answer. Without an executor there is
      * no capset. */
     [[nodiscard]] Status realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
-                                 const RvkRecordingOptions *recording, TextBuffer &message);
+                                 const RvkRecordingOptions *recording, const char *renderer,
+                                 const char *executor_path, TextBuffer &message);
     /* Main loop: a virtio reset destroys every context, releases the fence
      * interrupts, then every blob. */
     void                 reset();
@@ -67,6 +67,8 @@ public:
     [[nodiscard]] Status create_context(uint32_t id);
     [[nodiscard]] Status destroy_context(uint32_t id);
     uint32_t             contexts() const;
+    /* Main loop: the renderer the contexts ran in died. */
+    void                 renderer_lost();
     bool                 realized() const;
     uint32_t             gpu_index() const;
     /* Main loop: its fields on the line its caller opened, then its contexts. */
@@ -83,7 +85,6 @@ private:
     Host              &host_;
     GpuBinding         binding_;
     HostPciIdentity    pci_;
-    ExecutorLibrary    library_;
     HostFeasibility    feasibility_;
     DeviceCapset       capset_;
     /* Before the contexts and the blobs, which record through it. */
@@ -91,13 +92,15 @@ private:
     /* Before the contexts, which unpin blobs, let go of shared objects and
      * stop raising interrupts as they are destroyed. */
     BlobTable          blobs_;
-    HostSharedObjects  shared_;
     /* After the blobs it pins and before the contexts: a head holds a pin, so
      * every head lets go before the table it pinned from goes. */
     DisplayHeads       heads_;
     FenceInterrupts    interrupts_;
     DriverStatus       status_;
-    DeviceContextTable contexts_;
+    /* Where the contexts run: here, or in the renderer realize started. */
+    LocalContextPlane    local_;
+    RendererContextPlane remote_;
+    ContextPlane        *contexts_;
 
     friend struct VirtioGpuRvkProbe;
 };

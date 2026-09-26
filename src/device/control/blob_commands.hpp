@@ -13,6 +13,7 @@
 namespace av {
 
 class BlobTable;
+class ContextPlane;
 class ControlRequest;
 class GpuResponse;
 class Host;
@@ -28,7 +29,9 @@ public:
         resource_unmap_blob = 0x0209u,
     };
 
-    BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder);
+    /* `contexts` is told of every blob made and let go, for contexts that
+     * keep a copy of the table in another process. */
+    BlobCommands(Host &host, BlobTable &blobs, WireRecorder &recorder, ContextPlane &contexts);
     BlobCommands(const BlobCommands &) = delete;
     BlobCommands &operator=(const BlobCommands &) = delete;
 
@@ -53,6 +56,7 @@ private:
     Host         &host_;
     BlobTable    &blobs_;
     WireRecorder &recorder_;
+    ContextPlane &contexts_;
 };
 
 }  // namespace av

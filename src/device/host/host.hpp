@@ -183,6 +183,42 @@ public:
     /* Main loop. Head `head` shows nothing. Safe on a head showing nothing. */
     virtual void   hide_scanout(uint32_t head) = 0;
 
+    /* The renderer process (docs/renderer.md). Main loop, all of them. A
+     * descriptor handed out is a duplicate, the caller's to close; one handed
+     * in stays the caller's. */
+    /* The eventfd behind an event create_event made, not duplicated: -1 for a
+     * host whose events are not eventfds. */
+    virtual int                  event_descriptor(void *event) = 0;
+    /* Fence line `line`'s guest notifier while interrupts are connected; -1
+     * for a line with none. */
+    virtual int                  fence_interrupt_descriptor(uint32_t line) = 0;
+    /* Guest RAM as the memfd-backed regions QEMU maps it from: the count, and
+     * region `index`'s number, descriptor and size. not_supported for RAM that
+     * is not a shared memfd, which a renderer cannot map. */
+    virtual uint32_t             guest_region_count() = 0;
+    [[nodiscard]] virtual Status guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size) = 0;
+    /* Which region holds all `length` bytes at `pointer`, and where. */
+    [[nodiscard]] virtual Status locate_guest(const void *pointer, uint64_t length, uint32_t &region,
+                                              uint64_t &offset) = 0;
+    /* The memfd behind host memory create_host_memory made. */
+    virtual int                  host_memory_descriptor(void *memory) = 0;
+    virtual void                 close_descriptor(int descriptor) = 0;
+    /* The renderer at `path`, started with its socket as descriptor 3; the
+     * device is told through rvk_device_renderer_lost when it dies.
+     * not_supported where the host starts none. */
+    [[nodiscard]] virtual Status start_renderer(const char *path) = 0;
+    /* One datagram and its descriptors: not_found once the renderer is gone. */
+    [[nodiscard]] virtual Status send_renderer(const uint8_t *bytes, size_t length, const int *descriptors,
+                                               uint32_t count) = 0;
+    /* The next datagram, waiting at most `timeout_ms`: invalid_state when none
+     * came in time, not_found once the renderer is gone. The descriptors are
+     * the caller's. */
+    [[nodiscard]] virtual Status receive_renderer(uint8_t *buffer, size_t capacity, size_t &length, int *descriptors,
+                                                  uint32_t capacity_descriptors, uint32_t &count,
+                                                  uint32_t timeout_ms) = 0;
+    /* Ends the renderer at once; its death is reported as any other. */
+    virtual void                 kill_renderer() = 0;
+
 protected:
     Host() = default;
     ~Host() = default;

@@ -686,6 +686,42 @@ static void rvk_raise_fence_interrupt(void *opaque, uint32_t line)
     }
 }
 
+/* What a renderer is handed of QEMU's own objects (docs/renderer.md). The
+ * event's eventfd is its own; everything else is a duplicate the core closes. */
+static int rvk_event_descriptor(void *opaque, void *event)
+{
+    return event_notifier_get_fd(event);
+}
+
+static int rvk_fence_interrupt_descriptor(void *opaque, uint32_t line)
+{
+    VirtIOGPURvk *r = opaque;
+    EventNotifier *notifier;
+
+    if (line >= RVK_DEVICE_DOORBELLS || !r->fence_queues[line]) {
+        return -1;
+    }
+    notifier = virtio_queue_get_guest_notifier(r->fence_queues[line]);
+    if (!notifier->initialized) {
+        return -1;
+    }
+    return fcntl(event_notifier_get_fd(notifier), F_DUPFD_CLOEXEC, 0);
+}
+
+static int rvk_host_memory_descriptor(void *opaque, void *memory)
+{
+    VirtIOGPURvkBlock *block = memory;
+
+    return block->fd >= 0 ? fcntl(block->fd, F_DUPFD_CLOEXEC, 0) : -1;
+}
+
+static void rvk_close_descriptor(void *opaque, int descriptor)
+{
+    if (descriptor >= 0) {
+        close(descriptor);
+    }
+}
+
 static size_t rvk_read_request(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size)
 {
     struct virtio_gpu_ctrl_command *cmd = request;
@@ -1191,6 +1227,11 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .update_scanout = rvk_update_scanout,
         .hide_scanout = rvk_hide_scanout,
         .read_file = rvk_read_file,
+        .event_descriptor = rvk_event_descriptor,
+        .fence_interrupt_descriptor = rvk_fence_interrupt_descriptor,
+        .host_memory_descriptor = rvk_host_memory_descriptor,
+        .close_descriptor = rvk_close_descriptor,
     };
+    virtio_gpu_rvk_renderer_ops(&r->host);
     rvk_read_gpus(r);
 }

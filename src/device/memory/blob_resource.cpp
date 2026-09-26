@@ -106,6 +106,12 @@ bool BlobResource::pinned() const
     return pins_ != 0u;
 }
 
+void *BlobResource::host_memory() const
+{
+    AV_SCOPE("BlobResource::host_memory");
+    return block_.created() ? block_.handle() : nullptr;
+}
+
 BlobWindow BlobResource::window() const
 {
     AV_SCOPE("BlobResource::window");

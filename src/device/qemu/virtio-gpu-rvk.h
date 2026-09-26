@@ -20,6 +20,29 @@ OBJECT_DECLARE_SIMPLE_TYPE(VirtIOGPURvk, VIRTIO_GPU_RVK)
 
 /* Host GPUs remembered from the Vulkan loader at realize. */
 #define VIRTIO_GPU_RVK_MAX_GPUS 16
+/* RAMBlocks a renderer may be handed as guest regions. */
+#define VIRTIO_GPU_RVK_MAX_REGIONS 64
+
+/* A RAMBlock as guest_region_count found it: remembered by its host address,
+ * not the block, which RCU may free once the list changes. */
+typedef struct VirtIOGPURvkRegion {
+    void *host;
+    uint64_t fd_offset;
+    uint64_t used;
+    bool mappable;
+} VirtIOGPURvkRegion;
+
+/* The rvk-renderer the contexts run in (docs/renderer.md): -1 descriptors
+ * while none runs. */
+typedef struct VirtIOGPURvkRenderer {
+    pid_t pid;
+    int pidfd;
+    int socket;
+    /* The socket's hangup watch, 0 when none. */
+    guint hangup;
+    uint32_t region_count;
+    VirtIOGPURvkRegion regions[VIRTIO_GPU_RVK_MAX_REGIONS];
+} VirtIOGPURvkRenderer;
 
 struct VirtIOGPURvk {
     VirtIOGPU parent_obj;
@@ -28,6 +51,10 @@ struct VirtIOGPURvk {
     /* The executor library's path (rvk_executor.h); none: no capset. */
     char *executor;
     GModule *executor_library;
+    /* rvk-renderer's path: set, the contexts run in that process, which loads
+     * the executor library itself, and QEMU does not (docs/renderer.md). */
+    char *renderer;
+    VirtIOGPURvkRenderer process;
     /* The wire recording this device writes (docs/protocol.md, feature 065);
      * no path is recording off. */
     char *record;
@@ -79,6 +106,15 @@ void virtio_gpu_rvk_host_finish(VirtIOGPURvk *r);
 /* rvk_device_pci_identity for the PCI wrapper, which is a module of its own
  * and must not link a second copy of the core to ask it. */
 int virtio_gpu_rvk_pci_identity(VirtIOGPURvk *r, RvkPciIdentity *identity);
+
+/* The renderer's operations in `ops`: its process, its socket and the guest
+ * regions it maps (virtio-gpu-rvk-renderer.c). */
+void virtio_gpu_rvk_renderer_ops(RvkHostOps *ops);
+/* No renderer running; before anything else touches r->process. */
+void virtio_gpu_rvk_renderer_init(VirtIOGPURvk *r);
+/* Kills and reaps a renderer still running, without telling the core, which
+ * is gone by then. */
+void virtio_gpu_rvk_renderer_finish(VirtIOGPURvk *r);
 
 /* Head `head` shows `image` straight from the executor's dma-buf; false
  * where the head's display has no GL. */
