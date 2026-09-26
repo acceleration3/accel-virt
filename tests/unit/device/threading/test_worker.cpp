@@ -44,8 +44,6 @@ struct WorkerProbe {
     static void overfill(Worker &worker) { worker.count_ = Worker::queue_capacity + 1u; }
     static void misplace_head(Worker &worker) { worker.head_ = Worker::queue_capacity; }
     static Doorbell &doorbell(Worker &worker) { return worker.doorbell_; }
-    static void      fill(Worker &worker) { worker.count_ = Worker::queue_capacity; }
-    static void      empty(Worker &worker) { worker.count_ = 0u; }
     static void     *lock(Worker &worker) { return worker.lock_; }
 };
 
@@ -176,7 +174,16 @@ TEST(worker_report, writes_its_queue_or_busy_without_waiting)
   av::StateWriter started(bytes, sizeof bytes);
   fixture.worker().report(started);
   CHECK(std::strcmp(started.dump(), "worker/0 running=true pending=0 stopping=false") == 0);
-  av::WorkerProbe::fill(fixture.worker());
+  void *gate = nullptr;
+  CHECK_STATUS(fixture.host().create_event(gate), Status::ok);
+  Entry blocker = fixture.entry(0u, gate);
+  CHECK_STATUS(fixture.worker().post(WorkItem(&work, nullptr, &blocker)), Status::ok);
+  while (fixture.worker().pending() != 0u) sched_yield();   /* the blocker is running */
+  Entry entries[Worker::queue_capacity] = {};
+  for (std::uint32_t index = 0u; index < Worker::queue_capacity; index++) {
+      entries[index] = fixture.entry(index + 1u);
+      CHECK_STATUS(fixture.worker().post(WorkItem(&work, nullptr, &entries[index])), Status::ok);
+  }
   fixture.host().hold_mutex_elsewhere(av::WorkerProbe::lock(fixture.worker()), true);
   av::StateWriter busy(bytes, sizeof bytes);
   fixture.worker().report(busy);
@@ -185,8 +192,11 @@ TEST(worker_report, writes_its_queue_or_busy_without_waiting)
   av::StateWriter full(bytes, sizeof bytes);
   fixture.worker().report(full);
   CHECK(std::strcmp(full.dump(), "worker/0 running=true pending=64 stopping=false") == 0);
-  av::WorkerProbe::empty(fixture.worker());
-  CHECK(fixture.worker().invariants_hold()); }
+  fixture.host().signal_event(gate);
+  while (fixture.journal().ran.load() != Worker::queue_capacity + 1u) sched_yield();
+  CHECK(fixture.worker().invariants_hold());
+  fixture.worker().stop();
+  fixture.host().destroy_event(gate); }
 
 TEST(worker_post, a_full_queue_refuses_the_next_item)
 { Fixture fixture;

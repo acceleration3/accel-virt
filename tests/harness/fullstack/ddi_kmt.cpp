@@ -747,9 +747,13 @@ Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t devi
     const Status enabled = answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_enable}));
     if (enabled != Status::ok) return enabled;
     const std::uint32_t before = fences_.vertical_blanks();
+    /* The steps are the time the wait took; the real time the rig spent taking
+     * them is not the guest's, or a slower build would catch fewer blanks. */
+    const std::uint64_t entered_ns = now_ns();
     for (std::uint64_t waited = 0u; fences_.vertical_blanks() == before && waited < blank_patience;
          waited += timer_step)
         platform_.run_timers(timer_step);
+    started_ns_ += now_ns() - entered_ns;
     platform_.set_irql(Irql::passive);
     const Status disabled =
         answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_disable_no_phase}));

@@ -60,14 +60,24 @@ struct DeviceContextProbe {
     static FenceReporter &fences(DeviceContext &context) { return context.fences_; }
 };
 
-struct WorkerProbe {
-    static void fill(Worker &worker) { worker.count_ = Worker::queue_capacity; }
-    static void empty(Worker &worker) { worker.count_ = 0u; }
-};
-
 }  // namespace av
 
 namespace {
+
+/* An item that holds the context's worker until the test signals the event,
+ * so what the test posts behind it stays queued. */
+struct Gate {
+    av::Host *host;
+    void     *event;
+};
+
+void wait_at(void *gate)
+{
+    auto *const held = static_cast<Gate *>(gate);
+    held->host->wait_event(held->event);
+}
+
+void no_work(void *) {}
 
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::uint32_t ring = 1u, fence = 2u;
@@ -300,13 +310,20 @@ TEST(device_context_bind, a_full_work_queue_disconnects_unpins_and_withdraws_the
 { Fixture fixture;
   static_cast<void>(fixture.guest());
   Worker &worker = av::DeviceContextProbe::worker(fixture.context());
-  av::WorkerProbe::fill(worker);
+  Gate    gate{&fixture.host(), nullptr};
+  CHECK_STATUS(fixture.host().create_event(gate.event), Status::ok);
+  CHECK_STATUS(worker.post(av::WorkItem(&wait_at, nullptr, &gate)), Status::ok);
+  while (worker.pending() != 0u) sched_yield();   /* the gate holds the worker */
+  for (std::uint32_t index = 0u; index < Worker::queue_capacity; index++)
+      CHECK_STATUS(worker.post(av::WorkItem(&no_work, nullptr, nullptr)), Status::ok);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::no_space);
-  av::WorkerProbe::empty(worker);
+  fixture.host().signal_event(gate.event);
+  while (worker.pending() != 0u) sched_yield();
   CHECK(!fixture.context().binding().bound());
   CHECK_EQ(fixture.host().live_doorbells(), 0u);
   CHECK_STATUS(fixture.context().bind(setup(8u), capset()), Status::ok);
-  CHECK_EQ(fixture.context().binding().doorbell(), 8u); }
+  CHECK_EQ(fixture.context().binding().doorbell(), 8u);
+  fixture.host().destroy_event(gate.event); }
 
 TEST(device_context, destroying_a_bound_context_disconnects_before_the_worker_goes)
 { Fixture fixture;

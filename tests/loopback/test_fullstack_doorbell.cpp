@@ -261,8 +261,11 @@ public:
         WireWriter request = transport.request_writer();
         request.write_u64(payload);
         WireReader reply(nullptr, 0u);
-        if (transport.send_sync(echo_command, request, reply) != TransportResult::ok) return false;
-        return reply.remaining() == sizeof payload && reply.read_u64() == payload;
+        const bool answered = transport.send_sync(echo_command, request, reply) == TransportResult::ok;
+        /* A worker still polling its ring answers before the store that woke
+         * nobody is carried; carry it now, so the next test starts quiet. */
+        static_cast<void>(rig_.kmt().fabric().deliver());
+        return answered && reply.remaining() == sizeof payload && reply.read_u64() == payload;
     }
 
 private:

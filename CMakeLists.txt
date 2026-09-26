@@ -484,8 +484,8 @@ foreach(src ${AV_UNIT_TESTS})
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
   if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
      name STREQUAL "test_d3d12_session_features_device")
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT
-      "MESA_SHADER_CACHE_DISABLE=true;ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;RVK_D3D_PATH=${CMAKE_SOURCE_DIR}/build-d3d/lib;DXVK_LOG_PATH=${CMAKE_BINARY_DIR}")
   endif()
   if(name STREQUAL "test_fullstack_rvk")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
