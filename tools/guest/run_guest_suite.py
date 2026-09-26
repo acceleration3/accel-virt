@@ -288,7 +288,7 @@ def arguments():
                              "build/rvkrecord prints and replays (feature 065)")
     parser.add_argument("--record-limit", type=int, default=256 * 1024 * 1024, metavar="BYTES",
                         help="the recording's ceiling; it stops there rather than growing past it")
-    parser.add_argument("--hostmem", type=int, default=256, metavar="MIB",
+    parser.add_argument("--hostmem", type=int, default=8192, metavar="MIB",
                         help="the device's host-visible region, in MiB; 0 gives it none, where the driver "
                              "reports one segment and the same allocation goes to guest memory "
                              "(feature 041, FR-007)")
