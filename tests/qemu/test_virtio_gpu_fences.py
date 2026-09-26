@@ -101,10 +101,12 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 0, 0, 0, 0))
         fence = context.complete(3)
         self.assertTrue(context.completed(fence))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 3, 6, 0, 0))   # a command in each batch
+        # A command in each batch: the context's first command run is a
+        # heartbeat (the next is 256 commands on), and each completion another.
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 3, 4, 0, 0))
         fence = context.complete(2)
         self.assertTrue(context.completed(fence))
-        self.assertEqual(context.fence_page()[3], 10)
+        self.assertEqual(context.fence_page()[3], 6)
 
     def test_a_page_the_guest_overwrites_is_rewritten_from_the_device_counters(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
@@ -112,7 +114,7 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertTrue(context.completed(context.complete()))
         gpu.qtest.write_bytes(context.page, b"\xFF" * 32)
         self.assertTrue(context.completed(context.complete()))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 2, 4, 0, 0))
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 2, 3, 0, 0))
 
     def test_a_faulted_ring_leaves_its_page_faulted(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)

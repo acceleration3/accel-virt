@@ -170,7 +170,7 @@ class VirtioGpuContexts(unittest.TestCase):
         self.assertEqual(local_memory, host.local_memory)
         self.assertGreaterEqual(shared_memory, 0)
         name = capset[80:128]
-        self.assertEqual(name.rstrip(b"\0"), host.name.encode()[:47])
+        self.assertEqual(name.rstrip(b"\0"), host.adapter_name().encode())
         self.assertEqual(name[len(name.rstrip(b"\0")):], bytes(48 - len(name.rstrip(b"\0"))))
 
     def test_host_visible_memory_is_offered_only_with_a_hostmem_region(self):

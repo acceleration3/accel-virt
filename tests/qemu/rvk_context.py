@@ -37,6 +37,10 @@ DOORBELL_SHM_ID = 0x72
 DOORBELLS = 64
 PAGE = 0x1000
 RING_HEADER = 32
+BATCH_HEADER = 32
+# The worker's awake flag, the device's to write: while it is set the worker
+# is watching the ring and consumes a published tail without a doorbell.
+AWAKE_OFFSET = 5
 TAIL_OFFSET = 8
 HEAD_OFFSET = 16
 
@@ -123,8 +127,14 @@ def command(command_id, payload=b"", flags=0):
     return struct.pack("<II", command_id, (8 + len(payload)) | flags << 24) + payload
 
 
+def batch_header(length, fence, magic=BATCH_MAGIC):
+    """A batch's 32-byte header: magic, payload length, fence, the guest's
+    publish time (0 here) and eight reserved bytes."""
+    return struct.pack("<IIQQ8x", magic, length, fence, 0)
+
+
 def batch_of(fence, commands):
-    body = struct.pack("<IIQ", BATCH_MAGIC, len(commands), fence) + commands
+    body = batch_header(len(commands), fence) + commands
     return body + bytes(-len(body) % 8)
 
 
@@ -171,6 +181,9 @@ class GuestRing:
 
     def head(self):
         return self.qtest.read(64, self.address + HEAD_OFFSET)
+
+    def awake(self):
+        return self.qtest.read(8, self.address + AWAKE_OFFSET) != 0
 
     def wait_head(self, expected, seconds=10.0):
         """Whether head reached `expected` in time."""

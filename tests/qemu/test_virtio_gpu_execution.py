@@ -14,7 +14,7 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY,
+from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, batch_header,
                          IMPORT_BLOB, LOSE_DEVICE, NOP, PAGE, PEEK, POKE, REAL_EXECUTOR, RELEASE_BLOB,
                          SUB_API_OPENGL, SUB_API_VULKAN, setup_with_options,
                          RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA, UNDECODABLE,
@@ -70,8 +70,8 @@ class Context:
     def run(self, *commands):
         """One batch of these commands through the doorbell: whether head passed it."""
         self.fence += 1
-        self.ring.write(struct.pack("<IIQ", 0x424B5652, len(b"".join(commands)), self.fence) + b"".join(commands)
-                        + bytes(-(16 + len(b"".join(commands))) % 8))
+        self.ring.write(batch_header(len(b"".join(commands)), self.fence) + b"".join(commands)
+                        + bytes(-(32 + len(b"".join(commands))) % 8))
         self.ring.publish()
         self.gpu.qtest.write(32, self.gpu.device.shared_memory[DOORBELL_SHM_ID][0] + self.doorbell * PAGE, 1)
         return self.ring.wait_head(self.ring.tail, seconds=2.0)

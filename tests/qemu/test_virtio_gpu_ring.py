@@ -13,14 +13,17 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (DOORBELL_SHM_ID, DOORBELLS, FEATURE_CONTEXT_INIT, PAGE, RESP_ERR_INVALID_PARAMETER,
-                         RESP_OK_MAP_INFO, RESP_OK_NODATA, GuestRing, create_context, destroy_context, guest_blob,
-                         host_blob, map_blob, response_type, ring_header, rvk_device, setup, submit, unref)
+from rvk_context import (BATCH_HEADER, DOORBELL_SHM_ID, DOORBELLS, FEATURE_CONTEXT_INIT, PAGE,
+                         RESP_ERR_INVALID_PARAMETER, RESP_OK_MAP_INFO, RESP_OK_NODATA, GuestRing, batch_header,
+                         create_context, destroy_context, guest_blob, host_blob, map_blob, response_type, ring_header,
+                         rvk_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 HOSTMEM = 64 << 20
 SHM_ID_HOST_VISIBLE = 1
 QUIET = 0.3
+# The worker clears its awake flag a moment before it waits for a store.
+SETTLE = 0.01
 
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
@@ -54,11 +57,17 @@ class VirtioGpuRing(unittest.TestCase):
 
     def attached(self, gpu, ring, doorbell):
         """One batch through the doorbell: after it, the worker has attached the
-        ring, so nothing written later is consumed without a store."""
-        ring.write_batch(ring.tail // 16 + 1, 0)
+        ring and gone back to sleep, so nothing written later is consumed
+        without a store. An awake worker watches the ring and needs none."""
+        ring.write_batch(ring.tail // BATCH_HEADER + 1, 0)
         ring.publish()
         self.ring_doorbell(gpu, doorbell)
         self.assertTrue(ring.wait_head(ring.tail))
+        deadline = time.monotonic() + 10
+        while ring.awake() and time.monotonic() < deadline:
+            time.sleep(0.001)
+        self.assertFalse(ring.awake())
+        time.sleep(SETTLE)
 
     def stays(self, ring, head):
         time.sleep(QUIET)
@@ -94,10 +103,11 @@ class VirtioGpuRing(unittest.TestCase):
         ring = self.bind(gpu, 1, 0)
         ring.write_batch(1, 8)
         ring.write_batch(2, 200)
-        ring.publish(24 + 100)
+        first = BATCH_HEADER + 8
+        ring.publish(first + 100)
         self.ring_doorbell(gpu, 0)
-        self.assertTrue(ring.wait_head(24))
-        self.stays(ring, 24)
+        self.assertTrue(ring.wait_head(first))
+        self.stays(ring, first)
         ring.publish()
         self.ring_doorbell(gpu, 0)
         self.assertTrue(ring.wait_head(ring.tail))
@@ -124,9 +134,9 @@ class VirtioGpuRing(unittest.TestCase):
         self.ring_doorbell(gpu, 5, offset=4)
         self.ring_doorbell(gpu, 5, width=8)
         self.ring_doorbell(gpu, 5, width=16)
-        self.stays(ring, 16)
+        self.stays(ring, BATCH_HEADER)
         self.ring_doorbell(gpu, 5)
-        self.assertTrue(ring.wait_head(32))
+        self.assertTrue(ring.wait_head(2 * BATCH_HEADER))
 
     def test_each_doorbell_wakes_only_its_own_context(self):
         gpu = self.open()
@@ -139,20 +149,20 @@ class VirtioGpuRing(unittest.TestCase):
             ring.publish()
         self.ring_doorbell(gpu, 11)
         self.assertTrue(second.wait_head(second.tail))
-        self.stays(first, 16)
+        self.stays(first, BATCH_HEADER)
         self.ring_doorbell(gpu, 10)
         self.assertTrue(first.wait_head(first.tail))
 
     def test_a_hostile_ring_stops_only_its_own_context(self):
         spoilers = {
             "tail backwards": lambda ring: ring.publish(8),
-            "tail past a whole ring": lambda ring: ring.publish(16 + ring.capacity + 8),
+            "tail past a whole ring": lambda ring: ring.publish(BATCH_HEADER + ring.capacity + 8),
             "header magic": lambda ring: ring.qtest.write(32, ring.address, 0),
             "order changed": lambda ring: ring.qtest.write(8, ring.address + 4, 13),
             "fence repeated": lambda ring: (ring.write_batch(1, 0), ring.publish()),
-            "batch magic": lambda ring: (ring.write(struct.pack("<IIQ", 0x11111111, 0, 2)), ring.publish()),
-            "batch longer than the ring": lambda ring: (ring.write(struct.pack("<IIQ", 0x424B5652, 1 << 20, 2)),
-                                                        ring.publish(16 + ring.capacity)),
+            "batch magic": lambda ring: (ring.write(batch_header(0, 2, magic=0x11111111)), ring.publish()),
+            "batch longer than the ring": lambda ring: (ring.write(batch_header(1 << 20, 2)),
+                                                        ring.publish(BATCH_HEADER + ring.capacity)),
         }
         for name, spoil in spoilers.items():
             with self.subTest(name):
@@ -170,7 +180,7 @@ class VirtioGpuRing(unittest.TestCase):
                 healthy.publish()
                 self.ring_doorbell(gpu, 2)
                 self.assertTrue(healthy.wait_head(healthy.tail))
-                self.assertEqual(hostile.head(), 16)
+                self.assertEqual(hostile.head(), BATCH_HEADER)
                 self.expect(gpu, destroy_context(1), RESP_OK_NODATA)
 
     def test_setups_naming_an_unusable_doorbell_or_ring_bind_nothing(self):
@@ -210,12 +220,12 @@ class VirtioGpuRing(unittest.TestCase):
         old.write_batch(9, 0)
         old.publish()
         self.ring_doorbell(again, 9)
-        self.stays(old, 16)
+        self.stays(old, BATCH_HEADER)
         ring = self.bind(again, 1, 9)
         ring.write_batch(1, 0)
         ring.publish()
         self.ring_doorbell(again, 9)
-        self.assertTrue(ring.wait_head(16))
+        self.assertTrue(ring.wait_head(BATCH_HEADER))
 
     def test_a_host_visible_ring_is_consumed_through_its_mapping(self):
         gpu = self.open()
