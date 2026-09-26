@@ -1,6 +1,7 @@
 #include "device/executor/d3d_backend.hpp"
 
 #include <sched.h>
+#include <stdio.h>
 #include <time.h>
 
 #include "core/trace/function_scope.hpp"
@@ -10,9 +11,11 @@
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/query_result_publisher.hpp"
 #include "device/shim/d3d11_host_device.hpp"
+#include "device/shim/d3d_shared_resources.hpp"
 #include "device/shim/d3d_headers.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
+
 
 namespace av {
 
@@ -65,7 +68,7 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 
 D3dBackend::D3dBackend()
     : device11_(nullptr), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), selected_(nullptr), selected_device_(0u), arena_(nullptr), objects_(), region_(), d3d12_(region_), published_(),
-      lost_(false)
+      missed_key_(0u), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -94,6 +97,10 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
+        /* What this session shared goes with it: a process that exits without
+         * destroying its surfaces left them held here for good, and the
+         * table full. */
+        device11_->shared().withdraw_all(this, now());
         objects_.clear();
         device11_->unlock();
     }
@@ -250,6 +257,14 @@ bool D3dBackend::all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind)
     for (uint32_t index = 0u; index < count; index++)
         if (ids[index] != 0u && objects_.find(ids[index], kind) == nullptr) return false;
     return true;
+}
+
+uint64_t D3dBackend::now() const
+{
+    AV_SCOPE("D3dBackend::now");
+    timespec clock = {};
+    clock_gettime(CLOCK_MONOTONIC, &clock);
+    return static_cast<uint64_t>(clock.tv_sec) * 1000000000u + static_cast<uint64_t>(clock.tv_nsec);
 }
 
 bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
@@ -619,7 +634,7 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     D3dObjectKind kind = D3dObjectKind::none;
     IUnknown *const found = objects_.find_any(id, kind);
     if (found == nullptr) return false;
-    if (kind == D3dObjectKind::resource) device11_->shared().withdraw(found);
+    if (kind == D3dObjectKind::resource) device11_->shared().withdraw(found, this, now());
     published_.forget(id);
     constants_.forget(id);
     objects_.remove(id);
@@ -691,7 +706,12 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
      * nothing and every command naming it is refused. */
     if (FAILED(result) || made == nullptr) return true;
     if (!keep(id, D3dObjectKind::resource, made)) return false;
-    if (shared_key != 0u) static_cast<void>(device11_->shared().publish(shared_key, made));
+    /* A key the table refuses is one no other process can open: the host log
+     * is where the refusal is seen, since the creator is not told. */
+    if (shared_key != 0u && !device11_->shared().publish(shared_key, made, this, now()))
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: shared key 0x%016llx not shared: %s\n",
+                static_cast<unsigned long long>(shared_key),
+                device11_->shared().count() == D3dSharedResources::capacity ? "the table is full" : "already shared");
     return true;
 }
 
@@ -702,7 +722,13 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     desc = d3dproto::ResourceDesc{};
     if (!has_device()) return false;
     IUnknown *const shared = device11_->shared().find(shared_key);
-    if (shared == nullptr) return true;
+    if (shared == nullptr) {
+        if (shared_key != missed_key_)
+            fprintf(stderr, "virtio-gpu-rvk: d3d11: no resource shared under key 0x%016llx; %u shared\n",
+                    static_cast<unsigned long long>(shared_key), device11_->shared().count());
+        missed_key_ = shared_key;
+        return true;
+    }
     ID3D11Resource *resource = nullptr;
     const HRESULT cast = shared->QueryInterface(__uuidof(ID3D11Resource), reinterpret_cast<void **>(&resource));
     shared->Release();
