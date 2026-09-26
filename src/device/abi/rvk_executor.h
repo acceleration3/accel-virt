@@ -46,7 +46,7 @@ extern "C" {
  * contexts, a version 4 library signals nothing - a guest on one waits for
  * its events at a synchronising call instead - and a version 5 library shares
  * nothing, which the device answers as a refusal rather than a fault. */
-#define RVK_EXECUTOR_ABI_VERSION 11u
+#define RVK_EXECUTOR_ABI_VERSION 12u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
@@ -60,6 +60,7 @@ extern "C" {
 #define RVK_EXECUTOR_ABI_VERSION_EXPORTS 9u
 #define RVK_EXECUTOR_ABI_VERSION_POLL 10u
 #define RVK_EXECUTOR_ABI_VERSION_PROGRESS 11u
+#define RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE 12u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -285,6 +286,13 @@ typedef struct RvkExecutorOps {
      * waiting on the batch's fence waits for its GPU work too. Both 0 for an
      * executor whose commands have finished when they return. */
     void (*gpu_progress)(void *opaque, RvkExecutor *executor, uint64_t *marked, uint64_t *reached);
+
+    /* ABI 12: the guest let go of the shared object `object_id` everywhere -
+     * every process that made or opened the allocation it was minted over has
+     * - so what a session on the GPU `gpu_uuid` shared under it goes once no
+     * session holds it. Until this, what was shared stays whatever became of
+     * the session that shared it. Main loop. */
+    void (*release_shared)(void *opaque, const uint8_t *gpu_uuid, uint64_t object_id);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

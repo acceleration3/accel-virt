@@ -220,6 +220,12 @@ uint32_t export_image(void *, const uint8_t *gpu_uuid, uint64_t key, RvkExported
     return image != nullptr && library.root().export_image(gpu_uuid, key, *image) ? RVK_EXECUTED : RVK_UNKNOWN;
 }
 
+void release_shared(void *, const uint8_t *gpu_uuid, uint64_t object_id)
+{
+    AV_SCOPE("release_shared");
+    library.root().release_shared(gpu_uuid, object_id);
+}
+
 void end_batch(void *, RvkExecutor *executor)
 {
     AV_SCOPE("end_batch");
@@ -264,7 +270,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               end_batch,
                               export_image,
                               poll,
-                              gpu_progress};
+                              gpu_progress,
+                              release_shared};
 
 }  // namespace
 

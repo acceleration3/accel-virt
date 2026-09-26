@@ -42,6 +42,10 @@ public:
      * which is the whole point of it. */
     uint64_t                    shared_id() const;
     void                        shared_as(uint64_t id);
+    /* The key the host holds this allocation's image under: its minted id,
+     * which is what a Direct3D session shares a surface under, or else what
+     * its descriptor names. */
+    uint64_t                    host_key() const;
     /* The resource this allocation was created into, which goes when the last
      * of its allocations does; null for one created outside a resource
      * (research.md §16). */

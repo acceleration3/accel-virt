@@ -66,6 +66,10 @@ public:
     [[nodiscard]] bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     /* The image published under `key` as a dma-buf (HostImageExport). */
     [[nodiscard]] bool export_image(uint64_t key, RvkExportedImage &image);
+    /* The guest let go of the surface shared under `object_id` everywhere, or
+     * of every one for 0 - the device was reset and its ids start again. Takes
+     * the lock itself. */
+    void               release_shared(uint64_t object_id);
 
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;

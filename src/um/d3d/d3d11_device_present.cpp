@@ -12,6 +12,8 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 
 namespace av::d3d11 {
@@ -62,12 +64,19 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     const AllocationDescriptor descriptor(primary ? AllocationKind::shared_primary : AllocationKind::surface, true,
                                           SurfaceLayout(resource.width, resource.height, kernel_format(resource.format),
                                                         pitch),
-                                          bytes, scanout, resource.shared_key);
-    uint8_t encoded[AllocationDescriptor::encoded_size] = {};
-    if (descriptor.encode(encoded, sizeof(encoded)) != Status::ok) return E_INVALIDARG;
+                                          bytes, scanout);
+    /* An identity asked for, which the miniport mints and dxgkrnl copies back
+     * and hands whoever opens the resource: the key the host shares it under,
+     * and the id the driver releases once every process has let go of it -
+     * which is how long the host keeps the surface. */
+    uint8_t encoded[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
+    if (descriptor.encode(encoded, AllocationDescriptor::encoded_size) != Status::ok ||
+        SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
+                .encode(encoded + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok)
+        return E_INVALIDARG;
     /* The resource's own private data, which dxgkrnl keeps and hands whoever
-     * opens the resource: the key the host shares it under. */
-    const uint64_t shared[2] = {ResourceRecord::tag, resource.shared_key};
+     * opens the resource: that it is this driver's. */
+    const uint64_t shared[2] = {ResourceRecord::tag, 0u};
     D3DDDI_ALLOCATIONINFO2 info = {};
     info.pPrivateDriverData = encoded;
     info.PrivateDriverDataSize = sizeof(encoded);
@@ -86,6 +95,12 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
         log_.write("rvkumd: the kernel refused a presented resource's allocation");
         return made;
     }
+    SharedObjectRecord minted;
+    if (minted.decode(encoded + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok ||
+        !minted.assigned())
+        log_.write("rvkumd: the miniport minted no identity for a presented resource; nothing can open it");
+    else
+        resource.shared_key = minted.object_id();
     resource.allocation = info.hAllocation;
     resource.allocation_pitch = pitch;
     resource.primary = primary ? 1u : 0u;

@@ -401,7 +401,7 @@ TEST(renderer_service_receive, descriptors_on_a_kind_that_takes_none_are_closed)
   std::uint8_t body[av::ContextMessage::encoded_size] = {};
   CHECK_STATUS(av::ContextMessage(context_id).encode(body, sizeof body), Status::ok);
   const Kind kinds[] = {Kind::create_context, Kind::destroy_context, Kind::blob_retired, Kind::guest_blob,
-                        Kind::export_image};
+                        Kind::export_image, Kind::shared_released};
   for (const Kind kind : kinds) {
       const int carried[2] = {fresh_descriptor(), fresh_descriptor()};
       CHECK_STATUS(rig.send(kind, 4u, body, sizeof body, carried, 2u), Status::malformed);

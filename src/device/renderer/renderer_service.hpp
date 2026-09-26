@@ -62,6 +62,7 @@ private:
     [[nodiscard]] Status region(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count);
     [[nodiscard]] Status guest_blob(const uint8_t *body, uint32_t length, uint32_t count);
     [[nodiscard]] Status host_blob(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count);
+    [[nodiscard]] Status shared_released(const uint8_t *body, uint32_t length, uint32_t count);
     [[nodiscard]] Status blob_retired(const uint8_t *body, uint32_t length, uint32_t count);
     [[nodiscard]] Status context(RendererMessageHeader::Kind kind, const uint8_t *body, uint32_t length,
                                  uint32_t count, Status &outcome);

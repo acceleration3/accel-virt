@@ -50,9 +50,14 @@ void ContextSharedObjects::give_back(ContextSharedObjectSlot &slot)
 {
     AV_SCOPE("ContextSharedObjects::give_back");
     /* A publisher made nothing of its own: it named an object its guest
-     * already held, so there is nothing of this context's to destroy. */
-    if (!slot.published_) executor_.release_object(slot.kind_, slot.wire_handle_);
-    objects_.close(slot.object_id_);
+     * already held, so there is nothing of this context's to destroy - and the
+     * hold its publish made is the guest's, which goes only when the driver
+     * says every process let go of the object (SharedReleaseRequest), not
+     * when this context does. An opener's hold is its own. */
+    if (!slot.published_) {
+        executor_.release_object(slot.kind_, slot.wire_handle_);
+        objects_.close(slot.object_id_);
+    }
     slot = ContextSharedObjectSlot{};
 }
 

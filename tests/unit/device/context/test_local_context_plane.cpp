@@ -149,6 +149,28 @@ TEST(local_context_plane, destroy_all_takes_the_shared_objects_with_the_contexts
   CHECK_EQ(LocalContextPlaneProbe::shared(fixture.plane()).live(), 0u);
   CHECK_EQ(fixture.host().live_threads(), 0u); }
 
+/* The guest let go of an object everywhere: the hold its publish made goes,
+ * and the executor is told so, on the GPU the release names. Object 0 is
+ * every object. */
+TEST(local_context_plane, a_guest_release_closes_the_guest_s_hold_and_tells_the_executor)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_STATUS(fixture.plane().initialize(), Status::ok);
+  av::HostSharedObjects &shared = LocalContextPlaneProbe::shared(fixture.plane());
+  CHECK_STATUS(shared.publish(7u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u,
+                              fixture.host().open_descriptor()), Status::ok);
+  CHECK_STATUS(shared.publish(8u, RVK_SHARED_MEMORY, RVK_SHARED_HANDLE_DMA_BUF, 4096u,
+                              fixture.host().open_descriptor()), Status::ok);
+  fixture.plane().shared_released(uuid, 7u);
+  CHECK_EQ(shared.live(), 1u);
+  CHECK_EQ(fixture.ops().shared_releases(), 1u);
+  CHECK(fixture.ops().last_shared_release() == 7u);
+  CHECK(fixture.ops().last_shared_gpu() == uuid);
+  fixture.plane().shared_released(uuid, 0u);
+  CHECK_EQ(shared.live(), 0u);
+  CHECK_EQ(fixture.ops().shared_releases(), 2u);
+  CHECK(fixture.ops().last_shared_release() == 0u); }
+
 /* An image nothing published is no image, from either path. */
 TEST(local_context_plane, an_image_nothing_published_is_neither_exported_nor_read)
 { Fixture fixture;

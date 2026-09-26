@@ -42,6 +42,8 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
+#include "proto/virtio_gpu/shared_release_request.hpp"
+#include "core/platform/log_budget.hpp"
 #include "core/display/display_mode.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
@@ -202,6 +204,21 @@ public:
     /* What the device says it is from the next ask on: another host GPU behind
      * the same function is another device (feature 040, FR-005). */
     void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+    /* `step` with the device answering, as it does at StartDevice: what a DDI
+     * that waits on the control queue needs from the host. */
+    template <typename Step>
+    std::int32_t answering(Step step)
+    {
+        platform_.on_stall(&Device::answer_display_info, this);
+        const std::int32_t status = step();
+        platform_.on_stall(nullptr, nullptr);
+        return status;
+    }
+    /* The shared objects the driver said are gone, and the last one it named. */
+    std::uint32_t released() const { return released_; }
+    /* Every release from now on is answered with the device's refusal. */
+    void refuse_releases() { refusing_releases_ = true; }
+    std::uint64_t last_released() const { return last_released_; }
     /* Whether the driver made a blob and placed it in the region. */
     bool created_blob() const { return created_blob_; }
     bool mapped_region() const { return mapped_region_; }
@@ -217,6 +234,23 @@ public:
     }
 
 private:
+    /* The id a release names, counted; the device's ok. */
+    static std::uint32_t answer_release(void *context, const std::uint8_t *request, std::uint32_t length,
+                                        std::uint8_t *answer, std::uint32_t room)
+    {
+        auto *const device = static_cast<Device *>(context);
+        if (length >= av::SharedReleaseRequest::encoded_size) {
+            std::memcpy(&device->last_released_, request + 24u, sizeof device->last_released_);
+            device->released_++;
+        }
+        av::GpuResponse response;
+        response.set(device->refusing_releases_ ? av::GpuResponse::err_unspec : av::GpuResponse::ok_nodata);
+        const auto bytes = static_cast<std::uint32_t>(response.length());
+        if (bytes > room) return 0u;
+        std::memcpy(answer, response.bytes(), bytes);
+        return bytes;
+    }
+
     static void answer_display_info(void *context)
     {
         auto *const device = static_cast<Device *>(context);
@@ -236,6 +270,11 @@ private:
             }
             static_cast<void>(device->control().respond_all(answer.bytes(),
                                                             static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
+        if (asked == av::SharedReleaseRequest::type) {
+            std::uint8_t request[av::FakeVirtqueueDevice::request_bytes] = {};
+            static_cast<void>(device->control().answer_all(request, sizeof request, &Device::answer_release, device));
             return;
         }
         if (asked == get_capset_info || asked == get_capset) {
@@ -259,6 +298,9 @@ private:
     DisplayInfoAnswer     display_info_;
     av::CapsetInfo        capset_ = host_capset(first_gpu);
     bool                  created_blob_ = false;
+    std::uint32_t         released_ = 0u;
+    std::uint64_t         last_released_ = 0u;
+    bool                  refusing_releases_ = false;
     bool                  mapped_region_ = false;
     std::optional<av::FakeVirtqueueDevice> control_;
 };
@@ -1107,6 +1149,84 @@ TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_i
     CHECK_EQ(runtime.close(0u), 0);
     CHECK_EQ(runtime.destroy(), 0);
     CHECK_EQ(runtime.destroy_device(1u), 0);
+    CHECK_EQ(runtime.destroy_device(0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* The device holds what was shared under an id until the guest has let go of
+ * it everywhere, which is the destroy dxgkrnl makes after the last close: that
+ * one destroy - and not the refused ones before it - tells the device the id
+ * is gone. */
+TEST(ddi_scenario, the_destroy_after_the_last_close_tells_the_device_the_shared_object_is_gone)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.create_device(1u), 0);
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
+    const std::uint64_t id = runtime.minted().object_id();
+    CHECK_EQ(runtime.open(1u), 0);
+    CHECK_EQ(runtime.close(0u), 0);   /* the creator lets go first */
+    CHECK_EQ(nt(device.answering([&] { return runtime.destroy(); })), invalid_device_state);
+    CHECK_EQ(device.released(), 0u);
+    CHECK_EQ(runtime.close(1u), 0);
+    CHECK_EQ(device.answering([&] { return runtime.destroy(); }), 0);
+    CHECK_EQ(device.released(), 1u);
+    CHECK_EQ(device.last_released(), id);
+    CHECK_EQ(runtime.destroy_device(1u), 0);
+    CHECK_EQ(runtime.destroy_device(0u), 0); }
+  CHECK_EQ(device.released(), 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* A release the device refuses is the device's to explain: the driver says so
+ * while its log budget lasts and destroys the allocation all the same. */
+TEST(ddi_scenario, a_refused_release_is_logged_until_the_budget_is_spent)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  device.refuse_releases();
+  std::uint32_t logged = driver.platform().logged();
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++) {
+      SharedRuntime runtime(driver.table(), device.fdo().context());
+      CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+      CHECK_EQ(runtime.create_device(0u), 0);
+      CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
+      CHECK_EQ(runtime.close(0u), 0);
+      logged = driver.platform().logged();
+      CHECK_EQ(device.answering([&] { return runtime.destroy(); }), 0);
+      CHECK_EQ(device.released(), line + 1u);
+      CHECK_EQ(runtime.destroy_device(0u), 0);
+  }
+  CHECK(std::strstr(driver.platform().last_log(), "rvkgpu: a shared object's release") != nullptr);
+  CHECK_EQ(driver.platform().logged(), logged);   /* the last refusal, past the budget, said nothing */
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* A device that was pulled out holds nothing any more: the destroy after the
+ * last close tells it nothing and does not wait on it. */
+TEST(ddi_scenario, a_shared_object_destroyed_after_surprise_removal_tells_nobody)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  { SharedRuntime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
+    CHECK_EQ(runtime.create_device(0u), 0);
+    CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
+    CHECK_EQ(runtime.close(0u), 0);
+    CHECK_EQ(device.fdo().surprise_removal(), 0);
+    const std::uint32_t logged = driver.platform().logged();
+    CHECK_EQ(device.answering([&] { return runtime.destroy(); }), 0);
+    CHECK_EQ(device.released(), 0u);
+    CHECK_EQ(driver.platform().logged(), logged);
     CHECK_EQ(runtime.destroy_device(0u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());

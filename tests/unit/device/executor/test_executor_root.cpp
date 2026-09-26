@@ -4,6 +4,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
+#include "device/shim/d3d_headers.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
 #include "harness/executor/executor_root_probe.hpp"
@@ -54,6 +55,20 @@ constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0
 constexpr std::uint8_t absent[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                                      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
+/* A resource the table can hold, counted, so a reference given back is seen. */
+class Counted final : public IUnknown {
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
+    {
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
+    ULONG STDMETHODCALLTYPE Release() override { return --references; }
+
+    ULONG references = 1u;
+};
+
 }  // namespace
 
 TEST(executor_root, offers_what_the_host_runs_and_imports_what_each_gpu_can)
@@ -98,6 +113,36 @@ TEST(executor_root, answers_nothing_until_it_has_asked)
   ExecutorRoot &root = *held;
   CHECK_EQ(root.sub_apis(), 0u);
   CHECK_EQ(root.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN, intel), 0u);
+  CHECK(root.invariants_hold()); }
+
+/* The guest's release of what it shared reaches the Direct3D 11 table of the
+ * GPU it names and no other one; a root that has not asked the host has no
+ * table to reach. Id 0 lets go of everything. */
+TEST(executor_root, a_shared_release_reaches_only_the_named_gpu_s_table)
+{ Counted surface, other;
+  MockHostApis apis;
+  apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  apis.add_gpu(nvidia, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, 0u, 0u);
+  apis.give_d3d11(0u);
+  CHECK(apis.d3d11().shared().publish(7u, &surface));
+  RootUnderTest held;
+  ExecutorRoot &root = *held;
+  root.release_shared(intel, 7u);
+  CHECK_EQ(apis.d3d11().shared().count(), 1u);
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  root.release_shared(nvidia, 7u);
+  root.release_shared(absent, 7u);
+  CHECK_EQ(apis.d3d11().shared().count(), 1u);
+  CHECK_EQ(surface.references, 2u);
+  root.release_shared(intel, 7u);
+  CHECK_EQ(apis.d3d11().shared().count(), 0u);
+  CHECK_EQ(surface.references, 1u);
+  CHECK(apis.d3d11().shared().publish(8u, &surface));
+  CHECK(apis.d3d11().shared().publish(9u, &other));
+  root.release_shared(intel, 0u);
+  CHECK_EQ(apis.d3d11().shared().count(), 0u);
+  CHECK_EQ(surface.references, 1u);
+  CHECK_EQ(other.references, 1u);
   CHECK(root.invariants_hold()); }
 
 /* The host is asked once. Asking twice would mean the capset and the answer

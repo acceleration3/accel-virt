@@ -6,6 +6,9 @@
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_object_kind.hpp"
+#include "proto/resources/shared_object_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -109,7 +112,12 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
      * (docs/d3d-desktop.md §3.1). */
     const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
                                 (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
-    if (kernel_visible) resource.shared_key = (static_cast<uint64_t>(GetCurrentProcessId()) << 32u) | session_.next_id();
+    /* Allocated first: the key is the identity the miniport mints over the
+     * allocation, and the host resource is made under it. */
+    if (kernel_visible) {
+        const HRESULT allocated = allocate(resource, *args, runtime);
+        if (FAILED(allocated)) set_error(allocated);
+    }
     if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
         set_error(E_OUTOFMEMORY);
         return;
@@ -143,14 +151,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         }
     }
 
-    if (kernel_visible) {
-        const HRESULT allocated = allocate(resource, *args, runtime);
-        if (FAILED(allocated)) set_error(allocated);
-        /* Another process - DWM - may open the key as soon as the kernel
-         * hands it the handle, on its own stream: the host must have made the
-         * resource by then, contents included. */
-        if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
-    }
+    /* Another process - DWM - may open the key as soon as the kernel hands
+     * it the handle, on its own stream: the host must have made the resource
+     * by then, contents included. */
+    if (kernel_visible && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
 VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_HRESOURCE handle,
@@ -164,11 +168,22 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     resource.id = next_id();
     resource.runtime_resource = runtime.handle;
     if (args->NumAllocations != 0u) resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
+    /* The key is the identity the miniport minted over the creator's
+     * allocation, which dxgkrnl hands every process that opens it; a resource
+     * of this driver's carries its tag in the resource's own data. */
     uint64_t key = 0u;
-    if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= 2u * sizeof(uint64_t)) {
-        uint64_t words[2] = {};
+    uint64_t words[2] = {};
+    if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= sizeof(words))
         __builtin_memcpy(words, args->pPrivateDriverData, sizeof(words));
-        if (words[0] == ResourceRecord::tag) key = words[1];
+    const bool ours = words[0] == ResourceRecord::tag;
+    constexpr uint32_t shareable = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
+    if (ours && args->NumAllocations != 0u && args->pOpenAllocationInfo2[0].pPrivateDriverData != nullptr &&
+        args->pOpenAllocationInfo2[0].PrivateDriverDataSize == shareable) {
+        SharedObjectRecord record;
+        const auto *const bytes = static_cast<const uint8_t *>(args->pOpenAllocationInfo2[0].pPrivateDriverData);
+        if (record.decode(bytes + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) == Status::ok &&
+            record.assigned())
+            key = record.object_id();
     }
     uint32_t found = 0u;
     d3dproto::ResourceDesc desc = {};

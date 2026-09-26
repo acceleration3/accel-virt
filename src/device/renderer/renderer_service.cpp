@@ -18,6 +18,7 @@
 #include "proto/renderer/ready_message.hpp"
 #include "proto/renderer/region_message.hpp"
 #include "proto/renderer/reply_message.hpp"
+#include "proto/renderer/shared_released_message.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -80,6 +81,7 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     case Kind::guest_blob: return guest_blob(body, body_length, count);
     case Kind::host_blob: return host_blob(body, body_length, descriptors, count);
     case Kind::blob_retired: return blob_retired(body, body_length, count);
+    case Kind::shared_released: return shared_released(body, body_length, count);
     case Kind::interrupt_lines: return interrupt_lines(body, body_length, descriptors, count);
     case Kind::interrupts_off:
         interrupts_.disconnect();
@@ -184,6 +186,15 @@ Status RendererService::host_blob(const uint8_t *body, uint32_t length, const in
     }
     resources_.offer_host_memory(descriptors[0]);
     return blobs_.create_host(message.blob(), message.size());
+}
+
+Status RendererService::shared_released(const uint8_t *body, uint32_t length, uint32_t count)
+{
+    AV_SCOPE("RendererService::shared_released");
+    SharedReleasedMessage message;
+    if (message.decode(body, length, count) != Status::ok) return Status::malformed;
+    plane_.shared_released(capset_.gpu().uuid(), message.object_id());
+    return Status::ok;
 }
 
 Status RendererService::blob_retired(const uint8_t *body, uint32_t length, uint32_t count)

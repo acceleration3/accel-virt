@@ -4,7 +4,7 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u) {}
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus) {}
 
 void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis, uint32_t vulkan_kinds,
                            uint32_t opengl_kinds, uint32_t opencl_kinds)
@@ -20,6 +20,10 @@ void MockHostApis::add_gpu(const uint8_t *uuid, uint32_t sub_apis, uint32_t vulk
 }
 
 uint32_t MockHostApis::questions() const { return questions_; }
+
+void MockHostApis::give_d3d11(uint32_t index) { d3d11_index_ = index; }
+
+D3d11HostDevice &MockHostApis::d3d11() { return d3d11_; }
 
 uint32_t MockHostApis::gpu_count()
 {
@@ -68,10 +72,10 @@ const OpenClDevice *MockHostApis::opencl_device(uint32_t)
     return nullptr;
 }
 
-D3d11HostDevice *MockHostApis::d3d11_device(uint32_t)
+D3d11HostDevice *MockHostApis::d3d11_device(uint32_t index)
 {
     questions_++;
-    return nullptr;
+    return index == d3d11_index_ ? &d3d11_ : nullptr;
 }
 
 D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)

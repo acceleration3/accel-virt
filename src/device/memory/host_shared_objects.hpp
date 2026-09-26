@@ -60,10 +60,13 @@ public:
      * importer that keeps one duplicates it. */
     [[nodiscard]] Status open(uint64_t object_id, uint32_t kind, uint64_t claimed_size,
                               uint32_t &handle_kind, uint64_t &size, int &descriptor);
-    /* Any worker. One fewer holder, closing the descriptor when it was the
-     * last. An id this device does not hold is ignored: a release is
-     * idempotent, because a context tearing down releases what it may have
-     * already lost. */
+    /* Any worker, or the main loop. One fewer holder, closing the descriptor
+     * when it was the last. The holder a publish makes is the guest's: it goes
+     * when the driver says the object is gone from the guest
+     * (SharedReleaseRequest), whatever became of the context that published
+     * it; each opening context's goes with that context. An id this device
+     * does not hold is ignored: a release is idempotent, because a context
+     * tearing down releases what it may have already lost. */
     void                 close(uint64_t object_id);
     /* Main loop. Every object, whatever its count: a device reset leaves no
      * context to hold one. */

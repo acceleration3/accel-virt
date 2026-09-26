@@ -288,6 +288,27 @@ TEST(virtio_gpu_rvk_realize, an_executor_table_this_abi_does_not_accept_is_refus
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
 
+/* A reset starts the guest's shared-object ids again, so the executor is told
+ * everything it shares is released - on the GPU this device is bound to, the
+ * one the capset names, since the plane in QEMU is never started with one. */
+TEST(virtio_gpu_rvk_control, a_reset_releases_every_shared_object_on_the_bound_gpu)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_gpu(second);
+  VirtioGpuRvk device(host);
+  av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, &executor.table(), nullptr, nullptr,
+                              nullptr, message),
+               Status::ok);
+  CHECK_EQ(executor.shared_releases(), 0u);
+  device.reset();
+  CHECK_EQ(executor.shared_releases(), 1u);
+  CHECK(executor.last_shared_release() == 0u);
+  CHECK(executor.last_shared_gpu() != nullptr);
+  CHECK(std::memcmp(executor.last_shared_gpu(), second, sizeof second) == 0); }
+
 TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
 { MockHost host;
   host.add_gpu(first);

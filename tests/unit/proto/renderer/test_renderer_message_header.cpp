@@ -82,9 +82,9 @@ TEST(renderer_message_header_encode, refuses_what_decode_would)
 { std::uint8_t bytes[RendererMessageHeader::encoded_size] = {};
   CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(0u), 0u, 1u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(15u), 0u, 1u).encode(bytes, sizeof bytes),
+  CHECK_STATUS(RendererMessageHeader(static_cast<Kind>(16u), 0u, 1u).encode(bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(RendererMessageHeader(Kind::exported_image, 0u, 1u).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(RendererMessageHeader(Kind::shared_released, 0u, 1u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(RendererMessageHeader(Kind::hello, RendererMessageHeader::max_body_length + 1u, 1u)
                    .encode(bytes, sizeof bytes),
                Status::invalid_parameter);
@@ -101,8 +101,14 @@ TEST(renderer_message_header_encode, a_short_or_missing_destination_is_too_large
 
 /* A kind neither side knows would be dispatched nowhere; zero is a buffer
  * nobody wrote. */
-TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_exported_image_and_stays_unchanged)
-{ const std::uint32_t kinds[] = {0u, 15u, 0xFFFFFFFFu};
+TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_shared_released_and_stays_unchanged)
+{ CHECK_EQ(static_cast<std::uint32_t>(Kind::shared_released), 15u);
+  std::uint8_t last[RendererMessageHeader::encoded_size] = {};
+  CHECK_STATUS(RendererMessageHeader(Kind::shared_released, 0u, 5u).encode(last, sizeof last), Status::ok);
+  RendererMessageHeader known;
+  CHECK_STATUS(known.decode(last, sizeof last), Status::ok);
+  CHECK(known.kind() == Kind::shared_released);
+  const std::uint32_t kinds[] = {0u, 16u, 0xFFFFFFFFu};
   for (std::uint32_t kind : kinds) {
       std::uint8_t bytes[RendererMessageHeader::encoded_size] = {};
       CHECK_STATUS(RendererMessageHeader(Kind::hello, 0u, 5u).encode(bytes, sizeof bytes), Status::ok);

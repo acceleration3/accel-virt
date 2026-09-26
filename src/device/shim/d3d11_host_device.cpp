@@ -1,5 +1,6 @@
 #include "device/shim/d3d11_host_device.hpp"
 
+#include <stdio.h>
 #include <time.h>
 
 #include "core/trace/function_scope.hpp"
@@ -115,6 +116,21 @@ bool D3d11HostDevice::export_image(uint64_t key, RvkExportedImage &image)
     }
     exports_.describe(slot, image);
     return true;
+}
+
+void D3d11HostDevice::release_shared(uint64_t object_id)
+{
+    AV_SCOPE("D3d11HostDevice::release_shared");
+    lock(nullptr);
+    /* A reset is rare and ends every id the guest had: the log says it came,
+     * since a surface held past it would be refused its key again. */
+    if (object_id == 0u) {
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: the guest's shared ids start again; %u released\n", shared_.count());
+        shared_.clear();
+    } else {
+        shared_.release(object_id);
+    }
+    unlock();
 }
 
 bool D3d11HostDevice::stage(uint64_t key, D3D11_TEXTURE2D_DESC &wanted)

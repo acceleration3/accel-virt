@@ -48,6 +48,15 @@ void LocalContextPlane::blob_released(uint32_t)
     AV_SCOPE("LocalContextPlane::blob_released");
 }
 
+/* Object 0 is every one: a reset, after which the guest's ids start again. */
+void LocalContextPlane::shared_released(const uint8_t *gpu_uuid, uint64_t object_id)
+{
+    AV_SCOPE("LocalContextPlane::shared_released");
+    if (object_id == 0u) shared_.release_all();
+    else shared_.close(object_id);
+    library_.release_shared(gpu_uuid, object_id);
+}
+
 void LocalContextPlane::interrupts_changed(bool)
 {
     AV_SCOPE("LocalContextPlane::interrupts_changed");

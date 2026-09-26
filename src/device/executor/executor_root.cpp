@@ -57,6 +57,14 @@ bool ExecutorRoot::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExport
     return device != nullptr && device->export_image(key, image);
 }
 
+void ExecutorRoot::release_shared(const uint8_t *gpu_uuid, uint64_t object_id)
+{
+    AV_SCOPE("ExecutorRoot::release_shared");
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
+    D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
+    if (device != nullptr) device->release_shared(object_id);
+}
+
 bool ExecutorRoot::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                               uint32_t height)
 {

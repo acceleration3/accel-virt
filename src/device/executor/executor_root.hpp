@@ -53,6 +53,9 @@ public:
     uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
     /* The host image under `key` on the GPU `gpu_uuid` names, into `pixels`. */
     bool     export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image);
+    /* The Direct3D surface shared under `object_id` on `gpu_uuid` goes: the
+     * guest let go of it everywhere. Main loop. */
+    void     release_shared(const uint8_t *gpu_uuid, uint64_t object_id);
     bool     read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride, uint32_t width,
                         uint32_t height);
 

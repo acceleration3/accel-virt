@@ -14,6 +14,7 @@
 #include "proto/renderer/host_blob_message.hpp"
 #include "proto/renderer/interrupt_lines_message.hpp"
 #include "proto/renderer/region_message.hpp"
+#include "proto/renderer/shared_released_message.hpp"
 
 namespace av {
 
@@ -301,6 +302,19 @@ void RendererContextPlane::blob_released(uint32_t id)
             give_up();
         return;
     }
+}
+
+/* What was shared lives in the renderer's contexts, so the release goes there;
+ * a renderer that is gone took everything with it. */
+void RendererContextPlane::shared_released(const uint8_t *, uint64_t object_id)
+{
+    AV_SCOPE("RendererContextPlane::shared_released");
+    if (!alive_) return;
+    uint8_t body[SharedReleasedMessage::encoded_size] = {};
+    static_cast<void>(SharedReleasedMessage(object_id).encode(body, sizeof body));
+    if (link_.post(RendererMessageHeader::Kind::shared_released, body, SharedReleasedMessage::encoded_size, nullptr,
+                   0u) != Status::ok)
+        give_up();
 }
 
 Status RendererContextPlane::mirror(uint32_t id)

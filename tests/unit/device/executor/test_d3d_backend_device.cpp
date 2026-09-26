@@ -192,6 +192,61 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     backend.shut_down();
 }
 
+/* A surface one process shares opens in another by the id the driver minted,
+ * for as long as the guest holds it: past the creator's own session, as on
+ * Windows DWM keeps a window's surface its creator already let go of, and
+ * until the driver's release. A key already shared keeps naming what it
+ * named. */
+TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    constexpr std::uint64_t key = 0x5100000000000007ull;
+    av::D3dBackend creator, opener;
+    CHECK(creator.initialize(device));
+    CHECK(opener.initialize(device));
+    av::D3dLoopback made(creator), opening(opener);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(rvk_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
+    CHECK(rvk_d3d_CreateDevice11(opening, 1u, 0u, 0u, &hresult, &level));
+    ResourceDesc surface = {};
+    surface.dimension = 3u;
+    surface.width = size;
+    surface.height = size;
+    surface.depth_or_array = 1u;
+    surface.mip_levels = 1u;
+    surface.format = format_b8g8r8a8;
+    surface.sample_count = 1u;
+    surface.bind_flags = bind_render_target;
+    CHECK(rvk_d3d_CreateResource(made, 1u, surface, key));
+    const std::uint32_t held = device->shared().count();
+
+    ResourceDesc other = surface;
+    other.width = size / 2u;
+    CHECK(rvk_d3d_CreateResource(opening, 9u, other, key));
+    CHECK_EQ(device->shared().count(), held);
+    std::uint32_t found = 0u;
+    ResourceDesc opened = {};
+    CHECK(rvk_d3d_OpenResource(opening, 2u, key, &found, &opened));
+    CHECK_EQ(found, 1u);
+    CHECK_EQ(opened.width, size);
+
+    CHECK(rvk_d3d_DestroyObject(made, 1u));
+    creator.shut_down();
+    CHECK(rvk_d3d_OpenResource(opening, 3u, key, &found, &opened));
+    CHECK_EQ(found, 1u);
+    CHECK_EQ(opened.width, size);
+
+    device->release_shared(key);
+    CHECK_EQ(device->shared().count(), held - 1u);
+    CHECK(rvk_d3d_OpenResource(opening, 4u, key, &found, &opened));
+    CHECK_EQ(found, 0u);
+    CHECK_EQ(opening.refused(), 0u);
+    CHECK(opener.invariants_hold());
+    opener.shut_down();
+}
+
 /* A process's devices share one session: objects are the session's, pipeline
  * state is each device's own. A second device starts with nothing bound, so
  * its draw leaves the first device's target as it was, and the first draws the

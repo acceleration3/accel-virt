@@ -49,6 +49,12 @@ void                        Allocation::shared_as(uint64_t id)
     AV_SCOPE("Allocation::shared_as");
     shared_id_ = id;
 }
+
+uint64_t                    Allocation::host_key() const
+{
+    AV_SCOPE("Allocation::host_key");
+    return shared_id_ != 0u ? shared_id_ : descriptor_.host_key();
+}
 uint32_t                    Allocation::opens() const
 {
     AV_SCOPE("Allocation::opens");

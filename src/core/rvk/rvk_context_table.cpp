@@ -20,6 +20,7 @@
 #include "core/trace/state_writer.hpp"
 #include "core/platform/spin_lock_try_guard.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
+#include "core/memory/shared_object_release.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -294,6 +295,15 @@ uint32_t RvkContextTable::free_chunk(uint32_t slot) const
     uint32_t index = 0u;
     while (index < RvkContextBinding::chunk_slots && chunks_[slot][index].bound()) index++;
     return index;
+}
+
+Status RvkContextTable::release_shared(uint64_t object_id, VirtioGpuDevice &device)
+{
+    AV_SCOPE("RvkContextTable::release_shared");
+    platform_.require_irql_at_most(Irql::passive, "RvkContextTable::release_shared");
+    WaitMutexGuard      sequence(requests_);
+    SharedObjectRelease release(platform_);
+    return release.send(device, object_id);
 }
 
 Status RvkContextTable::window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device)

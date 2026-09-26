@@ -122,6 +122,11 @@ public:
     std::uint32_t imported_objects();
     std::uint32_t released_objects();
     std::uint32_t live_objects();
+    /* The guest's shared releases the library was told of (ABI 12): how many,
+     * and the last one's id and GPU. */
+    std::uint32_t        shared_releases();
+    std::uint64_t        last_shared_release();
+    const std::uint8_t *last_shared_gpu();
     /* What a live imported object was made of: false when there is none. */
     bool          object_of(std::uint64_t wire_handle, std::uint32_t &kind, std::uint32_t &handle_kind,
                             std::uint64_t &size, int &fd);
@@ -193,6 +198,9 @@ private:
     std::uint32_t              exported_objects_;
     std::uint32_t              imported_objects_;
     std::uint32_t              released_objects_;
+    std::uint32_t              shared_releases_ = 0u;
+    std::uint64_t              last_shared_release_ = 0u;
+    const std::uint8_t        *last_shared_gpu_ = nullptr;
     std::uint64_t              next_object_;
     SharedObject               objects_[max_objects];
 };

@@ -114,6 +114,15 @@ bool ExecutorLibrary::export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExp
     return ops_->export_image(ops_->opaque, gpu_uuid, key, &image) == RVK_EXECUTED;
 }
 
+void ExecutorLibrary::release_shared(const uint8_t *gpu_uuid, uint64_t object_id) const
+{
+    AV_SCOPE("ExecutorLibrary::release_shared");
+    if (ops_ == nullptr || ops_->abi_version < RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE ||
+        ops_->release_shared == nullptr)
+        return;
+    ops_->release_shared(ops_->opaque, gpu_uuid, object_id);
+}
+
 bool ExecutorLibrary::read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                                  uint32_t width, uint32_t height) const
 {

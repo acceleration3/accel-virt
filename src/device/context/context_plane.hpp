@@ -49,6 +49,11 @@ public:
      * another process are told, since they hold a copy of what they read. */
     virtual void blob_created(uint32_t id) = 0;
     virtual void blob_released(uint32_t id) = 0;
+    /* Main loop. The guest let go of the shared object `object_id` everywhere
+     * (SharedReleaseRequest): what was shared under it on the host GPU
+     * `gpu_uuid` goes once nothing on the host still holds it. Object 0 is
+     * every one, which the device sends at a reset. */
+    virtual void shared_released(const uint8_t *gpu_uuid, uint64_t object_id) = 0;
     virtual void interrupts_changed(bool connected) = 0;
     /* The process the contexts ran in died: they are lost, and it is
      * started again. */

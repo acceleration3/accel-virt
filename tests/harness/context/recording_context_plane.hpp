@@ -29,6 +29,11 @@ public:
     std::uint32_t live() const override { return 0u; }
     void          blob_created(std::uint32_t id) override { if (created_count_ < capacity) created_[created_count_++] = id; }
     void          blob_released(std::uint32_t id) override { if (released_count_ < capacity) released_[released_count_++] = id; }
+    void          shared_released(const std::uint8_t *gpu_uuid, std::uint64_t object_id) override
+    {
+        shared_gpu_ = gpu_uuid;
+        if (shared_count_ < capacity) shared_[shared_count_++] = object_id;
+    }
     void          interrupts_changed(bool connected) override { connected_ = connected; changes_++; }
     void          renderer_lost() override { losses_++; }
     bool export_image(const std::uint8_t *, std::uint64_t, RvkExportedImage &) override { return false; }
@@ -41,6 +46,9 @@ public:
     std::uint32_t created_count() const { return created_count_; }
     std::uint32_t released(std::uint32_t index) const { return released_[index]; }
     std::uint32_t released_count() const { return released_count_; }
+    std::uint64_t shared(std::uint32_t index) const { return shared_[index]; }
+    std::uint32_t shared_count() const { return shared_count_; }
+    const std::uint8_t *shared_gpu() const { return shared_gpu_; }
     bool          connected() const { return connected_; }
     std::uint32_t changes() const { return changes_; }
     std::uint32_t losses() const { return losses_; }
@@ -50,6 +58,9 @@ private:
     std::uint32_t created_count_ = 0u;
     std::uint32_t released_[capacity] = {};
     std::uint32_t released_count_ = 0u;
+    std::uint64_t shared_[capacity] = {};
+    std::uint32_t shared_count_ = 0u;
+    const std::uint8_t *shared_gpu_ = nullptr;
     bool          connected_ = false;
     std::uint32_t changes_ = 0u;
     std::uint32_t losses_ = 0u;

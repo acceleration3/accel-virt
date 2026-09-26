@@ -30,6 +30,10 @@ struct SharedObjectTableProbe;
 
 class SharedObjectTable {
 public:
+    /* Ids forgotten and not yet taken: every DestroyAllocation takes them, so
+     * this bounds one call's worth, not a backlog. */
+    static constexpr uint32_t max_released = 256u;
+
     explicit SharedObjectTable(Platform &platform);
     SharedObjectTable(const SharedObjectTable &) = delete;
     SharedObjectTable &operator=(const SharedObjectTable &) = delete;
@@ -68,8 +72,16 @@ public:
      * table does not hold, and for one nobody holds. */
     [[nodiscard]] Status close(SharedObject &object);
     /* DestroyAllocation: the identity goes with the allocation it named, so a
-     * later record naming that id finds nothing. */
+     * later record naming that id finds nothing, and the id waits to be taken
+     * by take_released. dxgkrnl destroys a shared allocation only once every
+     * process that made or opened it has let go, so this is the one moment the
+     * object is gone from the whole guest - the device holds it until told. */
     void                 forget(const Allocation &allocation);
+    /* Up to `capacity` of the ids forgotten since the last take, oldest first,
+     * into `ids`; how many. At most APC, like forget, which cannot tell the
+     * device itself: sending waits on it, and forget runs under the allocation
+     * table's lock. */
+    uint32_t             take_released(uint64_t *ids, uint32_t capacity);
     uint32_t             live() const;
 
     /* A line for the table and one per object; `busy=true` and nothing more
@@ -91,6 +103,11 @@ private:
      * a process that kept a stale record must not find someone else's object. */
     uint64_t                  next_id_;
     uint64_t                  adapter_;
+    uint64_t                  released_[max_released];
+    uint32_t                  released_count_;
+    /* Forgotten while the queue was full: objects the device keeps until the
+     * adapter restarts. Counted, because it should never happen. */
+    uint32_t                  released_dropped_;
 
     friend struct SharedObjectTableProbe;
 };

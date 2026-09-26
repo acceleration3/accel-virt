@@ -38,7 +38,7 @@ uint64_t RendererMessageHeader::sequence() const
 bool RendererMessageHeader::fields_valid() const
 {
     AV_SCOPE("RendererMessageHeader::fields_valid");
-    const bool known = kind_ >= static_cast<uint32_t>(Kind::hello) && kind_ <= static_cast<uint32_t>(Kind::exported_image);
+    const bool known = kind_ >= static_cast<uint32_t>(Kind::hello) && kind_ <= static_cast<uint32_t>(Kind::shared_released);
     const bool empty_when_off = kind_ != static_cast<uint32_t>(Kind::interrupts_off) || body_length_ == 0u;
     return known && body_length_ <= max_body_length && empty_when_off;
 }

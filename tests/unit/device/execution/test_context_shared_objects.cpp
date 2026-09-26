@@ -241,6 +241,7 @@ TEST(context_shared_objects_open, gives_the_reference_back_when_the_executor_ref
   CHECK_EQ(rig.shared().live(), 1u);
   rig.first().on_worker([&] { rig.first().objects().release(7u); });
   check(rig);
+  rig.shared().close(7u);   /* the driver's release: the guest's hold was the last */
   CHECK_EQ(rig.shared().live(), 0u);
   CHECK_EQ(rig.host().live_dmabufs(), 0u); }
 
@@ -269,8 +270,30 @@ TEST(context_shared_objects_release, a_publisher_releasing_destroys_nothing_of_i
   CHECK_EQ(rig.first().objects().held(), 0u);
   /* The wire handle a publisher named was its guest's own object, and this
    * table never made it: releasing it here would free something the guest is
-   * still using. */
+   * still using. And the hold its publish made is the guest's: the object
+   * stays until the driver says every process let go of it. */
   CHECK_EQ(rig.ops().released_objects(), 0u);
+  CHECK_EQ(rig.shared().live(), 1u);
+  CHECK_EQ(rig.host().live_dmabufs(), 1u);
+  rig.shared().close(7u);   /* the driver's release */
+  CHECK_EQ(rig.shared().live(), 0u);
+  CHECK_EQ(rig.host().live_dmabufs(), 0u); }
+
+/* A window's creator lets go of its surface as the compositor is opening it:
+ * the open still finds it, and the object goes only once the guest has let go
+ * everywhere and the opener has too. */
+TEST(context_shared_objects_release, a_publisher_gone_first_leaves_the_object_open_until_the_guest_releases_it)
+{ SharedObjectRig rig;
+  CHECK_STATUS(publish(rig, 7u), Status::ok);
+  rig.first().on_worker([&] { rig.first().objects().release(7u); });
+  std::uint64_t wire_handle = 0u;
+  CHECK_STATUS(open_second(rig, 7u, wire_handle), Status::ok);
+  CHECK(wire_handle != 0u);
+  check(rig);
+  rig.shared().close(7u);   /* the driver's release: the opener still holds it */
+  CHECK_EQ(rig.shared().live(), 1u);
+  rig.second().on_worker([&] { rig.second().objects().release(7u); });
+  check(rig);
   CHECK_EQ(rig.shared().live(), 0u);
   CHECK_EQ(rig.host().live_dmabufs(), 0u); }
 

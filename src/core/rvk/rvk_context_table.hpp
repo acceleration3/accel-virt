@@ -79,6 +79,10 @@ public:
      * without a request when there is no device or the device will not answer,
      * and unmaps its pages. invalid_parameter for a context not bound. */
     [[nodiscard]] Status unbind(void *context, VirtioGpuDevice *device);
+    /* The shared object `object_id` is gone from the guest: the device is
+     * told, in turn with this table's own sequences, because the control
+     * queue answers one exchange at a time (SharedObjectRelease). PASSIVE. */
+    [[nodiscard]] Status release_shared(uint64_t object_id, VirtioGpuDevice &device);
     /* DISPATCH. Publishes the batch the submission's private data describes and
      * rings its doorbell, answering in `awaited` the host fence the node waits
      * for. invalid_parameter for a context not live, one the host faulted or

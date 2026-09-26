@@ -626,6 +626,47 @@ TEST(renderer_context_plane_blobs, mirrors_guest_and_host_blobs_and_their_releas
   CHECK_EQ(fixture.peer().delivered(), sent);
   CHECK(fixture.plane().invariants_hold()); }
 
+/* What was shared lives in the renderer's contexts, so the guest's release
+ * reaches the executor there, and so does a reset's release of everything. A
+ * renderer that is gone took everything with it and is told nothing. */
+TEST(renderer_context_plane_shared, a_guest_release_reaches_the_renderer_s_executor)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const std::uint32_t before = fixture.ops().shared_releases();
+  fixture.plane().shared_released(nullptr, 0x2Au);
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().shared_releases() == before; spins++)
+      sched_yield();
+  CHECK_EQ(fixture.ops().shared_releases(), before + 1u);
+  CHECK(fixture.ops().last_shared_release() == 0x2Au);
+  CHECK(fixture.ops().last_shared_gpu() != nullptr);
+  CHECK(fixture.plane().alive());
+  fixture.plane().shared_released(nullptr, 0u);
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().shared_releases() == before + 1u; spins++)
+      sched_yield();
+  CHECK_EQ(fixture.ops().shared_releases(), before + 2u);
+  CHECK(fixture.ops().last_shared_release() == 0u); }
+
+TEST(renderer_context_plane_shared, a_release_with_no_renderer_is_told_to_nobody)
+{ Fixture fixture;
+  const std::uint32_t sent = fixture.peer().delivered();
+  fixture.plane().shared_released(nullptr, 0x2Au);
+  CHECK_EQ(fixture.peer().delivered(), sent);
+  CHECK_EQ(fixture.ops().shared_releases(), 0u); }
+
+/* A renderer the release cannot be sent to took what it held with it: it is
+ * given up on, as for any message it cannot take, and a new one started. */
+TEST(renderer_context_plane_shared, a_release_the_renderer_cannot_take_gives_it_up)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.qemu().kill_renderer();   /* gone underneath, not yet noticed */
+  CHECK_EQ(fixture.plane().epoch(), 1u);
+  fixture.plane().shared_released(nullptr, 0x2Au);
+  CHECK_EQ(fixture.plane().epoch(), 2u);
+  CHECK_EQ(fixture.qemu().renderer_starts(), 2u);
+  CHECK(fixture.plane().alive());
+  CHECK(std::strstr(fixture.qemu().last_log(), "did not answer") != nullptr);
+  CHECK(fixture.plane().invariants_hold()); }
+
 /* Blobs made before any renderer runs are told to the first one; one let go
  * before is never told. */
 TEST(renderer_context_plane_blobs, blobs_made_before_the_start_are_told_at_the_start)

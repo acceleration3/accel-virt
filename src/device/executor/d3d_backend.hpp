@@ -218,9 +218,6 @@ private:
     D3d12Session            d3d12_;
     QueryResultPublisher    published_;
     ConstantRing            constants_;
-    /* CLOCK_MONOTONIC in nanoseconds, the shared table's clock. */
-    uint64_t now() const;
-
     /* The last shared key an open found nothing under: the guest asks again
      * and again for one it was just given, and the host log says so once. */
     uint64_t                missed_key_;

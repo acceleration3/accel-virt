@@ -799,7 +799,29 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
             void *const user = rvk_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
             if (user != nullptr) static_cast<void>(rvk_contexts_.unbind(user, answering_device()));
         }
-    return NtStatus(allocations_.destroy(*request)).value();
+    const Status destroyed = allocations_.destroy(*request);
+    release_shared();
+    return NtStatus(destroyed).value();
+}
+
+/* dxgkrnl destroys a shared allocation only once every process let go of it,
+ * so what the destroy forgot is gone from the whole guest: the device holds
+ * what was shared under those ids until it is told. Told here, after the
+ * allocation table's lock is dropped, because telling it waits for an answer.
+ * A device that is not there has nothing left to hold. */
+void Adapter::release_shared()
+{
+    AV_SCOPE("Adapter::release_shared");
+    constexpr uint32_t batch = 16u;
+    uint64_t           ids[batch] = {};
+    for (uint32_t taken = shared_.take_released(ids, batch); taken != 0u; taken = shared_.take_released(ids, batch)) {
+        VirtioGpuDevice *const device = answering_device();
+        for (uint32_t index = 0u; device != nullptr && index < taken; index++) {
+            const Status released = rvk_contexts_.release_shared(ids[index], *device);
+            if (released != Status::ok && budget_.allows())
+                log_status("rvkgpu: a shared object's release", NtStatus(released).value());
+        }
+    }
 }
 
 int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)

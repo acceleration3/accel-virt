@@ -97,7 +97,7 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
         uint64_t key = 0u;
         if (resources_[source].needs_pages(address)) {
             auto *const primary = static_cast<Allocation *>(sources.primary(source));
-            if (primary != nullptr) key = primary->descriptor().host_key();
+            if (primary != nullptr) key = primary->host_key();
             if (key == 0u && resources_[source].keyed()) {
                 char       bytes[160];
                 TextBuffer line(bytes, sizeof bytes);

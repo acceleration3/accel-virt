@@ -123,7 +123,7 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 11u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 12u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_OPTIONS, 4u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EVENTS, 5u);
@@ -133,6 +133,7 @@ TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_EXPORTS, 9u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_POLL, 10u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_PROGRESS, 11u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE, 12u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
   ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
@@ -517,3 +518,41 @@ TEST(executor_library_export_image, answers_the_library_s_image_for_a_key_it_pub
 
   ExecutorLibrary none;
   CHECK(!none.export_image(some_gpu, 0x51u, image)); }
+
+/* ABI 12: the guest let go of a shared object everywhere. Only a library of
+ * that version with the call is told, with the GPU and the id as given; an
+ * older one never held anything past its sharing session. */
+namespace {
+
+std::uint64_t        released_object = 0u;
+const std::uint8_t *released_on = nullptr;
+
+void release_recorded(void *, const std::uint8_t *gpu_uuid, std::uint64_t object_id)
+{
+    released_on = gpu_uuid;
+    released_object = object_id;
+}
+
+}  // namespace
+
+TEST(executor_library_release_shared, tells_a_library_that_knows_the_call_and_no_other)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_D3D);
+  ops.editable().release_shared = release_recorded;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  library.release_shared(some_gpu, 0x2Au);
+  CHECK(released_object == 0x2Au);
+  CHECK(released_on == some_gpu);
+
+  released_object = 0u;
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE - 1u);
+  library.release_shared(some_gpu, 7u);
+  CHECK(released_object == 0u);
+  ops.set_abi_version(RVK_EXECUTOR_ABI_VERSION_SHARED_RELEASE);
+  ops.editable().release_shared = nullptr;
+  library.release_shared(some_gpu, 7u);
+  CHECK(released_object == 0u);
+
+  ExecutorLibrary none;
+  none.release_shared(some_gpu, 7u);
+  CHECK(released_object == 0u); }

@@ -2461,7 +2461,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"
-      "adapter/0/shared_objects/0 busy=false live=0\n"
+      "adapter/0/shared_objects/0 busy=false live=0 released=0 released_dropped=0\n"
       "adapter/0/context_table/0 busy=false live=0\n"
       "adapter/0/hw_queue_table/0 busy=false live=0\n"
       "adapter/0/execution_node/0 busy=false pending=0 last_submitted=0 last_completed=0"

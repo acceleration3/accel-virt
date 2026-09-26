@@ -147,6 +147,13 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         for (SharedObject &object : mock.objects_)
             if (object.live && object.wire_handle == wire_handle) object.live = false;
     };
+    table_.release_shared = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint64_t object_id) {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock lock(mock.lock_);
+        mock.shared_releases_++;
+        mock.last_shared_release_ = object_id;
+        mock.last_shared_gpu_ = gpu_uuid;
+    };
     table_.create_with_options = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
                                     const RvkContextOptions *options, RvkExecutor *share) -> RvkExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
@@ -418,6 +425,24 @@ std::uint32_t MockExecutorOps::released_objects()
 {
     Lock lock(lock_);
     return released_objects_;
+}
+
+std::uint32_t MockExecutorOps::shared_releases()
+{
+    Lock lock(lock_);
+    return shared_releases_;
+}
+
+std::uint64_t MockExecutorOps::last_shared_release()
+{
+    Lock lock(lock_);
+    return last_shared_release_;
+}
+
+const std::uint8_t *MockExecutorOps::last_shared_gpu()
+{
+    Lock lock(lock_);
+    return last_shared_gpu_;
 }
 
 std::uint32_t MockExecutorOps::live_objects()

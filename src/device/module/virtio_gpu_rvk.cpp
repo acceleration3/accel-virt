@@ -5,6 +5,7 @@
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/scanout_commands.hpp"
+#include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
@@ -115,6 +116,10 @@ void VirtioGpuRvk::reset()
     AV_SCOPE("VirtioGpuRvk::reset");
     host_.require_main_loop("VirtioGpuRvk::reset");
     contexts_->destroy_all();
+    /* The guest's shared-object ids start again, so what the executor still
+     * shares under the old ones goes - on this device's GPU, which the device
+     * knows and a plane running in QEMU was never told. */
+    contexts_->shared_released(capset_.info().gpu().uuid(), 0u);
     const bool connected = interrupts_.connected();
     status_.reset();
     if (connected && !interrupts_.connected()) contexts_->interrupts_changed(false);
@@ -160,7 +165,8 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
     ControlRequest control(host_, request);
     return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
            BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
-           ScanoutCommands(host_, blobs_, heads_).answer(control, type);
+           ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
+           SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type);
 }
 
 uint32_t VirtioGpuRvk::capsets() const

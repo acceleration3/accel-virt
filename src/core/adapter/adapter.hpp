@@ -333,6 +333,8 @@ private:
     [[nodiscard]] Status bind_rvk(Context &context);
     /* The device a teardown can still ask, or null when it cannot. */
     VirtioGpuDevice     *answering_device();
+    /* Tells the device of every shared object a destroy forgot. PASSIVE. */
+    void                 release_shared();
     int32_t          bind_chunk(const DxgkargEscapeRecord &escape);
     int32_t          window_chunk(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);

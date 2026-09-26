@@ -365,8 +365,8 @@ refusal must not believe it: the answer's own decode refuses that shape.
 
 #### Allocation private driver data
 
-Private data of exactly 48 bytes is an allocation that is not shared, which is
-every allocation before feature 053. Private data of 88 bytes is an
+Private data of exactly 56 bytes is an allocation that is not shared, which is
+every allocation before feature 053. Private data of 96 bytes is an
 `AllocationDescriptor` followed by a 40-byte `SharedObjectRecord`, which is an
 allocation asking for an identity: `DxgkDdiCreateAllocation` mints the id and
 the adapter's own number into the record it was handed and writes both back, so
@@ -375,6 +375,32 @@ length is refused. At `DxgkDdiOpenAllocation` the miniport believes nothing it
 did not write: an id it never minted, an id another adapter minted, a record
 that does not decode, and a kind or a size that disagrees with the object are
 each refused with nothing opened.
+
+#### The guest's release of a shared object (control queue)
+
+What a context shares lives as long as the guest holds the allocation its id
+was minted over, not as long as the context: on Windows a window's surface
+outlives its creator's handle while DWM still composes it, and DWM opens it
+again as the creator destroys it. dxgkrnl calls `DxgkDdiDestroyAllocation` on a
+shared allocation only after the last process that made or opened it has
+closed it, so that destroy is the one moment the guest knows the id is gone
+everywhere, and the miniport then tells the device on the control queue:
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F1`, context 0, no fence |
+| 24 | 8 | object_id | the id the miniport minted; never 0 |
+
+The device drops its own hold on the object (the descriptor a SHARE_OBJECT
+recorded, which a context's own destroy no longer closes for the context that
+published it) and hands the id to the executor library (ABI version 12), which
+lets go of what its sessions shared under it - a Direct3D 11 surface - once no
+session holds it. It answers `OK_NODATA`, an id it never held included, and
+`ERR_INVALID_PARAMETER` for a request that is short or names id 0. The miniport
+sends it synchronously, after its allocation table's lock is dropped; a device
+that is not there is told nothing, since a reset already let go of everything.
+A device reset releases every id at once, which is id 0 inside the device and
+the library.
 
 ### Reply slot (device -> guest)
 
@@ -398,7 +424,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, now version 5, is what runs a context's commands on
+`src/device/abi/rvk_executor.h`, now version 12, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -457,6 +483,14 @@ instead. Because OpenCL cannot unregister a callback, a signal may arrive after
 the executor it names is destroyed: the `context` the device hands over lives
 as long as the device does, and a signal for a context that is gone is
 tolerated rather than a fault.
+
+**Version 12 adds `release_shared(opaque, gpu_uuid, object_id)`**, the guest's
+release of a shared object reaching the library (see the control queue's
+`0x02F1` above): what the sessions on that GPU shared under `object_id` goes
+once none holds it, and `object_id` 0 lets go of everything, which the device
+sends when it resets. It runs on the main loop. Before version 12 a library had
+nothing to release by, and a surface shared across processes lived only as
+long as the session that made it; a version 11 library is told nothing.
 
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a

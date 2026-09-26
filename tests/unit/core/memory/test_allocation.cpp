@@ -81,6 +81,20 @@ TEST(allocation, remembers_its_descriptor_and_page_rounded_size)
   CHECK_EQ(allocation.opens(), 0u);
   CHECK(allocation.invariants_hold()); }
 
+/* What the host holds the allocation's image under: a key the creator named
+ * in its descriptor, until the adapter mints an identity for the allocation,
+ * which is what a Direct3D session then shares the surface under. */
+TEST(allocation_host_key, is_the_descriptor_s_until_an_identity_is_minted)
+{ MockPlatform platform; const Segments segments(platform);
+  const AllocationDescriptor keyed(AllocationKind::surface, true, SurfaceLayout(10u, 10u, 21u, 40u), 400u,
+                                   ScanoutTarget(), 0x51u);
+  Allocation allocation(platform, segments.segments(), keyed, 0x1000u);
+  CHECK_EQ(allocation.host_key(), 0x51u);
+  allocation.shared_as(7u);
+  CHECK_EQ(allocation.host_key(), 7u);
+  Allocation plain(platform, segments.segments(), shadow, 0x1000u);
+  CHECK_EQ(plain.host_key(), 0u); }
+
 TEST(allocation_report_to, tells_vidmm_the_size_segment_and_cpu_visibility)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
   DxgkAllocationInfoRecord info;

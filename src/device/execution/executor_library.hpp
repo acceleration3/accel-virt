@@ -57,6 +57,10 @@ public:
     /* The host image under `key`, read into `pixels` (version 7); false for a
      * library too old to or a key it does not know. */
     bool                 export_image(const uint8_t *gpu_uuid, uint64_t key, RvkExportedImage &image) const;
+    /* The executor's copy of the shared object `object_id` on `gpu_uuid` goes;
+     * nothing for a library older than the call, which never held one past its
+     * sharing session. */
+    void                 release_shared(const uint8_t *gpu_uuid, uint64_t object_id) const;
     bool                 read_image(const uint8_t *gpu_uuid, uint64_t key, void *pixels, uint32_t stride,
                                     uint32_t width, uint32_t height) const;
     /* Whether the library answers the wire handle an import made (version 3),

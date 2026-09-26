@@ -29,7 +29,8 @@ public:
         interrupts_off,
         reply,
         export_image,
-        exported_image
+        exported_image,
+        shared_released
     };
 
     static constexpr size_t   encoded_size = 16u;

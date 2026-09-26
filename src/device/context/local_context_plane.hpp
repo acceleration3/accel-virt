@@ -40,6 +40,7 @@ public:
 
     void blob_created(uint32_t id) override;
     void blob_released(uint32_t id) override;
+    void shared_released(const uint8_t *gpu_uuid, uint64_t object_id) override;
     void interrupts_changed(bool connected) override;
     void renderer_lost() override;
 

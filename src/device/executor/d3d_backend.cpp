@@ -97,10 +97,6 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
-        /* What this session shared goes with it: a process that exits without
-         * destroying its surfaces left them held here for good, and the
-         * table full. */
-        device11_->shared().withdraw_all(this, now());
         objects_.clear();
         device11_->unlock();
     }
@@ -257,14 +253,6 @@ bool D3dBackend::all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind)
     for (uint32_t index = 0u; index < count; index++)
         if (ids[index] != 0u && objects_.find(ids[index], kind) == nullptr) return false;
     return true;
-}
-
-uint64_t D3dBackend::now() const
-{
-    AV_SCOPE("D3dBackend::now");
-    timespec clock = {};
-    clock_gettime(CLOCK_MONOTONIC, &clock);
-    return static_cast<uint64_t>(clock.tv_sec) * 1000000000u + static_cast<uint64_t>(clock.tv_nsec);
 }
 
 bool D3dBackend::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
@@ -634,7 +622,6 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     D3dObjectKind kind = D3dObjectKind::none;
     IUnknown *const found = objects_.find_any(id, kind);
     if (found == nullptr) return false;
-    if (kind == D3dObjectKind::resource) device11_->shared().withdraw(found, this, now());
     published_.forget(id);
     constants_.forget(id);
     objects_.remove(id);
@@ -708,10 +695,9 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     if (!keep(id, D3dObjectKind::resource, made)) return false;
     /* A key the table refuses is one no other process can open: the host log
      * is where the refusal is seen, since the creator is not told. */
-    if (shared_key != 0u && !device11_->shared().publish(shared_key, made, this, now()))
-        fprintf(stderr, "virtio-gpu-rvk: d3d11: shared key 0x%016llx not shared: %s\n",
-                static_cast<unsigned long long>(shared_key),
-                device11_->shared().count() == D3dSharedResources::capacity ? "the table is full" : "already shared");
+    if (shared_key != 0u && !device11_->shared().publish(shared_key, made))
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: shared key 0x%016llx not shared: already shared, or %u of %u held\n",
+                static_cast<unsigned long long>(shared_key), device11_->shared().count(), D3dSharedResources::capacity);
     return true;
 }
 

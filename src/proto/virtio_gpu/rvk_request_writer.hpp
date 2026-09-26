@@ -49,6 +49,9 @@ public:
     [[nodiscard]] Status map_blob(uint32_t resource_id, uint64_t offset);
     [[nodiscard]] Status unmap_blob(uint32_t resource_id);
     [[nodiscard]] Status unref(uint32_t resource_id);
+    /* The shared object `object_id` is gone from the guest: every process let
+     * go of the allocation it was minted over (SharedReleaseRequest). */
+    [[nodiscard]] Status release_shared(uint64_t object_id);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
     /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;

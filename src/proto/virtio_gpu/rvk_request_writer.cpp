@@ -5,6 +5,7 @@
 
 #include "proto/context/context_setup.hpp"
 #include "proto/wire/wire_writer.hpp"
+#include "proto/virtio_gpu/shared_release_request.hpp"
 
 namespace av {
 
@@ -155,6 +156,15 @@ Status RvkRequestWriter::unref(uint32_t resource_id)
     if (!begin(writer, resource_unref, 0u, short_request_size)) return Status::too_large;
     writer.write_u32(resource_id);
     writer.write_zeros(4u);
+    return Status::ok;
+}
+
+Status RvkRequestWriter::release_shared(uint64_t object_id)
+{
+    AV_SCOPE("RvkRequestWriter::release_shared");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, SharedReleaseRequest::type, 0u, SharedReleaseRequest::encoded_size)) return Status::too_large;
+    writer.write_u64(object_id);
     return Status::ok;
 }
 
