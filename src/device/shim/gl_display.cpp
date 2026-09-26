@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* libstdc++'s <stdlib.h> is its freestanding one under -ffreestanding, which
+ * declares none of POSIX; the executor links glibc's all the same. */
+extern "C" int setenv(const char *name, const char *value, int overwrite);
+
 namespace av {
 
 namespace {
