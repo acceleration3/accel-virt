@@ -672,6 +672,7 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
         executed[index] = recorded;
     }
     if (count == 0u) return true;
+    if (!progress_.after_siblings(queue, on)) return false;
     on->ExecuteCommandLists(count, executed);
     return progress_.executed(queue, on, device_->device());
 }

@@ -37,6 +37,14 @@ public:
      * watches for it. False when the fence cannot be made, signalled or
      * watched, or the table is full. */
     [[nodiscard]] bool executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device);
+    /* Before an execute on `queue`, the guest's `id`: it waits on the GPU for
+     * what every other queue was given. An application's Queue::Wait is
+     * carried out by the guest's kernel on the queue's own context and never
+     * reaches the host, so sibling queues are ordered by what was executed
+     * first instead - never on a fence only the guest advances, which would
+     * stall the host GPU until the guest's timeout. False when a wait is
+     * refused. */
+    [[nodiscard]] bool after_siblings(uint32_t id, ID3D12CommandQueue *queue) const;
     /* The queue is going: its fence goes with it. */
     void               forget(uint32_t id);
     /* Every fence goes; marks keep rising. */

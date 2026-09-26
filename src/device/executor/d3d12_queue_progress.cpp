@@ -40,6 +40,17 @@ bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12
     return wake_.watch(fences_[slot], marked_);
 }
 
+bool D3d12QueueProgress::after_siblings(uint32_t id, ID3D12CommandQueue *queue) const
+{
+    AV_SCOPE("D3d12QueueProgress::after_siblings");
+    if (queue == nullptr) return false;
+    for (uint32_t slot = 0u; slot < count_; slot++) {
+        if (ids_[slot] == id || fences_[slot]->GetCompletedValue() >= signalled_[slot]) continue;
+        if (FAILED(queue->Wait(fences_[slot], signalled_[slot]))) return false;
+    }
+    return true;
+}
+
 void D3d12QueueProgress::forget(uint32_t id)
 {
     AV_SCOPE("D3d12QueueProgress::forget");
