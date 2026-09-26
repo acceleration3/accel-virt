@@ -33,6 +33,24 @@ void round_trip(const std::uint8_t *bytes, std::size_t length)
     if (std::memcmp(again, bytes, sizeof again) != 0) __builtin_trap();
 }
 
+/* The header's awake flag and published fence are the device's and the
+ * miniport's to write; the process's encode leaves them zero, so only the
+ * rest of what decoded comes back. */
+void ring_header_round_trip(const std::uint8_t *bytes, std::size_t length)
+{
+    constexpr std::size_t awake_flag = 5u;
+    constexpr std::size_t published_fence = 24u;
+    av::RingHeader decoded;
+    if (decoded.decode(bytes, length) != av::Status::ok) return;
+    std::uint8_t again[av::RingHeader::encoded_size] = {};
+    if (decoded.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
+    std::uint8_t expected[av::RingHeader::encoded_size] = {};
+    std::memcpy(expected, bytes, sizeof expected);
+    expected[awake_flag] = 0u;
+    std::memset(expected + published_fence, 0, sizeof expected - published_fence);
+    if (std::memcmp(again, expected, sizeof again) != 0) __builtin_trap();
+}
+
 /* A setup is 32 or 48 bytes by its minor: what decodes is exactly its size. */
 void setup_round_trip(const std::uint8_t *bytes, std::size_t length)
 {
@@ -89,7 +107,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     switch (data[0] % 11u) {
     case 0: round_trip<av::CapsetInfo>(payload, length); break;
     case 1: setup_round_trip(payload, length); break;
-    case 2: round_trip<av::RingHeader>(payload, length); break;
+    case 2: ring_header_round_trip(payload, length); break;
     case 3: round_trip<av::SubmissionDescriptor>(payload, length); break;
     case 4: round_trip<av::FencePage>(payload, length); break;
     case 5: ring_sequence(payload, length); break;
