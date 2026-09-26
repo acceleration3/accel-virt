@@ -122,6 +122,32 @@ TEST(d3d_command_stream, a_flush_hint_waits_while_the_host_is_behind)
   CHECK_STATUS(fixture.stream().flush_hint(), Status::ok);
   CHECK_EQ(fixture.submits(), submits + 1u); }
 
+/* Commands past stream_bytes go to an idle host at once, so its replay runs
+ * beside the recording; a host still behind gets them only when the batch
+ * must go. */
+TEST(d3d_command_stream, an_idle_host_is_sent_what_is_recorded_once_it_passes_the_stream_size)
+{ Fixture fixture;
+  const std::uint32_t submits = fixture.submits();
+  std::size_t last_pending = 0u;
+  for (std::uint32_t draw = 0u; draw < 1000u && fixture.submits() == submits; draw++) {
+      last_pending = fixture.stream().recorded_bytes();
+      CHECK(rvk_d3d_Draw(fixture.stream(), draw, 0u));
+  }
+  CHECK_EQ(fixture.submits(), submits + 1u);
+  CHECK(last_pending < D3dCommandStream::stream_bytes);
+  CHECK_EQ(fixture.stream().recorded_bytes(), 0u);
+
+  Fixture behind;
+  for (std::uint32_t batch = 0u; batch < 2u; batch++) {
+      CHECK(rvk_d3d_Draw(behind.stream(), batch, 0u));
+      CHECK_STATUS(behind.stream().flush(), Status::ok);
+  }
+  const std::uint32_t queued = behind.submits();
+  for (std::uint32_t draw = 0u; draw < 200u; draw++) CHECK(rvk_d3d_Draw(behind.stream(), draw, 0u));
+  CHECK(behind.stream().recorded_bytes() >= D3dCommandStream::stream_bytes);
+  CHECK_EQ(behind.submits(), queued);
+  CHECK(fixture.stream().invariants_hold()); }
+
 /* A deferred context's stream records: nothing is sent, nothing may be
  * answered, data goes inline, and the recording is handed over whole. */
 TEST(d3d_command_stream, a_recording_is_kept_and_taken_out_whole)

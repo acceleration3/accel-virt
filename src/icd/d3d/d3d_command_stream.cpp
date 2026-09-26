@@ -171,7 +171,13 @@ TransportResult D3dCommandStream::append(uint32_t command_id, WireWriter &writer
 TransportResult D3dCommandStream::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("D3dCommandStream::send_async");
-    return append(command_id, writer, 0u);
+    const TransportResult appended = append(command_id, writer, 0u);
+    if (appended != TransportResult::ok || used_ < stream_bytes) return appended;
+    /* The host replays a batch only once it arrives, and the application waits
+     * on what it replays: a host with nothing to do is given what is recorded
+     * so far, so its replay runs beside the recording instead of after it. A
+     * busy host is left alone - the batch reaches it no later for waiting. */
+    return flush_hint() == Status::ok ? TransportResult::ok : TransportResult::failed;
 }
 
 TransportResult D3dCommandStream::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)

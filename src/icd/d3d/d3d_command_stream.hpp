@@ -39,6 +39,9 @@ public:
     /* The most one command is lent, which bounds inline data too: anything
      * larger goes through the blob arena. */
     static constexpr size_t command_room = 256u * 1024u;
+    /* What is recorded before an idle host is sent it: a few dozen draws, so
+     * a submission's cost is spread over enough of them to stay small. */
+    static constexpr size_t stream_bytes = 1024u;
 
     /* Records into `capacity` bytes at `block`, which the caller keeps and
      * which must hold at least one command's room past its header. */
