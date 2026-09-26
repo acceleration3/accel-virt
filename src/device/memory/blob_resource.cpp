@@ -3,12 +3,13 @@
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/memory/held_blob.hpp"
 
 namespace av {
 
 BlobResource::BlobResource(Host &host, uint32_t id)
     : host_(host), id_(id), guest_(host), block_(host), offset_(0u), mapped_(false), pins_(0u), alias_(host),
-      alias_holds_(0u)
+      holds_(0u)
       {
           AV_SCOPE("BlobResource::BlobResource");
       }
@@ -118,31 +119,38 @@ BlobWindow BlobResource::window() const
     return block_.created() ? block_.window() : guest_.window();
 }
 
-Status BlobResource::hold_alias(const GuestPageAlias *&alias, BlobWindow &pages)
+Status BlobResource::hold(HeldBlob &held)
 {
-    AV_SCOPE("BlobResource::hold_alias");
-    alias = nullptr;
-    if (block_.created()) return Status::invalid_parameter;
+    AV_SCOPE("BlobResource::hold");
+    held = HeldBlob();
+    if (block_.created()) {
+        const BlobWindow view = block_.window();
+        uint64_t         length = 0u;
+        void *const      base = view.extent(0u, length);
+        if (base == nullptr) return Status::no_memory;
+        holds_++;
+        held = HeldBlob(base, length, view, block_.handle());
+        return Status::ok;
+    }
     const Status status = alias_.mapped() ? Status::ok : alias_.map(guest_.window());
     if (status != Status::ok) return status;
-    alias_holds_++;
-    alias = &alias_;
-    pages = guest_.window();
+    holds_++;
+    held = HeldBlob(alias_.base(), alias_.length(), guest_.window(), nullptr);
     return Status::ok;
 }
 
-void BlobResource::release_alias()
+void BlobResource::release_hold()
 {
-    AV_SCOPE("BlobResource::release_alias");
-    if (alias_holds_ == 0u) return;
-    alias_holds_--;
-    if (alias_holds_ == 0u) alias_.release();
+    AV_SCOPE("BlobResource::release_hold");
+    if (holds_ == 0u) return;
+    holds_--;
+    if (holds_ == 0u) alias_.release();
 }
 
-bool BlobResource::aliased() const
+bool BlobResource::held() const
 {
-    AV_SCOPE("BlobResource::aliased");
-    return alias_holds_ != 0u;
+    AV_SCOPE("BlobResource::held");
+    return holds_ != 0u;
 }
 
 }  // namespace av

@@ -7,6 +7,7 @@
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/blob_imports.hpp"
+#include "device/memory/blob_window.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -205,17 +206,17 @@ TEST(blob_imports_import, imports_through_one_chunk_share_its_alias_until_the_la
   CHECK_EQ(rig.ops().live_imports(), 0u);
   CHECK_STATUS(rig.blobs().release(rig.chunk(63u)), Status::ok); }
 
-TEST(blob_imports_import, a_resource_that_is_no_guest_chunk_of_this_context_is_not_found_and_maps_nothing)
+TEST(blob_imports_import, a_resource_that_is_no_chunk_of_this_context_is_not_found_and_maps_nothing)
 { ImportRig rig;
   const std::uint32_t pages[] = {1u};
   const std::uint32_t transport[] = {ImportRig::ring, ImportRig::ring + 1u, ImportRig::ring + 2u};
   for (const std::uint32_t id : transport) CHECK_STATUS(rig.create_guest_blob(id, pages, 1u), Status::ok);
   CHECK_STATUS(rig.create_guest_blob(ImportRig::ring + ContextResources::per_context, pages, 1u), Status::ok);
-  CHECK_STATUS(rig.blobs().create_host(rig.chunk(1u), page), Status::ok);
+  CHECK_STATUS(rig.blobs().create_host(ImportRig::ring + ContextResources::per_context + 1u, page), Status::ok);
   const std::uint32_t ids[] = {0u, ImportRig::ring - 1u, ImportRig::ring, ImportRig::ring + 1u, ImportRig::ring + 2u,
                                ImportRig::ring + ContextResources::per_context, 0xFFFFFFFFu,
-                               rig.chunk(0u),    /* a chunk slot no blob holds */
-                               rig.chunk(1u)};   /* a blob the host backs */
+                               ImportRig::ring + ContextResources::per_context + 1u,   /* a host blob past the slots */
+                               rig.chunk(0u)};   /* a chunk slot no blob holds */
   for (const std::uint32_t id : ids) {
       std::uint64_t device_memory = 7u;
       CHECK_STATUS(import(rig, id, 0u, page, 0u, device_memory), Status::not_found);
@@ -223,6 +224,123 @@ TEST(blob_imports_import, a_resource_that_is_no_guest_chunk_of_this_context_is_n
   }
   CHECK_EQ(rig.host().live_ranges(), 0u);
   CHECK_EQ(rig.ops().imported(), 0u); }
+
+namespace {
+
+/* The device's own view of host blob `id`: what the hostmem BAR shows the
+ * guest once the blob is placed there. */
+std::uint8_t *host_view(ImportRig &rig, std::uint32_t id)
+{
+    av::BlobWindow pages;
+    void          *memory = nullptr;
+    if (rig.blobs().backing(id, pages, memory) != Status::ok) return nullptr;
+    std::uint64_t bytes = 0u;
+    return static_cast<std::uint8_t *>(pages.extent(0u, bytes));
+}
+
+}  // namespace
+
+/* A chunk the driver placed in the host window is a host blob
+ * (docs/host-window.md): one mapping already, so nothing is aliased, and the
+ * executor is handed a dma-buf the host made over the blob's own memory. */
+TEST(blob_imports_import, a_host_chunk_is_handed_as_a_dma_buf_over_its_own_memory_and_held)
+{ ImportRig rig;
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(1u), 3u * page), Status::ok);
+  std::uint64_t device_memory = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(1u), page, 2u * page, 4u, device_memory), Status::ok);
+  CHECK_EQ(device_memory, 1u | MockExecutorOps::handle_bit);
+  CHECK_EQ(rig.host().live_ranges(), 0u);
+  CHECK_EQ(rig.host().host_dmabufs(), 1u);
+  av::BlobWindow pages;
+  void          *memory = nullptr;
+  CHECK_STATUS(rig.blobs().backing(rig.chunk(1u), pages, memory), Status::ok);
+  CHECK(rig.host().last_host_dmabuf().memory == memory);
+  CHECK_EQ(rig.host().last_host_dmabuf().offset, page);
+  CHECK_EQ(rig.host().last_host_dmabuf().size, 2u * page);
+  RvkBlobHandle handed = {};
+  CHECK(rig.ops().import_of(1u, handed));
+  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_DMA_BUF});
+  CHECK_EQ(handed.reserved, 4u);
+  CHECK(handed.fd >= 0);
+  CHECK(handed.pointer == nullptr);
+  CHECK_EQ(handed.size, 2u * page);
+  /* The blob is held for the import as a guest chunk is. */
+  CHECK_STATUS(rig.blobs().release(rig.chunk(1u)), Status::invalid_state);
+  release(rig, device_memory);
+  CHECK_EQ(rig.ops().live_imports(), 0u);
+  CHECK_STATUS(rig.blobs().release(rig.chunk(1u)), Status::ok);
+  CHECK_EQ(rig.ops().misuses(), 0u); }
+
+/* OpenGL's and OpenCL's libraries take no dma-buf, and a host without udmabuf
+ * makes none: both are handed a pointer into the blob's own mapping - the
+ * memfd pages the hostmem BAR shows the guest - at the offset asked for. */
+TEST(blob_imports_import, a_host_chunk_a_library_takes_only_as_a_pointer_is_handed_its_own_mapping)
+{ ImportRig rig;
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(2u), 2u * page), Status::ok);
+  std::uint8_t *const view = host_view(rig, rig.chunk(2u));
+  CHECK(view != nullptr);
+  view[page + 9u] = 0x5Eu;
+  rig.ops().refuse_import_at(1u);
+  std::uint64_t device_memory = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(2u), page, page, 2u, device_memory), Status::ok);
+  CHECK_EQ(rig.host().live_dmabufs(), 0u);   /* the refused one was closed */
+  RvkBlobHandle handed = {};
+  CHECK(rig.ops().import_of(1u, handed));
+  CHECK_EQ(handed.kind, std::uint32_t{RVK_BLOB_HOST_POINTER});
+  CHECK_EQ(handed.fd, -1);
+  CHECK_EQ(handed.size, page);
+  CHECK(handed.pointer == view + page);
+  CHECK_EQ(static_cast<std::uint8_t *>(handed.pointer)[9], 0x5Eu);
+  rig.host().refuse_dmabufs();
+  std::uint64_t whole = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(2u), 0u, 2u * page, 2u, whole), Status::ok);
+  CHECK(rig.ops().import_of(2u, handed));
+  CHECK(handed.pointer == view);
+  CHECK_EQ(rig.host().live_ranges(), 0u);
+  release(rig, device_memory);
+  CHECK_STATUS(rig.blobs().release(rig.chunk(2u)), Status::invalid_state);   /* the second still holds it */
+  release(rig, whole);
+  CHECK_STATUS(rig.blobs().release(rig.chunk(2u)), Status::ok); }
+
+TEST(blob_imports_import, a_host_chunk_refuses_a_range_past_it_and_a_block_with_no_mapping)
+{ ImportRig rig;
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(3u), page), Status::ok);
+  std::uint64_t device_memory = 0u;
+  CHECK_STATUS(import(rig, rig.chunk(3u), page, page, 0u, device_memory), Status::too_large);
+  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, 2u * page, 0u, device_memory), Status::too_large);
+  CHECK_EQ(rig.host().host_dmabufs(), 0u);
+  CHECK_STATUS(rig.blobs().release(rig.chunk(3u)), Status::ok);   /* a refusal holds nothing */
+  rig.host().empty_host_memory_at(1u);
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(3u), page), Status::ok);
+  CHECK_STATUS(import(rig, rig.chunk(3u), 0u, page, 0u, device_memory), Status::no_memory);
+  CHECK_EQ(device_memory, 0u);
+  CHECK_EQ(rig.ops().imported(), 0u);
+  CHECK_STATUS(rig.blobs().release(rig.chunk(3u)), Status::ok); }
+
+/* A replay recreates a host chunk's import from the bytes the guest wrote
+ * through the window, which are the blob's own. */
+TEST(blob_imports_import, records_the_bytes_behind_a_host_chunk)
+{ ImportRig rig;
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(4u), 2u * page), Status::ok);
+  host_view(rig, rig.chunk(4u))[page] = 0x7Au;
+  CHECK_STATUS(rig.recorder().open("host-chunk.rvk", 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
+                                   av::ProtocolVersion(1u, 1u)),
+               Status::ok);
+  std::uint64_t device_memory = 0u;
+  rig.on_worker([&] {
+      CHECK_STATUS(rig.imports().import(rig.chunk(4u), page, page, 0u, device_memory), Status::ok);
+  });
+  av::RecordedFile file(rig.host(), "host-chunk.rvk");
+  av::RecordHeader record;
+  CHECK(file.expect(av::RecordKind::blob, record) != nullptr);
+  const std::uint8_t *const payload = file.expect(av::RecordKind::blob_bytes, record);
+  CHECK(payload != nullptr);
+  CHECK_EQ(record.length(), 16u + page);
+  if (payload != nullptr) {
+      CHECK_EQ(read_u64(payload + 8u), page);
+      CHECK_EQ(payload[16], 0x7Au);
+  }
+  rig.recorder().close(); }
 
 TEST(blob_imports_import, a_range_past_the_blob_is_too_large_and_the_alias_made_for_it_goes)
 { ImportRig rig;

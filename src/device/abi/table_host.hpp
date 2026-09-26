@@ -76,6 +76,7 @@ public:
     Status   guest_region(uint32_t index, uint32_t &region, int &descriptor, uint64_t &size) override;
     Status   locate_guest(const void *pointer, uint64_t length, uint32_t &region, uint64_t &offset) override;
     int      host_memory_descriptor(void *memory) override;
+    Status   dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) override;
     void     close_descriptor(int descriptor) override;
     Status   start_renderer(const char *path) override;
     Status   send_renderer(const uint8_t *bytes, size_t length, const int *descriptors, uint32_t count) override;

@@ -17,7 +17,7 @@
 
 #include "core/support/status.hpp"
 #include "device/display/scanout_framebuffer.hpp"
-#include "device/memory/guest_dma_buf.hpp"
+#include "device/memory/blob_dma_buf.hpp"
 
 #include <stdint.h>
 
@@ -62,9 +62,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    GuestDmaBuf       &current();
-    const GuestDmaBuf &current() const;
-    GuestDmaBuf       &spare();
+    BlobDmaBuf       &current();
+    const BlobDmaBuf &current() const;
+    BlobDmaBuf       &spare();
     /* The part of `flushed` the head is showing, in the picture's own
      * coordinates; false when none of it is. */
     bool visible_part(const GpuRect &flushed, uint32_t &x, uint32_t &y, uint32_t &width,
@@ -75,8 +75,8 @@ private:
     uint32_t           head_;
     uint32_t           blob_;
     ScanoutFramebuffer framebuffer_;
-    GuestDmaBuf        first_;
-    GuestDmaBuf        second_;
+    BlobDmaBuf        first_;
+    BlobDmaBuf        second_;
     bool               second_is_current_;
     bool               shown_;
     uint64_t           frames_;

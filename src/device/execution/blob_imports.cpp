@@ -7,9 +7,8 @@
 #include "device/host/host.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/memory/blob_table.hpp"
-#include "device/memory/blob_window.hpp"
-#include "device/memory/guest_dma_buf.hpp"
-#include "device/memory/guest_page_alias.hpp"
+#include "device/memory/blob_dma_buf.hpp"
+#include "device/memory/held_blob.hpp"
 #include "proto/context/context_resources.hpp"
 
 namespace av {
@@ -27,7 +26,7 @@ BlobImports::~BlobImports()
     AV_SCOPE("BlobImports::~BlobImports");
     if (device_memory_ == nullptr) return;
     for (uint32_t slot = 0u; slot < max_imports; slot++)
-        if (device_memory_[slot] != 0u) blobs_.release_alias(resources_[slot]);
+        if (device_memory_[slot] != 0u) blobs_.release_hold(resources_[slot]);
     host_.release(device_memory_);
 }
 
@@ -61,22 +60,21 @@ Status BlobImports::import(uint32_t resource, uint64_t offset, uint64_t size, ui
     const Status reserved = reserve();
     const uint32_t slot = reserved == Status::ok ? slot_of(0u) : max_imports;
     if (slot == max_imports) return Status::no_space;
-    const GuestPageAlias *alias = nullptr;
-    BlobWindow            pages;
-    const Status          held = blobs_.hold_alias(resource, alias, pages);
-    /* What the table says of the blob itself is the guest naming the wrong
-     * resource; anything else is the host failing pages that were fine. */
-    if (held == Status::not_found || held == Status::invalid_parameter) return Status::not_found;
-    if (held != Status::ok) return Status::no_memory;
-    ScopeExit    unhold([this, resource] { blobs_.release_alias(resource); });
-    const Status handed = hand_over(pages, *alias, offset, size, memory_type, next_blob_id_++, slot);
+    HeldBlob     held;
+    const Status holding = blobs_.hold(resource, held);
+    /* No blob is the guest naming the wrong resource; anything else is the
+     * host failing memory that was fine. */
+    if (holding == Status::not_found) return Status::not_found;
+    if (holding != Status::ok) return Status::no_memory;
+    ScopeExit    unhold([this, resource] { blobs_.release_hold(resource); });
+    const Status handed = hand_over(held, offset, size, memory_type, next_blob_id_++, slot);
     if (handed != Status::ok) return handed;
     unhold.dismiss();
     resources_[slot] = resource;
     device_memory = device_memory_[slot];
     recorder_.record_blob(context_, BlobAction::imported, memory_type, blob_ids_[slot], offset, size);
     recorder_.record_blob_bytes(context_, blob_ids_[slot],
-                                offset, static_cast<const uint8_t *>(alias->base()) + offset, size);
+                                offset, static_cast<const uint8_t *>(held.base()) + offset, size);
     return Status::ok;
 }
 
@@ -96,12 +94,12 @@ Status BlobImports::offer(const RvkBlobHandle &handle, uint64_t blob_id, uint32_
     return Status::ok;
 }
 
-Status BlobImports::hand_over_dmabuf(const BlobWindow &pages, uint64_t offset, uint64_t size,
-                                     uint32_t memory_type, uint64_t blob_id, uint32_t slot)
+Status BlobImports::hand_over_dmabuf(const HeldBlob &held, uint64_t offset, uint64_t size, uint32_t memory_type,
+                                     uint64_t blob_id, uint32_t slot)
 {
     AV_SCOPE("BlobImports::hand_over_dmabuf");
-    GuestDmaBuf  shared(host_);
-    const Status made = shared.make(pages, offset, size);
+    BlobDmaBuf   shared(host_);
+    const Status made = held.share(shared, offset, size);
     if (made != Status::ok) return made;
     RvkBlobHandle handle = {};
     handle.kind = RVK_BLOB_DMA_BUF;
@@ -116,29 +114,29 @@ Status BlobImports::hand_over_dmabuf(const BlobWindow &pages, uint64_t offset, u
     return offered;
 }
 
-Status BlobImports::hand_over_pointer(const GuestPageAlias &alias, uint64_t offset, uint64_t size,
-                                      uint32_t memory_type, uint64_t blob_id, uint32_t slot)
+Status BlobImports::hand_over_pointer(const HeldBlob &held, uint64_t offset, uint64_t size, uint32_t memory_type,
+                                      uint64_t blob_id, uint32_t slot)
 {
     AV_SCOPE("BlobImports::hand_over_pointer");
     RvkBlobHandle handle = {};
     handle.kind = RVK_BLOB_HOST_POINTER;
     handle.reserved = memory_type;
-    handle.pointer = static_cast<uint8_t *>(alias.base()) + offset;
+    handle.pointer = static_cast<uint8_t *>(held.base()) + offset;
     handle.fd = -1;
     handle.size = size;
     return offer(handle, blob_id, slot);
 }
 
-Status BlobImports::hand_over(const BlobWindow &pages, const GuestPageAlias &alias, uint64_t offset,
-                              uint64_t size, uint32_t memory_type, uint64_t blob_id, uint32_t slot)
+Status BlobImports::hand_over(const HeldBlob &held, uint64_t offset, uint64_t size, uint32_t memory_type,
+                              uint64_t blob_id, uint32_t slot)
 {
     AV_SCOPE("BlobImports::hand_over");
-    if (size > alias.length() || offset > alias.length() - size) return Status::too_large;
+    if (size > held.length() || offset > held.length() - size) return Status::too_large;
     /* The dma-buf first: a host GPU that refuses a userptr over file-backed
-     * pages takes only that one, and guest RAM is always file-backed. A host
-     * with no udmabuf, or a library that imports no dma-buf, falls through to
-     * the pointer, which is what every one of them did before. */
-    if (hand_over_dmabuf(pages, offset, size, memory_type, blob_id, slot) == Status::ok) return Status::ok;
+     * pages takes only that one, and guest RAM and a host blob's memfd are
+     * both file-backed. A host with no udmabuf, or a library that imports no
+     * dma-buf - OpenGL's and OpenCL's - falls through to the pointer. */
+    if (hand_over_dmabuf(held, offset, size, memory_type, blob_id, slot) == Status::ok) return Status::ok;
     /* Said, because a host GPU that refuses the pointer then fails far from
      * here: udmabuf's size_limit_mb and list_limit (64 MiB and 1024 runs by
      * default) are what usually refused it. */
@@ -147,7 +145,7 @@ Status BlobImports::hand_over(const BlobWindow &pages, const GuestPageAlias &ali
         host_.log("virtio-gpu-rvk: a blob could not be a dma-buf (raise udmabuf's size_limit_mb and list_limit?); "
                   "handing over a host pointer");
     }
-    return hand_over_pointer(alias, offset, size, memory_type, blob_id, slot);
+    return hand_over_pointer(held, offset, size, memory_type, blob_id, slot);
 }
 
 void BlobImports::release(uint64_t device_memory)
@@ -159,7 +157,7 @@ void BlobImports::release(uint64_t device_memory)
     executor_.release(blob_ids_[slot]);
     recorder_.record_blob(context_, BlobAction::released, 0u, blob_ids_[slot], 0u, 0u);
     device_memory_[slot] = 0u;
-    blobs_.release_alias(resources_[slot]);
+    blobs_.release_hold(resources_[slot]);
 }
 
 uint32_t BlobImports::slot_of(uint64_t device_memory) const

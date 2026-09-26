@@ -23,19 +23,19 @@ ScanoutBinding::~ScanoutBinding()
     hide();
 }
 
-GuestDmaBuf &ScanoutBinding::current()
+BlobDmaBuf &ScanoutBinding::current()
 {
     AV_SCOPE("ScanoutBinding::current");
     return second_is_current_ ? second_ : first_;
 }
 
-const GuestDmaBuf &ScanoutBinding::current() const
+const BlobDmaBuf &ScanoutBinding::current() const
 {
     AV_SCOPE("ScanoutBinding::current");
     return second_is_current_ ? second_ : first_;
 }
 
-GuestDmaBuf &ScanoutBinding::spare()
+BlobDmaBuf &ScanoutBinding::spare()
 {
     AV_SCOPE("ScanoutBinding::spare");
     return second_is_current_ ? first_ : second_;

@@ -1,4 +1,4 @@
-#include "device/memory/guest_dma_buf.hpp"
+#include "device/memory/blob_dma_buf.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
@@ -6,20 +6,20 @@
 
 namespace av {
 
-GuestDmaBuf::GuestDmaBuf(Host &host) : host_(host), handle_(-1), length_(0u), items_(0u)
+BlobDmaBuf::BlobDmaBuf(Host &host) : host_(host), handle_(-1), length_(0u), items_(0u)
 {
-    AV_SCOPE("GuestDmaBuf::GuestDmaBuf");
+    AV_SCOPE("BlobDmaBuf::BlobDmaBuf");
 }
 
-GuestDmaBuf::~GuestDmaBuf()
+BlobDmaBuf::~BlobDmaBuf()
 {
-    AV_SCOPE("GuestDmaBuf::~GuestDmaBuf");
+    AV_SCOPE("BlobDmaBuf::~BlobDmaBuf");
     release();
 }
 
-Status GuestDmaBuf::make(const BlobWindow &pages, uint64_t offset, uint64_t size)
+Status BlobDmaBuf::make(const BlobWindow &pages, uint64_t offset, uint64_t size)
 {
-    AV_SCOPE("GuestDmaBuf::make");
+    AV_SCOPE("BlobDmaBuf::make");
     if (handle_ >= 0) return Status::invalid_state;
     if (size == 0u || size % page_size != 0u || offset % page_size != 0u) return Status::malformed;
     void    *runs[max_items];
@@ -55,9 +55,24 @@ Status GuestDmaBuf::make(const BlobWindow &pages, uint64_t offset, uint64_t size
     return Status::ok;
 }
 
-void GuestDmaBuf::release()
+Status BlobDmaBuf::make_over_host(void *memory, uint64_t length, uint64_t offset, uint64_t size)
 {
-    AV_SCOPE("GuestDmaBuf::release");
+    AV_SCOPE("BlobDmaBuf::make_over_host");
+    if (handle_ >= 0) return Status::invalid_state;
+    if (size > length || offset > length - size) return Status::too_large;
+    if (size == 0u || size % page_size != 0u || offset % page_size != 0u) return Status::malformed;
+    int          made = -1;
+    const Status opened = host_.dmabuf_over_host_memory(memory, offset, size, made);
+    if (opened != Status::ok) return opened;
+    handle_ = made;
+    length_ = size;
+    items_ = 1u;
+    return Status::ok;
+}
+
+void BlobDmaBuf::release()
+{
+    AV_SCOPE("BlobDmaBuf::release");
     if (handle_ < 0) return;
     host_.close_dmabuf(handle_);
     handle_ = -1;
@@ -65,9 +80,9 @@ void GuestDmaBuf::release()
     items_ = 0u;
 }
 
-int GuestDmaBuf::take()
+int BlobDmaBuf::take()
 {
-    AV_SCOPE("GuestDmaBuf::take");
+    AV_SCOPE("BlobDmaBuf::take");
     const int given = handle_;
     handle_ = -1;
     length_ = 0u;
@@ -75,14 +90,14 @@ int GuestDmaBuf::take()
     return given;
 }
 
-bool     GuestDmaBuf::made() const { AV_SCOPE("GuestDmaBuf::made"); return handle_ >= 0; }
-int      GuestDmaBuf::handle() const { AV_SCOPE("GuestDmaBuf::handle"); return handle_; }
-uint64_t GuestDmaBuf::length() const { AV_SCOPE("GuestDmaBuf::length"); return length_; }
-uint32_t GuestDmaBuf::items() const { AV_SCOPE("GuestDmaBuf::items"); return items_; }
+bool     BlobDmaBuf::made() const { AV_SCOPE("BlobDmaBuf::made"); return handle_ >= 0; }
+int      BlobDmaBuf::handle() const { AV_SCOPE("BlobDmaBuf::handle"); return handle_; }
+uint64_t BlobDmaBuf::length() const { AV_SCOPE("BlobDmaBuf::length"); return length_; }
+uint32_t BlobDmaBuf::items() const { AV_SCOPE("BlobDmaBuf::items"); return items_; }
 
-bool GuestDmaBuf::invariants_hold() const
+bool BlobDmaBuf::invariants_hold() const
 {
-    AV_SCOPE("GuestDmaBuf::invariants_hold");
+    AV_SCOPE("BlobDmaBuf::invariants_hold");
     if (handle_ < 0) return length_ == 0u && items_ == 0u;
     return length_ != 0u && items_ != 0u && items_ <= max_items && length_ % page_size == 0u;
 }

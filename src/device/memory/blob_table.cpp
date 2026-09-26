@@ -4,6 +4,7 @@
 #include "device/host/host.hpp"
 #include "core/support/scope_exit.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/memory/held_blob.hpp"
 
 namespace av {
 
@@ -154,7 +155,7 @@ Status BlobTable::release(uint32_t id)
     if (slot == nullptr) return Status::not_found;
     host_.lock_mutex(lock_);
     ScopeExit    unlock([this] { host_.unlock_mutex(lock_); });
-    const bool   held = slot->object().pinned() || slot->object().aliased();
+    const bool   held = slot->object().pinned() || slot->object().held();
     if (held) return Status::invalid_state;
     slot->destroy();
     retiring_[slot - slots_] = false;
@@ -186,7 +187,7 @@ void BlobTable::sweep_retired()
     for (uint32_t index = 0u; index < max_blobs; index++) {
         if (!retiring_[index]) continue;
         const BlobResource &blob = slots_[index].object();
-        if (blob.pinned() || blob.aliased()) continue;
+        if (blob.pinned() || blob.held()) continue;
         slots_[index].destroy();
         retiring_[index] = false;
     }
@@ -222,25 +223,25 @@ Status BlobTable::size(uint32_t id, uint64_t &size)
 
 /* The lookup takes the lock too: a creation on the main loop writes the slot a
  * worker would otherwise be reading. */
-Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias, BlobWindow &pages)
+Status BlobTable::hold(uint32_t id, HeldBlob &held)
 {
-    AV_SCOPE("BlobTable::hold_alias");
-    alias = nullptr;
+    AV_SCOPE("BlobTable::hold");
+    held = HeldBlob();
     if (lock_ == nullptr) return Status::not_found;
     host_.lock_mutex(lock_);
     ScopeExit                          unlock([this] { host_.unlock_mutex(lock_); });
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
-    return retiring(*slot) ? Status::invalid_state : slot->object().hold_alias(alias, pages);
+    return retiring(*slot) ? Status::invalid_state : slot->object().hold(held);
 }
 
-void BlobTable::release_alias(uint32_t id)
+void BlobTable::release_hold(uint32_t id)
 {
-    AV_SCOPE("BlobTable::release_alias");
+    AV_SCOPE("BlobTable::release_hold");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
     ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot != nullptr) slot->object().release_alias();
+    if (slot != nullptr) slot->object().release_hold();
     host_.unlock_mutex(lock_);
 }
 
@@ -253,7 +254,7 @@ uint32_t BlobTable::live() const
 }
 
 /* Ids are unique, no two mappings share a byte of the region, no blob lives
- * that a worker's alias could not be held apart from, and only a live blob is
+ * that a worker's hold could not be held apart from, and only a live blob is
  * retiring: a sweep reads the blob a retiring mark names. */
 bool BlobTable::invariants_hold() const
 {

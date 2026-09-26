@@ -613,6 +613,37 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK_EQ(mock.live_dmabufs(), 0u);
   host.destroy_host_memory(memory); }
 
+/* A dma-buf over a host blob through the table (docs/host-window.md): what the
+ * glue made is the caller's, closed by close_dmabuf; a refusal - no udmabuf,
+ * no sealed memfd - and a table from before the op are not_supported, holding
+ * nothing. */
+TEST(table_host_host_memory, a_dma_buf_over_host_memory_is_the_glues_or_not_supported)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *view = nullptr;
+  void *const memory = host.create_host_memory(0x3000u, view);
+  int shared = 7;
+  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0x1000u, 0x2000u, shared), Status::ok);
+  CHECK(mock.descriptor_open(shared));
+  CHECK(mock.last_host_dmabuf().memory == memory);
+  CHECK_EQ(mock.last_host_dmabuf().offset, 0x1000u);
+  CHECK_EQ(mock.last_host_dmabuf().size, 0x2000u);
+  CHECK_EQ(mock.live_dmabufs(), 1u);
+  host.close_dmabuf(shared);
+  CHECK_EQ(mock.live_dmabufs(), 0u);
+  mock.fail_dmabuf_at(1u);
+  int refused = 7;
+  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0u, 0x1000u, refused), Status::not_supported);
+  CHECK_EQ(refused, -1);
+  CHECK_EQ(mock.host_dmabufs(), 1u);
+  RvkHostOps older = ops.table();
+  older.dmabuf_over_host_memory = nullptr;
+  TableHost before(older);
+  int none = 7;
+  CHECK_STATUS(before.dmabuf_over_host_memory(memory, 0u, 0x1000u, none), Status::not_supported);
+  CHECK_EQ(none, -1);
+  CHECK_EQ(mock.host_dmabufs(), 1u);
+  host.destroy_host_memory(memory); }
+
 /* The renderer's socket through the table: a start that fails and one that
  * does, a datagram whose descriptor the peer gets its own copy of, a receive
  * with nothing to receive, an answer with a descriptor that becomes the

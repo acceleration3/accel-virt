@@ -282,13 +282,16 @@ to its executor as memory of type `memory_type`, and answers the wire handle -
 for Vulkan the `VkDeviceMemory` - the guest names that memory by from then on
 (feature 045). A context's resources are laid out from its ring: the ring, the
 fence page and the reply slot, then 64 chunk slots, so the resource must be one
-of the ids `ring_resource + 3` to `ring_resource + 66`, and a `GUEST` blob.
-The device maps the blob's scattered pages again, in order, as one host range
-(the pages themselves, not a copy), and the executor imports `offset` bytes into
-that range as a host pointer; one range serves every import of the blob and
-goes with the last of them. While any import holds a blob, `RESOURCE_UNREF` of
-it answers `ERR_INVALID_PARAMETER`, so its id is never re-created over other
-pages under a live import.
+of the ids `ring_resource + 3` to `ring_resource + 66`: a `GUEST` blob, or a
+`HOST3D` blob the driver placed in the host window (docs/host-window.md).
+The device maps a guest blob's scattered pages again, in order, as one host
+range (the pages themselves, not a copy); one range serves every import of the
+blob and goes with the last of them. A host blob is one range already, its
+memfd's own mapping. The executor is handed `size` bytes at `offset` of that
+range as a dma-buf where the host makes one and the library takes it, and as a
+host pointer otherwise. While any import holds a blob, `RESOURCE_UNREF` of it
+answers `ERR_INVALID_PARAMETER`, so its id is never re-created over other
+memory under a live import.
 
 An OpenGL context imports once (feature 050): its guest ICD binds one
 host-visible chunk as its blob arena and imports all of it at offset 0 with
@@ -305,9 +308,9 @@ NOP with a body. Every other refusal is an answer, and the context runs on:
 |--:|---|
 | 0 | not refused: `device_memory` names the import, never 0 |
 | 1 | a reserved field is not 0, `offset` or `size` is not a whole number of 4096-byte pages, `size` is 0, or `offset + size` passes 2^64 |
-| 2 | the resource is not a `GUEST` blob in one of the context's chunk slots |
+| 2 | the resource is no blob in one of the context's chunk slots |
 | 3 | `offset + size` is past the blob |
-| 4 | the host cannot map the blob's pages as one range (RAM with no file behind it, pages that are not whole, more than 16384 runs) |
+| 4 | the host cannot map the blob's pages as one range (RAM with no file behind it, pages that are not whole, more than 16384 runs, a host blob with no mapping) |
 | 5 | the context has no executor, its library is older than ABI version 3, or the library refused the import |
 | 6 | the context holds 256 imports, or the host has no memory for the table of them |
 

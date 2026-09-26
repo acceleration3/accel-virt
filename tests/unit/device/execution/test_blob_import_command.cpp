@@ -1,6 +1,6 @@
 /* IMPORT_BLOB and RELEASE_BLOB as the device answers them (feature 045, T013):
- * an import of a context's guest chunk answers status 0 and the executor's
- * handle; every refusal is an answer with its own status and the context runs
+ * an import of a context's chunk - guest or host blob - answers status 0 and
+ * the executor's handle; every refusal is an answer with its own status and the context runs
  * on; only a body of the wrong length is framing. Run over ImportRig, on the
  * context's worker, with guest pages behind every blob. */
 #include "core/support/status.hpp"
@@ -122,6 +122,22 @@ TEST(blob_import_command_run, an_import_of_a_guest_chunk_answers_status_0_and_th
   CHECK(std::memcmp(handed.pointer, rig.guest_page(7u), page) == 0);
   CHECK_EQ(rig.imports().imports(), 1u); }
 
+/* A host blob the driver placed in the host window, in a chunk slot, imports
+ * the same way (docs/host-window.md). */
+TEST(blob_import_command_run, an_import_of_a_host_chunk_answers_status_0_and_the_executors_handle)
+{ ImportRig rig;
+  CHECK_STATUS(rig.blobs().create_host(rig.chunk(5u), 2u * page), Status::ok);
+  const Run run = import(rig, ImportBody(rig.chunk(5u), 0u, 2u * page, 1u));
+  CHECK_STATUS(run.status(), Status::ok);
+  CHECK_EQ(run.answer().status(), BlobImportAnswer::imported);
+  CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
+  RvkBlobHandle handed = {};
+  CHECK(rig.ops().import_of(1u, handed));
+  CHECK_EQ(handed.size, 2u * page);
+  CHECK_EQ(rig.imports().imports(), 1u);
+  CHECK_STATUS(release(rig, run.answer().device_memory()).status(), Status::ok);
+  CHECK_EQ(rig.imports().imports(), 0u); }
+
 TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and_no_fault)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
@@ -142,7 +158,7 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
       {"the ring", ImportBody(ImportRig::ring, 0u, page, 0u), BlobImportAnswer::unknown_resource},
       {"past the last chunk slot", ImportBody(ImportRig::ring + 67u, 0u, page, 0u), BlobImportAnswer::unknown_resource},
       {"a chunk slot with no blob", ImportBody(rig.chunk(2u), 0u, page, 0u), BlobImportAnswer::unknown_resource},
-      {"a blob the host backs", ImportBody(rig.chunk(1u), 0u, page, 0u), BlobImportAnswer::unknown_resource},
+      {"a page past a host chunk", ImportBody(rig.chunk(1u), page, page, 0u), BlobImportAnswer::outside_blob},
       {"a page past the blob", ImportBody(rig.chunk(0u), 3u * page, page, 0u), BlobImportAnswer::outside_blob},
       {"one page too many", ImportBody(rig.chunk(0u), 0u, 4u * page, 0u), BlobImportAnswer::outside_blob},
   };

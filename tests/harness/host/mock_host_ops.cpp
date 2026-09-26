@@ -196,6 +196,10 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return received == Status::invalid_state ? 1 : 2;
     };
     table_.kill_renderer = [](void *opaque) { host_of(opaque).kill_renderer(); };
+    table_.dmabuf_over_host_memory = [](void *opaque, void *memory, std::uint64_t offset, std::uint64_t size,
+                                        int *fd) {
+        return host_of(opaque).dmabuf_over_host_memory(memory, offset, size, *fd) == Status::ok ? 0 : 1;
+    };
 }
 
 const RvkHostOps &MockHostOps::table() const

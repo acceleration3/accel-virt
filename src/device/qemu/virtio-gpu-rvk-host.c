@@ -243,6 +243,35 @@ static int rvk_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
                 (off_t)(qemu_ram_get_fd_offset(block) + offset)) == MAP_FAILED;
 }
 
+/* One dma-buf over `count` memfd ranges, in order: *fd on success, nonzero
+ * where the kernel has no udmabuf or refuses a range (a memfd not sealed
+ * against shrinking, or one sealed against writing). */
+static int rvk_udmabuf_create(const struct udmabuf_create_item *items, uint32_t count, int *fd)
+{
+    g_autofree uint8_t *request = NULL;
+    struct udmabuf_create_list list;
+    int device, made;
+
+    device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+    if (device < 0) {
+        return 1;
+    }
+    memset(&list, 0, sizeof(list));
+    list.flags = UDMABUF_FLAGS_CLOEXEC;
+    list.count = count;
+    /* The items follow the header, which is what the ioctl reads. */
+    request = g_malloc0(sizeof(list) + sizeof(items[0]) * count);
+    memcpy(request, &list, sizeof(list));
+    memcpy(request + sizeof(list), items, sizeof(items[0]) * count);
+    made = ioctl(device, UDMABUF_CREATE_LIST, request);
+    close(device);
+    if (made < 0) {
+        return 1;
+    }
+    *fd = made;
+    return 0;
+}
+
 /* One dma-buf over the guest's own pages, through udmabuf. A host GPU that
  * refuses a userptr whose pages are file-backed - and guest RAM is a memfd -
  * takes this instead. Nonzero where the kernel has no udmabuf or the RAM has
@@ -251,9 +280,6 @@ static int rvk_dmabuf_over_guest(void *opaque, void *const *runs, const uint64_t
                                  uint32_t count, int *fd)
 {
     g_autofree struct udmabuf_create_item *items = NULL;
-    g_autofree uint8_t *request = NULL;
-    struct udmabuf_create_list list;
-    int device, made;
     uint32_t index;
 
     if (!runs || !sizes || count == 0) {
@@ -275,24 +301,7 @@ static int rvk_dmabuf_over_guest(void *opaque, void *const *runs, const uint64_t
         items[index].offset = qemu_ram_get_fd_offset(block) + offset;
         items[index].size = sizes[index];
     }
-    device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-    if (device < 0) {
-        return 1;
-    }
-    memset(&list, 0, sizeof(list));
-    list.flags = UDMABUF_FLAGS_CLOEXEC;
-    list.count = count;
-    /* The items follow the header, which is what the ioctl reads. */
-    request = g_malloc0(sizeof(list) + sizeof(items[0]) * count);
-    memcpy(request, &list, sizeof(list));
-    memcpy(request + sizeof(list), items, sizeof(items[0]) * count);
-    made = ioctl(device, UDMABUF_CREATE_LIST, request);
-    close(device);
-    if (made < 0) {
-        return 1;
-    }
-    *fd = made;
-    return 0;
+    return rvk_udmabuf_create(items, count, fd);
 }
 
 static void rvk_close_dmabuf(void *opaque, int fd)
@@ -313,7 +322,10 @@ static void *rvk_create_host_memory(void *opaque, uint64_t size, void **pointer)
     Error *error = NULL;
 
     block->size = size;
-    block->pointer = qemu_memfd_alloc("virtio-gpu-rvk-blob", size, 0, &block->fd, &error);
+    /* Sealed against growing and shrinking, which is what lets udmabuf wrap
+     * it (docs/host-window.md); never against writing, which udmabuf refuses. */
+    block->pointer = qemu_memfd_alloc("virtio-gpu-rvk-blob", size, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL,
+                                      &block->fd, &error);
     if (!block->pointer) {
         /* The guest asked for it; the core answers out of memory rather than log each one. */
         error_free(error);
@@ -713,6 +725,25 @@ static int rvk_host_memory_descriptor(void *opaque, void *memory)
     VirtIOGPURvkBlock *block = memory;
 
     return block->fd >= 0 ? fcntl(block->fd, F_DUPFD_CLOEXEC, 0) : -1;
+}
+
+/* A dma-buf over part of a host blob's memfd, for a host GPU that refuses a
+ * user pointer over file-backed pages. A block from the host GPU has no memfd
+ * behind it, and udmabuf refuses its descriptor. */
+static int rvk_dmabuf_over_host_memory(void *opaque, void *memory, uint64_t offset, uint64_t size, int *fd)
+{
+    VirtIOGPURvkBlock *block = memory;
+    struct udmabuf_create_item item;
+
+    if (!block || block->fd < 0 || block->gpu_memory != VK_NULL_HANDLE || size == 0 || offset > block->size ||
+        size > block->size - offset) {
+        return 1;
+    }
+    memset(&item, 0, sizeof(item));
+    item.memfd = (uint32_t)block->fd;
+    item.offset = offset;
+    item.size = size;
+    return rvk_udmabuf_create(&item, 1, fd);
 }
 
 static void rvk_close_descriptor(void *opaque, int descriptor)
@@ -1231,6 +1262,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .fence_interrupt_descriptor = rvk_fence_interrupt_descriptor,
         .host_memory_descriptor = rvk_host_memory_descriptor,
         .close_descriptor = rvk_close_descriptor,
+        .dmabuf_over_host_memory = rvk_dmabuf_over_host_memory,
     };
     virtio_gpu_rvk_renderer_ops(&r->host);
     rvk_read_gpus(r);

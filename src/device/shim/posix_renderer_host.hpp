@@ -132,6 +132,7 @@ public:
     [[nodiscard]] Status locate_guest(const void *pointer, uint64_t length, uint32_t &region,
                                       uint64_t &offset) override;
     int                  host_memory_descriptor(void *memory) override;
+    [[nodiscard]] Status dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) override;
     [[nodiscard]] Status start_renderer(const char *path) override;
     [[nodiscard]] Status send_renderer(const uint8_t *bytes, size_t length, const int *descriptors,
                                        uint32_t count) override;

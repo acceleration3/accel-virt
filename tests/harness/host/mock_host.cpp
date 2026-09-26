@@ -48,7 +48,7 @@ MockHost::MockHost()
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
       host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), empty_host_memory_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
-      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u),
+      fail_reserve_(0u), fail_alias_(0u), fail_dmabuf_(0u), no_dmabufs_(false), dmabufs_(0u), host_dmabufs_(0u), last_host_dmabuf_{},
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
       fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{},
       update_rects_{}, renderer_regions_{}, renderer_region_count_(0u), renderer_peer_(nullptr),
@@ -327,7 +327,7 @@ void *MockHost::export_gpu_memory(std::uint64_t size, void *&pointer, std::int32
     const bool empty = fail_now(empty_export_);
     for (HostBlock &block : host_blocks_) {
         if (block.live) continue;
-        block = HostBlock{std::calloc(1u, size), size, true, false, 0u, true};
+        block = HostBlock{std::calloc(1u, size), size, -1, true, false, 0u, true};
         pointer = empty ? nullptr : block.pointer;
         return &block;
     }
@@ -928,6 +928,10 @@ void MockHost::refuse_dmabufs() { StateLock lock(state_); no_dmabufs_ = true; }
 
 std::uint32_t MockHost::live_dmabufs() const { return dmabufs_; }
 
+MockHost::HostDmaBuf MockHost::last_host_dmabuf() const { return last_host_dmabuf_; }
+
+std::uint32_t MockHost::host_dmabufs() const { return host_dmabufs_; }
+
 /* A descriptor the test's subject may own and close. A pipe's read end costs
  * nothing and is a real file descriptor, which is what makes "closed exactly
  * once" a thing the kernel answers rather than a counter. */
@@ -938,6 +942,24 @@ int MockHost::open_descriptor()
     StateLock lock(state_);
     dmabufs_++;
     return descriptor;
+}
+
+/* A real udmabuf over the memfd range where the host has /dev/udmabuf, so an
+ * executor under test imports it as the device's would; a stand-in descriptor
+ * otherwise, which only the device's bookkeeping reads. */
+int MockHost::udmabuf_over(int memfd, std::uint64_t offset, std::uint64_t size)
+{
+    const bool aligned = offset % page == 0u && size % page == 0u;
+    const int  device = memfd >= 0 && aligned ? ::open("/dev/udmabuf", O_RDWR | O_CLOEXEC) : -1;
+    if (device < 0) return fresh_descriptor();
+    udmabuf_create request = {};
+    request.memfd = static_cast<std::uint32_t>(memfd);
+    request.flags = UDMABUF_FLAGS_CLOEXEC;
+    request.offset = offset;
+    request.size = size;
+    const int made = ::ioctl(device, UDMABUF_CREATE, &request);
+    ::close(device);
+    return made >= 0 ? made : fresh_descriptor();
 }
 
 int MockHost::fresh_descriptor()
@@ -1089,7 +1111,18 @@ void *MockHost::create_host_memory(std::uint64_t size, void *&pointer)
     const bool empty = fail_now(empty_host_memory_);
     for (HostBlock &block : host_blocks_) {
         if (block.live) continue;
-        block = HostBlock{std::calloc(1u, size), size, true, false, 0u, false};
+        /* Page-aligned, as the memfd a real host maps is: a process's view of
+         * a window chunk is this memory (docs/host-window.md). */
+        const std::size_t whole = static_cast<std::size_t>((size + page - 1u) / page * page);
+        const int         fd = memfd_create("mock host memory", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+        void             *memory = nullptr;
+        if (fd >= 0 && ::ftruncate(fd, static_cast<off_t>(whole)) == 0 &&
+            ::fcntl(fd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) == 0) {
+            memory = ::mmap(nullptr, whole, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            if (memory == MAP_FAILED) memory = nullptr;
+        }
+        if (memory == nullptr && fd >= 0) ::close(fd);
+        block = HostBlock{memory, size, memory != nullptr ? fd : -1, true, false, 0u, false};
         pointer = empty ? nullptr : block.pointer;
         return &block;
     }
@@ -1105,7 +1138,9 @@ void MockHost::destroy_host_memory(void *memory)
         return;
     }
     StateLock lock(state_);
-    std::free(block->pointer);
+    if (block->pointer != nullptr)
+        ::munmap(block->pointer, static_cast<std::size_t>((block->size + page - 1u) / page * page));
+    if (block->fd >= 0) ::close(block->fd);
     *block = HostBlock{};
 }
 
@@ -1534,11 +1569,46 @@ Status MockHost::locate_guest(const void *pointer, std::uint64_t length, std::ui
 int MockHost::host_memory_descriptor(void *memory)
 {
     require_main_loop("MockHost::host_memory_descriptor");
-    if (block_of(memory) == nullptr) {
+    const HostBlock *const block = block_of(memory);
+    if (block == nullptr) {
         record(HostViolation::unknown_handle, "MockHost::host_memory_descriptor");
         return -1;
     }
-    return open_descriptor();
+    if (block->fd < 0) return open_descriptor();
+    const int duplicate = ::fcntl(block->fd, F_DUPFD_CLOEXEC, 0);
+    if (duplicate < 0) return -1;
+    StateLock lock(state_);
+    dmabufs_++;
+    return duplicate;
+}
+
+/* Any thread, as the contract allows: refused with the other dma-bufs, and
+ * for a range the block does not hold, as udmabuf refuses one past the memfd. */
+Status MockHost::dmabuf_over_host_memory(void *memory, std::uint64_t offset, std::uint64_t size, int &fd)
+{
+    fd = -1;
+    bool known = false;
+    int  memfd = -1;
+    {
+        StateLock lock(state_);
+        const HostBlock *const block = block_of(memory);
+        known = block != nullptr;
+        if (known) memfd = block->fd;
+        if (known && (no_dmabufs_ || fail_now(fail_dmabuf_))) return Status::not_supported;
+        if (known && (size == 0u || offset > block->size || size > block->size - offset)) return Status::not_supported;
+    }
+    if (!known) {
+        record(HostViolation::unknown_handle, "MockHost::dmabuf_over_host_memory");
+        return Status::not_supported;
+    }
+    const int made = udmabuf_over(memfd, offset, size);
+    if (made < 0) return Status::not_supported;
+    StateLock lock(state_);
+    dmabufs_++;
+    host_dmabufs_++;
+    last_host_dmabuf_ = HostDmaBuf{memory, offset, size};
+    fd = made;
+    return Status::ok;
 }
 
 /* Counted against the same total open_descriptor adds to, so a test says no

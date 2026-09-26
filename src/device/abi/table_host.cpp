@@ -486,6 +486,17 @@ int TableHost::host_memory_descriptor(void *memory)
     return ops_.host_memory_descriptor(ops_.opaque, memory);
 }
 
+Status TableHost::dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd)
+{
+    AV_SCOPE("TableHost::dmabuf_over_host_memory");
+    fd = -1;
+    if (ops_.dmabuf_over_host_memory == nullptr) return Status::not_supported;
+    int made = -1;
+    if (ops_.dmabuf_over_host_memory(ops_.opaque, memory, offset, size, &made) != 0) return Status::not_supported;
+    fd = made;
+    return Status::ok;
+}
+
 void TableHost::close_descriptor(int descriptor)
 {
     AV_SCOPE("TableHost::close_descriptor");

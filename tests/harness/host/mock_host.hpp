@@ -103,6 +103,7 @@ public:
     Status   locate_guest(const void *pointer, std::uint64_t length, std::uint32_t &region,
                           std::uint64_t &offset) override;
     int      host_memory_descriptor(void *memory) override;
+    Status   dmabuf_over_host_memory(void *memory, std::uint64_t offset, std::uint64_t size, int &fd) override;
     void     close_descriptor(int descriptor) override;
     Status   start_renderer(const char *path) override;
     Status   send_renderer(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
@@ -210,6 +211,18 @@ public:
     void refuse_dmabufs();
     /* Dma-bufs made and not yet closed, so a test can say none leaked. */
     std::uint32_t live_dmabufs() const;
+    /* What dmabuf_over_host_memory was last asked for: the block's handle
+     * and the range. Its descriptor is a stand-in, counted with the other
+     * dma-bufs and closed by close_dmabuf, since a mock block has no memfd
+     * for udmabuf to wrap; the bytes it would carry are the block's own. */
+    struct HostDmaBuf {
+        void         *memory;
+        std::uint64_t offset;
+        std::uint64_t size;
+    };
+    HostDmaBuf    last_host_dmabuf() const;
+    /* Dma-bufs made over host memory, closed or not. */
+    std::uint32_t host_dmabufs() const;
     /* A real descriptor of this process's, counted as a dma-buf, for a test
      * whose subject owns a descriptor it did not make itself - a shared
      * object's, which is exported by an executor on one context and closed by
@@ -398,6 +411,10 @@ private:
     struct HostBlock {
         void         *pointer;
         std::uint64_t size;
+        /* A sealed memfd, as QEMU's host blobs are, so a dma-buf over it is a
+         * real udmabuf the executors under test can import; -1 for memory
+         * exported from the host GPU. */
+        int           fd;
         bool          live;
         bool          placed;
         std::uint64_t offset;
@@ -440,6 +457,7 @@ private:
     Mutex  *mutex_of(void *mutex);
     RecordingFile *recording_of(void *file);
     RecordingFile *recording_at(const char *path);
+    int             udmabuf_over(int memfd, std::uint64_t offset, std::uint64_t size);
     /* A pipe's read end, uncounted: -1 where the kernel gives none. */
     int             fresh_descriptor();
 
@@ -504,6 +522,8 @@ private:
     std::uint32_t   fail_dmabuf_;
     bool            no_dmabufs_;
     std::uint32_t   dmabufs_;
+    std::uint32_t   host_dmabufs_;
+    HostDmaBuf      last_host_dmabuf_;
     RecordingFile   recordings_[max_recordings];
     std::uint32_t   fail_recording_create_;
     std::uint32_t   fail_recording_append_;

@@ -435,6 +435,55 @@ TEST(posix_renderer_host_memory, a_host_blob_maps_the_memfd_qemu_offered)
   host.offer_host_memory(unused);   /* closed with the host */
   CHECK(is_open(unused)); }
 
+/* A host blob's dma-buf is the renderer's own, over the memfd QEMU made
+ * sealed against growing and shrinking: the same pages the mapping shows, at
+ * the range asked for (docs/host-window.md). A memfd that is not sealed is
+ * refused by udmabuf, as is a range past the block. */
+TEST(posix_renderer_host_memory, a_host_blob_is_a_dma_buf_over_the_memfd_qemu_offered)
+{ Rig rig;
+  PosixRendererHost &host = rig.host();
+  const int sealed = ::memfd_create("rvk-test", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  CHECK(sealed >= 0);
+  CHECK_EQ(::ftruncate(sealed, static_cast<off_t>(3u * page)), 0);
+  CHECK_EQ(::fcntl(sealed, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL), 0);
+  host.offer_host_memory(sealed);
+  void *pointer = nullptr;
+  void *const memory = host.create_host_memory(3u * page, pointer);
+  CHECK(memory != nullptr);
+  static_cast<std::uint8_t *>(pointer)[page + 5u] = 0x7Du;
+  int fd = 7;
+  const Status made = host.dmabuf_over_host_memory(memory, page, 2u * page, fd);
+  const bool udmabuf = ::access("/dev/udmabuf", R_OK | W_OK) == 0;
+  CHECK_STATUS(made, udmabuf ? Status::ok : Status::not_supported);
+  if (made == Status::ok) {
+      auto *const shared = static_cast<std::uint8_t *>(
+          ::mmap(nullptr, 2u * page, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+      CHECK(shared != MAP_FAILED);
+      if (shared != MAP_FAILED) {
+          CHECK_EQ(shared[5], 0x7Du);
+          shared[page + 3u] = 0x2Bu;   /* what a host GPU writes, the mapping reads */
+          CHECK_EQ(static_cast<std::uint8_t *>(pointer)[2u * page + 3u], 0x2Bu);
+          ::munmap(shared, 2u * page);
+      }
+      host.close_dmabuf(fd);
+  } else {
+      CHECK_EQ(fd, -1);
+  }
+  int refused = 7;
+  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 2u * page, 2u * page, refused), Status::not_supported);
+  CHECK_EQ(refused, -1);
+  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 4u * page, page, refused), Status::not_supported);
+  CHECK_STATUS(host.dmabuf_over_host_memory(memory, 0u, 0u, refused), Status::not_supported);
+  CHECK_STATUS(host.dmabuf_over_host_memory(nullptr, 0u, page, refused), Status::not_supported);
+  host.destroy_host_memory(memory);
+  /* Unsealed, as a memfd QEMU made before the seals were asked for. */
+  host.offer_host_memory(memfd(page));
+  void *const unsealed = host.create_host_memory(page, pointer);
+  CHECK(unsealed != nullptr);
+  CHECK_STATUS(host.dmabuf_over_host_memory(unsealed, 0u, page, refused), Status::not_supported);
+  CHECK_EQ(refused, -1);
+  host.destroy_host_memory(unsealed); }
+
 /* A fence interrupt is a write to the guest notifier of its line, while the
  * lines are connected and only for a line QEMU gave. */
 TEST(posix_renderer_host_interrupts, raising_a_line_writes_its_notifier_while_connected)

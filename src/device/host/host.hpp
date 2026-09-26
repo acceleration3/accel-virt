@@ -202,6 +202,11 @@ public:
                                               uint64_t &offset) = 0;
     /* The memfd behind host memory create_host_memory made. */
     virtual int                  host_memory_descriptor(void *memory) = 0;
+    /* A dma-buf over `size` bytes at `offset` of host memory create_host_memory
+     * made, through udmabuf: a host GPU that takes no host pointer over
+     * file-backed pages takes this. not_supported where the host has no
+     * udmabuf or the memory is not a sealed memfd. Any thread. */
+    [[nodiscard]] virtual Status dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd) = 0;
     virtual void                 close_descriptor(int descriptor) = 0;
     /* The renderer at `path`, started with its socket as descriptor 3; the
      * device is told through rvk_device_renderer_lost when it dies.

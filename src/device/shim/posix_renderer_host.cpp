@@ -66,6 +66,17 @@ void post(int descriptor)
     }
 }
 
+/* The dma-buf a udmabuf list names, or -1 where the kernel has no udmabuf or
+ * refuses an item. */
+int create_udmabuf(void *list)
+{
+    AV_SCOPE("create_udmabuf");
+    const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
+    const int made = device >= 0 ? ioctl(device, UDMABUF_CREATE_LIST, list) : -1;
+    if (device >= 0) close(device);
+    return made;
+}
+
 }  // namespace
 
 PosixRendererHost::PosixRendererHost(GuestMemoryTable &memory, DoorbellOffers &doorbells)
@@ -464,9 +475,7 @@ Status PosixRendererHost::dmabuf_over_guest(void *const *runs, const uint64_t *s
         items[index].offset = offset;
         items[index].size = sizes[index];
     }
-    const int device = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
-    const int made = device >= 0 ? ioctl(device, UDMABUF_CREATE_LIST, request) : -1;
-    if (device >= 0) close(device);
+    const int made = create_udmabuf(request);
     free(request);
     if (made < 0) return Status::not_supported;
     fd = made;
@@ -498,6 +507,32 @@ void *PosixRendererHost::create_host_memory(uint64_t size, void *&pointer)
     offered_memory_ = -1;
     pointer = mapped;
     return made;
+}
+
+/* The same memfd QEMU made and sealed, so the renderer makes the dma-buf
+ * itself rather than asking QEMU for one per import. */
+Status PosixRendererHost::dmabuf_over_host_memory(void *memory, uint64_t offset, uint64_t size, int &fd)
+{
+    AV_SCOPE("PosixRendererHost::dmabuf_over_host_memory");
+    fd = -1;
+    const RendererMemory *const block = static_cast<const RendererMemory *>(memory);
+    if (block == nullptr || size == 0u || offset > block->size || size > block->size - offset)
+        return Status::not_supported;
+    udmabuf_create_list list = {};
+    list.flags = UDMABUF_FLAGS_CLOEXEC;
+    list.count = 1u;
+    udmabuf_create_item item = {};
+    item.memfd = static_cast<uint32_t>(block->descriptor);
+    item.offset = offset;
+    item.size = size;
+    /* The item follows the header, which is what the ioctl reads. */
+    uint8_t request[sizeof list + sizeof item] = {};
+    memcpy(request, &list, sizeof list);
+    memcpy(request + sizeof list, &item, sizeof item);
+    const int made = create_udmabuf(request);
+    if (made < 0) return Status::not_supported;
+    fd = made;
+    return Status::ok;
 }
 
 void PosixRendererHost::destroy_host_memory(void *memory)

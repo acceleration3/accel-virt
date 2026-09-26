@@ -15,6 +15,7 @@ namespace av {
 
 class BlobWindow;
 class ControlRequest;
+class HeldBlob;
 class Host;
 
 class BlobResource {
@@ -49,18 +50,19 @@ public:
     BlobWindow window() const;
     /* The host memory behind a host blob, or null for guest pages. */
     void      *host_memory() const;
-    /* Any thread, while nothing can release it: its guest pages as one host
-     * range, made for the first holder and shared by the rest, and as the
-     * extents they are - a holder needs both, and only the hold keeps either
-     * valid. invalid_parameter for a blob the host backs; the alias's answer
-     * when it cannot be made, holding nothing. */
-    [[nodiscard]] Status hold_alias(const GuestPageAlias *&alias, BlobWindow &pages);
-    /* Any thread, under the same rule. One hold let go; the range goes with
-     * the last, and a blob no one holds is left as it is. */
-    void                 release_alias();
-    /* An aliased blob, like a pinned one, is not released: its pages are in a
+    /* Any thread, while nothing can release it: its memory as one host
+     * range, for an importer. A guest blob's pages are aliased for the first
+     * holder and shared by the rest; a host blob's own mapping needs none.
+     * Only the hold keeps `held` valid. no_memory for a host block with no
+     * mapping behind it; the alias's answer when it cannot be made, holding
+     * nothing. */
+    [[nodiscard]] Status hold(HeldBlob &held);
+    /* Any thread, under the same rule. One hold let go; a guest blob's alias
+     * goes with the last, and a blob no one holds is left as it is. */
+    void                 release_hold();
+    /* A held blob, like a pinned one, is not released: its memory is in a
      * host API's hands. */
-    bool                 aliased() const;
+    bool                 held() const;
 
 private:
     Host            &host_;
@@ -71,7 +73,7 @@ private:
     bool             mapped_;
     uint32_t         pins_;
     GuestPageAlias   alias_;
-    uint32_t         alias_holds_;
+    uint32_t         holds_;
 };
 
 }  // namespace av

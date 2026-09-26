@@ -1,16 +1,17 @@
-/* One dma-buf over a guest blob's pages.
+/* One dma-buf over a blob's memory: a guest blob's pages, or the memfd behind
+ * a host blob (docs/host-window.md).
  *
  * The same pages GuestPageAlias maps a second time, handed to a host GPU as a
  * dma-buf instead of as a pointer. Both exist because the two imports fail in
  * different places: a host pointer is a userptr, and the GPU driver that
  * matters here refuses to pin one whose pages are file-backed - which guest
- * RAM always is (docs/testing.md). A dma-buf carries the same pages with no
- * pinning at all.
+ * RAM always is (docs/testing.md), and a host blob's memfd is too. A dma-buf
+ * carries the same pages with no pinning at all.
  *
- * The blob's extents become the dma-buf's items, in order, so the host GPU
+ * A guest blob's extents become the dma-buf's items, in order, so the host GPU
  * sees one contiguous range exactly as the alias gives one. No byte is copied. */
-#ifndef AV_GUEST_DMA_BUF_HPP
-#define AV_GUEST_DMA_BUF_HPP
+#ifndef AV_BLOB_DMA_BUF_HPP
+#define AV_BLOB_DMA_BUF_HPP
 
 #include "core/support/status.hpp"
 
@@ -20,9 +21,9 @@ namespace av {
 
 class BlobWindow;
 class Host;
-struct GuestDmaBufProbe;
+struct BlobDmaBufProbe;
 
-class GuestDmaBuf {
+class BlobDmaBuf {
 public:
     /* What a dma-buf over guest pages is made of on this host. */
     static constexpr uint64_t page_size = 4096u;
@@ -30,10 +31,10 @@ public:
      * scattered page by page is the worst case either has to carry. */
     static constexpr uint32_t max_items = 16384u;
 
-    explicit GuestDmaBuf(Host &host);
-    ~GuestDmaBuf();
-    GuestDmaBuf(const GuestDmaBuf &) = delete;
-    GuestDmaBuf &operator=(const GuestDmaBuf &) = delete;
+    explicit BlobDmaBuf(Host &host);
+    ~BlobDmaBuf();
+    BlobDmaBuf(const BlobDmaBuf &) = delete;
+    BlobDmaBuf &operator=(const BlobDmaBuf &) = delete;
 
     /* Any thread. One dma-buf over `size` bytes from `offset` of `pages`,
      * whose extents must stay mapped while it is made. The range is exactly
@@ -46,6 +47,12 @@ public:
      * RAM with no file behind it, or no udmabuf - which is the caller's
      * signal to import a pointer instead. Holds nothing unless ok. */
     [[nodiscard]] Status make(const BlobWindow &pages, uint64_t offset, uint64_t size);
+    /* Any thread. The same over `size` bytes from `offset` of host memory
+     * create_host_memory made, `length` bytes long: invalid_state once made;
+     * too_large for a range past it; malformed for a range that is not whole
+     * pages; not_supported where the host cannot make one. Holds nothing
+     * unless ok. */
+    [[nodiscard]] Status make_over_host(void *memory, uint64_t length, uint64_t offset, uint64_t size);
     /* Any thread. Safe on one that holds nothing. */
     void                 release();
     /* The descriptor, and this no longer holds it. A Vulkan fd import takes
@@ -68,9 +75,9 @@ private:
     uint64_t length_;
     uint32_t items_;
 
-    friend struct GuestDmaBufProbe;
+    friend struct BlobDmaBufProbe;
 };
 
 }  // namespace av
 
-#endif  // AV_GUEST_DMA_BUF_HPP
+#endif  // AV_BLOB_DMA_BUF_HPP

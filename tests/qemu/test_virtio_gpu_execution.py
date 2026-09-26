@@ -3,7 +3,9 @@ command through the executor library the device loaded - here the echo
 executor (echo_executor.cpp) - and the last answer asked for lands in the
 context's reply slot before head passes the batch. The transport's NOP is
 answered by the device, under the echo executor and this project's own, and
-IMPORT_BLOB hands the echo executor a guest chunk's pages as one host pointer.
+IMPORT_BLOB hands the echo executor a guest chunk's pages as one host pointer,
+and a host chunk placed in the hostmem window (docs/host-window.md) as its own
+mapping, with the contexts in QEMU or in a renderer.
 
 Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
 AV_QEMU_BUILD and AV_EXECUTOR.
@@ -18,10 +20,14 @@ from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT
                          IMPORT_BLOB, LOSE_DEVICE, NOP, PAGE, PEEK, POKE, REAL_EXECUTOR, RELEASE_BLOB,
                          SUB_API_OPENGL, SUB_API_VULKAN, setup_with_options,
                          RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA, UNDECODABLE,
-                         GuestRing, command, create_context, guest_blob, guest_blob_pages, host_blob, response_type,
-                         rvk_device, setup, submit, unref)
+                         RESP_OK_MAP_INFO, GuestRing, command, create_context, guest_blob, guest_blob_pages,
+                         header, host_blob, map_blob, response_type, rvk_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
+RENDERER = os.environ.get("AV_RENDERER", "")
+CMD_RESOURCE_UNMAP_BLOB = 0x0209
+SHM_ID_HOST_VISIBLE = 1
+HOSTMEM = 64 << 20
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
 REPLY_MAGIC = 0x594B5652
 STATUS_OK, STATUS_TOO_LARGE = 0, 1
@@ -331,6 +337,50 @@ class VirtioGpuExecution(unittest.TestCase):
         self.expect(gpu, unref(resource), RESP_OK_NODATA)
         self.assertNotIn("context faulted", gpu.qtest.printed())
 
+    def host_chunk(self, gpu, context, pages, offset):
+        """A mappable HOST3D blob in the context's first chunk slot, placed at `offset` of the hostmem window
+        as the driver places a window chunk: the resource id and the guest address of its first byte."""
+        resource = context.ring_resource + 3
+        self.expect(gpu, host_blob(resource, pages * PAGE), RESP_OK_NODATA)
+        self.assertEqual(hex(response_type(gpu.control(map_blob(resource, offset), 32))), hex(RESP_OK_MAP_INFO))
+        address, length = gpu.device.shared_memory[SHM_ID_HOST_VISIBLE]
+        self.assertEqual(length, HOSTMEM)
+        return resource, address + offset
+
+    def host_chunk_imports(self, renderer):
+        options = f",hostmem={HOSTMEM}" + (f",renderer={RENDERER}" if renderer else "")
+        gpu = self.open(rvk_device(options), shared_ram=True)
+        context = Context(self, gpu, 1, 14)
+        resource, window = self.host_chunk(gpu, context, 3, 5 * PAGE)
+        gpu.qtest.write_bytes(window + PAGE, bytes([0xB1]) * PAGE)
+        gpu.qtest.write_bytes(window + 2 * PAGE, bytes([0xB2]) * PAGE)
+        self.assertEqual(self.imported(context, resource, PAGE, 2 * PAGE, 3), (IMPORTED, 1 | HANDLE_BIT))
+        handle = 1 | HANDLE_BIT
+        # The executor reads, through what it was handed, what the guest wrote through the window.
+        self.assertTrue(context.run(command(PEEK, peek_body(handle, PAGE - 4, 8), GENERATE_REPLY)))
+        memory_type, live, size = struct.unpack("<IIQ", context.answer()[1][:16])
+        self.assertEqual((memory_type, live, size), (3, 1, 2 * PAGE))
+        self.assertEqual(context.answer()[1][16:], bytes([0xB1]) * 4 + bytes([0xB2]) * 4)
+        # And the guest reads, through the window, what the executor writes.
+        self.assertTrue(context.run(command(POKE, struct.pack("<QQ", handle, PAGE + 3) + b"host gpu", GENERATE_REPLY)))
+        self.assertEqual(context.answer()[1], struct.pack("<I", 1))
+        self.assertEqual(gpu.qtest.read_bytes(window + 2 * PAGE + 3, 8), b"host gpu")
+        if not renderer:
+            # QEMU's table holds the blob for the import; a renderer holds its own mirror instead.
+            self.expect(gpu, unref(resource), RESP_ERR_INVALID_PARAMETER)
+        self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", handle), GENERATE_REPLY)))
+        self.assertEqual(context.answer()[0][2], 0)
+        self.expect(gpu, header(CMD_RESOURCE_UNMAP_BLOB) + struct.pack("<I4x", resource), RESP_OK_NODATA)
+        self.expect(gpu, unref(resource), RESP_OK_NODATA)
+        self.assertNotIn("context faulted", gpu.qtest.printed())
+
+    def test_a_host_chunk_in_the_window_imports_over_the_bytes_the_guest_writes_there(self):
+        self.host_chunk_imports(renderer=False)
+
+    @unittest.skipUnless(RENDERER, "run by the qemu_virtio_gpu ctest")
+    def test_a_host_chunk_in_the_window_imports_in_the_renderer_too(self):
+        self.host_chunk_imports(renderer=True)
+
     def test_every_refused_import_is_an_answer_and_the_context_runs_on(self):
         gpu = self.open(shared_ram=True)
         context = Context(self, gpu, 1, 10)
@@ -343,7 +393,7 @@ class VirtioGpuExecution(unittest.TestCase):
             "the ring": ((context.ring_resource, 0, PAGE), UNKNOWN_RESOURCE),
             "the reply slot": ((context.ring_resource + 2, 0, PAGE), UNKNOWN_RESOURCE),
             "past the last chunk slot": ((context.ring_resource + 67, 0, PAGE), UNKNOWN_RESOURCE),
-            "a host blob in a chunk slot": ((resource + 1, 0, PAGE), UNKNOWN_RESOURCE),
+            "a page past a host blob in a chunk slot": ((resource + 1, PAGE, PAGE), OUTSIDE_BLOB),
             "past the blob": ((resource, PAGE, 2 * PAGE), OUTSIDE_BLOB),
         }
         for name, (arguments, expected) in refusals.items():

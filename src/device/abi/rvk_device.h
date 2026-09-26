@@ -227,6 +227,13 @@ typedef struct RvkHostOps {
                             uint32_t capacity_descriptors, uint32_t *count, uint32_t timeout_ms);
     /* SIGKILL; the death is reported through rvk_device_renderer_lost. */
     void (*kill_renderer)(void *opaque);
+
+    /* Any thread. A dma-buf over `size` bytes at `offset` of a block
+     * create_host_memory made, through udmabuf over its sealed memfd, in *fd:
+     * nonzero where the kernel has no udmabuf or the block is no sealed memfd,
+     * and the caller imports the block's own mapping as a host pointer
+     * instead. NULL: the host makes none (docs/host-window.md). */
+    int (*dmabuf_over_host_memory)(void *opaque, void *memory, uint64_t offset, uint64_t size, int *fd);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from

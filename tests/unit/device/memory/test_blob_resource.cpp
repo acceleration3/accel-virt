@@ -2,7 +2,8 @@
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_window.hpp"
-#include "device/memory/guest_page_alias.hpp"
+#include "device/memory/blob_dma_buf.hpp"
+#include "device/memory/held_blob.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -171,7 +172,7 @@ TEST(blob_resource_pin, counts_pins_until_the_last_is_let_go)
   CHECK(!blob.pinned()); }
 
 /* The pages at 0x100000 and 0x102000 entries() names: two runs in one range. */
-TEST(blob_resource_hold_alias, maps_its_guest_pages_for_the_first_holder_and_unmaps_after_the_last)
+TEST(blob_resource_hold, maps_its_guest_pages_for_the_first_holder_and_unmaps_after_the_last)
 { MockHost host;
   host.add_guest_ram(ram, 0x10000u);
   const GpuRequestBuilder bytes = entries(2u);
@@ -180,55 +181,88 @@ TEST(blob_resource_hold_alias, maps_its_guest_pages_for_the_first_holder_and_unm
   BlobResource blob(host, 7u);
   CHECK_STATUS(blob.back_with_guest(request, entries_at, 2u, 0x2000u), Status::ok);
   host.guest_ram(ram + 0x2010u)[0] = 0x9Du;
-  CHECK(!blob.aliased());
-  const av::GuestPageAlias *first = nullptr;
-  av::BlobWindow            pages;
-  CHECK_STATUS(blob.hold_alias(first, pages), Status::ok);
-  CHECK(blob.aliased());
-  CHECK(first != nullptr);
-  /* The extents the hold keeps valid, which is what a dma-buf is made over. */
-  CHECK_EQ(pages.extents(), 2u);
-  CHECK_EQ(pages.length(), 0x2000u);
-  CHECK_EQ(first->runs(), 2u);
-  CHECK_EQ(first->length(), 0x2000u);
-  CHECK_EQ(static_cast<std::uint8_t *>(first->base())[0x1010u], 0x9Du);
-  const av::GuestPageAlias *second = nullptr;
-  CHECK_STATUS(blob.hold_alias(second, pages), Status::ok);
-  CHECK(second == first);
+  CHECK(!blob.held());
+  av::HeldBlob first;
+  CHECK_STATUS(blob.hold(first), Status::ok);
+  CHECK(blob.held());
+  CHECK(first.base() != nullptr);
+  CHECK_EQ(first.length(), 0x2000u);
+  CHECK_EQ(host.live_aliases(), 2u);
+  CHECK_EQ(static_cast<std::uint8_t *>(first.base())[0x1010u], 0x9Du);
+  /* The extents the hold keeps valid are what a dma-buf is made over: one
+   * item a run, the guest's own pages. */
+  { av::BlobDmaBuf shared(host);
+    CHECK_STATUS(first.share(shared, 0u, 0x2000u), Status::ok);
+    CHECK_EQ(shared.items(), 2u);
+    CHECK_EQ(shared.length(), 0x2000u);
+    CHECK_EQ(host.host_dmabufs(), 0u); }
+  av::HeldBlob second;
+  CHECK_STATUS(blob.hold(second), Status::ok);
+  CHECK(second.base() == first.base());
   CHECK_EQ(host.live_ranges(), 1u);   /* made once, however many hold it */
-  blob.release_alias();
-  CHECK(blob.aliased());
+  blob.release_hold();
+  CHECK(blob.held());
   CHECK_EQ(host.live_ranges(), 1u);
-  blob.release_alias();
-  CHECK(!blob.aliased());
+  blob.release_hold();
+  CHECK(!blob.held());
   CHECK_EQ(host.live_ranges(), 0u);
-  blob.release_alias();   /* no holder: nothing */
-  CHECK(!blob.aliased());
+  blob.release_hold();   /* no holder: nothing */
+  CHECK(!blob.held());
   CHECK_EQ(host.unclaimed_violations(), 0u);
-  CHECK_STATUS(blob.hold_alias(first, pages), Status::ok);   /* and made again for the next */
+  CHECK_STATUS(blob.hold(first), Status::ok);   /* and made again for the next */
   CHECK_EQ(host.live_ranges(), 1u); }
 
-TEST(blob_resource_hold_alias, a_host_block_has_no_guest_pages_and_pages_the_host_cannot_alias_hold_nothing)
+/* A host block is one mapping already (docs/host-window.md): it is held as
+ * itself, aliases nothing, and its dma-buf is the host's over the block. */
+TEST(blob_resource_hold, a_host_block_is_held_as_its_own_view_and_counted_like_an_alias)
+{ MockHost host;
+  host.set_hostmem_size(0x10000u);
+  BlobResource block(host, 1u);
+  CHECK_STATUS(block.back_with_host(0x3000u), Status::ok);
+  av::BlobWindow view = block.window();
+  std::uint64_t  bytes = 0u;
+  void *const    mapping = view.extent(0u, bytes);
+  av::HeldBlob held;
+  CHECK_STATUS(block.hold(held), Status::ok);
+  CHECK(block.held());
+  CHECK(held.base() == mapping);
+  CHECK_EQ(held.length(), 0x3000u);
+  CHECK_EQ(host.live_ranges(), 0u);
+  { av::BlobDmaBuf shared(host);
+    CHECK_STATUS(held.share(shared, 0x1000u, 0x2000u), Status::ok);
+    CHECK_EQ(host.host_dmabufs(), 1u);
+    CHECK(host.last_host_dmabuf().memory == block.host_memory());
+    CHECK_EQ(host.last_host_dmabuf().offset, 0x1000u);
+    CHECK_EQ(host.last_host_dmabuf().size, 0x2000u); }
+  CHECK_EQ(host.live_dmabufs(), 0u);
+  av::HeldBlob again;
+  CHECK_STATUS(block.hold(again), Status::ok);
+  block.release_hold();
+  CHECK(block.held());
+  block.release_hold();
+  CHECK(!block.held());
+  CHECK_EQ(host.unclaimed_violations(), 0u); }
+
+TEST(blob_resource_hold, memory_the_host_cannot_give_holds_nothing)
 { MockHost host;
   host.add_guest_ram(ram, 0x10000u);
   host.set_hostmem_size(0x10000u);
-  BlobResource block(host, 1u);
-  CHECK_STATUS(block.back_with_host(0x1000u), Status::ok);
-  const av::GuestPageAlias stale(host);
-  const av::GuestPageAlias *alias = &stale;
-  av::BlobWindow            pages;
-  CHECK_STATUS(block.hold_alias(alias, pages), Status::invalid_parameter);
-  CHECK(alias == nullptr);
-  CHECK(!block.aliased());
+  host.empty_host_memory_at(1u);
+  BlobResource empty(host, 1u);
+  CHECK_STATUS(empty.back_with_host(0x1000u), Status::ok);
+  av::HeldBlob held;
+  CHECK_STATUS(empty.hold(held), Status::no_memory);   /* a handle with no mapping behind it */
+  CHECK(held.base() == nullptr);
+  CHECK(!empty.held());
   const GpuRequestBuilder bytes = entries(1u);
   MockRequest mock(bytes.bytes(), bytes.size());
   ControlRequest request(host, &mock);
   BlobResource guest(host, 2u);
   CHECK_STATUS(guest.back_with_guest(request, entries_at, 1u, 0x1000u), Status::ok);
   host.fail_reserve_at(1u);
-  CHECK_STATUS(guest.hold_alias(alias, pages), Status::no_memory);
-  CHECK(!guest.aliased());
+  CHECK_STATUS(guest.hold(held), Status::no_memory);
+  CHECK(!guest.held());
   BlobResource unbacked(host, 3u);
-  CHECK_STATUS(unbacked.hold_alias(alias, pages), Status::malformed);
-  CHECK(!unbacked.aliased());
+  CHECK_STATUS(unbacked.hold(held), Status::malformed);
+  CHECK(!unbacked.held());
   CHECK_EQ(host.live_ranges(), 0u); }
