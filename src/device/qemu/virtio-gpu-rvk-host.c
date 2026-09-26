@@ -820,7 +820,6 @@ static int rvk_show_scanout(void *opaque, uint32_t head, int fd, const RvkScanou
                                         frame->x, frame->y, frame->backing_width, frame->backing_height,
                                         frame->fourcc, frame->modifier, &duplicate, 1, false, false);
     VIRTIO_GPU_BASE(r)->enable = 1;
-    qemu_console_resize(con, frame->width, frame->height);
     qemu_console_gl_scanout_dmabuf(con, r->scanouts[head]);
     if (shown) {
         qemu_console_gl_release_dmabuf(con, shown);
@@ -872,12 +871,10 @@ bool virtio_gpu_rvk_show_image(VirtIOGPURvk *r, uint32_t head, const RvkExported
         r->exported_fd[head][image->slot] = image->fd;
     }
     if (r->showing[head] != (int32_t)image->slot) {
+        /* The dma-buf carries its own size, as virtio-gpu's blob scanouts do:
+         * the console's 2D surface is left alone, because virtio-gpu still
+         * holds it for the head and a resize would free it underneath. */
         VIRTIO_GPU_BASE(r)->enable = 1;
-        /* A resize replaces the console's surface, which the window shows as
-         * a blank frame: only when the size is new. */
-        if (qemu_console_get_width(con, 0) != (int)image->width || qemu_console_get_height(con, 0) != (int)image->height) {
-            qemu_console_resize(con, image->width, image->height);
-        }
         if (r->showing[head] < 0) {
             fprintf(stderr, "virtio-gpu-rvk: head %u shows exported images\n", head);
         }
