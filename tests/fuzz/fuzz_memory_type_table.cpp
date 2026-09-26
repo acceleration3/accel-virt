@@ -53,7 +53,7 @@ void check_held(const av::icd::MemoryTypeTable &table, const VkPhysicalDeviceMem
     }
     for (std::uint32_t heap = 0u; heap < host.memoryHeapCount; heap++) {
         const bool local = (host.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u;
-        require(answer.memoryHeaps[heap].size == (local ? local_budget : shared_budget));
+        require(answer.memoryHeaps[heap].size == (local ? host.memoryHeaps[heap].size : shared_budget));
         require(answer.memoryHeaps[heap].flags == host.memoryHeaps[heap].flags);
     }
 }

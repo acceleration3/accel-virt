@@ -1,6 +1,7 @@
 /* The memory types a guest application sees (research.md §7): the host's
  * types as the executor narrowed them - host visible only where the host GPU
- * imports guest RAM - over heaps sized by the adapter's budgets, never a type
+ * imports guest RAM - a device-local heap the host's size, any other the
+ * adapter's non-local budget - never a type
  * the host did not list. The host's answer is its word: a count past the
  * arrays, a device with no heap or a type naming a heap past the heaps is
  * refused, and the table is left empty. Budgets are MockKmt's; the two hosts
@@ -116,10 +117,10 @@ TEST(memory_type_table, is_empty_until_built)
   CHECK(table.invariants_hold());
   check_empty(table); }
 
-/* Intel's one heap is device local, so it is the adapter's local budget; every
+/* Intel's one heap is device local, so it is the host's size; every
  * type keeps its flags and heap, and the host-visible ones are the ones the
  * ICD serves from its own RAM. */
-TEST(memory_type_table, intel_s_types_sit_on_the_local_budget)
+TEST(memory_type_table, intel_s_device_local_heap_is_the_host_s_size)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
   CHECK_STATUS(table.build(intel()), Status::ok);
@@ -127,7 +128,7 @@ TEST(memory_type_table, intel_s_types_sit_on_the_local_budget)
   const VkPhysicalDeviceMemoryProperties answer = answered(table);
   CHECK_EQ(answer.memoryTypeCount, 7u);
   CHECK_EQ(answer.memoryHeapCount, 1u);
-  CHECK_EQ(answer.memoryHeaps[0].size, local_budget);
+  CHECK_EQ(answer.memoryHeaps[0].size, 1024u * mib);
   CHECK_EQ(answer.memoryHeaps[0].flags, static_cast<VkMemoryHeapFlags>(VK_MEMORY_HEAP_DEVICE_LOCAL_BIT));
   for (std::uint32_t type = 0u; type < 7u; type++) {
       CHECK_EQ(answer.memoryTypes[type].propertyFlags, intel_types[type].flags);
@@ -150,7 +151,7 @@ TEST(memory_type_table, nvidia_s_host_heap_sits_on_the_non_local_budget)
   const VkPhysicalDeviceMemoryProperties answer = answered(table);
   CHECK_EQ(answer.memoryTypeCount, 6u);
   CHECK_EQ(answer.memoryHeapCount, 2u);
-  CHECK_EQ(answer.memoryHeaps[0].size, local_budget);
+  CHECK_EQ(answer.memoryHeaps[0].size, 1024u * mib);
   CHECK_EQ(answer.memoryHeaps[1].size, shared_budget);
   CHECK_EQ(answer.memoryHeaps[1].flags, 0u);
   CHECK_EQ(answer.memoryTypes[0].heapIndex, 1u);
@@ -158,9 +159,9 @@ TEST(memory_type_table, nvidia_s_host_heap_sits_on_the_non_local_budget)
   const bool visible_types[] = {false, false, false, true, true, false};
   for (std::uint32_t type = 0u; type < 6u; type++) CHECK_EQ(table.host_visible(type), visible_types[type]); }
 
-/* VK_EXT_memory_budget: each heap's group, what this process may use and uses;
+/* VK_EXT_memory_budget: each heap's size, and what this process uses of its group;
  * every entry past the heaps zero, as the extension requires. */
-TEST(memory_type_table, the_budget_of_each_heap_is_its_group_s)
+TEST(memory_type_table, the_budget_of_each_heap_is_its_size)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
   CHECK_STATUS(table.build(nvidia()), Status::ok);
@@ -172,7 +173,7 @@ TEST(memory_type_table, the_budget_of_each_heap_is_its_group_s)
   table.budget(budget);
   CHECK_EQ(budget.sType, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT);
   CHECK(budget.pNext == &budget);
-  CHECK_EQ(budget.heapBudget[0], local_budget);
+  CHECK_EQ(budget.heapBudget[0], 1024u * mib);
   CHECK_EQ(budget.heapUsage[0], local_usage);
   CHECK_EQ(budget.heapBudget[1], shared_budget);
   CHECK_EQ(budget.heapUsage[1], shared_usage);
@@ -183,19 +184,24 @@ TEST(memory_type_table, the_budget_of_each_heap_is_its_group_s)
 }
 
 /* Asked again, the budgets are the adapter's now: usage moves as the process
- * allocates. */
+ * allocates, and a device-local heap stays the host's size whatever the local
+ * budget says - none at all, as an adapter with no local segment answers. */
 TEST(memory_type_table, a_rebuild_reads_the_budgets_again)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
-  CHECK_STATUS(table.build(intel()), Status::ok);
-  rig.kmt().set_video_memory(MemorySegmentGroup::local, 32u * mib, 5u * mib);
-  CHECK_STATUS(table.build(intel()), Status::ok);
+  CHECK_STATUS(table.build(nvidia()), Status::ok);
+  rig.kmt().set_video_memory(MemorySegmentGroup::local, 0u, 5u * mib);
+  rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 32u * mib, 7u * mib);
+  CHECK_STATUS(table.build(nvidia()), Status::ok);
   CHECK(table.invariants_hold());
   VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
   table.budget(budget);
-  CHECK_EQ(budget.heapBudget[0], 32u * mib);
+  CHECK_EQ(budget.heapBudget[0], 1024u * mib);
   CHECK_EQ(budget.heapUsage[0], 5u * mib);
-  CHECK_EQ(answered(table).memoryHeaps[0].size, 32u * mib); }
+  CHECK_EQ(budget.heapBudget[1], 32u * mib);
+  CHECK_EQ(budget.heapUsage[1], 7u * mib);
+  CHECK_EQ(answered(table).memoryHeaps[0].size, 1024u * mib);
+  CHECK_EQ(answered(table).memoryHeaps[1].size, 32u * mib); }
 
 /* A host at the arrays' ends is a host, not a lie. */
 TEST(memory_type_table, thirty_two_types_on_sixteen_heaps_are_taken)
@@ -285,6 +291,8 @@ TEST(memory_type_table, invariants_refuse_a_type_on_a_heap_past_the_heaps_or_a_c
   MemoryTypeTableProbe::properties(table).memoryHeaps[1].size = 1u;
   CHECK(!table.invariants_hold());
   MemoryTypeTableProbe::properties(table).memoryHeaps[1].size = shared_budget;
+  MemoryTypeTableProbe::properties(table).memoryHeaps[0].size = 1u;
+  CHECK(table.invariants_hold());
   MemoryTypeTableProbe::properties(table).memoryTypeCount = VK_MAX_MEMORY_TYPES + 1u;
   CHECK(!table.invariants_hold());
   MemoryTypeTableProbe::properties(table).memoryTypeCount = 6u;

@@ -1,10 +1,15 @@
 /* The memory types and heaps one physical device answers the guest with
  * (research.md §7). The types are the host's as the executor narrowed them:
- * host visible only where the host GPU imports a host pointer, since the only
- * memory a guest process can map is its own RAM (VulkanBackend,
- * ImportableTypes). None is ever added. The heaps are the adapter's: a
- * device-local heap is the adapter's local budget, any other its non-local
- * one, as D3DKMTQueryVideoMemoryInfo answers them for this process.
+ * host visible only where the host GPU imports memory it did not allocate,
+ * since every mappable chunk reaches it as an import (VulkanBackend,
+ * ImportableTypes) - a host window chunk as much as guest RAM. None is ever
+ * added, and none is changed: a window chunk is mapped write-back on both
+ * sides, which is what the host's HOST_CACHED types promise, and a chunk
+ * that fell back to guest RAM is the kernel's lock of it, coherent either
+ * way (docs/host-window.md). A device-local heap is the host's own size:
+ * what lives there is host GPU memory the guest never maps, and the adapter
+ * reports no local segment to budget it by. Any other heap is the adapter's
+ * non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for this process.
  *
  * The host's answer is its word, so a count past the arrays, a device with
  * types and no heap, or a type on a heap past the heaps is refused and the
@@ -44,7 +49,7 @@ public:
     bool                 host_visible(uint32_t type) const;
 
     /* Counts inside the arrays, a heap for every type, each type on one of them,
-     * and each heap the size of its group's budget. */
+     * and each heap that is not device-local the size of the non-local budget. */
     bool invariants_hold() const;
 
 private:
@@ -57,7 +62,7 @@ private:
     Kmt                             &kmt_;
     uint32_t                         adapter_;
     VkPhysicalDeviceMemoryProperties properties_;
-    uint64_t                         budgets_[groups];
+    uint64_t                         shared_budget_;
     uint64_t                         usages_[groups];
 
     friend struct MemoryTypeTableProbe;

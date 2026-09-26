@@ -14,7 +14,7 @@ constexpr uint32_t non_local_group = static_cast<uint32_t>(MemorySegmentGroup::n
 }  // namespace
 
 MemoryTypeTable::MemoryTypeTable(Kmt &kmt, uint32_t adapter)
-    : kmt_(kmt), adapter_(adapter), properties_(), budgets_(), usages_()
+    : kmt_(kmt), adapter_(adapter), properties_(), shared_budget_(0u), usages_()
     {
         AV_SCOPE("MemoryTypeTable::MemoryTypeTable");
     }
@@ -23,10 +23,8 @@ void MemoryTypeTable::clear()
 {
     AV_SCOPE("MemoryTypeTable::clear");
     properties_ = VkPhysicalDeviceMemoryProperties();
-    for (uint32_t group = 0u; group < groups; group++) {
-        budgets_[group] = 0u;
-        usages_[group] = 0u;
-    }
+    shared_budget_ = 0u;
+    for (uint32_t group = 0u; group < groups; group++) usages_[group] = 0u;
 }
 
 bool MemoryTypeTable::acceptable(const VkPhysicalDeviceMemoryProperties &host) const
@@ -64,12 +62,11 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
     properties_.memoryHeapCount = host.memoryHeapCount;
     for (uint32_t heap = 0u; heap < host.memoryHeapCount; heap++) {
         properties_.memoryHeaps[heap].flags = host.memoryHeaps[heap].flags;
-        properties_.memoryHeaps[heap].size = budgets[group_of(host.memoryHeaps[heap])];
+        const bool device_local = group_of(host.memoryHeaps[heap]) == local_group;
+        properties_.memoryHeaps[heap].size = device_local ? host.memoryHeaps[heap].size : budgets[non_local_group];
     }
-    for (uint32_t group = 0u; group < groups; group++) {
-        budgets_[group] = budgets[group];
-        usages_[group] = usages[group];
-    }
+    shared_budget_ = budgets[non_local_group];
+    for (uint32_t group = 0u; group < groups; group++) usages_[group] = usages[group];
     return Status::ok;
 }
 
@@ -85,7 +82,7 @@ void MemoryTypeTable::budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer) 
     for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
         const bool     listed = heap < properties_.memoryHeapCount;
         const uint32_t group = group_of(properties_.memoryHeaps[heap]);
-        answer.heapBudget[heap] = listed ? budgets_[group] : 0u;
+        answer.heapBudget[heap] = listed ? properties_.memoryHeaps[heap].size : 0u;
         answer.heapUsage[heap] = listed ? usages_[group] : 0u;
     }
 }
@@ -106,7 +103,9 @@ bool MemoryTypeTable::invariants_hold() const
     for (uint32_t type = 0u; type < properties_.memoryTypeCount; type++)
         if (properties_.memoryTypes[type].heapIndex >= properties_.memoryHeapCount) return false;
     for (uint32_t heap = 0u; heap < properties_.memoryHeapCount; heap++)
-        if (properties_.memoryHeaps[heap].size != budgets_[group_of(properties_.memoryHeaps[heap])]) return false;
+        if (group_of(properties_.memoryHeaps[heap]) == non_local_group &&
+            properties_.memoryHeaps[heap].size != shared_budget_)
+            return false;
     return true;
 }
 
