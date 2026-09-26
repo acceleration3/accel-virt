@@ -195,6 +195,26 @@ public:
     ID3D12GraphicsCommandList *list = nullptr;   // the frame being recorded
     uint32_t                   width = 0;
     uint32_t                   height = 0;
+    // What the runner reports each second: seconds blocked on the fence, how
+    // many waits blocked, and seconds inside ExecuteCommandLists and Signal.
+    double                     waited = 0.0;
+    uint32_t                   waits = 0;
+    double                     submitting = 0.0;
+    // Seconds between a frame's list opening and its submit: the recording.
+    double                     recording = 0.0;
+    // Of the submitting: seconds inside Signal alone.
+    double                     signalling = 0.0;
+    double                     opened_at = 0.0;
+    // The queue's timestamp ticks per second, as the runtime reports them.
+    uint64_t                   stamp_frequency = 0;
+    // The GPU's own time for the frames' lists, from timestamps around each.
+    double                     gpu_time = 0.0;
+    uint32_t                   gpu_frames = 0;
+    // Waits spin on the fence's completed value instead of blocking in the
+    // kernel: what a wait costs beyond the value arriving is the difference.
+    bool                       spin_waits = false;
+    // The frame fence is made D3D12_FENCE_FLAG_SHARED.
+    bool                       shared_fence = false;
     ID3D12Resource            *color = nullptr;   // the frame the runner reads back, in RENDER_TARGET
     ID3D12Resource            *depth_buffer = nullptr;
     D3D12_CPU_DESCRIPTOR_HANDLE target = {};
@@ -295,6 +315,7 @@ private:
         uint8_t                *ring_cpu = nullptr;
         D3D12_GPU_VIRTUAL_ADDRESS ring_gpu = 0;
         uint64_t                ring_used = 0;
+        bool                    stamped = false;
     };
     struct CachedShader {
         char                  name[64];
@@ -303,6 +324,14 @@ private:
     D3D12_SHADER_BYTECODE shader_code(const char *name, const char *source, const char *entry, const char *target);
 
     Slot                 slots_[slots];
+
+    ID3D12QueryHeap *stamps_ = nullptr;
+
+    ID3D12Resource  *stamp_readback_ = nullptr;
+
+    const uint64_t  *stamp_cpu_ = nullptr;
+
+    double           stamp_seconds_ = 0.0;
     uint32_t             slot_ = 0;
     ID3D12Fence         *fence_ = nullptr;
     uint64_t             fence_value_ = 0;

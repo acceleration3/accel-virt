@@ -19,6 +19,9 @@ struct Options {
     uint32_t    frames = 600;
     float       capture_time = 1.5f;
     bool        compile = false;
+    uint32_t    roundtrips = 0;
+    bool        spin_waits = false;
+    bool        shared_fence = false;
 };
 
 uint32_t parse_number(const char *text)
@@ -149,11 +152,43 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     const double timed = seconds();
     uint32_t     frames = 0;
     double       looped = 0.0;
+    /* Each second's rate as well as the whole run's, so a long run shows
+     * whether the rate holds or sags while the same process renders. */
+    double   second_from = timed;
+    uint32_t second_frames = 0;
+    double   waited_from = gpu.waited;
+    uint32_t waits_from = gpu.waits;
+    double   submitting_from = gpu.submitting;
+    double   gpu_time_from = gpu.gpu_time;
+    double   recording_from = gpu.recording;
+    double   signalling_from = gpu.signalling;
+    log_number("timestamp frequency ", static_cast<double>(gpu.stamp_frequency));
+    uint32_t gpu_frames_from = gpu.gpu_frames;
     do {
         const double block = seconds();
         for (uint32_t n = 0; n < options.frames; n++, frames++) frame(sample, gpu, static_cast<float>(frames) * step);
         looped += seconds() - block;
         gpu.finish();
+        const double now = seconds();
+        if (now - second_from >= 1.0) {
+            log_number("second fps ", (frames - second_frames) / (now - second_from));
+            log_number("second wait us/frame ", (gpu.waited - waited_from) * 1e6 / (frames - second_frames));
+            log_number("second waits/frame ", double(gpu.waits - waits_from) / (frames - second_frames));
+            log_number("second submit us/frame ", (gpu.submitting - submitting_from) * 1e6 / (frames - second_frames));
+            log_number("second record us/frame ", (gpu.recording - recording_from) * 1e6 / (frames - second_frames));
+            recording_from = gpu.recording;
+            log_number("second signal us/frame ", (gpu.signalling - signalling_from) * 1e6 / (frames - second_frames));
+            signalling_from = gpu.signalling;
+            second_from = now;
+            second_frames = frames;
+            waited_from = gpu.waited;
+            waits_from = gpu.waits;
+            submitting_from = gpu.submitting;
+            if (gpu.gpu_frames != gpu_frames_from)
+                log_number("second gpu us/frame ", (gpu.gpu_time - gpu_time_from) * 1e6 / (gpu.gpu_frames - gpu_frames_from));
+            gpu_time_from = gpu.gpu_time;
+            gpu_frames_from = gpu.gpu_frames;
+        }
     } while (seconds() - timed < options.timed_seconds);
     const double taken = seconds() - timed;
     log_number("loop ms", looped * 1000.0);
@@ -190,9 +225,15 @@ int run(int argc, const char *const *argv)
         else if (same_text(arg, "--height")) options.height = parse_number(value), i++;
         else if (same_text(arg, "--warmup")) options.warmup = parse_number(value), i++;
         else if (same_text(arg, "--frames")) options.frames = parse_number(value), i++;
+        else if (same_text(arg, "--seconds")) options.timed_seconds = parse_number(value), i++;
+        else if (same_text(arg, "--roundtrips")) options.roundtrips = parse_number(value), i++;
+        else if (same_text(arg, "--spin-waits")) options.spin_waits = true;
+        else if (same_text(arg, "--shared-fence")) options.shared_fence = true;
         else if (same_text(arg, "--compile")) options.compile = true;
     }
     Gpu gpu;
+    gpu.spin_waits = options.spin_waits;
+    gpu.shared_fence = options.shared_fence;
     gpu.width = options.width;
     gpu.height = options.height;
     if (!create_device(&gpu.device)) {
@@ -202,6 +243,23 @@ int run(int argc, const char *const *argv)
     if (!gpu.initialize()) {
         log("FAIL: the Direct3D 12 device could not be set up\n");
         return 2;
+    }
+    /* An empty list, its signal and the wait for it, over and over: how long
+     * one submission takes to come back when there is no work in it, the
+     * floor under any frame that waits for the last one. */
+    if (options.roundtrips != 0) {
+        double shortest = 1e9;
+        const double began = seconds();
+        for (uint32_t n = 0; n < options.roundtrips; n++) {
+            const double from = seconds();
+            gpu.open();
+            gpu.submit();
+            gpu.finish();
+            const double took = seconds() - from;
+            if (took < shortest) shortest = took;
+        }
+        log_number("roundtrip mean us ", (seconds() - began) * 1e6 / options.roundtrips);
+        log_number("roundtrip min us ", shortest * 1e6);
     }
     const size_t capacity = 64u * 1024u;
     char *metrics = static_cast<char *>(allocate(capacity));

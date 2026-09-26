@@ -503,7 +503,8 @@ bool Gpu::initialize()
     if (!made(device->CreateCommandQueue(&queue_desc, __uuidof(ID3D12CommandQueue), reinterpret_cast<void **>(&queue)),
               "CreateCommandQueue"))
         return false;
-    if (!made(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), reinterpret_cast<void **>(&fence_)),
+    if (!made(device->CreateFence(0, shared_fence ? D3D12_FENCE_FLAG_SHARED : D3D12_FENCE_FLAG_NONE,
+                                  __uuidof(ID3D12Fence), reinterpret_cast<void **>(&fence_)),
               "CreateFence"))
         return false;
     for (Slot &s : slots_) {
@@ -516,6 +517,32 @@ bool Gpu::initialize()
         const D3D12_RANGE none = {0, 0};
         if (!made(s.ring->Map(0, &none, reinterpret_cast<void **>(&s.ring_cpu)), "Map of the upload ring")) return false;
         s.ring_gpu = s.ring->GetGPUVirtualAddress();
+    }
+    D3D12_QUERY_HEAP_DESC stamps = {};
+    stamps.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+    stamps.Count = 2 * slots;
+    UINT64 frequency = 0;
+    if (SUCCEEDED(device->CreateQueryHeap(&stamps, __uuidof(ID3D12QueryHeap), reinterpret_cast<void **>(&stamps_))) &&
+        SUCCEEDED(queue->GetTimestampFrequency(&frequency)) && frequency != 0) {
+        D3D12_HEAP_PROPERTIES heap = {};
+        heap.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC desc = {};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = 16u * slots;
+        desc.Height = 1;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        void *mapped = nullptr;
+        if (SUCCEEDED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COPY_DEST,
+                                                      nullptr, __uuidof(ID3D12Resource),
+                                                      reinterpret_cast<void **>(&stamp_readback_))) &&
+            SUCCEEDED(stamp_readback_->Map(0, nullptr, &mapped))) {
+            stamp_cpu_ = static_cast<const uint64_t *>(mapped);
+            stamp_seconds_ = 1.0 / static_cast<double>(frequency);
+            stamp_frequency = frequency;
+        }
     }
     if (!made(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, slots_[0].allocator, nullptr,
                                         __uuidof(ID3D12GraphicsCommandList), reinterpret_cast<void **>(&list)),
@@ -564,6 +591,9 @@ void Gpu::shutdown()
     shader_count_ = 0;
     safe_release(color);
     safe_release(depth_buffer);
+    safe_release(stamp_readback_);
+    safe_release(stamps_);
+    stamp_cpu_ = nullptr;
     views_.release();
     samplers_.release();
     cpu_views_.release();
@@ -583,11 +613,21 @@ void Gpu::open()
     slot_ = (slot_ + 1) % slots;
     Slot &s = slots_[slot_];
     wait(s.fence);
+    if (s.stamped) {
+        const uint64_t began = stamp_cpu_[2 * slot_], ended = stamp_cpu_[2 * slot_ + 1];
+        if (ended > began) {
+            gpu_time += static_cast<double>(ended - began) * stamp_seconds_;
+            gpu_frames++;
+        }
+        s.stamped = false;
+    }
     if (FAILED(s.allocator->Reset()) || FAILED(list->Reset(s.allocator, nullptr))) {
         log("FAIL: the command list would not reset\n");
         failed = true;
         return;
     }
+    if (stamp_cpu_ != nullptr) list->EndQuery(stamps_, D3D12_QUERY_TYPE_TIMESTAMP, 2 * slot_);
+    opened_at = seconds();
     s.ring_used = 0;
     frame_views_used_ = 0;
     ID3D12DescriptorHeap *const heaps[2] = {views_.heap, samplers_.heap};
@@ -599,6 +639,12 @@ void Gpu::submit()
 {
     if (!recording_) return;
     recording_ = false;
+    recording += seconds() - opened_at;
+    if (stamp_cpu_ != nullptr) {
+        list->EndQuery(stamps_, D3D12_QUERY_TYPE_TIMESTAMP, 2 * slot_ + 1);
+        list->ResolveQueryData(stamps_, D3D12_QUERY_TYPE_TIMESTAMP, 2 * slot_, 2, stamp_readback_, 16u * slot_);
+        slots_[slot_].stamped = true;
+    }
     if (FAILED(list->Close())) {
         log("FAIL: the command list would not close\n");
         failed = true;
@@ -607,9 +653,14 @@ void Gpu::submit()
     }
     ID3D12CommandList *lists[1 + 16] = {list};
     for (uint32_t i = 0; i < queued_count_; i++) lists[1 + i] = queued_[i];
+    const double from = seconds();
     queue->ExecuteCommandLists(1 + queued_count_, lists);
     queued_count_ = 0;
+    const double executed = seconds();
     queue->Signal(fence_, ++fence_value_);
+    const double signalled = seconds();
+    submitting += signalled - from;
+    signalling += signalled - executed;
     slots_[slot_].fence = fence_value_;
 }
 
@@ -618,11 +669,14 @@ bool Gpu::reached(uint64_t value) const { return fence_->GetCompletedValue() >= 
 void Gpu::wait(uint64_t value)
 {
     if (value == 0 || reached(value)) return;
+    const double from = seconds();
     // A null event: the call returns once the fence reaches the value.
-    if (FAILED(fence_->SetEventOnCompletion(value, nullptr))) {
+    if (spin_waits || FAILED(fence_->SetEventOnCompletion(value, nullptr))) {
         while (!reached(value)) {
         }
     }
+    waited += seconds() - from;
+    waits++;
 }
 
 void Gpu::finish()
