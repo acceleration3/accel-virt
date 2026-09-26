@@ -105,15 +105,6 @@ uint64_t ScanoutFramebuffer::blob_size() const
     return blob_size_;
 }
 
-bool ScanoutFramebuffer::same_picture(const ScanoutFramebuffer &other) const
-{
-    AV_SCOPE("ScanoutFramebuffer::same_picture");
-    return adopted_ && other.adopted_ && fourcc() == other.fourcc() && width_ == other.width_ &&
-           height_ == other.height_ && stride_ == other.stride_ && offset_ == other.offset_ &&
-           blob_size_ == other.blob_size_ && rect_.x() == other.rect_.x() && rect_.y() == other.rect_.y() &&
-           rect_.width() == other.rect_.width() && rect_.height() == other.rect_.height();
-}
-
 bool ScanoutFramebuffer::invariants_hold() const
 {
     AV_SCOPE("ScanoutFramebuffer::invariants_hold");

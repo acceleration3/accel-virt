@@ -849,23 +849,9 @@ bool virtio_gpu_rvk_show_image(VirtIOGPURvk *r, uint32_t head, const RvkExported
     if (!con || !qemu_console_has_gl(con) || image->slot >= 2 || image->fd < 0) {
         return false;
     }
-    /* An image well short of the mode is not the desktop - a window's own
-     * swapchain caught mid-resize, say - and would be stretched over all of
-     * it: it is read back into the 2D surface instead. */
-    if ((uint64_t)image->width * 100u < (uint64_t)VIRTIO_GPU_BASE(r)->scanout[head].width * 95u ||
-        (uint64_t)image->height * 100u < (uint64_t)VIRTIO_GPU_BASE(r)->scanout[head].height * 95u) {
-        return false;
-    }
     buffer = r->exported[head][image->slot];
-    /* The listener imports a buffer once and keeps the import: an image made
-     * again in another format or layout on the same descriptor has to be a
-     * new buffer, or it is sampled with the old one's. */
     if (buffer && (r->exported_fd[head][image->slot] != image->fd ||
-                   qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height ||
-                   qemu_dmabuf_get_fourcc(buffer) != image->fourcc ||
-                   qemu_dmabuf_get_modifier(buffer) != image->modifier ||
-                   qemu_dmabuf_get_strides(buffer, NULL)[0] != image->stride ||
-                   qemu_dmabuf_get_offsets(buffer, NULL)[0] != image->offset)) {
+                   qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height)) {
         if (r->showing[head] == (int32_t)image->slot) {
             r->showing[head] = -1;
         }

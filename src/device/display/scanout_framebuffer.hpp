@@ -47,8 +47,6 @@ public:
     /* One past the last byte the framebuffer reads out of the blob. */
     uint64_t       end() const;
     uint64_t       blob_size() const;
-    /* Whether `other` reads the same pixels the same way. */
-    bool           same_picture(const ScanoutFramebuffer &other) const;
 
     bool invariants_hold() const;
 
