@@ -850,8 +850,15 @@ bool virtio_gpu_rvk_show_image(VirtIOGPURvk *r, uint32_t head, const RvkExported
         return false;
     }
     buffer = r->exported[head][image->slot];
+    /* The listener imports a buffer once and keeps the import: an image made
+     * again in another format or layout on the same descriptor has to be a
+     * new buffer, or it is sampled with the old one's. */
     if (buffer && (r->exported_fd[head][image->slot] != image->fd ||
-                   qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height)) {
+                   qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height ||
+                   qemu_dmabuf_get_fourcc(buffer) != image->fourcc ||
+                   qemu_dmabuf_get_modifier(buffer) != image->modifier ||
+                   qemu_dmabuf_get_strides(buffer, NULL)[0] != image->stride ||
+                   qemu_dmabuf_get_offsets(buffer, NULL)[0] != image->offset)) {
         if (r->showing[head] == (int32_t)image->slot) {
             r->showing[head] = -1;
         }
