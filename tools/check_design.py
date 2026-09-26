@@ -15,7 +15,7 @@ from header_scan import SOURCE_DIRECTORIES, declared_classes, is_generated
 
 IN_PLACE_CONSTRUCTORS = ("src/core/support/object_storage.hpp", "src/core/support/object_pool.hpp")
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
-NEW_EXPRESSION = re.compile(r"(?<![\w.])new\s*[\(\w:]")
+NEW_EXPRESSION = re.compile(r"(?<![\w.])new(?:\s+[\w:]|\s*\()")
 
 
 def sources(root):
