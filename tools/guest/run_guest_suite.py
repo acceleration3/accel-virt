@@ -755,7 +755,7 @@ class GuestRun:
         self.heads = 0
         self.unexpected_dump = None
         self.sleep_states = None
-        self.region = None
+        self.regions = []
         # The CTS files a --cts run pushes, once its pins were honoured.
         self.cts_files = []
         # What a --d3d run pushes, by layer, once its pins were honoured.
@@ -1164,24 +1164,25 @@ class GuestRun:
         status = int(region.group(1), 16)
         if status != 0:
             raise StepFailed("segments", f"the driver could not open the host-visible region: status 0x{status:08x}")
-        self.region = self.hostmem_bar()
-        base, size = self.region
-        self.say(f"segments ok: 2 reported, the second {size // MEGABYTE} MiB of host memory at {base:#x}")
+        self.regions = self.hostmem_bars()
+        described = ", ".join(f"{size // MEGABYTE} MiB at {base:#x}" for base, size in self.regions)
+        self.say(f"segments ok: 2 reported, the second host memory: {described}")
 
-    def hostmem_bar(self):
-        """Where the guest programmed the device's hostmem BAR, and how much of
-        it there is, from QEMU's own view of the bus."""
+    def hostmem_bars(self):
+        """Where the guest programmed each device's hostmem BAR, and how much of
+        it there is, from QEMU's own view of the bus. With --all-gpus there is
+        one device per host GPU, and the suite's adapter may be any of them."""
         try:
             buses = self.qmp.execute("query-pci")
         except AgentError as error:
             raise StepFailed("segments", str(error))
         regions = [region for bus in buses for device in bus.get("devices", [])
-                   if device.get("qdev_id") == DISPLAY_DEVICE
+                   if device.get("qdev_id", "").startswith(DISPLAY_DEVICE)
                    for region in device.get("regions", []) if region.get("bar") == HOSTMEM_BAR]
         if not regions:
             raise StepFailed("segments", f"QEMU maps no BAR {HOSTMEM_BAR} on the device: the region the driver "
                                          "opened is nowhere in the guest's physical address space")
-        return regions[0]["address"], regions[0]["size"]
+        return [(region["address"], region["size"]) for region in regions]
 
     def stage_output(self, name, saved=None, extra=()):
         """The stage's own output, for a step that reads what it said."""
@@ -1287,15 +1288,16 @@ class GuestRun:
             return
         count = int(written.group(1))
         self.say(f"hostvisible ok: {count} bytes written through the guest's view")
-        if self.region is None:
+        if not self.regions:
             self.say("hostvisible skipped: with no region on this device the pattern was written into guest "
                      "memory, which proves nothing the guest did not already say")
             return
-        base, size = self.region
-        if host_visible_pattern(count) in self.read_guest_memory(base, size):
-            self.say("hostvisible ok: the host reads the same bytes out of the BAR")
-            return
-        missing = (f"the host's own view of the {size // MEGABYTE} MiB at {base:#x} does not hold the "
+        pattern = host_visible_pattern(count)
+        for base, size in self.regions:
+            if pattern in self.read_guest_memory(base, size):
+                self.say(f"hostvisible ok: the host reads the same bytes out of the BAR at {base:#x}")
+                return
+        missing = (f"no hostmem BAR ({', '.join(f'{base:#x}' for base, _ in self.regions)}) holds the "
                    f"{count} bytes the guest wrote: the view was not the BAR")
         if self.args.require_host_visible:
             raise StepFailed("hostvisible", missing)

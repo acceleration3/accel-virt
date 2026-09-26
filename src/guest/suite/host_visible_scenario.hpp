@@ -25,6 +25,8 @@ class HostVisibleScenario {
 public:
     /* One page: the granularity VidMm maps a CPU-visible segment's views at. */
     static constexpr uint32_t pattern_bytes = 4096u;
+    /* Enough of the view that the clock's own cost disappears in the rate. */
+    static constexpr uint64_t measured_bytes = 16u * 1024u * 1024u;
 
     HostVisibleScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search);
 
@@ -35,6 +37,11 @@ public:
     uint32_t matched_bytes() const;
 
 private:
+    /* MB/s writing and then reading the whole view: what the caching VidMm
+     * chose for it costs a process. */
+    void measure(volatile uint64_t *view);
+    uint32_t megabytes_per_second(uint64_t ticks, uint64_t frequency) const;
+
     Kmt                 &kmt_;
     const AdapterSearch &search_;
     ScenarioSteps        steps_;

@@ -6,6 +6,8 @@
 
 #include "proto/resources/allocation_descriptor.hpp"
 
+#include "proto/resources/allocation_kind.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -15,6 +17,8 @@ public:
     static constexpr uint64_t page_bytes = 4096u;
 
     explicit ClientDescriptor(uint64_t bytes);
+    /* The same for an allocation of `kind` rather than a client one. */
+    ClientDescriptor(uint64_t bytes, AllocationKind kind);
 
     /* A magic no driver accepts. */
     void           corrupt_magic();

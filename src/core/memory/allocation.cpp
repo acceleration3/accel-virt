@@ -94,6 +94,17 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);
+    /* Host memory: the CPU-visible segment first. A WDDM 3.0 driver's
+     * CpuVisible allocation must also list an aperture segment it could live
+     * in (VIDMM_GLOBAL::CreateOneAllocation: "CPUVisible allocations must
+     * include an aperture segment in the supported segment set"), which is
+     * what every earlier attempt with the segment alone ran into. */
+    if (descriptor_.kind() == AllocationKind::host_memory && segments_.offers_host_visible()) {
+        info.PreferredSegment = HostVisibleSegment::segment_id;
+        info.SupportedReadSegmentSet = (1u << (ApertureSegment::segment_id - 1u)) |
+                                       (1u << (HostVisibleSegment::segment_id - 1u));
+        info.SupportedWriteSegmentSet = info.SupportedReadSegmentSet;
+    }
     info.EvictionSegmentSet = 0u;
     info.MaximumRenamingListLength = 0u;
     info.hAllocation = this;
@@ -104,6 +115,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * pages behind it (feature 038). */
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) |
                  (pinned ? flag_accessed_physically : 0u);
+    if (descriptor_.kind() == AllocationKind::host_memory && segments_.offers_host_visible()) info.Flags |= flag_cached;
     info.AllocationPriority = priority_normal;
     info.Flags2 = 0u;
 }

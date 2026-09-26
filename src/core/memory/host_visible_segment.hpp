@@ -57,13 +57,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* DXGK_SEGMENTFLAGS: CpuVisible, and nothing else. Never Aperture - the
-     * segment has storage of its own, and VidMm asks for guest pages to be
-     * mapped into an aperture. Never CacheCoherent either: this is a BAR, which
-     * is MMIO and not coherent RAM, and VidMm holds a cached allocation to
-     * supporting only cache-coherent segments
-     * (VerifySupportedSegmentSetAndAdjustFlags, dxgmms2.sys @1400fb430). */
-    static constexpr uint32_t flags = 0x4u;
+    /* DXGK_SEGMENTFLAGS: CpuVisible | CacheCoherent. Never Aperture - the
+     * segment has storage of its own. CacheCoherent because what backs the BAR
+     * is host RAM the guest reaches through KVM's page tables, not device MMIO:
+     * without it VidMm places no CPU-visible allocation here, and it is what
+     * lets a Cached allocation be mapped write-back (10.7 GB/s written, 20 GB/s
+     * read on a live guest, against 0.7 and 0.07 uncached). */
+    static constexpr uint32_t flags = 0x14u;
     static constexpr uint8_t  host_visible_region = 1u;
 
     friend struct HostVisibleSegmentProbe;
