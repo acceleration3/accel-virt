@@ -84,10 +84,9 @@ SUBMIT_RATIO = re.compile(rb"^ok submit\.ratio (\d+)\r?$", re.M)
 SUBMIT_DOORBELL = re.compile(rb"^note submit\.doorbell (\w+)\r?$", re.M)
 STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
-# What Adapter::open_region logs at StartDevice, and the only place a run can
-# see the second segment: the list itself never leaves dxgkrnl.
-REGION_LINE = re.compile(r"^rvkgpu: host-visible region status 0x([0-9a-fA-F]{8})\r?$", re.M)
-HOST_VISIBLE_WRITTEN = re.compile(rb"^ok host_visible\.pattern (\d+)\r?$", re.M)
+# What the adapter logs when it sets up the host window for a device
+# (docs/host-window.md): the only place a run sees whether it has one.
+WINDOW_LINE = re.compile(r"^rvkgpu: host window status 0x([0-9a-fA-F]{8})\r?$", re.M)
 PROBE_SUMMARY = re.compile(rb"^rvkvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
 # rvkglprobe --discovery's facts (feature 050): `discovery <key> <text> value=0x.. error=..`.
 DISCOVERY_LINE = re.compile(r"^discovery (\w+) (.*?)\r?$", re.M)
@@ -280,18 +279,14 @@ def arguments():
     parser.add_argument("--memory", type=int, default=4096, help="MiB")
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
-    parser.add_argument("--require-host-visible", action="store_true",
-                        help="fail the run when the host cannot find the guest's pattern in the BAR; off until "
-                             "something asks for host memory (feature 043)")
     parser.add_argument("--record", action="store_true",
                         help="write a wire recording to recording.rvk in the work directory, which "
                              "build/rvkrecord prints and replays (feature 065)")
     parser.add_argument("--record-limit", type=int, default=256 * 1024 * 1024, metavar="BYTES",
                         help="the recording's ceiling; it stops there rather than growing past it")
     parser.add_argument("--hostmem", type=int, default=8192, metavar="MIB",
-                        help="the device's host-visible region, in MiB; 0 gives it none, where the driver "
-                             "reports one segment and the same allocation goes to guest memory "
-                             "(feature 041, FR-007)")
+                        help="the device's host window, in MiB; 0 gives it none, and every chunk a "
+                             "process asks for is guest memory (docs/host-window.md)")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
     parser.add_argument("--vsync-wait", type=float, default=60.0,
                         help="seconds to wait for the driver to log a window at its own period")
@@ -511,16 +506,6 @@ def fingerprint(path):
     return status.st_size, status.st_mtime_ns
 
 
-def host_visible_pattern(count):
-    """The bytes the guest's host-visible scenario writes through the view
-    D3DKMTLock2 gave it (src/guest/suite/guest_pattern.hpp): the byte at
-    offset n is 1 + (n * 7) % 251, so none is zero and no page of it repeats
-    another - what the region held before the guest wrote cannot be mistaken for
-    it. The run looks for them anywhere in the region, because VidMm chooses
-    where in the segment an allocation lands and never tells the driver."""
-    return bytes(1 + (index * 7) % 251 for index in range(count))
-
-
 def luid_low_part(printed):
     """The LowPart of a LUID vulkaninfo printed as its eight bytes, which are
     the LUID structure's - LowPart first, little-endian - or None when what was
@@ -570,7 +555,7 @@ run, because the two sides are two boots: one with --record and one without."""
 FENCE_VECTORS = 11
 """The device id screendump names when it asks for a head other than the first."""
 HOSTMEM_BAR = 4
-"""Where virtio-gpu-pci registers the host-visible region, at offset 0 of the
+"""Where virtio-gpu-pci registers the host window, at offset 0 of the
 BAR (hw/display/virtio-gpu-pci.c). tests/qemu/test_virtio_gpu_blobs.py reads the
 same region out of the device's virtio shared-memory capability; a run has no
 config space of its own to walk, so it asks QEMU where the guest programmed the
@@ -760,7 +745,6 @@ class GuestRun:
         self.heads = 0
         self.unexpected_dump = None
         self.sleep_states = None
-        self.regions = []
         # The CTS files a --cts run pushes, once its pins were honoured.
         self.cts_files = []
         # What a --d3d run pushes, by layer, once its pins were honoured.
@@ -1153,25 +1137,23 @@ class GuestRun:
             raise StepFailed("adapters", "; ".join(missing) + "; see adapters.txt")
         self.say(f"adapters ok: {len(self.host_gpus)} host GPU(s) named and identified in WMI and DXGI")
 
-    def segments(self):
-        """FR-001: what memory the adapter told VidMm it has. The segment list
-        goes to dxgkrnl and nowhere else, so the line the driver logs for the
-        region it opened at StartDevice is where a run reads it: with the region
-        the adapter reports two segments, and without it one."""
-        region = REGION_LINE.search(self.driver_log())
+    def window(self):
+        """Whether the driver set up the host window it hands processes their
+        write-back chunks from (docs/host-window.md). Without one every chunk
+        is guest memory, which works but is not what a run with --hostmem is
+        measuring."""
+        opened = WINDOW_LINE.search(self.driver_log())
         if not self.args.hostmem:
-            self.say("segments ok: 1 reported, this device has no region and the same allocation goes to "
-                     "guest memory (FR-007)")
+            self.say("window ok: this device has none, so every chunk is guest memory")
             return
-        if region is None:
-            raise StepFailed("segments", "the driver opened no host-visible region: the capset's host-visible "
-                                         "bit is clear, or CapsetExchange failed at StartDevice")
-        status = int(region.group(1), 16)
+        if opened is None:
+            raise StepFailed("window", "the driver set up no host window: the capset's host-visible bit is "
+                                       "clear, or CapsetExchange failed at StartDevice")
+        status = int(opened.group(1), 16)
         if status != 0:
-            raise StepFailed("segments", f"the driver could not open the host-visible region: status 0x{status:08x}")
-        self.regions = self.hostmem_bars()
-        described = ", ".join(f"{size // MEGABYTE} MiB at {base:#x}" for base, size in self.regions)
-        self.say(f"segments ok: 2 reported, the second host memory: {described}")
+            raise StepFailed("window", f"the driver could not set up the host window: status 0x{status:08x}")
+        described = ", ".join(f"{size // MEGABYTE} MiB at {base:#x}" for base, size in self.hostmem_bars())
+        self.say(f"window ok: {described}")
 
     def hostmem_bars(self):
         """Where the guest programmed each device's hostmem BAR, and how much of
@@ -1180,13 +1162,13 @@ class GuestRun:
         try:
             buses = self.qmp.execute("query-pci")
         except AgentError as error:
-            raise StepFailed("segments", str(error))
+            raise StepFailed("window", str(error))
         regions = [region for bus in buses for device in bus.get("devices", [])
                    if device.get("qdev_id", "").startswith(DISPLAY_DEVICE)
                    for region in device.get("regions", []) if region.get("bar") == HOSTMEM_BAR]
         if not regions:
-            raise StepFailed("segments", f"QEMU maps no BAR {HOSTMEM_BAR} on the device: the region the driver "
-                                         "opened is nowhere in the guest's physical address space")
+            raise StepFailed("window", f"QEMU maps no BAR {HOSTMEM_BAR} on the device: the window the driver "
+                                       "set up is nowhere in the guest's physical address space")
         return [(region["address"], region["size"]) for region in regions]
 
     def stage_output(self, name, saved=None, extra=()):
@@ -1274,71 +1256,6 @@ class GuestRun:
         gained = record.gained(measured)
         self.say(f"submit.ratchet ok: {recorded / 100:.2f}x kept" +
                  (f", {gained / 100:.2f}x gained; commit `{record.line(measured).strip()}`" if gained else ""))
-
-    def host_visible(self, report):
-        """SC-003, and the one claim in this feature the guest cannot make for
-        itself: the pattern the guest wrote through the view D3DKMTLock2 gave it
-        is in the host's own view of the BAR.
-
-        A read-back inside the guest proves only that the view is memory -
-        guest RAM passes that just as well, which is exactly the fallback
-        FR-007 makes observable. Nothing the guest can do puts bytes where the
-        host reads them unless the mapping really is the device's memory, so
-        this read, taken from outside the guest, is the only one that cannot be
-        faked from inside it.
-        """
-        written = HOST_VISIBLE_WRITTEN.search(report)
-        if written is None:
-            self.say("hostvisible skipped: the suite reported no host-visible pattern")
-            return
-        count = int(written.group(1))
-        self.say(f"hostvisible ok: {count} bytes written through the guest's view")
-        if not self.regions:
-            self.say("hostvisible skipped: with no region on this device the pattern was written into guest "
-                     "memory, which proves nothing the guest did not already say")
-            return
-        pattern = host_visible_pattern(count)
-        for base, size in self.regions:
-            if pattern in self.read_guest_memory(base, size):
-                self.say(f"hostvisible ok: the host reads the same bytes out of the BAR at {base:#x}")
-                return
-        missing = (f"no hostmem BAR ({', '.join(f'{base:#x}' for base, _ in self.regions)}) holds the "
-                   f"{count} bytes the guest wrote: the view was not the BAR")
-        if self.args.require_host_visible:
-            raise StepFailed("hostvisible", missing)
-        # The driver reports the segment and maps the region, and asks VidMm for
-        # nothing in it: every allocation whose PreferredSegment was that
-        # segment came back STATUS_INVALID_PARAMETER on a live guest, so the
-        # pattern is in guest memory and this read cannot find it (feature 041,
-        # T026).
-        #
-        # Clients do ask for host-visible memory now - every OpenCL context
-        # opens a blob arena (feature 052), and the Vulkan and OpenGL contexts
-        # ask the same way - and every one of them gets FR-007's fallback: the
-        # allocation is guest pages, and the device imports those pages rather
-        # than placing the blob in the BAR. So this read finding nothing is the
-        # fallback working, not a client missing. --require-host-visible is what
-        # unparks the segment: turn it on in the change that makes VidMm place
-        # an allocation there, and this becomes a failure again.
-        self.say(f"hostvisible skipped: {missing}; the clients that ask for it "
-                 f"(feature 052's blob arena among them) take FR-007's fallback and the device "
-                 f"imports their guest pages, so 041's segment is still parked")
-
-    def read_guest_memory(self, address, size):
-        """QMP pmemsave: QEMU's own read of a guest physical range, which over
-        the hostmem BAR is the host memory the device put behind it."""
-        path = self.work / "hostmem.bin"
-        path.unlink(missing_ok=True)
-        try:
-            self.qmp.execute("pmemsave", {"val": address, "size": size, "filename": str(path)})
-        except AgentError as error:
-            raise StepFailed("hostvisible", str(error))
-        if not path.exists() or path.stat().st_size != size:
-            raise StepFailed("hostvisible", f"QEMU wrote no {size}-byte read of {address:#x} to {path}")
-        image = path.read_bytes()
-        # A copy of the whole region is not evidence worth leaving behind.
-        path.unlink()
-        return image
 
     def display(self):
         """The frame the host scans out of the guest's primary (feature 038, US1).
@@ -2071,7 +1988,7 @@ class GuestRun:
         self.check_monitors(self.stage_output("check", saved="device.txt"))
         if self.host_gpus:
             self.adapters()
-        self.segments()
+        self.window()
         # The display and power scenarios are the echo run's; these boots are
         # for the work the real executor does (features 044 and 045).
         if self.args.opengl_discovery:
@@ -2092,7 +2009,7 @@ class GuestRun:
         if self.injecting():
             self.tdr()
         else:
-            self.host_visible(self.suite())
+            self.suite()
             self.vsync()
 
     def real_executor(self, scenarios):

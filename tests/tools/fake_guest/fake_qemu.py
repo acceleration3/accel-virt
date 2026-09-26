@@ -19,11 +19,9 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              until QEMU is started again without virtio-gpu-rvk-pci
   die_during stage: QEMU aborts with an assertion when the stage runs
   refuse     ["guest-suspend-ram", ...]: agent commands answered with an error
-  region_status  "0xc0000017" or null: what the driver logs for the hostmem
-             region a device with hostmem= has; null takes the line away, as a
+  window_status  "0xc0000017" or null: what the driver logs for the host
+             window a device with hostmem= has; null takes the line away, as a
              capset without the host-visible bit does
-  hostmem_written {"offset": n, "bytes": n}: the guest's pattern, as pmemsave
-             finds it in the hostmem BAR; absent leaves the region all zeros
   inspect    {"list": text, "trace": base64, "state": text, "kernel-trace":
              base64, "kernel-state": text}: what rvkinspect.exe writes at its
              --out path; trace answers are whole snapshot files, state answers
@@ -57,7 +55,7 @@ REBOOT = 0.3
 ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_notifier: Assertion `ret >= 0' failed."
 LOOP_PERIOD = 0.5
 HOSTMEM_BAR = 4
-"""The BAR virtio-gpu-pci registers the host-visible region in."""
+"""The BAR virtio-gpu-pci registers the host window in."""
 INSPECTOR = "rvkinspect"
 SNAPSHOT_STATE = 2
 HOSTMEM_BASE = 0xC0000000
@@ -411,20 +409,13 @@ class Guest:
                                         "regions": regions}]}]
 
     def memory_image(self, address, size):
-        """The host's own view of a guest physical range: zeros, unless the
-        script says the guest wrote its pattern into the hostmem BAR - the byte
-        at offset n of it is 1 + (n * 7) % 251, as the scenario in
-        src/guest/suite/host_visible_scenario.hpp writes it."""
+        """The host's own view of a guest physical range: zeros, but for the
+        trace table the script puts there."""
         image = bytearray(size)
         traced = self.script.get("trace_memory")
         if traced is not None and address == traced["address"]:
             table = base64.b64decode(traced["b64"])[:size]
             image[:len(table)] = table
-        written = self.script.get("hostmem_written")
-        if written is not None and address == HOSTMEM_BASE:
-            offset = written.get("offset", 0)
-            pattern = bytes(1 + (index * 7) % 251 for index in range(written.get("bytes", 0)))
-            image[offset:offset + len(pattern)] = pattern
         return bytes(image[:size])
 
     def qmp_command(self, request):
@@ -525,12 +516,12 @@ def main():
         lines = script.get("driver_log", ["rvkgpu: DriverEntry",
                                           "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                           "rvkgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
-        # A device with a region makes the driver say what came of opening it,
-        # whatever else the scenario had it log, because the line belongs to the
-        # device rather than to the run.
-        status = script.get("region_status", "0x00000000")
+        # A device with a window makes the driver say what came of setting it
+        # up, whatever else the scenario had it log, because the line belongs
+        # to the device rather than to the run.
+        status = script.get("window_status", "0x00000000")
         if hostmem and status is not None:
-            lines = lines + [f"rvkgpu: host-visible region status {status}"]
+            lines = lines + [f"rvkgpu: host window status {status}"]
         log.write("".join(line + "\n" for line in lines) if device else "")
     # A driver goes on logging while the run reads: what it says every 120
     # blanks arrives long after the line before it.
