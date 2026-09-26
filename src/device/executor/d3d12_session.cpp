@@ -364,11 +364,22 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
         return false;
     if (cpu_visible(properties)) {
         uint8_t *const pages = region_.at(arena_offset, size);
+        /* Which of these refused is what the host log is read for when a
+         * guest's heap fails: the removal that follows says nothing more. */
         if (pages == nullptr || arena_offset % heap_alignment != 0u ||
-            reinterpret_cast<uintptr_t>(pages) % heap_alignment != 0u)
+            reinterpret_cast<uintptr_t>(pages) % heap_alignment != 0u) {
+            fprintf(stderr, "virtio-gpu-rvk: d3d12: a heap of %llu bytes at %llu is not inside the arena of %llu bytes\n",
+                    static_cast<unsigned long long>(size), static_cast<unsigned long long>(arena_offset),
+                    static_cast<unsigned long long>(region_.length()));
             return false;
-        if (region_.descriptor() >= 0) return arena_heaps_.add(*device_, region_, heap, arena_offset, size);
-        return keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
+        }
+        const bool shared = region_.descriptor() >= 0;
+        const bool made = shared ? arena_heaps_.add(*device_, region_, heap, arena_offset, size)
+                                 : keep(heap, D3dObjectKind::heap12, device_->import_heap(pages, size));
+        if (!made)
+            fprintf(stderr, "virtio-gpu-rvk: d3d12: the host did not import the arena of %llu bytes as %s\n",
+                    static_cast<unsigned long long>(region_.length()), shared ? "a dma-buf" : "host memory");
+        return made;
     }
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
