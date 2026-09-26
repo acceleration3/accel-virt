@@ -146,7 +146,7 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     }
     if (!doorbell_.established()) {
         uint8_t escape[TailPublishRecord::encoded_size] = {};
-        static_cast<void>(TailPublishRecord().encode(escape, sizeof escape));
+        static_cast<void>(TailPublishRecord(ring()).encode(escape, sizeof escape));
         /* An older driver refuses it, and the kernel publishes as it always has. */
         if (connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, escape, sizeof escape) ==
             Status::ok)
@@ -288,16 +288,32 @@ bool KmtTransport::drain()
         fences_.close(newest);
         return true;
     }
-    const Status waited = doorbell_.queue() != 0u
-                              ? connection_.kmt().wait_for_hw_queue(connection_.device(),
-                                                                    doorbell_.progress_fence(), newest)
-                              : connection_.kmt().wait_for_context(connection_.device(), context_);
+    const Status waited = wait_for_host(newest);
     if (waited != Status::ok || !arrives_eventually([this] { return ring_.head() == ring_.tail(); })) {
         faulted_ = true;
         return false;
     }
     fences_.close(newest);
     return true;
+}
+
+/* The kernel's wait is bounded, so a host that died is reported rather than
+ * waited on forever; but a host still working through what was queued ahead
+ * of `fence` is alive, just behind. A wait that times out while the device's
+ * head moved is waited again; only one in which the device took nothing at
+ * all gives up. */
+Status KmtTransport::wait_for_host(uint64_t fence)
+{
+    AV_SCOPE("KmtTransport::wait_for_host");
+    for (;;) {
+        const uint64_t head = ring_.head();
+        const Status   waited = doorbell_.queue() != 0u
+                                    ? connection_.kmt().wait_for_hw_queue(connection_.device(),
+                                                                          doorbell_.progress_fence(), fence)
+                                    : connection_.kmt().wait_for_context(connection_.device(), context_);
+        if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || ring_.head() == head)
+            return waited;
+    }
 }
 
 /* Every fence whose batch the device has moved its head past is done: the
@@ -469,10 +485,7 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
      * monitored fence dxgkrnl made with the queue, which this driver writes
      * what the device finished into (research.md §12). */
     if (!replied_within_spin(fence)) {
-        const Status waited = doorbell_.queue() != 0u
-                                  ? connection_.kmt().wait_for_hw_queue(connection_.device(),
-                                                                        doorbell_.progress_fence(), fence)
-                                  : connection_.kmt().wait_for_context(connection_.device(), context_);
+        const Status waited = wait_for_host(fence);
         /* A batch the kernel was not told of is the device's alone, so the
          * kernel's wait can return before it: the slot is watched until the
          * answer lands. */

@@ -93,6 +93,9 @@ public:
     static constexpr std::uint32_t max_objects = 32u;
     static constexpr std::uint32_t invalid_parameter = 0xC000000Du;
     static constexpr std::uint32_t pending = 0x00000103u;
+    /* What a wait that ran out its bound ends in, and a wait on a fence no one
+     * will reach. */
+    static constexpr std::uint32_t io_timeout = 0xC00000B5u;
     static constexpr std::uint64_t page_bytes = 4096u;
     /* The performance counter this answers, in the 100ns units Windows uses. */
     static constexpr std::uint64_t ticks_per_second = 10000000u;
@@ -258,6 +261,9 @@ public:
     /* The next `call` succeeds with a zero handle or address; a paging queue
      * comes without its fence object. */
     void          zero_next(Call call);
+    /* The `nth` `call` from now (1 for the next) succeeds zeroed, as zero_next
+     * does: for a call an earlier one of its kind comes before. */
+    void          zero_at(Call call, std::uint32_t nth);
     /* The next shared create succeeds and leaves bytes where the record was
      * that no record decodes from: a driver that wrote nonsense back into the
      * creator's private data, which a caller reading the id must catch rather
@@ -280,6 +286,9 @@ public:
     /* A wait for a context costs this many ticks, as waiting for real work
      * does; 0 (the default) leaves the clock where it was. */
     void          spend_on_wait(std::uint64_t ticks);
+    /* The next `count` waits for a context take what was submitted, as a host
+     * that is working does, and still run out their bound: STATUS_IO_TIMEOUT. */
+    void          time_out_while_consuming(std::uint32_t count);
     /* A submission through the kernel costs this many ticks, as the transition
      * into dxgkrnl does; a store to a doorbell costs nothing here, because it
      * is a write in the process and this mock never sees it (feature 049). */
@@ -356,7 +365,8 @@ public:
     /* Calls naming a handle this mock never gave or already closed. */
     std::uint32_t misuses() const;
     /* Bytes of the view this mock hands out that are not zero: what was
-     * written through the pointer a lock answered. */
+     * written through the pointer a lock answered, counting a large view's
+     * as they stood when it was unlocked and let go. */
     std::uint32_t view_filled() const;
     /* The buffer a locked allocation's view points into, or null: how a test
      * plays the device, reading and writing the guest's mapped memory. */
@@ -462,6 +472,7 @@ private:
     std::uint32_t countdown_[static_cast<unsigned>(Call::count)];
     std::uint32_t failing_run_[static_cast<unsigned>(Call::count)];
     bool          zeroing_[static_cast<unsigned>(Call::count)];
+    std::uint32_t zero_countdown_[static_cast<unsigned>(Call::count)] = {};
     std::uint32_t calls_[static_cast<unsigned>(Call::count)];
     Object        objects_[max_objects];
     std::uint8_t  views_[max_locks][view_capacity];
@@ -505,12 +516,19 @@ private:
     /* What reading the clock has added to it, which only a read changes -
      * hence mutable, since reading a clock is const to its caller. */
     mutable std::uint64_t read_ticks_;
+    /* A frozen clock read over and over with no call between the reads is
+     * code spinning until time passes, which no real clock lets last forever:
+     * after spin_reads such reads each one moves the clock a millisecond. */
+    static constexpr std::uint32_t spin_reads = 64u;
+    mutable std::uint32_t          idle_reads_;
+    std::uint64_t                  released_filled_ = 0u;
     std::uint64_t clock_step_;
     ClockReader  *clock_reader_;
     std::uint64_t blank_period_;
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
+    std::uint32_t timeouts_while_consuming_;
     std::uint64_t submit_cost_;
     std::uint32_t slow_nth_;
     std::uint64_t slow_ticks_;

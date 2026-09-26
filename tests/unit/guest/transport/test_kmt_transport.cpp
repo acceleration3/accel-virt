@@ -248,7 +248,7 @@ TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
   CHECK_STATUS(submitted.decode(fixture.kmt().last_submission(), av::SubmissionDescriptor::encoded_size), Status::ok);
   CHECK_EQ(submitted.fence_id(), 1u);
   CHECK_EQ(submitted.begin(), 0u);
-  CHECK_EQ(submitted.end(), 32u);   /* the batch, its command and 4 bytes, padded to 8 */ }
+  CHECK_EQ(submitted.end(), 48u);   /* the batch, its command and 4 bytes, padded to 8 */ }
 
 /* A writer that overflowed its slot is refused, not sent. */
 TEST(kmt_transport, an_overflowed_writer_is_refused)
@@ -456,8 +456,9 @@ TEST(kmt_transport, a_refused_submission_fails_the_send)
   writer.write_u32(1u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
 
-/* With every fence in flight the next send is refused. */
-TEST(kmt_transport, a_full_fence_table_refuses_the_next_send)
+/* With every fence in flight the next send waits for the host to catch up
+ * rather than failing, and fails only when that wait does. */
+TEST(kmt_transport, a_full_fence_table_waits_for_the_host_before_the_next_send)
 { MockKmt kmt;
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
@@ -470,12 +471,14 @@ TEST(kmt_transport, a_full_fence_table_refuses_the_next_send)
       writer.write_u32(i);
       CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
   }
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), 0u);
   WireWriter writer = transport.request_writer();
   writer.write_u32(64u);
-  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), 1u);
+  CHECK(transport.invariants_hold()); }
 
-/* A batch with no room in the ring is refused before the fence table fills. */
-TEST(kmt_transport, a_full_ring_refuses_the_send)
+TEST(kmt_transport, a_full_fence_table_whose_wait_fails_refuses_the_send)
 { MockKmt kmt;
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
@@ -483,13 +486,115 @@ TEST(kmt_transport, a_full_ring_refuses_the_send)
   std::uint8_t transport_staging[staging_bytes] = {};
   KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  bool refused = false;
-  for (std::uint32_t i = 0u; i < 64u && !refused; i++) {
+  for (std::uint32_t i = 0u; i < 64u; i++) {
       WireWriter writer = transport.request_writer();
-      writer.write_zeros(900u);   /* a big command; a few fill an order-12 ring */
+      writer.write_u32(i);
+      CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  }
+  kmt.fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  /* The context is faulted: nothing more goes. */
+  WireWriter after = transport.request_writer();
+  after.write_u32(65u);
+  CHECK(transport.send_async(0x10001u, after) == TransportResult::failed); }
+
+namespace {
+
+/* A transport whose fence window is full: its next send has to wait. */
+void fill_the_fence_window(KmtTransport &transport)
+{
+    for (std::uint32_t i = 0u; i < 64u; i++) {
+        WireWriter writer = transport.request_writer();
+        writer.write_u32(i);
+        CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+    }
+}
+
+}  // namespace
+
+/* A wait that runs out its bound while the host took batches is a host that is
+ * behind, not gone: it is waited again, and the send goes. */
+TEST(kmt_transport, a_wait_that_times_out_while_the_host_works_is_waited_again)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  kmt.time_out_while_consuming(1u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 2u); }
+
+/* A wait that runs out its bound with nothing taken is a host that is gone:
+ * the context is faulted after that one wait, not waited on forever. */
+TEST(kmt_transport, a_wait_that_times_out_with_nothing_taken_gives_up)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  kmt.fail_first(MockKmt::Call::wait_for_context, 64u, MockKmt::io_timeout);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 1u); }
+
+/* The host took what it had, then stopped: the second wait finds the head
+ * where the first left it, and that is the end. */
+TEST(kmt_transport, a_host_that_stops_taking_batches_is_given_up_on_after_one_silent_wait)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fill_the_fence_window(transport);
+  const std::uint32_t before = kmt.calls(MockKmt::Call::wait_for_context);
+  kmt.time_out_while_consuming(64u);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), before + 2u); }
+
+/* A batch with no room in the ring waits for the host to take one, and is
+ * refused when that wait fails. */
+TEST(kmt_transport, a_full_ring_waits_for_the_host_and_is_refused_when_that_fails)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  /* A few 900-byte commands fill an order-12 ring; the next waits it out. */
+  for (std::uint32_t i = 0u; i < 8u; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_zeros(900u);
+      CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  }
+  CHECK(kmt.calls(MockKmt::Call::wait_for_context) >= 1u);
+  const std::uint32_t waited = kmt.calls(MockKmt::Call::wait_for_context);
+  bool refused = false;
+  kmt.fail_first(MockKmt::Call::wait_for_context, 64u, 0xC0000001u);
+  for (std::uint32_t i = 0u; i < 8u && !refused; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_zeros(900u);
       refused = transport.send_async(0x10001u, writer) == TransportResult::failed;
   }
-  CHECK(refused); }
+  CHECK(refused);
+  CHECK(kmt.calls(MockKmt::Call::wait_for_context) > waited); }
 
 /* send_sync fails a call that could not be published, a device that will not
  * wait, and an answer the device never wrote. */
@@ -1005,3 +1110,126 @@ TEST(kmt_transport, give_back_doorbell_puts_every_submission_through_the_kernel)
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u);
   transport.teardown();
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_hw_queue), 1u); }
+
+namespace {
+
+/* `count` framed commands of four bytes of body each, numbered from `id`; the
+ * last asks for an answer when `answered`. */
+std::size_t frame_batch(std::uint8_t *bytes, std::uint32_t id, std::uint32_t count, bool answered)
+{
+    constexpr std::uint32_t size = CommandHeader::encoded_size + 4u;
+    for (std::uint32_t index = 0u; index < count; index++) {
+        const std::uint8_t flags = answered && index + 1u == count ? CommandHeader::generate_reply : 0u;
+        CHECK_STATUS(CommandHeader(id + index, size, flags).encode(bytes + size * index, CommandHeader::encoded_size),
+                     Status::ok);
+    }
+    return size * count;
+}
+
+}  // namespace
+
+/* A stream that framed its batch itself and knows none of it answers sends it
+ * whole, waits for nothing, and the device finds every command in it. */
+TEST(kmt_transport, an_async_batch_is_sent_whole_without_a_wait)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  std::uint8_t framed[3u * 12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 3u, false);
+  /* Nothing is sent before the transport is made. */
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::failed);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.send_async_batch(nullptr, length) == TransportResult::failed);
+  CHECK(transport.send_async_batch(framed, 0u) == TransportResult::failed);
+  CHECK(transport.send_async_batch(framed, std::size_t{1} << 32u) == TransportResult::failed);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
+  CHECK_EQ(fixture.kmt().commands(), 3u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x10001u);
+  CHECK_EQ(fixture.kmt().command_id(2u), 0x10003u);
+  CHECK(transport.invariants_hold());
+  transport.teardown(); }
+
+/* A batch ending in the one command that answers is awaited, and the reply is
+ * that command's. */
+TEST(kmt_transport, an_answered_batch_is_awaited_and_answers_its_last_command)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  std::uint8_t framed[2u * 12u] = {};
+  const std::size_t length = frame_batch(framed, 0x20001u, 2u, true);
+  WireReader reply(framed, sizeof framed);
+  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::failed);
+  CHECK_EQ(reply.remaining(), 0u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.send_answered_batch(nullptr, length, reply) == TransportResult::failed);
+  CHECK(transport.send_answered_batch(framed, 0u, reply) == TransportResult::failed);
+  CHECK(transport.send_answered_batch(framed, std::size_t{1} << 32u, reply) == TransportResult::failed);
+  const std::uint8_t answer[] = {0x42u, 0x43u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::ok);
+  CHECK_EQ(reply.remaining(), 2u);
+  CHECK_EQ(reply.read_u8(), 0x42u);
+  transport.end_call();
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
+  CHECK_EQ(fixture.kmt().queued_answers(), 0u);
+  /* A wait that fails faults the transport: nothing more is sent. */
+  fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+  CHECK(transport.send_answered_batch(framed, length, reply) == TransportResult::failed);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::failed);
+  transport.teardown(); }
+
+/* The host has taken every batch but the newest: one more now keeps it fed. A
+ * second batch it has not begun is the one to hold back and grow. */
+TEST(kmt_transport, is_ready_for_a_batch_while_the_host_holds_no_more_than_the_newest)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.ready_for_batch());
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(transport.ready_for_batch());
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK(!transport.ready_for_batch());
+  /* The device finishing what was sent - a wait plays it - moves the head. */
+  std::uint8_t answered[12u] = {};
+  const std::size_t last = frame_batch(answered, 0x10002u, 1u, true);
+  fixture.kmt().queue_answer(nullptr, 0u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_answered_batch(answered, last, reply) == TransportResult::ok);
+  transport.end_call();
+  CHECK(transport.ready_for_batch());
+  transport.teardown(); }
+
+/* What a packet on another of this process's contexts names: the transport's
+ * DMA buffer, which exists only while the context does. */
+TEST(kmt_transport, the_marker_address_is_the_dma_buffer_of_a_made_transport)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_EQ(transport.marker_address(), 0u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint64_t marker = transport.marker_address();
+  CHECK(marker != 0u);
+  /* A second transport's buffer is its own. */
+  std::uint8_t second_staging[staging_bytes] = {};
+  KmtTransport second(fixture.connection(), SubApi::opengl, 12u, reply_bytes, second_staging,
+                      sizeof second_staging);
+  CHECK_STATUS(second.initialize(), Status::ok);
+  CHECK(second.marker_address() != 0u);
+  CHECK(second.marker_address() != marker);
+  second.teardown();
+  transport.teardown();
+  CHECK_EQ(transport.marker_address(), 0u); }

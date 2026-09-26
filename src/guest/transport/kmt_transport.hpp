@@ -122,6 +122,8 @@ private:
     static constexpr uint32_t fence_index = 1u;
     static constexpr uint32_t reply_index = 2u;
     static constexpr uint32_t dma_index   = 3u;
+    /* The NTSTATUS a kernel wait that ran out its bound leaves in last_code(). */
+    static constexpr uint32_t wait_timed_out = 0xC00000B5u;
 
     /* Whether the record can carry `options` for this sub-API and order. */
     bool                 record_carries(const GlContextOptions &options) const;
@@ -141,6 +143,7 @@ private:
     bool                          consumed_within_spin();
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
+    [[nodiscard]] Status          wait_for_host(uint64_t fence);
     bool                          room_within_spin(uint64_t span);
 
     GuestConnection &connection_;

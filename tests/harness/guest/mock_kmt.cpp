@@ -22,8 +22,6 @@ namespace {
 
 constexpr std::uint32_t first_handle = 0x40000000u;
 constexpr std::uint32_t handle_step = 4u;
-/* What a wait on a fence no one will reach ends in. */
-constexpr std::uint32_t io_timeout = 0xC00000B5u;
 
 }  // namespace
 
@@ -37,8 +35,8 @@ MockKmt::MockKmt()
       next_shared_handle_(first_shared_handle),
       next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), carried_next_(),
       carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
-      next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), clock_step_(0u), clock_reader_(nullptr),
-      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
+      next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), idle_reads_(0u), clock_step_(0u), clock_reader_(nullptr),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
@@ -227,6 +225,7 @@ bool MockKmt::begin(Call call)
 {
     const unsigned index = static_cast<unsigned>(call);
     calls_[index]++;
+    idle_reads_ = 0u;
     success_code_ = 0u;
     if (failing_run_[index] != 0u) {
         failing_run_[index]--;
@@ -262,8 +261,10 @@ Status MockKmt::misuse()
 
 bool MockKmt::zeroed(Call call)
 {
-    const bool zero = zeroing_[static_cast<unsigned>(call)];
-    zeroing_[static_cast<unsigned>(call)] = false;
+    const unsigned index = static_cast<unsigned>(call);
+    const bool     counted = zero_countdown_[index] != 0u && --zero_countdown_[index] == 0u;
+    const bool     zero = zeroing_[index] || counted;
+    zeroing_[index] = false;
     return zero;
 }
 
@@ -642,7 +643,11 @@ Status MockKmt::unlock(std::uint32_t device, std::uint32_t allocation)
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (locked_[slot] == allocation) {
             locked_[slot] = 0u;
-            if (large_views_[slot] != nullptr) munmap(large_views_[slot], large_bytes_[slot]);
+            if (large_views_[slot] != nullptr) {
+                for (std::uint64_t at = 0u; at < large_bytes_[slot]; at++)
+                    released_filled_ += large_views_[slot][at] != 0u ? 1u : 0u;
+                munmap(large_views_[slot], large_bytes_[slot]);
+            }
             large_views_[slot] = nullptr;
             large_bytes_[slot] = 0u;
             return succeed();
@@ -800,6 +805,11 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     Object *const object = find(Kind::context, context);
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
     ticks_ += wait_cost_;
+    if (timeouts_while_consuming_ != 0u) {
+        timeouts_while_consuming_--;
+        consume(*object);
+        return refuse(io_timeout);
+    }
     if (slow_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_context)] % slow_nth_ == 0u) ticks_ += slow_ticks_;
     if (played()) play_(play_context_);
     take_doorbell_store(*object);
@@ -856,26 +866,38 @@ void MockKmt::write_bytes(const Object &context, const std::uint8_t *answer, std
     for (std::uint32_t i = 0u; i < size; i++) slot[ReplyHeader::encoded_size + i] = answer[i];
 }
 
-/* The command at the front of the batch the last submission named, read from
- * the ring as the device would; one command per batch is what a transport sends. */
+/* Every command of every batch the last submission named, read from the ring
+ * as the device would: a transport frames many commands into one batch. */
 void MockKmt::journal(const Object &context)
 {
     SubmissionDescriptor submitted;
     RingHeader           header;
     const std::uint8_t *const ring = context.ring != 0u ? view_of(context.ring) : nullptr;
-    if (ring == nullptr || journal_count_ == max_journal ||
-        submitted.decode(submission_, submission_size_) != Status::ok ||
+    if (ring == nullptr || submitted.decode(submission_, submission_size_) != Status::ok ||
         header.decode(ring, RingHeader::encoded_size) != Status::ok)
         return;
-    std::uint8_t *const leading = journal_bytes_[journal_count_];
     const std::uint64_t mask = header.capacity() - 1u;
-    for (std::uint32_t i = 0u; i < journal_bytes; i++)
-        leading[i] = ring[RingHeader::encoded_size + ((submitted.begin() + BatchHeader::encoded_size + i) & mask)];
-    CommandHeader command;
-    if (command.decode(leading, CommandHeader::encoded_size) != Status::ok) return;
-    journal_ids_[journal_count_] = command.id();
-    journal_sizes_[journal_count_] = command.size();
-    journal_count_++;
+    const auto          copy = [&](std::uint64_t at, std::uint8_t *into, std::uint32_t bytes) {
+        for (std::uint32_t i = 0u; i < bytes; i++) into[i] = ring[RingHeader::encoded_size + ((at + i) & mask)];
+    };
+    for (std::uint64_t batch_at = submitted.begin(); batch_at < submitted.end();) {
+        std::uint8_t framing[BatchHeader::encoded_size] = {};
+        copy(batch_at, framing, BatchHeader::encoded_size);
+        BatchHeader batch;
+        if (batch.decode(framing, sizeof framing) != Status::ok) return;
+        const std::uint64_t first = batch_at + BatchHeader::encoded_size;
+        for (std::uint64_t at = first; at < first + batch.length() && journal_count_ < max_journal;) {
+            std::uint8_t *const leading = journal_bytes_[journal_count_];
+            copy(at, leading, journal_bytes);
+            CommandHeader command;
+            if (command.decode(leading, CommandHeader::encoded_size) != Status::ok || command.size() == 0u) return;
+            journal_ids_[journal_count_] = command.id();
+            journal_sizes_[journal_count_] = command.size();
+            journal_count_++;
+            at += command.size();
+        }
+        batch_at += batch.span();
+    }
 }
 
 /* Everything submitted is finished once the context is: the head moves to the
@@ -1020,6 +1042,10 @@ std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
      * read that told it rather than by the one after. */
     if (clock_reader_ != nullptr) clock_reader_->clock_read();
     read_ticks_ += clock_step_;
+    if (clock_step_ == 0u && ++idle_reads_ > spin_reads) {
+        const std::uint64_t millisecond = frequency_ / 1000u;
+        read_ticks_ += millisecond != 0u ? millisecond : 1u;
+    }
     return ticks_ + read_ticks_;
 }
 
@@ -1067,6 +1093,8 @@ std::uint32_t MockKmt::command_size(std::uint32_t index) const
 }
 
 void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }
+
+void MockKmt::time_out_while_consuming(std::uint32_t count) { timeouts_while_consuming_ = count; }
 
 void MockKmt::spend_on_submit(std::uint64_t ticks) { submit_cost_ = ticks; }
 
@@ -1127,6 +1155,8 @@ void MockKmt::carry_at_the_next_share(const std::uint8_t *bytes, std::uint32_t s
 
 void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = true; }
 
+void MockKmt::zero_at(Call call, std::uint32_t nth) { zero_countdown_[static_cast<unsigned>(call)] = nth; }
+
 void MockKmt::withhold_answer_at(std::uint32_t nth) { withheld_countdown_ = nth; }
 
 bool MockKmt::withheld()
@@ -1148,10 +1178,10 @@ std::uint32_t MockKmt::misuses() const { return misuses_; }
 
 std::uint32_t MockKmt::view_filled() const
 {
-    std::uint32_t filled = 0u;
+    std::uint64_t filled = released_filled_;
     for (const auto &view : views_)
         for (const std::uint8_t byte : view) filled += byte != 0u ? 1u : 0u;
-    return filled;
+    return static_cast<std::uint32_t>(filled);
 }
 
 bool MockKmt::is_locked(std::uint32_t allocation) const
