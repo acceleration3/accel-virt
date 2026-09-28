@@ -97,7 +97,9 @@ struct Rig {
     void *map(std::uint32_t buffer, std::int64_t bytes, std::int64_t offset, std::int64_t length,
               std::uint32_t access, std::uint32_t expected)
     {
-        size(bytes);
+        /* The size, asked only where the context does not know it. */
+        std::uint64_t known = 0u;
+        if (!shadows.size_of(buffer, known)) size(bytes);
         /* A fill, answered empty: every read map, and a write map with bytes
          * to keep and no copy of them. */
         const std::uint64_t mapped = static_cast<std::uint64_t>(length == MappedBuffers::whole_buffer ? bytes - offset
@@ -158,16 +160,18 @@ TEST(mapped_buffers, a_range_past_the_buffer_or_a_buffer_the_host_does_not_size_
   CHECK_EQ(rig.mappings.map(rig.wire(), 3u, 0, 4, read, pointer), invalid_operation);
   CHECK_EQ(rig.commands() - before, 1u);
   CHECK_EQ(rig.id(before), ids::kCmd_glGetNamedBufferParameteri64v);
+  /* A buffer the host does not size is not learned; each other refusal is
+   * of a buffer of its own, whose size is learned. */
   CHECK(rig.map(3u, -5, 0, 1, write, invalid_operation) == nullptr);
-  CHECK(rig.map(3u, 16, 8, 9, write, invalid_value) == nullptr);
-  CHECK(rig.map(3u, 16, 17, MappedBuffers::whole_buffer, write, invalid_value) == nullptr);
-  CHECK(rig.map(3u, 16, 16, 1, write, invalid_value) == nullptr);
-  CHECK(rig.map(3u, 0, 0, MappedBuffers::whole_buffer, write, invalid_value) == nullptr);
+  CHECK(rig.map(10u, 16, 8, 9, write, invalid_value) == nullptr);
+  CHECK(rig.map(11u, 16, 17, MappedBuffers::whole_buffer, write, invalid_value) == nullptr);
+  CHECK(rig.map(12u, 16, 16, 1, write, invalid_value) == nullptr);
+  CHECK(rig.map(13u, 0, 0, MappedBuffers::whole_buffer, write, invalid_value) == nullptr);
   const std::int64_t huge = static_cast<std::int64_t>(BufferMapping::max_length) + 1;
-  CHECK(rig.map(3u, huge, 0, huge, write, out_of_memory) == nullptr);
-  CHECK(rig.map(3u, INT64_MAX, 1, INT64_MAX, write, invalid_value) == nullptr);
+  CHECK(rig.map(14u, huge, 0, huge, write, out_of_memory) == nullptr);
+  CHECK(rig.map(15u, INT64_MAX, 1, INT64_MAX, write, invalid_value) == nullptr);
   rig.context_rig.platform().fail_allocation_at(1u);
-  CHECK(rig.map(3u, 16, 0, 4, write, out_of_memory) == nullptr);
+  CHECK(rig.map(16u, 16, 0, 4, write, out_of_memory) == nullptr);
   CHECK_EQ(rig.mappings.held(), 0u);
   /* The whole buffer, and a range ending at its end. */
   before = rig.commands();
@@ -176,7 +180,15 @@ TEST(mapped_buffers, a_range_past_the_buffer_or_a_buffer_the_host_does_not_size_
   CHECK(rig.map(4u, 16, 12, 4, write, no_error) != nullptr);
   /* Each asked the size, and filled what it keeps. */
   CHECK_EQ(rig.commands() - before, 4u);
-  CHECK_EQ(rig.mappings.held(), 2u); }
+  CHECK_EQ(rig.mappings.held(), 2u);
+  /* A size learned is not asked again, and still judges the range. */
+  CHECK_EQ(rig.mappings.unmap(rig.wire(), 4u), no_error);
+  before = rig.commands();
+  CHECK(rig.map(4u, 16, 0, 17, write, invalid_value) == nullptr);
+  CHECK_EQ(rig.commands(), before);
+  CHECK(rig.map(4u, 16, 0, 4, write, no_error) != nullptr);
+  CHECK_EQ(rig.commands() - before, 1u);
+  CHECK_EQ(rig.id(before), ids::kCmd_glGetNamedBufferSubData); }
 
 TEST(mapped_buffers, a_buffer_is_mapped_once_and_the_65th_map_is_out_of_memory)
 { Rig rig;
@@ -325,19 +337,20 @@ TEST(mapped_buffers, a_map_that_writes_one_block_keeps_the_blocks_earlier_maps_w
 { Rig                     rig;
   constexpr std::uint32_t unsynchronized = write | BufferMapping::map_unsynchronized;
   constexpr std::int64_t  size = 2496, block = 156;
-  rig.shadows.respecify(5u, false);
+  rig.shadows.respecify(5u, size, false);
   std::uint32_t before = rig.commands();
   auto *bytes = static_cast<std::uint8_t *>(rig.map(5u, size, 0, MappedBuffers::whole_buffer, unsynchronized,
                                                     no_error));
-  CHECK_EQ(rig.commands() - before, 1u);
+  /* Its size known and its storage fresh: nothing asked. */
+  CHECK_EQ(rig.commands(), before);
   for (std::int64_t at = 0; at < block; at++) bytes[at] = 0xA1u;
   CHECK_EQ(rig.mappings.unmap(rig.wire(), 5u), no_error);
   for (std::uint32_t index = 1u; index < 3u; index++) {
     before = rig.commands();
     bytes = static_cast<std::uint8_t *>(rig.map(5u, size, 0, MappedBuffers::whole_buffer, unsynchronized,
                                                 no_error));
-    /* The size, and nothing filled. */
-    CHECK_EQ(rig.commands() - before, 1u);
+    /* Nothing asked, and nothing filled. */
+    CHECK_EQ(rig.commands(), before);
     for (std::uint32_t earlier = 0u; earlier < index; earlier++)
       CHECK_EQ(bytes[earlier * block + block - 1], 0xA1u + earlier);
     for (std::int64_t at = 0; at < block; at++) bytes[index * block + at] = static_cast<std::uint8_t>(0xA1u + index);

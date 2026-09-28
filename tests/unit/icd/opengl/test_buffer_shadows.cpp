@@ -23,6 +23,9 @@ struct BufferShadowsProbe {
     static void miscount(BufferShadows &shadows) { shadows.held_bytes_++; }
     static void set_held_bytes(BufferShadows &shadows, std::uint64_t bytes) { shadows.held_bytes_ = bytes; }
     static void set_next_fresh(BufferShadows &shadows, std::uint32_t next) { shadows.next_fresh_ = next; }
+    static void set_next_size(BufferShadows &shadows, std::uint32_t next) { shadows.next_size_ = next; }
+    /* A second row naming the first row's buffer. */
+    static void size_twice(BufferShadows &shadows) { shadows.size_names_[7] = shadows.size_names_[0]; }
     static BufferShadow &shadow(BufferShadows &shadows, std::uint32_t slot) { return shadows.shadows_[slot].object(); }
     /* A slot constructed and holding nothing. */
     static void empty_slot(BufferShadows &shadows, BlockSource &memory)
@@ -155,7 +158,7 @@ TEST(buffer_shadows, buffer_sub_data_goes_into_a_copy_and_naming_no_bytes_forget
   shadows.wrote(7u, 0u, 4u, nullptr);
   CHECK_EQ(shadows.held(), 0u);
   /* Written storage is no longer fresh. */
-  shadows.respecify(8u, false);
+  shadows.respecify(8u, 16, false);
   shadows.wrote(8u, 0u, sizeof source, source);
   CHECK(!shadows.fresh(8u));
   CHECK(shadows.invariants_hold()); }
@@ -165,29 +168,29 @@ TEST(buffer_shadows, fresh_storage_is_marked_until_anything_writes_it)
   BufferShadows shadows{platform};
   std::uint8_t  bytes[4] = {};
   CHECK(!shadows.fresh(0u));
-  shadows.respecify(7u, false);
+  shadows.respecify(7u, 16, false);
   CHECK(shadows.fresh(7u));
   CHECK(!shadows.fresh(0u));
   CHECK(!shadows.fresh(8u));
   /* Storage made with data is not fresh, and neither is no buffer. */
-  shadows.respecify(7u, true);
+  shadows.respecify(7u, 16, true);
   CHECK(!shadows.fresh(7u));
-  shadows.respecify(0u, false);
+  shadows.respecify(0u, 16, false);
   CHECK(!shadows.fresh(0u));
   /* A copy kept of it, and a forget, end the mark. */
-  shadows.respecify(7u, false);
+  shadows.respecify(7u, 16, false);
   shadows.keep(7u, 0u, sizeof bytes, bytes);
   CHECK(!shadows.fresh(7u));
-  shadows.respecify(8u, false);
+  shadows.respecify(8u, 16, false);
   shadows.forget(8u);
   CHECK(!shadows.fresh(8u));
   /* New storage drops the old copy. */
-  shadows.respecify(7u, false);
+  shadows.respecify(7u, 16, false);
   CHECK(shadows.covering(7u, 0u, 1u) == nullptr);
   CHECK(shadows.fresh(7u));
   /* Past max_fresh marks the oldest is lost. */
   for (std::uint32_t buffer = 100u; buffer < 100u + BufferShadows::max_fresh; buffer++)
-    shadows.respecify(buffer, false);
+    shadows.respecify(buffer, 16, false);
   CHECK(!shadows.fresh(7u));
   CHECK(shadows.fresh(100u));
   CHECK(shadows.fresh(100u + BufferShadows::max_fresh - 1u));
@@ -208,7 +211,7 @@ TEST(buffer_shadows, forgets_by_name_by_list_and_all)
   shadows.forget(3, deleted);
   CHECK_EQ(shadows.held(), 1u);
   CHECK(shadows.covering(3u, 0u, 1u) != nullptr);
-  shadows.respecify(5u, false);
+  shadows.respecify(5u, 16, false);
   shadows.forget_all();
   CHECK_EQ(shadows.held(), 0u);
   CHECK(!shadows.fresh(5u));
@@ -221,7 +224,7 @@ TEST(buffer_shadows, a_distrusted_context_keeps_nothing_and_lets_go_on_its_own_t
   BufferShadows shadows{platform};
   std::uint8_t  bytes[4] = {};
   shadows.keep(1u, 0u, sizeof bytes, bytes);
-  shadows.respecify(2u, false);
+  shadows.respecify(2u, 16, false);
   shadows.distrust();
   CHECK(!shadows.trusted());
   CHECK_EQ(shadows.held(), 1u);
@@ -230,7 +233,7 @@ TEST(buffer_shadows, a_distrusted_context_keeps_nothing_and_lets_go_on_its_own_t
   CHECK(shadows.covering(1u, 0u, 1u) == nullptr);
   CHECK_EQ(shadows.held(), 0u);
   shadows.keep(1u, 0u, sizeof bytes, bytes);
-  shadows.respecify(3u, false);
+  shadows.respecify(3u, 16, false);
   CHECK_EQ(shadows.held(), 0u);
   CHECK(!shadows.fresh(3u));
   /* Forgetting everything does not trust again. */
@@ -243,10 +246,11 @@ TEST(buffer_shadows, reports_trust_and_each_copy)
   BufferShadows shadows{platform};
   std::uint8_t  bytes[32] = {};
   shadows.keep(7u, 12u, sizeof bytes, bytes);
+  shadows.sized(7u, 64u);
   char            text[256];
   av::StateWriter writer(text, sizeof text);
   shadows.report(writer);
-  CHECK(std::strcmp(writer.dump(), "shadows/0 trusted=true held=1 held_bytes=32\n"
+  CHECK(std::strcmp(writer.dump(), "shadows/0 trusted=true held=1 held_bytes=32 sizes=1\n"
                                    "shadows/0/shadow/0 buffer=7 offset=12 length=32 stamp=1") == 0); }
 
 TEST(buffer_shadows_invariants, fail_for_a_miscount_a_copy_twice_a_broken_or_empty_copy_or_a_bad_ring)
@@ -280,4 +284,63 @@ TEST(buffer_shadows_invariants, fail_for_a_miscount_a_copy_twice_a_broken_or_emp
   CHECK(over.invariants_hold());
   BufferShadows ring{platform};
   Probe::set_next_fresh(ring, BufferShadows::max_fresh);
-  CHECK(!ring.invariants_hold()); }
+  CHECK(!ring.invariants_hold());
+  BufferShadows size_ring{platform};
+  Probe::set_next_size(size_ring, BufferShadows::max_sizes);
+  CHECK(!size_ring.invariants_hold());
+  BufferShadows twice_sized{platform};
+  twice_sized.sized(3u, 8u);
+  CHECK(twice_sized.invariants_hold());
+  Probe::size_twice(twice_sized);
+  CHECK(!twice_sized.invariants_hold()); }
+
+/* A size given by new storage, or answered by the host, is kept until the
+ * buffer is deleted, forgotten or respecified; a refused size changes nothing,
+ * and past max_sizes the oldest goes. */
+TEST(buffer_shadows, a_buffers_size_is_kept_until_anything_can_change_it)
+{ MockPlatform  platform;
+  BufferShadows shadows{platform};
+  std::uint64_t size = 0u;
+  CHECK(!shadows.size_of(7u, size));
+  shadows.respecify(7u, 64, false);
+  CHECK(shadows.size_of(7u, size));
+  CHECK_EQ(size, 64u);
+  /* Refused by OpenGL: the old storage stands, fresh and sized. */
+  shadows.respecify(7u, -1, true);
+  CHECK(shadows.fresh(7u));
+  CHECK(shadows.size_of(7u, size));
+  CHECK_EQ(size, 64u);
+  shadows.respecify(7u, 128, true);
+  CHECK(shadows.size_of(7u, size));
+  CHECK_EQ(size, 128u);
+  shadows.sized(8u, 32u);
+  shadows.sized(8u, 48u);
+  CHECK(shadows.size_of(8u, size));
+  CHECK_EQ(size, 48u);
+  /* Buffer 0 has no size to keep. */
+  shadows.sized(0u, 4u);
+  CHECK(!shadows.size_of(0u, size));
+  /* A write keeps the size; a forget, a deletion and forgetting all do not. */
+  const std::uint8_t data[4] = {};
+  shadows.wrote(7u, 0u, sizeof data, data);
+  CHECK(shadows.size_of(7u, size));
+  shadows.forget(7u);
+  CHECK(!shadows.size_of(7u, size));
+  const std::uint32_t deleted[] = {8u};
+  shadows.forget(1, deleted);
+  CHECK(!shadows.size_of(8u, size));
+  shadows.sized(9u, 4u);
+  shadows.forget_all();
+  CHECK(!shadows.size_of(9u, size));
+  for (std::uint32_t buffer = 100u; buffer <= 100u + BufferShadows::max_sizes; buffer++)
+    shadows.sized(buffer, buffer);
+  CHECK(!shadows.size_of(100u, size));
+  CHECK(shadows.size_of(101u, size));
+  CHECK_EQ(size, 101u);
+  CHECK(shadows.invariants_hold());
+  /* Distrusted, nothing is kept or answered. */
+  shadows.distrust();
+  CHECK(!shadows.size_of(101u, size));
+  shadows.sized(5u, 4u);
+  CHECK(!shadows.size_of(5u, size));
+  CHECK(shadows.invariants_hold()); }

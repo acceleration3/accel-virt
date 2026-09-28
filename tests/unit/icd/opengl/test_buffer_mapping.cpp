@@ -243,7 +243,7 @@ TEST(buffer_mapping, a_map_with_nothing_to_keep_asks_the_host_nothing)
       invalidating, BufferMapping::map_write | BufferMapping::map_invalidate_buffer, explicit_write, write_only};
   for (const std::uint32_t access : accesses) {
     Rig rig;
-    if (access == write_only) rig.shadows.respecify(buffer, false);
+    if (access == write_only) rig.shadows.respecify(buffer, 64, false);
     const std::uint32_t before = rig.commands();
     CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 64u, access), Status::ok);
     CHECK_EQ(rig.commands(), before);
@@ -256,7 +256,7 @@ TEST(buffer_mapping, a_map_with_nothing_to_keep_asks_the_host_nothing)
  * then is the copy - and the storage is no longer fresh. */
 TEST(buffer_mapping, a_whole_write_back_becomes_the_copy)
 { Rig rig;
-  rig.shadows.respecify(buffer, false);
+  rig.shadows.respecify(buffer, 64, false);
   CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 16u, write_only), Status::ok);
   pattern(rig.bytes(), 16u, 2u);
   const std::uint32_t before = rig.commands();

@@ -56,6 +56,13 @@ public:
      * move an indexed target's own binding is not relied on, so it is no
      * longer known. Nothing for a target that is not indexed. */
     void     lose_buffer(uint32_t target);
+    /* glPopClientAttrib put back array and pixel buffer bindings the guest
+     * did not see: no buffer binding is known from now on. */
+    void     restore_buffers();
+    /* The buffer at `target` when the guest knows it for certain: false for
+     * a target it does not keep, a binding lost or restored, and the element
+     * array buffer, which a vertex array can change out of sight. */
+    bool     known_buffer(uint32_t target, uint32_t &buffer) const;
     /* A deleted buffer is unbound from every target it was bound to. */
     void     delete_buffers(int32_t count, const uint32_t *buffers);
     uint32_t bound_buffer(uint32_t target) const;
@@ -104,6 +111,7 @@ private:
     uint32_t    vertex_array_row(uint32_t array) const;
 
     uint32_t   buffers_[buffer_targets];
+    bool       buffers_restored_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;

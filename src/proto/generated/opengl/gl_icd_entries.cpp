@@ -192,6 +192,7 @@ void APIENTRY Wrap_glBindTransformFeedback(GLenum target, GLuint id) {
     AV_SCOPE("glBindTransformFeedback");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bind_buffers_indexed(0x8C8Eu);
     ::av::glproto::rvk_glBindTransformFeedback(*rvk_t, target, id);
 }
 

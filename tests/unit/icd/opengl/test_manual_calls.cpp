@@ -355,15 +355,16 @@ TEST(manual_calls, a_target_map_is_the_hosts_bound_buffer_filled_and_written_bac
 { Current current;
   av::ScriptedHost &host = current.rig().host();
   const std::uint8_t data[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-  host.gl_integer(7);
+  /* The guest saw the bind, so the host is not asked what is bound. */
+  gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, sizeof data);
   host.gl_bytes(data, sizeof data);
   auto *const mapped = static_cast<std::uint8_t *>(gen::Wrap_glMapBuffer(array_buffer, gl_read_write));
   CHECK(mapped != nullptr);
   CHECK(std::memcmp(mapped, data, sizeof data) == 0);
   CHECK_EQ(current.sent(), 3u);
-  CHECK_EQ(current.sent_since(0u), ids::kCmd_glGetIntegerv);
-  CHECK_EQ(current.argument_since(0u, 0u), 0x8894u);
+  CHECK_EQ(current.sent_since(0u), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument_since(0u, 0u), array_buffer);
   CHECK_EQ(current.sent_since(1u), ids::kCmd_glGetNamedBufferParameteri64v);
   CHECK_EQ(current.argument_since(1u, 0u), 7u);
   CHECK_EQ(current.argument_since(1u, 1u), 0x8764u);
@@ -371,44 +372,41 @@ TEST(manual_calls, a_target_map_is_the_hosts_bound_buffer_filled_and_written_bac
   CHECK_EQ(current.argument_since(2u, 2u), sizeof data);
   CHECK_EQ(current.rig().log().holding("buffer maps are guest copies"), 1u);
   CHECK(current.context().mappings().invariants_hold());
-  host.gl_integer(7);
   void *pointer = nullptr;
   gen::Wrap_glGetBufferPointerv(array_buffer, gl_buffer_map_pointer, &pointer);
   CHECK(pointer == mapped);
   pointer = nullptr;
   gen::Wrap_glGetNamedBufferPointerv(7u, gl_buffer_map_pointer, &pointer);
   CHECK(pointer == mapped);
-  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent(), 3u);
   mapped[0] = 0xAAu;
-  host.gl_integer(7);
   CHECK(gen::Wrap_glUnmapBuffer(array_buffer) == 1u);
   /* Only the word that changed from the fill goes back. */
-  CHECK_EQ(current.sent(), 6u);
-  CHECK_EQ(current.sent_since(5u), ids::kCmd_glNamedBufferSubData);
-  CHECK_EQ(current.argument_since(5u, 0u), 7u);
-  CHECK_EQ(current.argument_since(5u, 1u), 0u);
-  CHECK_EQ(current.argument_since(5u, 2u), 8u);
+  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent_since(3u), ids::kCmd_glNamedBufferSubData);
+  CHECK_EQ(current.argument_since(3u, 0u), 7u);
+  CHECK_EQ(current.argument_since(3u, 1u), 0u);
+  CHECK_EQ(current.argument_since(3u, 2u), 8u);
   CHECK_EQ(current.context().mappings().held(), 0u);
   CHECK_EQ(current.error(), 0u); }
 
 TEST(manual_calls, an_explicit_range_writes_back_only_what_was_flushed)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
-  host.gl_integer(7);
+  gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, 16u);
   const GLbitfield explicit_write = 0x0002u | 0x0010u;
   auto *const mapped = static_cast<std::uint8_t *>(gen::Wrap_glMapBufferRange(array_buffer, 4, 8, explicit_write));
   CHECK(mapped != nullptr);
   CHECK_EQ(mapped[7], 0u);
   CHECK_EQ(current.sent(), 2u);
-  host.gl_integer(7);
   gen::Wrap_glFlushMappedBufferRange(array_buffer, 1, 2);
   gen::Wrap_glFlushMappedNamedBufferRange(7u, 6, 1);
   CHECK(gen::Wrap_glUnmapNamedBuffer(7u) == 1u);
-  CHECK_EQ(current.sent(), 4u);
-  CHECK_EQ(current.sent_since(3u), ids::kCmd_glNamedBufferSubData);
-  CHECK_EQ(current.argument_since(3u, 1u), 5u);
-  CHECK_EQ(current.argument_since(3u, 2u), 6u);
+  CHECK_EQ(current.sent(), 3u);
+  CHECK_EQ(current.sent_since(2u), ids::kCmd_glNamedBufferSubData);
+  CHECK_EQ(current.argument_since(2u, 1u), 5u);
+  CHECK_EQ(current.argument_since(2u, 2u), 6u);
   CHECK_EQ(current.error(), 0u); }
 
 /* What a persistent map wrote reaches the host before each hand-written draw;
@@ -452,19 +450,15 @@ TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
   av::ScriptedHost &host = current.rig().host();
   constexpr GLenum map_length = 0x9120u, map_offset = 0x9121u, access_flags = 0x911Fu, mapped_name = 0x88BCu,
                    access = 0x88BBu, buffer_size = 0x8764u;
-  host.gl_integer(7);
+  gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, 64u);
   host.gl_bytes(nullptr, 0u);
   const GLbitfield unsynchronized_write = 0x0002u | 0x0020u;
   CHECK(gen::Wrap_glMapBufferRange(array_buffer, 8, 32, unsynchronized_write) != nullptr);
   const std::uint32_t sent = current.sent();
-  host.gl_integer(7);
   GLint value = -1;
   gen::Wrap_glGetBufferParameteriv(array_buffer, map_length, &value);
   CHECK_EQ(value, 32);
-  CHECK_EQ(current.sent() - sent, 1u);
-  CHECK_EQ(current.sent_since(sent), ids::kCmd_glGetIntegerv);
-  host.gl_integer(7);
   GLint64 wide = -1;
   gen::Wrap_glGetBufferParameteri64v(array_buffer, map_offset, &wide);
   CHECK_EQ(wide, 8);
@@ -474,20 +468,20 @@ TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
   CHECK_EQ(wide, 1);
   gen::Wrap_glGetNamedBufferParameterivEXT(7u, access, &value);
   CHECK_EQ(value, static_cast<GLint>(0x88B9u));
-  /* The named queries needed no round trip. */
-  CHECK_EQ(current.sent() - sent, 2u);
+  /* None of them needed a round trip. */
+  CHECK_EQ(current.sent(), sent);
   /* Any other name is the host's, and needs no binding resolved first. */
   const std::int32_t host_size = 64;
   host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&host_size), sizeof host_size);
   gen::Wrap_glGetBufferParameteriv(array_buffer, buffer_size, &value);
   CHECK_EQ(value, 64);
-  CHECK_EQ(current.sent() - sent, 3u);
-  CHECK_EQ(current.sent_since(sent + 2u), ids::kCmd_glGetBufferParameteriv);
+  CHECK_EQ(current.sent() - sent, 1u);
+  CHECK_EQ(current.sent_since(sent), ids::kCmd_glGetBufferParameteriv);
   /* No error of the guest's: the host is asked for its own. */
   host.gl_varint(0u);
   CHECK_EQ(current.error(), 0u);
   /* A target binding nothing, or no target at all, is refused here. */
-  host.gl_integer(0);
+  gen::Wrap_glBindBuffer(array_buffer, 0u);
   gen::Wrap_glGetBufferParameteriv(array_buffer, map_length, &value);
   CHECK_EQ(current.error(), gl_invalid_operation);
   gen::Wrap_glGetBufferParameteriv(0x1234u, map_length, &value);
@@ -513,20 +507,19 @@ TEST(manual_calls, map_refusals_are_recorded)
   CHECK(pointer == reinterpret_cast<void *>(0x1u));
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK_EQ(current.sent(), 0u);
-  /* An access that is no enum, after the binding was asked. */
-  host.gl_integer(7);
+  /* An access that is no enum, with a buffer bound. */
+  gen::Wrap_glBindBuffer(array_buffer, 7u);
   CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x1234u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK(gen::Wrap_glMapNamedBuffer(7u, 0x1234u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
-  host.gl_integer(7);
   CHECK(gen::Wrap_glMapBufferRange(array_buffer, 0, -1, 1u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_value);
   CHECK(gen::Wrap_glMapNamedBufferRange(7u, 0, -1, 1u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_value);
-  CHECK_EQ(current.sent(), 2u);
+  CHECK_EQ(current.sent(), 1u);
   /* Nothing bound, nothing mapped. */
-  host.gl_integer(0);
+  gen::Wrap_glBindBuffer(array_buffer, 0u);
   gen::Wrap_glGetBufferPointerv(array_buffer, gl_buffer_map_pointer, &pointer);
   CHECK_EQ(current.error(), gl_invalid_operation);
   gen::Wrap_glGetBufferPointerv(array_buffer, 0x1234u, &pointer);
@@ -542,7 +535,17 @@ TEST(manual_calls, map_refusals_are_recorded)
   CHECK_EQ(current.error(), gl_invalid_operation);
   gen::Wrap_glFlushMappedNamedBufferRange(7u, 0, 1);
   CHECK_EQ(current.error(), gl_invalid_operation);
-  CHECK_EQ(current.sent(), 3u); }
+  CHECK_EQ(current.sent(), 2u);
+  /* Bound several at once, the uniform target is not the guest's to know:
+   * the host is asked. */
+  const GLuint several[] = {7u};
+  gen::Wrap_glBindBuffersBase(0x8A11u, 0u, 1, several);
+  host.gl_integer(7);
+  CHECK(!gen::Wrap_glUnmapBuffer(0x8A11u));
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent_since(3u), ids::kCmd_glGetIntegerv);
+  CHECK_EQ(current.argument_since(3u, 0u), 0x8A28u); }
 
 TEST(manual_calls, the_ext_direct_state_calls_are_refused_without_a_host_call)
 { Current current;
@@ -830,8 +833,8 @@ TEST(manual_calls, a_level_download_with_nothing_current_is_sized_nothing)
 TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
-  /* GL_READ_ONLY through a target: bound buffer, size, fill. */
-  host.gl_integer(7);
+  /* GL_READ_ONLY through a target: size and fill, the binding the guest's. */
+  gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, 4);
   host.gl_bytes(nullptr, 0u);
   CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x88B8u) != nullptr);
@@ -850,7 +853,7 @@ TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
   CHECK(gen::Wrap_glMapNamedBufferRange(9u, 0, 4, 0u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_operation);
   /* The buffer bound at the target is not mapped. */
-  host.gl_integer(10);
+  gen::Wrap_glBindBuffer(array_buffer, 10u);
   CHECK(!gen::Wrap_glUnmapBuffer(array_buffer));
   CHECK_EQ(current.error(), gl_invalid_operation);
   CHECK_EQ(current.sent(), 6u);

@@ -5,7 +5,8 @@
  * (manual_entries.cpp) are one line each into this.
  *
  * A map is a guest copy of the range (MappedBuffers); a target names the
- * buffer the host has bound there, which is asked. The GL extensions answered
+ * buffer bound there, which the host is asked only where the guest cannot
+ * know it (ClientArrayState::known_buffer). The GL extensions answered
  * are the context's own list (GlExtensionPolicy). A client-side
  * vertex or index array, which the core profile removed, is
  * GL_INVALID_OPERATION with no host call. */
@@ -195,8 +196,9 @@ private:
     void            record(uint32_t error);
     /* Whether a draw's indices can cross: an offset, or none. */
     bool            indices_cross(const void *indices);
-    /* The buffer the host has bound at `target`; false, with
-     * GL_INVALID_ENUM recorded, for a target that binds no buffer. */
+    /* The buffer bound at `target`, asked of the host where the guest does
+     * not know it; false, with GL_INVALID_ENUM recorded, for a target that
+     * binds no buffer. */
     bool            bound_to(GuestGlContext &context, uint32_t target, uint32_t &buffer);
     void           *map_name(GuestGlContext &context, uint32_t buffer, int64_t offset, int64_t length,
                              uint32_t access);
@@ -205,8 +207,8 @@ private:
     /* The host wrote the buffer the guest saw bound at `target`. */
     void            forget_bound(GuestGlContext &context, uint32_t target);
     /* glBufferData or glBufferStorage gave the buffer at `target` new
-     * storage. */
-    void            respecify_bound(GuestGlContext &context, uint32_t target, bool with_data);
+     * storage of `size` bytes. */
+    void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
 
     CurrentContexts &currents_;
 };

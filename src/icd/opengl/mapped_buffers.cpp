@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -51,10 +52,16 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     if (refused != gl_no_error) return refused;
     if (offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
     if (buffer == 0u || find(buffer) != max_mappings) return gl_invalid_operation;
-    int64_t size = -1;
-    glproto::rvk_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
-    /* No answer: the host's own error says why, and the name is no buffer. */
-    if (size < 0) return gl_invalid_operation;
+    uint64_t known = 0u;
+    int64_t  size = -1;
+    if (shadows_.size_of(buffer, known)) {
+        size = static_cast<int64_t>(known);
+    } else {
+        glproto::rvk_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
+        /* No answer: the host's own error says why, and the name is no buffer. */
+        if (size < 0) return gl_invalid_operation;
+        shadows_.sized(buffer, static_cast<uint64_t>(size));
+    }
     const int64_t mapped = length == whole_buffer ? size : length;
     if (offset > size || mapped > size - offset) return gl_invalid_value;
     const uint32_t slot = find(0u);

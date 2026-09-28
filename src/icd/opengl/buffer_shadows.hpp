@@ -1,6 +1,7 @@
 /* What the host holds of one context's buffers, as far as the guest can know
- * it: a copy of each range a map wrote back or read (BufferShadow), and the
- * buffers whose storage was just made with no data. A map that only writes
+ * it: a copy of each range a map wrote back or read (BufferShadow), the
+ * buffers whose storage was just made with no data, and each storage's size -
+ * so a map asks the host neither. A map that only writes
  * starts from the copy - OpenGL keeps whatever bytes a map leaves alone - and
  * its write-back sends only the bytes that differ from it. With no copy the
  * map is filled from the host, unless the storage is fresh and holds nothing
@@ -35,6 +36,8 @@ public:
     static constexpr uint64_t max_bytes = uint64_t{64} << 20u;
     /* Fresh storage remembered; the oldest mark is lost, which costs a fill. */
     static constexpr uint32_t max_fresh = 64u;
+    /* Sizes remembered; the oldest is lost, which costs the map a question. */
+    static constexpr uint32_t max_sizes = 256u;
 
     explicit BufferShadows(BlockSource &memory);
     ~BufferShadows();
@@ -51,12 +54,18 @@ public:
     void     keep(uint32_t buffer, uint64_t offset, uint64_t length, const uint8_t *bytes);
     /* glBufferSubData: what a copy holds of the range takes the new bytes. */
     void     wrote(uint32_t buffer, uint64_t offset, uint64_t length, const void *bytes);
-    /* glBufferData and glBufferStorage: the copy goes, and storage made with
-     * no data is fresh. */
-    void     respecify(uint32_t buffer, bool with_data);
+    /* glBufferData and glBufferStorage: the copy goes, the storage is `size`
+     * bytes, and made with no data it is fresh. A negative size is refused
+     * and changes nothing. */
+    void     respecify(uint32_t buffer, int64_t size, bool with_data);
+    /* The size the host answered for `buffer`. */
+    void     sized(uint32_t buffer, uint64_t size);
+    /* `buffer`'s size, when known. */
+    bool     size_of(uint32_t buffer, uint64_t &size);
     /* Storage made with no data that nothing has written since: a map of it
      * has nothing to keep. */
     bool     fresh(uint32_t buffer) const;
+    /* Everything known of `buffer`: a command the host runs changed it. */
     void     forget(uint32_t buffer);
     /* glDeleteBuffers. */
     void     forget(int32_t count, const uint32_t *buffers);
@@ -83,11 +92,16 @@ private:
     /* Whether nothing is kept any more, dropping what still is. */
     bool     let_go();
     void     unmark(uint32_t buffer);
+    /* The row with `buffer`'s size, or max_sizes. */
+    uint32_t size_row(uint32_t buffer) const;
 
     BlockSource                &memory_;
     ObjectStorage<BufferShadow> shadows_[max_shadows];
     uint32_t                    fresh_[max_fresh];
     uint32_t                    next_fresh_;
+    uint32_t                    size_names_[max_sizes];
+    uint64_t                    sizes_[max_sizes];
+    uint32_t                    next_size_;
     uint64_t                    held_bytes_;
     uint64_t                    clock_;
     bool                        distrusted_;

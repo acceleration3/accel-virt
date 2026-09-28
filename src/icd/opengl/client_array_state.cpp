@@ -36,7 +36,7 @@ constexpr uint32_t texture_targets_kept[] = {
 }  // namespace
 
 ClientArrayState::ClientArrayState()
-    : buffers_{}, pack_(), unpack_(), vertex_array_(0u), array_names_{}, array_elements_{}, arrays_known_(1u),
+    : buffers_{}, buffers_restored_(false), pack_(), unpack_(), vertex_array_(0u), array_names_{}, array_elements_{}, arrays_known_(1u),
       attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{}, offsets_{}
 {
     AV_SCOPE("ClientArrayState::ClientArrayState");
@@ -89,6 +89,21 @@ void ClientArrayState::lose_buffer(uint32_t target)
 {
     AV_SCOPE("ClientArrayState::lose_buffer");
     if (indexed(target)) buffers_[buffer_slot(target)] = unknown;
+}
+
+void ClientArrayState::restore_buffers()
+{
+    AV_SCOPE("ClientArrayState::restore_buffers");
+    buffers_restored_ = true;
+}
+
+bool ClientArrayState::known_buffer(uint32_t target, uint32_t &buffer) const
+{
+    AV_SCOPE("ClientArrayState::known_buffer");
+    const uint32_t slot = buffer_slot(target);
+    if (buffers_restored_ || slot == buffer_targets || buffers_[slot] == unknown) return false;
+    buffer = buffers_[slot];
+    return true;
 }
 
 void ClientArrayState::delete_buffers(int32_t count, const uint32_t *buffers)

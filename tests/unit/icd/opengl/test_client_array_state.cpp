@@ -134,6 +134,30 @@ TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_kn
   CHECK_EQ(state.bound_buffer(0x8A11u), 7u);
   CHECK(state.invariants_hold()); }
 
+/* A map through a target is answered from the guest only where nothing can
+ * have moved the binding out of its sight: not the element array buffer, which
+ * a vertex array holds, not a binding lost to a bind of several, and none at
+ * all once glPopClientAttrib restored some. */
+TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_of_sight)
+{ ClientArrayState state;
+  std::uint32_t    buffer = 99u;
+  CHECK(state.known_buffer(ClientArrayState::array_buffer, buffer));
+  CHECK_EQ(buffer, 0u);
+  state.bind_buffer(0x8F37u /* GL_COPY_WRITE_BUFFER */, 4u);
+  CHECK(state.known_buffer(0x8F37u, buffer));
+  CHECK_EQ(buffer, 4u);
+  CHECK(!state.known_buffer(0x0DE1u, buffer));
+  state.bind_buffer(ClientArrayState::element_array_buffer, 5u);
+  CHECK(!state.known_buffer(ClientArrayState::element_array_buffer, buffer));
+  state.bind_buffer(0x8A11u, 6u);
+  state.lose_buffer(0x8A11u);
+  CHECK(!state.known_buffer(0x8A11u, buffer));
+  state.restore_buffers();
+  CHECK(!state.known_buffer(ClientArrayState::array_buffer, buffer));
+  CHECK(!state.known_buffer(0x8F37u, buffer));
+  CHECK_EQ(buffer, 4u);
+  CHECK(state.invariants_hold()); }
+
 TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
 { ClientArrayState state;
   /* Array 0 starts known, with nothing bound. */
