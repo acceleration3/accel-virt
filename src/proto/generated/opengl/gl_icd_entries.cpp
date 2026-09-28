@@ -61,6 +61,7 @@ void APIENTRY Wrap_glBeginTransformFeedback(GLenum primitiveMode) {
     AV_SCOPE("glBeginTransformFeedback");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glBeginTransformFeedback(*rvk_t, primitiveMode);
 }
 
@@ -75,6 +76,7 @@ void APIENTRY Wrap_glBindBufferBase(GLenum target, GLuint index, GLuint buffer) 
     AV_SCOPE("glBindBufferBase");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bind_buffer_indexed(target, buffer);
     ::av::glproto::rvk_glBindBufferBase(*rvk_t, target, index, buffer);
 }
 
@@ -82,6 +84,7 @@ void APIENTRY Wrap_glBindBufferRange(GLenum target, GLuint index, GLuint buffer,
     AV_SCOPE("glBindBufferRange");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bind_buffer_indexed(target, buffer);
     ::av::glproto::rvk_glBindBufferRange(*rvk_t, target, index, buffer, offset, size);
 }
 
@@ -89,6 +92,7 @@ void APIENTRY Wrap_glBindBuffersBase(GLenum target, GLuint first, GLsizei count,
     AV_SCOPE("glBindBuffersBase");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bind_buffers_indexed(target);
     ::av::glproto::rvk_glBindBuffersBase(*rvk_t, target, first, count, buffers);
 }
 
@@ -96,6 +100,7 @@ void APIENTRY Wrap_glBindBuffersRange(GLenum target, GLuint first, GLsizei count
     AV_SCOPE("glBindBuffersRange");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bind_buffers_indexed(target);
     ::av::glproto::rvk_glBindBuffersRange(*rvk_t, target, first, count, buffers, offsets, sizes);
 }
 
@@ -117,6 +122,7 @@ void APIENTRY Wrap_glBindImageTexture(GLuint unit, GLuint texture, GLint level, 
     AV_SCOPE("glBindImageTexture");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glBindImageTexture(*rvk_t, unit, texture, level, layered, layer, access, format);
 }
 
@@ -124,6 +130,7 @@ void APIENTRY Wrap_glBindImageTextures(GLuint first, GLsizei count, const GLuint
     AV_SCOPE("glBindImageTextures");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glBindImageTextures(*rvk_t, first, count, textures);
 }
 
@@ -285,6 +292,7 @@ void APIENTRY Wrap_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr si
     AV_SCOPE("glBufferSubData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::wrote_buffer(target, offset, size, data);
     ::av::glproto::rvk_glBufferSubData(*rvk_t, target, offset, size, data);
 }
 
@@ -322,6 +330,7 @@ void APIENTRY Wrap_glClearBufferData(GLenum target, GLenum internalformat, GLenu
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_target(target);
     ::av::glproto::rvk_glClearBufferData(*rvk_t, target, internalformat, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 
@@ -330,6 +339,7 @@ void APIENTRY Wrap_glClearBufferSubData(GLenum target, GLenum internalformat, GL
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_target(target);
     ::av::glproto::rvk_glClearBufferSubData(*rvk_t, target, internalformat, offset, size, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 
@@ -387,6 +397,7 @@ void APIENTRY Wrap_glClearNamedBufferData(GLuint buffer, GLenum internalformat, 
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glClearNamedBufferData(*rvk_t, buffer, internalformat, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 
@@ -395,6 +406,7 @@ void APIENTRY Wrap_glClearNamedBufferSubData(GLuint buffer, GLenum internalforma
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glClearNamedBufferSubData(*rvk_t, buffer, internalformat, offset, size, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 
@@ -585,6 +597,7 @@ void APIENTRY Wrap_glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GL
     AV_SCOPE("glCopyBufferSubData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_target(writeTarget);
     ::av::glproto::rvk_glCopyBufferSubData(*rvk_t, readTarget, writeTarget, readOffset, writeOffset, size);
 }
 
@@ -599,6 +612,7 @@ void APIENTRY Wrap_glCopyNamedBufferSubData(GLuint readBuffer, GLuint writeBuffe
     AV_SCOPE("glCopyNamedBufferSubData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(writeBuffer);
     ::av::glproto::rvk_glCopyNamedBufferSubData(*rvk_t, readBuffer, writeBuffer, readOffset, writeOffset, size);
 }
 
@@ -1288,6 +1302,7 @@ void APIENTRY Wrap_glGetBufferParameteri64v(GLenum target, GLenum pname, GLint64
     AV_SCOPE("glGetBufferParameteri64v");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    if (::av::glicd::answer_buffer_map_state(target, pname, params)) return;
     ::av::glproto::rvk_glGetBufferParameteri64v(*rvk_t, target, pname, params);
 }
 
@@ -1295,6 +1310,7 @@ void APIENTRY Wrap_glGetBufferParameteriv(GLenum target, GLenum pname, GLint* pa
     AV_SCOPE("glGetBufferParameteriv");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    if (::av::glicd::answer_buffer_map_state(target, pname, params)) return;
     ::av::glproto::rvk_glGetBufferParameteriv(*rvk_t, target, pname, params);
 }
 
@@ -1310,6 +1326,7 @@ void APIENTRY Wrap_glGetCompressedTexImage(GLenum target, GLint level, void* img
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_img_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_img_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetCompressedTexImage(*rvk_t, target, level, img, rvk_img_offset ? 0 : ::av::glicd::compressed_level_bytes(target, level, true), rvk_img_offset);
 }
 
@@ -1318,6 +1335,7 @@ void APIENTRY Wrap_glGetCompressedTextureImage(GLuint texture, GLint level, GLsi
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetCompressedTextureImage(*rvk_t, texture, level, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -1326,6 +1344,7 @@ void APIENTRY Wrap_glGetCompressedTextureSubImage(GLuint texture, GLint level, G
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetCompressedTextureSubImage(*rvk_t, texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -1459,6 +1478,7 @@ void APIENTRY Wrap_glGetNamedBufferParameteri64v(GLuint buffer, GLenum pname, GL
     AV_SCOPE("glGetNamedBufferParameteri64v");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    if (::av::glicd::answer_named_buffer_map_state(buffer, pname, params)) return;
     ::av::glproto::rvk_glGetNamedBufferParameteri64v(*rvk_t, buffer, pname, params);
 }
 
@@ -1466,6 +1486,7 @@ void APIENTRY Wrap_glGetNamedBufferParameteriv(GLuint buffer, GLenum pname, GLin
     AV_SCOPE("glGetNamedBufferParameteriv");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    if (::av::glicd::answer_named_buffer_map_state(buffer, pname, params)) return;
     ::av::glproto::rvk_glGetNamedBufferParameteriv(*rvk_t, buffer, pname, params);
 }
 
@@ -1601,6 +1622,7 @@ void APIENTRY Wrap_glGetQueryBufferObjecti64v(GLuint id, GLuint buffer, GLenum p
     AV_SCOPE("glGetQueryBufferObjecti64v");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glGetQueryBufferObjecti64v(*rvk_t, id, buffer, pname, offset);
 }
 
@@ -1608,6 +1630,7 @@ void APIENTRY Wrap_glGetQueryBufferObjectiv(GLuint id, GLuint buffer, GLenum pna
     AV_SCOPE("glGetQueryBufferObjectiv");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glGetQueryBufferObjectiv(*rvk_t, id, buffer, pname, offset);
 }
 
@@ -1615,6 +1638,7 @@ void APIENTRY Wrap_glGetQueryBufferObjectui64v(GLuint id, GLuint buffer, GLenum 
     AV_SCOPE("glGetQueryBufferObjectui64v");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glGetQueryBufferObjectui64v(*rvk_t, id, buffer, pname, offset);
 }
 
@@ -1622,6 +1646,7 @@ void APIENTRY Wrap_glGetQueryBufferObjectuiv(GLuint id, GLuint buffer, GLenum pn
     AV_SCOPE("glGetQueryBufferObjectuiv");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glGetQueryBufferObjectuiv(*rvk_t, id, buffer, pname, offset);
 }
 
@@ -1637,6 +1662,7 @@ void APIENTRY Wrap_glGetQueryObjecti64v(GLuint id, GLenum pname, GLint64* params
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_params_offset = ::av::glicd::query_buffer_bound();
+    if (rvk_params_offset) ::av::glicd::host_writes_target(0x9192u);
     ::av::glproto::rvk_glGetQueryObjecti64v(*rvk_t, id, pname, params, rvk_params_offset ? 0 : ::av::glproto::pname_count(*rvk_t, pname) * sizeof(GLint64), rvk_params_offset);
 }
 
@@ -1645,6 +1671,7 @@ void APIENTRY Wrap_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* params) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_params_offset = ::av::glicd::query_buffer_bound();
+    if (rvk_params_offset) ::av::glicd::host_writes_target(0x9192u);
     ::av::glproto::rvk_glGetQueryObjectiv(*rvk_t, id, pname, params, rvk_params_offset ? 0 : ::av::glproto::pname_count(*rvk_t, pname) * sizeof(GLint), rvk_params_offset);
 }
 
@@ -1653,6 +1680,7 @@ void APIENTRY Wrap_glGetQueryObjectui64v(GLuint id, GLenum pname, GLuint64* para
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_params_offset = ::av::glicd::query_buffer_bound();
+    if (rvk_params_offset) ::av::glicd::host_writes_target(0x9192u);
     ::av::glproto::rvk_glGetQueryObjectui64v(*rvk_t, id, pname, params, rvk_params_offset ? 0 : ::av::glproto::pname_count(*rvk_t, pname) * sizeof(GLuint64), rvk_params_offset);
 }
 
@@ -1661,6 +1689,7 @@ void APIENTRY Wrap_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) 
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_params_offset = ::av::glicd::query_buffer_bound();
+    if (rvk_params_offset) ::av::glicd::host_writes_target(0x9192u);
     ::av::glproto::rvk_glGetQueryObjectuiv(*rvk_t, id, pname, params, rvk_params_offset ? 0 : ::av::glproto::pname_count(*rvk_t, pname) * sizeof(GLuint), rvk_params_offset);
 }
 
@@ -1760,6 +1789,7 @@ void APIENTRY Wrap_glGetTexImage(GLenum target, GLint level, GLenum format, GLen
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetTexImage(*rvk_t, target, level, format, type, pixels, rvk_pixels_offset ? 0 : ::av::glicd::level_bytes(target, level, format, type), rvk_pixels_offset);
 }
 
@@ -1810,6 +1840,7 @@ void APIENTRY Wrap_glGetTextureImage(GLuint texture, GLint level, GLenum format,
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetTextureImage(*rvk_t, texture, level, format, type, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -1860,6 +1891,7 @@ void APIENTRY Wrap_glGetTextureSubImage(GLuint texture, GLint level, GLint xoffs
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetTextureSubImage(*rvk_t, texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -2008,6 +2040,7 @@ void APIENTRY Wrap_glGetnCompressedTexImage(GLenum target, GLint lod, GLsizei bu
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetnCompressedTexImage(*rvk_t, target, lod, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -2016,6 +2049,7 @@ void APIENTRY Wrap_glGetnTexImage(GLenum target, GLint level, GLenum format, GLe
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetnTexImage(*rvk_t, target, level, format, type, bufSize, pixels, rvk_pixels_offset);
 }
 
@@ -2058,6 +2092,7 @@ void APIENTRY Wrap_glInvalidateBufferData(GLuint buffer) {
     AV_SCOPE("glInvalidateBufferData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glInvalidateBufferData(*rvk_t, buffer);
 }
 
@@ -2065,6 +2100,7 @@ void APIENTRY Wrap_glInvalidateBufferSubData(GLuint buffer, GLintptr offset, GLs
     AV_SCOPE("glInvalidateBufferSubData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glInvalidateBufferSubData(*rvk_t, buffer, offset, length);
 }
 
@@ -2361,6 +2397,7 @@ void APIENTRY Wrap_glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeip
     AV_SCOPE("glNamedBufferSubData");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::wrote_named_buffer(buffer, offset, size, data);
     ::av::glproto::rvk_glNamedBufferSubData(*rvk_t, buffer, offset, size, data);
 }
 
@@ -2943,6 +2980,7 @@ void APIENTRY Wrap_glReadnPixels(GLint x, GLint y, GLsizei width, GLsizei height
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_data_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glReadnPixels(*rvk_t, x, y, width, height, format, type, bufSize, data, rvk_data_offset);
 }
 
@@ -3484,6 +3522,7 @@ void APIENTRY Wrap_glTransformFeedbackBufferBase(GLuint xfb, GLuint index, GLuin
     AV_SCOPE("glTransformFeedbackBufferBase");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glTransformFeedbackBufferBase(*rvk_t, xfb, index, buffer);
 }
 
@@ -3491,6 +3530,7 @@ void APIENTRY Wrap_glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLui
     AV_SCOPE("glTransformFeedbackBufferRange");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glTransformFeedbackBufferRange(*rvk_t, xfb, index, buffer, offset, size);
 }
 
@@ -6678,6 +6718,7 @@ void APIENTRY Wrap_glPopClientAttrib(void) {
     }
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::bindings_restored();
     ::av::glproto::rvk_glPopClientAttrib(*rvk_t);
 }
 
@@ -8340,6 +8381,7 @@ void APIENTRY Wrap_glBufferPageCommitmentARB(GLenum target, GLintptr offset, GLs
     AV_SCOPE("glBufferPageCommitmentARB");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_target(target);
     ::av::glproto::rvk_glBufferPageCommitmentARB(*rvk_t, target, offset, size, commit);
 }
 
@@ -8347,6 +8389,7 @@ void APIENTRY Wrap_glNamedBufferPageCommitmentEXT(GLuint buffer, GLintptr offset
     AV_SCOPE("glNamedBufferPageCommitmentEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glNamedBufferPageCommitmentEXT(*rvk_t, buffer, offset, size, commit);
 }
 
@@ -8354,6 +8397,7 @@ void APIENTRY Wrap_glNamedBufferPageCommitmentARB(GLuint buffer, GLintptr offset
     AV_SCOPE("glNamedBufferPageCommitmentARB");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glNamedBufferPageCommitmentARB(*rvk_t, buffer, offset, size, commit);
 }
 
@@ -8453,6 +8497,7 @@ void APIENTRY Wrap_glMakeImageHandleResidentARB(GLuint64 handle, GLenum access) 
     AV_SCOPE("glMakeImageHandleResidentARB");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glMakeImageHandleResidentARB(*rvk_t, handle, access);
 }
 
@@ -8565,6 +8610,7 @@ void APIENTRY Wrap_glMakeImageHandleResidentNV(GLuint64 handle, GLenum access) {
     AV_SCOPE("glMakeImageHandleResidentNV");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glMakeImageHandleResidentNV(*rvk_t, handle, access);
 }
 
@@ -8747,6 +8793,7 @@ void APIENTRY Wrap_glMakeBufferResidentNV(GLenum target, GLenum access) {
     AV_SCOPE("glMakeBufferResidentNV");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glMakeBufferResidentNV(*rvk_t, target, access);
 }
 
@@ -8768,6 +8815,7 @@ void APIENTRY Wrap_glMakeNamedBufferResidentNV(GLuint buffer, GLenum access) {
     AV_SCOPE("glMakeNamedBufferResidentNV");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::shaders_write_buffers();
     ::av::glproto::rvk_glMakeNamedBufferResidentNV(*rvk_t, buffer, access);
 }
 
@@ -9368,6 +9416,7 @@ void APIENTRY Wrap_glGetTextureImageEXT(GLuint texture, GLenum target, GLint lev
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetTextureImageEXT(*rvk_t, texture, target, level, format, type, pixels, rvk_pixels_offset ? 0 : ::av::glicd::level_bytes(target, level, format, type), rvk_pixels_offset);
 }
 
@@ -9635,6 +9684,7 @@ void APIENTRY Wrap_glGetMultiTexImageEXT(GLenum texunit, GLenum target, GLint le
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_pixels_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_pixels_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetMultiTexImageEXT(*rvk_t, texunit, target, level, format, type, pixels, rvk_pixels_offset ? 0 : ::av::glicd::level_bytes(target, level, format, type), rvk_pixels_offset);
 }
 
@@ -9799,6 +9849,7 @@ void APIENTRY Wrap_glGetCompressedTextureImageEXT(GLuint texture, GLenum target,
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_img_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_img_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetCompressedTextureImageEXT(*rvk_t, texture, target, lod, img, rvk_img_offset ? 0 : ::av::glicd::compressed_level_bytes(target, lod, true), rvk_img_offset);
 }
 
@@ -9849,6 +9900,7 @@ void APIENTRY Wrap_glGetCompressedMultiTexImageEXT(GLenum texunit, GLenum target
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_img_offset = ::av::glicd::pixel_buffer_bound(true);
+    if (rvk_img_offset) ::av::glicd::host_writes_target(0x88EBu);
     ::av::glproto::rvk_glGetCompressedMultiTexImageEXT(*rvk_t, texunit, target, lod, img, rvk_img_offset ? 0 : ::av::glicd::compressed_level_bytes(target, lod, true), rvk_img_offset);
 }
 
@@ -9884,6 +9936,7 @@ void APIENTRY Wrap_glNamedBufferDataEXT(GLuint buffer, GLsizeiptr size, const vo
     AV_SCOPE("glNamedBufferDataEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glNamedBufferDataEXT(*rvk_t, buffer, size, data, usage);
 }
 
@@ -9891,6 +9944,7 @@ void APIENTRY Wrap_glNamedBufferSubDataEXT(GLuint buffer, GLintptr offset, GLsiz
     AV_SCOPE("glNamedBufferSubDataEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::wrote_named_buffer(buffer, offset, size, data);
     ::av::glproto::rvk_glNamedBufferSubDataEXT(*rvk_t, buffer, offset, size, data);
 }
 
@@ -9898,6 +9952,7 @@ void APIENTRY Wrap_glGetNamedBufferParameterivEXT(GLuint buffer, GLenum pname, G
     AV_SCOPE("glGetNamedBufferParameterivEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    if (::av::glicd::answer_named_buffer_map_state(buffer, pname, params)) return;
     ::av::glproto::rvk_glGetNamedBufferParameterivEXT(*rvk_t, buffer, pname, params);
 }
 
@@ -10489,6 +10544,7 @@ void APIENTRY Wrap_glNamedCopyBufferSubDataEXT(GLuint readBuffer, GLuint writeBu
     AV_SCOPE("glNamedCopyBufferSubDataEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(writeBuffer);
     ::av::glproto::rvk_glNamedCopyBufferSubDataEXT(*rvk_t, readBuffer, writeBuffer, readOffset, writeOffset, size);
 }
 
@@ -10653,6 +10709,7 @@ void APIENTRY Wrap_glNamedBufferStorageEXT(GLuint buffer, GLsizeiptr size, const
     AV_SCOPE("glNamedBufferStorageEXT");
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glNamedBufferStorageEXT(*rvk_t, buffer, size, data, flags);
 }
 
@@ -10661,6 +10718,7 @@ void APIENTRY Wrap_glClearNamedBufferDataEXT(GLuint buffer, GLenum internalforma
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glClearNamedBufferDataEXT(*rvk_t, buffer, internalformat, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 
@@ -10669,6 +10727,7 @@ void APIENTRY Wrap_glClearNamedBufferSubDataEXT(GLuint buffer, GLenum internalfo
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
     const bool rvk_data_offset = ::av::glicd::pixel_buffer_bound(false);
+    ::av::glicd::host_writes_buffer(buffer);
     ::av::glproto::rvk_glClearNamedBufferSubDataEXT(*rvk_t, buffer, internalformat, offset, size, format, type, data, rvk_data_offset ? 0 : ::av::glicd::pixel_bytes(format, type, 1, 1, 1, false), rvk_data_offset);
 }
 

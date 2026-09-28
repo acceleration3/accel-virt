@@ -3,6 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 
@@ -10,9 +11,9 @@
 
 namespace av::glicd {
 
-BufferMapping::BufferMapping(BlockSource &memory)
-    : memory_(memory), block_(nullptr), buffer_(0u), offset_(0u), length_(0u), access_(0u), dirty_from_(0u),
-      dirty_to_(0u)
+BufferMapping::BufferMapping(BlockSource &memory, BufferShadows &shadows)
+    : memory_(memory), shadows_(shadows), block_(nullptr), buffer_(0u), offset_(0u), length_(0u), access_(0u),
+      dirty_from_(0u), dirty_to_(0u)
 {
     AV_SCOPE("BufferMapping::BufferMapping");
 }
@@ -36,11 +37,10 @@ Status BufferMapping::map(ClientTransport &wire, uint32_t buffer, uint64_t offse
     access_ = access;
     dirty_from_ = 0u;
     dirty_to_ = 0u;
-    const bool fills = (access & map_read) != 0u && (access & (map_invalidate_range | map_invalidate_buffer)) == 0u;
-    /* Memory the host does not fill, or answers short, is still the
+    /* Memory nothing fills, or the host answers short, is still the
      * application's to read: zeros, never what the block held before. */
     __builtin_memset(block_, 0, static_cast<size_t>(length));
-    if (fills) read(wire);
+    start(wire);
     return Status::ok;
 }
 
@@ -98,17 +98,22 @@ void BufferMapping::write_back(ClientTransport &wire)
 {
     AV_SCOPE("BufferMapping::write_back");
     if ((access_ & map_write) == 0u) return;
-    const bool     explicit_flush = (access_ & map_flush_explicit) != 0u;
-    uint64_t       at = explicit_flush ? dirty_from_ : 0u;
-    const uint64_t end = explicit_flush ? dirty_to_ : length_;
-    dirty_from_ = 0u;
-    dirty_to_ = 0u;
-    while (at < end) {
-        const size_t chunk = chunk_for(wire, end - at);
-        glproto::rvk_glNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
-                                          static_cast<GLsizeiptr>(chunk), block_ + at);
-        at += chunk;
+    if ((access_ & map_flush_explicit) != 0u) {
+        const uint64_t from = dirty_from_;
+        const uint64_t to = dirty_to_;
+        dirty_from_ = 0u;
+        dirty_to_ = 0u;
+        send(wire, from, to);
+        shadows_.wrote(buffer_, offset_ + from, to - from, block_ + from);
+        return;
     }
+    uint8_t *const known = shadows_.covering(buffer_, offset_, length_);
+    if (known != nullptr) {
+        send_changes(wire, known);
+        return;
+    }
+    send(wire, 0u, length_);
+    shadows_.keep(buffer_, offset_, length_, block_);
 }
 
 void BufferMapping::report(StateWriter &writer, uint32_t index) const
@@ -135,6 +140,25 @@ bool BufferMapping::invariants_hold() const
     return marks || dirty_to_ == 0u;
 }
 
+void BufferMapping::start(ClientTransport &wire)
+{
+    AV_SCOPE("BufferMapping::start");
+    if ((access_ & map_read) != 0u) {
+        read(wire);
+        if ((access_ & map_write) != 0u) shadows_.keep(buffer_, offset_, length_, block_);
+        return;
+    }
+    const uint8_t *const known = shadows_.covering(buffer_, offset_, length_);
+    if (known != nullptr) {
+        __builtin_memcpy(block_, known, static_cast<size_t>(length_));
+        return;
+    }
+    const uint32_t keeps_nothing = map_invalidate_range | map_invalidate_buffer | map_flush_explicit;
+    if ((access_ & keeps_nothing) != 0u || shadows_.fresh(buffer_)) return;
+    read(wire);
+    shadows_.keep(buffer_, offset_, length_, block_);
+}
+
 void BufferMapping::read(ClientTransport &wire)
 {
     AV_SCOPE("BufferMapping::read");
@@ -144,6 +168,53 @@ void BufferMapping::read(ClientTransport &wire)
         glproto::rvk_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
                                              static_cast<GLsizeiptr>(chunk), block_ + at);
     }
+}
+
+void BufferMapping::send(ClientTransport &wire, uint64_t at, uint64_t end)
+{
+    AV_SCOPE("BufferMapping::send");
+    while (at < end) {
+        const size_t chunk = chunk_for(wire, end - at);
+        glproto::rvk_glNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
+                                          static_cast<GLsizeiptr>(chunk), block_ + at);
+        at += chunk;
+    }
+}
+
+void BufferMapping::send_changes(ClientTransport &wire, uint8_t *known)
+{
+    AV_SCOPE("BufferMapping::send_changes");
+    uint64_t from = next_change(known, 0u);
+    while (from < length_) {
+        const uint64_t to = change_end(known, from);
+        send(wire, from, to);
+        __builtin_memcpy(known + from, block_ + from, static_cast<size_t>(to - from));
+        from = next_change(known, to);
+    }
+}
+
+/* Word by word, each compare a load apiece: a scan of a 256 KiB staging
+ * range runs once per unmap, and calls per word would cost more than the
+ * bytes it saves. */
+uint64_t BufferMapping::next_change(const uint8_t *known, uint64_t at) const
+{
+    AV_SCOPE("BufferMapping::next_change");
+    for (; at + word <= length_; at += word)
+        if (__builtin_memcmp(block_ + at, known + at, word) != 0) return at;
+    const bool tail_differs = at < length_ && __builtin_memcmp(block_ + at, known + at, length_ - at) != 0;
+    return tail_differs ? at : length_;
+}
+
+uint64_t BufferMapping::change_end(const uint8_t *known, uint64_t from) const
+{
+    AV_SCOPE("BufferMapping::change_end");
+    uint64_t end = from + word < length_ ? from + word : length_;
+    uint64_t at = end;
+    for (; at + word <= length_ && at - end < merge_gap; at += word)
+        if (__builtin_memcmp(block_ + at, known + at, word) != 0) end = at + word;
+    if (at < length_ && at - end < merge_gap && __builtin_memcmp(block_ + at, known + at, length_ - at) != 0)
+        end = length_;
+    return end;
 }
 
 size_t BufferMapping::chunk_for(ClientTransport &wire, uint64_t left) const

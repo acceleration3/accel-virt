@@ -46,8 +46,36 @@ public:
     void  flush_mapped_named_range(uint32_t buffer, intptr_t offset, intptr_t length);
     void  buffer_pointer(uint32_t target, uint32_t pname, void **params);
     void  named_buffer_pointer(uint32_t buffer, uint32_t pname, void **params);
+    /* glGetBufferParameter for a map-state name (MappedBuffers::map_state):
+     * true once answered here - with `value`, or with the error a bad target
+     * records - and false for a name the host answers. */
+    bool  buffer_map_state(uint32_t target, uint32_t pname, int64_t &value);
+    /* The same by name; buffer 0 is the host's to refuse. */
+    bool  named_buffer_map_state(uint32_t buffer, uint32_t pname, int64_t &value);
     /* A call only a direct-state extension this ICD does not report has. */
     void  refuse();
+
+    /* What changes a buffer's bytes on the host, told to the current
+     * context's copies of them (BufferShadows). A target names the buffer the
+     * guest saw bound there; where that is not known, every copy goes.
+     * glBufferSubData and glNamedBufferSubData: the copy takes the bytes. */
+    void  wrote_buffer(uint32_t target, intptr_t offset, intptr_t size, const void *data);
+    void  wrote_named_buffer(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
+    /* A command the host runs writes the buffer at `target`, or `buffer`: a
+     * copy, a clear, an invalidation, a download into a pack or query
+     * buffer. */
+    void  host_writes_target(uint32_t target);
+    void  host_writes_buffer(uint32_t buffer);
+    /* glBindBufferBase and glBindBufferRange, which bind the target's own
+     * binding too; a buffer bound where a shader writes ends the copies. */
+    void  bind_buffer_indexed(uint32_t target, uint32_t buffer);
+    /* glBindBuffersBase and glBindBuffersRange. */
+    void  bind_buffers_indexed(uint32_t target);
+    /* An image unit, a transform feedback, a resident address: a shader can
+     * write buffers the guest cannot follow. */
+    void  shaders_write_buffers();
+    /* glPopClientAttrib: bindings come back out of sight. */
+    void  bindings_restored();
 
     /* GL_EXT_memory_object and GL_EXT_semaphore over a Win32 handle
      * (feature 053). The first four are answered here and never sent: an
@@ -174,6 +202,11 @@ private:
                              uint32_t access);
     bool            unmap_name(GuestGlContext &context, uint32_t buffer);
     void            mark_name(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t length);
+    /* The host wrote the buffer the guest saw bound at `target`. */
+    void            forget_bound(GuestGlContext &context, uint32_t target);
+    /* glBufferData or glBufferStorage gave the buffer at `target` new
+     * storage. */
+    void            respecify_bound(GuestGlContext &context, uint32_t target, bool with_data);
 
     CurrentContexts &currents_;
 };

@@ -2080,6 +2080,95 @@ BIND_SHADOW = {
     "glBindSampler": "::av::glicd::skip_bind_sampler(unit, sampler)",
 }
 
+# Queries some of whose names only the guest can answer.
+#
+# A buffer's map state - GL_BUFFER_MAPPED, _ACCESS, _ACCESS_FLAGS,
+# _MAP_OFFSET and _MAP_LENGTH - describes a map the host never saw: a map is
+# a copy in the guest (rvk::glicd::MappedBuffers), so the host always says
+# unmapped. The expression answers those names and says so; every other name
+# still goes to the host. A tracer's glUnmapBuffer asks them to learn what
+# the application wrote, and recorded nothing while the host answered.
+ANSWERED_BY_GUEST_NAMES = {
+    "glGetBufferParameteriv": "::av::glicd::answer_buffer_map_state(target, pname, params)",
+    "glGetBufferParameteri64v": "::av::glicd::answer_buffer_map_state(target, pname, params)",
+    "glGetNamedBufferParameteriv": "::av::glicd::answer_named_buffer_map_state(buffer, pname, params)",
+    "glGetNamedBufferParameteri64v": "::av::glicd::answer_named_buffer_map_state(buffer, pname, params)",
+    "glGetNamedBufferParameterivEXT": "::av::glicd::answer_named_buffer_map_state(buffer, pname, params)",
+}
+
+# Commands that change a buffer's bytes on the host, told to the guest's
+# copies of them before they go.
+#
+# A map is a copy in the guest, and OpenGL keeps every byte a map does not
+# write, so a map that only writes starts from the guest's copy of what the
+# host holds and sends back only what differs (rvk::glicd::BufferShadows).
+# The copy is only as good as the guest's knowledge: a command the host runs
+# that writes a buffer drops that buffer's copy, glBufferSubData updates it,
+# and anything that lets a shader write buffers the guest cannot follow ends
+# the copies for the context. A download into a pack or query buffer is
+# every command with pixels out, which _icd_buffer_writes adds itself.
+BUFFER_WRITES = {
+    "glBufferSubData": "::av::glicd::wrote_buffer(target, offset, size, data)",
+    "glNamedBufferSubData": "::av::glicd::wrote_named_buffer(buffer, offset, size, data)",
+    "glNamedBufferSubDataEXT": "::av::glicd::wrote_named_buffer(buffer, offset, size, data)",
+    "glCopyBufferSubData": "::av::glicd::host_writes_target(writeTarget)",
+    "glCopyNamedBufferSubData": "::av::glicd::host_writes_buffer(writeBuffer)",
+    "glNamedCopyBufferSubDataEXT": "::av::glicd::host_writes_buffer(writeBuffer)",
+    "glClearBufferData": "::av::glicd::host_writes_target(target)",
+    "glClearBufferSubData": "::av::glicd::host_writes_target(target)",
+    "glClearNamedBufferData": "::av::glicd::host_writes_buffer(buffer)",
+    "glClearNamedBufferSubData": "::av::glicd::host_writes_buffer(buffer)",
+    "glClearNamedBufferDataEXT": "::av::glicd::host_writes_buffer(buffer)",
+    "glClearNamedBufferSubDataEXT": "::av::glicd::host_writes_buffer(buffer)",
+    "glInvalidateBufferData": "::av::glicd::host_writes_buffer(buffer)",
+    "glInvalidateBufferSubData": "::av::glicd::host_writes_buffer(buffer)",
+    "glNamedBufferDataEXT": "::av::glicd::host_writes_buffer(buffer)",
+    "glNamedBufferStorageEXT": "::av::glicd::host_writes_buffer(buffer)",
+    "glBufferPageCommitmentARB": "::av::glicd::host_writes_target(target)",
+    "glNamedBufferPageCommitmentARB": "::av::glicd::host_writes_buffer(buffer)",
+    "glNamedBufferPageCommitmentEXT": "::av::glicd::host_writes_buffer(buffer)",
+    "glGetQueryBufferObjecti64v": "::av::glicd::host_writes_buffer(buffer)",
+    "glGetQueryBufferObjectiv": "::av::glicd::host_writes_buffer(buffer)",
+    "glGetQueryBufferObjectui64v": "::av::glicd::host_writes_buffer(buffer)",
+    "glGetQueryBufferObjectuiv": "::av::glicd::host_writes_buffer(buffer)",
+    # These bind the target's own binding as well as the index, which the
+    # guest follows to know what a target names.
+    "glBindBufferBase": "::av::glicd::bind_buffer_indexed(target, buffer)",
+    "glBindBufferRange": "::av::glicd::bind_buffer_indexed(target, buffer)",
+    "glBindBuffersBase": "::av::glicd::bind_buffers_indexed(target)",
+    "glBindBuffersRange": "::av::glicd::bind_buffers_indexed(target)",
+    "glTransformFeedbackBufferBase": "::av::glicd::shaders_write_buffers()",
+    "glTransformFeedbackBufferRange": "::av::glicd::shaders_write_buffers()",
+    "glBeginTransformFeedback": "::av::glicd::shaders_write_buffers()",
+    "glBindImageTexture": "::av::glicd::shaders_write_buffers()",
+    "glBindImageTextures": "::av::glicd::shaders_write_buffers()",
+    "glMakeBufferResidentNV": "::av::glicd::shaders_write_buffers()",
+    "glMakeNamedBufferResidentNV": "::av::glicd::shaders_write_buffers()",
+    "glMakeImageHandleResidentARB": "::av::glicd::shaders_write_buffers()",
+    "glMakeImageHandleResidentNV": "::av::glicd::shaders_write_buffers()",
+    # Restores the array and pixel buffer bindings out of sight.
+    "glPopClientAttrib": "::av::glicd::bindings_restored()",
+}
+
+# The binding a download writes through when its pointer is an offset.
+PACK_TARGET = "0x88EBu"
+QUERY_TARGET = "0x9192u"
+
+
+def _icd_buffer_writes(cmd: Command) -> list[str]:
+    """The guest's copies told what this command writes (BUFFER_WRITES)."""
+    lines = []
+    for p in cmd.params:
+        if p.role is Role.PIXELS_OUT:
+            target = (QUERY_TARGET if cmd.name.startswith("glGetQueryObject")
+                      else PACK_TARGET)
+            lines.append(f"    if (rvk_{p.name}_offset) "
+                         f"::av::glicd::host_writes_target({target});")
+    if cmd.name in BUFFER_WRITES:
+        lines.append(f"    {BUFFER_WRITES[cmd.name]};")
+    return lines
+
+
 # Everything else that can move one of those bindings.
 #
 # Skipping a bind is only safe while the driver knows what is bound, so
@@ -2357,17 +2446,22 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             out.append("    if (rvk_t == nullptr) return;")
             if cmd.name in BIND_SHADOW:
                 out.append(f"    if ({BIND_SHADOW[cmd.name]}) return;")
+            if cmd.name in ANSWERED_BY_GUEST_NAMES:
+                out.append(f"    if ({ANSWERED_BY_GUEST_NAMES[cmd.name]}) return;")
             out += prologue
+            out += _icd_buffer_writes(cmd)
             out.append(f"    ::av::glproto::rvk_{cmd.name}({args});")
         elif kind == "sync":
             out.append("    if (rvk_t == nullptr) return nullptr;")
             out += prologue
+            out += _icd_buffer_writes(cmd)
             out.append(f"    return reinterpret_cast<GLsync>("
                        f"static_cast<uintptr_t>("
                        f"::av::glproto::rvk_{cmd.name}({args})));")
         else:
             out.append(f"    if (rvk_t == nullptr) return 0;")
             out += prologue
+            out += _icd_buffer_writes(cmd)
             out.append(f"    return ::av::glproto::rvk_{cmd.name}({args});")
         out.append("}")
         out.append("")

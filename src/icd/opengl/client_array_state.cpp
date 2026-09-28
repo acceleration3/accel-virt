@@ -13,6 +13,19 @@ enum : uint32_t {
     gl_pack_image_height = 0x806Cu, gl_unpack_skip_images = 0x806Du, gl_unpack_image_height = 0x806Eu,
 };
 
+/* The buffer targets whose bindings are kept, in slot order; the element
+ * array buffer is each vertex array's own. */
+constexpr uint32_t buffer_targets_kept[] = {
+    0x8892u /* ARRAY */,         0x88EBu /* PIXEL_PACK */,        0x88ECu /* PIXEL_UNPACK */,
+    0x9192u /* QUERY */,         0x8A11u /* UNIFORM */,           0x8C2Au /* TEXTURE */,
+    0x8C8Eu /* TRANSFORM_FEEDBACK */, 0x8F36u /* COPY_READ */,    0x8F37u /* COPY_WRITE */,
+    0x8F3Fu /* DRAW_INDIRECT */, 0x90D2u /* SHADER_STORAGE */,    0x90EEu /* DISPATCH_INDIRECT */,
+    0x92C0u /* ATOMIC_COUNTER */,
+};
+
+/* The targets with indexed bindings as well as their own. */
+constexpr uint32_t indexed_targets[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
+
 /* The texture targets whose bindings are kept, in slot order. */
 constexpr uint32_t texture_targets_kept[] = {
     0x0DE0u /* 1D */,       0x0DE1u /* 2D */,       0x806Fu /* 3D */,         0x8C18u /* 1D_ARRAY */,
@@ -70,6 +83,12 @@ void ClientArrayState::bind_buffer(uint32_t target, uint32_t buffer)
     }
     const uint32_t slot = buffer_slot(target);
     if (slot != buffer_targets) buffers_[slot] = buffer;
+}
+
+void ClientArrayState::lose_buffer(uint32_t target)
+{
+    AV_SCOPE("ClientArrayState::lose_buffer");
+    if (indexed(target)) buffers_[buffer_slot(target)] = unknown;
 }
 
 void ClientArrayState::delete_buffers(int32_t count, const uint32_t *buffers)
@@ -221,18 +240,17 @@ bool ClientArrayState::invariants_hold() const
 uint32_t ClientArrayState::buffer_slot(uint32_t target) const
 {
     AV_SCOPE("ClientArrayState::buffer_slot");
-    switch (target) {
-    case array_buffer:
-        return 0u;
-    case pixel_pack_buffer:
-        return 1u;
-    case pixel_unpack_buffer:
-        return 2u;
-    case query_buffer:
-        return 3u;
-    default:
-        return buffer_targets;
-    }
+    for (uint32_t slot = 0u; slot < buffer_targets; slot++)
+        if (buffer_targets_kept[slot] == target) return slot;
+    return buffer_targets;
+}
+
+bool ClientArrayState::indexed(uint32_t target) const
+{
+    AV_SCOPE("ClientArrayState::indexed");
+    for (const uint32_t kept : indexed_targets)
+        if (kept == target) return true;
+    return false;
 }
 
 uint32_t ClientArrayState::texture_slot(uint32_t target) const

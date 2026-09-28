@@ -1,11 +1,13 @@
 /* One context's mapped ranges (data-model.md): the checks OpenGL makes of a
  * map, an unmap and an explicit flush - access bits, ranges against the size
  * the host answers, a buffer mapped twice, the 65th map, no memory - what goes
- * back to the host and when, and the one line a context logs. */
+ * back to the host and when, what a later map keeps of an earlier one's
+ * writes, and the one line a context logs. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
 
@@ -18,6 +20,7 @@ using av::GlContextOptions;
 using av::GlContextRig;
 using av::Status;
 using av::glicd::BufferMapping;
+using av::glicd::BufferShadows;
 using av::glicd::GuestGlContext;
 using av::glicd::MappedBuffers;
 namespace ids = av::glproto;
@@ -31,14 +34,15 @@ struct MappedBuffersProbe {
         return mappings.mappings_[slot].object();
     }
     /* A slot holding a mapping of nothing. */
-    static void empty_slot(MappedBuffers &mappings, BlockSource &memory)
+    static void empty_slot(MappedBuffers &mappings, BlockSource &memory, BufferShadows &shadows)
     {
-        static_cast<void>(mappings.mappings_[5].construct(memory));
+        static_cast<void>(mappings.mappings_[5].construct(memory, shadows));
     }
     /* A second slot claiming the first slot's buffer. */
-    static void duplicate(MappedBuffers &mappings, ClientTransport &wire, BlockSource &memory)
+    static void duplicate(MappedBuffers &mappings, ClientTransport &wire, BlockSource &memory,
+                          BufferShadows &shadows)
     {
-        static_cast<void>(mappings.mappings_[1].construct(memory));
+        static_cast<void>(mappings.mappings_[1].construct(memory, shadows));
         static_cast<void>(mappings.mappings_[1].object().map(wire, mappings.mappings_[0].object().buffer(), 0u, 1u,
                                                                BufferMapping::map_write));
     }
@@ -67,7 +71,8 @@ struct Rig {
     GlContextRig   context_rig;
     GuestGlContext context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
                            context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
-    MappedBuffers  mappings{context_rig.platform(), context_rig.log()};
+    BufferShadows  shadows{context_rig.platform()};
+    MappedBuffers  mappings{context_rig.platform(), shadows, context_rig.log()};
 
     Rig()
     {
@@ -93,8 +98,15 @@ struct Rig {
               std::uint32_t access, std::uint32_t expected)
     {
         size(bytes);
-        /* A read map's fill, answered empty. */
-        if ((access & read) != 0u && expected == no_error) host().gl_bytes(nullptr, 0u);
+        /* A fill, answered empty: every read map, and a write map with bytes
+         * to keep and no copy of them. */
+        const std::uint64_t mapped = static_cast<std::uint64_t>(length == MappedBuffers::whole_buffer ? bytes - offset
+                                                                                                        : length);
+        const bool keeps = (access & (explicit_flush | BufferMapping::map_invalidate_range |
+                                      BufferMapping::map_invalidate_buffer)) == 0u &&
+                           !shadows.fresh(buffer) &&
+                           shadows.covering(buffer, static_cast<std::uint64_t>(offset), mapped) == nullptr;
+        if (expected == no_error && ((access & read) != 0u || keeps)) host().gl_bytes(nullptr, 0u);
         void *pointer = reinterpret_cast<void *>(0x1u);
         CHECK_EQ(mappings.map(wire(), buffer, offset, length, access, pointer), expected);
         CHECK(mappings.invariants_hold());
@@ -162,7 +174,8 @@ TEST(mapped_buffers, a_range_past_the_buffer_or_a_buffer_the_host_does_not_size_
   CHECK(rig.map(3u, 16, 0, MappedBuffers::whole_buffer, write, no_error) != nullptr);
   CHECK_EQ(av::glicd::MappedBuffersProbe::mapping(rig.mappings, 0u).length(), 16u);
   CHECK(rig.map(4u, 16, 12, 4, write, no_error) != nullptr);
-  CHECK_EQ(rig.commands() - before, 2u);
+  /* Each asked the size, and filled what it keeps. */
+  CHECK_EQ(rig.commands() - before, 4u);
   CHECK_EQ(rig.mappings.held(), 2u); }
 
 TEST(mapped_buffers, a_buffer_is_mapped_once_and_the_65th_map_is_out_of_memory)
@@ -234,18 +247,24 @@ TEST(mapped_buffers, only_persistent_writers_are_flushed)
   CHECK_EQ(rig.commands(), before);
   CHECK(rig.map(1u, 4, 0, 4, write, no_error) != nullptr);
   CHECK(rig.map(2u, 4, 0, 4, read | persistent, no_error) != nullptr);
-  CHECK(rig.map(3u, 4, 0, 4, write | persistent, no_error) != nullptr);
+  auto *const three = static_cast<std::uint8_t *>(rig.map(3u, 4, 0, 4, write | persistent, no_error));
+  CHECK(three != nullptr);
   CHECK(rig.map(4u, 4, 0, 4, write | persistent | explicit_flush, no_error) != nullptr);
   const std::uint32_t flushed = rig.commands();
+  /* Nothing written, nothing marked: nothing goes. */
   rig.mappings.flush_persistent(rig.wire());
-  /* Buffer 3's whole range; buffer 4 marked nothing. */
+  CHECK_EQ(rig.commands(), flushed);
+  /* What buffer 3 wrote; buffer 4 marked nothing. */
+  three[0] = 0x31u;
+  rig.mappings.flush_persistent(rig.wire());
   CHECK_EQ(rig.commands() - flushed, 1u);
   CHECK_EQ(rig.id(flushed), ids::kCmd_glNamedBufferSubData);
   CHECK_EQ(rig.mappings.mark(4u, 0, 1), no_error);
   rig.mappings.flush_persistent(rig.wire());
-  CHECK_EQ(rig.commands() - flushed, 3u);
+  CHECK_EQ(rig.commands() - flushed, 2u);
+  three[1] = 0x32u;
   rig.mappings.flush_persistent(rig.wire());
-  CHECK_EQ(rig.commands() - flushed, 4u);
+  CHECK_EQ(rig.commands() - flushed, 3u);
   char            bytes[512];
   av::StateWriter writer(bytes, sizeof bytes);
   rig.mappings.report(writer);
@@ -260,7 +279,8 @@ TEST(mapped_buffers, forget_and_release_give_up_ranges_without_writing)
 { Rig rig;
   CHECK(rig.map(1u, 4, 0, 4, write | persistent, no_error) != nullptr);
   CHECK(rig.map(2u, 4, 0, 4, write, no_error) != nullptr);
-  CHECK(rig.map(3u, 4, 0, 4, write | persistent, no_error) != nullptr);
+  auto *const three = static_cast<std::uint8_t *>(rig.map(3u, 4, 0, 4, write | persistent, no_error));
+  CHECK(three != nullptr);
   const std::uint32_t before = rig.commands();
   rig.mappings.forget(1, nullptr);
   const std::uint32_t deleted[] = {0u, 9u, 1u, 2u};
@@ -270,6 +290,7 @@ TEST(mapped_buffers, forget_and_release_give_up_ranges_without_writing)
   CHECK_EQ(rig.mappings.held(), 1u);
   CHECK(rig.mappings.pointer_of(3u) != nullptr);
   CHECK(rig.mappings.invariants_hold());
+  three[2] = 0x33u;
   rig.mappings.flush_persistent(rig.wire());
   CHECK_EQ(rig.commands() - before, 1u);
   rig.mappings.release();
@@ -285,12 +306,92 @@ TEST(mapped_buffers_invariants, fail_for_a_miscount_a_buffer_mapped_twice_or_a_b
   CHECK(!counted.mappings.invariants_hold());
   Rig twice;
   CHECK(twice.map(1u, 4, 0, 4, write, no_error) != nullptr);
-  av::glicd::MappedBuffersProbe::duplicate(twice.mappings, twice.wire(), twice.context_rig.platform());
+  av::glicd::MappedBuffersProbe::duplicate(twice.mappings, twice.wire(), twice.context_rig.platform(),
+                                           twice.shadows);
   CHECK(!twice.mappings.invariants_hold());
   Rig broken;
   CHECK(broken.map(1u, 4, 0, 4, write, no_error) != nullptr);
   av::glicd::BufferMappingProbe::set_dirty(av::glicd::MappedBuffersProbe::mapping(broken.mappings, 0u), 0u, 1u);
   CHECK(!broken.mappings.invariants_hold());
   Rig empty;
-  av::glicd::MappedBuffersProbe::empty_slot(empty.mappings, empty.context_rig.platform());
+  av::glicd::MappedBuffersProbe::empty_slot(empty.mappings, empty.context_rig.platform(), empty.shadows);
   CHECK(!empty.mappings.invariants_hold()); }
+
+/* A frame's uniforms written one block per map of the whole buffer, write-only
+ * and unsynchronized: each map keeps the blocks the earlier ones wrote - they
+ * were lost to zeros when a map started empty and went back whole - and each
+ * unmap sends only its own block. Fresh storage asks the host nothing. */
+TEST(mapped_buffers, a_map_that_writes_one_block_keeps_the_blocks_earlier_maps_wrote)
+{ Rig                     rig;
+  constexpr std::uint32_t unsynchronized = write | BufferMapping::map_unsynchronized;
+  constexpr std::int64_t  size = 2496, block = 156;
+  rig.shadows.respecify(5u, false);
+  std::uint32_t before = rig.commands();
+  auto *bytes = static_cast<std::uint8_t *>(rig.map(5u, size, 0, MappedBuffers::whole_buffer, unsynchronized,
+                                                    no_error));
+  CHECK_EQ(rig.commands() - before, 1u);
+  for (std::int64_t at = 0; at < block; at++) bytes[at] = 0xA1u;
+  CHECK_EQ(rig.mappings.unmap(rig.wire(), 5u), no_error);
+  for (std::uint32_t index = 1u; index < 3u; index++) {
+    before = rig.commands();
+    bytes = static_cast<std::uint8_t *>(rig.map(5u, size, 0, MappedBuffers::whole_buffer, unsynchronized,
+                                                no_error));
+    /* The size, and nothing filled. */
+    CHECK_EQ(rig.commands() - before, 1u);
+    for (std::uint32_t earlier = 0u; earlier < index; earlier++)
+      CHECK_EQ(bytes[earlier * block + block - 1], 0xA1u + earlier);
+    for (std::int64_t at = 0; at < block; at++) bytes[index * block + at] = static_cast<std::uint8_t>(0xA1u + index);
+    before = rig.commands();
+    CHECK_EQ(rig.mappings.unmap(rig.wire(), 5u), no_error);
+    CHECK_EQ(rig.commands() - before, 1u);
+    CHECK_EQ(rig.id(before), ids::kCmd_glNamedBufferSubData);
+  }
+  CHECK(rig.mappings.invariants_hold());
+  CHECK(rig.shadows.invariants_hold()); }
+
+/* The map state OpenGL answers is the guest's: the host never saw the map.
+ * An unmapped buffer answers what the host would, since it maps none; any
+ * other name is left to the host with the answer untouched. */
+TEST(mapped_buffers, map_state_answers_from_the_guests_map)
+{ Rig rig;
+  constexpr std::uint32_t mapped_name = MappedBuffers::gl_buffer_mapped, flags = MappedBuffers::gl_buffer_access_flags,
+                          offset = MappedBuffers::gl_buffer_map_offset, length = MappedBuffers::gl_buffer_map_length,
+                          access = MappedBuffers::gl_buffer_access;
+  std::int64_t value = -1;
+  CHECK(rig.mappings.map_state(6u, mapped_name, value));
+  CHECK_EQ(value, 0);
+  CHECK(rig.mappings.map_state(6u, flags, value));
+  CHECK_EQ(value, 0);
+  CHECK(rig.mappings.map_state(6u, length, value));
+  CHECK_EQ(value, 0);
+  CHECK(rig.mappings.map_state(0u, access, value));
+  CHECK_EQ(value, MappedBuffers::gl_read_write);
+
+  CHECK(rig.map(6u, 64, 16, 24, write | explicit_flush, no_error) != nullptr);
+  CHECK(rig.mappings.map_state(6u, mapped_name, value));
+  CHECK_EQ(value, 1);
+  CHECK(rig.mappings.map_state(6u, flags, value));
+  CHECK_EQ(value, static_cast<std::int64_t>(write | explicit_flush));
+  CHECK(rig.mappings.map_state(6u, offset, value));
+  CHECK_EQ(value, 16);
+  CHECK(rig.mappings.map_state(6u, length, value));
+  CHECK_EQ(value, 24);
+  CHECK(rig.mappings.map_state(6u, access, value));
+  CHECK_EQ(value, MappedBuffers::gl_write_only);
+  /* Another buffer is still unmapped. */
+  CHECK(rig.mappings.map_state(7u, mapped_name, value));
+  CHECK_EQ(value, 0);
+
+  CHECK(rig.map(7u, 8, 0, 8, read, no_error) != nullptr);
+  CHECK(rig.mappings.map_state(7u, access, value));
+  CHECK_EQ(value, MappedBuffers::gl_read_only);
+  CHECK(rig.map(8u, 8, 0, 8, read | write, no_error) != nullptr);
+  CHECK(rig.mappings.map_state(8u, access, value));
+  CHECK_EQ(value, MappedBuffers::gl_read_write);
+
+  value = 42;
+  CHECK(!rig.mappings.map_state(6u, MappedBuffers::gl_buffer_size, value));
+  CHECK_EQ(value, 42);
+  CHECK_EQ(rig.mappings.unmap(rig.wire(), 6u), no_error);
+  CHECK(rig.mappings.map_state(6u, mapped_name, value));
+  CHECK_EQ(value, 0); }

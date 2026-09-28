@@ -5,6 +5,7 @@
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
@@ -34,6 +35,7 @@ struct IcdConnectionProbe {
 namespace av::glicd {
 
 struct GlIcdRootProbe {
+    static GuestGlContext *context(GlIcdRoot &root, std::uint64_t handle) { return root.contexts_.resolve(handle); }
     static void fill_pending(GlIcdRoot &root)
     {
         for (uint32_t row = 0u; row < GlIcdRoot::max_pending; row++) {
@@ -729,6 +731,10 @@ TEST(gl_icd_root, a_create_with_attributes_shares_with_the_context_opengl32_name
   void *const second = create(rig.dc(), first, attributes);
   CHECK(second != nullptr);
   CHECK_EQ(rig.opengl32().dhglrc_lookups(), 1u);
+  /* Both now write the same buffers: neither keeps copies of them. */
+  using Probe = av::glicd::GlIcdRootProbe;
+  CHECK(!Probe::context(rig.root(), rig.opengl32().driver_context(first))->shadows().trusted());
+  CHECK(!Probe::context(rig.root(), rig.opengl32().driver_context(second))->shadows().trusted());
   av::RvkContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.options().share_context() != 0u);

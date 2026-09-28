@@ -14,6 +14,7 @@
 #include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
@@ -381,11 +382,12 @@ TEST(manual_calls, a_target_map_is_the_hosts_bound_buffer_filled_and_written_bac
   mapped[0] = 0xAAu;
   host.gl_integer(7);
   CHECK(gen::Wrap_glUnmapBuffer(array_buffer) == 1u);
+  /* Only the word that changed from the fill goes back. */
   CHECK_EQ(current.sent(), 6u);
   CHECK_EQ(current.sent_since(5u), ids::kCmd_glNamedBufferSubData);
   CHECK_EQ(current.argument_since(5u, 0u), 7u);
   CHECK_EQ(current.argument_since(5u, 1u), 0u);
-  CHECK_EQ(current.argument_since(5u, 2u), sizeof data);
+  CHECK_EQ(current.argument_since(5u, 2u), 8u);
   CHECK_EQ(current.context().mappings().held(), 0u);
   CHECK_EQ(current.error(), 0u); }
 
@@ -409,29 +411,94 @@ TEST(manual_calls, an_explicit_range_writes_back_only_what_was_flushed)
   CHECK_EQ(current.argument_since(3u, 2u), 6u);
   CHECK_EQ(current.error(), 0u); }
 
-/* A persistent map's bytes reach the host before each hand-written draw. */
+/* What a persistent map wrote reaches the host before each hand-written draw;
+ * a draw with nothing new written sends nothing ahead of it. */
 TEST(manual_calls, a_persistent_write_map_is_sent_before_every_draw)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
   answer_size(host, 8u);
+  host.gl_bytes(nullptr, 0u);
   const GLbitfield persistent_write = 0x0002u | 0x0040u;
-  CHECK(gen::Wrap_glMapNamedBufferRange(3u, 0, 8, persistent_write) != nullptr);
+  auto *const mapped = static_cast<std::uint8_t *>(gen::Wrap_glMapNamedBufferRange(3u, 0, 8, persistent_write));
+  CHECK(mapped != nullptr);
+  mapped[0] = 1u;
   gen::Wrap_glDrawArrays(gl_triangles, 0, 3);
+  mapped[1] = 2u;
   gen::Wrap_glDrawElements(gl_triangles, 3, gl_unsigned_short, nullptr);
+  mapped[2] = 3u;
   gen::Wrap_glDrawRangeElements(gl_triangles, 0u, 2u, 3, gl_unsigned_short, nullptr);
-  const std::uint32_t expected[] = {ids::kCmd_glGetNamedBufferParameteri64v, ids::kCmd_glNamedBufferSubData,
-                                    ids::kCmd_glDrawArrays, ids::kCmd_glNamedBufferSubData,
-                                    ids::kCmd_glDrawElements, ids::kCmd_glNamedBufferSubData,
-                                    ids::kCmd_glDrawRangeElements};
-  CHECK_EQ(current.sent(), 7u);
-  for (std::uint32_t index = 0u; index < 7u; index++) CHECK_EQ(current.sent_since(index), expected[index]);
+  gen::Wrap_glDrawArrays(gl_triangles, 0, 3);
+  const std::uint32_t expected[] = {ids::kCmd_glGetNamedBufferParameteri64v, ids::kCmd_glGetNamedBufferSubData,
+                                    ids::kCmd_glNamedBufferSubData,          ids::kCmd_glDrawArrays,
+                                    ids::kCmd_glNamedBufferSubData,          ids::kCmd_glDrawElements,
+                                    ids::kCmd_glNamedBufferSubData,          ids::kCmd_glDrawRangeElements,
+                                    ids::kCmd_glDrawArrays};
+  CHECK_EQ(current.sent(), 9u);
+  for (std::uint32_t index = 0u; index < 9u; index++) CHECK_EQ(current.sent_since(index), expected[index]);
   /* Deleting the buffer unmaps it with nothing written. */
   const GLuint deleted[] = {3u};
   gen::Wrap_glDeleteBuffers(1, deleted);
   gen::Wrap_glDrawArrays(gl_triangles, 0, 3);
-  CHECK_EQ(current.sent(), 9u);
-  CHECK_EQ(current.sent_since(8u), ids::kCmd_glDrawArrays);
+  CHECK_EQ(current.sent(), 11u);
+  CHECK_EQ(current.sent_since(10u), ids::kCmd_glDrawArrays);
   CHECK_EQ(current.context().mappings().held(), 0u); }
+
+/* A tracer learns what an application wrote by asking, at unmap, how the
+ * buffer is mapped: the guest answers, since the host never saw the map. A
+ * name that is not map state still goes to the host, and a target is resolved
+ * only for a map-state name. */
+TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
+{ Current current;
+  av::ScriptedHost &host = current.rig().host();
+  constexpr GLenum map_length = 0x9120u, map_offset = 0x9121u, access_flags = 0x911Fu, mapped_name = 0x88BCu,
+                   access = 0x88BBu, buffer_size = 0x8764u;
+  host.gl_integer(7);
+  answer_size(host, 64u);
+  host.gl_bytes(nullptr, 0u);
+  const GLbitfield unsynchronized_write = 0x0002u | 0x0020u;
+  CHECK(gen::Wrap_glMapBufferRange(array_buffer, 8, 32, unsynchronized_write) != nullptr);
+  const std::uint32_t sent = current.sent();
+  host.gl_integer(7);
+  GLint value = -1;
+  gen::Wrap_glGetBufferParameteriv(array_buffer, map_length, &value);
+  CHECK_EQ(value, 32);
+  CHECK_EQ(current.sent() - sent, 1u);
+  CHECK_EQ(current.sent_since(sent), ids::kCmd_glGetIntegerv);
+  host.gl_integer(7);
+  GLint64 wide = -1;
+  gen::Wrap_glGetBufferParameteri64v(array_buffer, map_offset, &wide);
+  CHECK_EQ(wide, 8);
+  gen::Wrap_glGetNamedBufferParameteriv(7u, access_flags, &value);
+  CHECK_EQ(value, static_cast<GLint>(unsynchronized_write));
+  gen::Wrap_glGetNamedBufferParameteri64v(7u, mapped_name, &wide);
+  CHECK_EQ(wide, 1);
+  gen::Wrap_glGetNamedBufferParameterivEXT(7u, access, &value);
+  CHECK_EQ(value, static_cast<GLint>(0x88B9u));
+  /* The named queries needed no round trip. */
+  CHECK_EQ(current.sent() - sent, 2u);
+  /* Any other name is the host's, and needs no binding resolved first. */
+  const std::int32_t host_size = 64;
+  host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&host_size), sizeof host_size);
+  gen::Wrap_glGetBufferParameteriv(array_buffer, buffer_size, &value);
+  CHECK_EQ(value, 64);
+  CHECK_EQ(current.sent() - sent, 3u);
+  CHECK_EQ(current.sent_since(sent + 2u), ids::kCmd_glGetBufferParameteriv);
+  /* No error of the guest's: the host is asked for its own. */
+  host.gl_varint(0u);
+  CHECK_EQ(current.error(), 0u);
+  /* A target binding nothing, or no target at all, is refused here. */
+  host.gl_integer(0);
+  gen::Wrap_glGetBufferParameteriv(array_buffer, map_length, &value);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  gen::Wrap_glGetBufferParameteriv(0x1234u, map_length, &value);
+  CHECK_EQ(current.error(), gl_invalid_enum);
+  /* Buffer 0 by name is the host's to refuse. */
+  const std::uint32_t before_zero = current.sent();
+  const std::int32_t  host_zero = 0;
+  host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&host_zero), sizeof host_zero);
+  gen::Wrap_glGetNamedBufferParameteriv(0u, map_length, &value);
+  CHECK_EQ(current.sent() - before_zero, 1u);
+  CHECK_EQ(current.sent_since(before_zero), ids::kCmd_glGetNamedBufferParameteriv); }
 
 TEST(manual_calls, map_refusals_are_recorded)
 { Current current;
@@ -578,9 +645,23 @@ TEST(manual_calls, with_nothing_current_nothing_is_sent_or_answered)
   calls.refuse();
   calls.buffer_pointer(array_buffer, 0x88BDu, &pointer);
   calls.named_buffer_pointer(1u, 0x88BDu, &pointer);
+  /* No context, no map state to answer: the host would be asked, and there
+   * is no host either. */
+  std::int64_t state = 7;
+  CHECK(!calls.buffer_map_state(array_buffer, 0x9120u, state));
+  CHECK(!calls.named_buffer_map_state(1u, 0x9120u, state));
+  CHECK_EQ(state, 7);
   calls.attribute_pointer(0u, 0x8645u, &pointer);
   calls.pointer(0x8244u, &pointer);
   CHECK(pointer == reinterpret_cast<void *>(0x1u));
+  calls.wrote_buffer(array_buffer, 0, 1, &value);
+  calls.wrote_named_buffer(1u, 0, 1, &value);
+  calls.host_writes_target(array_buffer);
+  calls.host_writes_buffer(1u);
+  calls.bind_buffer_indexed(0x90D2u, 1u);
+  calls.bind_buffers_indexed(0x90D2u);
+  calls.shaders_write_buffers();
+  calls.bindings_restored();
   CHECK_EQ(rig.kmt().commands(), 0u); }
 
 TEST(manual_calls, a_lost_context_sends_nothing_but_still_answers_what_it_kept)
@@ -755,11 +836,13 @@ TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
   host.gl_bytes(nullptr, 0u);
   CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x88B8u) != nullptr);
   CHECK_EQ(current.context().mappings().held(), 1u);
-  /* GL_WRITE_ONLY by name: no fill. */
+  /* GL_WRITE_ONLY by name: filled too, since what it does not write is kept. */
   answer_size(host, 4);
+  host.gl_bytes(nullptr, 0u);
   CHECK(gen::Wrap_glMapNamedBuffer(8u, 0x88B9u) != nullptr);
-  CHECK_EQ(current.sent(), 4u);
+  CHECK_EQ(current.sent(), 5u);
   CHECK_EQ(current.sent_since(3u), ids::kCmd_glGetNamedBufferParameteri64v);
+  CHECK_EQ(current.sent_since(4u), ids::kCmd_glGetNamedBufferSubData);
   /* A target that binds no buffer. */
   CHECK(gen::Wrap_glMapBufferRange(0x1234u, 0, 4, 1u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
@@ -770,7 +853,7 @@ TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
   host.gl_integer(10);
   CHECK(!gen::Wrap_glUnmapBuffer(array_buffer));
   CHECK_EQ(current.error(), gl_invalid_operation);
-  CHECK_EQ(current.sent(), 5u);
+  CHECK_EQ(current.sent(), 6u);
   CHECK_EQ(current.context().mappings().held(), 2u); }
 
 /* The generated entries' hooks: framebuffer 0 is the window's, and a draw
@@ -790,12 +873,15 @@ TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
   CHECK_EQ(current.sent_since(0u), ids::kCmd_glCheckNamedFramebufferStatus);
   CHECK_EQ(current.argument_since(0u, 0u), 100u);
   answer_size(host, 4);
-  CHECK(gen::Wrap_glMapNamedBufferRange(3u, 0, 4, 0x0002u | 0x0040u) != nullptr);
+  host.gl_bytes(nullptr, 0u);
+  auto *const mapped = static_cast<std::uint8_t *>(gen::Wrap_glMapNamedBufferRange(3u, 0, 4, 0x0002u | 0x0040u));
+  CHECK(mapped != nullptr);
+  mapped[0] = 1u;
   const GLenum buffers[] = {0x8CE0u};
   gen::Wrap_glDrawBuffers(1, buffers);
-  CHECK_EQ(current.sent(), 4u);
-  CHECK_EQ(current.sent_since(2u), ids::kCmd_glNamedBufferSubData);
-  CHECK_EQ(current.sent_since(3u), ids::kCmd_glDrawBuffers);
+  CHECK_EQ(current.sent(), 5u);
+  CHECK_EQ(current.sent_since(3u), ids::kCmd_glNamedBufferSubData);
+  CHECK_EQ(current.sent_since(4u), ids::kCmd_glDrawBuffers);
   current.rig().kmt().withhold_answer_at(1u);
   GLint value = 0;
   gen::Wrap_glGetIntegerv(0x0BA2u, &value);
@@ -1039,8 +1125,11 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
    * which is the first argument of each. */
   context.flush();
   std::uint32_t before = rig.kmt().commands();
+  CHECK(context.shadows().trusted());
   calls.buffer_storage_mem(array_buffer, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
+  /* Another API writes the memory whenever it likes. */
+  CHECK(!context.shadows().trusted());
   context.flush();
   CHECK(rig.kmt().commands() > before);
 
@@ -1106,8 +1195,10 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   };
   std::uint32_t before = 0u;
   const std::uint32_t named_at = rig.kmt().commands();
+  CHECK(context.shadows().trusted());
   calls.named_buffer_storage_mem(1u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
+  CHECK(!context.shadows().trusted());
   CHECK_EQ(sent_id(named_at), static_cast<std::uint32_t>(ids::kCmd_glNamedBufferStorageMemEXT));
 
   before = rig.kmt().commands();
@@ -1282,3 +1373,166 @@ TEST(manual_calls, a_count_no_call_can_have_is_kept_as_an_error_on_each_entry)
                                reinterpret_cast<void *>(0xDEADu));
   CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
   CHECK_EQ(rig.kmt().commands(), quiet); }
+
+/* A command the host runs that writes a buffer forgets the guest's copy of
+ * it - the buffer named, or bound at the target named - so the next map of it
+ * starts from the host's bytes. A target whose binding is not known forgets
+ * every copy. */
+TEST(manual_calls, a_command_the_host_runs_forgets_the_copy_of_the_buffer_it_writes)
+{ Current                   current;
+  ManualCalls              &calls = current.rig().root().manual();
+  av::glicd::BufferShadows &shadows = current.context().shadows();
+  constexpr GLenum          copy_read = 0x8F36u, copy_write = 0x8F37u, uniform = 0x8A11u;
+  constexpr GLenum          rgba8 = 0x8058u, rgba = 0x1908u, ubyte = 0x1401u;
+  std::uint8_t              bytes[16] = {};
+  for (std::uint32_t buffer = 1u; buffer <= 9u; buffer++) shadows.keep(buffer, 0u, sizeof bytes, bytes);
+  const auto kept = [&](std::uint32_t buffer) { return shadows.covering(buffer, 0u, 1u) != nullptr; };
+  calls.bind_buffer(copy_write, 2u);
+  gen::Wrap_glCopyBufferSubData(copy_read, copy_write, 0, 0, 4);
+  CHECK(!kept(2u));
+  CHECK(kept(1u));
+  gen::Wrap_glCopyNamedBufferSubData(1u, 3u, 0, 0, 4);
+  CHECK(!kept(3u));
+  CHECK(kept(1u));
+  gen::Wrap_glClearNamedBufferData(4u, rgba8, rgba, ubyte, nullptr);
+  CHECK(!kept(4u));
+  gen::Wrap_glInvalidateBufferData(5u);
+  CHECK(!kept(5u));
+  gen::Wrap_glGetQueryBufferObjectiv(1u, 6u, 0x8866u /* GL_QUERY_RESULT */, 0);
+  CHECK(!kept(6u));
+  /* A download into the pack buffer, by hand and generated. */
+  calls.bind_buffer(pixel_pack_buffer, 7u);
+  current.rig().host().gl_bytes(nullptr, 0u);
+  calls.read_pixels(0, 0, 1, 1, rgba, ubyte, nullptr);
+  CHECK(!kept(7u));
+  shadows.keep(7u, 0u, sizeof bytes, bytes);
+  current.rig().host().gl_bytes(nullptr, 0u);
+  gen::Wrap_glGetCompressedTexImage(0x0DE1u, 0, nullptr);
+  CHECK(!kept(7u));
+  /* A query's result into the query buffer. */
+  calls.bind_buffer(0x9192u /* GL_QUERY_BUFFER */, 9u);
+  current.rig().host().gl_bytes(nullptr, 0u);
+  gen::Wrap_glGetQueryObjectiv(1u, 0x8866u, nullptr);
+  CHECK(!kept(9u));
+  CHECK(kept(1u));
+  CHECK(kept(8u));
+  /* Bound several at once, the uniform target is not known. */
+  const GLuint several[] = {9u};
+  gen::Wrap_glBindBuffersBase(uniform, 0u, 1, several);
+  CHECK(shadows.trusted());
+  gen::Wrap_glClearBufferData(uniform, rgba8, rgba, ubyte, nullptr);
+  CHECK_EQ(shadows.held(), 0u);
+  CHECK(shadows.trusted()); }
+
+/* glBufferSubData's bytes go into the copy of the buffer bound, whether by
+ * glBindBuffer or by an indexed bind; a range OpenGL refuses changes nothing,
+ * and a target not known forgets every copy. */
+TEST(manual_calls, buffer_sub_data_goes_into_the_copy_of_the_buffer_bound_or_named)
+{ Current                   current;
+  ManualCalls              &calls = current.rig().root().manual();
+  av::glicd::BufferShadows &shadows = current.context().shadows();
+  constexpr GLenum          uniform = 0x8A11u;
+  std::uint8_t              zeros[16] = {};
+  const std::uint8_t        data[4] = {1u, 2u, 3u, 4u};
+  for (std::uint32_t buffer = 3u; buffer <= 5u; buffer++) shadows.keep(buffer, 0u, sizeof zeros, zeros);
+  calls.bind_buffer(uniform, 3u);
+  gen::Wrap_glBufferSubData(uniform, 4, sizeof data, data);
+  CHECK(std::memcmp(shadows.covering(3u, 4u, 4u), data, sizeof data) == 0);
+  gen::Wrap_glNamedBufferSubData(4u, 8, sizeof data, data);
+  CHECK(std::memcmp(shadows.covering(4u, 8u, 4u), data, sizeof data) == 0);
+  /* Refused by OpenGL: nothing written. */
+  gen::Wrap_glBufferSubData(uniform, -1, sizeof data, data);
+  gen::Wrap_glBufferSubData(uniform, 0, -1, data);
+  gen::Wrap_glNamedBufferSubData(4u, -1, sizeof data, data);
+  gen::Wrap_glNamedBufferSubData(4u, 0, -1, data);
+  CHECK_EQ(shadows.covering(3u, 0u, 1u)[0], 0u);
+  CHECK_EQ(shadows.covering(4u, 0u, 1u)[0], 0u);
+  /* An indexed bind binds the target too. */
+  gen::Wrap_glBindBufferRange(uniform, 0u, 5u, 0, 16);
+  CHECK_EQ(current.context().arrays().bound_buffer(uniform), 5u);
+  gen::Wrap_glBufferSubData(uniform, 0, sizeof data, data);
+  CHECK(std::memcmp(shadows.covering(5u, 0u, 4u), data, sizeof data) == 0);
+  CHECK_EQ(shadows.covering(3u, 0u, 1u)[0], 0u);
+  const GLuint     several[] = {3u};
+  const GLintptr   offsets[] = {0};
+  const GLsizeiptr sizes[] = {16};
+  gen::Wrap_glBindBuffersRange(uniform, 0u, 1, several, offsets, sizes);
+  gen::Wrap_glBufferSubData(uniform, 0, sizeof data, data);
+  CHECK_EQ(shadows.held(), 0u); }
+
+/* A buffer a shader can write - storage, atomic counters, transform feedback,
+ * an image unit, imported memory - changes out of the guest's sight, so the
+ * context keeps no copies from then on. Binding nothing there, or a buffer
+ * where shaders only read, keeps them. */
+TEST(manual_calls, a_binding_a_shader_writes_through_ends_the_copies)
+{ constexpr GLenum storage = 0x90D2u, atomic = 0x92C0u, feedback = 0x8C8Eu, uniform = 0x8A11u;
+  {
+    Current      current;
+    const GLuint none[] = {0u};
+    gen::Wrap_glBindBufferBase(uniform, 0u, 5u);
+    gen::Wrap_glBindBufferBase(storage, 0u, 0u);
+    gen::Wrap_glBindBuffersBase(uniform, 0u, 1, none);
+    CHECK(current.context().shadows().trusted());
+    gen::Wrap_glBindBufferRange(atomic, 0u, 5u, 0, 4);
+    CHECK(!current.context().shadows().trusted());
+  }
+  {
+    Current      current;
+    const GLuint some[] = {5u};
+    gen::Wrap_glBindBuffersBase(feedback, 0u, 1, some);
+    CHECK(!current.context().shadows().trusted());
+  }
+  {
+    Current current;
+    gen::Wrap_glBindImageTexture(0u, 1u, 0, 0u, 0, 0x88B9u /* GL_WRITE_ONLY */, 0x8058u);
+    CHECK(!current.context().shadows().trusted());
+  }
+  {
+    Current current;
+    gen::Wrap_glBeginTransformFeedback(0x0000u /* GL_POINTS */);
+    CHECK(!current.context().shadows().trusted());
+  }
+  {
+    Current current;
+    gen::Wrap_glTransformFeedbackBufferBase(1u, 0u, 5u);
+    CHECK(!current.context().shadows().trusted());
+  } }
+
+/* New storage drops the copy and, made with no data, is fresh: its first map
+ * has nothing to keep. A deletion forgets the copy, and bindings restored out
+ * of sight forget every copy. */
+TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
+{ Current                   current;
+  ManualCalls              &calls = current.rig().root().manual();
+  av::glicd::BufferShadows &shadows = current.context().shadows();
+  constexpr GLenum          uniform = 0x8A11u, stream_draw = 0x88E0u;
+  std::uint8_t              data[16] = {};
+  calls.bind_buffer(array_buffer, 3u);
+  shadows.keep(3u, 0u, sizeof data, data);
+  calls.buffer_data(array_buffer, sizeof data, nullptr, stream_draw);
+  CHECK(shadows.covering(3u, 0u, 1u) == nullptr);
+  CHECK(shadows.fresh(3u));
+  calls.buffer_data(array_buffer, sizeof data, data, stream_draw);
+  CHECK(!shadows.fresh(3u));
+  calls.buffer_storage(array_buffer, sizeof data, nullptr, 0u);
+  CHECK(shadows.fresh(3u));
+  calls.named_buffer_data(4u, sizeof data, nullptr, stream_draw);
+  calls.named_buffer_storage(5u, sizeof data, nullptr, 0u);
+  CHECK(shadows.fresh(4u));
+  CHECK(shadows.fresh(5u));
+  calls.named_buffer_storage(5u, sizeof data, data, 0u);
+  CHECK(!shadows.fresh(5u));
+  /* Storage for a target not known: nothing is known. */
+  const GLuint several[] = {6u};
+  gen::Wrap_glBindBuffersBase(uniform, 0u, 1, several);
+  calls.buffer_data(uniform, sizeof data, nullptr, stream_draw);
+  CHECK(!shadows.fresh(3u));
+  CHECK(!shadows.fresh(4u));
+  const GLuint deleted[] = {7u};
+  shadows.keep(7u, 0u, sizeof data, data);
+  calls.delete_buffers(1, deleted);
+  CHECK(shadows.covering(7u, 0u, 1u) == nullptr);
+  shadows.keep(8u, 0u, sizeof data, data);
+  calls.bindings_restored();
+  CHECK_EQ(shadows.held(), 0u);
+  CHECK(shadows.trusted()); }
