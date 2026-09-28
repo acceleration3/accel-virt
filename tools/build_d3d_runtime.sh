@@ -27,19 +27,37 @@ build() {
     meson install -C "$dir" --quiet
 }
 
+# A submodule with its series of patches on top of the pinned commit. The
+# series is judged whole - the files it touches, as they are, against the pinned
+# commit with every patch applied, both built in a scratch index - since one
+# patch reverse-checked alone fails once a later one edits beside it. Files
+# already as the series makes them are left alone (a rebuild stays
+# incremental); otherwise they are put back as pinned and the series applied.
+apply_series() {
+    local dir=$1 patches=("${@:2}") scratch files expected current
+    scratch=$(mktemp -d)
+    files=$(for patch in "${patches[@]}"; do git -C "$dir" apply --numstat "$patch" | cut -f3; done | sort -u)
+    GIT_INDEX_FILE="$scratch/expected" git -C "$dir" read-tree HEAD
+    for patch in "${patches[@]}"; do GIT_INDEX_FILE="$scratch/expected" git -C "$dir" apply --cached "$patch"; done
+    expected=$(GIT_INDEX_FILE="$scratch/expected" git -C "$dir" write-tree)
+    GIT_INDEX_FILE="$scratch/current" git -C "$dir" read-tree HEAD
+    # shellcheck disable=SC2086
+    GIT_INDEX_FILE="$scratch/current" git -C "$dir" add -- $files
+    current=$(GIT_INDEX_FILE="$scratch/current" git -C "$dir" write-tree)
+    rm -rf "$scratch"
+    [ "$expected" = "$current" ] && return
+    # shellcheck disable=SC2086
+    git -C "$dir" checkout HEAD -- $files
+    for patch in "${patches[@]}"; do git -C "$dir" apply "$patch"; done
+}
+
 # The pinned DXVK with what this project needs of it that upstream does not
-# enable: tools/dxvk-patches, applied once (a patch already in the tree is kept).
-for patch in "$ROOT"/tools/dxvk-patches/*.patch; do
-    git -C "$ROOT/third_party/dxvk" apply --reverse --check "$patch" 2>/dev/null ||
-        git -C "$ROOT/third_party/dxvk" apply "$patch"
-done
+# enable: tools/dxvk-patches.
+apply_series "$ROOT/third_party/dxvk" "$ROOT"/tools/dxvk-patches/*.patch
 
 # The pinned vkd3d-proton with the host-pointer heap the executor imports guest
-# memory through: tools/vkd3d-proton-patches, applied the same way.
-for patch in "$ROOT"/tools/vkd3d-proton-patches/*.patch; do
-    git -C "$ROOT/third_party/vkd3d-proton" apply --reverse --check "$patch" 2>/dev/null ||
-        git -C "$ROOT/third_party/vkd3d-proton" apply "$patch"
-done
+# memory through, and shared textures and fences as fds: tools/vkd3d-proton-patches.
+apply_series "$ROOT/third_party/vkd3d-proton" "$ROOT"/tools/vkd3d-proton-patches/*.patch
 
 # Direct3D 8, 9 and 10 stay out: the guest's user-mode driver serves 11 and 12.
 build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=false -Denable_d3d10=false

@@ -3,6 +3,7 @@
 #include "core/support/status.hpp"
 #include "core/virtio/gpu_command_queue.hpp"
 #include "core/virtio/virtio_pci_transport.hpp"
+#include "core/virtio/virtq_segment.hpp"
 #include "harness/device/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
@@ -17,6 +18,8 @@ using av::GpuRequestWriter;
 using av::Irql;
 using av::LockRank;
 using av::MappedRegisterWindow;
+using av::SegmentDirection;
+using av::VirtqSegment;
 using av::Status;
 using av::VirtioPciTransport;
 using av::Violation;
@@ -412,3 +415,60 @@ TEST(gpu_command_queue_harvest, counts_an_answer_that_is_not_an_ok_as_refused)
   CHECK_STATUS(fixture.control().harvest(completed, refused), Status::ok);
   CHECK_EQ(completed, 1u);
   CHECK_EQ(refused, 1u); }
+
+/* A request too large for any slot continues in memory of the caller's: the
+ * device reads the slot's bytes, then the payload, then writes its answer -
+ * one chain, and the answer is the exchange's like any other. */
+TEST(gpu_command_queue_exchange, carries_a_payload_the_device_reads_after_the_request)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  constexpr std::size_t payload_bytes = 3u * 4096u;
+  auto *const           payload = static_cast<std::uint8_t *>(fixture.platform().allocate_contiguous(payload_bytes));
+  CHECK(payload != nullptr);
+  for (std::size_t at = 0u; at < payload_bytes; at++) payload[at] = static_cast<std::uint8_t>(at * 7u);
+  const std::uint64_t address = fixture.platform().physical_address(payload);
+  Answering           host(fixture, ok_nodata, 1u);
+  std::uint8_t        answer[GpuRequestWriter::max_response_size] = {};
+  std::uint32_t       written = 0u;
+  const std::size_t   length = move_request(9);
+  CHECK_STATUS(fixture.control().exchange_carrying(request_bytes, length,
+                                                   VirtqSegment(address, payload_bytes, SegmentDirection::device_reads),
+                                                   answer, sizeof answer, written),
+               Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size);
+  CHECK_EQ(answer[1], 0x11u);
+  CHECK_EQ(host.answered(), 1u);
+  FakeVirtqueueDevice &device = host.device();
+  CHECK_EQ(device.seen_count(), 3u);
+  CHECK_EQ(device.seen(0u).length, length);
+  CHECK_EQ(device.seen(1u).address, address);
+  CHECK_EQ(device.seen(1u).length, payload_bytes);
+  CHECK_EQ(device.seen(1u).flags & flag_write, 0u);
+  CHECK_EQ(device.seen(2u).length, GpuRequestWriter::response_size);
+  CHECK_EQ(device.seen(2u).flags & flag_write, flag_write);
+  CHECK_EQ(fixture.control().in_flight(), 0u);
+  CHECK(fixture.control().invariants_hold());
+  fixture.platform().release_contiguous(payload, payload_bytes); }
+
+/* A payload of nothing, or one the device would write, is no request's
+ * continuation, and nothing is published. */
+TEST(gpu_command_queue_exchange, refuses_a_payload_that_is_empty_or_written_by_the_device)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  std::uint8_t  answer[GpuRequestWriter::max_response_size] = {};
+  std::uint32_t written = 7u;
+  CHECK_STATUS(fixture.control().exchange_carrying(request_bytes, move_request(1),
+                                                   VirtqSegment(0x10000u, 0u, SegmentDirection::device_reads), answer,
+                                                   sizeof answer, written),
+               Status::invalid_parameter);
+  CHECK_EQ(written, 0u);
+  CHECK_STATUS(fixture.control().exchange_carrying(request_bytes, move_request(1),
+                                                   VirtqSegment(0x10000u, 64u, SegmentDirection::device_writes), answer,
+                                                   sizeof answer, written),
+               Status::invalid_parameter);
+  /* A queue that answers nothing cannot be asked, payload or not. */
+  CHECK_STATUS(fixture.cursor().exchange_carrying(request_bytes, move_request(1),
+                                                  VirtqSegment(0x10000u, 64u, SegmentDirection::device_reads), answer,
+                                                  sizeof answer, written),
+               Status::invalid_parameter);
+  CHECK_EQ(fixture.control().in_flight(), 0u); }

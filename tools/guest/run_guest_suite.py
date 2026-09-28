@@ -407,6 +407,16 @@ def arguments():
                         help="the QEMU display backend (default: none). egl-headless gives the console a GL "
                              "context, which is what lets the device scan out a dma-buf; gtk and sdl open a "
                              "window on the host desktop, and closing it powers the guest off")
+    parser.add_argument("--relative-mouse", action="store_true",
+                        help="with gtk or sdl, a relative mouse the window grabs on a click (Ctrl+Alt+G lets go) "
+                             "instead of the absolute tablet, and on gtk the pointer kept visible while grabbed: "
+                             "what a game that locks the mouse for camera look needs")
+    parser.add_argument("--net", action="store_true",
+                        help="the guest on the internet through QEMU's user-mode NAT, on an e1000e NIC, which "
+                             "Windows drives with its inbox driver (default: no network)")
+    parser.add_argument("--audio", action="store_true",
+                        help="an Intel HD Audio controller and codec playing to the host's PipeWire, which Windows "
+                             "drives with its inbox driver (default: no sound)")
     parser.add_argument("--perfetto", action="store_true",
                         help="record every host scope as a timeline event (RVK_PERFETTO=1); "
                              "tools/perfetto_trace.py <qemu pid> writes it for ui.perfetto.dev")
@@ -427,6 +437,22 @@ def arguments():
         parser.error("--no-verifier leaves nothing to read: --power-cycles judges the pool allocations "
                      "Driver Verifier tracked, and without it every cycle reports none")
     return parsed
+
+
+def display_option(args):
+    """The display backend and its options. A window draws with GL, as gtk
+    must to scale the guest's frame on the GPU. Grabbing a relative mouse, gtk
+    hides the host's pointer and shows the guest's only when the guest next
+    changes its shape, which Windows does rarely: show-cursor keeps one in
+    view. gtk has no pointer lock on Wayland, though - it warps the host's
+    pointer after the guest's, and XWayland answers each warp with movement -
+    so a relative mouse on a Wayland host is SDL's, whose relative mode locks
+    the pointer (SDL_VIDEODRIVER=wayland)."""
+    if args.display == "gtk":
+        return "gtk,gl=on,show-cursor=on" if args.relative_mouse else "gtk,gl=on"
+    if args.display == "sdl":
+        return "sdl,gl=on"
+    return args.display
 
 
 def qemu_command(args, work, disk, rescue, gpus=()):
@@ -486,9 +512,12 @@ def qemu_command(args, work, disk, rescue, gpus=()):
         # Without GL, gtk scales the guest's frame to a HiDPI window in
         # software - bilinear, in cairo, on QEMU's main loop, on every redraw -
         # which the device's work shares; with it the GPU draws the window.
-        "-vga", "none", "-display", "gtk,gl=on" if args.display == "gtk" else args.display,
-        "-nic", "none",
+        "-vga", "none", "-display", display_option(args),
+        "-nic", "user,model=e1000e" if args.net else "none",
     ]
+    if args.audio:
+        command += ["-audiodev", "pipewire,id=audio", "-device", "ich9-intel-hda",
+                    "-device", "hda-output,audiodev=audio"]
     # An idle vCPU halts inside the guest instead of exiting to the host: a
     # completion's interrupt then reaches a vCPU still on its core, not a host
     # thread the scheduler must wake first. A guest that waits on every frame
@@ -499,9 +528,12 @@ def qemu_command(args, work, disk, rescue, gpus=()):
     if args.vnc is not None:
         command += ["-vnc", f"127.0.0.1:{args.vnc}"]
     # A window someone uses: an absolute pointer, so the guest's cursor is
-    # where the host's is rather than a grabbed relative mouse.
+    # where the host's is rather than a grabbed relative mouse - unless a game
+    # asked for one. A game that locks the mouse reads raw movement, and an
+    # absolute pointer's is a jump to where the host's cursor is, which swings
+    # its camera far past what the hand moved.
     if args.display in ("gtk", "sdl"):
-        command += ["-device", "qemu-xhci", "-device", "usb-tablet"]
+        command += ["-device", "qemu-xhci"] + ([] if args.relative_mouse else ["-device", "usb-tablet"])
     if args.gdb is not None:
         command += ["-gdb", f"tcp:127.0.0.1:{args.gdb}"]
     for pattern in args.trace:

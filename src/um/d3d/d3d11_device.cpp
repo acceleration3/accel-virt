@@ -40,8 +40,8 @@ constexpr uint32_t copy_discard = 0x2u;
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, icd::LogSink &log, const D3d11HostCaps &caps)
     : session_(session), memory_(memory), log_(log), caps_(caps), runtime_{}, core_layer_{}, kernel_(nullptr),
       core_(nullptr), dxgi_(nullptr), channel_(), parent_(nullptr), recording_lock_(), calls_(), calls_owner_(0u), calls_depth_(0u), recording_(),
-      recording_block_(nullptr), present_context_(nullptr), feature_level_(0u),
-      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), frame_(1u)
+      recording_block_(nullptr), context_(nullptr), paging_(), follower_(), feature_level_(0u),
+      guest_surfaces_{}, guest_surface_count_(0u), guest_lock_refused_(false), present_refused_(false), follow_refused_(false), frame_(1u)
 {
     AV_SCOPE("D3d11Device::D3d11Device");
 }
@@ -61,9 +61,11 @@ D3d11Device::~D3d11Device()
         channel_.destroy();
         session_.leave();
     }
-    if (present_context_ != nullptr && kernel_ != nullptr) {
+    if (paging_.constructed()) paging_.destroy();
+    follower_.destroy();
+    if (context_ != nullptr && kernel_ != nullptr) {
         D3DDDICB_DESTROYCONTEXT destroy = {};
-        destroy.hContext = present_context_;
+        destroy.hContext = context_;
         kernel_->pfnDestroyContextCb(runtime_.handle, &destroy);
     }
 }
@@ -76,6 +78,10 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     kernel_ = create.pKTCallbacks;
     core_ = create.p11UMCallbacks;
     dxgi_ = create.DXGIBaseDDI.pDXGIBaseCallbacks;
+    static_cast<void>(paging_.construct(*kernel_, runtime_.handle));
+    static_cast<void>(follower_.construct(*kernel_, runtime_.handle, session_.transport()));
+    const HRESULT context = make_context();
+    if (FAILED(context)) return context;
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
     feature_level_ = level < sizeof(feature_levels) / sizeof(feature_levels[0]) ? feature_levels[level] : 0u;
     const HRESULT joined = session_.join(adapter);
@@ -382,7 +388,13 @@ void D3d11Device::destroy_object(uint32_t id)
 BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
-    if (wire().application_flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (wire().application_flush() != Status::ok) {
+        set_error(D3DDDIERR_DEVICEREMOVED);
+        return TRUE;
+    }
+    /* The runtime signals a fence it was asked to after flushing, on the
+     * kernel context: the signal must wait for what the flush sent. */
+    if (FAILED(follow_host())) set_error(D3DDDIERR_DEVICEREMOVED);
     return TRUE;
 }
 

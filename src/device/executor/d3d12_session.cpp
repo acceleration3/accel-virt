@@ -1,6 +1,8 @@
 #include "device/executor/d3d12_session.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/d3d12_indirect_signature.hpp"
+#include "device/executor/d3d12_root_layout.hpp"
 #include "device/executor/guest_region.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
@@ -99,17 +101,18 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 
 D3d12Session::D3d12Session(GuestRegion &region)
     : region_(region), device_(nullptr), objects_(), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
-      pipelines_(objects_), arena_(nullptr), drained_(nullptr), drained_value_(0u), removed_(0u)
+      pipelines_(objects_), presentation_(), arena_(nullptr), drained_(nullptr), drained_value_(0u), removed_(0u)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
 
-void D3d12Session::initialize(D3d12HostDevice *device)
+void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by)
 {
     AV_SCOPE("D3d12Session::initialize");
     device_ = device != nullptr && device->opened() ? device : nullptr;
     views_.bind(device_ != nullptr ? device_->device() : nullptr);
     pipelines_.bind(device_);
+    presentation_.bind(device_, shown_by);
     removed_ = 0u;
 }
 
@@ -117,6 +120,7 @@ void D3d12Session::shut_down()
 {
     AV_SCOPE("D3d12Session::shut_down");
     drain();
+    presentation_.bind(nullptr, nullptr);
     fences_.clear();
     progress_.clear();
     wake_.stop();
@@ -235,11 +239,19 @@ bool D3d12Session::gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &ha
     return true;
 }
 
+/* A buffer placed in a heap lies inside the buffer D3D12Core made over the
+ * whole heap when the heap was created, whose range is registered already.
+ * The host placed both in one heap at the same offsets, so an address of the
+ * placed buffer translates through that range to exactly where the buffer
+ * is, and it is not registered again. A range overlapping one that does not
+ * translate so is refused, as before. */
 bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t width)
 {
     AV_SCOPE("D3d12Session::place");
     ID3D12Resource *const resource = static_cast<ID3D12Resource *>(static_cast<void *>(made));
-    if (address != 0u && !addresses_.insert(address, width, resource->GetGPUVirtualAddress(), id)) {
+    const uint64_t        host = resource->GetGPUVirtualAddress();
+    const bool            within = address != 0u && addresses_.translate(address, width) == host;
+    if (address != 0u && !within && !addresses_.insert(address, width, host, id)) {
         made->Release();
         return false;
     }
@@ -413,6 +425,13 @@ bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12pr
     return place(resource, made, desc.dimension == buffer_dimension ? address : 0u, desc.width);
 }
 
+bool D3d12Session::on_ShareResource12(uint32_t resource, uint64_t key)
+{
+    AV_SCOPE("D3d12Session::on_ShareResource12");
+    ID3D12Resource *const shown = object<ID3D12Resource>(resource, D3dObjectKind::resource12);
+    return shown != nullptr && presentation_.share(shown, key);
+}
+
 bool D3d12Session::on_ResourceAllocation12(const d3d12proto::ResourceDesc &desc, uint64_t &size,
                                            uint64_t &alignment)
 {
@@ -465,9 +484,18 @@ bool D3d12Session::on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint3
     AV_SCOPE("D3d12Session::on_CreateDescriptorHeap12");
     constexpr uint32_t most_descriptors = 1000000u;
     if (device_ == nullptr || type >= descriptor_heap_types || count == 0u || count > most_descriptors) return false;
+    /* vkd3d-proton makes a shader-visible sampler heap of at most the API's
+     * 2048, while the guest's runtime has the driver report more than that
+     * (D3d12HostCaps): an application that makes the heap it was told of - as
+     * wgpu makes one of the size reported - gets 2048, and a sampler past them
+     * is refused as one outside any heap is. Applications hand sampler slots
+     * out from the start. */
+    constexpr uint32_t visible_samplers = 2048u;   /* D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE */
+    const bool         capped = type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER &&
+                        (flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) != 0u && count > visible_samplers;
     D3D12_DESCRIPTOR_HEAP_DESC desc = {};
     desc.Type = static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type);
-    desc.NumDescriptors = count;
+    desc.NumDescriptors = capped ? visible_samplers : count;
     desc.Flags = static_cast<D3D12_DESCRIPTOR_HEAP_FLAGS>(flags);
     ID3D12DescriptorHeap *made = nullptr;
     if (FAILED(device_->device()->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap),
@@ -559,6 +587,21 @@ bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint3
     return keep(root, D3dObjectKind::root_signature12,
                 pipelines_.root_signature(flags, parameters, parameter_count, ranges, range_count, samplers,
                                           sampler_count));
+}
+
+/* The layout a root argument is judged against is the one kept on the root
+ * signature when it was made (D3d12RootLayout). */
+bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride,
+                                               uint32_t argument_count, const d3d12proto::IndirectArgument *arguments)
+{
+    AV_SCOPE("D3d12Session::on_CreateCommandSignature12");
+    ID3D12RootSignature *const rooted =
+        root == 0u ? nullptr : object<ID3D12RootSignature>(root, D3dObjectKind::root_signature12);
+    D3d12RootLayout layout;
+    if (device_ == nullptr || (root != 0u && (rooted == nullptr || !layout.read(rooted)))) return false;
+    const D3d12IndirectSignature made(arguments, argument_count, byte_stride);
+    if (!made.holds(rooted != nullptr ? &layout : nullptr)) return false;
+    return keep(signature, D3dObjectKind::command_signature12, made.make(device_->device(), rooted));
 }
 
 bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState &state,
@@ -663,6 +706,14 @@ bool D3d12Session::on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t f
                                               reinterpret_cast<void **>(&made))))
         return false;
     return keep(fence, D3dObjectKind::fence12, made);
+}
+
+bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource)
+{
+    AV_SCOPE("D3d12Session::on_PresentResource12");
+    ID3D12CommandQueue *const from = object<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
+    if (from == nullptr || object<ID3D12Resource>(resource, D3dObjectKind::resource12) == nullptr) return false;
+    return presentation_.present(from);
 }
 
 bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t *lists)

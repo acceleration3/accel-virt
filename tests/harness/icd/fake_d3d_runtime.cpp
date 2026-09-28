@@ -37,13 +37,29 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
  * name, so -fsanitize=function would see a mismatch that the ABI does not. */
 __attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
+/* UMDRIVERPRIVATE as rvkgpu.sys writes it: its tag, then the adapter's LUID. */
+struct AdapterInfoQuery {
+    void         *private_data;
+    std::uint32_t private_bytes;
+};
+
+__attribute__((no_sanitize("function"))) std::int32_t answer_adapter_info(void *adapter, void *query)
+{
+    constexpr std::uint64_t umd_private_tag = 0x44494C554B5652ull;
+    auto *const asked = static_cast<AdapterInfoQuery *>(query);
+    if (asked->private_bytes < 2u * sizeof(std::uint64_t)) return -1;
+    const std::uint64_t words[2] = {umd_private_tag, *static_cast<const std::uint64_t *>(adapter)};
+    std::memcpy(asked->private_data, words, sizeof words);
+    return 0;
+}
+
 }  // namespace
 
 FakeD3dRuntime::FakeD3dRuntime(d3d::UmdRoot &root, d3d::RuntimeKind runtime)
     : root_(root), runtime_(runtime), callbacks_{}, funcs10_{}, funcs12_{}, dxgi_callbacks_{}, dxgi_table_{},
       adapter_(nullptr), interface_(runtime == d3d::RuntimeKind::d3d10_11 ? d3d11_interface : 0u),
       no_callbacks_(false), no_table_(false), no_dxgi_callbacks_(false), no_dxgi_table_(false), scribble_(false),
-      block_{}, table_{}, runtime_device_(0), runtime_core_layer_(0), kt_callbacks_(0), um_callbacks_(0)
+      block_{}, table_{}, runtime_device_(0), luid_(0u), runtime_core_layer_(0), kt_callbacks_(0), um_callbacks_(0)
 {
     /* Non-null rows, as a real runtime's table has: the driver keeps the
      * pointer to the table, and a test that moved a row would see it. */
@@ -60,6 +76,12 @@ void FakeD3dRuntime::offer_no_dxgi_callbacks() { no_dxgi_callbacks_ = true; }
 void FakeD3dRuntime::offer_no_dxgi_table() { no_dxgi_table_ = true; }
 void FakeD3dRuntime::scribble_the_device_block() { scribble_ = true; }
 
+void FakeD3dRuntime::answer_luid(std::uint64_t luid)
+{
+    luid_ = luid;
+    callbacks_.pfnQueryAdapterInfoCb = reinterpret_cast<void *>(&answer_adapter_info);
+}
+
 Hresult FakeD3dRuntime::open()
 {
     /* Both runtimes zero the table before the call, so a slot the driver does
@@ -68,7 +90,7 @@ Hresult FakeD3dRuntime::open()
     std::memset(&funcs12_, 0, sizeof funcs12_);
     if (runtime_ == d3d::RuntimeKind::d3d10_11) {
         d3d::D3d10ddiargOpenAdapterRecord args = {};
-        args.hRTAdapter = &runtime_device_;
+        args.hRTAdapter = luid_ != 0u ? static_cast<void *>(&luid_) : &runtime_device_;
         args.Interface = interface_;
         args.Version = d3d11_runtime_build;
         args.pAdapterCallbacks = no_callbacks_ ? nullptr : &callbacks_;
@@ -78,7 +100,7 @@ Hresult FakeD3dRuntime::open()
         return opened;
     }
     d3d::D3d12ddiargOpenAdapterRecord args = {};
-    args.hRTAdapter = &runtime_device_;
+    args.hRTAdapter = luid_ != 0u ? static_cast<void *>(&luid_) : &runtime_device_;
     args.pAdapterCallbacks = no_callbacks_ ? nullptr : &callbacks_;
     args.pAdapterFuncs = no_table_ ? nullptr : &funcs12_;
     const Hresult opened = root_.open_adapter12(&args);

@@ -1,14 +1,14 @@
 /* rvkumd.dll as the Direct3D runtimes reach it (contracts/umd_interface.md):
  * the answers to the two exports, the adapters opened through them, the
- * devices made on those adapters, and the one connection to the kernel's
- * adapter they share.
+ * devices made on those adapters, and a connection to each kernel adapter
+ * they opened, which every open of that adapter shares.
  *
  * One per process, in ObjectStorage in the exports' translation unit, bound
  * into UmdBinding for its lifetime so a table thunk - which the runtime calls
  * with its argument structure and no context - can find it.
  *
- * Nothing is opened before the first OpenAdapter call, and the connection is
- * closed with the last CloseAdapter: a process that loaded the DLL and asked
+ * Nothing is opened before the first OpenAdapter call, and a connection is
+ * closed with the last CloseAdapter of its adapter: a process that loaded the DLL and asked
  * it nothing holds no kernel object. */
 #ifndef AV_D3D_UMD_ROOT_HPP
 #define AV_D3D_UMD_ROOT_HPP
@@ -17,7 +17,7 @@
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"
-#include "icd/d3d/umd_connection.hpp"
+#include "icd/d3d/umd_connections.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -84,7 +84,7 @@ public:
     /* What a DXGI thunk resolves its argument's hDevice through. */
     UmdDevice *device_of(void *block) const;
 
-    /* `umd/0` with the adapter and device counts, then the connection, each
+    /* `umd/0` with the adapter and device counts, then each open connection, each
      * adapter and each device (docs/trace.md). Never waits: with the lock held
      * elsewhere only `umd/0 busy=true` is written. */
     void report(StateWriter &writer) override;
@@ -109,7 +109,7 @@ private:
     icd::LogSink    &log_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;
-    UmdConnection    connection_;
+    UmdConnections   connections_;
     AdapterTable     adapters_;
     DeviceTable      devices_;
 

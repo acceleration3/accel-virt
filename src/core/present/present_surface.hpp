@@ -13,6 +13,9 @@
 
 namespace av {
 
+class Platform;
+class WireWriter;
+
 class PresentSurface {
 public:
     /* Four bytes a pixel: every surface this driver presents (A8R8G8B8). */
@@ -21,12 +24,19 @@ public:
     PresentSurface(const SurfaceLayout &layout, const GuestPageList &pages);
 
     const SurfaceLayout &layout() const;
-    /* The bytes at `offset`, up to the end of their page, and how many there
-     * are; the frame is 0 when the offset is past the pages. */
-    uint64_t             frame_at(uint64_t offset, uint32_t &within) const;
+    /* Every page of the surface mapped as one view (Platform::map_pages); null
+     * when the platform cannot map them. */
+    uint8_t             *map(Platform &platform, void *&mapping) const;
     /* A surface of four-byte pixels, with a pitch of whole pixels wide enough
      * for its own width, every page of it mapped, and room for every row. */
     bool                 reachable() const;
+    /* Whether red and blue trade places between this surface's bytes and
+     * `other`'s: an application's R8G8B8A8 back buffer into the desktop's
+     * A8R8G8B8. */
+    bool                 swaps_with(const PresentSurface &other) const;
+    /* The pages as the device is told them (GuestPageList::write_runs). */
+    uint32_t             runs() const;
+    void                 write_runs(WireWriter &writer) const;
 
 private:
     SurfaceLayout layout_;

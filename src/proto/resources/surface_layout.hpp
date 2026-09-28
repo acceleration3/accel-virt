@@ -19,6 +19,10 @@ public:
     /* pitch * height, which cannot overflow 64 bits. */
     uint64_t bytes() const;
     bool     is_surface() const;
+    /* Whether a pixel's bytes run red first - A8B8G8R8 and X8B8G8R8, what a
+     * Direct3D R8G8B8A8 surface is - rather than blue first like A8R8G8B8, the
+     * desktop's: two surfaces that disagree swap red and blue when copied. */
+    bool     red_first() const;
 
 private:
     uint32_t width_;

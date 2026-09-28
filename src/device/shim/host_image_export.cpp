@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/shim/d3d_headers.hpp"
-#include "device/shim/dxvk_interop.hpp"
+#include "device/shim/dxvk_vulkan_device.hpp"
 
 #include <unistd.h>
 
@@ -40,11 +40,8 @@ VkFormat vk_format(uint32_t format)
 
 }  // namespace
 
-HostImageExport::HostImageExport()
-    : interop_(nullptr), physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), create_image_(nullptr),
-      destroy_image_(nullptr), requirements_(nullptr), allocate_(nullptr), free_(nullptr), bind_(nullptr),
-      layout_(nullptr), memory_fd_(nullptr), images_{}, width_(0u), height_(0u), format_(0u), next_(0u),
-      unavailable_(false)
+HostImageExport::HostImageExport(DxvkVulkanDevice &vulkan)
+    : vulkan_(vulkan), images_{}, width_(0u), height_(0u), format_(0u), next_(0u), unavailable_(false)
 {
     AV_SCOPE("HostImageExport::HostImageExport");
     for (Image &image : images_) image.fd_ = -1;
@@ -54,27 +51,6 @@ HostImageExport::~HostImageExport()
 {
     AV_SCOPE("HostImageExport::~HostImageExport");
     release();
-}
-
-bool HostImageExport::connect(ID3D11Device5 *device)
-{
-    AV_SCOPE("HostImageExport::connect");
-    if (interop_ != nullptr) return true;
-    IDXGIVkInteropDevice1 *interop = nullptr;
-    if (FAILED(device->QueryInterface(__uuidof(IDXGIVkInteropDevice1), reinterpret_cast<void **>(&interop)))) return false;
-    VkInstance instance = VK_NULL_HANDLE;
-    interop->GetVulkanHandles(&instance, &physical_, &device_);
-    const auto load = [this](const char *name) { return vkGetDeviceProcAddr(device_, name); };
-    create_image_ = reinterpret_cast<PFN_vkCreateImage>(load("vkCreateImage"));
-    destroy_image_ = reinterpret_cast<PFN_vkDestroyImage>(load("vkDestroyImage"));
-    requirements_ = reinterpret_cast<PFN_vkGetImageMemoryRequirements>(load("vkGetImageMemoryRequirements"));
-    allocate_ = reinterpret_cast<PFN_vkAllocateMemory>(load("vkAllocateMemory"));
-    free_ = reinterpret_cast<PFN_vkFreeMemory>(load("vkFreeMemory"));
-    bind_ = reinterpret_cast<PFN_vkBindImageMemory>(load("vkBindImageMemory"));
-    layout_ = reinterpret_cast<PFN_vkGetImageSubresourceLayout>(load("vkGetImageSubresourceLayout"));
-    memory_fd_ = reinterpret_cast<PFN_vkGetMemoryFdKHR>(load("vkGetMemoryFdKHR"));
-    interop_ = interop;
-    return memory_fd_ != nullptr;
 }
 
 /* Linear, so the display imports it with no modifier to agree on; device
@@ -96,32 +72,15 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.tiling = VK_IMAGE_TILING_LINEAR;
     created.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     created.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (create_image_(device_, &created, nullptr, &image.image_) != VK_SUCCESS) return false;
-    VkMemoryRequirements needs = {};
-    requirements_(device_, image.image_, &needs);
-    VkPhysicalDeviceMemoryProperties memory = {};
-    vkGetPhysicalDeviceMemoryProperties(physical_, &memory);
-    uint32_t type = memory.memoryTypeCount;
-    for (uint32_t index = 0u; index < memory.memoryTypeCount && type == memory.memoryTypeCount; index++)
-        if ((needs.memoryTypeBits & (1u << index)) != 0u &&
-            (memory.memoryTypes[index].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0u)
-            type = index;
-    for (uint32_t index = 0u; index < memory.memoryTypeCount && type == memory.memoryTypeCount; index++)
-        if ((needs.memoryTypeBits & (1u << index)) != 0u) type = index;
-    if (type == memory.memoryTypeCount) return false;
-    VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, nullptr, image.image_,
-                                               VK_NULL_HANDLE};
-    VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, &dedicated,
-                                           VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    VkMemoryAllocateInfo allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &exported, needs.size, type};
-    if (allocate_(device_, &allocation, nullptr, &image.memory_) != VK_SUCCESS) return false;
-    if (bind_(device_, image.image_, image.memory_, 0u) != VK_SUCCESS) return false;
-    VkMemoryGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, image.memory_,
-                                  VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    if (memory_fd_(device_, &asked, &image.fd_) != VK_SUCCESS) return false;
-    const VkImageSubresource plane = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u};
-    VkSubresourceLayout laid = {};
-    layout_(device_, image.image_, &plane, &laid);
+    if (!vulkan_.create_image(created, image.image_)) return false;
+    const VkMemoryRequirements needs = vulkan_.requirements(image.image_);
+    const uint32_t             type = vulkan_.memory_type(needs.memoryTypeBits);
+    if (type == VK_MAX_MEMORY_TYPES) return false;
+    const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
+                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    if (!vulkan_.bind_memory(image.image_, &exported, needs.size, type, image.memory_)) return false;
+    if (!vulkan_.memory_fd(image.memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, image.fd_)) return false;
+    const VkSubresourceLayout laid = vulkan_.row_layout(image.image_);
     image.stride_ = static_cast<uint32_t>(laid.rowPitch);
     image.offset_ = static_cast<uint32_t>(laid.offset);
     D3D11_TEXTURE2D_DESC1 described = {};
@@ -132,8 +91,7 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     described.Format = static_cast<DXGI_FORMAT>(format_);
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
-    auto *const interop = static_cast<IDXGIVkInteropDevice1 *>(interop_);
-    if (FAILED(interop->CreateTexture2DFromVkImage(&described, image.image_, &image.texture_))) return false;
+    if (!vulkan_.wrap(described, image.image_, image.texture_)) return false;
     const D3D11_QUERY_DESC query = {D3D11_QUERY_EVENT, 0u};
     return SUCCEEDED(device->CreateQuery(&query, &image.done_));
 }
@@ -162,7 +120,7 @@ bool HostImageExport::stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context
     D3D11_TEXTURE2D_DESC described = {};
     source->GetDesc(&described);
     if (drm_format(static_cast<uint32_t>(described.Format)) == 0u || described.SampleDesc.Count != 1u) return false;
-    if (!connect(device) || !make(device, described.Width, described.Height, static_cast<uint32_t>(described.Format))) {
+    if (!vulkan_.connected() || !make(device, described.Width, described.Height, static_cast<uint32_t>(described.Format))) {
         unavailable_ = true;
         return false;
     }
@@ -202,8 +160,8 @@ void HostImageExport::drop(Image &image)
     if (image.done_ != nullptr) image.done_->Release();
     if (image.texture_ != nullptr) image.texture_->Release();
     if (image.fd_ >= 0) close(image.fd_);
-    if (image.image_ != VK_NULL_HANDLE) destroy_image_(device_, image.image_, nullptr);
-    if (image.memory_ != VK_NULL_HANDLE) free_(device_, image.memory_, nullptr);
+    vulkan_.destroy_image(image.image_);
+    vulkan_.free_memory(image.memory_);
     image = Image{VK_NULL_HANDLE, VK_NULL_HANDLE, nullptr, nullptr, -1, 0u, 0u};
 }
 
@@ -211,8 +169,6 @@ void HostImageExport::release()
 {
     AV_SCOPE("HostImageExport::release");
     for (Image &image : images_) drop(image);
-    if (interop_ != nullptr) static_cast<IDXGIVkInteropDevice1 *>(interop_)->Release();
-    interop_ = nullptr;
 }
 
 }  // namespace av

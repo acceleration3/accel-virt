@@ -35,6 +35,7 @@ public:
     virtual bool on_Finish12(uint32_t& hresult) = 0;
     virtual bool on_CreateHeap12(uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) = 0;
     virtual bool on_CreateCommittedResource12(uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
+    virtual bool on_ShareResource12(uint32_t resource, uint64_t key) = 0;
     virtual bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) = 0;
     virtual bool on_ResourceAllocation12(const ResourceDesc& desc, uint64_t& size, uint64_t& alignment) = 0;
     virtual bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) = 0;
@@ -46,6 +47,7 @@ public:
     virtual bool on_CreateSampler12(const DescriptorRef& at, const SamplerDesc& desc) = 0;
     virtual bool on_CopyDescriptors12(const DescriptorRef& destination, const DescriptorRef& source, uint32_t count) = 0;
     virtual bool on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers) = 0;
+    virtual bool on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments) = 0;
     virtual bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size) = 0;
     virtual bool on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, const uint8_t* cs, uint64_t cs_size) = 0;
     virtual bool on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) = 0;
@@ -56,6 +58,7 @@ public:
     virtual bool on_CloseCommandList12(uint32_t list) = 0;
     virtual bool on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t flags) = 0;
     virtual bool on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t* lists) = 0;
+    virtual bool on_PresentResource12(uint32_t queue, uint32_t resource) = 0;
     virtual bool on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
     virtual bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
     virtual bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) = 0;
@@ -91,6 +94,7 @@ public:
     virtual bool on_BeginEvent12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) = 0;
     virtual bool on_EndEvent12(uint32_t list) = 0;
     virtual bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) = 0;
+    virtual bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) = 0;
 
 protected:
     ServerDispatch() = default;

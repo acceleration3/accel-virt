@@ -8,7 +8,6 @@
 #include "icd/d3d/d3d12_heap_arena.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
-#include "proto/submission/follow_record.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -47,7 +46,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, icd::LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), channel_(), addresses_(),
+    : session_(session), heaps_(heaps), log_(log), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, lost_(false), logged_{}
 {
     AV_SCOPE("D3d12Device::D3d12Device");
@@ -58,6 +57,7 @@ D3d12Device::D3d12Device(d3d::D3dSession &session, d3d::D3d12HeapArena &heaps, i
 D3d12Device::~D3d12Device()
 {
     AV_SCOPE("D3d12Device::~D3d12Device");
+    follower_.destroy();
     if (!channel_.constructed()) return;
     static_cast<void>(channel_.object().flush());
     channel_.destroy();
@@ -69,9 +69,10 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     AV_SCOPE("D3d12Device::initialize");
     runtime_ = create.hRTDevice;
     core_ = create.p12UMCallbacks_0050;
-    kernel_ = create.pKTCallbacks;
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
+    if (create.pKTCallbacks != nullptr)
+        static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
     /* A session no heap lives in yet lends only its first part, whichever
      * device of it arrives first: the arena was just opened, or every heap in
@@ -365,22 +366,9 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
 bool D3d12Device::follow(const QueueRecord &queue)
 {
     AV_SCOPE("D3d12Device::follow");
-    constexpr UINT marker_bytes = sizeof(uint64_t);
-    uint8_t        record[FollowRecord::encoded_size] = {};
-    if (session_.transport().follow().encode(record, sizeof record) != Status::ok) {
-        lost("the queue's work had no batch to follow");
-        return false;
-    }
-    D3DDDICB_SUBMITCOMMAND submit = {};
-    submit.Commands = session_.transport().marker_address();
-    submit.CommandLength = marker_bytes;
-    submit.BroadcastContextCount = 1u;
-    submit.BroadcastContext[0] = queue.context;
-    submit.pPrivateDriverData = record;
-    submit.PrivateDriverDataSize = sizeof record;
-    const HRESULT submitted = kernel_ != nullptr ? kernel_->pfnSubmitCommandCb(runtime_.handle, &submit) : E_FAIL;
-    if (SUCCEEDED(submitted)) return true;
-    refused("pfnSubmitCommandCb", static_cast<uint32_t>(submitted));
+    const HRESULT followed = follower_.constructed() ? follower_.object().follow(queue.context) : E_FAIL;
+    if (SUCCEEDED(followed)) return true;
+    refused("pfnSubmitCommandCb", static_cast<uint32_t>(followed));
     lost("the queue's context refused its packet");
     return false;
 }

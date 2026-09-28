@@ -202,13 +202,13 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
   CHECK_EQ(u64_at(rig.kmt().command_bytes(1u) + CommandHeader::encoded_size, 0u), imported_memory);
   rig.check_nothing_is_held(); }
 
-/* The size is whole pages, at least the default, and at most 256 MiB; a
+/* The size is whole pages, at least the default, and at most 1 GiB; a
  * request past that asks the Kmt nothing. */
 TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
 { struct Case { std::uint64_t asked; std::uint64_t made; };
   const Case cases[] = {{1u, 16u * mib}, {16u * mib - 1u, 16u * mib}, {16u * mib, 16u * mib},
                         {16u * mib + 1u, 16u * mib + 4096u}, {100u * mib + 5u, 100u * mib + 4096u},
-                        {KmtBlobArena::max_bytes, 256u * mib}};
+                        {KmtBlobArena::max_bytes, 1024u * mib}};
   for (const Case &one : cases) {
       Rig rig;
       rig.host_takes_the_import();
@@ -319,7 +319,7 @@ TEST(kmt_blob_arena, the_invariant_catches_a_size_it_never_makes_and_lending_out
   CHECK(rig.arena().invariants_hold());
   KmtBlobArenaProbe::claim_bytes(rig.arena(), 16u * mib + 1u);
   CHECK(!rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), 512u * mib);
+  KmtBlobArenaProbe::claim_bytes(rig.arena(), KmtBlobArena::max_bytes + 4096u);
   CHECK(!rig.arena().invariants_hold());
   KmtBlobArenaProbe::claim_bytes(rig.arena(), 4096u);
   CHECK(!rig.arena().invariants_hold());

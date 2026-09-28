@@ -1,9 +1,13 @@
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/guest_page_list.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 
 using av::GuestPageList;
+using av::WireReader;
+using av::WireWriter;
 
 namespace {
 
@@ -80,3 +84,24 @@ TEST(guest_page_list, fingerprint_follows_the_frames_and_their_count)
   CHECK(list.fingerprint() != GuestPageList(swapped, 3u).fingerprint());
   CHECK(list.fingerprint() != GuestPageList(frames, 2u).fingerprint());
   CHECK(GuestPageList().fingerprint() != GuestPageList(frames, 1u).fingerprint()); }
+
+/* Each run as one virtio memory entry: its first page, its length in bytes, and
+ * four zero bytes; a list of nothing writes nothing. */
+TEST(guest_page_list, writes_one_memory_entry_per_run)
+{ const std::uint64_t frames[] = {0x10000u, 0x11000u, 0x12000u, 0x40000u, 0x3F000u};
+  const GuestPageList pages(frames, 5u);
+  std::uint8_t        bytes[4u * GuestPageList::run_entry_bytes] = {};
+  WireWriter          writer(bytes, sizeof bytes);
+  pages.write_runs(writer);
+  CHECK_EQ(writer.offset(), 3u * GuestPageList::run_entry_bytes);
+  WireReader reader(bytes, writer.offset());
+  const std::uint64_t starts[] = {0x10000u, 0x40000u, 0x3F000u};
+  const std::uint32_t lengths[] = {0x3000u, 0x1000u, 0x1000u};
+  for (std::uint32_t run = 0u; run < 3u; run++) {
+      CHECK_EQ(reader.read_u64(), starts[run]);
+      CHECK_EQ(reader.read_u32(), lengths[run]);
+      CHECK_EQ(reader.read_u32(), 0u);
+  }
+  WireWriter nothing(bytes, sizeof bytes);
+  GuestPageList().write_runs(nothing);
+  CHECK_EQ(nothing.offset(), 0u); }

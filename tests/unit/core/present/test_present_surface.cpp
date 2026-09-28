@@ -1,17 +1,22 @@
-/* One surface a present moves pixels to or from (feature 046): where in the
- * guest's pages a byte of it is, and whether it is a surface this driver can
- * reach at all. The layout and the pages come from outside the miniport, so
+/* One surface a present moves pixels to or from (feature 046): its pages as
+ * one view, and whether it is a surface this driver can reach at all. The layout and the pages come from outside the miniport, so
  * every disagreement between them is a refusal rather than an assumption. */
 #include "core/present/present_surface.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 
 using av::GuestPageList;
+using av::MockPlatform;
 using av::PresentSurface;
 using av::SurfaceLayout;
+using av::WireReader;
+using av::WireWriter;
 
 namespace {
 
@@ -23,22 +28,27 @@ constexpr std::uint32_t format = 21u;
 
 }  // namespace
 
-TEST(present_surface, a_byte_is_in_the_page_its_offset_names)
-{ const std::uint64_t  frames[2] = {0x40000000u, 0x40002000u};
+/* Its pages are mapped as one view, in their order, whatever frames they are:
+ * the first byte of the second page follows the last of the first. */
+TEST(present_surface, its_pages_map_as_one_view_in_their_order)
+{ MockPlatform        platform;
+  auto *const         block = static_cast<std::uint8_t *>(platform.allocate_contiguous(2u * page));
+  CHECK(block != nullptr);
+  block[0] = 0x11u;
+  block[page] = 0x22u;
+  /* Given in the opposite order to the block's. */
+  const std::uint64_t frames[2] = {platform.physical_address(block) + page, platform.physical_address(block)};
   const PresentSurface surface(SurfaceLayout(side, side, format, pitch), GuestPageList(frames, 2u));
-  std::uint32_t        within = 0xFFFFu;
-  CHECK_EQ(surface.frame_at(0u, within), frames[0]);
-  CHECK_EQ(within, 0u);
-  /* The last byte of the first page, and the first of the second. */
-  CHECK_EQ(surface.frame_at(page - 1u, within), frames[0]);
-  CHECK_EQ(within, static_cast<std::uint32_t>(page - 1u));
-  CHECK_EQ(surface.frame_at(page + 16u, within), frames[1]);
-  CHECK_EQ(within, 16u);
-  /* Past the pages there is no frame, whatever the layout says. */
-  CHECK_EQ(surface.frame_at(2u * page, within), 0u);
-  CHECK_EQ(surface.frame_at(2u * page + 8u, within), 0u);
-  CHECK_EQ(within, 8u);
-  CHECK_EQ(surface.layout().width(), side); }
+  void               *mapping = nullptr;
+  std::uint8_t *const view = surface.map(platform, mapping);
+  CHECK(view != nullptr);
+  CHECK_EQ(view[0], 0x22u);
+  CHECK_EQ(view[page], 0x11u);
+  view[1] = 0x33u;
+  platform.unmap_pages(view, mapping);
+  CHECK_EQ(block[page + 1u], 0x33u);   /* written through to the page it was in */
+  CHECK_EQ(surface.layout().width(), side);
+  platform.release_contiguous(block, 2u * page); }
 
 TEST(present_surface, a_surface_it_cannot_reach_says_so)
 { const std::uint64_t frames[2] = {0x40000000u, 0x40001000u};
@@ -57,3 +67,31 @@ TEST(present_surface, a_surface_it_cannot_reach_says_so)
   /* A surface taller than the pages it was given room in. */
   CHECK(PresentSurface(SurfaceLayout(side, 256u, format, pitch), pages).reachable());
   CHECK(!PresentSurface(SurfaceLayout(side, 257u, format, pitch), pages).reachable()); }
+
+/* Red and blue trade places only between surfaces whose bytes run in opposite
+ * orders: an application's R8G8B8A8 into the desktop's A8R8G8B8, either way. */
+TEST(present_surface, red_and_blue_trade_places_between_opposite_orders_only)
+{ const std::uint64_t  frame = 0x1000u;
+  const PresentSurface blue_first(SurfaceLayout(4u, 4u, 21u, 16u), GuestPageList(&frame, 1u));
+  const PresentSurface red_first(SurfaceLayout(4u, 4u, 32u, 16u), GuestPageList(&frame, 1u));
+  const PresentSurface also_red_first(SurfaceLayout(4u, 4u, 33u, 16u), GuestPageList(&frame, 1u));
+  CHECK(red_first.swaps_with(blue_first));
+  CHECK(blue_first.swaps_with(red_first));
+  CHECK(!red_first.swaps_with(also_red_first));
+  CHECK(!blue_first.swaps_with(blue_first)); }
+
+/* The pages as the device is told them: one memory entry per run. */
+TEST(present_surface, tells_its_pages_as_runs)
+{ const std::uint64_t  frames[] = {0x4000u, 0x5000u, 0x9000u};
+  const PresentSurface surface(SurfaceLayout(4u, 4u, 21u, 16u), GuestPageList(frames, 3u));
+  CHECK_EQ(surface.runs(), 2u);
+  std::uint8_t bytes[2u * GuestPageList::run_entry_bytes] = {};
+  WireWriter   writer(bytes, sizeof bytes);
+  surface.write_runs(writer);
+  CHECK_EQ(writer.offset(), sizeof bytes);
+  WireReader reader(bytes, sizeof bytes);
+  CHECK_EQ(reader.read_u64(), 0x4000u);
+  CHECK_EQ(reader.read_u32(), 0x2000u);
+  CHECK_EQ(reader.read_u32(), 0u);
+  CHECK_EQ(reader.read_u64(), 0x9000u);
+  CHECK_EQ(reader.read_u32(), 0x1000u); }

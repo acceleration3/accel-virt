@@ -6,6 +6,8 @@
 #include "core/ddi/dxgk_child_container_id_record.hpp"
 #include "core/ddi/dxgk_child_descriptor_record.hpp"
 #include "core/ddi/dxgk_child_status_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_present_allocation_info_record.hpp"
 #include "core/ddi/dxgk_device_descriptor_record.hpp"
 #include "core/ddi/dxgk_display_information_record.hpp"
 #include "core/ddi/dxgk_driver_caps_record.hpp"
@@ -51,6 +53,11 @@
 #include "core/ddi/dxgkarg_patch_record.hpp"
 #include "core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "core/ddi/dxgkarg_present_record.hpp"
+#include "device/control/control_request.hpp"
+#include "device/control/present_commands.hpp"
+#include "harness/host/mock_host.hpp"
+#include "harness/host/mock_request.hpp"
+#include "proto/virtio_gpu/present_copy_request.hpp"
 #include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "core/ddi/dxgkarg_query_dependent_engine_group_record.hpp"
@@ -236,7 +243,12 @@ av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint32_t sub_apis = 1u
 
 class Fixture {
 public:
-    Fixture() : dxgkrnl_(platform_, function_), adapter_(platform_, &function_), sources_(9u), children_(9u) {}
+    Fixture() : dxgkrnl_(platform_, function_), adapter_(platform_, &function_), sources_(9u), children_(9u)
+    {
+        host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
+            return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
+        }, &platform_);
+    }
     ~Fixture() { static_cast<void>(adapter_.stop_device()); }
 
     /* StartDevice asks the device what its displays are and waits for the
@@ -258,6 +270,8 @@ public:
     enum class Answer { display_info, none, wrong_type, no_scanout };
     void answer_with(Answer answer) { answer_ = answer; }
 
+    /* Present copies the host was asked for (PresentCopyRequest). */
+    std::uint32_t present_copies() const { return present_copies_; }
     /* The host answers whatever the adapter asks from here on, as it does
      * during StartDevice. */
     void answer_asks() { platform_.on_stall(&Fixture::answer_display_info, this); }
@@ -347,6 +361,14 @@ private:
             static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA */
             return;
         }
+        /* A present's pixels, moved by the device's own core over the guest's
+         * memory, as the host moves them. */
+        if (asked == av::PresentCopyRequest::type) {
+            fixture->present_copies_++;
+            static_cast<void>(fixture->control().answer_all(fixture->present_request_, sizeof fixture->present_request_,
+                                                            &Fixture::answer_present_copy, fixture));
+            return;
+        }
         if (fixture->answer_ == Answer::none) return;
         if (fixture->answer_ == Answer::wrong_type) {
             static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA, not display info */
@@ -357,7 +379,23 @@ private:
                                                          fixture->display_info_.length()));
     }
 
+    static std::uint32_t answer_present_copy(void *context, const std::uint8_t *request, std::uint32_t length,
+                                             std::uint8_t *answer, std::uint32_t room)
+    {
+        auto *const        fixture = static_cast<Fixture *>(context);
+        av::MockRequest    mock(request, length);
+        av::ControlRequest control(fixture->host_, &mock);
+        static_cast<void>(fixture->present_commands_.answer(control, av::PresentCopyRequest::type));
+        const std::size_t given = mock.response_size() < room ? mock.response_size() : room;
+        std::memcpy(answer, mock.response_bytes(), given);
+        return static_cast<std::uint32_t>(given);
+    }
+
     MockPlatform          platform_;
+    av::MockHost          host_;
+    av::PresentCommands   present_commands_{host_};
+    std::uint8_t          present_request_[0x9000] = {};
+    std::uint32_t         present_copies_ = 0u;
     FakeVirtioGpuFunction function_;
     FakeDxgkrnlAdapter    dxgkrnl_;
     Adapter               adapter_;
@@ -487,6 +525,8 @@ public:
     MappedSurface &operator=(const MappedSurface &) = delete;
 
     void *open_handle() const { return open_handle_; }
+    /* The miniport's own handle, which paging operations name. */
+    void *handle() const { return handle_; }
 
     void paint_all(std::uint32_t value)
     {
@@ -1432,6 +1472,7 @@ TEST(adapter_present, needs_a_live_context_then_presents)
 TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
   av::DxgkargCreateDeviceRecord device = {};
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
   av::DxgkargCreateContextRecord context = {};
@@ -1460,6 +1501,9 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
   CHECK(fixture.adapter().invariants_hold());
+  /* The host moved them: the miniport asked, and never fell back. */
+  CHECK_EQ(fixture.present_copies(), 1u);
+  CHECK(!fixture.platform().logged_line("would not move"));
 
   /* The rows it moved are in the state dump, and nothing was left mapped. */
   const StateDump dump(fixture);
@@ -1484,6 +1528,7 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
   present.DstRect = {0, 0, side, side / 2};
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK(fixture.platform().logged_line("rvkgpu: present unmoved surfaces flags 0x00000001 sources 1 destinations 1"));
+  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 1 kind 2 destination 1 kind 1 from 8x8 into 8x4"));
 
   /* An allocation this device never opened is one the miniport cannot reach. */
   present.DstRect = {0, 0, side, side};
@@ -1491,6 +1536,147 @@ TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
 
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* An application's blt-model present, which dxgkrnl builds into the window's
+ * redirection surface on the application's own context: GPU virtual addressing,
+ * so no patch list, and its source and destination at the fixed indices with
+ * no counts. Its pixels move like dxgkrnl's own. */
+TEST(adapter_present, an_application_s_blt_on_a_virtual_context_moves_its_pixels)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  CHECK(!fixture.platform().logged_line("rvkgpu: present unmoved"));
+  CHECK_EQ(fixture.present_copies(), 1u);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("presents_unmoved=0"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* The blt a game presents, with no host to move it - a device that does not
+ * answer the copy, or no memory for its payload at start: the miniport moves
+ * the pixels itself, and says so once. */
+TEST(adapter_present, a_blt_the_host_cannot_take_is_moved_by_the_miniport)
+{ /* Which of the start's allocations is the copier's payload: the one whose
+   * failure a start that still succeeds reports. */
+  std::uint32_t payload = 0u;
+  for (std::uint32_t nth = 1u; nth <= 64u && payload == 0u; nth++) {
+      Fixture probe;
+      probe.platform().fail_allocation_at(nth);
+      const bool started = probe.start() == success;
+      probe.platform().fail_allocation_at(0u);
+      if (started && probe.platform().logged_line("no memory to hand presents to the host")) payload = nth;
+  }
+  CHECK(payload != 0u);
+  for (const bool starved : {false, true}) {
+      Fixture fixture;
+      if (starved) fixture.platform().fail_allocation_at(payload);
+      CHECK_EQ(fixture.start(), success);
+      fixture.platform().fail_allocation_at(0u);
+      /* A host that answers, with no copier to ask it; or no host answering. */
+      if (starved) fixture.answer_asks();
+      av::DxgkargCreateDeviceRecord device = {};
+      CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+      av::DxgkargCreateContextRecord context = {};
+      CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+      av::FakeHandleTable handles;
+      MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+      MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::staging);
+      source.paint_all(MappedSurface::colour);
+      av::DxgkPresentAllocationInfoRecord info[3] = {};
+      info[1].hDeviceSpecificAllocation = source.open_handle();
+      info[2].hDeviceSpecificAllocation = destination.open_handle();
+      std::uint8_t             dma[512] = {};
+      av::DxgkargPresentRecord present = {};
+      present.pDmaBuffer = dma;
+      present.DmaSize = sizeof dma;
+      present.Flags = 1u;   /* Blt */
+      present.pAllocationList = info;
+      const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+      present.SrcRect = {0, 0, side, side};
+      present.DstRect = {0, 0, side, side};
+      CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+      CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+      CHECK_EQ(fixture.present_copies(), 0u);
+      CHECK(fixture.platform().logged_line(starved ? "no memory to hand presents" : "would not move"));
+      CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+      CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
+  } }
+
+/* A surface VidMm never mapped into the aperture has no pages the miniport
+ * could write: the blt moves nothing, and the line says which side it was -
+ * while the log budget lasts. */
+TEST(adapter_present, a_blt_into_a_surface_with_no_mapped_pages_says_which_side)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::gdi);
+  av::DxgkBuildPagingBufferUnmapApertureSegmentRecord unmapping = {};
+  unmapping.hAllocation = destination.handle();
+  unmapping.SegmentId = av::ApertureSegment::segment_id;
+  unmapping.NumberOfPages = 1u;
+  std::uint8_t                       paging_dma[64] = {};
+  av::DxgkargBuildPagingBufferRecord paging = {};
+  paging.pDmaBuffer = paging_dma;
+  paging.DmaSize = sizeof paging_dma;
+  paging.Operation = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
+  std::memcpy(paging.Reserved, &unmapping, sizeof unmapping);
+  CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 1 kind 2 destination 0 kind 4 from 8x8 into 8x8"));
+  /* A fill has no source to name. */
+  present.Flags = 2u;   /* ColorFill */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present surfaces reachable source 0 kind 0 destination 0 kind 4"));
+  present.Flags = 1u;
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(fixture.platform().logged(), spent);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 

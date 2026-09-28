@@ -21,6 +21,8 @@ struct ID3D11DeviceContext;
 
 namespace av {
 
+class Vkd3dImageExport;
+
 class D3dRuntime {
 public:
     static constexpr uint32_t uuid_bytes = 16u;
@@ -55,6 +57,13 @@ public:
     int32_t open_host_heap(void *device, void *address, uint64_t size, void *&heap) const;
     /* The same pages as the dma-buf `fd`, which the caller keeps. */
     int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
+    /* A shared committed texture of vkd3d-proton's - `resource` an
+     * ID3D12Resource - as the fd of its memory and the image it was made as;
+     * the HRESULT. */
+    int32_t export_image(void *resource, Vkd3dImageExport &image) const;
+    /* A shared fence's timeline semaphore - `fence` an ID3D12Fence - as an fd
+     * the caller owns; the HRESULT, `fd` -1 on failure. */
+    int32_t export_fence(void *fence, int &fd) const;
     /* D3D12SerializeVersionedRootSignature on a D3D12_VERSIONED_ROOT_SIGNATURE_DESC;
      * `blob` an ID3DBlob the caller owns, null on failure. */
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
@@ -69,6 +78,8 @@ private:
     using OpenDmabufHeap = int32_t (*)(void *device, void *address, int fd, uint64_t size, const void *riid,
                                        void **heap);
     using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
+    using ExportImage = int32_t (*)(void *resource, Vkd3dImageExport *image);
+    using ExportFence = int32_t (*)(void *fence, int *fd);
 
     void *open_library(const char *name) const;
     /* Where the Vulkan device with this UUID comes in the loader's
@@ -86,6 +97,8 @@ private:
     OpenHostHeap   open_host_heap_;
     OpenDmabufHeap open_dmabuf_heap_;
     SerializeRoot  serialize_root_;
+    ExportImage    export_image_;
+    ExportFence    export_fence_;
 };
 
 }  // namespace av

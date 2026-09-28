@@ -1,6 +1,7 @@
 #include "device/executor/d3d12_pipeline_builder.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/d3d12_root_layout.hpp"
 #include "device/executor/d3d_object_table.hpp"
 #include "device/executor/dxbc_container.hpp"
 #include "device/executor/dxbc_signature_reader.hpp"
@@ -131,7 +132,11 @@ ID3D12RootSignature *D3d12PipelineBuilder::root_signature(uint32_t flags, const 
     desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
     desc.Desc_1_1 = {parameter_count, made_parameters, sampler_count, made_samplers,
                      static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(flags)};
-    return device_->root_signature(&desc);
+    ID3D12RootSignature *const made = device_->root_signature(&desc);
+    /* What a command signature's root arguments are judged against. */
+    if (made == nullptr || D3d12RootLayout(parameters, parameter_count).attach(made)) return made;
+    made->Release();
+    return nullptr;
 }
 
 bool D3d12PipelineBuilder::container(uint32_t stage, const uint8_t *code, uint64_t size,

@@ -147,3 +147,36 @@ TEST(fake_vidmm_validate, accepts_standby_with_one_hibernate_preservation_flag_a
   descriptor.NumUEFIFrameBufferRanges = 1u;
   std::memcpy(descriptors + FakeVidMm::stride, &descriptor, sizeof descriptor);
   CHECK(vidmm.validate(descriptors, 2u, 2u) == SegmentRule::none); }
+
+/* What dxdiag and DXGI report: a plain memory segment is dedicated video
+ * memory, one populated from system memory is dedicated system memory, and
+ * neither an aperture nor reserved system memory is dedicated at all. Each
+ * counts no more than its commit limit. */
+TEST(fake_vidmm_totals, classify_each_segment_as_get_total_segment_size_does)
+{ MockPlatform platform; CraftedSegments miniport;
+  miniport.set_count(4u);
+  miniport.descriptor(0).CommitLimit = 0x100000u;
+  miniport.descriptor(1).Size = 0x1000000u;
+  miniport.descriptor(1).CommitLimit = 0x800000u;
+  miniport.descriptor(2).Flags = 0x40u;
+  miniport.descriptor(2).Size = 0x200000u;
+  miniport.descriptor(2).CommitLimit = 0x400000u;
+  miniport.descriptor(3).Flags = 0x1000u;
+  miniport.descriptor(3).Size = 0x400000u;
+  miniport.descriptor(3).CommitLimit = 0x400000u;
+  FakeDxgadapter adapter(platform, miniport.table());
+  FakeVidMm vidmm(adapter);
+  CHECK_EQ(vidmm.create_segments(&miniport), 0);
+  CHECK_EQ(vidmm.dedicated_video_memory(), 0x800000u);
+  CHECK_EQ(vidmm.dedicated_system_memory(), 0x200000u);
+  CHECK_EQ(vidmm.aperture_memory(), 0x100000u); }
+
+TEST(fake_vidmm_totals, an_aperture_alone_is_no_dedicated_memory)
+{ MockPlatform platform; CraftedSegments miniport;
+  miniport.descriptor(0).CommitLimit = 0x100000u;
+  FakeDxgadapter adapter(platform, miniport.table());
+  FakeVidMm vidmm(adapter);
+  CHECK_EQ(vidmm.create_segments(&miniport), 0);
+  CHECK_EQ(vidmm.dedicated_video_memory(), 0u);
+  CHECK_EQ(vidmm.dedicated_system_memory(), 0u);
+  CHECK_EQ(vidmm.aperture_memory(), 0x100000u); }

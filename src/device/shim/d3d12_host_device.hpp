@@ -15,12 +15,15 @@
 #include <stdint.h>
 
 struct ID3D12Device;
+struct ID3D12Fence;
 struct ID3D12Heap;
+struct ID3D12Resource;
 struct ID3D12RootSignature;
 
 namespace av {
 
 class D3dRuntime;
+class Vkd3dImageExport;
 
 class D3d12HostDevice {
 public:
@@ -46,6 +49,11 @@ public:
     /* A root signature from a D3D12_VERSIONED_ROOT_SIGNATURE_DESC, with a
      * reference the caller owns; null when the runtime refuses it. */
     ID3D12RootSignature       *root_signature(const void *desc) const;
+    /* A shared committed texture's memory as an fd, and the image it was made
+     * as (tools/vkd3d-proton-patches); false where vkd3d-proton cannot say. */
+    [[nodiscard]] bool         export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const;
+    /* A shared fence's timeline semaphore as an fd the caller owns. */
+    [[nodiscard]] bool         export_fence(ID3D12Fence *fence, int &fd) const;
 
 private:
     void measure(uint32_t vendor_id, uint32_t device_id, uint64_t video_memory);

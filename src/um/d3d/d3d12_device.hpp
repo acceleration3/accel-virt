@@ -31,6 +31,7 @@
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
+#include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_records.hpp"
@@ -85,26 +86,40 @@ public:
     /* A failure the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. Logged once. */
     void                      lost(const char *what);
+    /* A present from `queue` (d3d12_device_present.cpp): the command list's
+     * slot, but the queue's work. */
+    void                      present(D3D12DDI_HCOMMANDQUEUE queue, const D3D12DDIARG_PRESENT_0001 *args,
+                                      D3D12DDI_PRESENT_0051 *out, D3D12DDI_PRESENT_CONTEXTS_0051 *contexts,
+                                      D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues);
 
 private:
     uint32_t next_id();
     void     stamp(RecordHeader &header, uint32_t magic, uint32_t id);
     bool     sent(bool sent_ok, const char *what);
     /* A packet on `queue`'s context behind the batch its execute sent; false,
-     * with the device lost, when there is none to follow or the runtime
-     * refuses it. */
+     * with the device lost, when the runtime refuses it. */
     bool     follow(const QueueRecord &queue);
 
     /* Resources and heaps (d3d12_device_resources.cpp). */
     d3d12proto::ResourceDesc resource_desc(const D3D12DDIARG_CREATERESOURCE_0109 &args) const;
     uint32_t                 initial_state(const D3D12DDIARG_CREATERESOURCE_0109 &args, uint32_t heap_type) const;
+    HRESULT place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                           const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
-                              const D3D12DDIARG_CREATERESOURCE_0109 *args, const D3D12DDI_CLEAR_VALUES *clear,
-                              D3D12DDI_HRESOURCE handle);
+                              D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                              const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                            HeapRecord &heap, uint64_t offset, ResourceRecord &resource);
     uint64_t                 allocation_bytes(const d3d12proto::ResourceDesc &desc, uint64_t &alignment);
+    /* A resource the host gave no size to, in the log: an application told so
+     * sizes a heap by UINT64_MAX. */
+    void                     log_unsized(const d3d12proto::ResourceDesc &desc);
+
+    /* A swap chain buffer (d3d12_device_present.cpp): the kernel allocation
+     * DWM opens it by, and the host's texture shown under its identity. */
+    HRESULT                  show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime,
+                                  const D3D12DDIARG_CREATERESOURCE_0109 &args);
 
     /* Shaders and pipelines (d3d12_device_pipelines.cpp). */
     SIZE_T  shader_bytes(const D3D12DDIARG_CREATE_SHADER_0026 &args, bool tessellation) const;
@@ -126,8 +141,8 @@ private:
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
-    /* The runtime's kernel thunks: how a packet reaches a queue's context. */
-    const D3DDDI_DEVICECALLBACKS                  *kernel_;
+    /* How a queue's context waits for the work the ring carried. */
+    ObjectStorage<d3d::BatchFollower>     follower_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;
     d3d::D3d12AddressSpace                addresses_;
     D3d12Recorder                         recorder_;

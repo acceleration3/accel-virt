@@ -4,6 +4,8 @@
 
 #include "km/kernel_platform.hpp"
 
+#include "proto/resources/guest_page_list.hpp"
+
 #include <intrin.h>
 
 /* dispmprt.h, unlike ntddk.h, declares its imports without a C linkage guard. */
@@ -101,6 +103,39 @@ void KernelPlatform::unmap_frame(uint8_t *view)
 {
     AV_SCOPE("KernelPlatform::unmap_frame");
     MmUnmapIoSpace(view, PAGE_SIZE);
+}
+
+/* The MDL's page array is written from the list, as map_to_process writes a
+ * BAR's: the pages are an allocation's, which dxgkrnl keeps locked while the
+ * aperture maps them. Write-combined, like every CPU mapping of this adapter's
+ * allocations: the memory manager keeps one cache type per page, and a view
+ * asked for as cached still read uncached (PresentBlit::copy_pixels). */
+uint8_t *KernelPlatform::map_pages(const GuestPageList &pages, void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_pages");
+    mapping = nullptr;
+    const uint32_t count = pages.count();
+    if (count == 0u || uint64_t{count} * PAGE_SIZE > max_mapping_bytes) return nullptr;
+    PMDL const mdl = IoAllocateMdl(nullptr, count * static_cast<ULONG>(PAGE_SIZE), FALSE, FALSE, nullptr);
+    if (mdl == nullptr) return nullptr;
+    PFN_NUMBER *const frames = MmGetMdlPfnArray(mdl);
+    for (uint32_t page = 0u; page < count; page++) frames[page] = static_cast<PFN_NUMBER>(pages.frame(page) >> PAGE_SHIFT);
+    mdl->MdlFlags |= MDL_PAGES_LOCKED;
+    PVOID const view = MmMapLockedPagesSpecifyCache(mdl, KernelMode, MmWriteCombined, nullptr, FALSE,
+                                                    NormalPagePriority | MdlMappingNoExecute);
+    if (view == nullptr) {
+        IoFreeMdl(mdl);
+        return nullptr;
+    }
+    mapping = mdl;
+    return static_cast<uint8_t *>(view);
+}
+
+void KernelPlatform::unmap_pages(uint8_t *view, void *mapping)
+{
+    AV_SCOPE("KernelPlatform::unmap_pages");
+    MmUnmapLockedPages(view, static_cast<PMDL>(mapping));
+    IoFreeMdl(static_cast<PMDL>(mapping));
 }
 
 /* The BAR's pages have no PFN database entries for MmBuildMdlForNonPagedPool

@@ -35,10 +35,24 @@ GpuClockHold::~GpuClockHold()
     close();
 }
 
+/* Contexts on one GPU attach on workers of their own, so two may open its
+ * hold at once. Under the lock only one sets it up, and none while a watching
+ * thread waits on the condition: destroying a condition with a waiter never
+ * returns. */
 bool GpuClockHold::open(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::open");
-    if (open_) return true;
+    pthread_mutex_lock(&lock_);
+    const bool opened = open_ || start(render_minor);
+    pthread_mutex_unlock(&lock_);
+    return opened;
+}
+
+/* The watching thread takes the lock first thing, so it starts only once this
+ * has let go of it. */
+bool GpuClockHold::start(int32_t render_minor)
+{
+    AV_SCOPE("GpuClockHold::start");
     if (render_minor < 0) return false;
     char path[32];
     snprintf(path, sizeof path, "/dev/dri/renderD%d", render_minor);
@@ -65,7 +79,7 @@ bool GpuClockHold::open(int32_t render_minor)
         fd_ = -1;
         return false;
     }
-    open_ = true;
+    __atomic_store_n(&open_, true, __ATOMIC_RELEASE);
     return true;
 }
 

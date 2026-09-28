@@ -10,6 +10,7 @@
 #include "device/ring/ring_consumer.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/ring/ring_window.hpp"
+#include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/executor/mock_context_execution.hpp"
@@ -82,7 +83,7 @@ class Fixture {
 public:
     Fixture()
         : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), recorder_(host_), fences_(host_, interrupts_, recorder_, 1u),
-          execution_(host_, fences_, 12u), consumer_(host_, fences_, execution_.batches())
+          execution_(host_, fences_, 12u), consumer_(host_, fences_, execution_.batches()), worker_(host_, consumer_)
     {
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
@@ -90,11 +91,14 @@ public:
 
     MockHost     &host() { return host_; }
     RingConsumer &consumer() { return consumer_; }
+    /* The thread that would serve the ring; nothing starts it but a test. */
+    av::Worker   &worker() { return worker_; }
     RingWindow    window() const { return memory_.window(); }
     GuestRing    &ring() { return memory_.guest(); }
 
     ~Fixture()
     {
+        worker_.stop();
         on_worker([](RingConsumer &consumer) { consumer.detach(); });
     }
 
@@ -159,6 +163,7 @@ private:
     FenceReporter   fences_;
     av::MockContextExecution execution_;
     RingConsumer    consumer_;
+    av::Worker      worker_;
     RingMemory      memory_;
 };
 
@@ -669,8 +674,8 @@ TEST(ring_consumer_order_with, a_batch_waits_for_an_earlier_one_on_another_strea
   other.ring().publish();
   other.bind();
   waiting.bind();
-  ordering.add(waiting.consumer());
-  ordering.add(other.consumer());
+  ordering.add(waiting.consumer(), waiting.worker());
+  ordering.add(other.consumer(), other.worker());
   waiting.consumer().order_with(ordering);
 
   waiting.ring().write_batch(1u, 0u);
@@ -701,6 +706,43 @@ TEST(ring_consumer_order_with, a_batch_waits_for_an_earlier_one_on_another_strea
   CHECK_EQ(waiting.consumer().batches(), 3u);
   ordering.remove(waiting.consumer()); }
 
+/* A stream waited on is woken to run what it holds. A process publishes its
+ * own tail, so a batch can sit in a ring whose worker is asleep with no doorbell
+ * coming - the kernel rings that only once dxgkrnl hands the packet over, which
+ * it holds while the waiting stream's own packet is still running. The waited-on
+ * worker here is asleep before its batch is published and nothing else rings
+ * it: without the wake the wait would run to its 20 ms bound and the batch
+ * never run. */
+TEST(d3d_ordering, a_stream_waited_on_is_woken_to_run_its_batch)
+{ Fixture waiting;
+  Fixture other;
+  av::D3dOrdering ordering(waiting.host());
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  other.bind();
+  waiting.bind();
+  ordering.add(waiting.consumer(), waiting.worker());
+  ordering.add(other.consumer(), other.worker());
+  waiting.consumer().order_with(ordering);
+  other.host().advance_clock_per_read(1000u);   /* so the worker's spin ends and it sleeps */
+  CHECK_STATUS(other.worker().start(), Status::ok);
+  CHECK(other.host().wait_for_sleepers(1u, 2000u));
+
+  other.ring().write_batch(1u, 0u);
+  stamp(other.ring(), 0u, 500u);
+  other.ring().publish();
+  waiting.ring().write_batch(1u, 0u);
+  stamp(waiting.ring(), 0u, 600u);
+  waiting.ring().publish();
+  const std::uint64_t started = now_ns();
+  waiting.serve();
+  CHECK(now_ns() - started < 20000000u);
+  CHECK_EQ(waiting.consumer().batches(), 1u);
+  other.worker().stop();
+  CHECK_EQ(other.consumer().batches(), 1u);
+  CHECK_EQ(other.ring().head(), other.ring().tail());
+  ordering.remove(other.consumer());
+  ordering.remove(waiting.consumer()); }
+
 TEST(d3d_ordering, an_ordering_never_initialized_or_an_unstamped_batch_waits_for_nothing)
 { Fixture waiting;
   Fixture other;
@@ -710,14 +752,14 @@ TEST(d3d_ordering, an_ordering_never_initialized_or_an_unstamped_batch_waits_for
   other.ring().publish();
   other.bind();
   waiting.bind();
-  ordering.add(other.consumer());   /* no mutex: not added */
-  ordering.add(waiting.consumer());
+  ordering.add(other.consumer(), other.worker());   /* no mutex: not added */
+  ordering.add(waiting.consumer(), waiting.worker());
   /* Waiting would take 1000 pauses of 20 us at least. */
   std::uint64_t started = now_ns();
   ordering.wait_before(waiting.consumer(), 900u);
   CHECK(now_ns() - started < 20000000u);
   CHECK_STATUS(ordering.initialize(), Status::ok);
-  ordering.add(other.consumer());
+  ordering.add(other.consumer(), other.worker());
   started = now_ns();
   ordering.wait_before(waiting.consumer(), 0u);
   CHECK(now_ns() - started < 20000000u);

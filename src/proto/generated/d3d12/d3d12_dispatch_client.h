@@ -29,6 +29,10 @@ namespace av::d3d12proto {
 [[nodiscard]] bool rvk_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset);
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
 [[nodiscard]] bool rvk_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
+// `resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to
+// the host GPU's Direct3D 11 device under `key`, the identity the miniport minted over its kernel allocation,
+// which the compositor opens it by. The same memory on both devices: nothing is copied.
+[[nodiscard]] bool rvk_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key);
 // A resource at `offset` in a heap made by CreateHeap12. A buffer is found by `address` from then on.
 [[nodiscard]] bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // How many bytes, at what alignment, a placed resource of `desc` takes in a heap: the host's answer, since
@@ -45,6 +49,9 @@ namespace av::d3d12proto {
 // `count` descriptors from `source` to `destination`, both of heaps of the same type.
 [[nodiscard]] bool rvk_d3d12_CopyDescriptors12(::av::ClientTransport& t, const DescriptorRef& destination, const DescriptorRef& source, uint32_t count);
 [[nodiscard]] bool rvk_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, uint32_t flags, uint32_t parameter_count, const RootParameter* parameters, uint32_t range_count, const DescriptorRange* ranges, uint32_t sampler_count, const StaticSampler* samplers);
+// What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
+// arguments say. root is the root signature the arguments that set root parameters name, 0 for none.
+[[nodiscard]] bool rvk_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments);
 // A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
 // container, a DXIL program, or a DXBC token stream - and empty for a stage the pipeline does not have; the
 // signatures are every stage's, as registers. The input layout names vertex shader input registers.
@@ -59,6 +66,9 @@ namespace av::d3d12proto {
 [[nodiscard]] bool rvk_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list);
 [[nodiscard]] bool rvk_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags);
 [[nodiscard]] bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists);
+// `resource`, shared by ShareResource12, is presented from `queue`: what the queue executed before is
+// done on the GPU before the host's Direct3D 11 device runs anything it is given after.
+[[nodiscard]] bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource);
 // `fence` reaches `value` once `queue` has finished what was executed on it before; queue 0 signals
 // from the CPU, now.
 [[nodiscard]] bool rvk_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value);
@@ -104,5 +114,8 @@ namespace av::d3d12proto {
 [[nodiscard]] bool rvk_d3d12_BeginEvent12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size);
 [[nodiscard]] bool rvk_d3d12_EndEvent12(::av::ClientTransport& t, uint32_t list);
 [[nodiscard]] bool rvk_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size);
+// Up to max_count commands of the signature, read from argument_buffer at argument_offset; with a
+// count_buffer (0 for none), as many as the u32 at count_offset says, if fewer.
+[[nodiscard]] bool rvk_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset);
 
 }  // namespace av::d3d12proto

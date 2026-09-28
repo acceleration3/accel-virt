@@ -1,6 +1,7 @@
 #include "proto/resources/guest_page_list.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -50,6 +51,18 @@ uint32_t GuestPageList::runs() const
     uint32_t runs = 0u;
     for (uint32_t index = 0u; index < count_; index += run_length(index)) runs++;
     return runs;
+}
+
+void GuestPageList::write_runs(WireWriter &writer) const
+{
+    AV_SCOPE("GuestPageList::write_runs");
+    for (uint32_t page = 0u; page < count_;) {
+        const uint32_t run = run_length(page);
+        writer.write_u64(frames_[page]);
+        writer.write_u32(static_cast<uint32_t>(run * page_bytes));
+        writer.write_zeros(4u);
+        page += run;
+    }
 }
 
 uint64_t GuestPageList::fingerprint() const

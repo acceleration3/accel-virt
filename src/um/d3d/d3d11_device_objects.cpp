@@ -5,10 +5,8 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
+#include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
-#include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/shared_object_kind.hpp"
-#include "proto/resources/shared_object_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -169,22 +167,14 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     resource.runtime_resource = runtime.handle;
     if (args->NumAllocations != 0u) resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
     /* The key is the identity the miniport minted over the creator's
-     * allocation, which dxgkrnl hands every process that opens it; a resource
-     * of this driver's carries its tag in the resource's own data. */
-    uint64_t key = 0u;
-    uint64_t words[2] = {};
-    if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= sizeof(words))
-        __builtin_memcpy(words, args->pPrivateDriverData, sizeof(words));
-    const bool ours = words[0] == ResourceRecord::tag;
-    constexpr uint32_t shareable = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
-    if (ours && args->NumAllocations != 0u && args->pOpenAllocationInfo2[0].pPrivateDriverData != nullptr &&
-        args->pOpenAllocationInfo2[0].PrivateDriverDataSize == shareable) {
-        SharedObjectRecord record;
-        const auto *const bytes = static_cast<const uint8_t *>(args->pOpenAllocationInfo2[0].pPrivateDriverData);
-        if (record.decode(bytes + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) == Status::ok &&
-            record.assigned())
-            key = record.object_id();
-    }
+     * allocation, which dxgkrnl hands every process that opens it - whichever
+     * of this driver's devices made it, Direct3D 11's or 12's. */
+    d3d::KernelSurface opened;
+    const bool         surface =
+        args->NumAllocations != 0u &&
+        opened.open(args->pPrivateDriverData, args->PrivateDriverDataSize, args->pOpenAllocationInfo2[0].pPrivateDriverData,
+                    args->pOpenAllocationInfo2[0].PrivateDriverDataSize) == Status::ok;
+    const uint64_t key = surface ? opened.key() : 0u;
     uint32_t found = 0u;
     d3dproto::ResourceDesc desc = {};
     if (key == 0u && open_guest_surface(resource, *args)) return;

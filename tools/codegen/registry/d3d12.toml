@@ -153,6 +153,13 @@ fields = ["u64 offset", "u32 resource", "u32 type", "u32 subresource", "u32 form
           "u32 depth", "u32 row_pitch"]
 
 # What the host's device is, asked once.
+# D3D12_INDIRECT_ARGUMENT_DESC: type is D3D12_INDIRECT_ARGUMENT_TYPE, and a, b, c
+# the members of its union in declaration order - a vertex buffer's Slot; a
+# constant's RootParameterIndex, DestOffsetIn32BitValues, Num32BitValuesToSet; a
+# root view's RootParameterIndex - and 0 past them.
+[structs.IndirectArgument]
+fields = ["u32 type", "u32 a", "u32 b", "u32 c"]
+
 [structs.Caps12]
 fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
@@ -208,6 +215,14 @@ id = 0x1101
 doc = """A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on."""
 params = ["u32 resource", "HeapProperties properties", "u32 heap_flags", "ResourceDesc desc", "u32 state",
           "ClearValue clear", "u64 address"]
+
+[[command]]
+name = "ShareResource12"
+id = 0x1104
+doc = """`resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to
+the host GPU's Direct3D 11 device under `key`, the identity the miniport minted over its kernel allocation,
+which the compositor opens it by. The same memory on both devices: nothing is copied."""
+params = ["u32 resource", "u64 key"]
 
 [[command]]
 name = "CreatePlacedResource12"
@@ -278,6 +293,14 @@ params = ["u32 root", "u32 flags", "u32 parameter_count", "RootParameter paramet
           "StaticSampler samplers[sampler_count] max 64"]
 
 [[command]]
+name = "CreateCommandSignature12"
+id = 0x1303
+doc = """What ExecuteIndirect12 reads each command from: byte_stride bytes a command, laid out as the
+arguments say. root is the root signature the arguments that set root parameters name, 0 for none."""
+params = ["u32 signature", "u32 root", "u32 byte_stride", "u32 argument_count",
+          "IndirectArgument arguments[argument_count] max 16"]
+
+[[command]]
 name = "CreateGraphicsPipeline12"
 id = 0x1301
 doc = """A graphics pipeline state. Each stage's code is what the DDI gave the driver - a DXBC or DXIL
@@ -335,6 +358,13 @@ params = ["u32 fence", "u64 initial", "u32 flags"]
 name = "ExecuteCommandLists12"
 id = 0x1407
 params = ["u32 queue", "u32 count", "u32 lists[count] max 64"]
+
+[[command]]
+name = "PresentResource12"
+id = 0x140d
+doc = """`resource`, shared by ShareResource12, is presented from `queue`: what the queue executed before is
+done on the GPU before the host's Direct3D 11 device runs anything it is given after."""
+params = ["u32 queue", "u32 resource"]
 
 [[command]]
 name = "SignalFence12"
@@ -528,3 +558,11 @@ params = ["u32 list"]
 name = "SetMarker12"
 id = 0x151e
 params = ["u32 list", "u32 metadata", "bytes data"]
+
+[[command]]
+name = "ExecuteIndirect12"
+id = 0x151f
+doc = """Up to max_count commands of the signature, read from argument_buffer at argument_offset; with a
+count_buffer (0 for none), as many as the u32 at count_offset says, if fewer."""
+params = ["u32 list", "u32 signature", "u32 max_count", "u32 argument_buffer", "u64 argument_offset",
+          "u32 count_buffer", "u64 count_offset"]

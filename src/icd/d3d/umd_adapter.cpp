@@ -7,8 +7,8 @@
 namespace av::d3d {
 
 UmdAdapter::UmdAdapter(RuntimeKind runtime, void *runtime_adapter, const D3dddiAdapterCallbacksRecord *callbacks,
-                       uint32_t interface_version, uint32_t runtime_version)
-    : runtime_(runtime), runtime_adapter_(runtime_adapter), callbacks_(callbacks),
+                       UmdConnection &connection, uint32_t interface_version, uint32_t runtime_version)
+    : runtime_(runtime), runtime_adapter_(runtime_adapter), callbacks_(callbacks), connection_(connection),
       interface_version_(interface_version), runtime_version_(runtime_version), devices_(0u), versions_(runtime),
       identity_()
 {
@@ -31,6 +31,12 @@ const D3dddiAdapterCallbacksRecord *UmdAdapter::callbacks() const
 {
     AV_SCOPE("UmdAdapter::callbacks");
     return callbacks_;
+}
+
+UmdConnection &UmdAdapter::connection() const
+{
+    AV_SCOPE("UmdAdapter::connection");
+    return connection_;
 }
 
 uint32_t UmdAdapter::interface_version() const

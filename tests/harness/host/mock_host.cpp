@@ -219,6 +219,7 @@ Status MockHost::create_event(void *&event)
         candidate.set = false;
         candidate.live = true;
         candidate.descriptor = -1;
+        candidate.sleepers = 0u;
         event = &candidate;
         return Status::ok;
     }
@@ -265,7 +266,10 @@ void MockHost::wait_event(void *event)
         return;
     }
     pthread_mutex_lock(&slot->lock);
+    const bool sleeps = !slot->set;
+    if (sleeps) slot->sleepers++;
     while (!slot->set) pthread_cond_wait(&slot->signalled, &slot->lock);
+    if (sleeps) slot->sleepers--;
     slot->set = false;
     pthread_mutex_unlock(&slot->lock);
 }
@@ -669,6 +673,26 @@ void MockHost::add_gpu(const GpuIdentity &identity)
 void MockHost::fail_thread_start_at(std::uint32_t nth) { StateLock lock(state_); fail_thread_ = nth; }
 void MockHost::fail_event_at(std::uint32_t nth) { StateLock lock(state_); fail_event_ = nth; }
 void MockHost::fail_mutex_at(std::uint32_t nth) { StateLock lock(state_); fail_mutex_ = nth; }
+
+bool MockHost::wait_for_sleepers(std::uint32_t threads, std::uint32_t milliseconds)
+{
+    const timespec pause = {0, 100000};
+    for (std::uint32_t waited = 0u; waited <= milliseconds * 10u; waited++) {
+        std::uint32_t sleeping = 0u;
+        {
+            StateLock lock(state_);
+            for (Event &event : events_) {
+                if (!event.live) continue;
+                pthread_mutex_lock(&event.lock);
+                sleeping += event.sleepers;
+                pthread_mutex_unlock(&event.lock);
+            }
+        }
+        if (sleeping >= threads) return true;
+        nanosleep(&pause, nullptr);
+    }
+    return false;
+}
 
 bool MockHost::wait_for_main_loop_work(std::uint32_t work, std::uint32_t milliseconds)
 {

@@ -236,6 +236,28 @@ VOID D3d12Recorder::copy_buffer_region(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG
          "CopyBufferRegion12");
 }
 
+VOID D3d12Recorder::execute_indirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDSIGNATURE signature,
+                                     UINT max_count, D3D12DDIARG_BUFFER_PLACEMENT arguments,
+                                     D3D12DDIARG_BUFFER_PLACEMENT count)
+{
+    AV_SCOPE("D3d12Recorder::execute_indirect");
+    sent(rvk_d3d12_ExecuteIndirect12(device_.wire(), list(handle), device_.id_of(signature.pDrvPrivate), max_count,
+                                     device_.id_of(arguments.BaseAddress.UMD.hResource.pDrvPrivate),
+                                     arguments.BaseAddress.UMD.Offset,
+                                     device_.id_of(count.BaseAddress.UMD.hResource.pDrvPrivate),
+                                     count.BaseAddress.UMD.Offset),
+         "ExecuteIndirect12");
+}
+
+/* Not recorded: a present is its queue's work (D3d12Device::present). */
+VOID D3d12Recorder::present(D3D12DDI_HCOMMANDLIST, D3D12DDI_HCOMMANDQUEUE queue, const D3D12DDIARG_PRESENT_0001 *args,
+                            D3D12DDI_PRESENT_0051 *out, D3D12DDI_PRESENT_CONTEXTS_0051 *contexts,
+                            D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues)
+{
+    AV_SCOPE("D3d12Recorder::present");
+    device_.present(queue, args, out, contexts, hardware_queues);
+}
+
 VOID D3d12Recorder::resource_resolve_subresource(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE destination,
                                                  UINT destination_subresource, D3D12DDI_HRESOURCE source,
                                                  UINT source_subresource, DXGI_FORMAT format)

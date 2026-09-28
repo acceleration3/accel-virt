@@ -17,6 +17,8 @@
 
 namespace av {
 
+class GuestPageList;
+
 class DdiTable;
 
 
@@ -56,6 +58,14 @@ public:
     virtual uint8_t *map_frame(uint64_t frame) = 0;
     /* Of a view map_frame returned; never of null. Never at DISPATCH. */
     virtual void     unmap_frame(uint8_t *view) = 0;
+    /* Every page of `pages` mapped into kernel space as one view, in their
+     * order: how a present's blit reaches a surface whose frames are scattered
+     * with one mapping, not one per page - every unmapping is a TLB flush on
+     * each processor, and a 1280x800 frame was thousands of them. Null, and
+     * `mapping` null, when the platform cannot map them. Never at DISPATCH. */
+    virtual uint8_t *map_pages(const GuestPageList &pages, void *&mapping) = 0;
+    /* Of a view map_pages returned, with the mapping it answered. */
+    virtual void     unmap_pages(uint8_t *view, void *mapping) = 0;
     /* `bytes` of device memory at physical address `physical` (both
      * page-aligned) mapped write-back into the calling process: its address
      * there in `view`, and what unmap_from_process takes in `mapping`.

@@ -88,6 +88,7 @@ IMPLEMENTED = {
         "pfnCalcPrivateCommandRecorderSize", "pfnCreateCommandRecorder", "pfnDestroyCommandRecorder",
         "pfnCommandRecorderSetCommandPoolAsTarget", "pfnEnumerateMetaCommands",
         "pfnCheckDriverMatchingIdentifier", "pfnGetDebugAllocationInfo",
+        "pfnCalcPrivateCommandSignatureSize", "pfnCreateCommandSignature", "pfnDestroyCommandSignature",
     },
     QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence"},
     EXTENDED_TABLE: {"pfnGetSupportedExtendedFeatures", "pfnGetSupportedExtendedFeatureVersions",
@@ -106,7 +107,8 @@ IMPLEMENTED = {
         "pfnSetGraphicsRootConstantBufferView", "pfnSetComputeRootShaderResourceView",
         "pfnSetGraphicsRootShaderResourceView", "pfnSetComputeRootUnorderedAccessView",
         "pfnSetGraphicsRootUnorderedAccessView", "pfnIASetIndexBuffer", "pfnIASetVertexBuffers",
-        "pfnOMSetRenderTargets", "pfnSetMarker", "pfnClearRootArguments",
+        "pfnOMSetRenderTargets", "pfnSetMarker", "pfnClearRootArguments", "pfnExecuteIndirect",
+        "pfnPresent",
     },
 }
 

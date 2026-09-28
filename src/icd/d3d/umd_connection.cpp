@@ -7,7 +7,7 @@
 
 namespace av::d3d {
 
-UmdConnection::UmdConnection(Kmt &kmt) : search_(kmt), opens_(0u)
+UmdConnection::UmdConnection(Kmt &kmt) : search_(kmt), luid_(0u), opens_(0u)
 {
     AV_SCOPE("UmdConnection::UmdConnection");
 }
@@ -21,6 +21,7 @@ Status UmdConnection::acquire(uint64_t luid)
 {
     AV_SCOPE("UmdConnection::acquire");
     if (search_.found()) {
+        if (luid != luid_) return Status::conflict;
         opens_++;
         return Status::ok;
     }
@@ -32,6 +33,7 @@ Status UmdConnection::acquire(uint64_t luid)
                              AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
     const Status found = search_.find(rvkgpu, luid);
     if (found != Status::ok) return found == Status::not_found ? Status::not_supported : found;
+    luid_ = luid;
     opens_ = 1u;
     return Status::ok;
 }
@@ -51,6 +53,18 @@ bool UmdConnection::open() const
     return search_.found();
 }
 
+bool UmdConnection::holds(uint64_t luid) const
+{
+    AV_SCOPE("UmdConnection::holds");
+    return search_.found() && luid_ == luid;
+}
+
+bool UmdConnection::shares_adapter(const UmdConnection &other) const
+{
+    AV_SCOPE("UmdConnection::shares_adapter");
+    return other.search_.found() && holds(other.luid_);
+}
+
 uint32_t UmdConnection::adapter() const
 {
     AV_SCOPE("UmdConnection::adapter");
@@ -68,6 +82,7 @@ void UmdConnection::report(StateWriter &writer) const
     AV_SCOPE("UmdConnection::report");
     writer.flag("open", search_.found());
     writer.number("adapter", search_.adapter());
+    writer.hex("luid", luid_);
     writer.number("opens", opens_);
 }
 

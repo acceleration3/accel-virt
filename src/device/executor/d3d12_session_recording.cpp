@@ -4,6 +4,7 @@
 #include "device/executor/d3d12_session.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/d3d12_indirect_stride.hpp"
 #include "device/shim/d3d12_host_device.hpp"
 #include "device/shim/d3d_headers.hpp"
 
@@ -305,6 +306,39 @@ bool D3d12Session::on_Dispatch12(uint32_t id, uint32_t x, uint32_t y, uint32_t z
     ID3D12GraphicsCommandList *const recorded = list(id);
     if (recorded == nullptr || x > most_groups || y > most_groups || z > most_groups) return false;
     recorded->Dispatch(x, y, z);
+    return true;
+}
+
+/* The argument buffer is bounded by the stride kept on the signature
+ * (D3d12IndirectStride): the host GPU reads max_count commands of it, and
+ * nothing past the buffer may be one. */
+bool D3d12Session::on_ExecuteIndirect12(uint32_t id, uint32_t signature, uint32_t max_count, uint32_t argument_buffer,
+                                        uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset)
+{
+    AV_SCOPE("D3d12Session::on_ExecuteIndirect12");
+    constexpr uint64_t count_bytes = sizeof(uint32_t);
+    ID3D12GraphicsCommandList *const recorded = list(id);
+    ID3D12CommandSignature *const    signed_by =
+        object<ID3D12CommandSignature>(signature, D3dObjectKind::command_signature12);
+    ID3D12Resource *const arguments = object<ID3D12Resource>(argument_buffer, D3dObjectKind::resource12);
+    ID3D12Resource *const counts =
+        count_buffer == 0u ? nullptr : object<ID3D12Resource>(count_buffer, D3dObjectKind::resource12);
+    D3d12IndirectStride stride;
+    if (recorded == nullptr || signed_by == nullptr || arguments == nullptr || (count_buffer != 0u && counts == nullptr) ||
+        !stride.read(signed_by))
+        return false;
+    const D3D12_RESOURCE_DESC argument_desc = arguments->GetDesc();
+    if (argument_desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER ||
+        !stride.reaches(argument_offset, max_count, argument_desc.Width))
+        return false;
+    if (counts != nullptr) {
+        const D3D12_RESOURCE_DESC count_desc = counts->GetDesc();
+        if (count_desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || count_offset % count_bytes != 0u ||
+            count_offset > count_desc.Width || count_desc.Width - count_offset < count_bytes)
+            return false;
+    }
+    recorded->ExecuteIndirect(signed_by, max_count, arguments, argument_offset, counts,
+                              counts != nullptr ? count_offset : 0u);
     return true;
 }
 

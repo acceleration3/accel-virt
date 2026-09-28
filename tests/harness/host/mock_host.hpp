@@ -306,6 +306,9 @@ public:
     /* The device view of the block placed at `offset`, or null. */
     void         *placed_at(std::uint64_t offset);
 
+    /* Waits up to `milliseconds` for at least `threads` to be blocked in
+     * wait_event, each past the point it looked at anything; false on timeout. */
+    bool          wait_for_sleepers(std::uint32_t threads, std::uint32_t milliseconds);
     /* Waits up to `milliseconds` for at least `work` routines to be queued for
      * the main loop; false on timeout. */
     bool          wait_for_main_loop_work(std::uint32_t work, std::uint32_t milliseconds);
@@ -353,6 +356,7 @@ private:
         bool            set;
         bool            live;
         int             descriptor;   /* made on the first event_descriptor, -1 before */
+        std::uint32_t   sleepers;     /* threads blocked in wait_event on it */
     };
     struct Mutex {
         pthread_mutex_t lock;

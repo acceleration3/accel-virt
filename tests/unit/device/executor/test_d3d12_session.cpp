@@ -128,8 +128,10 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   CHECK(!session.on_CreateGraphicsPipeline12(11u, 5u, state, 0u, nullptr, 0u, nullptr, nothing, 0u, nothing, 0u,
                                             nothing, 0u, nothing, 0u, nothing, 0u));
   CHECK(!session.on_CreateComputePipeline12(12u, 5u, nothing, 0u));
+  const IndirectArgument draw = {};
+  CHECK(!session.on_CreateCommandSignature12(13u, 0u, 16u, 1u, &draw));
   /* None of those ids names anything now. */
-  for (std::uint32_t id = 1u; id <= 12u; id++) CHECK(!session.on_Destroy12(id)); }
+  for (std::uint32_t id = 1u; id <= 13u; id++) CHECK(!session.on_Destroy12(id)); }
 
 TEST(d3d12_session, every_view_and_descriptor_naming_a_heap_it_never_made_is_refused)
 { FreshSession fresh;
@@ -160,7 +162,10 @@ TEST(d3d12_session, every_queue_list_and_fence_command_naming_nothing_is_refused
   CHECK(completed == 0u);
   CHECK(!session.on_PublishFence12(nobody, 64u));
   /* Stopping a publication that never started is nothing to refuse. */
-  CHECK(session.on_PublishFence12(nobody, av::D3d12FencePublisher::stop)); }
+  CHECK(session.on_PublishFence12(nobody, av::D3d12FencePublisher::stop));
+  /* A swap chain buffer shared or presented that nothing names. */
+  CHECK(!session.on_ShareResource12(nobody, 0x5eedu));
+  CHECK(!session.on_PresentResource12(nobody, nobody)); }
 
 TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
 { FreshSession fresh;
@@ -206,7 +211,8 @@ TEST(d3d12_session, every_recording_command_on_a_list_it_never_made_is_refused)
   CHECK(!session.on_ResolveQueryData12(list, 1u, 0u, 0u, 1u, 2u, 0u));
   CHECK(!session.on_BeginEvent12(list, 1u, marker, sizeof marker));
   CHECK(!session.on_EndEvent12(list));
-  CHECK(!session.on_SetMarker12(list, 1u, marker, sizeof marker)); }
+  CHECK(!session.on_SetMarker12(list, 1u, marker, sizeof marker));
+  CHECK(!session.on_ExecuteIndirect12(list, 1u, 1u, 2u, 0u, 0u, 0u)); }
 
 /* With no queue executed there is no GPU work to wait for, and no published
  * fence to write. */

@@ -1,0 +1,43 @@
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index 407a584..25ceab5 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -50,6 +50,7 @@ namespace dxvk {
+     HANDLE_EXT(khrExternalSemaphoreWin32);         \
+     HANDLE_EXT(khrExternalMemoryFd);               \
+     HANDLE_EXT(extExternalMemoryDmaBuf);           \
++    HANDLE_EXT(khrExternalSemaphoreFd);            \
+     HANDLE_EXT(khrIncrementalPresent);             \
+     HANDLE_EXT(khrLoadStoreOpNone);                \
+     HANDLE_EXT(khrMaintenance5);                   \
+@@ -1030,6 +1031,10 @@ namespace dxvk {
+       ENABLE_EXT(khrExternalMemoryFd, false),
+       ENABLE_EXT(extExternalMemoryDmaBuf, false),
+ 
++      /* A timeline an embedder imports to order this device's work after
++       * another's on the same GPU (accel-virt's Direct3D 12 swapchains) */
++      ENABLE_EXT(khrExternalSemaphoreFd, false),
++
+       /* Dirty rects for presentation */
+       ENABLE_EXT(khrIncrementalPresent, false),
+ 
+diff --git a/src/dxvk/dxvk_device_info.h b/src/dxvk/dxvk_device_info.h
+index ffe10d6..5aa2b4b 100644
+--- a/src/dxvk/dxvk_device_info.h
++++ b/src/dxvk/dxvk_device_info.h
+@@ -93,6 +93,7 @@ namespace dxvk {
+     VkBool32                                                  khrExternalSemaphoreWin32       = VK_FALSE;
+     VkBool32                                                  khrExternalMemoryFd             = VK_FALSE;
+     VkBool32                                                  extExternalMemoryDmaBuf         = VK_FALSE;
++    VkBool32                                                  khrExternalSemaphoreFd          = VK_FALSE;
+     VkBool32                                                  khrIncrementalPresent           = VK_FALSE;
+     VkBool32                                                  khrLoadStoreOpNone              = VK_FALSE;
+     VkPhysicalDeviceMaintenance5FeaturesKHR                   khrMaintenance5                 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES_KHR };
+@@ -171,6 +172,7 @@ namespace dxvk {
+     VkExtensionProperties khrExternalSemaphoreWin32         = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
+     VkExtensionProperties khrExternalMemoryFd               = vk::makeExtension(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+     VkExtensionProperties extExternalMemoryDmaBuf           = vk::makeExtension(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
++    VkExtensionProperties khrExternalSemaphoreFd            = vk::makeExtension(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
+     VkExtensionProperties khrIncrementalPresent             = vk::makeExtension(VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME);
+     VkExtensionProperties khrLoadStoreOpNone                = vk::makeExtension(VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME);
+     VkExtensionProperties khrMaintenance5                   = vk::makeExtension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);

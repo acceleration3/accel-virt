@@ -78,7 +78,7 @@ bool D3dBackend::initialize(D3d11HostDevice *device11, D3d12HostDevice *device12
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->opened()) return false;
     device11_ = device11;
-    d3d12_.initialize(device12);
+    d3d12_.initialize(device12, device11);
     lost_ = false;
     return true;
 }

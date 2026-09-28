@@ -26,6 +26,8 @@
 #include "core/platform/spin_lock.hpp"
 #include "core/pci/bar_mappings.hpp"
 #include "core/pci/resource_list.hpp"
+#include "core/present/mapped_pixels.hpp"
+#include "core/present/present_copier.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/platform/platform.hpp"
 #include "core/scheduling/context_table.hpp"
@@ -51,6 +53,9 @@
 #include <stdint.h>
 
 namespace av {
+
+class PresentSurface;
+class Rectangle;
 
 struct D3dkmdtVidPnPresentPathRecord;
 struct DxgkChildContainerIdRecord;
@@ -284,6 +289,8 @@ private:
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
+    void log_unreadable_surfaces(const PresentSurface &read, const PresentSurface &written, AllocationKind source_kind,
+                                 AllocationKind destination_kind, const Rectangle &from, const Rectangle &into);
 
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
@@ -354,6 +361,7 @@ private:
      * the work queued on the one that is gone is reported lost (FR-005). */
     void                 judge_device();
     [[nodiscard]] Status power_up();
+    void                 start_copier();
     /* Which sources have a committed mode: what a power transition puts back. */
     uint32_t             scanning_out() const;
     /* Configures each source the transition held, logging any it cannot: a
@@ -401,6 +409,11 @@ private:
     BarMappings                    mappings_;
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
+    /* What moves a present's pixels while the device cannot: the miniport,
+     * through its own uncached view of the pages. */
+    MappedPixels                   mapped_pixels_;
+    /* What moves them while it can: made with the device and gone with it. */
+    ObjectStorage<PresentCopier>   copier_;
     ObjectStorage<MappedRegisterWindow> doorbells_;
     /* The doorbells processes hold on hardware queues (feature 049): made with
      * the mapping they hand out pages of, and gone with it. */

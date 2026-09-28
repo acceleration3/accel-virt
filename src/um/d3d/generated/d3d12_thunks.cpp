@@ -230,13 +230,13 @@ extern "C" VOID APIENTRY rvkumd_d3d12_DestroyQueryHeap(D3D12DDI_HDEVICE handle, 
 { D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_query_heap(a1); }
 
 extern "C" SIZE_T APIENTRY rvkumd_d3d12_CalcPrivateCommandSignatureSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateCommandSignatureSize"); return SIZE_T{}; }
+{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_signature_size(a1); }
 
 extern "C" HRESULT APIENTRY rvkumd_d3d12_CreateCommandSignature(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 * a1, D3D12DDI_HCOMMANDSIGNATURE a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateCommandSignature"); return E_NOTIMPL; }
+{ return D3d12DeviceHandle(handle.pDrvPrivate).device().create_command_signature(a1, a2); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12_DestroyCommandSignature(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDSIGNATURE a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroyCommandSignature"); }
+{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_signature(a1); }
 
 extern "C" D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY rvkumd_d3d12_CheckResourceVirtualAddress(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1)
 { return D3d12DeviceHandle(handle.pDrvPrivate).device().check_resource_virtual_address(a1); }
@@ -464,7 +464,7 @@ extern "C" VOID APIENTRY rvkumd_d3d12l_ExecuteBundle(D3D12DDI_HCOMMANDLIST handl
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12l_ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDSIGNATURE a1, UINT a2, D3D12DDIARG_BUFFER_PLACEMENT a3, D3D12DDIARG_BUFFER_PLACEMENT a4)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); }
+{ D3d12RecordHandle(handle.pDrvPrivate).recorder().execute_indirect(handle, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12l_ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT a1, const D3D12DDIARG_RESOURCE_BARRIER_0022 * a2)
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().resource_barrier(handle, a1, a2); }
@@ -473,7 +473,7 @@ extern "C" VOID APIENTRY rvkumd_d3d12l_Blt(D3D12DDI_HCOMMANDLIST handle, const D
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12l_Present(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE a1, const D3D12DDIARG_PRESENT_0001 * a2, D3D12DDI_PRESENT_0051 * a3, D3D12DDI_PRESENT_CONTEXTS_0051 * a4, D3D12DDI_PRESENT_HWQUEUES_0051 * a5)
-{ static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); }
+{ D3d12RecordHandle(handle.pDrvPrivate).recorder().present(handle, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY rvkumd_d3d12l_BeginQuery(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEAP a1, D3D12DDI_QUERY_TYPE a2, UINT a3)
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().begin_query(handle, a1, a2, a3); }

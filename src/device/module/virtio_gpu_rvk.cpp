@@ -5,6 +5,7 @@
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/scanout_commands.hpp"
+#include "device/control/present_commands.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/execution/executor_library.hpp"
@@ -166,7 +167,8 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
     return ContextCommands(host_, *contexts_, capset_).answer(control, type) ||
            BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
-           SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type);
+           SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type) ||
+           PresentCommands(host_).answer(control, type);
 }
 
 uint32_t VirtioGpuRvk::capsets() const

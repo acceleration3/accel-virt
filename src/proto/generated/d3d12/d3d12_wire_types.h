@@ -294,6 +294,15 @@ struct CopyLocation {
 static_assert(sizeof(CopyLocation) == 40, "CopyLocation crosses as 40 bytes");
 static_assert(__is_trivially_copyable(CopyLocation), "CopyLocation is plain data");
 
+struct IndirectArgument {
+    uint32_t type;
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+};
+static_assert(sizeof(IndirectArgument) == 16, "IndirectArgument crosses as 16 bytes");
+static_assert(__is_trivially_copyable(IndirectArgument), "IndirectArgument is plain data");
+
 struct Caps12 {
     uint32_t feature_level;
     uint32_t shader_model;

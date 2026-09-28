@@ -67,7 +67,7 @@ constexpr std::uint64_t upload_address = 0x200000000ull;
 
 enum Id : std::uint32_t {
     queue = 1, allocator, list, target, rtv_heap, readback_heap, readback, upload_heap, vertices, constants, fence,
-    root, pipeline
+    root, pipeline, signature, arguments, counts, shown, shown_rtv
 };
 
 struct Vertex {
@@ -254,8 +254,8 @@ void make_triangle(av::D3dLoopback &wire, bool whole_containers)
                                              ps_bytes));
 }
 
-/* Cleared blue, the triangle drawn over the left half and down the middle. */
-void draw_triangle(av::D3dLoopback &wire)
+/* Cleared blue, and everything the triangle is drawn with bound. */
+void bind_triangle(av::D3dLoopback &wire)
 {
     CHECK(rvk_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{rtv_heap, 0u}, Float4{{0.0f, 0.0f, 1.0f, 1.0f}},
                                             0u, nullptr));
@@ -271,6 +271,12 @@ void draw_triangle(av::D3dLoopback &wire)
     const VertexBufferView binding = {upload_address, 3u * sizeof(Vertex), sizeof(Vertex)};
     CHECK(rvk_d3d12_SetVertexBuffers12(wire, list, 0u, 1u, &binding));
     CHECK(rvk_d3d12_SetTopology12(wire, list, topology_triangles));
+}
+
+/* The triangle drawn over the left half and down the middle. */
+void draw_triangle(av::D3dLoopback &wire)
+{
+    bind_triangle(wire);
     CHECK(rvk_d3d12_DrawInstanced12(wire, list, 3u, 1u, 0u, 0u));
 }
 
@@ -367,5 +373,321 @@ TEST(d3d12_session_device, a_triangle_drawn_from_ddi_dxil_reads_back_where_it_wa
         CHECK_EQ(wire.refused(), 0u);
         CHECK(backend.invariants_hold());
         backend.shut_down();
+    }
+}
+
+namespace {
+
+constexpr std::uint64_t arguments_at = 512u, counts_at = 768u, argument_bytes = 256u;
+constexpr std::uint32_t draw_bytes = 16u;   /* D3D12_DRAW_ARGUMENTS */
+constexpr IndirectArgument draw_argument = {0u, 0u, 0u, 0u};
+
+/* The frame and the triangle, a draw of it in an argument buffer of guest
+ * memory, a count of one in a count buffer, and a signature of one draw. */
+void make_indirect(av::D3dLoopback &wire)
+{
+    make_frame(wire);
+    CHECK(rvk_d3d12_CreateFence12(wire, fence, 0u, 0u));
+    make_triangle(wire, false);
+    const std::uint32_t draw[4] = {3u, 1u, 0u, 0u};
+    std::memcpy(wire.guest(upload_at + arguments_at), draw, sizeof draw);
+    const std::uint32_t one = 1u;
+    std::memcpy(wire.guest(upload_at + counts_at), &one, sizeof one);
+    CHECK(rvk_d3d12_CreatePlacedResource12(wire, arguments, upload_heap, arguments_at, buffer_of(argument_bytes),
+                                           state_generic_read, ClearValue{}, upload_address + arguments_at));
+    CHECK(rvk_d3d12_CreatePlacedResource12(wire, counts, upload_heap, counts_at, buffer_of(argument_bytes),
+                                           state_generic_read, ClearValue{}, upload_address + counts_at));
+    CHECK(rvk_d3d12_CreateCommandSignature12(wire, signature, 0u, draw_bytes, 1u, &draw_argument));
+}
+
+/* One command the host must refuse, sent to a session that was healthy. */
+using Misuse = void (*)(av::D3dLoopback &wire);
+
+/* The triangle's root signature has one parameter, a CBV. */
+constexpr Misuse misuses[] = {
+    [](av::D3dLoopback &wire) {   /* root constants on a CBV parameter */
+        const IndirectArgument taken[2] = {{5u, 0u, 0u, 1u}, draw_argument};
+        CHECK(rvk_d3d12_CreateCommandSignature12(wire, signature + 1u, root, 20u, 2u, taken));
+    },
+    [](av::D3dLoopback &wire) {   /* a CBV at a parameter past the last */
+        const IndirectArgument taken[2] = {{6u, 1u, 0u, 0u}, draw_argument};
+        CHECK(rvk_d3d12_CreateCommandSignature12(wire, signature + 1u, root, 24u, 2u, taken));
+    },
+    [](av::D3dLoopback &wire) {   /* a root that is no root signature */
+        const IndirectArgument taken[2] = {{6u, 0u, 0u, 0u}, draw_argument};
+        CHECK(rvk_d3d12_CreateCommandSignature12(wire, signature + 1u, pipeline, 24u, 2u, taken));
+    },
+    [](av::D3dLoopback &wire) {   /* one command past the argument buffer */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, argument_bytes / draw_bytes + 1u, arguments, 0u,
+                                          0u, 0u));
+    },
+    [](av::D3dLoopback &wire) {   /* a count off its word */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, counts, 2u));
+    },
+    [](av::D3dLoopback &wire) {   /* a count past its buffer */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, counts, argument_bytes));
+    },
+    [](av::D3dLoopback &wire) {   /* a count in no buffer */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, pipeline, 0u));
+    },
+    [](av::D3dLoopback &wire) {   /* arguments in a texture */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 1u, target, 0u, 0u, 0u));
+    },
+    [](av::D3dLoopback &wire) {   /* a count in a texture */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 1u, arguments, 0u, target, 0u));
+    },
+    [](av::D3dLoopback &wire) {   /* a signature that is none */
+        CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, pipeline, 1u, arguments, 0u, 0u, 0u));
+    },
+};
+
+}  // namespace
+
+/* The same triangle drawn by ExecuteIndirect: its draw read from an argument
+ * buffer of guest memory, up to four commands of which a count buffer says
+ * one. */
+TEST(d3d12_session_device, a_triangle_drawn_indirectly_reads_back_where_it_was_drawn)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device11, device12));
+    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    make_indirect(wire);
+    bind_triangle(wire);
+    CHECK(rvk_d3d12_ExecuteIndirect12(wire, list, signature, 4u, arguments, 0u, counts, 0u));
+    read_frame(wire, 1u);
+    judge_triangle(wire);
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+/* Everything the host refuses on the real device - a root argument naming a
+ * parameter of another kind or none, a root that is no root signature,
+ * commands past the argument buffer, a count off its word or in no buffer,
+ * a signature that is none - each alone, on a session that was healthy until
+ * it came: the device is removed after it and not before. */
+TEST(d3d12_session_device, each_indirect_misuse_removes_a_healthy_device)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    for (const Misuse misuse : misuses) {
+        av::D3dBackend backend;
+        CHECK(backend.initialize(device11, device12));
+        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        if (!imports(*device12, wire)) {
+            backend.shut_down();
+            return;
+        }
+        make_indirect(wire);
+        std::uint32_t removed = 1u;
+        CHECK(rvk_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, 0u);
+        misuse(wire);
+        CHECK(rvk_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, driver_internal_error);
+        backend.shut_down();
+    }
+}
+
+/* A shader-visible sampler heap of the size the guest's runtime reports - more
+ * than the 2048 vkd3d-proton makes - is made with 2048: a sampler at the last
+ * of them is written, one past them is refused as outside the heap. */
+TEST(d3d12_session_device, a_sampler_heap_past_2048_is_made_with_2048)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    constexpr std::uint32_t descriptors_sampler = 1u, shader_visible = 1u, reported = 4000u, made = 2048u;
+    const std::uint32_t indices[2] = {made - 1u, made};
+    for (const std::uint32_t index : indices) {
+        av::D3dBackend backend;
+        CHECK(backend.initialize(device11, device12));
+        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        std::uint32_t hresult = 1u;
+        Caps12 caps = {};
+        CHECK(rvk_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+        CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, rtv_heap, descriptors_sampler, reported, shader_visible));
+        SamplerDesc sampler = {};
+        sampler.filter = 0u;
+        sampler.address_u = sampler.address_v = sampler.address_w = 1u;   /* WRAP */
+        sampler.comparison = 1u;
+        sampler.max_lod = 1000.0f;
+        CHECK(rvk_d3d12_CreateSampler12(wire, DescriptorRef{rtv_heap, index}, sampler));
+        std::uint32_t removed = 1u;
+        CHECK(rvk_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, index < made ? 0u : driver_internal_error);
+        backend.shut_down();
+    }
+}
+
+/* A heap as D3D12Core makes one - with a buffer over all of it - and a buffer
+ * placed inside it, at the address that is the spanning buffer's plus the
+ * offset: it is taken, since the host placed both at the same offsets. A
+ * buffer whose guest address says it is somewhere its host placement is not
+ * is refused. */
+TEST(d3d12_session_device, a_buffer_placed_inside_a_spanning_buffer_is_taken_and_a_misplaced_one_refused)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    constexpr std::uint64_t heap_size = 1u << 20u, piece = 64u * 1024u, base = 0x300000000ull;
+    constexpr std::uint32_t heap = 1u, spanning = 2u, inner = 3u, misplaced = 4u;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device11, device12));
+    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    std::uint32_t hresult = 1u;
+    Caps12 caps = {};
+    CHECK(rvk_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+    CHECK(rvk_d3d12_CreateHeap12(wire, heap, heap_of(heap_default), 0u, heap_size, piece, 0u));
+    CHECK(rvk_d3d12_CreatePlacedResource12(wire, spanning, heap, 0u, buffer_of(heap_size), 0u, ClearValue{}, base));
+    CHECK(rvk_d3d12_CreatePlacedResource12(wire, inner, heap, piece, buffer_of(piece), 0u, ClearValue{}, base + piece));
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    /* Placed two pieces in, but claiming the address of one piece in. */
+    CHECK(rvk_d3d12_CreatePlacedResource12(wire, misplaced, heap, 2u * piece, buffer_of(piece), 0u, ClearValue{},
+                                           base + piece));
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, driver_internal_error);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+namespace {
+
+constexpr std::uint32_t heap_flag_shared = 0x1u;
+/* What the miniport would have minted over the buffer's kernel allocation. */
+constexpr std::uint64_t shown_key = 0x5eed00000000d312ull;
+constexpr std::uint32_t opaque_red = 0xffff0000u;
+constexpr std::uint32_t opaque_green = 0xff00ff00u;
+
+/* The frame make_frame makes, and beside its target a 64x64 swap chain
+ * buffer made shared, with a view, shown under shown_key. */
+void make_shown(av::D3dLoopback &wire)
+{
+    make_frame(wire);
+    ResourceDesc texture = {};
+    texture.width = size;
+    texture.dimension = dimension_texture2d;
+    texture.height = size;
+    texture.depth_or_array = 1u;
+    texture.mip_levels = 1u;
+    texture.format = format_b8g8r8a8;
+    texture.sample_count = 1u;
+    texture.flags = flag_render_target;
+    CHECK(rvk_d3d12_CreateCommittedResource12(wire, shown, heap_of(heap_default), heap_flag_shared, texture,
+                                              state_render_target, ClearValue{}, 0u));
+    CHECK(rvk_d3d12_CreateDescriptorHeap12(wire, shown_rtv, descriptors_rtv, 1u, 0u));
+    ViewDesc view = {};
+    view.resource = shown;
+    CHECK(rvk_d3d12_CreateRenderTargetView12(wire, DescriptorRef{shown_rtv, 0u}, 0u, view));
+    CHECK(rvk_d3d12_ShareResource12(wire, shown, shown_key));
+}
+
+/* The buffer cleared `colour`, executed and presented, and the list open again. */
+void present_cleared(av::D3dLoopback &wire, Float4 colour)
+{
+    CHECK(rvk_d3d12_ClearRenderTargetView12(wire, list, DescriptorRef{shown_rtv, 0u}, colour, 0u, nullptr));
+    CHECK(rvk_d3d12_CloseCommandList12(wire, list));
+    const std::uint32_t lists[1] = {list};
+    CHECK(rvk_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
+    CHECK(rvk_d3d12_PresentResource12(wire, queue, shown));
+    CHECK(rvk_d3d12_ResetCommandAllocator12(wire, allocator));
+    CHECK(rvk_d3d12_ResetCommandList12(wire, list, allocator, 0u));
+}
+
+/* Whether every pixel of what the Direct3D 11 device has under shown_key -
+ * DWM's view of the buffer - is `expected`. */
+bool shown_everywhere(av::D3d11HostDevice &device11, std::uint32_t expected)
+{
+    std::uint32_t pixels[size * size] = {};
+    if (!device11.read_image(shown_key, pixels, row_pitch, size, size)) return false;
+    for (const std::uint32_t value : pixels)
+        if (value != expected) return false;
+    return true;
+}
+
+using ShowMisuse = void (*)(av::D3dLoopback &);
+
+const ShowMisuse show_misuses[] = {
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, target, shown_key + 1u)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, shown, 0u)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, 99u, shown_key + 1u)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_ShareResource12(wire, shown, shown_key)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, 99u, shown)); },
+    [](av::D3dLoopback &wire) { CHECK(rvk_d3d12_PresentResource12(wire, queue, 99u)); },
+};
+
+}  // namespace
+
+/* A swap chain buffer drawn on Direct3D 12 is the texture the Direct3D 11
+ * device - the compositor's - has under the buffer's key: the same memory,
+ * each present's pixels there once the presenting queue has drawn them. */
+TEST(d3d12_session_device, a_shared_buffer_drawn_on_d3d12_is_what_d3d11_reads_under_its_key)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    av::D3dBackend backend;
+    CHECK(backend.initialize(device11, device12));
+    av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    make_shown(wire);
+    present_cleared(wire, Float4{{1.0f, 0.0f, 0.0f, 1.0f}});
+    CHECK(shown_everywhere(*device11, opaque_red));
+    present_cleared(wire, Float4{{0.0f, 1.0f, 0.0f, 1.0f}});
+    CHECK(shown_everywhere(*device11, opaque_green));
+    std::uint32_t removed = 1u;
+    CHECK(rvk_d3d12_Finish12(wire, &removed));
+    CHECK_EQ(removed, 0u);
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(backend.invariants_hold());
+    backend.shut_down();
+    /* The guest let go of it everywhere: nothing is shown under the key. */
+    device11->release_shared(shown_key);
+    CHECK(!shown_everywhere(*device11, opaque_green));
+}
+
+/* A share of a texture not made shared, of none, under key 0 or a key already
+ * shown; a present from a queue or of a resource nothing names: each alone
+ * removes a session that was healthy until it came. */
+TEST(d3d12_session_device, each_share_or_present_misuse_removes_a_healthy_device)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    if (!host_devices(apis, device11, device12)) return;
+    for (const ShowMisuse misuse : show_misuses) {
+        av::D3dBackend backend;
+        CHECK(backend.initialize(device11, device12));
+        av::D3dLoopback wire(backend, guest_bytes, lent_bytes);
+        make_shown(wire);
+        std::uint32_t removed = 1u;
+        CHECK(rvk_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, 0u);
+        misuse(wire);
+        CHECK(rvk_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, driver_internal_error);
+        backend.shut_down();
+        device11->release_shared(shown_key);
     }
 }

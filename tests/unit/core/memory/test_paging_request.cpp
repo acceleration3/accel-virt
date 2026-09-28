@@ -381,7 +381,7 @@ TEST(paging_request_map_aperture, records_nothing_for_a_segment_that_is_not_the_
   const std::uint64_t frames[] = {5u * page};
   void *mdl = paging.platform().attach_page_frames(frames, 1u);
   DxgkBuildPagingBufferMapApertureSegmentRecord request = aperture_map(allocation, mdl, 0u, 1u);
-  request.SegmentId = ApertureSegment::system_memory_segment_id;
+  request.SegmentId = ApertureSegment::segment_id + 1u;
   paging.place(request);
   CHECK_EQ(paging.build(), 0);
   CHECK_EQ(allocation->pages_at(aperture_address(0u), 1u).count(), 0u); }

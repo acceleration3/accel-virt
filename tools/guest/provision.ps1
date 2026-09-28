@@ -103,6 +103,29 @@ function SetDword($Path, $Name, $Value) {
     Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type DWord
 }
 
+# The device presents its host GPU's vendor and device (docs/protocol.md), so
+# with a network Windows' device setup finds the vendor's own WHQL driver on
+# Windows Update, ranks it above this test-signed one and installs it over
+# the device - which then bugchecks at the next boot (2026-09-28: AMD's
+# u0420529.inf on 1002:7550). NoAutoUpdate does not stop device setup, so it
+# is told not to search Windows Update for drivers at all - and the policies
+# do not stop an update already downloaded, which Windows Update installed
+# after the next boot all the same, so its services and tasks are turned off
+# and what it downloaded is dropped.
+function NoDriverUpdates {
+    SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' ExcludeWUDriversInQualityUpdate 1
+    SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching' DontSearchWindowsUpdate 1
+    SetDword 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching' SearchOrderConfig 0
+    SetDword 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Device Metadata' PreventDeviceMetadataFromNetwork 1
+    foreach ($service in 'wuauserv', 'UsoSvc', 'WaaSMedicSvc') {
+        Stop-Service $service -Force -ErrorAction SilentlyContinue
+        SetDword "HKLM:\SYSTEM\CurrentControlSet\Services\$service" Start 4
+    }
+    Get-ScheduledTask -TaskPath '\Microsoft\Windows\WindowsUpdate\', '\Microsoft\Windows\UpdateOrchestrator\' `
+        -ErrorAction SilentlyContinue | Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
+    Remove-Item 'C:\Windows\SoftwareDistribution\Download\*' -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 function RvkDevices {
     @(Get-PnpDevice -PresentOnly | Where-Object { @($_.HardwareID | Where-Object { $_ -match $RvkHardwareId }).Count })
 }
@@ -324,6 +347,7 @@ switch ($Stage) {
         SetDword $crash AlwaysKeepMemoryDump 1
         SetDword 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup' LogLevel $VerboseDeviceInstallLog
         SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' NoAutoUpdate 1
+        NoDriverUpdates
         SetDword 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance' MaintenanceDisabled 1
         # A driver that bugchecks on every boot must keep rebooting into
         # Windows, where the runner notices, not stop in the recovery
@@ -350,6 +374,8 @@ switch ($Stage) {
         exit 0
     }
     'install' {
+        # Also here, for an image prepared before the prepare stage set it.
+        NoDriverUpdates
         # The WDDM features this driver implements, staged off by this build of
         # Windows (feature 049, research.md §19). dxgkrnl's ConfigureFeature
         # reads Features\<DXGK_FEATURE_ID>\Enabled, and the driver's own INF

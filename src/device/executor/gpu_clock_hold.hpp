@@ -33,7 +33,8 @@ public:
 
     /* The render node /dev/dri/renderD<render_minor> and a context on it, and
      * the thread that takes and gives back the hold. False, holding nothing,
-     * where any of it cannot be had; true at once when already open. */
+     * where any of it cannot be had; true at once when already open. Any
+     * thread, as many at once as like. */
     bool open(int32_t render_minor);
     /* Any thread, once a batch: cheap unless the clocks are not yet held. */
     void busy();
@@ -58,6 +59,8 @@ private:
      * choice would have been higher (Vulkan instancing, 77% of native). */
     static constexpr uint64_t first_probe_ns = 500000000u;
 
+    /* open's work, under the lock, on a hold not yet open. */
+    bool     start(int32_t render_minor);
     bool     request(uint32_t pstate);
     /* An AMDGPU_INFO_SENSOR reading; zero where the kernel will not say. */
     uint32_t sensor(uint32_t type) const;

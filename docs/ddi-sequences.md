@@ -265,6 +265,19 @@ flags below bit 22 without `Agp`, `PreservedDuringHibernate` or
 host aperture, at most one UEFI frame-buffer range in at most one segment, and
 `PagingBufferSegmentId <= NbSegment`. `FakeVidMm` applies it.
 
+dxdiag's and DXGI's memory sizes come from `VIDMM_GLOBAL::GetTotalSegmentSize
+@ 14010636c`. Each segment counts the smaller of its size and `CommitLimit`:
+one with neither `Aperture` (0x1) nor `ReservedSysMem` (0x1000) is dedicated -
+video memory, or system memory with `PopulatedFromSystemMemory` (0x40) - and
+the aperture and reserved totals give the shared figure (the larger, capped).
+The implicit system memory segment is `ReservedSysMem` (0x1180 and up,
+`InitializePhysicalAdapterSegments @ 140116728`), so it is never dedicated.
+The adapter reports the host GPU's local memory as a flagless segment 2 after
+the aperture, which VidMm makes a `VIDMM_MEMORY_SEGMENT` without calling the
+driver; the implicit segment is then id 3. With a capset that reports no local
+memory the aperture is the only segment. `FakeVidMm` applies the
+classification.
+
 ### 2.4b The GPU MMU (feature 017)
 
 For a physical adapter whose `PHYSICALADAPTERCAPS.Flags` sets `GpuMmuSupported`

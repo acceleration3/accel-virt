@@ -93,12 +93,38 @@ width, height, pitch, format), and the UMD's `OpenResource` recognises it
 
 ### 3.2 Presenting without pixels
 
-- **Flip presents** (DWM's swapchain, flip-model applications): the UMD sends
-  `PresentImage11(resource)`, synchronous, whose host handler submits the
-  context's work to the host GPU queue, and then calls `pfnPresentCb` with the
-  source allocation. No readback. The synchronous round trip is what orders
-  the host's rendering before dxgkrnl programs the flip; it costs a round
-  trip, not a frame.
+- **Flip presents** (DWM's swapchain, flip-model applications): the UMD
+  flushes the frame's batch, queues a packet on its present context naming
+  that batch (`BatchFollower`, a `FollowRecord`), and then calls
+  `pfnPresentCb` with the source allocation. No readback, no round trip. The
+  frame is drawn on the host from the session's ring, which dxgkrnl never
+  sees, so nothing it schedules would otherwise wait for it: the miniport
+  holds the follow packet until the host has run the batch, and dxgkrnl works
+  through the context in order, so the flip it programs - and the present DWM
+  composes on - waits for the frame. Direct3D 12 queues follow their executes
+  the same way.
+- **Fences** in Direct3D 11 are the runtime's own: it signals a monitored
+  fence on the kernel contexts the driver made through its callbacks, and
+  refuses a signal with none ("There should be at least one broadcast context
+  passed to signal."). So a device makes its kernel context when it is made,
+  not at its first present, and each flush that sent a batch follows it on
+  that context: a signal the runtime queues next waits for the host. DWM
+  composing a frame rendered on another adapter signals such a fence on its
+  device there, and waited forever before.
+- **One adapter per open.** A process may open several rvkgpu adapters - an
+  application choosing among host GPUs opens each - and the driver holds one
+  kernel adapter per LUID the runtime named (`UmdConnections`): a device made
+  on the second reaches the second's kernel adapter, where the runtime makes
+  its allocations, and not the first one opened.
+- **Across processes** the host runs Direct3D batches in the order the guest
+  stamped them (`D3dOrdering`): an application's frame, published before its
+  present, runs before the DWM batch that composes it. A process publishes its
+  own ring tail, so a batch can be in a ring whose worker is asleep with no
+  doorbell coming - the kernel rings it only when dxgkrnl hands the packet
+  over, and dxgkrnl holds one context's packets while another's (DWM's,
+  waiting on this very batch) are still running. So a stream waiting on
+  another's batch wakes that stream's worker to run it, rather than wait for
+  a doorbell that would come only after the wait.
 - **Blt presents** into a destination with a host key are a host copy
   (`CopySubresourceRegion` on the host), as VirtualBox's `DX_PRESENTBLT`.
 - **Readback survives only for CPU destinations**: a GDI shadow or staging
@@ -184,6 +210,44 @@ than failing. A read larger than the arena still fails, because
 large reads left are staging maps, and a region on `ReadSubresource` is what
 settles them.
 
+### 3.9 Direct3D 12 swap chains
+
+DXGI makes a Direct3D 12 swap chain buffer through D3D12Core as a shared
+committed texture, and shares it with DWM, which opens it with Direct3D 11.
+D3D12Core shares the buffer's kernel resource, so the buffer needs one: the
+UMD gives a committed texture whose heap D3D12Core sized itself - a shared
+heap's is the size D3D12Core asked the driver for, a committed one's is left
+to the driver, and no heap flag says "shared" or "display" - a kernel
+allocation made through the core layer's `pfnAllocateCb` for the runtime's
+resource, with the private data `d3d::KernelSurface` writes. The same class
+writes Direct3D 11's presented resources and reads what DWM's `OpenResource`
+is handed, so a buffer from either API opens the same way. The allocation is
+the runtime's to free, as Direct3D 11's keyed ones are.
+
+On the host the buffer is made with `D3D12_HEAP_FLAG_SHARED`, and
+`ShareResource12(resource, key)` shows it to the GPU's Direct3D 11 device
+under the key the miniport minted: vkd3d-proton exports the texture's memory
+as an fd with the image it made (`vkd3d_proton_export_image`,
+`tools/vkd3d-proton-patches`), and `ImportedTextures` makes the same image on
+DXVK's Vulkan device over that memory and wraps it as a texture - no copy, one
+memory on two devices. The image and memory outlive the texture: DXVK
+releases a slot the texture holds as private data when the texture goes, and
+the slot's image is freed once DXVK's queue is idle.
+
+`pfnPresent` sends `PresentResource12(queue, resource)`, whose host handler
+signals a shared fence on the Direct3D 12 queue and puts a wait for that value
+on DXVK's queue through the fence's timeline semaphore imported onto DXVK's
+device (`vkd3d_proton_export_fence`): DWM's reads of the buffer wait on the
+GPU for the frame, and nothing waits on the CPU or drains the Direct3D 12
+queue (a queue waiting on a fence the session's next command signals would
+never drain). The kernel's present then follows the batch on the queue's
+context. Both host GPUs here have unified image layouts, so the two devices
+never disagree about the image's layout.
+
+A buffer made on a GPU other than DWM's is shared into that GPU's table, where
+DWM's `OpenResource` does not look; composing it would take a copy between
+GPUs, which nothing does yet.
+
 ## 4. Classes
 
 | Class | Kind | Where | State | Responsibility |
@@ -193,6 +257,12 @@ settles them.
 | `D3dHostImages` | system | `src/device/executor/` | a staging texture per size | reads a keyed image into memory the device gives |
 | `DeviceRemoval` | object | `src/device/executor/` | removed reason per device | says which device a refused command removed |
 | `StandardAllocationBlob` | object | `src/proto/resources/` | the fields of the KMD's standard blob | encodes and decodes it for the KMD and the UMD |
+| `KernelSurface` | object | `src/icd/d3d/` | a surface's allocation and resource private data | writes and reads what a presented or shared surface's kernel allocation carries, for both UMDs |
+| `DxvkVulkanDevice` | system | `src/device/shim/` | DXVK's Vulkan device and its entry points | makes, imports and wraps images on DXVK's device and waits on its queue |
+| `ImportedTextures` | system | `src/device/shim/` | a slot per imported image | keeps a Direct3D 12 image shown by DXVK alive as long as its texture is |
+| `D3d12Presentation` | object | `src/device/shim/` | the session's shared fence and DXVK's semaphore of it | shares a session's swap chain buffers and orders DXVK after its presents |
+| `BatchFollower` | object | `src/um/d3d/` | the kernel thunks, the device and the session's transport | queues a packet on a kernel context that waits for the newest batch the session published, for both UMDs; none when that context already follows it |
+| `UmdConnections` | system | `src/icd/d3d/` | the Kmt | one held kernel adapter per LUID a runtime opened, shared by every open of it |
 
 Extended: `D3dBackend` (`PresentImage11`, removal), `D3dChannel`/`D3d11Device`
 (present, error path), `DisplayScanout` (third backing), `DisplaySources`

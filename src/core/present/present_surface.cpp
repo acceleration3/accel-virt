@@ -1,5 +1,6 @@
 #include "core/present/present_surface.hpp"
 
+#include "core/platform/platform.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -16,13 +17,10 @@ const SurfaceLayout &PresentSurface::layout() const
     return layout_;
 }
 
-uint64_t PresentSurface::frame_at(uint64_t offset, uint32_t &within) const
+uint8_t *PresentSurface::map(Platform &platform, void *&mapping) const
 {
-    AV_SCOPE("PresentSurface::frame_at");
-    const uint64_t page = offset / GuestPageList::page_bytes;
-    within = static_cast<uint32_t>(offset % GuestPageList::page_bytes);
-    if (page >= pages_.count()) return 0u;
-    return pages_.frame(static_cast<uint32_t>(page));
+    AV_SCOPE("PresentSurface::map");
+    return platform.map_pages(pages_, mapping);
 }
 
 bool PresentSurface::reachable() const
@@ -34,6 +32,24 @@ bool PresentSurface::reachable() const
     if (layout_.pitch() % pixel_bytes != 0u) return false;
     if (!pages_.complete()) return false;
     return layout_.bytes() <= uint64_t{pages_.count()} * GuestPageList::page_bytes;
+}
+
+bool PresentSurface::swaps_with(const PresentSurface &other) const
+{
+    AV_SCOPE("PresentSurface::swaps_with");
+    return layout_.red_first() != other.layout_.red_first();
+}
+
+uint32_t PresentSurface::runs() const
+{
+    AV_SCOPE("PresentSurface::runs");
+    return pages_.runs();
+}
+
+void PresentSurface::write_runs(WireWriter &writer) const
+{
+    AV_SCOPE("PresentSurface::write_runs");
+    pages_.write_runs(writer);
 }
 
 }  // namespace av

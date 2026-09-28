@@ -55,6 +55,10 @@ public:
     void offer_no_dxgi_callbacks();
     void offer_no_dxgi_table();
     void scribble_the_device_block();
+    /* Before `open`: the driver's LUID query is answered as rvkgpu.sys answers
+     * it for the adapter a runtime opened, naming `luid`, where otherwise it is
+     * refused. */
+    void answer_luid(std::uint64_t luid);
 
     /* Calls the export and, on success, checks the table as the real runtime
      * does. A driver that answered hr_ok with a hole in its table is a
@@ -100,6 +104,9 @@ private:
     alignas(16) unsigned char            block_[device_block_bytes];
     void                                *table_[table_bytes / sizeof(void *)];
     int                                  runtime_device_;
+    /* What the adapter handle points at once a LUID is answered: the query
+     * is given that handle and nothing else. */
+    std::uint64_t                        luid_;
     int                                  runtime_core_layer_;
     int                                  kt_callbacks_;
     int                                  um_callbacks_;

@@ -178,6 +178,26 @@ class Provisioning(unittest.TestCase):
         self.assertIn(f"= Rvkgpu_Install, {hardware}", INF.read_text())
         self.assertIn("service -ne 'rvkgpu'", script)
 
+    def test_windows_update_never_installs_a_driver_over_the_device(self):
+        """The device presents a real GPU's vendor and device, so a guest with a
+        network would take the vendor's WHQL driver from Windows Update over this
+        one and bugcheck at the next boot. Both the image's prepare and every
+        run's install turn that search off, and before the install does anything."""
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        body = re.search(r"function NoDriverUpdates \{(.*?)\n\}", script, re.S).group(1)
+        for policy in ("ExcludeWUDriversInQualityUpdate 1", "DontSearchWindowsUpdate 1", "SearchOrderConfig 0"):
+            self.assertIn(policy, body)
+        # A policy does not stop an update already downloaded: the service goes too.
+        for service in ("'wuauserv'", "'UsoSvc'", "'WaaSMedicSvc'"):
+            self.assertIn(service, body)
+        self.assertIn("Start 4", body)
+        self.assertIn("SoftwareDistribution\\Download", body)
+        for stage in ("prepare", "install"):
+            block = re.search(r"\n    '" + stage + r"' \{(.*?)\n    \}", script, re.S).group(1)
+            self.assertIn("NoDriverUpdates", block, stage)
+        install = re.search(r"\n    'install' \{(.*?)\n    \}", script, re.S).group(1)
+        self.assertLess(install.index("NoDriverUpdates"), install.index("pnputil /add-driver"))
+
     def test_recognises_the_device_by_its_subsystem_whatever_gpu_it_presents(self):
         """virtio-gpu-rvk-pci presents its host GPU's vendor and device, so the
         guest finds it - and names it in the INF - by the subsystem the device

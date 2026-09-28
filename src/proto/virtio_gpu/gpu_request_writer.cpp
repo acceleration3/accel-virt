@@ -70,13 +70,7 @@ Status GpuRequestWriter::attach_backing_pages(uint32_t resource_id, const GuestP
         return Status::too_large;
     writer.write_u32(resource_id);
     writer.write_u32(runs);
-    for (uint32_t page = 0u; page < pages.count();) {
-        const uint32_t run = pages.run_length(page);
-        writer.write_u64(pages.frame(page));
-        writer.write_u32(static_cast<uint32_t>(run * GuestPageList::page_bytes));
-        writer.write_zeros(4u);
-        page += run;
-    }
+    pages.write_runs(writer);
     return Status::ok;
 }
 

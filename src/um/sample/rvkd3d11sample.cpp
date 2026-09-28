@@ -60,7 +60,7 @@ public:
             const int64_t took = after.QuadPart - before.QuadPart;
             in_present += took;
             if (took > worst) worst = took;
-            if (last == S_OK) presented++; else failures++;
+            if (last == S_OK) presented++; else if (failures++ == 0u) first_failed_ = frame;
         }
         const int64_t total = after.QuadPart - start.QuadPart, per_ms = frequency.QuadPart / 1000;
         say("fps x10 "); number(static_cast<uint32_t>(static_cast<int64_t>(frames) * 10 * frequency.QuadPart / total));
@@ -70,6 +70,10 @@ public:
         say("frames "); number(frames); say(" presented "); number(presented); say(" failed "); number(failures);
         say(" last 0x"); hex(static_cast<uint32_t>(last)); say(" centre 0x"); hex(centre_); say(" corner 0x");
         hex(corner_); say("\n");
+        if (failures != 0u) {
+            say("removed reason 0x"); hex(static_cast<uint32_t>(device_->GetDeviceRemovedReason()));
+            say(" first failed frame "); number(first_failed_); say("\n");
+        }
         const bool drew = centre_ != corner_ && (corner_ & 0x00FFFFFFu) == 0x00102040u;
         say(drew && failures == 0u ? "ok d3d11sample\n" : "FAIL d3d11sample\n");
         return drew && failures == 0u ? 0 : 4;
@@ -110,6 +114,14 @@ private:
         wchar_t flag[4] = {};
         uncapped_ = GetEnvironmentVariableW(L"RVK_SAMPLE_UNCAPPED", flag, 4u) != 0u && flag[0] == L'1';
         if (uncapped_) described.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        /* The legacy blt model, as a game written for it asks: the runtime
+         * copies each present into the window's surface rather than flipping. */
+        if (GetEnvironmentVariableW(L"RVK_SAMPLE_BLT", flag, 4u) != 0u && flag[0] == L'1') {
+            described.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            described.BufferUsage = DXGI_USAGE_SHADER_INPUT | DXGI_USAGE_RENDER_TARGET_OUTPUT;
+            described.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+            described.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+        }
         D3D_FEATURE_LEVEL made = D3D_FEATURE_LEVEL_11_0;
         if (FAILED(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0u, nullptr, 0u,
                                                  D3D11_SDK_VERSION, &described, &swapchain_, &device_, &made,
@@ -258,6 +270,7 @@ private:
     ID3D11Buffer           *constants_ = nullptr;
     UINT                    width_ = 0u, height_ = 0u;
     bool                    uncapped_ = false;
+    uint32_t                first_failed_ = 0u;
     uint32_t                centre_ = 0u, corner_ = 0u;
 };
 

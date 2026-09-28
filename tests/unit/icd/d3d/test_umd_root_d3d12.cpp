@@ -5,6 +5,8 @@
  * driver with the device, so it knows which runtime's device it tears down;
  * every table but DXGI's is the host driver's to fill; and a caps question
  * reaches it naming the D3D12 adapter it was asked on. */
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/suite/adapter_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
 #include "harness/icd/recording_host_driver.hpp"
@@ -17,7 +19,10 @@
 
 #include <cstdint>
 
+using av::AdapterScenario;
 using av::FakeD3dRuntime;
+using av::PciIdentity;
+using av::Status;
 using av::RecordingHostDriver;
 using av::UmdRig;
 using av::d3d::RuntimeKind;
@@ -57,6 +62,39 @@ TEST(umd_root_d3d12, a_create_adopts_the_block_and_hands_the_device_to_the_host_
   CHECK(host.torn_runtime() == RuntimeKind::d3d12);
   CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
   CHECK_EQ(runtime.close_adapter(), hr_ok);
+  CHECK(rig.root().invariants_hold()); }
+
+/* A guest has one rvkgpu adapter per host GPU, and an application choosing
+ * among them opens more than one. A device made on the second reaches the
+ * second's kernel adapter: the runtime makes that device's allocations there,
+ * and a device that reached the first's would share them on the wrong host
+ * GPU, under keys the first's kernel adapter already gave out. */
+TEST(umd_root_d3d12, a_device_is_built_on_the_kernel_adapter_its_runtime_opened)
+{ constexpr std::uint64_t second_luid = 0x0000000300005678ull;
+  const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                           AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+  RecordingHostDriver host;
+  UmdRig rig(&host);
+  rig.kmt().add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+  rig.kmt().set_adapter_luid(1u, second_luid);
+  FakeD3dRuntime first(rig.root(), RuntimeKind::d3d12);
+  FakeD3dRuntime second(rig.root(), RuntimeKind::d3d12);
+  first.answer_luid(UmdRig::adapter_luid);
+  second.answer_luid(second_luid);
+  CHECK_EQ(first.open(), hr_ok);
+  CHECK_EQ(second.open(), hr_ok);
+  std::uint64_t luid = 0u;
+  CHECK_EQ(second.create_device(), hr_ok);
+  CHECK_STATUS(rig.kmt().adapter_luid(host.kmt_adapter(), luid), Status::ok);
+  CHECK_EQ(luid, second_luid);
+  CHECK_EQ(first.create_device(), hr_ok);
+  CHECK_STATUS(rig.kmt().adapter_luid(host.kmt_adapter(), luid), Status::ok);
+  CHECK_EQ(luid, UmdRig::adapter_luid);
+  CHECK(rig.root().invariants_hold());
+  first.destroy_device();
+  second.destroy_device();
+  CHECK_EQ(first.close_adapter(), hr_ok);
+  CHECK_EQ(second.close_adapter(), hr_ok);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(umd_root_d3d12, a_create_the_host_driver_refuses_leaves_no_device_and_no_tear_down)

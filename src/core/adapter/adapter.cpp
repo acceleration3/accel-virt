@@ -74,13 +74,13 @@
 #include "core/memory/standard_allocation.hpp"
 #include "core/miniport/adapter_info_query.hpp"
 #include "core/pci/pci_base_addresses.hpp"
-#include "core/ddi/dxgk_allocation_list_record.hpp"
 #include "core/memory/device_allocation.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/present/present_blit.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/commands/rectangle.hpp"
 #include "core/present/present_request.hpp"
+#include "core/present/presented_allocations.hpp"
 #include "core/rvk/capset_exchange.hpp"
 #include "core/scheduling/patch_request.hpp"
 #include "core/scheduling/render_request.hpp"
@@ -117,7 +117,7 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), mapped_pixels_(platform), copier_(), doorbells_(), doorbell_table_(), capabilities_(platform), geometry_(platform),
       segment_(platform), host_visible_(platform), memory_(platform, segment_), window_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
@@ -213,6 +213,7 @@ void Adapter::remember_device()
     if (read == Status::ok) {
         identity_.remember(capset);
         host_visible_.offer(capset);
+        memory_.offer_local(capset);
         scanout_.offer(capset);
         /* A window this driver cannot place chunks in is logged, never a
          * failed start: every chunk then falls back to guest RAM. */
@@ -268,6 +269,7 @@ Status Adapter::power_up()
     if (device_.construct(platform_, mappings_, layout_) != Status::ok) return Status::ok;
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
+    if (status == Status::ok) start_copier();
     cursor_.forget_device();
     scanout_.forget_device();
     return status;
@@ -281,9 +283,21 @@ Status Adapter::power_down()
     /* A reset destroys every host context and blob, and the device object goes
      * with it. The window stays offered for whatever brings the device back. */
     rvk_contexts_.abandon_all();
+    copier_.destroy();
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
+}
+
+/* Without contiguous memory for its payload the host cannot be handed a
+ * present, and the miniport moves every one itself. */
+void Adapter::start_copier()
+{
+    AV_SCOPE("Adapter::start_copier");
+    if (copier_.construct(platform_, device_.object(), mapped_pixels_) != Status::ok) return;
+    if (copier_.object().initialize() == Status::ok) return;
+    copier_.destroy();
+    platform_.log("rvkgpu: no memory to hand presents to the host; the miniport moves their pixels");
 }
 
 int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dxgkrnl_interface, uint32_t *sources,
@@ -350,6 +364,7 @@ int32_t Adapter::stop_device()
     doorbells_.destroy();
     mappings_.unmap_all();
     identity_.forget();
+    memory_.forget_local();
     withdraw_window();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
@@ -1353,23 +1368,23 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     return presented;
 }
 
-/* The allocation list of a present addressed by patch locations is its source
- * allocations and then its destination ones; a context with GPU virtual
- * addressing has none, and its commands the host executes. */
+/* The pixels a blt or a fill names move here, whichever form names them
+ * (PresentedAllocations): dxgkrnl's own presents, and an application's
+ * blt-model present into its window's redirection surface. */
 void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first)
 {
     AV_SCOPE("Adapter::move_presented_pixels");
     const bool filling = kind == PresentOperation::color_fill;
     if (kind == PresentOperation::flip) return;
-    if (request.pAllocationList == nullptr || request.NumDstAllocations != 1u ||
-        (!filling && request.NumSrcAllocations != 1u)) {
+    const PresentedAllocations named(request);
+    void *const                source_handle = filling ? nullptr : named.source();
+    void *const                destination_handle = named.destination();
+    if (destination_handle == nullptr || (!filling && source_handle == nullptr)) {
         log_unmoved_present("list", request, request.NumSrcAllocations, request.NumDstAllocations);
         return;
     }
-    const auto *const list = static_cast<const DxgkAllocationListRecord *>(request.pAllocationList);
-    DeviceAllocation *const source = filling ? nullptr : devices_.opened(list[0].hDeviceSpecificAllocation);
-    DeviceAllocation *const destination =
-        devices_.opened(list[request.NumSrcAllocations].hDeviceSpecificAllocation);
+    DeviceAllocation *const source = filling ? nullptr : devices_.opened(source_handle);
+    DeviceAllocation *const destination = devices_.opened(destination_handle);
     if (destination == nullptr || (!filling && source == nullptr)) {
         log_unmoved_present("handles", request, request.NumSrcAllocations, request.NumDstAllocations);
         return;
@@ -1377,14 +1392,21 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
-    PresentBlit          blit(platform_, source != nullptr ? &read : nullptr, written);
+    PixelMover          &mover = copier_.constructed() && present_ ? static_cast<PixelMover &>(copier_.object())
+                                                                  : mapped_pixels_;
+    PresentBlit          blit(platform_, mover, source != nullptr ? &read : nullptr, written);
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
     const uint32_t  count = request.SubRectCnt - first;
     const RectRecord *const rectangles = count != 0u ? request.pDstSubRects + first : nullptr;
     const Rectangle   from(request.SrcRect.left, request.SrcRect.top, request.SrcRect.right, request.SrcRect.bottom);
     const Status      moved = filling ? blit.fill(request.Color, into, rectangles, count)
                                       : blit.blit(from, into, rectangles, count);
-    if (moved != Status::ok) log_unmoved_present("surfaces", request, request.NumSrcAllocations, request.NumDstAllocations);
+    if (moved != Status::ok) {
+        log_unmoved_present("surfaces", request, request.NumSrcAllocations, request.NumDstAllocations);
+        log_unreadable_surfaces(read, written, source != nullptr ? source->allocation().descriptor().kind()
+                                                                 : AllocationKind{},
+                                destination->allocation().descriptor().kind(), from, into);
+    }
     present_rows_ += blit.rows();
 }
 
@@ -1412,6 +1434,35 @@ void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool oper
             message.append_decimal(static_cast<uint32_t>(side < 0 ? -side : side));
             message.append(",");
         }
+    }
+    platform_.log(message.text());
+}
+
+/* Which of a blt's surfaces the miniport could not read or write - a surface
+ * whose pages VidMm never mapped into the aperture - or the two rectangles it
+ * would have had to stretch between. */
+void Adapter::log_unreadable_surfaces(const PresentSurface &read, const PresentSurface &written,
+                                      AllocationKind source_kind, AllocationKind destination_kind,
+                                      const Rectangle &from, const Rectangle &into)
+{
+    AV_SCOPE("Adapter::log_unreadable_surfaces");
+    if (!budget_.allows()) return;
+    char       bytes[160];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: present surfaces reachable source ");
+    message.append_decimal(static_cast<uint32_t>(read.reachable()));
+    message.append(" kind ");
+    message.append_decimal(static_cast<uint32_t>(source_kind));
+    message.append(" destination ");
+    message.append_decimal(static_cast<uint32_t>(written.reachable()));
+    message.append(" kind ");
+    message.append_decimal(static_cast<uint32_t>(destination_kind));
+    const Rectangle *const sides[2] = {&from, &into};
+    for (const Rectangle *side : sides) {
+        message.append(side == &from ? " from " : " into ");
+        message.append_decimal(static_cast<uint32_t>(side->right() - side->left()));
+        message.append("x");
+        message.append_decimal(static_cast<uint32_t>(side->bottom() - side->top()));
     }
     platform_.log(message.text());
 }

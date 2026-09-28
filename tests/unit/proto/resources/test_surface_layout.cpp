@@ -20,3 +20,11 @@ TEST(surface_layout_is_surface, needs_width_height_and_pitch)
   CHECK(!SurfaceLayout(1u, 0u, 0u, 1u).is_surface());
   CHECK(!SurfaceLayout(1u, 1u, 0u, 0u).is_surface());
   CHECK(!SurfaceLayout().is_surface()); }
+
+/* Direct3D's R8G8B8A8 surfaces run red first, the desktop's blue first. */
+TEST(surface_layout_red_first, is_the_two_red_first_formats_and_no_other)
+{ CHECK(SurfaceLayout(1u, 1u, 32u, 4u).red_first());
+  CHECK(SurfaceLayout(1u, 1u, 33u, 4u).red_first());
+  CHECK(!SurfaceLayout(1u, 1u, 21u, 4u).red_first());
+  CHECK(!SurfaceLayout(1u, 1u, 22u, 4u).red_first());
+  CHECK(!SurfaceLayout().red_first()); }

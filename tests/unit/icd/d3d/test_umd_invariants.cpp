@@ -21,6 +21,7 @@
 #include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/umd_connection.hpp"
+#include "icd/d3d/umd_connections.hpp"
 #include "icd/d3d/umd_root.hpp"
 
 #include <cstdint>
@@ -94,8 +95,19 @@ struct UmdConnectionProbe {
     static void count_one_more_than_it_holds(UmdConnection &connection) { connection.opens_++; }
 };
 
+struct UmdConnectionsProbe {
+    static UmdConnection &first(UmdConnections &connections) { return connections.connections_[0].object(); }
+    /* A second connection opened on the adapter the first holds: what acquire
+     * never does. */
+    static Status open_the_first_twice(UmdConnections &connections, std::uint64_t luid)
+    {
+        static_cast<void>(connections.connections_[0].object().acquire(luid));
+        return connections.connections_[1].object().acquire(luid);
+    }
+};
+
 struct UmdRootProbe {
-    static UmdConnection &connection(UmdRoot &root) { return root.connection_; }
+    static UmdConnection &connection(UmdRoot &root) { return UmdConnectionsProbe::first(root.connections_); }
     static DeviceTable   &devices(UmdRoot &root) { return root.devices_; }
     static Hresult adopt(UmdRoot &root, void *adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made)
     {
@@ -118,6 +130,9 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
+/* What an adapter made outside a root is opened over: none of these judge it. */
+MockKmt                      no_kernel;
+UmdConnection                unopened(no_kernel);
 
 }  // namespace
 
@@ -183,7 +198,7 @@ TEST(umd_adapter, forgetting_a_device_lets_an_adapter_close_that_should_not)
 { MockPlatform platform;
   AdapterTable table(platform);
   UmdAdapter  *adapter = nullptr;
-  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::ok);
   if (adapter == nullptr) return;
   adapter->device_made();
@@ -567,11 +582,11 @@ TEST(adapter_identity_invariants, fail_for_a_description_written_before_the_luid
 /* The adapter's invariant is its parts': a version list or an identity broken
  * under it must be noticed, or the table above would report it as sound. */
 TEST(umd_adapter_invariants, fail_when_a_part_of_the_adapter_is_broken)
-{ UmdAdapter versions(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u);
+{ UmdAdapter versions(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u);
   UmdAdapterProbe::break_its_versions(versions);
   CHECK(!versions.invariants_hold());
 
-  UmdAdapter identity(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u);
+  UmdAdapter identity(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u);
   UmdAdapterProbe::break_its_identity(identity);
   CHECK(!identity.invariants_hold()); }
 
@@ -579,7 +594,7 @@ TEST(adapter_table_invariants, fail_when_an_adapter_it_holds_is_broken)
 { MockPlatform platform;
   AdapterTable table(platform);
   UmdAdapter  *adapter = nullptr;
-  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::ok);
   if (adapter == nullptr) return;
   CHECK(table.invariants_hold());
@@ -611,6 +626,22 @@ TEST(device_table_invariants, fail_when_a_device_it_holds_is_broken)
   CHECK(UmdRootProbe::devices(adopted.rig().root()).invariants_hold());
   UmdDeviceProbe::forget_the_callbacks(adopted.device());
   CHECK(!UmdRootProbe::devices(adopted.rig().root()).invariants_hold()); }
+
+/* Two connections open on one adapter would be two sets of kernel objects for
+ * what the runtimes treat as one; a connection broken under the table is the
+ * table's to notice too. */
+TEST(umd_connections_invariants, fail_for_two_connections_on_one_adapter_or_a_broken_one)
+{ { MockKmt kmt;
+    kmt.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt.set_adapter_luid(0u, UmdRig::adapter_luid);
+    UmdConnections connections(kmt);
+    CHECK(connections.invariants_hold());
+    CHECK_STATUS(UmdConnectionsProbe::open_the_first_twice(connections, UmdRig::adapter_luid), Status::ok);
+    CHECK(!connections.invariants_hold()); }
+  { MockKmt kmt;
+    UmdConnections connections(kmt);
+    UmdConnectionProbe::count_an_open_it_does_not_hold(UmdConnectionsProbe::first(connections));
+    CHECK(!connections.invariants_hold()); } }
 
 TEST(umd_root_invariants, fail_when_the_connection_the_adapters_or_the_devices_are_broken)
 { /* The connection's own rule: an open counted over an adapter it never

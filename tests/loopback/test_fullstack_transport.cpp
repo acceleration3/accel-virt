@@ -127,10 +127,10 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
 
 /* What a Vulkan ICD sizes its heaps and names its adapter by: the rig's LUID,
  * and budgets that are the driver's own segments - the aperture over the
- * guest's 8 GiB of system memory, which is not local, and nothing local: the
- * hostmem region is the driver's host window, not a segment
- * (docs/host-window.md) - with this process's allocations counted where they
- * live. */
+ * guest's 8 GiB of system memory, which is not local, and the host GPU's 24 GiB
+ * as the capset reports it, which is; the hostmem region is the driver's host
+ * window, not a segment (docs/host-window.md) - with this process's
+ * allocations counted where they live, none of them in the host GPU's. */
 TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_segments)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -146,7 +146,7 @@ TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_se
   std::uint64_t budget = 0u;
   std::uint64_t usage = 1u;
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
-  CHECK_EQ(budget, 0u);
+  CHECK_EQ(budget, std::uint64_t{24} << 30u);
   CHECK_EQ(usage, 0u);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
   CHECK_EQ(budget, std::uint64_t{8} << 30u);

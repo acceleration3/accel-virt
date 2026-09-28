@@ -12,7 +12,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
+    : device_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shared_(), vulkan_(), exports_(vulkan_), imports_(vulkan_), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -53,6 +53,11 @@ bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     feature_level_ = level;
     capabilities_.measure(*device_, level, description.VendorId, description.DeviceId,
                           description.DedicatedVideoMemory);
+    /* Without DXVK's Vulkan interop the scanout is read back rather than
+     * exported, and a Direct3D 12 swap chain has nothing to be shown by. */
+    if (!vulkan_.connect(device_))
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: DXVK offers no Vulkan interop with fd export; "
+                        "Direct3D 12 swap chains cannot be shown\n");
     return true;
 }
 
@@ -61,6 +66,8 @@ void D3d11HostDevice::close()
     AV_SCOPE("D3d11HostDevice::close");
     exports_.release();
     shared_.clear();
+    imports_.release();
+    vulkan_.release();
     if (staging_ != nullptr) staging_->Release();
     staging_ = nullptr;
     if (context_ != nullptr) context_->Release();
@@ -296,6 +303,27 @@ const D3d11Capabilities &D3d11HostDevice::capabilities() const
 {
     AV_SCOPE("D3d11HostDevice::capabilities");
     return capabilities_;
+}
+
+bool D3d11HostDevice::share_image(uint64_t key, Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc)
+{
+    AV_SCOPE("D3d11HostDevice::share_image");
+    if (device_ == nullptr) return false;
+    lock(nullptr);
+    ID3D11Texture2D *const texture = imports_.import(image, desc);
+    const bool          published = texture != nullptr && shared_.publish(key, texture);
+    if (texture != nullptr && !published)
+        fprintf(stderr, "virtio-gpu-rvk: d3d11: image key 0x%016llx not shared: already shared, or the table is full\n",
+                static_cast<unsigned long long>(key));
+    if (texture != nullptr) texture->Release();
+    unlock();
+    return published;
+}
+
+DxvkVulkanDevice &D3d11HostDevice::vulkan()
+{
+    AV_SCOPE("D3d11HostDevice::vulkan");
+    return vulkan_;
 }
 
 D3dSharedResources &D3d11HostDevice::shared()

@@ -9,84 +9,40 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
-#include "proto/d3d/dxgi_format_layout.hpp"
+#include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/shared_object_kind.hpp"
-#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/scanout_target.hpp"
 #include "um/d3d/d3d11_device.hpp"
 
 namespace av::d3d11 {
-
-namespace {
-
-/* D3DDDIFORMAT, which the kernel's descriptors name surfaces by, for the
- * DXGI formats a presented surface can have. */
-constexpr uint32_t ddi_a8r8g8b8 = 21u;
-constexpr uint32_t ddi_x8r8g8b8 = 22u;
-constexpr uint32_t ddi_a2b10g10r10 = 31u;
-constexpr uint32_t ddi_a8b8g8r8 = 32u;
-constexpr uint32_t ddi_a16b16g16r16f = 113u;
-constexpr uint64_t page_bytes = 4096u;
-
-}  // namespace
-
-uint32_t D3d11Device::kernel_format(uint32_t format) const
-{
-    AV_SCOPE("D3d11Device::kernel_format");
-    switch (format) {
-    case DXGI_FORMAT_B8G8R8A8_UNORM:
-    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-    case DXGI_FORMAT_B8G8R8A8_TYPELESS: return ddi_a8r8g8b8;
-    case DXGI_FORMAT_B8G8R8X8_UNORM:
-    case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-    case DXGI_FORMAT_B8G8R8X8_TYPELESS: return ddi_x8r8g8b8;
-    case DXGI_FORMAT_R10G10B10A2_UNORM:
-    case DXGI_FORMAT_R10G10B10A2_TYPELESS: return ddi_a2b10g10r10;
-    case DXGI_FORMAT_R16G16B16A16_FLOAT: return ddi_a16b16g16r16f;
-    default: return ddi_a8b8g8r8;
-    }
-}
 
 HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATERESOURCE &create,
                               D3D10DDI_HRTRESOURCE runtime)
 {
     AV_SCOPE("D3d11Device::allocate");
-    const DxgiFormatLayout layout(resource.format);
-    const uint32_t element = layout.element_bytes() == 0u ? 4u : layout.element_bytes();
-    const uint32_t pitch = resource.width * element;
-    const uint64_t bytes = (static_cast<uint64_t>(pitch) * resource.height + page_bytes - 1u) / page_bytes * page_bytes;
     const bool primary = create.pPrimaryDesc != nullptr;
     const DXGI_DDI_MODE_DESC *const mode = primary ? &create.pPrimaryDesc->ModeDesc : nullptr;
-    const ScanoutTarget scanout = primary ? ScanoutTarget(create.pPrimaryDesc->VidPnSourceId,
-                                                          mode->RefreshRate.Numerator, mode->RefreshRate.Denominator)
-                                          : ScanoutTarget();
-    const AllocationDescriptor descriptor(primary ? AllocationKind::shared_primary : AllocationKind::surface, true,
-                                          SurfaceLayout(resource.width, resource.height, kernel_format(resource.format),
-                                                        pitch),
-                                          bytes, scanout);
     /* An identity asked for, which the miniport mints and dxgkrnl copies back
      * and hands whoever opens the resource: the key the host shares it under,
      * and the id the driver releases once every process has let go of it -
      * which is how long the host keeps the surface. */
-    uint8_t encoded[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
-    if (descriptor.encode(encoded, AllocationDescriptor::encoded_size) != Status::ok ||
-        SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
-                .encode(encoded + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok)
-        return E_INVALIDARG;
-    /* The resource's own private data, which dxgkrnl keeps and hands whoever
-     * opens the resource: that it is this driver's. */
-    const uint64_t shared[2] = {ResourceRecord::tag, 0u};
+    d3d::KernelSurface surface = primary ? d3d::KernelSurface(resource.width, resource.height, resource.format,
+                                                              ScanoutTarget(create.pPrimaryDesc->VidPnSourceId,
+                                                                            mode->RefreshRate.Numerator,
+                                                                            mode->RefreshRate.Denominator))
+                                         : d3d::KernelSurface(resource.width, resource.height, resource.format);
+    if (surface.make() != Status::ok) return E_INVALIDARG;
     D3DDDI_ALLOCATIONINFO2 info = {};
-    info.pPrivateDriverData = encoded;
-    info.PrivateDriverDataSize = sizeof(encoded);
+    info.pPrivateDriverData = surface.allocation_data();
+    info.PrivateDriverDataSize = d3d::KernelSurface::allocation_bytes;
     if (primary) {
         info.VidPnSourceId = create.pPrimaryDesc->VidPnSourceId;
         info.Flags.Primary = 1u;
     }
     D3DDDICB_ALLOCATE allocate = {};
-    allocate.pPrivateDriverData = shared;
-    allocate.PrivateDriverDataSize = sizeof(shared);
+    allocate.pPrivateDriverData = surface.resource_data();
+    allocate.PrivateDriverDataSize = d3d::KernelSurface::resource_bytes;
     allocate.hResource = runtime.handle;
     allocate.NumAllocations = 1u;
     allocate.pAllocationInfo2 = &info;
@@ -95,32 +51,41 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
         log_.write("rvkumd: the kernel refused a presented resource's allocation");
         return made;
     }
-    SharedObjectRecord minted;
-    if (minted.decode(encoded + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok ||
-        !minted.assigned())
+    resource.shared_key = surface.key();
+    if (resource.shared_key == 0u)
         log_.write("rvkumd: the miniport minted no identity for a presented resource; nothing can open it");
-    else
-        resource.shared_key = minted.object_id();
     resource.allocation = info.hAllocation;
-    resource.allocation_pitch = pitch;
+    resource.allocation_pitch = surface.pitch();
+    /* A blt present names this allocation in a DMA buffer, which dxgkrnl
+     * refuses - and puts the device in error for - unless it was asked to be
+     * resident (PagingQueue). A flip never names it, so a refusal is logged
+     * and the resource still made. */
+    const HRESULT resident = paging_.object().make_resident(info.hAllocation);
+    if (FAILED(resident)) {
+        char       line[96] = {};
+        TextBuffer text(line, sizeof(line));
+        text.append("rvkumd: the kernel would not keep a presented resource resident 0x");
+        text.append_hex(static_cast<uint32_t>(resident), 8u);
+        log_.write(text.text());
+    }
     resource.primary = primary ? 1u : 0u;
     resource.vidpn_source = primary ? create.pPrimaryDesc->VidPnSourceId : 0u;
     return S_OK;
 }
 
-HANDLE D3d11Device::present_context()
+HRESULT D3d11Device::make_context()
 {
-    AV_SCOPE("D3d11Device::present_context");
-    if (present_context_ != nullptr) return present_context_;
+    AV_SCOPE("D3d11Device::make_context");
     D3DDDICB_CREATECONTEXTVIRTUAL create = {};
     create.NodeOrdinal = 0u;
     create.EngineAffinity = 1u;
-    if (FAILED(kernel_->pfnCreateContextVirtualCb(runtime_.handle, &create))) {
-        log_.write("rvkumd: the kernel refused the present context");
-        return nullptr;
+    const HRESULT made = kernel_->pfnCreateContextVirtualCb(runtime_.handle, &create);
+    if (FAILED(made)) {
+        log_.write("rvkumd: the kernel refused the device's context");
+        return made;
     }
-    present_context_ = create.hContext;
-    return present_context_;
+    context_ = create.hContext;
+    return S_OK;
 }
 
 HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
@@ -144,19 +109,27 @@ HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
 }
 
 HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
-                                     void *dxgi_context)
+                                     void *dxgi_context, DXGI_DDI_PRESENT_FLAGS flags)
 {
     AV_SCOPE("D3d11Device::present_surface");
     /* A keyed image is shown by the host from the host's own copy (the
      * scanout's SCANOUT_IMAGE, and DWM opening it by key), so nothing is read
      * back: the host only has to have finished drawing it before the flip. */
     if (source.shared_key != 0u) {
-        /* A flush, not a round trip: the miniport holds this present's packet
-         * until the host has run the batch the flush published (its fence is
-         * in the ring's header), and DWM and the scanout wait on the present. */
+        /* A flush, not a round trip: the present then waits in its context
+         * behind the batch this publishes (present_to_kernel), and DWM and the
+         * scanout wait on the present. */
         if (wire().flush() != Status::ok) {
             set_error(D3DDDIERR_DEVICEREMOVED);
             return DXGI_ERROR_DEVICE_REMOVED;
+        }
+        /* A blt-model present with no destination is copied by the kernel from
+         * the surface's own pages into the window's redirection surface
+         * (RedirectedBlt), which DWM then composes: the host's image has to be
+         * in those pages first. */
+        if (flags.Blt != 0u && destination == nullptr) {
+            const HRESULT published = publish(source, subresource);
+            if (FAILED(published)) return published;
         }
         return present_to_kernel(source, destination, dxgi_context);
     }
@@ -175,14 +148,43 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
 HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_to_kernel");
-    HANDLE const context = present_context();
-    if (context == nullptr) return E_FAIL;
+    const HRESULT followed = follow_host();
+    if (FAILED(followed)) return followed;
     DXGIDDICB_PRESENT present = {};
     present.hSrcAllocation = source.allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.pDXGIContext = dxgi_context;
-    present.hContext = context;
-    return dxgi_->pfnPresentCb(runtime_.handle, &present);
+    present.hContext = context_;
+    const HRESULT presented = dxgi_->pfnPresentCb(runtime_.handle, &present);
+    /* The runtime turns a refused present into a removed device without
+     * saying why; the answer is only ever seen here. */
+    if (FAILED(presented) && !present_refused_) {
+        present_refused_ = true;
+        char       line[128] = {};
+        TextBuffer text(line, sizeof(line));
+        text.append("rvkumd: the kernel refused a present 0x");
+        text.append_hex(static_cast<uint32_t>(presented), 8u);
+        text.append(" source 0x");
+        text.append_hex(source.allocation, 8u);
+        text.append(" destination 0x");
+        text.append_hex(present.hDstAllocation, 8u);
+        log_.write(text.text());
+    }
+    return presented;
+}
+
+HRESULT D3d11Device::follow_host()
+{
+    AV_SCOPE("D3d11Device::follow_host");
+    const HRESULT followed = follower_.constructed() ? follower_.object().follow(context_) : E_FAIL;
+    if (SUCCEEDED(followed) || follow_refused_) return followed;
+    follow_refused_ = true;
+    char       line[96] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: the kernel refused the packet that waits for the host 0x");
+    text.append_hex(static_cast<uint32_t>(followed), 8u);
+    log_.write(text.text());
+    return followed;
 }
 
 /* ---------------------------------------------------------------- DXGI */
@@ -193,7 +195,7 @@ HRESULT D3d11Device::present(DXGI_DDI_ARG_PRESENT *args)
     refresh_guest_surfaces();
     ResourceRecord &source = record(args->hSurfaceToPresent);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
-    return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext);
+    return present_surface(source, args->SrcSubResourceIndex, destination, args->pDXGIContext, args->Flags);
 }
 
 HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
@@ -203,7 +205,8 @@ HRESULT D3d11Device::present1(DXGI1_6_1_DDI_ARG_PRESENT *args)
     if (args->SurfacesToPresent == 0u || args->phSurfacesToPresent == nullptr) return E_INVALIDARG;
     ResourceRecord &source = record(args->phSurfacesToPresent[0].hSurface);
     ResourceRecord *const destination = args->hDstResource == 0u ? nullptr : &record(args->hDstResource);
-    return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext);
+    return present_surface(source, args->phSurfacesToPresent[0].SubResourceIndex, destination, args->pDXGIContext,
+                           args->Flags);
 }
 
 HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)

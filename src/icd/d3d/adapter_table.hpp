@@ -21,6 +21,7 @@ class StateWriter;
 namespace av::d3d {
 
 struct D3dddiAdapterCallbacksRecord;
+class UmdConnection;
 
 struct AdapterTableProbe;
 
@@ -32,8 +33,8 @@ public:
 
     /* no_memory when the pool has none; ok with `opened` set otherwise. */
     [[nodiscard]] Status open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_adapter,
-                              const D3dddiAdapterCallbacksRecord *callbacks, uint32_t interface_version,
-                              uint32_t runtime_version);
+                              const D3dddiAdapterCallbacksRecord *callbacks, UmdConnection &connection,
+                              uint32_t interface_version, uint32_t runtime_version);
     /* The adapter that handle names, or null. */
     UmdAdapter          *adapter_of(void *handle) const;
     /* invalid_parameter for a handle this did not hand out; conflict while a

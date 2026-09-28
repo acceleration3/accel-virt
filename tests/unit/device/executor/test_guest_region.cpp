@@ -5,6 +5,8 @@
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
+#include <cstdio>
+#include <string_view>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -15,6 +17,26 @@ using av::GuestRegionProbe;
 namespace {
 
 std::uint8_t mapping[4096];
+
+/* Whether a PROT_NONE mapping - what is left of a reservation - ends where
+ * the region begins or begins where its pages end. */
+bool reservation_beside(const std::uint8_t *base, std::uint64_t mapped_bytes)
+{
+    std::FILE *const maps = std::fopen("/proc/self/maps", "r");
+    if (maps == nullptr) return true;
+    const auto low = reinterpret_cast<std::uintptr_t>(base);
+    const std::uintptr_t high = low + mapped_bytes;
+    unsigned long start = 0u, end = 0u;
+    char permissions[8] = {};
+    char line[512];
+    bool beside = false;
+    while (std::fgets(line, sizeof line, maps) != nullptr) {
+        if (std::sscanf(line, "%lx-%lx %7s", &start, &end, permissions) != 3) continue;
+        if (std::string_view(permissions) == "---p" && (end == low || start == high)) beside = true;
+    }
+    std::fclose(maps);
+    return beside;
+}
 
 }  // namespace
 
@@ -100,12 +122,41 @@ TEST(guest_region_take_shared, maps_the_descriptor_and_gives_both_back)
   /* The descriptor went with the region. */
   CHECK_EQ(fcntl(shared, F_GETFD), -1); }
 
+/* A dma-buf is mapped where a Direct3D 12 heap over part of it can be made:
+ * mmap alone places a mapping at page alignment, and a 1 GiB arena landed
+ * where no heap in it could be imported. The address space is moved a page
+ * between takes so each lands somewhere else; the reservation each was
+ * aligned in is given back around it, and give_back leaves nothing mapped. */
+TEST(guest_region_take_shared, maps_at_the_base_alignment_and_keeps_none_of_the_reservation)
+{ const std::uint64_t page = static_cast<std::uint64_t>(sysconf(_SC_PAGESIZE));
+  const std::uint64_t length = 3u * page + 100u;   /* not a whole number of pages */
+  void *shifts[16] = {};
+  for (std::uint32_t round = 0u; round < 16u; round++) {
+      shifts[round] = mmap(nullptr, page, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      CHECK(shifts[round] != MAP_FAILED);
+      const int shared = memfd_create("guest-region", 0);
+      CHECK(shared >= 0);
+      CHECK_EQ(ftruncate(shared, static_cast<off_t>(length)), 0);
+      const std::uint8_t written = static_cast<std::uint8_t>(round + 1u);
+      CHECK_EQ(pwrite(shared, &written, 1u, static_cast<off_t>(length - 50u)), 1);
+      GuestRegion region;
+      CHECK(region.take_shared(shared, length));
+      const std::uint8_t *const base = region.at(0u, 1u);
+      CHECK(base != nullptr);
+      CHECK_EQ(reinterpret_cast<std::uintptr_t>(base) % GuestRegion::base_alignment, 0u);
+      CHECK_EQ(*region.at(length - 50u, 1u), written);
+      CHECK(!reservation_beside(base, 4u * page));
+      region.give_back();
+  }
+  for (void *shift : shifts) munmap(shift, page); }
+
 TEST(guest_region_take_shared, refuses_what_cannot_be_mapped_and_leaves_the_descriptor_alone)
 { GuestRegion region;
   CHECK(!region.take_shared(-1, 4096u));
   const int shared = memfd_create("guest-region", 0);
   CHECK(shared >= 0);
   CHECK(!region.take_shared(shared, 0u));
+  CHECK(!region.take_shared(shared, std::uint64_t{1} << 62u));   /* no address space to reserve */
   int pipes[2] = {-1, -1};
   CHECK_EQ(pipe(pipes), 0);
   CHECK(!region.take_shared(pipes[0], 4096u));   /* a pipe maps nothing */

@@ -88,13 +88,8 @@ Status RvkRequestWriter::guest_blob_pages(uint32_t resource_id, const GuestPageL
     AV_SCOPE("RvkRequestWriter::guest_blob_pages");
     if (!pages.complete()) return Status::invalid_parameter;
     const uint32_t runs = pages.runs();
-    uint64_t       size = 0u;
-    for (uint32_t page = 0u; page < pages.count();) {
-        const uint32_t run = pages.run_length(page);
-        size += static_cast<uint64_t>(run) * GuestPageList::page_bytes;
-        page += run;
-    }
-    WireWriter writer(bytes_, capacity_);
+    const uint64_t size = uint64_t{pages.count()} * GuestPageList::page_bytes;
+    WireWriter     writer(bytes_, capacity_);
     if (!begin(writer, resource_create_blob, 0u,
                guest_blob_fixed_size + size_t{runs} * guest_blob_entry_size))
         return Status::too_large;
@@ -104,13 +99,7 @@ Status RvkRequestWriter::guest_blob_pages(uint32_t resource_id, const GuestPageL
     writer.write_u32(runs);
     writer.write_u64(0u);
     writer.write_u64(size);
-    for (uint32_t page = 0u; page < pages.count();) {
-        const uint32_t run = pages.run_length(page);
-        writer.write_u64(pages.frame(page));
-        writer.write_u32(static_cast<uint32_t>(run * GuestPageList::page_bytes));
-        writer.write_zeros(4u);
-        page += run;
-    }
+    pages.write_runs(writer);
     return writer.status();
 }
 

@@ -100,7 +100,7 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     unbind.dismiss();
     if (setup.sub_api() == SubApi::d3d) {
         ring_.order_with(ordering_);
-        ordering_.add(ring_);
+        ordering_.add(ring_, worker_);
     }
     recorder_.record_context_setup(id_, setup);
     return Status::ok;

@@ -402,6 +402,47 @@ that is not there is told nothing, since a reset already let go of everything.
 A device reset releases every id at once, which is id 0 inside the device and
 the library.
 
+#### The present copy (control queue)
+
+A present's pixels - dxgkrnl's own blts and fills, and an application's
+blt-model present into its window's redirection surface - move between guest
+pages. The miniport's CPU sees those pages uncached, so moving them there cost
+a 1280x800 blt thirty milliseconds; the host reads and writes guest RAM through
+its own cache. The miniport clips every rectangle to both surfaces first and
+sends what is left as regions:
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F2`, context 0, no fence |
+| 24 | 4 | operation | 1 blt, 2 colour fill (`PresentOperation`) |
+| 28 | 4 | flags | bit 0: swap each pixel's first and third byte - the two surfaces' bytes run in opposite orders; blt only. Others 0 |
+| 32 | 4 | colour | the four bytes a fill writes to each pixel; 0 for a blt |
+| 36 | 4 | region_count | 1 to 256 |
+| 40 | 4 | source_entries | a blt's: 1 to 16384; a fill's: 0 |
+| 44 | 4 | destination_entries | 1 to 16384 |
+| 48 | 4 | source_pitch | bytes between a blt's source rows, a whole number of four-byte pixels, not 0; a fill's: 0 |
+| 52 | 4 | destination_pitch | the same, for the destination |
+| 56 | 16 each | source entries | virtio memory entries: u64 address, u32 length, u32 0 |
+| | 16 each | destination entries | |
+| | 24 each | regions | u32 source_x, source_y, destination_x, destination_y, width, height, in pixels; width and height not 0 |
+
+A surface is its entries' bytes end to end, and pixel (x, y) of it is the four
+bytes at `y * pitch + x * 4`. The fixed part travels in a control slot; the rest
+is too large for one, so the chain carries it as a second read-only buffer of
+the driver's own contiguous memory, and the device reads the two as one
+request. The miniport waits for the answer - asks on the control queue take
+turns - and the pixels have moved when it comes: `OK_NODATA`.
+
+`ERR_INVALID_PARAMETER` answers a fixed part that breaks a rule above, entries
+cut short or naming what is not guest RAM, a region cut short, and a region
+with a row that is not wholly inside either surface; that region's rows before
+the one outside, and every region before it, have moved - into the
+destination's own entries, which is all a request can make the device write.
+`ERR_OUT_OF_MEMORY` answers a host with no memory to map the entries. A present
+the device refuses, does not answer, or the driver cannot hand it - more pages
+than its buffer holds - the miniport moves itself, as it did before this
+request.
+
 ### Reply slot (device -> guest)
 
 Offset 0 of the reply resource; the answer follows at offset 32. 32 bytes.

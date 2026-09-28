@@ -19,7 +19,9 @@
 
 #include "device/shim/d3d11_capabilities.hpp"
 #include "device/shim/d3d_shared_resources.hpp"
+#include "device/shim/dxvk_vulkan_device.hpp"
 #include "device/shim/host_image_export.hpp"
+#include "device/shim/imported_textures.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -28,11 +30,13 @@ struct ID3D11Device5;
 struct ID3D11DeviceContext4;
 struct ID3DDeviceContextState;
 struct D3D11_TEXTURE2D_DESC;
+struct D3D11_TEXTURE2D_DESC1;
 struct ID3D11Texture2D;
 
 namespace av {
 
 class D3dRuntime;
+class Vkd3dImageExport;
 
 class D3d11HostDevice {
 public:
@@ -70,6 +74,12 @@ public:
      * of every one for 0 - the device was reset and its ids start again. Takes
      * the lock itself. */
     void               release_shared(uint64_t object_id);
+    /* A Direct3D 12 surface vkd3d-proton exported, shared under `key` as a
+     * texture described as `desc` over the same memory (ImportedTextures).
+     * False where DXVK cannot import it or the key is taken. Takes the lock. */
+    [[nodiscard]] bool share_image(uint64_t key, Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
+    DxvkVulkanDevice  &vulkan();
 
     ID3D11Device5        *device() const;
     ID3D11DeviceContext4 *context() const;
@@ -89,7 +99,9 @@ private:
     uint32_t                feature_level_;
     D3d11Capabilities       capabilities_;
     D3dSharedResources      shared_;
+    DxvkVulkanDevice        vulkan_;
     HostImageExport         exports_;
+    ImportedTextures        imports_;
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;

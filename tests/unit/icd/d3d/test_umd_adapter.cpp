@@ -36,11 +36,14 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
+/* What an adapter made outside a root is opened over: none of these judge it. */
+MockKmt                      no_kernel;
+UmdConnection                unopened(no_kernel);
 
 }  // namespace
 
 TEST(umd_adapter, records_what_the_open_gave_and_counts_the_devices_made_on_it)
-{ UmdAdapter adapter(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 26100u);
+{ UmdAdapter adapter(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 26100u);
   CHECK(adapter.invariants_hold());
   CHECK(adapter.runtime() == RuntimeKind::d3d10_11);
   CHECK(adapter.runtime_adapter() == &runtime_handle);
@@ -63,18 +66,18 @@ TEST(umd_adapter, records_what_the_open_gave_and_counts_the_devices_made_on_it)
   CHECK(adapter.invariants_hold()); }
 
 TEST(umd_adapter, a_d3d12_adapter_carries_no_interface_and_serves_its_own_version)
-{ UmdAdapter adapter(RuntimeKind::d3d12, &runtime_handle, &callbacks, 0u, 0u);
+{ UmdAdapter adapter(RuntimeKind::d3d12, &runtime_handle, &callbacks, unopened, 0u, 0u);
   CHECK(adapter.invariants_hold());
   CHECK_EQ(adapter.interface_version(), 0u);
   CHECK(!adapter.versions().serves(d3d11_interface));
   CHECK(adapter.versions().serves(static_cast<std::uint32_t>(adapter.versions().word(0u) >> 32))); }
 
 TEST(umd_adapter_invariants, fail_for_no_callbacks_or_a_version_the_open_does_not_serve)
-{ const UmdAdapter without(RuntimeKind::d3d10_11, &runtime_handle, nullptr, d3d11_interface, 0u);
+{ const UmdAdapter without(RuntimeKind::d3d10_11, &runtime_handle, nullptr, unopened, d3d11_interface, 0u);
   CHECK(!without.invariants_hold());
-  const UmdAdapter unserved(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface + 1u, 0u);
+  const UmdAdapter unserved(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface + 1u, 0u);
   CHECK(!unserved.invariants_hold());
-  const UmdAdapter twelve_with_interface(RuntimeKind::d3d12, &runtime_handle, &callbacks, 1u, 0u);
+  const UmdAdapter twelve_with_interface(RuntimeKind::d3d12, &runtime_handle, &callbacks, unopened, 1u, 0u);
   CHECK(!twelve_with_interface.invariants_hold()); }
 
 TEST(adapter_table, opens_adapters_and_answers_only_the_handles_it_gave)
@@ -83,10 +86,10 @@ TEST(adapter_table, opens_adapters_and_answers_only_the_handles_it_gave)
   CHECK(table.invariants_hold());
   CHECK_EQ(table.open_adapters(), 0u);
   UmdAdapter *first = nullptr;
-  CHECK_STATUS(table.open(first, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(first, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::ok);
   UmdAdapter *second = nullptr;
-  CHECK_STATUS(table.open(second, RuntimeKind::d3d12, &runtime_handle, &callbacks, 0u, 0u), Status::ok);
+  CHECK_STATUS(table.open(second, RuntimeKind::d3d12, &runtime_handle, &callbacks, unopened, 0u, 0u), Status::ok);
   CHECK_EQ(table.open_adapters(), 2u);
   CHECK(first != second);
   CHECK(table.adapter_of(first) == first);
@@ -112,7 +115,7 @@ TEST(adapter_table, refuses_to_close_an_adapter_a_device_is_still_made_on)
 { MockPlatform platform;
   AdapterTable table(platform);
   UmdAdapter  *adapter = nullptr;
-  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::ok);
   if (adapter == nullptr) return;
   adapter->device_made();
@@ -127,7 +130,7 @@ TEST(adapter_table, an_open_with_no_memory_opens_nothing)
   AdapterTable table(platform);
   platform.fail_allocation_at(1u);
   UmdAdapter *adapter = nullptr;
-  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::no_memory);
   CHECK(adapter == nullptr);
   CHECK_EQ(table.open_adapters(), 0u);
@@ -137,7 +140,7 @@ TEST(adapter_table, reports_every_adapter_it_holds)
 { MockPlatform platform;
   AdapterTable table(platform);
   UmdAdapter  *adapter = nullptr;
-  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, d3d11_interface, 0u),
+  CHECK_STATUS(table.open(adapter, RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u),
                Status::ok);
   char bytes[512] = {};
   av::StateWriter writer(bytes, sizeof bytes);

@@ -82,8 +82,14 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * aperture mapping hands the driver, so they are pinned there for the same
      * reason. */
     /* A user-mode driver's surface is blitted by the miniport from its pages
-     * and read back into by the host, so it wants them known too. */
-    const bool pinned = scanned_out || descriptor_.kind() == AllocationKind::surface || published_as_blob();
+     * and read back into by the host, so it wants them known too - and so does
+     * a staging surface, which is where an application's blt-model present
+     * lands: dxgkrnl builds the blt into the window's redirection surface,
+     * which CDD makes as a staging surface and the miniport writes through its
+     * pages. */
+    const AllocationKind kind = descriptor_.kind();
+    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging ||
+                        published_as_blob();
     const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
@@ -96,7 +102,17 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * VidMm leaves it in its own implicit system memory segment and
      * SetVidPnSourceAddress answers segment 0, address 0 - an address with no
      * pages behind it (feature 038). */
-    info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) |
+    /* A window's redirection surface is read by the CPU after every blt-model
+     * present: dxgkrnl's redirected blt locks it and copies the frame out for
+     * DWM while the application's present waits. Write-combined, as an
+     * aperture allocation is unless it asks otherwise, that was an uncached
+     * read of the whole frame - seventeen milliseconds at 1280x800, which held
+     * a game to every other vblank. Only processors write a staging surface -
+     * the host's present copy and GDI - unlike the reply slot a host GPU writes,
+     * whose Cached mapping was reverted for resetting the GPU (b911e084). The
+     * aperture segment is cache coherent, which is what Cached asks of it. */
+    const bool cached = kind == AllocationKind::staging;
+    info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) | (cached ? flag_cached : 0u) |
                  (pinned ? flag_accessed_physically : 0u);
     info.AllocationPriority = priority_normal;
     info.Flags2 = 0u;

@@ -68,8 +68,12 @@ guest RAM as before (`HostVisibleChunk`).
 
 ## Budgets
 
-The adapter reports only the aperture segment to VidMm, so its local segment
-group is empty and D3DKMTQueryVideoMemoryInfo answers a local budget of zero.
-Vulkan's device-local heaps are sized from the host's own heaps instead: what
-lives there is host GPU memory, which the guest never maps. Every other heap is
-the adapter's non-local budget.
+The adapter reports the host GPU's local memory to VidMm as a second segment
+(`LocalMemorySegment`): a memory segment with no flags, the size the capset's
+`local_memory` gives. VidMm counts it as the adapter's dedicated video memory,
+so dxdiag, DXGI's `DedicatedVideoMemory` and D3DKMTQueryVideoMemoryInfo's
+local budget describe the host GPU rather than guest RAM. Nothing is ever
+placed in it: every allocation names the aperture or VidMm's own system memory
+segment. Vulkan's device-local heaps are still sized from the host's own heaps:
+what lives there is host GPU memory, which the guest never maps. Every other
+heap is the adapter's non-local budget.

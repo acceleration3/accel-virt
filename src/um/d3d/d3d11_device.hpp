@@ -25,6 +25,8 @@
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
+#include "um/d3d/batch_follower.hpp"
+#include "um/d3d/paging_queue.hpp"
 
 #include <stdint.h>
 
@@ -135,12 +137,15 @@ private:
     void   unmap(D3D10DDI_HRESOURCE handle, UINT subresource);
 
     /* The kernel allocation a presented, scanned-out or shared resource
-     * needs, and the context presents are made on. */
+     * needs. */
     HRESULT allocate(ResourceRecord &resource, const D3D11DDIARG_CREATERESOURCE &create,
                      D3D10DDI_HRTRESOURCE runtime);
-    HANDLE  present_context();
-    /* The D3DDDIFORMAT the kernel's descriptor names a DXGI format by. */
-    uint32_t kernel_format(uint32_t format) const;
+    /* The device's kernel context, made with it through the runtime so the
+     * runtime knows it: presents are made on it, and Direct3D 11's fences are
+     * the runtime's own, signaled on the contexts a driver made - with none, a
+     * signal is refused, and a compositor waiting on the fence (DWM, taking a
+     * frame from another adapter) waits for good. */
+    HRESULT make_context();
     /* The host's pixels of `resource` into its allocation, for the kernel. */
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
     /* A surface GDI draws into from the guest's CPU (a window's redirection
@@ -153,8 +158,12 @@ private:
     void refresh_guest_surface(ResourceRecord &resource);
     void forget_guest_surface(const ResourceRecord &resource);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
-                            void *dxgi_context);
+                            void *dxgi_context, DXGI_DDI_PRESENT_FLAGS flags);
     HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context);
+    /* The kernel context's next packet - a present, a fence the runtime
+     * signals - waits for the batches the ring carried: the kernel's refusal
+     * otherwise, logged the first time. */
+    HRESULT follow_host();
 
     void set_shader(uint32_t stage, D3D10DDI_HSHADER shader);
     void set_constant_buffers(uint32_t stage, UINT start, UINT count, const D3D10DDI_HRESOURCE *buffers,
@@ -190,12 +199,16 @@ private:
     uint32_t                              calls_depth_;
     ObjectStorage<d3d::D3dCommandStream>  recording_;
     uint8_t                              *recording_block_;
-    HANDLE    present_context_;
+    HANDLE    context_;
+    ObjectStorage<PagingQueue> paging_;
+    ObjectStorage<d3d::BatchFollower> follower_;
     uint32_t  feature_level_;
     static constexpr uint32_t max_guest_surfaces = 256u;
     ResourceRecord *guest_surfaces_[max_guest_surfaces];
     uint32_t        guest_surface_count_;
     bool            guest_lock_refused_;
+    bool            present_refused_;
+    bool            follow_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
 };

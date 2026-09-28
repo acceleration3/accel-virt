@@ -86,6 +86,19 @@ ID3D12Heap *D3d12HostDevice::import_dmabuf_heap(void *address, int fd, uint64_t 
     return static_cast<ID3D12Heap *>(heap);
 }
 
+bool D3d12HostDevice::export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const
+{
+    AV_SCOPE("D3d12HostDevice::export_image");
+    return runtime_ != nullptr && SUCCEEDED(runtime_->export_image(resource, image));
+}
+
+bool D3d12HostDevice::export_fence(ID3D12Fence *fence, int &fd) const
+{
+    AV_SCOPE("D3d12HostDevice::export_fence");
+    fd = -1;
+    return runtime_ != nullptr && SUCCEEDED(runtime_->export_fence(fence, fd));
+}
+
 ID3D12RootSignature *D3d12HostDevice::root_signature(const void *desc) const
 {
     AV_SCOPE("D3d12HostDevice::root_signature");

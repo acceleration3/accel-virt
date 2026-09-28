@@ -21,6 +21,10 @@ enum class LockRank : uint16_t {
     allocation_table = 110u,
     shared_objects = 115u,     /* SharedObjectTable: minted inside the allocation table's create,
                                   and opened beside it from the device table (feature 053) */
+    present_payload = 117u,    /* wait mutex: PresentCopier's payload, held while the request carrying
+                                  it waits for the device's answer */
+    control_exchanges = 120u,  /* wait mutex: one control request and its answer at a time, whoever
+                                  asks - a present's copy beside an rvk context's request sequence */
     dpc = 150u,                /* spin lock: the adapter's DPC, which KeInsertQueueDpc may run on two
                                   processors at once; completions must reach dxgkrnl one at a time, in order */
     rvk_context_slots = 190u,  /* spin lock: which rvk contexts are live, around a submission and the DPC's serve */

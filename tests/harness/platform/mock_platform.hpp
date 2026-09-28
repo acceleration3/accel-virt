@@ -47,6 +47,11 @@ public:
      * other is refused with null. A view left mapped fails the test. */
     std::uint8_t *map_frame(std::uint64_t frame) override;
     void          unmap_frame(std::uint8_t *view) override;
+    /* A copy of the pages in one buffer, written back to them on unmapping, as
+     * a real mapping's writes land in the pages: one more map for
+     * fail_frame_map_at to count, and a view left mapped fails the test. */
+    std::uint8_t *map_pages(const GuestPageList &pages, void *&mapping) override;
+    void          unmap_pages(std::uint8_t *view, void *mapping) override;
     /* A view of `bytes` at `physical` in the one process a test models: the
      * memory behind it where a resolver says what that is, otherwise an
      * address no live view overlaps and nothing may touch. Recorded until
@@ -272,6 +277,15 @@ private:
     std::uint32_t contiguous_count_;
     std::uint64_t next_physical_address_;
     std::uint8_t *frame_views_[max_frame_views] = {};
+    /* map_pages' views: the buffer and the frames it is written back to. */
+    struct PageMapping {
+        std::uint8_t  *view;
+        std::uint64_t *frames;
+        std::uint32_t  count;
+    };
+    static constexpr std::uint32_t max_page_mappings = 16u;
+    PageMapping   page_mappings_[max_page_mappings] = {};
+    std::uint32_t page_mapping_count_ = 0u;
     std::uint32_t frame_view_count_ = 0u;
     std::uint32_t frame_map_sequence_ = 0u;
     std::uint32_t frame_fail_at_ = 0u;

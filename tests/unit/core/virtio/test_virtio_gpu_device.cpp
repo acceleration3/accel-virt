@@ -309,6 +309,29 @@ TEST(virtio_gpu_device_ask_control, needs_a_running_device)
   /* Running, but the device answers nothing. */
   CHECK_STATUS(device.ask_control(request, sizeof request, answer, sizeof answer, written), Status::not_found); }
 
+/* A request that continues in a payload is asked the same way: not before the
+ * device runs, and waited for once it does. */
+TEST(virtio_gpu_device_ask_control_carrying, needs_a_running_device_and_carries_the_payload)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  std::uint8_t       request[24] = {0x05, 0x01};
+  std::uint8_t       answer[64] = {};
+  std::uint32_t      written = 9u;
+  const VirtqSegment payload(0x20000u, 128u, SegmentDirection::device_reads);
+  CHECK_STATUS(device.ask_control_carrying(request, sizeof request, payload, answer, sizeof answer, written),
+               Status::invalid_state);
+  CHECK_EQ(written, 0u);
+  CHECK_STATUS(device.start(3u), Status::ok);
+  /* Running, and the device takes the chain but answers nothing. */
+  CHECK_STATUS(device.ask_control_carrying(request, sizeof request, payload, answer, sizeof answer, written),
+               Status::not_found);
+  FakeVirtqueueDevice queue = mapped.queue_device(0u);
+  CHECK_EQ(queue.complete_all(0u), 1u);
+  CHECK_EQ(queue.seen_count(), 3u);
+  CHECK_EQ(queue.seen(1u).address, 0x20000u);
+  CHECK_EQ(queue.seen(1u).length, 128u); }
+
 /* The displays the device has, from its configuration: what decides how many
  * VidPn sources the driver offers. */
 TEST(virtio_gpu_device_scanouts, are_what_the_device_configuration_says)

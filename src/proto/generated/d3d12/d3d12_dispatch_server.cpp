@@ -167,6 +167,20 @@ static bool decode_CreateCommittedResource12(ServerDispatch& s, ::av::WireReader
     return true;
 }
 
+static bool decode_ShareResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ShareResource12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    uint64_t key{};
+    if (!r.read_pod(key)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ShareResource12(resource, key)) return false;
+    return true;
+}
+
 static bool decode_CreatePlacedResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CreatePlacedResource12");
     (void)s;
@@ -376,6 +390,31 @@ static bool decode_CreateRootSignature12(ServerDispatch& s, ::av::WireReader& r,
     return true;
 }
 
+static bool decode_CreateCommandSignature12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:CreateCommandSignature12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t signature{};
+    if (!r.read_pod(signature)) return false;
+    uint32_t root{};
+    if (!r.read_pod(root)) return false;
+    uint32_t byte_stride{};
+    if (!r.read_pod(byte_stride)) return false;
+    uint32_t argument_count{};
+    if (!r.read_pod(argument_count)) return false;
+    if (argument_count > 16u) return false;
+    IndirectArgument* arguments = nullptr;
+    if (argument_count != 0u) {
+        arguments = arena.allocate<IndirectArgument>(argument_count);
+        if (arguments == nullptr) return false;
+        if (!r.read(arguments, sizeof(IndirectArgument) * argument_count)) return false;
+    }
+    if (r.remaining() != 0u) return false;
+    if (!s.on_CreateCommandSignature12(signature, root, byte_stride, argument_count, arguments)) return false;
+    return true;
+}
+
 static bool decode_CreateGraphicsPipeline12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:CreateGraphicsPipeline12");
     (void)s;
@@ -566,6 +605,20 @@ static bool decode_ExecuteCommandLists12(ServerDispatch& s, ::av::WireReader& r,
     }
     if (r.remaining() != 0u) return false;
     if (!s.on_ExecuteCommandLists12(queue, count, lists)) return false;
+    return true;
+}
+
+static bool decode_PresentResource12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:PresentResource12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t queue{};
+    if (!r.read_pod(queue)) return false;
+    uint32_t resource{};
+    if (!r.read_pod(resource)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_PresentResource12(queue, resource)) return false;
     return true;
 }
 
@@ -1242,6 +1295,30 @@ static bool decode_SetMarker12(ServerDispatch& s, ::av::WireReader& r, ::av::Wir
     return true;
 }
 
+static bool decode_ExecuteIndirect12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:ExecuteIndirect12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t list{};
+    if (!r.read_pod(list)) return false;
+    uint32_t signature{};
+    if (!r.read_pod(signature)) return false;
+    uint32_t max_count{};
+    if (!r.read_pod(max_count)) return false;
+    uint32_t argument_buffer{};
+    if (!r.read_pod(argument_buffer)) return false;
+    uint64_t argument_offset{};
+    if (!r.read_pod(argument_offset)) return false;
+    uint32_t count_buffer{};
+    if (!r.read_pod(count_buffer)) return false;
+    uint64_t count_offset{};
+    if (!r.read_pod(count_offset)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_ExecuteIndirect12(list, signature, max_count, argument_buffer, argument_offset, count_buffer, count_offset)) return false;
+    return true;
+}
+
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
@@ -1250,6 +1327,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_Finish12:
         case kCmd_CreateHeap12:
         case kCmd_CreateCommittedResource12:
+        case kCmd_ShareResource12:
         case kCmd_CreatePlacedResource12:
         case kCmd_ResourceAllocation12:
         case kCmd_CreateDescriptorHeap12:
@@ -1261,6 +1339,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CreateSampler12:
         case kCmd_CopyDescriptors12:
         case kCmd_CreateRootSignature12:
+        case kCmd_CreateCommandSignature12:
         case kCmd_CreateGraphicsPipeline12:
         case kCmd_CreateComputePipeline12:
         case kCmd_CreateCommandQueue12:
@@ -1271,6 +1350,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CloseCommandList12:
         case kCmd_CreateFence12:
         case kCmd_ExecuteCommandLists12:
+        case kCmd_PresentResource12:
         case kCmd_SignalFence12:
         case kCmd_WaitFence12:
         case kCmd_FenceValue12:
@@ -1306,6 +1386,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_BeginEvent12:
         case kCmd_EndEvent12:
         case kCmd_SetMarker12:
+        case kCmd_ExecuteIndirect12:
             return true;
         default: return false;
     }
@@ -1320,6 +1401,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_Finish12: return decode_Finish12(s, r, reply, arena);
         case kCmd_CreateHeap12: return decode_CreateHeap12(s, r, reply, arena);
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
+        case kCmd_ShareResource12: return decode_ShareResource12(s, r, reply, arena);
         case kCmd_CreatePlacedResource12: return decode_CreatePlacedResource12(s, r, reply, arena);
         case kCmd_ResourceAllocation12: return decode_ResourceAllocation12(s, r, reply, arena);
         case kCmd_CreateDescriptorHeap12: return decode_CreateDescriptorHeap12(s, r, reply, arena);
@@ -1331,6 +1413,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CreateSampler12: return decode_CreateSampler12(s, r, reply, arena);
         case kCmd_CopyDescriptors12: return decode_CopyDescriptors12(s, r, reply, arena);
         case kCmd_CreateRootSignature12: return decode_CreateRootSignature12(s, r, reply, arena);
+        case kCmd_CreateCommandSignature12: return decode_CreateCommandSignature12(s, r, reply, arena);
         case kCmd_CreateGraphicsPipeline12: return decode_CreateGraphicsPipeline12(s, r, reply, arena);
         case kCmd_CreateComputePipeline12: return decode_CreateComputePipeline12(s, r, reply, arena);
         case kCmd_CreateCommandQueue12: return decode_CreateCommandQueue12(s, r, reply, arena);
@@ -1341,6 +1424,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CloseCommandList12: return decode_CloseCommandList12(s, r, reply, arena);
         case kCmd_CreateFence12: return decode_CreateFence12(s, r, reply, arena);
         case kCmd_ExecuteCommandLists12: return decode_ExecuteCommandLists12(s, r, reply, arena);
+        case kCmd_PresentResource12: return decode_PresentResource12(s, r, reply, arena);
         case kCmd_SignalFence12: return decode_SignalFence12(s, r, reply, arena);
         case kCmd_WaitFence12: return decode_WaitFence12(s, r, reply, arena);
         case kCmd_FenceValue12: return decode_FenceValue12(s, r, reply, arena);
@@ -1376,6 +1460,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_BeginEvent12: return decode_BeginEvent12(s, r, reply, arena);
         case kCmd_EndEvent12: return decode_EndEvent12(s, r, reply, arena);
         case kCmd_SetMarker12: return decode_SetMarker12(s, r, reply, arena);
+        case kCmd_ExecuteIndirect12: return decode_ExecuteIndirect12(s, r, reply, arena);
         default: return false;
     }
 }

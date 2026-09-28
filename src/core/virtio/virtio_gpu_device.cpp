@@ -1,6 +1,7 @@
 #include "core/virtio/virtio_gpu_device.hpp"
 
 #include "core/pci/bar_mappings.hpp"
+#include "core/platform/wait_mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
@@ -18,8 +19,8 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
       transport_(platform, common_, notify_, isr_, device_, layout.notify_multiplier()),
       control_(platform, transport_, control_queue, GpuRequestWriter::max_response_size,
                GpuRequestWriter::max_backing_request_size, LockRank::control_queue),
-      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), scanouts_(0u), message_interrupts_(0u),
-      running_(false)
+      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue),
+      asks_(platform, LockRank::control_exchanges), scanouts_(0u), message_interrupts_(0u), running_(false)
       {
           AV_SCOPE("VirtioGpuDevice::VirtioGpuDevice");
       }
@@ -121,7 +122,19 @@ Status VirtioGpuDevice::ask_control(const uint8_t *request, size_t length, uint8
     AV_SCOPE("VirtioGpuDevice::ask_control");
     platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::ask_control");
     if (!running_) return Status::invalid_state;
+    WaitMutexGuard one(asks_);
     return control_.exchange(request, length, response, capacity, written);
+}
+
+Status VirtioGpuDevice::ask_control_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload,
+                                             uint8_t *response, size_t capacity, uint32_t &written)
+{
+    AV_SCOPE("VirtioGpuDevice::ask_control_carrying");
+    platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::ask_control_carrying");
+    written = 0u;
+    if (!running_) return Status::invalid_state;
+    WaitMutexGuard one(asks_);
+    return control_.exchange_carrying(request, length, payload, response, capacity, written);
 }
 
 Status VirtioGpuDevice::send_cursor(const uint8_t *request, size_t length)

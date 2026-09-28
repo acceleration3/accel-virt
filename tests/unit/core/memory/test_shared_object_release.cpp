@@ -127,5 +127,7 @@ TEST(shared_object_release, is_passive_only)
   static_cast<void>(release.send(fixture.device(), 5u));
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
-  /* The device's own ceilings, reached under it. */
-  while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {} }
+  /* The device's own ceilings, reached under it, and the wait for its turn
+   * at the queue, which blocks. */
+  while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {}
+  CHECK(fixture.mapped().platform().claim(Violation::blocking_at_dispatch)); }

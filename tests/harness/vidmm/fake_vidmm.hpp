@@ -31,6 +31,17 @@ public:
      * physical adapter the system memory segment it appends
      * (CreatePhysicalAdapterSegments). */
     std::uint32_t                     segment_count() const;
+    /* VIDMM_GLOBAL::GetTotalSegmentSize @ 14010636c over the driver's
+     * segments, each counting the smaller of its size and commit limit: one
+     * neither Aperture nor ReservedSysMem is dedicated - video memory, or
+     * system memory when PopulatedFromSystemMemory - and an aperture is
+     * shared. The segment VidMm appends is ReservedSysMem
+     * (InitializePhysicalAdapterSegments @ 140116728 flags it 0x1180 and up),
+     * so it is never dedicated. These are DXGI's DedicatedVideoMemory and
+     * DedicatedSystemMemory, and what dxdiag shows. */
+    std::uint64_t                     dedicated_video_memory() const;
+    std::uint64_t                     dedicated_system_memory() const;
+    std::uint64_t                     aperture_memory() const;
     SegmentRule                       failed_rule() const;
     const DxgkQuerySegmentOut4Record &answer() const;
     DxgkSegmentDescriptor4Record      segment(std::uint32_t index) const;
@@ -39,13 +50,16 @@ private:
     static constexpr std::int32_t  status_unsuccessful = static_cast<std::int32_t>(0xC0000001u);
     static constexpr std::uint32_t highest_valid_flag = 0x3FFFFFu;
     enum : std::uint32_t {
-        flag_aperture = 0x1u, flag_agp = 0x2u, flag_cpu_visible = 0x4u, flag_preserved_during_standby = 0x80u,
-        flag_hibernate_preservation = 0x300u, flag_cpu_host_aperture = 0x2000u,
+        flag_aperture = 0x1u, flag_agp = 0x2u, flag_cpu_visible = 0x4u, flag_populated_from_system_memory = 0x40u,
+        flag_preserved_during_standby = 0x80u, flag_hibernate_preservation = 0x300u, flag_reserved_system_memory = 0x1000u,
+        flag_cpu_host_aperture = 0x2000u,
     };
 
     static constexpr std::uint32_t physical_virtual_addressing = 0x3u;   /* IoMmuSupported | GpuMmuSupported */
 
     std::int32_t refuse(SegmentRule rule, std::int32_t status);
+    /* The segments whose flags under `mask` are `match`. */
+    std::uint64_t total(std::uint32_t mask, std::uint32_t match) const;
 
     FakeDxgadapter            &adapter_;
     DxgkQuerySegmentOut4Record answer_;

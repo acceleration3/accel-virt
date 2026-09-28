@@ -76,6 +76,30 @@ std::uint32_t FakeVidMm::segment_count() const
     return answer_.NbSegment + (implicit ? 1u : 0u);
 }
 
+std::uint64_t FakeVidMm::total(std::uint32_t mask, std::uint32_t match) const
+{
+    std::uint64_t bytes = 0u;
+    for (std::uint32_t index = 0u; index < answer_.NbSegment && index < max_segments; index++) {
+        const DxgkSegmentDescriptor4Record descriptor = segment(index);
+        if ((descriptor.Flags & mask) != match) continue;
+        bytes += descriptor.CommitLimit < descriptor.Size ? descriptor.CommitLimit : descriptor.Size;
+    }
+    return bytes;
+}
+
+std::uint64_t FakeVidMm::dedicated_video_memory() const
+{
+    return total(flag_aperture | flag_reserved_system_memory | flag_populated_from_system_memory, 0u);
+}
+
+std::uint64_t FakeVidMm::dedicated_system_memory() const
+{
+    return total(flag_aperture | flag_reserved_system_memory | flag_populated_from_system_memory,
+                 flag_populated_from_system_memory);
+}
+
+std::uint64_t FakeVidMm::aperture_memory() const { return total(flag_aperture, flag_aperture); }
+
 SegmentRule                       FakeVidMm::failed_rule() const { return failed_; }
 const DxgkQuerySegmentOut4Record &FakeVidMm::answer() const { return answer_; }
 

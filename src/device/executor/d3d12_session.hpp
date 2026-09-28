@@ -24,6 +24,7 @@
 #include "device/executor/d3d12_queue_progress.hpp"
 #include "device/executor/d3d12_view_writer.hpp"
 #include "device/executor/d3d_object_table.hpp"
+#include "device/shim/d3d12_presentation.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_server.h"
 
 #include <stddef.h>
@@ -36,6 +37,7 @@ struct ID3D12Heap;
 
 namespace av {
 
+class D3d11HostDevice;
 class D3d12HostDevice;
 class GuestRegion;
 
@@ -46,8 +48,10 @@ public:
     explicit D3d12Session(GuestRegion &region);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
-     * GPU with none, on which every command is refused. */
-    void               initialize(D3d12HostDevice *device);
+     * GPU with none, on which every command is refused. Swap chain buffers are
+     * shown through `shown_by`, the GPU's Direct3D 11 device; with none, a
+     * share or a present is refused. */
+    void               initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by = nullptr);
     /* Waits for the GPU to finish with everything, then lets it all go. */
     void               shut_down();
 
@@ -74,6 +78,8 @@ public:
     bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_ResourceAllocation12(const d3d12proto::ResourceDesc& desc, uint64_t& size, uint64_t& alignment) override;
+    bool on_ShareResource12(uint32_t resource, uint64_t key) override;
+    bool on_PresentResource12(uint32_t queue, uint32_t resource) override;
     bool on_CreatePlacedResource12(uint32_t resource, uint32_t heap, uint64_t offset, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags) override;
     bool on_CreateShaderResourceView12(const d3d12proto::DescriptorRef& at, uint32_t has_desc, const d3d12proto::ViewDesc& desc) override;
@@ -84,6 +90,7 @@ public:
     bool on_CreateSampler12(const d3d12proto::DescriptorRef& at, const d3d12proto::SamplerDesc& desc) override;
     bool on_CopyDescriptors12(const d3d12proto::DescriptorRef& destination, const d3d12proto::DescriptorRef& source, uint32_t count) override;
     bool on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count, const d3d12proto::RootParameter* parameters, uint32_t range_count, const d3d12proto::DescriptorRange* ranges, uint32_t sampler_count, const d3d12proto::StaticSampler* samplers) override;
+    bool on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const d3d12proto::IndirectArgument* arguments) override;
     bool on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root, const d3d12proto::GraphicsState& state, uint32_t element_count, const d3d12proto::InputElement* elements, uint32_t signature_count, const d3d12proto::SignatureEntry* signatures, const uint8_t* vs, uint64_t vs_size, const uint8_t* hs, uint64_t hs_size, const uint8_t* ds, uint64_t ds_size, const uint8_t* gs, uint64_t gs_size, const uint8_t* ps, uint64_t ps_size) override;
     bool on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, const uint8_t* cs, uint64_t cs_size) override;
     bool on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags) override;
@@ -129,6 +136,7 @@ public:
     bool on_BeginEvent12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) override;
     bool on_EndEvent12(uint32_t list) override;
     bool on_SetMarker12(uint32_t list, uint32_t metadata, const uint8_t* data, uint64_t data_size) override;
+    bool on_ExecuteIndirect12(uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) override;
 
     bool invariants_hold() const;
 
@@ -160,6 +168,7 @@ private:
     D3d12QueueProgress     progress_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
+    D3d12Presentation      presentation_;
     /* The decoding command's arena, which containers are written into. */
     WireArena             *arena_;
     /* What drain() signals each queue with, and the value it signalled last. */

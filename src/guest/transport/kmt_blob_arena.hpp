@@ -23,7 +23,10 @@ struct KmtBlobArenaProbe;
 class KmtBlobArena {
 public:
     static constexpr uint64_t default_bytes = uint64_t{16} << 20u;
-    static constexpr uint64_t max_bytes = uint64_t{256} << 20u;
+    /* A Direct3D 12 session's upload and readback heaps are its arena's too,
+     * and an application's allocator takes them 64 MiB at a time: 256 MiB ran
+     * out under a game streaming its world in. */
+    static constexpr uint64_t max_bytes = uint64_t{1} << 30u;
 
     KmtBlobArena(GuestConnection &connection, KmtTransport &transport);
     ~KmtBlobArena();

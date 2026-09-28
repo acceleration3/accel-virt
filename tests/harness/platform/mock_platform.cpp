@@ -2,6 +2,7 @@
 
 #include "harness/platform/log_record.hpp"
 #include "harness/platform/service_value.hpp"
+#include "proto/resources/guest_page_list.hpp"
 
 #include "harness/framework/test_registry.hpp"
 
@@ -63,8 +64,9 @@ MockPlatform::~MockPlatform()
                                 live_count_ + contiguous_count_);
     if (held_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
-    if (frame_view_count_ != 0u)
-        registry.record_failure(__FILE__, __LINE__, "%u frame view(s) left mapped", frame_view_count_);
+    if (frame_view_count_ + page_mapping_count_ != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u frame view(s) left mapped",
+                                frame_view_count_ + page_mapping_count_);
     if (process_mappings() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u process view(s) left mapped", process_mappings());
     if (bugcheck_routine_ != nullptr)
@@ -235,7 +237,57 @@ void MockPlatform::unmap_frame(std::uint8_t *view)
     record(Violation::frame_misuse, "unmap_frame of a view never mapped");
 }
 
-std::uint32_t MockPlatform::mapped_frames() const { return frame_view_count_; }
+std::uint8_t *MockPlatform::map_pages(const GuestPageList &pages, void *&mapping)
+{
+    mapping = nullptr;
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "map_pages at IRQL %u", static_cast<unsigned>(irql_));
+    const std::uint32_t count = pages.count();
+    if (count == 0u) {
+        record(Violation::frame_misuse, "map_pages of no pages");
+        return nullptr;
+    }
+    frame_map_sequence_++;
+    if (frame_fail_at_ != 0u && frame_map_sequence_ == frame_fail_at_) return nullptr;
+    if (page_mapping_count_ == max_page_mappings) {
+        std::fprintf(stderr, "\n    more than %u page mappings\n", max_page_mappings);
+        std::abort();
+    }
+    auto *const view = static_cast<std::uint8_t *>(std::malloc(std::size_t{count} * 0x1000u));
+    auto *const frames = static_cast<std::uint64_t *>(std::malloc(std::size_t{count} * sizeof(std::uint64_t)));
+    for (std::uint32_t page = 0u; page < count; page++) {
+        frames[page] = pages.frame(page);
+        const void *const memory = translate_physical(frames[page], 0x1000u);
+        if (memory == nullptr) {
+            std::free(view);
+            std::free(frames);
+            return nullptr;
+        }
+        std::memcpy(view + std::size_t{page} * 0x1000u, memory, 0x1000u);
+    }
+    page_mappings_[page_mapping_count_++] = PageMapping{view, frames, count};
+    mapping = view;
+    return view;
+}
+
+void MockPlatform::unmap_pages(std::uint8_t *view, void *mapping)
+{
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "unmap_pages at IRQL %u", static_cast<unsigned>(irql_));
+    for (std::uint32_t i = 0u; i < page_mapping_count_; i++) {
+        PageMapping &held = page_mappings_[i];
+        if (held.view != view || mapping != view) continue;
+        for (std::uint32_t page = 0u; page < held.count; page++)
+            std::memcpy(translate_physical(held.frames[page], 0x1000u), view + std::size_t{page} * 0x1000u, 0x1000u);
+        std::free(held.view);
+        std::free(held.frames);
+        page_mappings_[i] = page_mappings_[--page_mapping_count_];
+        return;
+    }
+    record(Violation::frame_misuse, "unmap_pages of a view never mapped");
+}
+
+std::uint32_t MockPlatform::mapped_frames() const { return frame_view_count_ + page_mapping_count_; }
 
 void MockPlatform::fail_frame_map_at(std::uint32_t nth)
 {

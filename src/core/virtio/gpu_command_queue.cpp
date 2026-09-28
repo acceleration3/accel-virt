@@ -83,7 +83,8 @@ Status GpuCommandQueue::activate(uint16_t vector)
     return status;
 }
 
-Status GpuCommandQueue::send_locked(const uint8_t *request, size_t length, uint32_t &slot)
+Status GpuCommandQueue::send_locked(const uint8_t *request, size_t length, const VirtqSegment *payload,
+                                    uint16_t payload_count, uint32_t &slot)
 {
     AV_SCOPE("GpuCommandQueue::send_locked");
     InvariantScope<GpuCommandQueue> guard(platform_, *this, "send");
@@ -93,12 +94,15 @@ Status GpuCommandQueue::send_locked(const uint8_t *request, size_t length, uint3
     uint8_t *const bytes = slots_ + offset;
     platform_.copy(bytes, request, length);
     const uint64_t address = slots_address_ + offset;
+    const VirtqSegment response(address + request_bytes_of(slot), response_bytes_, SegmentDirection::device_writes);
     const VirtqSegment segments[] = {
         VirtqSegment(address, static_cast<uint32_t>(length), SegmentDirection::device_reads),
-        VirtqSegment(address + request_bytes_of(slot), response_bytes_, SegmentDirection::device_writes),
+        payload_count != 0u ? *payload : response,
+        response,
     };
-    uint16_t head = 0u;
-    const Status status = queue_.add(segments, response_bytes_ != 0u ? 2u : 1u, head);
+    const uint16_t count = static_cast<uint16_t>(1u + payload_count + (response_bytes_ != 0u ? 1u : 0u));
+    uint16_t       head = 0u;
+    const Status   status = queue_.add(segments, count, head);
     if (status != Status::ok) return status;
     busy_[slot] = true;
     slot_of_head_[head] = static_cast<uint8_t>(slot);
@@ -116,7 +120,7 @@ Status GpuCommandQueue::send(const uint8_t *request, size_t length)
     {
         SpinLockGuard lock(lock_);
         uint32_t     slot = no_slot;
-        const Status status = send_locked(request, length, slot);
+        const Status status = send_locked(request, length, nullptr, 0u, slot);
         if (status != Status::ok) return status;
     }
     transport_.notify(queue_);
@@ -130,6 +134,24 @@ Status GpuCommandQueue::exchange(const uint8_t *request, size_t length, uint8_t 
                                  uint32_t &written)
 {
     AV_SCOPE("GpuCommandQueue::exchange");
+    return exchange_segments(request, length, nullptr, 0u, response, capacity, written);
+}
+
+Status GpuCommandQueue::exchange_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload,
+                                          uint8_t *response, size_t capacity, uint32_t &written)
+{
+    AV_SCOPE("GpuCommandQueue::exchange_carrying");
+    written = 0u;
+    if (payload.length() == 0u || payload.direction() != SegmentDirection::device_reads)
+        return Status::invalid_parameter;
+    return exchange_segments(request, length, &payload, 1u, response, capacity, written);
+}
+
+Status GpuCommandQueue::exchange_segments(const uint8_t *request, size_t length, const VirtqSegment *payload,
+                                          uint16_t payload_count, uint8_t *response, size_t capacity,
+                                          uint32_t &written)
+{
+    AV_SCOPE("GpuCommandQueue::exchange_segments");
     platform_.require_irql_at_most(Irql::passive, "GpuCommandQueue::exchange");
     written = 0u;
     if (slots_ == nullptr) return Status::invalid_state;
@@ -140,7 +162,7 @@ Status GpuCommandQueue::exchange(const uint8_t *request, size_t length, uint8_t 
         SpinLockGuard lock(lock_);
         if (awaited_slot_ != no_slot) return Status::conflict;
         uint32_t     slot = no_slot;
-        const Status status = send_locked(request, length, slot);
+        const Status status = send_locked(request, length, payload, payload_count, slot);
         if (status != Status::ok) return status;
         awaited_slot_ = slot;
         awaited_response_ = response;

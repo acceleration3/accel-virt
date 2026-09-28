@@ -2248,6 +2248,52 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: window ok: this device has none, so every chunk is guest memory", result.stdout)
         self.assert_clean()
 
+    def test_a_gtk_window_has_the_absolute_tablet(self):
+        self.script()
+        result = self.run_suite("--display", "gtk")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("usb-tablet", self.journal_lines()[0])
+        self.assertIn("-display gtk,gl=on ", self.journal_lines()[0])
+        self.assertNotIn("show-cursor", self.journal_lines()[0])
+        self.assert_clean()
+
+    def test_a_relative_mouse_run_grabs_a_mouse_whose_pointer_stays_in_view(self):
+        self.script()
+        result = self.run_suite("--display", "gtk", "--relative-mouse")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("usb-tablet", self.journal_lines()[0])
+        self.assertIn("gtk,gl=on,show-cursor=on", self.journal_lines()[0])
+        self.assert_clean()
+
+    def test_an_sdl_window_draws_with_gl_and_a_relative_mouse_run_has_no_tablet(self):
+        self.script()
+        result = self.run_suite("--display", "sdl", "--relative-mouse")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("-display sdl,gl=on ", self.journal_lines()[0])
+        self.assertNotIn("usb-tablet", self.journal_lines()[0])
+        # The controller stays: a disk is hot-plugged onto it.
+        self.assertIn("-device qemu-xhci", self.journal_lines()[0])
+        self.assert_clean()
+
+    def test_a_run_has_no_network_and_no_sound_unless_asked(self):
+        self.script()
+        result = self.run_suite("--display", "gtk")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("-nic none", self.journal_lines()[0])
+        self.assertNotIn("-audiodev", self.journal_lines()[0])
+        self.assertNotIn("intel-hda", self.journal_lines()[0])
+        self.assert_clean()
+
+    def test_net_and_audio_give_the_guest_devices_its_inbox_drivers_run(self):
+        self.script()
+        result = self.run_suite("--display", "gtk", "--net", "--audio")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("-nic user,model=e1000e", self.journal_lines()[0])
+        self.assertNotIn("-nic none", self.journal_lines()[0])
+        self.assertIn("-audiodev pipewire,id=audio -device ich9-intel-hda -device hda-output,audiodev=audio",
+                      self.journal_lines()[0])
+        self.assert_clean()
+
     def test_no_cpu_pm_lets_an_idle_vcpu_exit_to_the_host(self):
         self.script()
         result = self.run_suite("--no-cpu-pm")

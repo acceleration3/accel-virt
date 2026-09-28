@@ -5,6 +5,7 @@
  * outside the destination's own pages, no page may be left mapped, and no IRQL
  * rule may break. */
 #include "core/ddi/rect_record.hpp"
+#include "core/present/mapped_pixels.hpp"
 #include "core/present/present_blit.hpp"
 #include "core/present/present_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -82,7 +83,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         rect = av::RectRecord{sub.left(), sub.top(), sub.right(), sub.bottom()};
     }
 
-    av::PresentBlit blit(platform, (choices & 1u) != 0u ? nullptr : &source, destination);
+    av::MappedPixels pixels(platform);
+    av::PresentBlit  blit(platform, pixels, (choices & 1u) != 0u ? nullptr : &source, destination);
     const av::Status moved = (choices & 1u) != 0u ? blit.fill(colour, into, count != 0u ? rects : nullptr, count)
                                                  : blit.blit(from, into, count != 0u ? rects : nullptr, count);
     static_cast<void>(moved);

@@ -31,7 +31,7 @@ constexpr uint32_t line_bytes = 128u;
 
 UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::LogSink &log, UmdBinding &binding,
                  UmdHostDriver *builder)
-    : kmt_(kmt), lock_(lock), log_(log), binding_(binding), builder_(builder), connection_(kmt),
+    : kmt_(kmt), lock_(lock), log_(log), binding_(binding), builder_(builder), connections_(kmt),
       adapters_(memory), devices_(memory, log)
 {
     AV_SCOPE("UmdRoot::UmdRoot");
@@ -88,26 +88,27 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
         note("open refused, interface", interface_version);
         return hr_no_interface;
     }
-    const Status held = connection_.acquire(adapter_luid(runtime_adapter, callbacks));
+    UmdConnection *connection = nullptr;
+    const Status   held = connections_.acquire(adapter_luid(runtime_adapter, callbacks), connection);
     if (held != Status::ok) {
         note("no rvkgpu adapter, status", static_cast<uint64_t>(held));
         return hr_fail;
     }
     bool      keep = false;
-    ScopeExit give_back([this, &keep] {
+    ScopeExit give_back([this, &keep, connection] {
         if (keep) return;
-        const Status released = connection_.release();
+        const Status released = connection->release();
         if (released != Status::ok) note("connection release, status", static_cast<uint64_t>(released));
     });
     UmdAdapter  *adapter = nullptr;
     const Status made = adapters_.open(adapter, runtime, runtime_adapter,
-                                       static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks),
+                                       static_cast<const D3dddiAdapterCallbacksRecord *>(callbacks), *connection,
                                        interface_version, runtime_version);
     if (made != Status::ok) {
         note("no memory for the adapter, status", static_cast<uint64_t>(made));
         return hr_out_of_memory;
     }
-    const Status learned = adapter->identity().learn(kmt_, connection_.adapter(), log_);
+    const Status learned = adapter->identity().learn(kmt_, connection->adapter(), log_);
     if (learned != Status::ok) {
         /* Discarded rather than closed: the adapter is the one this function
          * made a line ago, so there is no handle to be wrong and no device to
@@ -167,7 +168,7 @@ Hresult UmdRoot::caps(void *adapter, D3d102ddiargGetCapsRecord *args)
     ScopeExit release([this] { lock_.release(); });
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || args == nullptr) return hr_invalid_arg;
-    if (builder_ != nullptr) return builder_->caps(*open_adapter, *args, connection_.adapter());
+    if (builder_ != nullptr) return builder_->caps(*open_adapter, *args, open_adapter->connection().adapter());
     /* No host to ask, so no capability is claimed (constitution VI). D3D12Core
      * survives this: it falls back and records generic pipeline level 1
      * (research.md §12). */
@@ -224,7 +225,8 @@ Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *cre
     /* The runtime frees its own block and never calls pfnDestroyDevice for a
      * create that failed, so the object model built above is given back here
      * rather than leaked. */
-    const Hresult built = builder_ == nullptr ? hr_not_impl : builder_->build(*device, *create, connection_.adapter());
+    const Hresult built =
+        builder_ == nullptr ? hr_not_impl : builder_->build(*device, *create, open_adapter->connection().adapter());
     if (built != hr_ok) forget_device(create->hDrvDevice);
     return built;
 }
@@ -244,7 +246,8 @@ Hresult UmdRoot::create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *c
     }
     /* As for Direct3D 11, a failed create is given back here: the runtime
      * never destroys a device it was told was not made. */
-    const Hresult built = builder_ == nullptr ? hr_not_impl : builder_->build12(*device, *create, connection_.adapter());
+    const Hresult built =
+        builder_ == nullptr ? hr_not_impl : builder_->build12(*device, *create, open_adapter->connection().adapter());
     if (built != hr_ok) forget_device(create->hDrvDevice);
     return built;
 }
@@ -254,13 +257,16 @@ Hresult UmdRoot::close_adapter(void *adapter)
     AV_SCOPE("UmdRoot::close_adapter");
     lock_.acquire();
     ScopeExit release([this] { lock_.release(); });
-    const Status closed = adapters_.close(adapter);
+    /* Taken before the close, which frees the adapter that names it. */
+    UmdAdapter *const    open_adapter = adapters_.adapter_of(adapter);
+    UmdConnection *const connection = open_adapter != nullptr ? &open_adapter->connection() : nullptr;
+    const Status         closed = adapters_.close(adapter);
     if (closed == Status::conflict) {
-        note("adapter closed with live devices", adapters_.adapter_of(adapter)->devices());
+        note("adapter closed with live devices", open_adapter->devices());
         return hr_fail;
     }
     if (closed != Status::ok) return hr_invalid_arg;
-    const Status released = connection_.release();
+    const Status released = connection->release();
     if (released != Status::ok) note("connection release, status", static_cast<uint64_t>(released));
     return hr_ok;
 }
@@ -323,7 +329,7 @@ void UmdRoot::report(StateWriter &writer)
     ScopeExit release([this] { lock_.release(); });
     writer.number("adapters", adapters_.open_adapters());
     writer.number("devices", devices_.live_devices());
-    connection_.report(writer);
+    connections_.report(writer);
     adapters_.report(writer);
     devices_.report(writer);
     writer.close();
@@ -332,12 +338,12 @@ void UmdRoot::report(StateWriter &writer)
 bool UmdRoot::invariants_hold() const
 {
     AV_SCOPE("UmdRoot::invariants_hold");
-    if (!connection_.invariants_hold()) return false;
+    if (!connections_.invariants_hold()) return false;
     if (!adapters_.invariants_hold() || !devices_.invariants_hold()) return false;
-    /* The connection is held once per open adapter and by nothing else, so a
+    /* A connection is held once per open adapter and by nothing else, so a
      * process with no adapter open holds no kernel adapter either. */
-    if (connection_.opens() != adapters_.open_adapters()) return false;
-    return connection_.open() == (adapters_.open_adapters() != 0u);
+    if (connections_.opens() != adapters_.open_adapters()) return false;
+    return (connections_.open() != 0u) == (adapters_.open_adapters() != 0u);
 }
 
 }  // namespace av::d3d

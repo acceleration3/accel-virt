@@ -61,6 +61,17 @@ struct ResourceRecord {
     uint32_t     sample_count;
     uint32_t     flags; /* D3D12_RESOURCE_FLAGS */
     uint32_t     heap;  /* the heap id it was placed in, 0 for none */
+    /* The heap's record and where in it the resource starts: a resource
+     * placed in a heap names the heap only by the buffer the runtime made
+     * over all of it, and an offset into that buffer. */
+    HeapRecord  *placed_in;
+    uint64_t     heap_offset;
+    /* A swap chain buffer's kernel allocation (d3d::KernelSurface), which DWM
+     * opens it by, and the runtime resource it was made for: 0 and null for
+     * every other resource. */
+    D3DKMT_HANDLE allocation;
+    uint32_t      reserved;
+    HANDLE        runtime_resource;
 };
 
 /* A descriptor heap; its descriptors follow it in the block, one slot of

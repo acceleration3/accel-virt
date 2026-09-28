@@ -33,7 +33,7 @@ void *D3dRuntime::open_library(const char *name) const
 D3dRuntime::D3dRuntime()
     : dxgi_(nullptr), d3d11_(nullptr), d3d12core_(nullptr), d3d12_(nullptr), create_factory_(nullptr),
       create_device11_(nullptr), get_interface12_(nullptr), open_host_heap_(nullptr), open_dmabuf_heap_(nullptr),
-      serialize_root_(nullptr)
+      serialize_root_(nullptr), export_image_(nullptr), export_fence_(nullptr)
 {
     AV_SCOPE("D3dRuntime::D3dRuntime");
 }
@@ -76,6 +76,8 @@ bool D3dRuntime::open()
         open_dmabuf_heap_ =
             reinterpret_cast<OpenDmabufHeap>(dlsym(d3d12core_, "vkd3d_proton_open_heap_from_dmabuf"));
         serialize_root_ = reinterpret_cast<SerializeRoot>(dlsym(d3d12_, "D3D12SerializeVersionedRootSignature"));
+        export_image_ = reinterpret_cast<ExportImage>(dlsym(d3d12core_, "vkd3d_proton_export_image"));
+        export_fence_ = reinterpret_cast<ExportFence>(dlsym(d3d12core_, "vkd3d_proton_export_fence"));
     }
     return true;
 }
@@ -92,6 +94,8 @@ void D3dRuntime::close()
     open_host_heap_ = nullptr;
     open_dmabuf_heap_ = nullptr;
     serialize_root_ = nullptr;
+    export_image_ = nullptr;
+    export_fence_ = nullptr;
     dxgi_ = nullptr;
     d3d11_ = nullptr;
     d3d12core_ = nullptr;
@@ -251,6 +255,23 @@ int32_t D3dRuntime::open_dmabuf_heap(void *device, void *address, int fd, uint64
     const GUID    heap_id = __uuidof(ID3D12Heap);
     const int32_t made = open_dmabuf_heap_(device, address, fd, size, &heap_id, &heap);
     if (FAILED(made)) heap = nullptr;
+    return made;
+}
+
+int32_t D3dRuntime::export_image(void *resource, Vkd3dImageExport &image) const
+{
+    AV_SCOPE("D3dRuntime::export_image");
+    if (export_image_ == nullptr || resource == nullptr) return E_NOTIMPL;
+    return export_image_(resource, &image);
+}
+
+int32_t D3dRuntime::export_fence(void *fence, int &fd) const
+{
+    AV_SCOPE("D3dRuntime::export_fence");
+    fd = -1;
+    if (export_fence_ == nullptr || fence == nullptr) return E_NOTIMPL;
+    const int32_t made = export_fence_(fence, &fd);
+    if (FAILED(made)) fd = -1;
     return made;
 }
 

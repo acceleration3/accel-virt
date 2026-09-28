@@ -11,14 +11,14 @@ AdapterTable::AdapterTable(BlockSource &memory) : adapters_(memory)
 }
 
 Status AdapterTable::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_adapter,
-                          const D3dddiAdapterCallbacksRecord *callbacks, uint32_t interface_version,
-                          uint32_t runtime_version)
+                          const D3dddiAdapterCallbacksRecord *callbacks, UmdConnection &connection,
+                          uint32_t interface_version, uint32_t runtime_version)
 {
     AV_SCOPE("AdapterTable::open");
     opened = nullptr;
     UmdAdapter  *made = nullptr;
     const Status created =
-        adapters_.create(made, runtime, runtime_adapter, callbacks, interface_version, runtime_version);
+        adapters_.create(made, runtime, runtime_adapter, callbacks, connection, interface_version, runtime_version);
     if (created != Status::ok) return created;
     opened = made;
     return Status::ok;

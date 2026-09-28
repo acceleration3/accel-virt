@@ -24,6 +24,7 @@
 namespace av {
 
 class VirtioPciTransport;
+class VirtqSegment;
 struct GpuCommandQueueProbe;
 
 class GpuCommandQueue {
@@ -52,6 +53,11 @@ public:
      * time; not_found when the device never answers. */
     [[nodiscard]] Status exchange(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
                                   uint32_t &written);
+    /* The same, the request continuing in `payload` - memory of the caller's,
+     * read by the device after the slot's bytes as one request: what carries
+     * a request too large for any slot. */
+    [[nodiscard]] Status exchange_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload,
+                                           uint8_t *response, size_t capacity, uint32_t &written);
     /* Reclaims every used request; `refused` counts responses shorter than a
      * header or not VIRTIO_GPU_RESP_OK_NODATA. A used element the queue never
      * published is invalid_state. */
@@ -76,8 +82,13 @@ private:
     /* The slot a request of `length` bytes goes in, or no_slot when none is
      * free or none is wide enough. */
     uint32_t slot_for(size_t length) const;
-    /* Publishes one request; the caller holds the lock and notifies. */
-    [[nodiscard]] Status send_locked(const uint8_t *request, size_t length, uint32_t &slot);
+    /* Publishes one request, followed by `payload_count` (0 or 1) buffers of
+     * the caller's; the caller holds the lock and notifies. */
+    [[nodiscard]] Status send_locked(const uint8_t *request, size_t length, const VirtqSegment *payload,
+                                     uint16_t payload_count, uint32_t &slot);
+    [[nodiscard]] Status exchange_segments(const uint8_t *request, size_t length, const VirtqSegment *payload,
+                                           uint16_t payload_count, uint8_t *response, size_t capacity,
+                                           uint32_t &written);
     void   release_slots();
 
     Platform           &platform_;

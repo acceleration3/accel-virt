@@ -17,6 +17,7 @@ const char* command_name(uint32_t id) {
         case kCmd_CreateCommittedResource12: return "CreateCommittedResource12";
         case kCmd_CreatePlacedResource12: return "CreatePlacedResource12";
         case kCmd_ResourceAllocation12: return "ResourceAllocation12";
+        case kCmd_ShareResource12: return "ShareResource12";
         case kCmd_CreateDescriptorHeap12: return "CreateDescriptorHeap12";
         case kCmd_CreateShaderResourceView12: return "CreateShaderResourceView12";
         case kCmd_CreateUnorderedAccessView12: return "CreateUnorderedAccessView12";
@@ -28,6 +29,7 @@ const char* command_name(uint32_t id) {
         case kCmd_CreateRootSignature12: return "CreateRootSignature12";
         case kCmd_CreateGraphicsPipeline12: return "CreateGraphicsPipeline12";
         case kCmd_CreateComputePipeline12: return "CreateComputePipeline12";
+        case kCmd_CreateCommandSignature12: return "CreateCommandSignature12";
         case kCmd_CreateCommandQueue12: return "CreateCommandQueue12";
         case kCmd_CreateCommandAllocator12: return "CreateCommandAllocator12";
         case kCmd_ResetCommandAllocator12: return "ResetCommandAllocator12";
@@ -41,6 +43,7 @@ const char* command_name(uint32_t id) {
         case kCmd_FenceValue12: return "FenceValue12";
         case kCmd_PublishFence12: return "PublishFence12";
         case kCmd_CreateQueryHeap12: return "CreateQueryHeap12";
+        case kCmd_PresentResource12: return "PresentResource12";
         case kCmd_ResourceBarrier12: return "ResourceBarrier12";
         case kCmd_SetPipelineState12: return "SetPipelineState12";
         case kCmd_SetRootSignature12: return "SetRootSignature12";
@@ -71,6 +74,7 @@ const char* command_name(uint32_t id) {
         case kCmd_BeginEvent12: return "BeginEvent12";
         case kCmd_EndEvent12: return "EndEvent12";
         case kCmd_SetMarker12: return "SetMarker12";
+        case kCmd_ExecuteIndirect12: return "ExecuteIndirect12";
         default: return nullptr;
     }
 }

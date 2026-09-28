@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_consumer.hpp"
+#include "device/threading/worker.hpp"
 
 #include <time.h>
 
@@ -33,12 +34,12 @@ Status D3dOrdering::initialize()
     return mutex_ != nullptr ? Status::ok : host_.create_mutex(mutex_);
 }
 
-void D3dOrdering::add(RingConsumer &ring)
+void D3dOrdering::add(RingConsumer &ring, Worker &worker)
 {
     AV_SCOPE("D3dOrdering::add");
     if (mutex_ == nullptr) return;
     host_.lock_mutex(mutex_);
-    if (count_ < capacity) members_[count_++] = &ring;
+    if (count_ < capacity) members_[count_++] = Member{&ring, &worker};
     host_.unlock_mutex(mutex_);
 }
 
@@ -48,21 +49,25 @@ void D3dOrdering::remove(RingConsumer &ring)
     if (mutex_ == nullptr) return;
     host_.lock_mutex(mutex_);
     for (uint32_t index = 0u; index < count_; index++) {
-        if (members_[index] != &ring) continue;
+        if (members_[index].ring_ != &ring) continue;
         members_[index] = members_[--count_];
-        members_[count_] = nullptr;
+        members_[count_] = Member{nullptr, nullptr};
         break;
     }
     host_.unlock_mutex(mutex_);
 }
 
-/* Another stream holds a batch published before `published_at` it has not run. */
-bool D3dOrdering::earlier_pending(const RingConsumer *ring, uint64_t published_at) const
+bool D3dOrdering::wake_earlier(const RingConsumer *ring, uint64_t published_at)
 {
-    AV_SCOPE("D3dOrdering::earlier_pending");
-    for (uint32_t index = 0u; index < count_; index++)
-        if (members_[index] != ring && members_[index]->earliest_pending() < published_at) return true;
-    return false;
+    AV_SCOPE("D3dOrdering::wake_earlier");
+    bool pending = false;
+    for (uint32_t index = 0u; index < count_; index++) {
+        const Member &member = members_[index];
+        if (member.ring_ == ring || member.ring_->earliest_pending() >= published_at) continue;
+        member.worker_->wake();
+        pending = true;
+    }
+    return pending;
 }
 
 void D3dOrdering::pause() const
@@ -72,13 +77,14 @@ void D3dOrdering::pause() const
     nanosleep(&wait, nullptr);
 }
 
-/* Held only while looking, so no member is removed - and freed - under the
- * scan, and never while pausing: the stream waited for takes it too. */
+/* Held only while looking and waking, so no member is removed - and its worker
+ * freed - under the scan, and never while pausing: the stream waited for takes
+ * it too. */
 bool D3dOrdering::must_wait(const RingConsumer *ring, uint64_t published_at)
 {
     AV_SCOPE("D3dOrdering::must_wait");
     host_.lock_mutex(mutex_);
-    const bool pending = earlier_pending(ring, published_at);
+    const bool pending = wake_earlier(ring, published_at);
     host_.unlock_mutex(mutex_);
     return pending;
 }

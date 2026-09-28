@@ -7,9 +7,10 @@
  * sides, which is what the host's HOST_CACHED types promise, and a chunk
  * that fell back to guest RAM is the kernel's lock of it, coherent either
  * way (docs/host-window.md). A device-local heap is the host's own size:
- * what lives there is host GPU memory the guest never maps, and the adapter
- * reports no local segment to budget it by. Any other heap is the adapter's
- * non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for this process.
+ * what lives there is host GPU memory the guest never maps, which the
+ * adapter's local segment only names to VidMm. Any other heap is the
+ * adapter's non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for
+ * this process.
  *
  * The host's answer is its word, so a count past the arrays, a device with
  * types and no heap, or a type on a heap past the heaps is refused and the

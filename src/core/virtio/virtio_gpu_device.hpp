@@ -8,6 +8,7 @@
 
 #include "core/pci/mapped_register_window.hpp"
 #include "core/platform/platform.hpp"
+#include "core/platform/wait_mutex.hpp"
 #include "core/support/status.hpp"
 #include "core/virtio/gpu_command_queue.hpp"
 #include "core/virtio/virtio_pci_transport.hpp"
@@ -19,6 +20,7 @@ namespace av {
 
 class BarMappings;
 class VirtioPciLayout;
+class VirtqSegment;
 struct VirtioGpuDeviceProbe;
 
 class VirtioGpuDevice {
@@ -52,9 +54,14 @@ public:
     /* A virtio-gpu request, not waited on: invalid_state unless running. */
     [[nodiscard]] Status send_control(const uint8_t *request, size_t length);
     /* A control request and the answer to it, waited for at PASSIVE: what the
-     * driver uses before dxgkrnl has connected the interrupt. */
+     * driver uses before dxgkrnl has connected the interrupt. One at a time,
+     * whoever asks: a second waits for the first's answer. */
     [[nodiscard]] Status ask_control(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
                                      uint32_t &written);
+    /* The same, the request continuing in `payload`, memory of the caller's
+     * the device reads after it (GpuCommandQueue::exchange_carrying). */
+    [[nodiscard]] Status ask_control_carrying(const uint8_t *request, size_t length, const VirtqSegment &payload,
+                                              uint8_t *response, size_t capacity, uint32_t &written);
     [[nodiscard]] Status send_cursor(const uint8_t *request, size_t length);
     /* Takes every completed request of the queue, logging refusals; a device
      * that lies about one is failed. */
@@ -97,6 +104,9 @@ private:
     VirtioPciTransport   transport_;
     GpuCommandQueue      control_;
     GpuCommandQueue      cursor_;
+    /* A control exchange waits for its own answer, and the queue holds one
+     * such wait at a time; the rest queue here instead of being refused. */
+    WaitMutex            asks_;
     uint32_t             scanouts_;
     uint32_t             message_interrupts_;
     bool                 running_;

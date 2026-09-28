@@ -200,9 +200,9 @@ uint64_t RingConsumer::earliest_pending() const
             return 0u;
         return batch.published_at();
     }
-    /* A batch the guest announced but its kernel has not handed over is not
-     * waited for: the kernel may be holding it until the waiting stream's own
-     * packet completes, and the two would wait on each other. */
+    /* Nothing past the head. A batch the process published without its kernel
+     * handing it over is past it, and waited for: D3dOrdering wakes this
+     * ring's worker to run it rather than wait for a doorbell. */
     return UINT64_MAX;
 }
 

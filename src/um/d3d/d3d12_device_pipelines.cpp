@@ -28,6 +28,8 @@ constexpr size_t   container_size_at = 24u;
 constexpr uint32_t most_parameters = 64u;
 constexpr uint32_t most_ranges = 512u;
 constexpr uint32_t most_samplers = 64u;
+/* CreateCommandSignature12's own maximum. */
+constexpr uint32_t most_indirect_arguments = 16u;
 constexpr uint32_t most_signatures = 1024u;
 
 /* A DXBC or DXIL container says its size at byte 24; a token stream and a
@@ -69,6 +71,32 @@ const d3d12proto::SignatureEntry *signatures_of(const ShaderRecord &shader)
     const size_t aligned = (shader.code_bytes + 7u) & ~size_t{7};
     return reinterpret_cast<const d3d12proto::SignatureEntry *>(reinterpret_cast<const uint8_t *>(&shader + 1) +
                                                                 aligned);
+}
+
+/* The DDI's argument types are the API's, in the same order, and each carries
+ * as many of its union's members as its kind has; the rest cross as 0. */
+d3d12proto::IndirectArgument indirect_argument(const D3D12DDI_INDIRECT_ARGUMENT_DESC &from)
+{
+    AV_SCOPE("indirect_argument");
+    d3d12proto::IndirectArgument to = {};
+    to.type = static_cast<uint32_t>(from.Type);
+    switch (from.Type) {
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW: to.a = from.VertexBuffer.Slot; break;
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT:
+        to.a = from.Constant.RootParameterIndex;
+        to.b = from.Constant.DestOffsetIn32BitValues;
+        to.c = from.Constant.Num32BitValuesToSet;
+        break;
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_INCREMENTING_CONSTANT:
+        to.a = from.IncrementingConstant.RootParameterIndex;
+        to.b = from.IncrementingConstant.DestOffsetIn32BitValues;
+        break;
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW: to.a = from.ConstantBufferView.RootParameterIndex; break;
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW: to.a = from.ShaderResourceView.RootParameterIndex; break;
+    case D3D12DDI_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW: to.a = from.UnorderedAccessView.RootParameterIndex; break;
+    default: break;
+    }
+    return to;
 }
 
 }  // namespace
@@ -361,6 +389,43 @@ VOID D3d12Device::destroy_root_signature(D3D12DDI_HROOTSIGNATURE handle)
     ObjectRecord &root = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), root.header.id), "Destroy12"));
     root = ObjectRecord{};
+}
+
+/* ---------------------------------------------------------------- command signatures */
+
+SIZE_T D3d12Device::calc_private_command_signature_size(const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *)
+{
+    AV_SCOPE("D3d12Device::calc_private_command_signature_size");
+    return sizeof(ObjectRecord);
+}
+
+HRESULT D3d12Device::create_command_signature(const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *args,
+                                              D3D12DDI_HCOMMANDSIGNATURE handle)
+{
+    AV_SCOPE("D3d12Device::create_command_signature");
+    if (args == nullptr || handle.pDrvPrivate == nullptr || args->NumArgumentDescs > most_indirect_arguments ||
+        (args->NumArgumentDescs != 0u && args->pArgumentDescs == nullptr))
+        return E_INVALIDARG;
+    d3d12proto::IndirectArgument arguments[most_indirect_arguments] = {};
+    for (UINT index = 0u; index < args->NumArgumentDescs; index++)
+        arguments[index] = indirect_argument(args->pArgumentDescs[index]);
+    ObjectRecord &signature = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
+    signature = ObjectRecord{};
+    stamp(signature.header, ObjectRecord::tag, next_id());
+    if (!sent(d3d12proto::rvk_d3d12_CreateCommandSignature12(wire(), signature.header.id,
+                                                             id_of(args->hRootSignature.pDrvPrivate), args->ByteStride,
+                                                             args->NumArgumentDescs, arguments),
+              "CreateCommandSignature12"))
+        return E_OUTOFMEMORY;
+    return S_OK;
+}
+
+VOID D3d12Device::destroy_command_signature(D3D12DDI_HCOMMANDSIGNATURE handle)
+{
+    AV_SCOPE("D3d12Device::destroy_command_signature");
+    ObjectRecord &signature = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
+    static_cast<void>(sent(d3d12proto::rvk_d3d12_Destroy12(wire(), signature.header.id), "Destroy12"));
+    signature = ObjectRecord{};
 }
 
 /* ---------------------------------------------------------------- pipelines */

@@ -2,6 +2,7 @@
  * GPU virtual address this device hands out, and a CPU-visible heap placed in
  * the session's arena so that what the application maps is what the host's
  * GPU reads. */
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/log_sink.hpp"
 #include "icd/d3d/d3d12_heap_arena.hpp"
@@ -17,7 +18,8 @@ namespace {
 constexpr uint32_t heap_default = 1u;
 constexpr uint32_t heap_upload = 2u;
 constexpr uint32_t heap_readback = 3u;
-/* D3D12_HEAP_FLAG_DENY_* and D3D12_HEAP_FLAG_SHARED. */
+/* D3D12_HEAP_FLAG_SHARED and D3D12_HEAP_FLAG_DENY_*. */
+constexpr uint32_t heap_shared = 0x1u;
 constexpr uint32_t deny_buffers = 0x4u;
 constexpr uint32_t deny_rt_ds_textures = 0x40u;
 constexpr uint32_t deny_non_rt_ds_textures = 0x80u;
@@ -35,6 +37,13 @@ constexpr uint32_t state_copy_dest = 0x400u;
 constexpr uint32_t buffer_dimension = 1u;
 constexpr uint64_t buffer_alignment = uint64_t{64} * 1024u;
 constexpr uint64_t refused_size = ~uint64_t{0};
+/* The runtime sums a resource's data, its additional data header and its
+ * additional data, aligning the running size up to each part's alignment in
+ * turn and taking any wrap as UINT64_MAX (d3d12core DDIRAIToAPIRAI). Aligned to
+ * 0, size - 1 + 0 is below size: every resource of a driver that leaves the
+ * alignments of parts it does not have at zero measures UINT64_MAX, and an
+ * application that sizes a heap by it has CreateHeap refused. */
+constexpr UINT32   no_additional_data_alignment = 1u;
 
 /* D3D12_RESOURCE_STATES by D3D12DDI_BARRIER_LAYOUT, the layout D3D12Core hands
  * a driver that takes legacy barriers the state it was made in as. */
@@ -131,7 +140,36 @@ uint64_t D3d12Device::allocation_bytes(const d3d12proto::ResourceDesc &desc, uin
     uint64_t bytes = refused_size;
     if (!sent(d3d12proto::rvk_d3d12_ResourceAllocation12(wire(), desc, &bytes, &alignment), "ResourceAllocation12"))
         return refused_size;
+    /* The runtime hands an application this size as it is, and one that sizes
+     * a heap by it gets E_INVALIDARG from CreateHeap with no word of why. */
+    if (bytes == refused_size) log_unsized(desc);
     return bytes;
+}
+
+void D3d12Device::log_unsized(const d3d12proto::ResourceDesc &desc)
+{
+    AV_SCOPE("D3d12Device::log_unsized");
+    char       line[192] = {};
+    TextBuffer text(line, sizeof(line));
+    text.append("rvkumd: the host sizes no resource: dimension ");
+    text.append_decimal(desc.dimension);
+    text.append(" format ");
+    text.append_decimal(desc.format);
+    text.append(" ");
+    text.append_decimal(static_cast<uint32_t>(desc.width));
+    text.append("x");
+    text.append_decimal(desc.height);
+    text.append("x");
+    text.append_decimal(desc.depth_or_array);
+    text.append(" mips ");
+    text.append_decimal(desc.mip_levels);
+    text.append(" samples ");
+    text.append_decimal(desc.sample_count);
+    text.append(" layout ");
+    text.append_decimal(desc.layout);
+    text.append(" flags 0x");
+    text.append_hex(desc.flags, 8u);
+    log_.write(text.text());
 }
 
 HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed)
@@ -194,9 +232,12 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     }
     const uint32_t state = initial_state(args, heap.type);
     bool           made = false;
+    resource.placed_in = &heap;
+    resource.heap_offset = offset;
     if (heap.made == 0u) {
-        made = d3d12proto::rvk_d3d12_CreateCommittedResource12(wire(), resource.header.id, properties_of(heap_default), 0u,
-                                                               desc, state, value, resource.address);
+        made = d3d12proto::rvk_d3d12_CreateCommittedResource12(wire(), resource.header.id, properties_of(heap_default),
+                                                               heap.flags & heap_shared, desc, state, value,
+                                                               resource.address);
     } else {
         resource.heap = heap.header.id;
         made = d3d12proto::rvk_d3d12_CreatePlacedResource12(wire(), resource.header.id, heap.header.id, offset, desc,
@@ -216,39 +257,75 @@ D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_heap_and_resource_siz
  * with the heap made for it, and a resource placed in an existing heap
  * (pHeap null), at the offset D3D12Core puts in ReuseBufferGPUVA. */
 HRESULT D3d12Device::create_heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
-                                              D3D12DDI_HRTRESOURCE, const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                                              D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                                               const D3D12DDI_CLEAR_VALUES *clear,
                                               D3D12DDI_HPROTECTEDRESOURCESESSION_0030, D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::create_heap_and_resource");
-    const HRESULT made = heap_and_resource(heap_args, heap_handle, args, clear, handle);
+    const HRESULT made = heap_and_resource(heap_args, heap_handle, runtime, args, clear, handle);
     if (FAILED(made)) refused("CreateHeapAndResource", static_cast<uint32_t>(made));
     return made;
 }
 
 HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
-                                       const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                                       D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                                        const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::heap_and_resource");
-    if (heap_handle.pDrvPrivate == nullptr) return E_INVALIDARG;
-    HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
+    if (heap_args != nullptr && heap_handle.pDrvPrivate == nullptr) return E_INVALIDARG;
     if (heap_args != nullptr) {
+        HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
         /* A committed resource's heap comes unsized - D3D12Core passes all
-         * ones - since its size is the resource's. */
+         * ones - since its size is the resource's; a shared one's (a swap
+         * chain buffer's) comes sized. */
         D3D12DDIARG_CREATEHEAP_0001 sized = *heap_args;
-        if ((sized.ByteSize == 0u || sized.ByteSize == refused_size) && args != nullptr) {
+        const bool unsized = sized.ByteSize == 0u || sized.ByteSize == refused_size;
+        /* An explicit heap arrives with a resource too - the buffer D3D12Core
+         * makes over all of it, which placed resources then name - but sized,
+         * and a buffer: only a committed resource's heap is one host object
+         * with it. */
+        const bool committed = args != nullptr && (unsized || args->ResourceType != D3D12DDI_RT_BUFFER);
+        if (committed && unsized) {
             uint64_t alignment = buffer_alignment;
             sized.ByteSize = allocation_bytes(resource_desc(*args), alignment);
             if (sized.Alignment < alignment) sized.Alignment = alignment;
         }
-        const HRESULT made = make_heap(sized, heap, args != nullptr);
-        if (FAILED(made)) return made;
+        const HRESULT made = make_heap(sized, heap, committed);
+        if (FAILED(made) || args == nullptr) return made;
+        if (handle.pDrvPrivate == nullptr) return E_INVALIDARG;
+        /* A committed texture whose heap D3D12Core sized itself is one made
+         * shared - a swap chain buffer, which DXGI makes for DWM to compose.
+         * The heap's flags say nothing of sharing or display (a driver whose
+         * heaps are all kernel allocations need not know); a shared heap's
+         * size is what D3D12Core asked the driver for, and a committed one's
+         * is left to the driver. The host makes it shared, and it gets the
+         * kernel allocation DWM opens it by. */
+        const bool shown = committed && !unsized && args->ResourceType == D3D12DDI_RT_TEXTURE2D;
+        if (shown) heap.flags |= heap_shared;
+        ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
+        const HRESULT   resource_made = make_resource(*args, clear, heap, 0u, resource);
+        if (FAILED(resource_made) || !shown) return resource_made;
+        return show(resource, runtime, *args);
     }
-    if (args == nullptr) return S_OK;
-    if (handle.pDrvPrivate == nullptr || heap.header.magic != HeapRecord::tag) return E_INVALIDARG;
-    const uint64_t offset = heap_args != nullptr ? 0u : args->ReuseBufferGPUVA.BaseAddress.UMD.Offset;
-    return make_resource(*args, clear, heap, offset, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
+    return place_resource(heap_handle, args, clear, handle);
+}
+
+/* A resource placed in an existing heap: D3D12Core names the heap by the
+ * buffer it made over all of it when the heap was created, and the offset
+ * into that buffer, and passes no heap handle. */
+HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIARG_CREATERESOURCE_0109 *args,
+                                    const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle)
+{
+    AV_SCOPE("D3d12Device::place_resource");
+    if (args == nullptr || handle.pDrvPrivate == nullptr) return E_INVALIDARG;
+    const D3D12DDIARG_HRESOURCE_PLACEMENT &at = args->ReuseBufferGPUVA.BaseAddress.UMD;
+    const auto *const spanning = static_cast<const ResourceRecord *>(at.hResource.pDrvPrivate);
+    HeapRecord *const in = heap_handle.pDrvPrivate != nullptr ? static_cast<HeapRecord *>(heap_handle.pDrvPrivate)
+                           : spanning != nullptr && spanning->header.magic == ResourceRecord::tag ? spanning->placed_in
+                                                                                                  : nullptr;
+    if (in == nullptr || in->header.magic != HeapRecord::tag) return E_INVALIDARG;
+    const uint64_t offset = (spanning != nullptr ? spanning->heap_offset : 0u) + at.Offset;
+    return make_resource(*args, clear, *in, offset, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
 }
 
 VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI_HRESOURCE handle)
@@ -301,6 +378,8 @@ VOID D3d12Device::check_resource_allocation_info(const D3D12DDIARG_CREATERESOURC
     uint64_t alignment = buffer_alignment;
     info->ResourceDataSize = allocation_bytes(resource_desc(*args), alignment);
     info->ResourceDataAlignment = static_cast<UINT32>(alignment);
+    info->AdditionalDataHeaderAlignment = no_additional_data_alignment;
+    info->AdditionalDataAlignment = no_additional_data_alignment;
     info->Layout = args->Layout;
 }
 
@@ -323,6 +402,8 @@ VOID D3d12Device::check_existing_resource_allocation_info(D3D12DDI_HRESOURCE han
     uint64_t alignment = buffer_alignment;
     info->ResourceDataSize = allocation_bytes(desc, alignment);
     info->ResourceDataAlignment = static_cast<UINT32>(alignment);
+    info->AdditionalDataHeaderAlignment = no_additional_data_alignment;
+    info->AdditionalDataAlignment = no_additional_data_alignment;
 }
 
 /* Only a texture in a CPU-visible heap has a layout the CPU sees, and this

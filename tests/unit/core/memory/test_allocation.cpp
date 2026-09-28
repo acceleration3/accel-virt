@@ -9,6 +9,9 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/guest_page_list.hpp"
 
@@ -56,6 +59,14 @@ public:
     { CHECK_STATUS(aperture_.initialize(0x100000000), av::Status::ok); }
 
     const av::MemorySegments &segments() const { return segments_; }
+    /* The host GPU's memory, reported after the aperture. */
+    void offer_local(std::uint64_t bytes)
+    {
+        const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
+        segments_.offer_local(av::CapsetInfo(
+            av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 1u, 64u,
+            12u, 24u, 0u, av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, bytes, 0u, "the host's")));
+    }
 
 private:
     av::ApertureSegment     aperture_;
@@ -118,7 +129,7 @@ TEST(allocation_report_to, tells_vidmm_the_size_segment_and_cpu_visibility)
 
 TEST(allocation_report_to, a_gpu_only_allocation_is_not_cpu_visible)
 { MockPlatform platform;
-  const AllocationDescriptor texture(AllocationKind::gdi, false, SurfaceLayout(1u, 1u, 21u, 4u), 4u, ScanoutTarget());
+  const AllocationDescriptor texture(AllocationKind::shadow, false, SurfaceLayout(1u, 1u, 21u, 4u), 4u, ScanoutTarget());
   Segments segments(platform); Allocation allocation(platform, segments.segments(), texture, 0x1000u);
   DxgkAllocationInfoRecord info = {};
   allocation.report_to(info);
@@ -223,6 +234,32 @@ TEST(allocation_report_to, a_primary_is_preferred_in_the_aperture_and_anything_e
   other.report_to(plain);
   CHECK_EQ(plain.PreferredSegment, 2u);   /* VidMm's own, after the one segment this adapter reports */
   CHECK_EQ(plain.SupportedReadSegmentSet, 2u); }
+
+/* A staging surface is the destination of an application's blt-model present -
+ * the window's redirection surface, which CDD makes as one - and the miniport
+ * writes it through its pages: it is pinned in the aperture, where those pages
+ * are known. */
+/* A window's redirection surface is pinned where its pages are known, and
+ * mapped write-back: dxgkrnl reads every blt-model frame out of it on the CPU.
+ * A surface of the user-mode driver's, beside it, keeps the default
+ * write-combined mapping. */
+TEST(allocation_report_to, a_staging_surface_is_pinned_in_the_aperture_and_cached)
+{ MockPlatform platform;
+  Segments segments(platform);
+  const AllocationDescriptor staging(AllocationKind::staging, true, SurfaceLayout(64u, 64u, 21u, 256u), 64u * 256u,
+                                     ScanoutTarget());
+  Allocation redirection(platform, segments.segments(), staging, 64u * 256u);
+  DxgkAllocationInfoRecord info = {};
+  redirection.report_to(info);
+  CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
+  CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
+  CHECK_EQ(info.Flags, 0x8005u);   /* CpuVisible | Cached | AccessedPhysically */
+  const AllocationDescriptor surface(AllocationKind::surface, true, SurfaceLayout(64u, 64u, 21u, 256u), 64u * 256u,
+                                     ScanoutTarget());
+  Allocation back_buffer(platform, segments.segments(), surface, 64u * 256u);
+  DxgkAllocationInfoRecord drawn = {};
+  back_buffer.report_to(drawn);
+  CHECK_EQ(drawn.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */ }
 
 /* The aperture pages are part of the allocation's own invariant. */
 TEST(allocation_invariants, aperture_pages_that_lost_theirs_are_detected)
@@ -338,12 +375,34 @@ TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
       DxgkAllocationInfoRecord info = {};
       allocation.report_to(info);
-      CHECK_EQ(info.PreferredSegment, av::ApertureSegment::system_memory_segment_id);
+      CHECK_EQ(info.PreferredSegment, 2u);
       CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
       CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
       CHECK_EQ(info.EvictionSegmentSet, 0u);
       CHECK_EQ(info.Flags, 1u);   /* still CPU-visible, and still guest-backed */
   } }
+
+/* With the host GPU's memory reported as the second segment, VidMm's own system
+ * memory is the third, and a client's buffer follows it there; nothing is ever
+ * placed in the host GPU's segment. */
+TEST(allocation_report_to, a_client_buffer_follows_vidmm_s_system_memory_past_the_local_segment)
+{ MockPlatform platform;
+  Segments segments(platform);
+  segments.offer_local(std::uint64_t{16} << 30u);
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), client, client.size());
+  DxgkAllocationInfoRecord info = {};
+  allocation.report_to(info);
+  CHECK_EQ(info.PreferredSegment, 3u);
+  CHECK_EQ(info.SupportedReadSegmentSet, 0x4u);
+  CHECK_EQ(info.SupportedWriteSegmentSet, 0x4u);
+
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  Allocation pinned(platform, segments.segments(), ring, ring.size());
+  DxgkAllocationInfoRecord pinned_info = {};
+  pinned.report_to(pinned_info);
+  CHECK_EQ(pinned_info.PreferredSegment, av::ApertureSegment::segment_id);
+  CHECK_EQ(pinned_info.SupportedReadSegmentSet, av::ApertureSegment::segment_set); }
 
 /* Feature 043: a context's ring, fence page and reply slot are published to the
  * device as guest blobs, and the only pages the driver ever learns are the ones

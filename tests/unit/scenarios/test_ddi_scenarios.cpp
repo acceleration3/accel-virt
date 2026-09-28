@@ -159,12 +159,12 @@ constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSE
 constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
 constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 
-av::CapsetInfo host_capset(const std::uint8_t *uuid)
+av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint64_t local_memory)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
                           1u, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
-                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
+                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, local_memory, 0u, "the host's"));
 }
 
 class Device {
@@ -203,7 +203,9 @@ public:
 
     /* What the device says it is from the next ask on: another host GPU behind
      * the same function is another device (feature 040, FR-005). */
-    void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+    void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid, 0u); }
+    /* The host GPU's local memory, as the capset gives it from the next ask on. */
+    void answer_local_memory(std::uint64_t bytes) { capset_ = host_capset(first_gpu, bytes); }
     /* `step` with the device answering, as it does at StartDevice: what a DDI
      * that waits on the control queue needs from the host. */
     template <typename Step>
@@ -296,7 +298,7 @@ private:
     FakeDxgkrnlAdapter    dxgkrnl_;
     FakeDxgkrnlFdo        fdo_;
     DisplayInfoAnswer     display_info_;
-    av::CapsetInfo        capset_ = host_capset(first_gpu);
+    av::CapsetInfo        capset_ = host_capset(first_gpu, 0u);
     bool                  created_blob_ = false;
     std::uint32_t         released_ = 0u;
     std::uint64_t         last_released_ = 0u;
@@ -533,6 +535,33 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
   CHECK_EQ(vidmm.create_segments(device.fdo().context()), 0);
   CHECK(vidmm.failed_rule() == av::SegmentRule::none);
   CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* dxdiag's Dedicated Memory and DXGI's DedicatedVideoMemory are the host GPU's
+ * own, as the capset reports it, and guest RAM stays the aperture it always
+ * was. A restart reads the capset again: a host GPU that reports none leaves
+ * the aperture alone. */
+TEST(ddi_scenario, vidmm_counts_the_host_gpu_s_memory_as_dedicated_video_memory)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  device.answer_local_memory(17095983104ull);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  av::FakeVidMm vidmm(device.fdo().dxgadapter());
+  CHECK_EQ(vidmm.create_segments(device.fdo().context()), 0);
+  CHECK(vidmm.failed_rule() == av::SegmentRule::none);
+  CHECK_EQ(vidmm.answer().NbSegment, 2u);
+  CHECK(vidmm.dedicated_video_memory() == 17095983104ull);
+  CHECK(vidmm.dedicated_system_memory() == 0u);
+  CHECK(vidmm.aperture_memory() == std::uint64_t{8} << 30u);
+
+  CHECK_EQ(device.fdo().stop_device(), 0);
+  device.forget_control();
+  device.answer_local_memory(0u);
+  CHECK_EQ(device.start_device(), 0);
+  CHECK_EQ(vidmm.create_segments(device.fdo().context()), 0);
+  CHECK_EQ(vidmm.answer().NbSegment, 1u);
+  CHECK(vidmm.dedicated_video_memory() == 0u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 TEST(ddi_scenario, the_render_core_is_created_once_present_arrives)

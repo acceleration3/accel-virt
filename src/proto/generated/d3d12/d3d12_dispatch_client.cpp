@@ -154,6 +154,14 @@ bool rvk_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t reso
     return t.send_async(kCmd_CreateCommittedResource12, b) == ::av::TransportResult::ok;
 }
 
+bool rvk_d3d12_ShareResource12(::av::ClientTransport& t, uint32_t resource, uint64_t key) {
+    AV_SCOPE("rvk_d3d12_ShareResource12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(resource);
+    b.write_pod<uint64_t>(key);
+    return t.send_async(kCmd_ShareResource12, b) == ::av::TransportResult::ok;
+}
+
 bool rvk_d3d12_CreatePlacedResource12(::av::ClientTransport& t, uint32_t resource, uint32_t heap, uint64_t offset, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address) {
     AV_SCOPE("rvk_d3d12_CreatePlacedResource12");
     ::av::WireWriter b = t.request_writer();
@@ -272,6 +280,18 @@ bool rvk_d3d12_CreateRootSignature12(::av::ClientTransport& t, uint32_t root, ui
     return t.send_async(kCmd_CreateRootSignature12, b) == ::av::TransportResult::ok;
 }
 
+bool rvk_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signature, uint32_t root, uint32_t byte_stride, uint32_t argument_count, const IndirectArgument* arguments) {
+    AV_SCOPE("rvk_d3d12_CreateCommandSignature12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(signature);
+    b.write_pod<uint32_t>(root);
+    b.write_pod<uint32_t>(byte_stride);
+    b.write_pod<uint32_t>(argument_count);
+    if (argument_count > 16u || (argument_count != 0u && arguments == nullptr)) return abandon(t);
+    if (argument_count != 0u) b.write(arguments, sizeof(*arguments) * argument_count);
+    return t.send_async(kCmd_CreateCommandSignature12, b) == ::av::TransportResult::ok;
+}
+
 bool rvk_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
     AV_SCOPE("rvk_d3d12_CreateGraphicsPipeline12");
     ::av::WireWriter b = t.request_writer();
@@ -369,6 +389,14 @@ bool rvk_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, u
     if (count > 64u || (count != 0u && lists == nullptr)) return abandon(t);
     if (count != 0u) b.write(lists, sizeof(*lists) * count);
     return t.send_async(kCmd_ExecuteCommandLists12, b) == ::av::TransportResult::ok;
+}
+
+bool rvk_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource) {
+    AV_SCOPE("rvk_d3d12_PresentResource12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(queue);
+    b.write_pod<uint32_t>(resource);
+    return t.send_async(kCmd_PresentResource12, b) == ::av::TransportResult::ok;
 }
 
 bool rvk_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
@@ -731,6 +759,19 @@ bool rvk_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t met
     b.write_pod<uint32_t>(metadata);
     if (!put_bytes(t, b, data, data_size)) return abandon(t);
     return t.send_async(kCmd_SetMarker12, b) == ::av::TransportResult::ok;
+}
+
+bool rvk_d3d12_ExecuteIndirect12(::av::ClientTransport& t, uint32_t list, uint32_t signature, uint32_t max_count, uint32_t argument_buffer, uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset) {
+    AV_SCOPE("rvk_d3d12_ExecuteIndirect12");
+    ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(list);
+    b.write_pod<uint32_t>(signature);
+    b.write_pod<uint32_t>(max_count);
+    b.write_pod<uint32_t>(argument_buffer);
+    b.write_pod<uint64_t>(argument_offset);
+    b.write_pod<uint32_t>(count_buffer);
+    b.write_pod<uint64_t>(count_offset);
+    return t.send_async(kCmd_ExecuteIndirect12, b) == ::av::TransportResult::ok;
 }
 
 }  // namespace av::d3d12proto

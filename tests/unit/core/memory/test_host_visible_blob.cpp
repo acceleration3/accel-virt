@@ -241,7 +241,9 @@ TEST(host_visible_blob, is_passive_only)
   static_cast<void>(blob.create(fixture.device(), resource, page));
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
-  while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {} }
+  while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {}
+  /* The wait for its turn at the queue, which blocks. */
+  CHECK(fixture.mapped().platform().claim(Violation::blocking_at_dispatch)); }
 
 /* The device refusing each step in turn: a create it will not make, an unmap it
  * will not take, and an unref it refuses. Each leaves the blob where it was,

@@ -3,8 +3,7 @@
  * image is copied into on the GPU, so the display composes straight
  * from video memory - no readback into guest-sized CPU memory on QEMU's main
  * loop, and no upload back into a texture there. Made on DXVK's own Vulkan
- * device through its interop, which is why DXVK is built with fd export
- * (tools/dxvk-patches). */
+ * device (DxvkVulkanDevice). */
 #ifndef AV_HOST_IMAGE_EXPORT_HPP
 #define AV_HOST_IMAGE_EXPORT_HPP
 
@@ -20,13 +19,15 @@ struct ID3D11Query;
 
 namespace av {
 
+class DxvkVulkanDevice;
+
 class HostImageExport {
 public:
     /* One, kept bound: switching the display between two exported images
      * every frame made gtk show a blank frame at each switch. */
     static constexpr uint32_t images = 1u;
 
-    HostImageExport();
+    explicit HostImageExport(DxvkVulkanDevice &vulkan);
     ~HostImageExport();
     HostImageExport(const HostImageExport &) = delete;
     HostImageExport &operator=(const HostImageExport &) = delete;
@@ -52,22 +53,11 @@ private:
         uint32_t         offset_;
     };
 
-    [[nodiscard]] bool connect(ID3D11Device5 *device);
     [[nodiscard]] bool make(ID3D11Device5 *device, uint32_t width, uint32_t height, uint32_t format);
     [[nodiscard]] bool make_image(ID3D11Device5 *device, Image &image);
     void               drop(Image &image);
 
-    void                      *interop_;   /* IDXGIVkInteropDevice1, held */
-    VkPhysicalDevice           physical_;
-    VkDevice                   device_;
-    PFN_vkCreateImage          create_image_;
-    PFN_vkDestroyImage         destroy_image_;
-    PFN_vkGetImageMemoryRequirements requirements_;
-    PFN_vkAllocateMemory       allocate_;
-    PFN_vkFreeMemory           free_;
-    PFN_vkBindImageMemory      bind_;
-    PFN_vkGetImageSubresourceLayout layout_;
-    PFN_vkGetMemoryFdKHR       memory_fd_;
+    DxvkVulkanDevice          &vulkan_;
     Image                      images_[images];
     uint32_t                   width_;
     uint32_t                   height_;

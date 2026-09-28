@@ -48,7 +48,8 @@ enum class D3dObjectKind : uint8_t {
     allocator12,
     list12,
     fence12,
-    query_heap12
+    query_heap12,
+    command_signature12
 };
 
 class D3dObjectTable {

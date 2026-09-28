@@ -1,6 +1,6 @@
-/* The one memory segment a WDDM 1.0-phase adapter on a stock virtio-gpu reports
- * to VidMm: an aperture over guest system memory, which the device reaches
- * through each allocation's pages. basicrender.sys reports the same shape. */
+/* The first segment the adapter reports to VidMm: an aperture over guest
+ * system memory, which the device reaches through each allocation's pages.
+ * basicrender.sys reports the same shape as its only segment. */
 #ifndef AV_APERTURE_SEGMENT_HPP
 #define AV_APERTURE_SEGMENT_HPP
 
@@ -22,9 +22,6 @@ public:
      * its only segment; an empty set leaves VidMmInitDmaPool (dxgmms2.sys
      * @1400c7990) with no segment to take a DMA buffer from. */
     static constexpr uint32_t segment_set = 1u << (segment_id - 1u);
-    /* The system memory segment VidMm appends after this one for a GPU MMU
-     * adapter (CreatePhysicalAdapterSegments). */
-    static constexpr uint32_t system_memory_segment_id = segment_id + 1u;
     static constexpr uint64_t page_bytes = 0x1000u;
     /* Where the segment starts, as basicrender.sys reports it: the addresses
      * dxgkrnl hands back for an allocation in it are offsets from here. */
