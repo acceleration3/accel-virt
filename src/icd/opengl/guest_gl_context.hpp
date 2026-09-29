@@ -18,6 +18,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/batched_transport.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/opengl/reported_gl_errors.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
@@ -112,6 +113,9 @@ public:
     /* The calls held so far go to the host: at glFlush, and before another
      * context may depend on them. */
     void                 flush();
+    /* The newest batch sent, for another thread to wait on (BatchMark); one
+     * of no batch unless made. */
+    BatchMark            mark() const;
 
     ClientArrayState &arrays();
     UniformShapes    &uniforms();
@@ -133,6 +137,10 @@ public:
      * GL_CONTEXT_LOST for a robust one, GL_OUT_OF_MEMORY for any other
      * (T040); then GL_NO_ERROR, 0. */
     uint32_t    take_error();
+    /* The next error the host published for this context, in `error`: false
+     * when there is no word to read - no arena, or a host that answers only
+     * when asked - and the caller asks it instead. */
+    bool     take_host_error(uint32_t &error);
     /* Asked for with both robust access and lose-on-reset. */
     bool        robust() const;
     /* What glGetGraphicsResetStatus answers without the host: for a lost
@@ -163,7 +171,10 @@ private:
     enum : uint32_t { vendor_row, renderer_row, version_row, shading_row, strings };
     static constexpr uint32_t string_names[strings] = {gl_vendor, gl_renderer, gl_version,
                                                         gl_shading_language_version};
-    static constexpr uint64_t arena_bytes = KmtBlobArena::default_bytes;
+    /* Room beside the leases for a window's two frames the present thread
+     * shows (BackBufferPresenter::slot_count): 16.6 MB at 1920x1080, and the
+     * rest still lends what one frame of it would. */
+    static constexpr uint64_t arena_bytes = uint64_t{48} << 20u;
 
     [[nodiscard]] Status build();
     /* One ask: built, learned, and held or given back whole. */
@@ -194,6 +205,7 @@ private:
     ObjectStorage<KmtTransport>    transport_;
     ObjectStorage<icd::BatchedTransport> batched_;
     ObjectStorage<KmtBlobArena>    arena_;
+    ReportedGlErrors               reported_;
     ClientArrayState               arrays_;
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;

@@ -591,6 +591,20 @@ TEST(guest_gl_context, a_make_that_fails_keeps_no_copies_of_buffers)
   CHECK_EQ(context->shadows().held(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
+/* The newest batch the context sent, for the present thread to wait on: none
+ * before the make, and one it can wait on after a batch. */
+TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
+{ GlContextRig rig;
+  Context      context(rig);
+  CHECK(!context->mark().waitable());
+  rig.host().gl_make(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  av::glproto::rvk_glFlush(*context->wire());
+  context->flush();
+  const av::BatchMark mark = context->mark();
+  CHECK(mark.waitable());
+  CHECK(mark.fence() != 0u); }
+
 /* Feature 053: the context owns the memory objects and semaphores it imported,
  * because a GL name belongs to the context that made it. */
 TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)

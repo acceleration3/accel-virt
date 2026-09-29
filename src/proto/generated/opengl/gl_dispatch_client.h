@@ -293,6 +293,7 @@ void rvk_glGetTextureParameterIuiv(::av::ClientTransport& rvk_t, GLuint texture,
 void rvk_glGetTextureParameterfv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLfloat* params);
 void rvk_glGetTextureParameteriv(::av::ClientTransport& rvk_t, GLuint texture, GLenum pname, GLint* params);
 void rvk_glGetTextureSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset = false);
+void rvk_glGetTextureSubImage_into_blob(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, uint64_t rvk_blob_at);
 void rvk_glGetTransformFeedbackVarying(::av::ClientTransport& rvk_t, GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLsizei* size, GLenum* type, GLchar* name);
 void rvk_glGetTransformFeedbacki64_v(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLuint index, GLint64* param);
 void rvk_glGetTransformFeedbacki_v(::av::ClientTransport& rvk_t, GLuint xfb, GLenum pname, GLuint index, GLint* param);

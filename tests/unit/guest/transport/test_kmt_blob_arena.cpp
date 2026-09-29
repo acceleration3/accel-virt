@@ -179,8 +179,9 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
   std::memset(second.data(), 0xA5, second.bytes());
   CHECK_EQ(view[4096u + 99u], 0xA5u);
   CHECK(rig.arena().invariants_hold());
-  /* A request past the chunk is no lease, and takes nothing. */
-  CHECK(!blobs.take(16u * mib).taken());
+  /* A request past the room below the error word is no lease, and takes
+   * nothing. */
+  CHECK(!blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());
   CHECK_EQ(blobs.used(), 4196u);
   /* Only the top lease rewinds; retiring returns them all. */
   blobs.give_back(first);
@@ -189,7 +190,8 @@ TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_vie
   CHECK_EQ(blobs.used(), 4096u);
   blobs.retire_all();
   CHECK_EQ(blobs.used(), 0u);
-  CHECK(blobs.take(16u * mib).taken());
+  CHECK(!blobs.take(16u * mib).taken());
+  CHECK(blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());
   CHECK(rig.arena().invariants_hold());
   /* A second open is refused and asks nothing. */
   CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
@@ -215,7 +217,8 @@ TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
       CHECK_STATUS(rig.arena().open(one.asked), Status::ok);
       CHECK_EQ(rig.arena().bytes(), one.made);
       CHECK_EQ(rig.kmt().allocation_pages(rig.kmt().bound_allocation(0u)), one.made / MockKmt::page_bytes);
-      CHECK(rig.transport().blobs().take(static_cast<std::size_t>(one.made)).taken());
+      CHECK(!rig.transport().blobs().take(static_cast<std::size_t>(one.made)).taken());
+      CHECK(rig.transport().blobs().take(static_cast<std::size_t>(one.made - KmtBlobArena::error_word_bytes)).taken());
       CHECK(rig.arena().invariants_hold());
       rig.host().nop();
       CHECK_STATUS(rig.arena().close(), Status::ok);
@@ -311,6 +314,28 @@ TEST(kmt_blob_arena, close_lets_every_part_go_and_answers_the_first_failure)
     CHECK_STATUS(rig.arena().open(0u), Status::ok);
     rig.host().nop();
     CHECK_STATUS(rig.arena().close(), Status::ok); } }
+
+/* The chunk's last eight bytes are the host's error word: zeroed at open,
+ * which is what a host that publishes none leaves, read whole, and never
+ * lent, so no lease the host writes into can overwrite it. */
+TEST(kmt_blob_arena, keeps_the_last_word_for_the_hosts_errors)
+{ Rig rig;
+  CHECK_EQ(rig.arena().host_errors(), 0u);
+  rig.host_takes_the_import();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  std::uint8_t *const chunk = rig.kmt().view_of(rig.kmt().bound_allocation(0u));
+  CHECK_EQ(rig.arena().host_errors(), 0u);
+  const std::uint64_t word = 0x8000000000030201ull;
+  std::memcpy(chunk + 16u * mib - 8u, &word, sizeof word);
+  CHECK_EQ(rig.arena().host_errors(), word);
+  av::ClientBlobArena &blobs = rig.transport().blobs();
+  CHECK_EQ(blobs.room(), 16u * mib - 8u);
+  const ClientBlobLease all = blobs.take(blobs.room());
+  CHECK(all.taken());
+  CHECK(static_cast<const std::uint8_t *>(all.data()) + all.bytes() == chunk + 16u * mib - 8u);
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  CHECK_EQ(rig.arena().host_errors(), 0u); }
 
 TEST(kmt_blob_arena, the_invariant_catches_a_size_it_never_makes_and_lending_out_of_step)
 { Rig rig;

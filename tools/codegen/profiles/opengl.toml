@@ -395,6 +395,13 @@ driver_implemented = [
 # that it be finished, and the ring has already started it.
 synchronous = ["glFinish"]
 
+# Reads that may also go one-way, the host writing the pixels at an offset
+# of the blob arena the caller set aside (rvk_<name>_into_blob). A swap's
+# read-back of the window is sent this way so that the application's render
+# thread does not wait for its own frame to finish: the present thread waits
+# for the batch instead, and shows the frame the moment it is there.
+read_into_blob = ["glGetTextureSubImage"]
+
 # What a pointer query would answer with is a pointer in the guest,
 # which the host has never seen: the guest kept it when the application
 # passed it and answers from there. These never cross.

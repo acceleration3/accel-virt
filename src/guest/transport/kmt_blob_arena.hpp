@@ -27,6 +27,7 @@ public:
      * and an application's allocator takes them 64 MiB at a time: 256 MiB ran
      * out under a game streaming its world in. */
     static constexpr uint64_t max_bytes = uint64_t{1} << 30u;
+    static constexpr uint64_t error_word_bytes = sizeof(uint64_t);
 
     KmtBlobArena(GuestConnection &connection, KmtTransport &transport);
     ~KmtBlobArena();
@@ -55,6 +56,9 @@ public:
      * same bytes on both sides - which is what lets a buffer be made over it
      * (feature 052, T033). */
     uint8_t             *view() const;
+    /* The host's error word, the chunk's last eight bytes, which the arena
+     * never lends (docs/protocol.md, "Error word"); 0 unless lending. */
+    uint64_t             host_errors() const;
 
     bool invariants_hold() const;
 

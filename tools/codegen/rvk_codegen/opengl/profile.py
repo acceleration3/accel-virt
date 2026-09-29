@@ -35,6 +35,9 @@ class Profile:
     extension_requires: dict[str, str] = field(default_factory=dict)
     # Commands that must not be sent one-way. See Registry.synchronous.
     synchronous: set[str] = field(default_factory=set)
+    # Reads that may also be sent one-way into blob room the caller keeps.
+    # See Registry.read_into_blob.
+    read_into_blob: set[str] = field(default_factory=set)
     # Other spellings of a generated command, where the registry
     # declares no alias of its own.
     aliases: dict[str, str] = field(default_factory=dict)
@@ -85,6 +88,7 @@ def load(profile_path: Path, ids_path: Path) -> Profile:
         driver_implemented=set(data.get("driver_implemented", [])),
         extension_requires=dict(data.get("extension_requires", {})),
         synchronous=set(data.get("synchronous", [])),
+        read_into_blob=set(data.get("read_into_blob", [])),
         aliases={str(k): str(v) for k, v in data.get("aliases", {}).items()},
         params=dict(data.get("params", {})),
         pname_counts={k: int(v) for k, v in data.get("pname_counts", {}).items()},

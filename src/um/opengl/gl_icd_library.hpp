@@ -1,6 +1,7 @@
 /* rvkgl.dll's ICD root and what it is constructed over: the process heap, the
  * two thread locks, the log file, D3DKMT through gdi32, the application's
- * windows, thread-local storage and the loaded opengl32.dll. One per process,
+ * windows, thread-local storage, the loaded opengl32.dll, and the present
+ * thread with the lock, D3DKMT waits and events of its own. One per process,
  * in the exports' storage (rvkgl_exports.cpp), constructed on opengl32's first
  * call rather than at DLL attach, where the loader lock forbids opening a file
  * or an event. Translation only: what the root decides is in src/icd/opengl,
@@ -10,11 +11,14 @@
 
 #include "core/support/object_storage.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/gl_present_loop.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/icd/gdi_window_surface.hpp"
+#include "um/icd/windows_service_thread.hpp"
+#include "um/icd/windows_wake_signal.hpp"
 #include "um/opengl/loaded_opengl32.hpp"
 #include "um/opengl/tls_thread_slot.hpp"
 #include "um/trace/process_trace.hpp"
@@ -67,6 +71,13 @@ private:
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;
+        /* Before the root, which settles every presenter on it as it goes. */
+        SrwLock              present_lock;
+        GdiKmt               present_kmt;
+        WindowsServiceThread present_thread;
+        WindowsWakeSignal    present_handed;
+        WindowsWakeSignal    present_shown;
+        glicd::GlPresentLoop presents;
         glicd::GlIcdRoot  root;
         ProcessTrace      trace;
     };
@@ -76,6 +87,7 @@ private:
     ObjectStorage<Seams> seams_;
     bool                 refused_;
     bool                 started_trace_ = false;
+    bool                 started_presents_ = false;
     ProcessTrace::Filter crashed_;
 };
 

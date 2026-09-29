@@ -55,7 +55,7 @@ uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
 }  // namespace
 
 OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), import_(), objects_(), fences_(), region_(), resolved_(0u), ran_(0u),
+    : context_(), gl_(), import_(), objects_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
       lost_(false), current_(false)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -150,10 +150,33 @@ void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
     reached = 0u;
 }
 
+/* A batch that never made the context current raised nothing. */
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");
+    if (current_) publish_errors();
     current_ = false;
+}
+
+/* glGetError was a round trip, and an application asks after everything:
+ * Minecraft clears the flags before most calls, which was two thirds of its
+ * render thread's time in the driver. The host is the only side that sees an
+ * error and reading one clears it, so the batch's errors are read here and
+ * counted into the word the guest reads without asking (docs/protocol.md,
+ * "Error word"). It is stored before the device publishes the batch's head,
+ * so a guest that sees the batch done sees its errors. */
+void OpenGlBackend::publish_errors()
+{
+    AV_SCOPE("OpenGlBackend::publish_errors");
+    if (gl_.glGetError == nullptr) return;
+    for (uint32_t flag = 0u; flag < error_flags; flag++) {
+        const uint32_t error = gl_.glGetError();
+        if (error == 0u) break;
+        errors_.record(error);
+    }
+    if (region_.length() < sizeof(uint64_t)) return;
+    uint8_t *const word = region_.at(region_.length() - sizeof(uint64_t), sizeof(uint64_t));
+    if (word != nullptr) __atomic_store_n(reinterpret_cast<uint64_t *>(word), errors_.word(), __ATOMIC_RELEASE);
 }
 
 bool OpenGlBackend::lost() const

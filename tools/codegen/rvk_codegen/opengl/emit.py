@@ -622,6 +622,46 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         out.append("    return rvk_present != 0;")
 
 
+def _into_blob_variant(cmd: Command, h: list[str], c: list[str]) -> None:
+    """rvk_<name>_into_blob: the read sent one-way, its pixels written by
+    the host at `rvk_blob_at` of the arena. See Registry.read_into_blob."""
+    pixels = [p for p in cmd.params if p.role is Role.PIXELS_OUT]
+    size = _stated_size(cmd)
+    if len(pixels) != 1 or size is None or _ret_kind(cmd) != "void":
+        raise GenerationError(f"read_into_blob: {cmd.name} is not a void read of one stated-size pixel array")
+    out = pixels[0]
+    params = ["::av::ClientTransport& rvk_t"]
+    for p in cmd.params:
+        if p.role is Role.IGNORED or p is out:
+            continue
+        params.append(f"{p.type.cpp()} {p.name}")
+    params.append("uint64_t rvk_blob_at")
+    signature = f"void rvk_{cmd.name}_into_blob({', '.join(params)})"
+    h.append(f"{signature};")
+    c.append(f"{signature} {{")
+    c.append(f'    AV_SCOPE("rvk_{cmd.name}_into_blob");')
+    c.append("    ::av::WireWriter rvk_b = rvk_t.request_writer();")
+    for p in cmd.params:
+        if p is out:
+            # Mode 3, as the synchronous read spells a blob lease: the
+            # server cannot tell the two apart, and answers neither
+            # through the reply slot.
+            c.append("    rvk_b.write_pod<uint8_t>(3);")
+            c.append(f"    rvk_b.write_varint(static_cast<uint64_t>({size}));")
+            c.append("    rvk_b.write_varint(rvk_blob_at);")
+        else:
+            _encode_param(cmd, p, c)
+    c.append("    if (rvk_b.status() != ::av::Status::ok) {")
+    c.append(f'        ::av::icd::payload_dropped("gl", "{cmd.name}",')
+    c.append("                                       rvk_b.offset());")
+    c.append("        rvk_t.end_call();")
+    c.append("        return;")
+    c.append("    }")
+    c.append(f"    (void)rvk_t.send_async(kCmd_{cmd.name}, rvk_b);")
+    c.append("}")
+    c.append("")
+
+
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>\n",
@@ -710,6 +750,8 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             _decode_reply(cmd, c)
             c.append("}")
         c.append("")
+        if cmd.name in reg.read_into_blob:
+            _into_blob_variant(cmd, h, c)
     h += ["", "}  // namespace av::glproto", ""]
     c += ["}  // namespace av::glproto", ""]
     write(out_dir / "gl_dispatch_client.h", "\n".join(h))

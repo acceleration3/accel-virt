@@ -30,6 +30,7 @@ class WindowSurface;
 namespace av::glicd {
 
 class ClientArrayState;
+class GlPresentLoop;
 class PixelFormat;
 struct WindowFramebuffersProbe;
 
@@ -79,11 +80,19 @@ public:
     uint32_t buffer_for(uint32_t buffer, bool drawing) const;
     /* A glGetIntegerv answer as the application must see it. */
     int32_t  answer(uint32_t pname, int32_t host_value) const;
-    /* The frame of `window` onto `dc` and, when the window's size changed, its
-     * framebuffer made again - bound again where the application left the
-     * window bound. false for a window this context never drew on. */
+    /* The frame of `window` onto `dc`, or read for `loop` to show
+     * (BackBufferPresenter::present). false for a window this context never
+     * drew on. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                     const PixelFormat &format, icd::WindowSurface &surface);
+                     icd::WindowSurface &surface, GlPresentLoop *loop);
+    /* The frame the last present read for the present thread goes to it, to
+     * show once the batch `mark` names is done. */
+    void     hand_over(const BatchMark &mark);
+    /* After a swap: when `window`'s size changed, its framebuffer made again -
+     * bound again where the application left the window bound - before the
+     * next frame. One that cannot have its new size keeps the old until the
+     * window is gone. */
+    void     follow(ClientTransport &wire, void *window, const PixelFormat &format, icd::WindowSurface &surface);
     /* The presenters of windows that are gone, given up. */
     void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
     /* Every presenter given up; the host's objects deleted through `wire` when there is one. */
@@ -101,6 +110,8 @@ private:
     icd::LogSink                       &log_;
     ObjectStorage<BackBufferPresenter>  presenters_[max_windows];
     uint32_t                            current_;
+    /* The presenter the last present read a frame for; max_windows when none. */
+    uint32_t                            presented_;
     bool                                draws_window_;
     bool                                reads_window_;
     /* The buffer glReadBuffer last named, GL_BACK until it is named. */

@@ -84,6 +84,20 @@ void ClientBlobArena::retire_all()
     used_ = 0u;
 }
 
+ClientBlobLease ClientBlobArena::set_aside(size_t count)
+{
+    AV_SCOPE("ClientBlobArena::set_aside");
+    if (count == 0u || count > capacity_ - used_) return ClientBlobLease{};
+    capacity_ -= count;
+    return ClientBlobLease(block_ + capacity_, capacity_, count);
+}
+
+void ClientBlobArena::restore(const ClientBlobLease &aside)
+{
+    AV_SCOPE("ClientBlobArena::restore");
+    if (aside.taken() && aside.offset() == capacity_) capacity_ += aside.bytes();
+}
+
 size_t ClientBlobArena::used() const
 {
     AV_SCOPE("ClientBlobArena::used");

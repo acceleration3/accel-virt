@@ -7,8 +7,10 @@
 namespace av {
 
 GlIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(L"rvkgl"), kmt(), surface(), slot(), opengl32(),
-      root(heap, kmt, lock, send_lock, log, surface, slot, opengl32, glicd::gl_icd_binding), trace()
+    : heap(), lock(), send_lock(), log(L"rvkgl"), kmt(), surface(), slot(), opengl32(), present_lock(),
+      present_kmt(), present_thread(), present_handed(), present_shown(),
+      presents(present_thread, present_handed, present_shown, present_lock, present_kmt, surface, log),
+      root(heap, kmt, lock, send_lock, log, surface, slot, opengl32, presents, glicd::gl_icd_binding), trace()
 {
     AV_SCOPE("GlIcdLibrary::Seams::Seams");
     log.open();
@@ -23,6 +25,15 @@ bool GlIcdLibrary::ready()
         seams_.destroy();
         refused_ = true;
         return false;
+    }
+    if (seams_.constructed() && !started_presents_) {
+        started_presents_ = true;
+        Seams &seams = seams_.object();
+        if (seams.present_kmt.initialize() != Status::ok || seams.present_handed.initialize() != Status::ok ||
+            seams.present_shown.initialize() != Status::ok) {
+            seams.log.write("rvkgl: no present thread: its D3DKMT event or wake events could not be made");
+            seams.presents.refuse();
+        }
     }
     if (seams_.constructed() && !started_trace_) {
         started_trace_ = true;

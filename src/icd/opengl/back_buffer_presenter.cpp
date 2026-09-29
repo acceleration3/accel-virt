@@ -7,6 +7,7 @@
 #include "icd/common/log_sink.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_surface.hpp"
+#include "icd/opengl/gl_present_loop.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/client_transport.hpp"
 
@@ -25,7 +26,8 @@ static_assert(BackBufferPresenter::max_edge * 4u <= BackBufferPresenter::inline_
 
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, icd::LogSink &log)
     : memory_(memory), log_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
-      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(false)
+      framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(false),
+      loop_(nullptr), arena_(nullptr), room_(), pending_(slot_count)
 {
     AV_SCOPE("BackBufferPresenter::BackBufferPresenter");
 }
@@ -45,6 +47,8 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
     if (!surface.client_size(window, width, height) || width > max_edge || height > max_edge)
         return Status::invalid_parameter;
     if (framebuffers_[draw] != 0u && window == window_ && width == width_ && height == height_) return Status::ok;
+    /* The thread may be showing a frame of the old size from the old room. */
+    settle();
     delete_objects(wire);
     window_ = window;
     format_ = format;
@@ -96,7 +100,7 @@ bool     BackBufferPresenter::double_buffered() const
 }
 
 bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState &state, void *dc,
-                                  icd::WindowSurface &surface)
+                                  icd::WindowSurface &surface, GlPresentLoop *loop)
 {
     AV_SCOPE("BackBufferPresenter::present");
     if (framebuffers_[draw] == 0u) return false;
@@ -106,6 +110,9 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     if (framebuffers_[resolve] != 0u)
         glproto::rvk_glBlitNamedFramebuffer(wire, framebuffers_[draw], framebuffers_[resolve], 0, 0, right, top, 0, 0,
                                             right, top, gl_color_buffer_bit, gl_nearest);
+    if (loop != nullptr && queue_read(wire, state, *loop)) return true;
+    /* Shown after whatever the thread still has of this window's. */
+    settle();
     const bool plain = pack_is_plain(state);
     if (!plain) set_pack(wire, state, true);
     read_back(wire);
@@ -124,9 +131,42 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
     return true;
 }
 
+void BackBufferPresenter::hand_over(const BatchMark &mark)
+{
+    AV_SCOPE("BackBufferPresenter::hand_over");
+    if (pending_ == slot_count || loop_ == nullptr) return;
+    const HandedFrame frame(*this, pending_, room_pixels(pending_), width_, height_, window_, mark);
+    pending_ = slot_count;
+    /* A frame the table has no row for is not shown; the next one will be. */
+    static_cast<void>(loop_->hand(frame));
+}
+
+void BackBufferPresenter::shown(const uint8_t *pixels, uint32_t width, uint32_t height)
+{
+    AV_SCOPE("BackBufferPresenter::shown");
+    const size_t bytes = static_cast<size_t>(width) * height * bytes_per_pixel;
+    if (pixels_ == nullptr || bytes > capacity_) return;
+    __builtin_memcpy(pixels_, pixels, bytes);
+    front_.presented(pixels_, width, height);
+}
+
+bool BackBufferPresenter::read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
+                                     uint32_t type, void *pixels) const
+{
+    AV_SCOPE("BackBufferPresenter::read_front");
+    if (loop_ != nullptr) loop_->acquire();
+    const bool read = front_.read(x, y, width, height, format, type, pixels);
+    if (loop_ != nullptr) loop_->release();
+    return read;
+}
+
 void BackBufferPresenter::release(ClientTransport *wire)
 {
     AV_SCOPE("BackBufferPresenter::release");
+    settle();
+    give_room_back();
+    pending_ = slot_count;
+    loop_ = nullptr;
     if (wire != nullptr) delete_objects(*wire);
     forget_objects();
     front_.forget();
@@ -146,6 +186,8 @@ void BackBufferPresenter::report(StateWriter &writer, uint32_t index) const
     writer.number("height", height_);
     writer.number("samples", format_.samples());
     writer.flag("srgb", format_.srgb());
+    writer.number("room", room_.bytes());
+    writer.number("pending", pending_);
     writer.close();
 }
 
@@ -154,6 +196,8 @@ void BackBufferPresenter::report(StateWriter &writer, uint32_t index) const
 bool BackBufferPresenter::invariants_hold() const
 {
     AV_SCOPE("BackBufferPresenter::invariants_hold");
+    if (pending_ > slot_count || room_.taken() != (arena_ != nullptr)) return false;
+    if (pending_ != slot_count && !room_.taken()) return false;
     const bool multisampled = format_.samples() != 0u;
     const bool depth_stencil = format_.depth_bits() != 0u;
     if (framebuffers_[draw] == 0u)
@@ -269,6 +313,70 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
                                           gl_unsigned_byte, static_cast<GLsizei>(row_bytes * taken),
                                           pixels_ + row_bytes * row);
     }
+}
+
+/* The present thread cannot have a frame of this presenter's before a present
+ * reads one into a slot, and one read is always handed over before the next
+ * present: so a free slot is one the thread is not holding. */
+bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentLoop &loop)
+{
+    AV_SCOPE("BackBufferPresenter::queue_read");
+    if (!loop.ready() || !reserve_room(wire, loop)) return false;
+    const uint32_t slot = loop.free_slot(*this, slot_count, pending_);
+    /* Nothing came free: the thread is stuck, and the frame is dropped. */
+    if (slot == slot_count) return true;
+    const bool plain = pack_is_plain(state);
+    if (!plain) set_pack(wire, state, true);
+    const size_t frame = frame_bytes();
+    glproto::rvk_glGetTextureSubImage_into_blob(wire, texture_, 0, 0, 0, 0, static_cast<GLsizei>(width_),
+                                                static_cast<GLsizei>(height_), 1, gl_bgra, gl_unsigned_byte,
+                                                static_cast<GLsizei>(frame), room_.offset() + slot * frame);
+    if (!plain) set_pack(wire, state, false);
+    pending_ = slot;
+    return true;
+}
+
+bool BackBufferPresenter::reserve_room(ClientTransport &wire, GlPresentLoop &loop)
+{
+    AV_SCOPE("BackBufferPresenter::reserve_room");
+    const size_t wanted = frame_bytes() * slot_count;
+    if (room_.taken() && room_.bytes() == wanted) return true;
+    loop_ = &loop;
+    settle();
+    give_room_back();
+    ClientBlobArena &arena = wire.blobs();
+    room_ = arena.set_aside(wanted);
+    if (!room_.taken()) return false;
+    arena_ = &arena;
+    return true;
+}
+
+/* Only the most recent room goes back to lending; an older one is lent again
+ * when the arena closes with the context. */
+void BackBufferPresenter::give_room_back()
+{
+    AV_SCOPE("BackBufferPresenter::give_room_back");
+    if (arena_ != nullptr) arena_->restore(room_);
+    arena_ = nullptr;
+    room_ = ClientBlobLease();
+}
+
+void BackBufferPresenter::settle() const
+{
+    AV_SCOPE("BackBufferPresenter::settle");
+    if (loop_ != nullptr) loop_->settle(*this);
+}
+
+uint8_t *BackBufferPresenter::room_pixels(uint32_t slot) const
+{
+    AV_SCOPE("BackBufferPresenter::room_pixels");
+    return static_cast<uint8_t *>(room_.data()) + slot * frame_bytes();
+}
+
+size_t BackBufferPresenter::frame_bytes() const
+{
+    AV_SCOPE("BackBufferPresenter::frame_bytes");
+    return static_cast<size_t>(width_) * height_ * bytes_per_pixel;
 }
 
 /* Never zero, so a 0x0 window still has storage the framebuffer can be complete with. */

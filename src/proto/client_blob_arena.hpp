@@ -59,6 +59,14 @@ public:
     /* Every lease back at once: the host has answered a command sent after
      * all of them, so it has read every one. */
     void            retire_all();
+    /* `count` bytes off the top for a caller that keeps them itself - frames
+     * the host writes that the guest shows later, which no retire may lend
+     * again. Not taken for a count of zero, no arena, or more than the room
+     * below. */
+    ClientBlobLease set_aside(size_t count);
+    /* The most recent room set aside goes back to lending; any other is kept
+     * set aside, since lending can only grow at the top. */
+    void            restore(const ClientBlobLease &aside);
 
     size_t used() const;
     /* What the next lease can have at most. */

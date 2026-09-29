@@ -43,7 +43,11 @@ Status KmtBlobArena::open(uint64_t bytes)
     if (status != Status::ok) return status;
     undo.dismiss();
     bytes_ = size;
-    transport_.blobs().lend(const_cast<uint8_t *>(chunk_.view()), static_cast<size_t>(size));
+    /* The host writes the word only once it publishes one: zero is what an
+     * older host leaves, which the context reads as "ask instead". */
+    volatile unsigned char *const word = chunk_.view() + size - error_word_bytes;
+    for (uint64_t at = 0u; at < error_word_bytes; at++) word[at] = 0u;
+    transport_.blobs().lend(const_cast<uint8_t *>(chunk_.view()), static_cast<size_t>(size - error_word_bytes));
     return Status::ok;
 }
 
@@ -84,6 +88,14 @@ uint8_t *KmtBlobArena::view() const
     AV_SCOPE("KmtBlobArena::view");
     if (bytes_ == 0u) return nullptr;
     return const_cast<uint8_t *>(chunk_.view());
+}
+
+uint64_t KmtBlobArena::host_errors() const
+{
+    AV_SCOPE("KmtBlobArena::host_errors");
+    if (bytes_ == 0u) return 0u;
+    const auto *const word = reinterpret_cast<const volatile uint64_t *>(chunk_.view() + bytes_ - error_word_bytes);
+    return __atomic_load_n(word, __ATOMIC_ACQUIRE);
 }
 
 bool KmtBlobArena::invariants_hold() const

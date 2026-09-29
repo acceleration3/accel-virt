@@ -11,6 +11,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/gl_shared_objects.hpp"
 #include "device/executor/guest_region.hpp"
+#include "device/executor/gl_error_tally.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/executor/sync_tokens.hpp"
 #include "device/shim/gl_context.hpp"
@@ -89,6 +90,9 @@ private:
      * a draw's check asks after - a core context has none - asked once, with
      * whatever error the asking left cleared before the guest can read it. */
     bool granted_fixed_function();
+    /* What the batch raised, drained from the context while it is current
+     * and published as the error word at the end of the imported region. */
+    void publish_errors();
 
     GlContext   context_;
     glproto::RealGl gl_;
@@ -96,6 +100,7 @@ private:
     GlSharedObjects objects_;
     SyncTokens  fences_;
     GuestRegion region_;
+    GlErrorTally errors_;
     uint32_t    resolved_;
     uint64_t    ran_;
     bool        lost_;

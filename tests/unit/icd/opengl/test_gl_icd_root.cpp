@@ -684,6 +684,36 @@ TEST(gl_icd_root, a_swap_puts_the_current_contexts_frame_on_its_window)
   CHECK_EQ(rig.surface().blits(), 2u);
   CHECK(rig.root().invariants_hold()); }
 
+/* With a present thread, a swap sends its frame's read one-way and returns:
+ * the thread shows it once the batch the swap sent is done, and a window that
+ * changed size meanwhile gets its new framebuffer after the frame is handed
+ * over. */
+TEST(gl_icd_root, with_a_present_thread_a_swap_hands_its_frame_over_and_returns)
+{ GlIcdRig rig(true);
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  const std::uint32_t queued = rig.kmt().queued_answers();
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  /* Nothing asked of the host, nothing on the window yet. */
+  CHECK_EQ(rig.kmt().queued_answers(), queued);
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 1u);
+  CHECK_EQ(rig.surface().blits(), 0u);
+  CHECK_EQ(rig.presents().queued(), 1u);
+  CHECK_EQ(rig.handed().raises(), 1u);
+  CHECK(rig.present_thread().step());
+  CHECK_EQ(rig.surface().blits(), 1u);
+  CHECK(rig.surface().last_blit_dc() == rig.dc());
+  CHECK_EQ(rig.presents().shown_frames(), 1u);
+  /* A resize: the frame is handed over first, and the window is made again
+   * once the thread has shown it - here it never steps, and the frame is
+   * dropped. */
+  rig.surface().resize(rig.window(), 32u, 16u);
+  rig.host().gl_window(1u, 1u, 300u);
+  CHECK(rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.presents().dropped_frames(), 1u);
+  CHECK_EQ(rig.root().current()->framebuffers().name_of(0u), 300u);
+  CHECK(rig.root().invariants_hold()); }
+
 /* A context the host lost swaps nothing and fails nothing. */
 TEST(gl_icd_root, a_lost_context_swaps_without_a_host_call)
 { GlIcdRig rig;

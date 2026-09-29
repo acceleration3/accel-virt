@@ -4,13 +4,22 @@
  * guest pixels a swap reads it back into and puts on the window's DC. Every
  * host call names its objects directly, so nothing the application bound is
  * disturbed; the pack state that shapes a read-back is set aside for the read
- * and put back after it. */
+ * and put back after it.
+ *
+ * With a present thread (GlPresentLoop) and room for two frames set aside in
+ * the context's blob arena, a swap does not read back and blit: it sends the
+ * read one-way into a free slot of that room and, once the swap's batch is
+ * sent, hands the frame to the thread, which shows it when the host has
+ * written it. The room changes, and the pixels the front buffer answers from
+ * are written, only with nothing of this presenter's in the thread's hands. */
 #ifndef AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 #define AV_GLICD_BACK_BUFFER_PRESENTER_HPP
 
 #include "core/support/status.hpp"
+#include "guest/transport/batch_mark.hpp"
 #include "icd/opengl/front_buffer.hpp"
 #include "icd/opengl/pixel_format.hpp"
+#include "proto/client_blob_arena.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +41,7 @@ class WindowSurface;
 namespace av::glicd {
 
 class ClientArrayState;
+class GlPresentLoop;
 struct BackBufferPresenterProbe;
 
 class BackBufferPresenter {
@@ -41,6 +51,9 @@ public:
      * data crosses there, and what a reply holds inline otherwise. */
     static constexpr size_t   blob_read_bytes = size_t{8} << 20u;
     static constexpr size_t   inline_read_bytes = size_t{48} << 10u;
+    /* Frames the present thread may hold at once: one being shown while the
+     * next is drawn, as a native driver queues. */
+    static constexpr uint32_t slot_count = 2u;
     enum : uint32_t {
         gl_texture_2d = 0x0DE1u, gl_renderbuffer = 0x8D41u, gl_rgba8 = 0x8058u, gl_srgb8_alpha8 = 0x8C43u,
         gl_depth24_stencil8 = 0x88F0u, gl_depth_component32f = 0x8CACu, gl_color_attachment0 = 0x8CE0u,
@@ -67,15 +80,28 @@ public:
      * (feature 051): the host has no front buffer, since the window is a
      * framebuffer object there. */
     const FrontBuffer &front() const;
+    /* A read of GL_FRONT, answered from the last frame shown (FrontBuffer::read)
+     * while the present thread cannot be writing it. */
+    [[nodiscard]] bool read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
+                                  uint32_t type, void *pixels) const;
     /* 0 until prepared. */
     uint32_t framebuffer() const;
     uint32_t width() const;
     uint32_t height() const;
     bool     double_buffered() const;
-    /* The frame onto `dc`: resolved, read back in rows the transport carries,
-     * and put on the window bottom row first. false before a prepare; a DC
-     * that refuses the frame is logged once and the swap still happened. */
-    bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface);
+    /* The frame onto `dc`: resolved, then either read one-way into a slot for
+     * `loop` (hand_over gives it the frame) or, with no loop, thread or room,
+     * read back in rows the transport carries and put on the window bottom
+     * row first. false before a prepare; a DC that refuses the frame is logged
+     * once and the swap still happened. */
+    bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface,
+                     GlPresentLoop *loop);
+    /* The frame the last present read into a slot goes to the present thread,
+     * to be shown once the batch `mark` names is done. Nothing without one. */
+    void     hand_over(const BatchMark &mark);
+    /* The present thread showed `width` x `height` pixels: they are what
+     * GL_FRONT names now. Called with the thread's lock held. */
+    void     shown(const uint8_t *pixels, uint32_t width, uint32_t height);
     /* Deletes the host objects through `wire` when there is one - without one
      * they went with the host's context - and gives the pixels back. */
     void     release(ClientTransport *wire);
@@ -97,6 +123,17 @@ private:
     /* The pack state a read-back needs, or the application's again. */
     void                 set_pack(ClientTransport &wire, const ClientArrayState &state, bool plain);
     void                 read_back(ClientTransport &wire);
+    /* The frame read one-way into a free slot for `loop`; false when there is
+     * no thread or no room, and the swap shows the frame itself. */
+    bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentLoop &loop);
+    /* Room for slot_count frames of this size, set aside in the wire's arena
+     * once nothing of this presenter's is in the thread's hands. */
+    bool                 reserve_room(ClientTransport &wire, GlPresentLoop &loop);
+    void                 give_room_back();
+    uint8_t             *room_pixels(uint32_t slot) const;
+    /* Nothing of this presenter's is in the present thread's hands. */
+    void                 settle() const;
+    size_t               frame_bytes() const;
     size_t               stored_bytes() const;
 
     BlockSource  &memory_;
@@ -112,6 +149,12 @@ private:
     FrontBuffer   front_;
     size_t        capacity_;
     bool          refusal_logged_;
+    GlPresentLoop   *loop_;
+    ClientBlobArena *arena_;
+    ClientBlobLease  room_;
+    /* The slot the last present read into, until handed over; slot_count
+     * when none. */
+    uint32_t         pending_;
 
     friend struct BackBufferPresenterProbe;
 };

@@ -46,6 +46,7 @@ class WindowSurface;
 namespace av::glicd {
 
 class GlIcdBinding;
+class GlPresentLoop;
 class SystemOpengl;
 class ThreadSlot;
 struct GlIcdRootProbe;
@@ -68,7 +69,8 @@ public:
     static constexpr uint32_t max_pending = 64u;
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, icd::LogSink &log,
-              icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlIcdBinding &binding);
+              icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentLoop &presents,
+              GlIcdBinding &binding);
     ~GlIcdRoot();
     GlIcdRoot(const GlIcdRoot &) = delete;
     GlIcdRoot &operator=(const GlIcdRoot &) = delete;
@@ -103,7 +105,10 @@ public:
                                      int32_t *ints, float *floats);
     /* glFlush: a single-buffered pixel format has no back buffer to swap, so
      * the flush is what puts the frame on the window, as it does on Windows
-     * (feature 051, US2 edge case). */
+     * (feature 051, US2 edge case) - unpaced: the swap interval counts swaps,
+     * and an application flushing between its draws (Photoshop CS6 does,
+     * hundreds of times as its first canvas is made) would otherwise wait a
+     * vertical blank for every one. */
     void        flush_current();
     /* wglSwapIntervalEXT: false for an interval no extension this ICD reports
      * defines, or with no current context, with the error set. */
@@ -140,6 +145,12 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* What putting the frame on a window came to: refused, nothing to show
+     * (a lost context, a hidden window), or handed to the present thread. */
+    enum class Shown { refused, nothing, handed };
+
+    /* The calling thread's context's frame for the DC's window, unpaced. */
+    Shown show_frame(void *dc);
     uint64_t take_pending(uint32_t thread);
     bool     put_pending(uint32_t thread, uint64_t handle);
     int32_t  format_of_dc(void *dc);
@@ -159,6 +170,7 @@ private:
     icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;
     SystemOpengl     &system_;
+    GlPresentLoop                &presents_;
     GlIcdBinding     &binding_;
     PixelFormatTable  formats_;
     PixelFormatQuery  query_;

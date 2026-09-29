@@ -5,9 +5,15 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
 #include "harness/icd/gl_context_rig.hpp"
+#include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/opengl/gl_present_loop.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
 #include "icd/opengl/window_framebuffers.hpp"
@@ -38,6 +44,7 @@ struct BackBufferPresenterProbe {
 
 struct WindowFramebuffersProbe {
     static void point_nowhere(WindowFramebuffers &windows, std::uint32_t slot) { windows.current_ = slot; }
+    static void presented(WindowFramebuffers &windows, std::uint32_t slot) { windows.presented_ = slot; }
     static BackBufferPresenter &presenter(WindowFramebuffers &windows, std::uint32_t slot)
     {
         return windows.presenters_[slot].object();
@@ -93,6 +100,13 @@ struct Rig {
     {
         context_rig.host().gl_window(1u, 1u, first);
         return framebuffers.make_current_on(wire(), &windows[index], format, surface);
+    }    /* A swap as the root makes one with no present thread: the frame onto
+     * the window, then the window's new size followed. */
+    bool swap(int index)
+    {
+        const bool shown = framebuffers.present(wire(), state, &dcs[index], &windows[index], surface, nullptr);
+        framebuffers.follow(wire(), &windows[index], doubled, surface);
+        return shown;
     }
 };
 
@@ -220,13 +234,15 @@ TEST(window_framebuffers, a_query_answers_as_the_window_would)
 
 TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_was_left_on_it)
 { Rig rig;
-  CHECK(!rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], nullptr, doubled, rig.surface));
-  CHECK(!rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], doubled, rig.surface));
+  CHECK(!rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], nullptr, rig.surface, nullptr));
+  rig.framebuffers.follow(rig.wire(), nullptr, doubled, rig.surface);
+  rig.framebuffers.hand_over(av::BatchMark());
+  CHECK(!rig.swap(0));
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
   CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   std::uint32_t swapped = rig.commands();
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - swapped, 1u);
   CHECK_EQ(rig.surface.blits(), 1u);
   /* The current window grows: made again, and both bindings follow it. */
@@ -234,7 +250,7 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   rig.context_rig.host().gl_window(1u, 1u, 300u);
   swapped = rig.commands();
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 2u);
   CHECK_EQ(rig.argument(swapped + 11u, 1u), 300u);
   CHECK_EQ(rig.argument(swapped + 12u, 0u), Windows::gl_read_framebuffer);
@@ -245,7 +261,7 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   rig.context_rig.host().gl_window(1u, 1u, 400u);
   swapped = rig.commands();
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 1u);
   CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_read_framebuffer);
   rig.framebuffers.bound(Windows::gl_framebuffer, 0u);
@@ -253,7 +269,7 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   rig.context_rig.host().gl_window(1u, 1u, 500u);
   swapped = rig.commands();
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], doubled, rig.surface));
+  CHECK(rig.swap(0));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u);
   /* The current window, drawn on there and read elsewhere. */
   rig.framebuffers.bound(Windows::gl_framebuffer, 0u);
@@ -262,14 +278,14 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   rig.context_rig.host().gl_window(1u, 1u, 600u);
   swapped = rig.commands();
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 1u);
   CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_draw_framebuffer);
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
   /* A window whose remake is refused keeps presenting what it had. */
   rig.surface.resize(&rig.windows[1], Windows::max_windows * 2000u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[1], &rig.windows[1], doubled, rig.surface));
+  CHECK(rig.swap(1));
   CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
@@ -284,7 +300,7 @@ TEST(window_framebuffers, a_read_of_the_windows_front_buffer_is_answered_without
   /* Nothing presented yet, and the read buffer is GL_BACK. */
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   rig.context_rig.host().gl_bytes(nullptr, 0u);
-  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], doubled, rig.surface));
+  CHECK(rig.swap(0));
   /* Still the back buffer: that read is the host's. */
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   rig.framebuffers.reading(0x0404u /* GL_FRONT */);
@@ -367,3 +383,38 @@ TEST(window_framebuffers_invariants, fail_for_a_current_window_not_held_a_window
   CHECK_STATUS(broken.current_on(0, 100u), Status::ok);
   av::glicd::BackBufferPresenterProbe::drop_texture(Probe::presenter(broken.framebuffers, 0u));
   CHECK(!broken.framebuffers.invariants_hold()); }
+
+/* The frame a present read for the thread is handed over once, with the
+ * batch named; a window gone in between hands nothing, and neither does a
+ * hand-over with no present before it. */
+TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
+{ Rig                      rig;
+  av::ScriptedThread       thread;
+  av::CountedWakeSignal    handed;
+  av::CountedWakeSignal    shown;
+  av::LockTrace            trace;
+  av::RecordingThreadLock  lock{trace, 'P'};
+  av::RecordingLog         log;
+  av::glicd::GlPresentLoop loop{thread, handed, shown, lock, rig.context_rig.kmt(), rig.surface, log};
+  CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop));
+  rig.context.flush();
+  rig.framebuffers.hand_over(rig.context.mark());
+  rig.framebuffers.hand_over(rig.context.mark());
+  CHECK_EQ(loop.queued(), 1u);
+  CHECK(thread.step());
+  CHECK_EQ(rig.surface.blits(), 1u);
+  CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop));
+  rig.surface.close_window(&rig.windows[0]);
+  rig.framebuffers.drop_gone(rig.wire(), rig.surface);
+  rig.framebuffers.hand_over(rig.context.mark());
+  CHECK_EQ(loop.queued(), 0u);
+  CHECK(rig.framebuffers.invariants_hold());
+  rig.framebuffers.release(nullptr); }
+
+TEST(window_framebuffers_invariants, fail_for_a_presented_window_past_the_table)
+{ Rig rig;
+  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, Windows::max_windows + 1u);
+  CHECK(!rig.framebuffers.invariants_hold());
+  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, Windows::max_windows);
+  CHECK(rig.framebuffers.invariants_hold()); }

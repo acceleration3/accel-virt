@@ -194,6 +194,14 @@ class Registry:
     # returns immediately and every measurement taken after it is of a
     # queue rather than of a GPU.
     synchronous: set[str] = field(default_factory=set)
+    # Reads that also get a one-way spelling, rvk_<name>_into_blob, which
+    # has the host write the pixels at an offset of the blob arena the
+    # caller set aside and answer nothing. What the synchronous read spends
+    # is the wait: the caller learns the bytes are there from the batch's
+    # fence instead, on whichever thread it likes. A swap's read-back of
+    # the window is the case: the present thread waits, and the
+    # application's render thread goes on.
+    read_into_blob: set[str] = field(default_factory=set)
     # The highest GL version any tier asked for: what this driver may
     # honestly report.
     tier_major: int = 1

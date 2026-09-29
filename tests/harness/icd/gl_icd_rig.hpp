@@ -8,14 +8,17 @@
 
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
 #include "harness/icd/fake_opengl32.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
+#include "icd/opengl/gl_present_loop.hpp"
 
 #include <cstdint>
 
@@ -26,7 +29,9 @@ public:
     static constexpr std::uint32_t window_width = 64u;
     static constexpr std::uint32_t window_height = 48u;
 
-    GlIcdRig();
+    /* Swaps read back and blit on the calling thread unless `present_thread`,
+     * and then hand their frames to a present thread the test steps. */
+    explicit GlIcdRig(bool present_thread = false);
     GlIcdRig(const GlIcdRig &) = delete;
     GlIcdRig &operator=(const GlIcdRig &) = delete;
 
@@ -40,6 +45,10 @@ public:
     ScriptedThreadSlot    &threads();
     FakeOpengl32          &opengl32();
     glicd::GlIcdRoot      &root();
+    glicd::GlPresentLoop  &presents();
+    ScriptedThread        &present_thread();
+    CountedWakeSignal     &handed();
+    CountedWakeSignal     &shown();
 
     /* A DC on a window, a second DC on another window, and a memory DC. */
     void *dc();
@@ -68,6 +77,11 @@ private:
     ScriptedWindowSurface surface_;
     ScriptedThreadSlot    threads_;
     FakeOpengl32          opengl32_;
+    RecordingThreadLock   present_lock_;
+    ScriptedThread        present_thread_;
+    CountedWakeSignal     handed_;
+    CountedWakeSignal     shown_;
+    glicd::GlPresentLoop  presents_;
     glicd::GlIcdRoot      root_;
     int                   dc_;
     int                   other_dc_;

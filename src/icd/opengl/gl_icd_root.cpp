@@ -87,6 +87,24 @@ constexpr icd::ExtensionPolicy::Row reported_extensions[] = {
     {"GL_EXT_semaphore_win32", 1u,
      "manual_calls.an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one",
      "GL_EXT_semaphore_fd"},
+    /* What OpenGL 2.x and 3.0 promoted to core, which a 4.6 context does
+     * through the same commands. An application of that era asks the
+     * extension string for them instead of the version: Photoshop CS6's GPU
+     * check turns its canvas acceleration off without NPOT, framebuffer
+     * objects and the shading language named there. */
+    {"GL_ARB_texture_non_power_of_two", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_framebuffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_framebuffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_EXT_framebuffer_blit", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_shading_language_100", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_shader_objects", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_vertex_shader", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_fragment_shader", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_vertex_buffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_pixel_buffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_texture_float", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_texture_rectangle", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_multitexture", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The WGL extensions the functions DrvGetProcAddress answers make whole, each
@@ -107,8 +125,9 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
                      icd::LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
-                     GlIcdBinding &binding)
-    : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), binding_(binding), formats_(),
+                     GlPresentLoop &presents, GlIcdBinding &binding)
+    : lock_(lock), log_(log), surface_(surface), slot_(slot), system_(system), presents_(presents),
+      binding_(binding), formats_(),
       query_(formats_), windows_(), currents_(slot), connection_(kmt),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock),
@@ -353,34 +372,42 @@ bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
     return (planes & swap_main_plane) != 0u && swap_buffers(dc);
 }
 
-/* The calling thread's context puts its frame for the DC's window there. */
+/* The calling thread's context puts its frame for the DC's window there, and
+ * waits out the interval after it (feature 051, US2.2). */
 bool GlIcdRoot::swap_buffers(void *dc)
 {
     AV_SCOPE("GlIcdRoot::swap_buffers");
+    const Shown shown = show_frame(dc);
+    if (shown == Shown::handed) currents_.current()->pace();
+    return shown != Shown::refused;
+}
+
+GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
+{
+    AV_SCOPE("GlIcdRoot::show_frame");
     lock_.acquire();
     windows_.drop_gone(surface_);
     lock_.release();
     GuestGlContext *const context = currents_.current();
     void *const           window = surface_.window_of(dc);
-    if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return false;
+    if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return Shown::refused;
     ClientTransport *const transport = context->wire();
     /* A lost context has nothing to show and fails nothing by swapping. */
-    if (transport == nullptr) return true;
+    if (transport == nullptr) return Shown::nothing;
     /* Nor does a window nobody can see: the frame is read back through the
-     * host GPU and blitted for a client area that is not there, and the
-     * application's render thread waits for both (feature 051, US2.3). */
-    if (!WindowVisibility(surface_, window).showing()) return true;
+     * host GPU and blitted for a client area that is not there (feature 051,
+     * US2.3). */
+    if (!WindowVisibility(surface_, window).showing()) return Shown::nothing;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
-    if (!framebuffers.present(*transport, context->arrays(), dc, window,
-                              formats_.format(context->pixel_format()), surface_))
-        return false;
-    /* The frame is on its window; what the interval buys is the wait after it
-     * (feature 051, US2.2). The calls after the present's go before the
-     * application waits. */
+    if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_)) return Shown::refused;
+    /* The frame's read-back goes out with the calls before it, and the present
+     * thread is handed the frame with the batch it went in. Only then may the
+     * window's new size replace the room the frame is being read into. */
     context->flush();
-    context->pace();
-    return true;
+    framebuffers.hand_over(context->mark());
+    framebuffers.follow(*transport, window, formats_.format(context->pixel_format()), surface_);
+    return Shown::handed;
 }
 
 void GlIcdRoot::flush_current()
@@ -388,7 +415,7 @@ void GlIcdRoot::flush_current()
     AV_SCOPE("GlIcdRoot::flush_current");
     const GuestGlContext *const context = currents_.current();
     if (context != nullptr && !formats_.format(context->pixel_format()).double_buffer())
-        static_cast<void>(swap_buffers(context->current_dc()));
+        static_cast<void>(show_frame(context->current_dc()));
     manual_.flush();
 }
 
@@ -534,6 +561,12 @@ uint32_t GlIcdRoot::get_error()
     ClientTransport *const transport = context->wire();
     const uint32_t         local = context->take_error();
     if (local != 0u) return local;
+    /* From the word the host publishes, without a round trip: an error shows
+     * once the host has run the command that raised it, which for a command
+     * still queued is a later call - where OpenGL would have answered it
+     * already, having run it. */
+    uint32_t published = 0u;
+    if (context->take_host_error(published)) return published;
     return transport != nullptr ? glproto::rvk_glGetError(*transport) : 0u;
 }
 

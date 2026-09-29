@@ -189,7 +189,8 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
                    pname_counts=dict(prof.pname_counts),
                    handwritten=set(prof.handwritten),
                    answered_by_guest=set(prof.answered_by_guest),
-                   synchronous=set(prof.synchronous))
+                   synchronous=set(prof.synchronous),
+                   read_into_blob=set(prof.read_into_blob))
     wanted: list[tuple[str, str]] = []
     seen: set[str] = set()
     # A tier is the union of what its features require, minus

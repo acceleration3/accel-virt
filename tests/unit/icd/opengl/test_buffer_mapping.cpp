@@ -384,6 +384,8 @@ TEST(buffer_mapping, a_range_larger_than_the_arena_crosses_in_leases_with_a_reti
 { Rig rig;
   const std::uint64_t mib = std::uint64_t{1} << 20u;
   const std::uint64_t length = 17u * mib;
+  /* An arena that lends 16 MiB: the rest of the context's is set aside. */
+  CHECK(rig.wire().blobs().set_aside(rig.wire().blobs().room() - 16u * mib).taken());
   CHECK_EQ(rig.wire().blobs().room(), 16u * mib);
   CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, invalidating), Status::ok);
   pattern(rig.bytes(), static_cast<std::size_t>(length), 5u);

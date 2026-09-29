@@ -30,7 +30,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
+      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -168,6 +168,12 @@ Status GuestGlContext::share(uint32_t share_name)
     return Status::ok;
 }
 
+BatchMark GuestGlContext::mark() const
+{
+    AV_SCOPE("GuestGlContext::mark");
+    return transport_.constructed() ? transport_.object().newest_mark() : BatchMark();
+}
+
 void GuestGlContext::flush()
 {
     AV_SCOPE("GuestGlContext::flush");
@@ -262,6 +268,17 @@ uint32_t GuestGlContext::take_error()
     if (taken != no_error || state_ != State::lost || loss_reported_) return taken;
     loss_reported_ = true;
     return robust() ? gl_context_lost : gl_out_of_memory;
+}
+
+bool GuestGlContext::take_host_error(uint32_t &error)
+{
+    AV_SCOPE("GuestGlContext::take_host_error");
+    error = no_error;
+    if (!arena_.constructed() || !arena_.object().lending()) return false;
+    const uint64_t word = arena_.object().host_errors();
+    if (!reported_.readable(word)) return false;
+    error = reported_.take(word);
+    return true;
 }
 
 const char *GuestGlContext::string(uint32_t name) const

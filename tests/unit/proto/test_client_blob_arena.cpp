@@ -154,6 +154,41 @@ TEST(client_blob_arena, lent_memory_replaces_the_block_and_lending_none_takes_it
   CHECK(!arena.take(1u).taken());
   CHECK(arena.invariants_hold()); }
 
+/* Room set aside comes off the top, is never lent again - a retire included
+ * - and goes back only in the order it was taken, since lending grows at the
+ * top. */
+TEST(client_blob_arena, room_set_aside_comes_off_the_top_and_goes_back_last_first)
+{ std::uint8_t    block[64];
+  ClientBlobArena arena(block, sizeof block);
+  CHECK(arena.take(8u).taken());
+  CHECK(!arena.set_aside(0u).taken());
+  CHECK(!arena.set_aside(57u).taken());
+  const av::ClientBlobLease frames = arena.set_aside(32u);
+  CHECK(frames.taken());
+  CHECK(frames.data() == block + 32);
+  CHECK_EQ(frames.offset(), 32u);
+  CHECK_EQ(frames.bytes(), 32u);
+  const av::ClientBlobLease more = arena.set_aside(16u);
+  CHECK_EQ(more.offset(), 16u);
+  CHECK_EQ(arena.room(), 8u);
+  arena.retire_all();
+  CHECK_EQ(arena.room(), 16u);
+  CHECK(!arena.take(17u).taken());
+  CHECK(arena.invariants_hold());
+  /* Not the most recent, nothing taken, or taken twice: kept aside. */
+  arena.restore(frames);
+  arena.restore(av::ClientBlobLease{});
+  CHECK_EQ(arena.room(), 16u);
+  arena.restore(more);
+  CHECK_EQ(arena.room(), 32u);
+  arena.restore(more);
+  CHECK_EQ(arena.room(), 32u);
+  arena.restore(frames);
+  CHECK_EQ(arena.room(), 64u);
+  CHECK(arena.invariants_hold());
+  ClientBlobArena none;
+  CHECK(!none.set_aside(1u).taken()); }
+
 /* The invariant catches the states the class never builds. */
 TEST(client_blob_arena, the_invariant_catches_impossible_states)
 { std::uint8_t block[64];

@@ -13,6 +13,7 @@
 #define AV_KMT_TRANSPORT_HPP
 
 #include "core/support/status.hpp"
+#include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_doorbell.hpp"
 #include "guest/transport/reply_reader.hpp"
 #include "guest/transport/submission_path.hpp"
@@ -110,6 +111,9 @@ public:
      * no sooner than the newest batch published here (FollowRecord); a record
      * that names no fence before the first batch. */
     FollowRecord follow() const;
+    /* The same newest batch, for another thread of this process to wait on
+     * (BatchMark). */
+    BatchMark    newest_mark() const;
     TransportResult send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply);
     WireArena      &decode_arena() override;
     ClientBlobArena &blobs() override;

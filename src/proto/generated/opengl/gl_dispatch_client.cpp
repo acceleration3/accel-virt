@@ -8075,6 +8075,32 @@ void rvk_glGetTextureSubImage(::av::ClientTransport& rvk_t, GLuint texture, GLin
     }
 }
 
+void rvk_glGetTextureSubImage_into_blob(::av::ClientTransport& rvk_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, uint64_t rvk_blob_at) {
+    AV_SCOPE("rvk_glGetTextureSubImage_into_blob");
+    ::av::WireWriter rvk_b = rvk_t.request_writer();
+    rvk_b.write_varint(static_cast<uint64_t>(texture));
+    rvk_b.write_varint(static_cast<uint64_t>(level));
+    rvk_b.write_varint(static_cast<uint64_t>(xoffset));
+    rvk_b.write_varint(static_cast<uint64_t>(yoffset));
+    rvk_b.write_varint(static_cast<uint64_t>(zoffset));
+    rvk_b.write_varint(static_cast<uint64_t>(width));
+    rvk_b.write_varint(static_cast<uint64_t>(height));
+    rvk_b.write_varint(static_cast<uint64_t>(depth));
+    rvk_b.write_varint(static_cast<uint64_t>(format));
+    rvk_b.write_varint(static_cast<uint64_t>(type));
+    rvk_b.write_varint(static_cast<uint64_t>(bufSize));
+    rvk_b.write_pod<uint8_t>(3);
+    rvk_b.write_varint(static_cast<uint64_t>(bufSize));
+    rvk_b.write_varint(rvk_blob_at);
+    if (rvk_b.status() != ::av::Status::ok) {
+        ::av::icd::payload_dropped("gl", "glGetTextureSubImage",
+                                       rvk_b.offset());
+        rvk_t.end_call();
+        return;
+    }
+    (void)rvk_t.send_async(kCmd_glGetTextureSubImage, rvk_b);
+}
+
 void rvk_glGetTransformFeedbackVarying(::av::ClientTransport& rvk_t, GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLsizei* size, GLenum* type, GLchar* name) {
     AV_SCOPE("rvk_glGetTransformFeedbackVarying");
     ::av::WireWriter rvk_b = rvk_t.request_writer();

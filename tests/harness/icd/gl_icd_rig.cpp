@@ -14,12 +14,15 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 
 }  // namespace
 
-GlIcdRig::GlIcdRig()
+GlIcdRig::GlIcdRig(bool present_thread)
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), log_(), surface_(),
-      threads_(), opengl32_(threads_),
-      root_(platform_, kmt_, lock_, send_lock_, log_, surface_, threads_, opengl32_, glicd::gl_icd_binding), dc_(0),
-      other_dc_(0), memory_dc_(0), window_(0), other_window_(0)
+      threads_(), opengl32_(threads_), present_lock_(trace_, 'P'), present_thread_(), handed_(), shown_(),
+      presents_(present_thread_, handed_, shown_, present_lock_, kmt_, surface_, log_),
+      root_(platform_, kmt_, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
+            glicd::gl_icd_binding),
+      dc_(0), other_dc_(0), memory_dc_(0), window_(0), other_window_(0)
 {
+    if (!present_thread) presents_.refuse();
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
     surface_.add_dc(&dc_, &window_, window_width, window_height);
     surface_.add_dc(&other_dc_, &other_window_, window_width, window_height);
@@ -36,6 +39,10 @@ ScriptedWindowSurface &GlIcdRig::surface() { return surface_; }
 ScriptedThreadSlot    &GlIcdRig::threads() { return threads_; }
 FakeOpengl32          &GlIcdRig::opengl32() { return opengl32_; }
 glicd::GlIcdRoot      &GlIcdRig::root() { return root_; }
+glicd::GlPresentLoop  &GlIcdRig::presents() { return presents_; }
+ScriptedThread        &GlIcdRig::present_thread() { return present_thread_; }
+CountedWakeSignal     &GlIcdRig::handed() { return handed_; }
+CountedWakeSignal     &GlIcdRig::shown() { return shown_; }
 void                  *GlIcdRig::dc() { return &dc_; }
 void                  *GlIcdRig::other_dc() { return &other_dc_; }
 void                  *GlIcdRig::memory_dc() { return &memory_dc_; }

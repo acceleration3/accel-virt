@@ -10,7 +10,8 @@
 namespace av::glicd {
 
 WindowFramebuffers::WindowFramebuffers(BlockSource &memory, icd::LogSink &log)
-    : memory_(memory), log_(log), presenters_{}, current_(max_windows), draws_window_(false), reads_window_(false),
+    : memory_(memory), log_(log), presenters_{}, current_(max_windows), presented_(max_windows), draws_window_(false),
+      reads_window_(false),
       read_buffer_(gl_back), ever_current_(false)
 {
     AV_SCOPE("WindowFramebuffers::WindowFramebuffers");
@@ -90,7 +91,7 @@ bool WindowFramebuffers::read_front(int32_t x, int32_t y, int32_t width, int32_t
     AV_SCOPE("WindowFramebuffers::read_front");
     if (!reads_window_ || current_ == max_windows) return false;
     if (read_buffer_ != gl_front && read_buffer_ != gl_front_left) return false;
-    return presenters_[current_].object().front().read(x, y, width, height, format, type, pixels);
+    return presenters_[current_].object().read_front(x, y, width, height, format, type, pixels);
 }
 
 uint32_t WindowFramebuffers::buffer_for(uint32_t buffer, bool drawing) const
@@ -120,21 +121,35 @@ int32_t WindowFramebuffers::answer(uint32_t pname, int32_t host_value) const
 }
 
 bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                                 const PixelFormat &format, icd::WindowSurface &surface)
+                                 icd::WindowSurface &surface, GlPresentLoop *loop)
 {
     AV_SCOPE("WindowFramebuffers::present");
     const uint32_t slot = find(window);
     if (window == nullptr || slot == max_windows) return false;
+    presented_ = slot;
+    return presenters_[slot].object().present(wire, state, dc, surface, loop);
+}
+
+void WindowFramebuffers::hand_over(const BatchMark &mark)
+{
+    AV_SCOPE("WindowFramebuffers::hand_over");
+    if (presented_ != max_windows && presenters_[presented_].constructed())
+        presenters_[presented_].object().hand_over(mark);
+    presented_ = max_windows;
+}
+
+void WindowFramebuffers::follow(ClientTransport &wire, void *window, const PixelFormat &format,
+                                icd::WindowSurface &surface)
+{
+    AV_SCOPE("WindowFramebuffers::follow");
+    const uint32_t slot = find(window);
+    if (window == nullptr || slot == max_windows) return;
     BackBufferPresenter &presenter = presenters_[slot].object();
-    const bool          presented = presenter.present(wire, state, dc, surface);
-    const uint32_t      before = presenter.framebuffer();
-    /* A window that shrank or grew gets its new size before the next frame;
-     * one that cannot have it keeps the old until the window is gone. */
+    const uint32_t       before = presenter.framebuffer();
     static_cast<void>(presenter.prepare(wire, window, format, surface));
     const uint32_t after = presenter.framebuffer();
     if (after != before && slot == current_ && draws_window_) glproto::rvk_glBindFramebuffer(wire, gl_draw_framebuffer, after);
     if (after != before && slot == current_ && reads_window_) glproto::rvk_glBindFramebuffer(wire, gl_read_framebuffer, after);
-    return presented;
 }
 
 void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)
@@ -148,6 +163,7 @@ void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &su
         presenters_[slot].object().release(&wire);
         presenters_[slot].destroy();
         if (slot == current_) current_ = max_windows;
+        if (slot == presented_) presented_ = max_windows;
     }
 }
 
@@ -159,6 +175,7 @@ void WindowFramebuffers::release(ClientTransport *wire)
         presenter.destroy();
     }
     current_ = max_windows;
+    presented_ = max_windows;
 }
 
 uint32_t WindowFramebuffers::held() const
@@ -189,6 +206,7 @@ bool WindowFramebuffers::invariants_hold() const
 {
     AV_SCOPE("WindowFramebuffers::invariants_hold");
     if (current_ > max_windows || (current_ != max_windows && !presenters_[current_].constructed())) return false;
+    if (presented_ > max_windows) return false;
     for (uint32_t slot = 0u; slot < max_windows; slot++) {
         if (!presenters_[slot].constructed()) continue;
         const BackBufferPresenter &presenter = presenters_[slot].object();

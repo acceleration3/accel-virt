@@ -5,6 +5,7 @@
  * device wrote to the reply slot (the test plays the device). */
 #include "core/ddi/dxgkarg_doorbell_records.hpp"
 #include "core/support/status.hpp"
+#include "guest/transport/batch_mark.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,8 +21,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 using av::BatchHeader;
+using av::BatchMark;
 using av::CommandHeader;
 using av::GuestConnection;
 using av::KmtTransport;
@@ -124,6 +127,36 @@ TEST(kmt_transport, submits_through_the_kernel_without_a_doorbell_and_through_on
   transport.teardown();
   /* The doorbell went with the context it was made for. */
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_doorbell), 1u); }
+
+/* Another thread of the process waits for a batch through a mark: on the
+ * hardware queue's progress fence where there is a queue, on the context where
+ * there is none - and not at all before the first batch. */
+TEST(kmt_transport, the_newest_batch_is_marked_for_another_thread_to_wait_on)
+{ for (const bool hardware : {false, true}) {
+    Fixture fixture;
+    if (hardware) fixture.kmt().allow_hardware_scheduling();
+    CHECK_STATUS(fixture.open(), Status::ok);
+    std::uint8_t transport_staging[staging_bytes] = {};
+    KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                           sizeof transport_staging);
+    CHECK_STATUS(transport.initialize(), Status::ok);
+    const BatchMark none = transport.newest_mark();
+    CHECK(!none.waitable());
+    CHECK_STATUS(none.wait(fixture.kmt()), Status::invalid_state);
+    for (std::uint32_t batch = 1u; batch <= 2u; batch++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(7u);
+      CHECK(transport.send_async(1u, writer) == TransportResult::ok);
+    }
+    const BatchMark mark = transport.newest_mark();
+    CHECK(mark.waitable());
+    CHECK_EQ(mark.fence(), 2u);
+    const MockKmt::Call waited = hardware ? MockKmt::Call::wait_for_hw_queue : MockKmt::Call::wait_for_context;
+    const std::uint32_t before = fixture.kmt().calls(waited);
+    CHECK_STATUS(mark.wait(fixture.kmt()), Status::ok);
+    CHECK_EQ(fixture.kmt().calls(waited) - before, 1u);
+    transport.teardown();
+  } }
 
 TEST(kmt_transport, is_unestablished_until_initialized)
 { Fixture fixture;

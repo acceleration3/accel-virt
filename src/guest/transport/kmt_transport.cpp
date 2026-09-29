@@ -441,6 +441,13 @@ FollowRecord KmtTransport::follow() const
     return FollowRecord(ring(), newest_fence_);
 }
 
+BatchMark KmtTransport::newest_mark() const
+{
+    AV_SCOPE("KmtTransport::newest_mark");
+    const uint32_t fence_object = doorbell_.queue() != 0u ? doorbell_.progress_fence() : 0u;
+    return BatchMark(connection_.device(), context_, fence_object, newest_fence_);
+}
+
 /* For a stream whose batch ends in the one command that answers. */
 TransportResult KmtTransport::send_answered_batch(const uint8_t *framed, size_t length, WireReader &reply)
 {
