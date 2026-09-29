@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/log_sink.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -30,8 +31,8 @@ uint32_t access_error(uint32_t access)
 
 }  // namespace
 
-MappedBuffers::MappedBuffers(BlockSource &memory, icd::LogSink &log)
-    : memory_(memory), log_(log), mappings_{}, persistent_writers_(0u), logged_(false)
+MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, icd::LogSink &log)
+    : memory_(memory), shadows_(shadows), log_(log), mappings_{}, persistent_writers_(0u), logged_(false)
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
 }
@@ -51,15 +52,21 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     if (refused != gl_no_error) return refused;
     if (offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
     if (buffer == 0u || find(buffer) != max_mappings) return gl_invalid_operation;
-    int64_t size = -1;
-    glproto::rvk_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
-    /* No answer: the host's own error says why, and the name is no buffer. */
-    if (size < 0) return gl_invalid_operation;
+    uint64_t known = 0u;
+    int64_t  size = -1;
+    if (shadows_.size_of(buffer, known)) {
+        size = static_cast<int64_t>(known);
+    } else {
+        glproto::rvk_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
+        /* No answer: the host's own error says why, and the name is no buffer. */
+        if (size < 0) return gl_invalid_operation;
+        shadows_.sized(buffer, static_cast<uint64_t>(size));
+    }
     const int64_t mapped = length == whole_buffer ? size : length;
     if (offset > size || mapped > size - offset) return gl_invalid_value;
     const uint32_t slot = find(0u);
     if (slot == max_mappings) return gl_out_of_memory;
-    static_cast<void>(mappings_[slot].construct(memory_));
+    static_cast<void>(mappings_[slot].construct(memory_, shadows_));
     BufferMapping &mapping = mappings_[slot].object();
     const Status   made = mapping.map(wire, buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(mapped),
                                       access);
@@ -102,6 +109,36 @@ void *MappedBuffers::pointer_of(uint32_t buffer) const
     AV_SCOPE("MappedBuffers::pointer_of");
     const uint32_t slot = buffer != 0u ? find(buffer) : max_mappings;
     return slot != max_mappings ? mappings_[slot].object().pointer() : nullptr;
+}
+
+bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) const
+{
+    AV_SCOPE("MappedBuffers::map_state");
+    const uint32_t       slot = buffer != 0u ? find(buffer) : max_mappings;
+    const BufferMapping *mapping = slot != max_mappings ? &mappings_[slot].object() : nullptr;
+    const uint32_t       access = mapping != nullptr ? mapping->access() : 0u;
+    const uint32_t       both = BufferMapping::map_read | BufferMapping::map_write;
+    switch (pname) {
+    case gl_buffer_mapped:
+        value = mapping != nullptr ? 1 : 0;
+        return true;
+    case gl_buffer_access_flags:
+        value = access;
+        return true;
+    case gl_buffer_map_offset:
+        value = mapping != nullptr ? static_cast<int64_t>(mapping->offset()) : 0;
+        return true;
+    case gl_buffer_map_length:
+        value = mapping != nullptr ? static_cast<int64_t>(mapping->length()) : 0;
+        return true;
+    case gl_buffer_access:
+        value = (access & both) == BufferMapping::map_read    ? gl_read_only
+                : (access & both) == BufferMapping::map_write ? gl_write_only
+                                                              : gl_read_write;
+        return true;
+    default:
+        return false;
+    }
 }
 
 void MappedBuffers::flush_persistent(ClientTransport &wire)
@@ -188,8 +225,9 @@ void MappedBuffers::log_once()
     AV_SCOPE("MappedBuffers::log_once");
     if (logged_) return;
     logged_ = true;
-    log_.write("rvkgl: buffer maps are guest copies: filled at map, written back at unmap, and before every "
-               "command that reads buffers while a persistent map writes");
+    log_.write("rvkgl: buffer maps are guest copies: filled at map from what the host holds, the bytes that "
+               "changed written back at unmap, and before every command that reads buffers while a persistent "
+               "map writes");
 }
 
 }  // namespace av::glicd

@@ -18,6 +18,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/batched_transport.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/frame_pacer.hpp"
@@ -99,8 +100,12 @@ public:
     /* The options name `share_name`'s context to share with, and, when they
      * ask no version, 1.0 - a share needs one on the wire
      * (contracts/context_options.md) and it is what an empty
-     * WGL_ARB_create_context list asks. invalid_state once made. */
+     * WGL_ARB_create_context list asks. invalid_state once made. Buffers
+     * shared can change through the other context, so this one keeps no
+     * copies of them (BufferShadows). */
     [[nodiscard]] Status share(uint32_t share_name);
+    /* Another context is to share this one's objects: the same. */
+    void                 lend();
     /* What a GL call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here. */
     ClientTransport     *wire();
@@ -117,6 +122,8 @@ public:
     WindowFramebuffers    &framebuffers();
     /* The buffer ranges the application has mapped. */
     MappedBuffers         &mappings();
+    /* What the host holds of this context's buffers, as far as it knows. */
+    BufferShadows         &shadows();
     /* The memory objects and semaphores imported from a Win32 handle. */
     GlExternalObjects     &externals();
 
@@ -197,6 +204,7 @@ private:
     ObjectStorage<icd::FramePacer> pacer_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
+    BufferShadows                  shadows_;
     MappedBuffers                  mappings_;
     GlExternalObjects              externals_;
     char                           strings_[strings][string_bytes];

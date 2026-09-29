@@ -4,8 +4,10 @@
  * the application's pointer holds and whether it is an offset instead; the
  * element buffer of each vertex array, so a draw knows whether its indices are
  * an offset; each attribute's pointer, for the query that answers it; the
- * redundant texture, unit and sampler binds a draw loop repeats; and the
- * pointers a multi-draw names, as the offsets the wire carries. */
+ * redundant texture, unit and sampler binds a draw loop repeats; the buffer
+ * at every other target, so a command that writes through one knows whose
+ * bytes change (BufferShadows); and the pointers a multi-draw names, as the
+ * offsets the wire carries. */
 #ifndef AV_GLICD_CLIENT_ARRAY_STATE_HPP
 #define AV_GLICD_CLIENT_ARRAY_STATE_HPP
 
@@ -25,6 +27,8 @@ public:
     static constexpr uint32_t pixel_pack_buffer = 0x88EBu;
     static constexpr uint32_t pixel_unpack_buffer = 0x88ECu;
     static constexpr uint32_t query_buffer = 0x9192u;
+    /* What bound_buffer answers where the binding is not known. */
+    static constexpr uint32_t unknown = 0xFFFFFFFFu;
     /* The most pointers one multi-draw converts. */
     static constexpr size_t   max_offsets = 1024u;
     /* The vertex arrays whose element buffer is kept; past this many a draw
@@ -48,6 +52,17 @@ public:
     size_t compressed_bytes(int32_t image_size, bool packing) const;
 
     void     bind_buffer(uint32_t target, uint32_t buffer);
+    /* glBindBuffersBase and glBindBuffersRange bind by index; whether they
+     * move an indexed target's own binding is not relied on, so it is no
+     * longer known. Nothing for a target that is not indexed. */
+    void     lose_buffer(uint32_t target);
+    /* glPopClientAttrib put back array and pixel buffer bindings the guest
+     * did not see: no buffer binding is known from now on. */
+    void     restore_buffers();
+    /* The buffer at `target` when the guest knows it for certain: false for
+     * a target it does not keep, a binding lost or restored, and the element
+     * array buffer, which a vertex array can change out of sight. */
+    bool     known_buffer(uint32_t target, uint32_t &buffer) const;
     /* A deleted buffer is unbound from every target it was bound to. */
     void     delete_buffers(int32_t count, const uint32_t *buffers);
     uint32_t bound_buffer(uint32_t target) const;
@@ -85,17 +100,18 @@ public:
 private:
     static constexpr uint32_t units = 32u;
     static constexpr uint32_t texture_targets = 11u;
-    static constexpr uint32_t buffer_targets = 5u;
-    static constexpr uint32_t unknown = 0xFFFFFFFFu;
+    static constexpr uint32_t buffer_targets = 13u;
     static constexpr uint32_t texture0 = 0x84C0u;
 
     uint32_t    buffer_slot(uint32_t target) const;
+    bool        indexed(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
     const PixelStore *store_for(uint32_t pname, PixelStore::Field &field) const;
     /* The row of `array` in the vertex array table, or max_vertex_arrays. */
     uint32_t    vertex_array_row(uint32_t array) const;
 
     uint32_t   buffers_[buffer_targets];
+    bool       buffers_restored_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;

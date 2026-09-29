@@ -8,6 +8,8 @@
 #include "icd/opengl/granted_profile.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/opengl/buffer_shadows.hpp"
+#include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 
@@ -34,6 +36,14 @@ constexpr TargetBinding target_bindings[] = {
     {0x8C2Au, 0x8C2Bu}, {0x8C8Eu, 0x8C8Fu}, {0x8F36u, 0x8F36u}, {0x8F37u, 0x8F37u}, {0x8F3Fu, 0x8F43u},
     {0x90D2u, 0x90D3u}, {0x90EEu, 0x90EFu}, {0x9192u, 0x9193u}, {0x92C0u, 0x92C1u},
 };
+
+/* The targets whose indexed bindings a shader writes through: transform
+ * feedback, shader storage and atomic counters. */
+bool shader_writable(uint32_t target)
+{
+    AV_SCOPE("shader_writable");
+    return target == 0x8C8Eu || target == 0x90D2u || target == 0x92C0u;
+}
 
 /* glMapBuffer's access enum as glMapBufferRange's bits; 0 for no such enum. */
 uint32_t access_bits(uint32_t access)
@@ -141,6 +151,74 @@ void ManualCalls::refuse()
     record(gl_invalid_operation);
 }
 
+void ManualCalls::wrote_buffer(uint32_t target, intptr_t offset, intptr_t size, const void *data)
+{
+    AV_SCOPE("ManualCalls::wrote_buffer");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    const uint32_t buffer = context->arrays().bound_buffer(target);
+    if (buffer == ClientArrayState::unknown)
+        context->shadows().forget_all();
+    else if (offset >= 0 && size >= 0)
+        context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
+}
+
+void ManualCalls::wrote_named_buffer(uint32_t buffer, intptr_t offset, intptr_t size, const void *data)
+{
+    AV_SCOPE("ManualCalls::wrote_named_buffer");
+    GuestGlContext *const context = sending();
+    if (context != nullptr && offset >= 0 && size >= 0)
+        context->shadows().wrote(buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(size), data);
+}
+
+void ManualCalls::host_writes_target(uint32_t target)
+{
+    AV_SCOPE("ManualCalls::host_writes_target");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) forget_bound(*context, target);
+}
+
+void ManualCalls::host_writes_buffer(uint32_t buffer)
+{
+    AV_SCOPE("ManualCalls::host_writes_buffer");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->shadows().forget(buffer);
+}
+
+void ManualCalls::bind_buffer_indexed(uint32_t target, uint32_t buffer)
+{
+    AV_SCOPE("ManualCalls::bind_buffer_indexed");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->arrays().bind_buffer(target, buffer);
+    if (buffer != 0u && shader_writable(target)) context->shadows().distrust();
+}
+
+void ManualCalls::bind_buffers_indexed(uint32_t target)
+{
+    AV_SCOPE("ManualCalls::bind_buffers_indexed");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->arrays().lose_buffer(target);
+    if (shader_writable(target)) context->shadows().distrust();
+}
+
+void ManualCalls::shaders_write_buffers()
+{
+    AV_SCOPE("ManualCalls::shaders_write_buffers");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->shadows().distrust();
+}
+
+void ManualCalls::bindings_restored()
+{
+    AV_SCOPE("ManualCalls::bindings_restored");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    context->arrays().restore_buffers();
+    context->shadows().forget_all();
+}
+
 void ManualCalls::buffer_pointer(uint32_t target, uint32_t pname, void **params)
 {
     AV_SCOPE("ManualCalls::buffer_pointer");
@@ -160,6 +238,30 @@ void ManualCalls::named_buffer_pointer(uint32_t buffer, uint32_t pname, void **p
     if (context == nullptr || params == nullptr) return;
     if (pname != gl_buffer_map_pointer) return context->record(gl_invalid_enum);
     *params = context->mappings().pointer_of(buffer);
+}
+
+/* The name is judged before the target, which costs a round trip to resolve. */
+bool ManualCalls::buffer_map_state(uint32_t target, uint32_t pname, int64_t &value)
+{
+    AV_SCOPE("ManualCalls::buffer_map_state");
+    GuestGlContext *const context = sending();
+    int64_t               unmapped = 0;
+    if (context == nullptr || !context->mappings().map_state(0u, pname, unmapped)) return false;
+    uint32_t buffer = 0u;
+    if (!bound_to(*context, target, buffer)) return true;
+    if (buffer == 0u) {
+        context->record(gl_invalid_operation);
+        return true;
+    }
+    return context->mappings().map_state(buffer, pname, value);
+}
+
+bool ManualCalls::named_buffer_map_state(uint32_t buffer, uint32_t pname, int64_t &value)
+{
+    AV_SCOPE("ManualCalls::named_buffer_map_state");
+    GuestGlContext *const context = currents_.current();
+    if (context == nullptr || buffer == 0u) return false;
+    return context->mappings().map_state(buffer, pname, value);
 }
 
 void ManualCalls::attribute_pointer(uint32_t index, uint32_t pname, void **pointer)
@@ -222,6 +324,7 @@ void ManualCalls::delete_buffers(int32_t count, const uint32_t *buffers)
     if (context == nullptr) return;
     context->arrays().delete_buffers(count, buffers);
     context->mappings().forget(count, buffers);
+    context->shadows().forget(count, buffers);
     glproto::rvk_glDeleteBuffers(*context->wire(), count, buffers);
 }
 
@@ -268,30 +371,36 @@ void ManualCalls::buffer_data(uint32_t target, intptr_t size, const void *data, 
 {
     AV_SCOPE("ManualCalls::buffer_data");
     GuestGlContext *const context = sending();
-    if (context != nullptr) glproto::rvk_glBufferData(*context->wire(), target, size, data, usage);
+    if (context == nullptr) return;
+    respecify_bound(*context, target, size, data != nullptr);
+    glproto::rvk_glBufferData(*context->wire(), target, size, data, usage);
 }
 
 void ManualCalls::buffer_storage(uint32_t target, intptr_t size, const void *data, uint32_t flags)
 {
     AV_SCOPE("ManualCalls::buffer_storage");
     GuestGlContext *const context = sending();
-    if (context != nullptr)
-        glproto::rvk_glBufferStorage(*context->wire(), target, size, data, flags | gl_dynamic_storage_bit);
+    if (context == nullptr) return;
+    respecify_bound(*context, target, size, data != nullptr);
+    glproto::rvk_glBufferStorage(*context->wire(), target, size, data, flags | gl_dynamic_storage_bit);
 }
 
 void ManualCalls::named_buffer_data(uint32_t buffer, intptr_t size, const void *data, uint32_t usage)
 {
     AV_SCOPE("ManualCalls::named_buffer_data");
     GuestGlContext *const context = sending();
-    if (context != nullptr) glproto::rvk_glNamedBufferData(*context->wire(), buffer, size, data, usage);
+    if (context == nullptr) return;
+    context->shadows().respecify(buffer, size, data != nullptr);
+    glproto::rvk_glNamedBufferData(*context->wire(), buffer, size, data, usage);
 }
 
 void ManualCalls::named_buffer_storage(uint32_t buffer, intptr_t size, const void *data, uint32_t flags)
 {
     AV_SCOPE("ManualCalls::named_buffer_storage");
     GuestGlContext *const context = sending();
-    if (context != nullptr)
-        glproto::rvk_glNamedBufferStorage(*context->wire(), buffer, size, data, flags | gl_dynamic_storage_bit);
+    if (context == nullptr) return;
+    context->shadows().respecify(buffer, size, data != nullptr);
+    glproto::rvk_glNamedBufferStorage(*context->wire(), buffer, size, data, flags | gl_dynamic_storage_bit);
 }
 
 void ManualCalls::vertex_attrib_pointer(uint32_t index, int32_t size, uint32_t type, uint8_t normalized,
@@ -501,6 +610,7 @@ void ManualCalls::read_pixels(int32_t x, int32_t y, int32_t width, int32_t heigh
     if (context == nullptr) return;
     if (context->framebuffers().read_front(x, y, width, height, format, type, pixels)) return;
     const bool offset = glicd::pixel_buffer_bound(true);
+    if (offset) forget_bound(*context, ClientArrayState::pixel_pack_buffer);
     glproto::rvk_glReadPixels(*context->wire(), x, y, width, height, format, type, pixels,
                               offset ? 0u : glicd::pixel_bytes(format, type, width, height, 1, true), offset);
 }
@@ -707,6 +817,8 @@ void ManualCalls::buffer_storage_mem(uint32_t target, intptr_t size, uint32_t me
     GuestGlContext *context = nullptr;
     uint32_t        made = 0u;
     if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    /* Another API writes imported memory whenever it likes. */
+    context->shadows().distrust();
     glproto::rvk_glBufferStorageMemEXT(*context->wire(), target, size, made, offset);
 }
 
@@ -727,6 +839,7 @@ void ManualCalls::named_buffer_storage_mem(uint32_t buffer, intptr_t size, uint3
     GuestGlContext *context = nullptr;
     uint32_t        made = 0u;
     if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
+    context->shadows().distrust();
     glproto::rvk_glNamedBufferStorageMemEXT(*context->wire(), buffer, size, made, offset);
 }
 
@@ -854,6 +967,8 @@ bool ManualCalls::bound_to(GuestGlContext &context, uint32_t target, uint32_t &b
     AV_SCOPE("ManualCalls::bound_to");
     for (const TargetBinding &row : target_bindings) {
         if (row.target != target) continue;
+        /* Asking would wait for the host to run everything queued ahead. */
+        if (context.arrays().known_buffer(target, buffer)) return true;
         int32_t bound = 0;
         glproto::rvk_glGetIntegerv(*context.wire(), row.binding, &bound);
         buffer = static_cast<uint32_t>(bound);
@@ -886,6 +1001,26 @@ void ManualCalls::mark_name(GuestGlContext &context, uint32_t buffer, intptr_t o
     AV_SCOPE("ManualCalls::mark_name");
     const uint32_t error = context.mappings().mark(buffer, offset, length);
     if (error != MappedBuffers::gl_no_error) context.record(error);
+}
+
+void ManualCalls::forget_bound(GuestGlContext &context, uint32_t target)
+{
+    AV_SCOPE("ManualCalls::forget_bound");
+    const uint32_t buffer = context.arrays().bound_buffer(target);
+    if (buffer == ClientArrayState::unknown)
+        context.shadows().forget_all();
+    else
+        context.shadows().forget(buffer);
+}
+
+void ManualCalls::respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data)
+{
+    AV_SCOPE("ManualCalls::respecify_bound");
+    const uint32_t buffer = context.arrays().bound_buffer(target);
+    if (buffer == ClientArrayState::unknown)
+        context.shadows().forget_all();
+    else
+        context.shadows().respecify(buffer, size, with_data);
 }
 
 bool ManualCalls::indices_cross(const void *indices)

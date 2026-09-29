@@ -61,6 +61,10 @@ struct MappedBuffersProbe {
     static void miscount(MappedBuffers &mappings, std::uint32_t writers) { mappings.persistent_writers_ = writers; }
 };
 
+struct BufferShadowsProbe {
+    static void miscount(BufferShadows &shadows, std::uint64_t bytes) { shadows.held_bytes_ = bytes; }
+};
+
 struct QueryShapesProbe {
     static void overflow(QueryShapes &shapes, uint32_t length) { shapes.lengths_[1] = length; }
 };
@@ -489,7 +493,8 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   CHECK(std::strcmp(created.dump(), "context/65537 state=created owner=0 pixel_format=7 major=3 minor=3 "
                                     "profile=2 flags=0 share=0 share_target=0 error=0 link=4 arena=false renderer= extensions=0\n"
                                     "context/65537/windows/0 held=0 draws_window=false reads_window=false\n"
-                     "context/65537/mappings/0 held=0 persistent_writers=0") == 0);
+                     "context/65537/mappings/0 held=0 persistent_writers=0\n"
+                     "context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0);
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   context->set_owner(2u);
@@ -499,7 +504,8 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   CHECK(std::strcmp(made.dump(), "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
                                  "share=0 share_target=0 error=1282 link=0 arena=true renderer=rvk host renderer extensions=0\n"
                                  "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
-                     "context/1/mappings/0 held=0 persistent_writers=0") == 0); }
+                     "context/1/mappings/0 held=0 persistent_writers=0\n"
+                     "context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
 
 TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
 { GlContextRig rig;
@@ -554,7 +560,36 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   av::glicd::MappedBuffersProbe::miscount(made->mappings(), 1u);
   CHECK(!made->invariants_hold());
   av::glicd::MappedBuffersProbe::miscount(made->mappings(), 0u);
+  av::glicd::BufferShadowsProbe::miscount(made->shadows(), 1u);
+  CHECK(!made->invariants_hold());
+  av::glicd::BufferShadowsProbe::miscount(made->shadows(), 0u);
   CHECK(made->invariants_hold()); }
+
+/* Buffers another context can write are not this one's to know: a context
+ * that shares, or that another shares, keeps no copies of them. */
+TEST(guest_gl_context, sharing_either_way_ends_its_buffer_copies)
+{ GlContextRig rig;
+  Context      sharer(rig);
+  CHECK(sharer->shadows().trusted());
+  CHECK_STATUS(sharer->share(5u), Status::ok);
+  CHECK(!sharer->shadows().trusted());
+  Context lender(rig);
+  lender->lend();
+  CHECK(!lender->shadows().trusted());
+  Context alone(rig);
+  CHECK(alone->shadows().trusted()); }
+
+/* The copies are of the host context's buffers, and go with it. */
+TEST(guest_gl_context, a_make_that_fails_keeps_no_copies_of_buffers)
+{ GlContextRig rig;
+  Context      context(rig);
+  std::uint8_t bytes[4] = {};
+  context->shadows().keep(1u, 0u, sizeof bytes, bytes);
+  CHECK_EQ(context->shadows().held(), 1u);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(context->make(), Status::no_memory);
+  CHECK_EQ(context->shadows().held(), 0u);
+  CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
 /* Feature 053: the context owns the memory objects and semaphores it imported,
  * because a GL name belongs to the context that made it. */
