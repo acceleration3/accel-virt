@@ -7,11 +7,13 @@
  *
  * The commands are one contiguous block, because a batch is published as one
  * span; it grows by doubling, copying what was recorded, up to the connection's
- * command limit. The generated client encodes a command before its size is
- * known, so each is lent a fixed room: a command larger than that, a batch past
- * the limit and memory refused while growing all latch one failure, and end
- * answers it rather than ship a batch with a command missing. Until 050's blob
- * arena carries bulk data, those are all out of host memory. */
+ * command limit, and a recording past that goes as several batches: the host
+ * records a command buffer's commands in the order they arrive, whichever
+ * batch carried them. The generated client encodes a command before its size
+ * is known, so each is lent a fixed room: a command larger than that and
+ * memory refused while growing latch one failure, and end answers it rather
+ * than ship a batch with a command missing. Until 050's blob arena carries
+ * bulk data, those are all out of host memory. */
 #ifndef AV_ICD_COMMAND_BATCH_HPP
 #define AV_ICD_COMMAND_BATCH_HPP
 
@@ -47,10 +49,13 @@ public:
     /* Drops what was recorded and the failure with it; the block is kept for
      * the next recording. */
     void                 discard();
-    /* Publishes every recorded command in one submission, then drops them:
-     * no_memory when a command could not be recorded, with nothing published;
-     * invalid_state when the connection refused the batch. */
+    /* Publishes the recorded commands not yet published, then drops them:
+     * no_memory when a command could not be recorded, with nothing more
+     * published; invalid_state when the connection refused a batch. */
     [[nodiscard]] Status end();
+    /* The command whose failure was the latest latched, when it failed by not
+     * fitting the room it was lent; 0 when that failure was anything else. */
+    uint32_t             refused() const;
 
     WireWriter       request_writer() override;
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
@@ -72,6 +77,8 @@ public:
 private:
     [[nodiscard]] bool make_room();
     [[nodiscard]] bool grow();
+    /* Publishes what is recorded so far, at the command limit. */
+    [[nodiscard]] bool flush();
 
     BlockSource    &memory_;
     Connection     &connection_;
@@ -81,6 +88,7 @@ private:
     /* Where the last command recorded starts; 0 with none. */
     size_t          last_;
     Status          failure_;
+    uint32_t        refused_;
     WireArena       decode_arena_;
     ClientBlobArena blobs_;
 

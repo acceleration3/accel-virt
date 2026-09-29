@@ -1,5 +1,6 @@
 /* One VkSwapchainKHR (feature 046, data-model.md): host images handed out in
- * turn, and a presented one copied back and put on its window, paced for FIFO.
+ * turn, and a presented one copied back and put on its window, paced for FIFO
+ * and, for IMMEDIATE, one per refresh with the rest dropped before the copy.
  * Presents are synchronous, so an image is held only between its acquire and
  * its present. */
 #ifndef AV_SWAPCHAIN_HPP

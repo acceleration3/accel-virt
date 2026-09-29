@@ -200,6 +200,14 @@ private:
      * GPU. Enabling a promoted extension is valid at any version, and the
      * guest's own instance - in the guest - never sees it. */
     void enable_identity(VkInstanceCreateInfo &create);
+    /* Raises the Vulkan version an instance is made for to the host loader's.
+     * The server calls a promoted alias - vkCmdPipelineBarrier2KHR - through
+     * its core symbol, the only one the loader exports, and Mesa fills a core
+     * slot only on an instance made for that core version: a guest asking for
+     * 1.2 with VK_KHR_synchronization2 enabled would reach a null slot and
+     * take the host process down. The device still gets no more than its GPU
+     * supports, and an alias does exactly what its core command does. */
+    void adopt_host_version(VkInstanceCreateInfo &create);
     /* Adds VK_KHR_external_memory and VK_EXT_external_memory_host to the
      * extensions a device is made with, unless the guest named them or its
      * list has no room. */
@@ -269,6 +277,8 @@ private:
     /* The names the create being run is made with. One list serves instances
      * and devices: a create is one command, and nothing reads it afterwards. */
     ExtensionList      extensions_;
+    /* The application an instance being made names, at the host's version. */
+    VkApplicationInfo  application_;
     VkInstance     instance_;
     VkDevice         device_;
     VkPhysicalDevice physical_;

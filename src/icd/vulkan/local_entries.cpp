@@ -427,10 +427,10 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSwapchainImagesKHR(VkDevice device, Vk
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL local_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
-                                                           VkSemaphore, VkFence, uint32_t *pImageIndex)
+                                                           VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex)
 {
     AV_SCOPE("local_vkAcquireNextImageKHR");
-    return icd_binding.root().presentation().acquire(device, swapchain, timeout, pImageIndex);
+    return icd_binding.root().presentation().acquire(device, swapchain, timeout, semaphore, fence, pImageIndex);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)

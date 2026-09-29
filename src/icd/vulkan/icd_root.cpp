@@ -189,6 +189,15 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_KHR_external_semaphore_win32", 1u,
             "icd_external_handles.a_semaphore_handle_becomes_the_host_s_own_fd_import",
             "VK_KHR_external_semaphore_fd"},
+    /* Minecraft's Vulkan backend declines a device without all three - "does
+     * not support required extensions from FeatureSet [Minecraft base
+     * required]" - and falls back to OpenGL. Their commands are core 1.3 or
+     * aliases the generator already emits, and their features are structures
+     * the chain carries to the host. */
+    {"VK_KHR_dynamic_rendering", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_KHR_synchronization2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
+    {"VK_EXT_vertex_attribute_divisor", 3u,
+            "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry
@@ -1454,6 +1463,7 @@ VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
     const Status   shipped = batch.end();
     if (shipped == Status::ok) return recorded;
     note("vkEndCommandBuffer: batch not shipped, status", static_cast<uint64_t>(shipped));
+    if (batch.refused() != 0u) note("vkEndCommandBuffer: a command larger than its room, id", batch.refused());
     return shipped == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_DEVICE_LOST;
 }
 
@@ -1547,6 +1557,26 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     const VkResult waited = wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);
     if (waited == VK_SUCCESS) made->mark_idle(connection.submissions());
     return waited;
+}
+
+VkResult IcdRoot::signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence fence)
+{
+    AV_SCOPE("IcdRoot::signal_acquire");
+    if (semaphore == VK_NULL_HANDLE && fence == VK_NULL_HANDLE) return VK_SUCCESS;
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) return VK_ERROR_DEVICE_LOST;
+    if (lost(*made->connection(), "vkAcquireNextImageKHR")) return VK_ERROR_DEVICE_LOST;
+    LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, 0u);
+    if (queue == nullptr) {
+        log_.write("rvkvk: vkAcquireNextImageKHR has nothing to signal on: the device handed out no queue");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    VkSubmitInfo submit = {};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.signalSemaphoreCount = semaphore != VK_NULL_HANDLE ? 1u : 0u;
+    submit.pSignalSemaphores = &semaphore;
+    return vkproto::rvk_vkQueueSubmit(made->connection()->transport(), static_cast<VkQueue>(static_cast<void *>(queue)),
+                                      1u, &submit, fence);
 }
 
 /* An application may submit only through a queue it was handed, so the queues

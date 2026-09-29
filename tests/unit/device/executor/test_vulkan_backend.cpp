@@ -600,7 +600,7 @@ TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
 
   struct Case { std::uint32_t count; const char *const *names; bool made; std::uint32_t listed; };
   const Case cases[] = {{255u, surfaces, true, 1u},
-                        {256u, surfaces, true, 0u},
+                        {256u, surfaces, true, 1u},
                         {2u, identity, true, 1u},
                         {3u, nullptr, false, 0u}};
   for (const Case &c : cases) {

@@ -134,12 +134,15 @@ VkResult Presentation::swapchain_images(VkDevice device, VkSwapchainKHR swapchai
     return chain->images(*count, images);
 }
 
-VkResult Presentation::acquire(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, uint32_t *index)
+VkResult Presentation::acquire(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore,
+                               VkFence fence, uint32_t *index)
 {
     AV_SCOPE("Presentation::acquire");
     Swapchain *const chain = find(device, swapchain);
     if (chain == nullptr) return VK_ERROR_OUT_OF_DATE_KHR;
-    return chain->acquire(timeout, *index);
+    const VkResult acquired = chain->acquire(timeout, *index);
+    if (acquired != VK_SUCCESS) return acquired;
+    return root_.signal_acquire(device, semaphore, fence);
 }
 
 VkResult Presentation::present(VkQueue queue, const VkPresentInfoKHR *info)

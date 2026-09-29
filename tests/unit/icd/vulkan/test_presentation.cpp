@@ -131,7 +131,7 @@ TEST(icd_presentation, a_swapchain_presents_its_frame_on_the_window)
   VkImage made[images] = {};
   CHECK_EQ(rig.wsi().swapchain_images(rig.device(), swapchain, &count, made), VK_SUCCESS);
   std::uint32_t index = 9u;
-  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, &index), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_SUCCESS);
   CHECK_EQ(index, 0u);
   rig.host().paint(made[index], 0x81u, 0x82u, 0x83u, 0xFFu);
   VkPresentInfoKHR present = {};
@@ -204,8 +204,8 @@ TEST(icd_presentation, the_old_swapchain_a_recreation_names_is_retired)
   CHECK(second != first);
   CHECK_EQ(rig.wsi().swapchains(), 2u);
   std::uint32_t index = 9u;
-  CHECK_EQ(rig.wsi().acquire(rig.device(), first, 0u, &index), VK_ERROR_OUT_OF_DATE_KHR);
-  CHECK_EQ(rig.wsi().acquire(rig.device(), second, 0u, &index), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), first, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), second, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_SUCCESS);
   rig.wsi().destroy_swapchain(rig.device(), first);
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold()); }
@@ -220,10 +220,10 @@ TEST(icd_presentation, a_swapchain_this_driver_did_not_make_is_out_of_date_or_re
   VkImage image = VK_NULL_HANDLE;
   CHECK_EQ(rig.wsi().swapchain_images(rig.device(), nowhere, &count, &image), VK_ERROR_INITIALIZATION_FAILED);
   std::uint32_t index = 9u;
-  CHECK_EQ(rig.wsi().acquire(rig.device(), nowhere, 0u, &index), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), nowhere, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
   int stack = 0;
   VkDevice other = reinterpret_cast<VkDevice>(&stack);
-  CHECK_EQ(rig.wsi().acquire(other, swapchain, 0u, &index), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.wsi().acquire(other, swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
   /* Destroying it through another device does nothing. */
   rig.wsi().destroy_swapchain(other, swapchain);
   rig.wsi().destroy_swapchain(rig.device(), nowhere);
@@ -240,7 +240,7 @@ TEST(icd_presentation, a_present_of_several_swapchains_answers_the_worst_result)
   const VkSwapchainKHR chains[] = {first, second, reinterpret_cast<VkSwapchainKHR>(0x60u)};
   std::uint32_t indices[3] = {0u, 0u, 0u};
   for (std::uint32_t index = 0u; index < 2u; index++)
-      CHECK_EQ(rig.wsi().acquire(rig.device(), chains[index], 0u, &indices[index]), VK_SUCCESS);
+      CHECK_EQ(rig.wsi().acquire(rig.device(), chains[index], 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &indices[index]), VK_SUCCESS);
   VkResult results[3] = {VK_SUCCESS, VK_SUCCESS, VK_SUCCESS};
   VkPresentInfoKHR present = {};
   present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -264,7 +264,7 @@ TEST(icd_presentation, the_present_s_semaphores_are_waited_on_once)
   const VkSwapchainKHR chains[] = {first, second};
   std::uint32_t indices[2] = {0u, 0u};
   for (std::uint32_t index = 0u; index < 2u; index++)
-      CHECK_EQ(rig.wsi().acquire(rig.device(), chains[index], 0u, &indices[index]), VK_SUCCESS);
+      CHECK_EQ(rig.wsi().acquire(rig.device(), chains[index], 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &indices[index]), VK_SUCCESS);
   const VkSemaphore waits[] = {reinterpret_cast<VkSemaphore>(0x700u)};
   VkPresentInfoKHR present = {};
   present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -299,7 +299,7 @@ TEST(icd_presentation, its_report_names_the_surfaces_and_each_swapchain_s_presen
 { PresentationRig rig;
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
   std::uint32_t index = 0u;
-  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, &index), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_SUCCESS);
   VkPresentInfoKHR present = {};
   present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present.swapchainCount = 1u;
@@ -339,11 +339,11 @@ TEST(icd_presentation, a_destroyed_swapchain_s_handle_answers_nothing)
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
   rig.wsi().destroy_swapchain(rig.device(), swapchain);
   std::uint32_t index = 9u;
-  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, &index), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
   std::uint32_t count = 0u;
   CHECK_EQ(rig.wsi().swapchain_images(rig.device(), swapchain, &count, nullptr), VK_ERROR_INITIALIZATION_FAILED);
   /* A present that starts with an error keeps it, whatever follows. */
-  CHECK_EQ(rig.wsi().acquire(rig.device(), live, 0u, &index), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().acquire(rig.device(), live, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_SUCCESS);
   const VkSwapchainKHR chains[] = {swapchain, live};
   std::uint32_t indices[2] = {0u, index};
   VkPresentInfoKHR present = {};

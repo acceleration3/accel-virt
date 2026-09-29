@@ -59,13 +59,19 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
 
     properties_.memoryTypeCount = host.memoryTypeCount;
     for (uint32_t type = 0u; type < host.memoryTypeCount; type++) properties_.memoryTypes[type] = host.memoryTypes[type];
+    /* An adapter with a local segment is given no non-local budget by VidMm,
+     * and a heap of none is one VMA will not place a mapped buffer in: the
+     * host's own size stands in for it. */
+    uint64_t system_heap = budgets[non_local_group];
+    for (uint32_t heap = 0u; heap < host.memoryHeapCount && system_heap == 0u; heap++)
+        if (group_of(host.memoryHeaps[heap]) == non_local_group) system_heap = host.memoryHeaps[heap].size;
     properties_.memoryHeapCount = host.memoryHeapCount;
     for (uint32_t heap = 0u; heap < host.memoryHeapCount; heap++) {
         properties_.memoryHeaps[heap].flags = host.memoryHeaps[heap].flags;
         const bool device_local = group_of(host.memoryHeaps[heap]) == local_group;
-        properties_.memoryHeaps[heap].size = device_local ? host.memoryHeaps[heap].size : budgets[non_local_group];
+        properties_.memoryHeaps[heap].size = device_local ? host.memoryHeaps[heap].size : system_heap;
     }
-    shared_budget_ = budgets[non_local_group];
+    shared_budget_ = system_heap;
     for (uint32_t group = 0u; group < groups; group++) usages_[group] = usages[group];
     return Status::ok;
 }

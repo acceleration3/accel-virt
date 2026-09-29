@@ -7,6 +7,12 @@ namespace av::icd {
 
 namespace {
 
+/* Where a present's semaphores are waited: the copy is a transfer. */
+constexpr VkPipelineStageFlags present_stages[PresentDevice::max_waits] = {
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
+
 using CreateImage = VkResult(VKAPI_PTR *)(VkDevice, const VkImageCreateInfo *, const VkAllocationCallbacks *, VkImage *);
 using DestroyImage = void(VKAPI_PTR *)(VkDevice, VkImage, const VkAllocationCallbacks *);
 using ImageRequirements = void(VKAPI_PTR *)(VkDevice, VkImage, VkMemoryRequirements *);
@@ -220,20 +226,29 @@ VkResult PresentDevice::copy(VkQueue queue, VkImage image, VkExtent2D extent, ui
     submit.pCommandBuffers = &commands_;
     /* The application's semaphores are the host's: the copy waits on them
      * where the host would have presented. */
-    const VkPipelineStageFlags stages[max_waits] = {
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT};
     if (wait_count > max_waits) return VK_ERROR_OUT_OF_HOST_MEMORY;
     submit.waitSemaphoreCount = wait_count;
     submit.pWaitSemaphores = waits;
-    submit.pWaitDstStageMask = stages;
+    submit.pWaitDstStageMask = present_stages;
     step = call<Submit>("vkQueueSubmit")(queue, 1u, &submit, fence_);
     if (step != VK_SUCCESS) return step;
     step = call<WaitFences>("vkWaitForFences")(device_, 1u, &fence_, VK_TRUE, copy_timeout_ns);
     const VkResult reset = call<ResetFences>("vkResetFences")(device_, 1u, &fence_);
     if (step != VK_SUCCESS) return step == VK_TIMEOUT ? VK_ERROR_DEVICE_LOST : step;
     return reset;
+}
+
+VkResult PresentDevice::skip(VkQueue queue, uint32_t wait_count, const VkSemaphore *waits)
+{
+    AV_SCOPE("PresentDevice::skip");
+    if (wait_count == 0u) return VK_SUCCESS;
+    if (wait_count > max_waits) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    VkSubmitInfo submit = {};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.waitSemaphoreCount = wait_count;
+    submit.pWaitSemaphores = waits;
+    submit.pWaitDstStageMask = present_stages;
+    return call<Submit>("vkQueueSubmit")(queue, 1u, &submit, VK_NULL_HANDLE);
 }
 
 VkResult PresentDevice::record_copy(VkImage image, VkExtent2D extent)

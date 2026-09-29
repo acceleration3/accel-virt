@@ -150,6 +150,13 @@ public:
     VkResult           wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout);
     VkResult           queue_wait_idle(VkQueue queue);
     VkResult           device_wait_idle(VkDevice device);
+    /* Signals what an application gave vkAcquireNextImageKHR, on the first
+     * queue `device` handed out: an empty submission that signals `semaphore`
+     * and `fence`, either of which may be null. The image is already idle -
+     * a present copies synchronously - but the host still needs a signal
+     * operation before a submission waits on the semaphore: without one radv
+     * blocks inside vkQueueSubmit, holding the context's worker for good. */
+    VkResult           signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence fence);
     /* The probe's lost step (feature 045): the instance's context is sent a
      * vkCreateInstance cut after its structure type, which the host faults it
      * for. VK_ERROR_DEVICE_LOST once it has; VK_ERROR_INITIALIZATION_FAILED

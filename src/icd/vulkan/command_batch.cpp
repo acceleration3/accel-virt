@@ -22,7 +22,7 @@ static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (do
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
     : memory_(memory), connection_(connection), block_(nullptr), capacity_(0u), used_(0u), last_(0u), failure_(Status::ok),
-      decode_arena_(nullptr, 0u), blobs_()
+      refused_(0u), decode_arena_(nullptr, 0u), blobs_()
       {
           AV_SCOPE("CommandBatch::CommandBatch");
       }
@@ -49,14 +49,29 @@ Status CommandBatch::end()
     return connection_.send_batch(block_, used_) == TransportResult::ok ? Status::ok : Status::invalid_state;
 }
 
-/* Room for the next command's header and its lent room, or, at the command
- * limit, whatever is left past a header. */
+/* Room for the next command's header and its lent room: a bigger block below
+ * the command limit, and at it, the block emptied into a batch of its own. */
 bool CommandBatch::make_room()
 {
     AV_SCOPE("CommandBatch::make_room");
     if (capacity_ - used_ >= header_bytes + command_room) return true;
-    if (capacity_ == Connection::command_bytes) return capacity_ - used_ > header_bytes;
+    if (capacity_ == Connection::command_bytes) return flush();
     return grow();
+}
+
+uint32_t CommandBatch::refused() const
+{
+    AV_SCOPE("CommandBatch::refused");
+    return refused_;
+}
+
+bool CommandBatch::flush()
+{
+    AV_SCOPE("CommandBatch::flush");
+    if (connection_.send_batch(block_, used_) != TransportResult::ok) return false;
+    used_ = 0u;
+    last_ = 0u;
+    return true;
 }
 
 /* One doubling is always enough: a block is at least twice the room a
@@ -82,6 +97,7 @@ WireWriter CommandBatch::request_writer()
     if (failure_ != Status::ok) return WireWriter(nullptr, 0u);
     if (!make_room()) {
         failure_ = Status::no_memory;
+        refused_ = 0u;
         return WireWriter(nullptr, 0u);
     }
     const size_t left = capacity_ - used_ - header_bytes;
@@ -94,6 +110,7 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     if (failure_ != Status::ok) return TransportResult::failed;
     if (writer.status() != Status::ok) {
         failure_ = Status::no_memory;
+        refused_ = command_id;
         return TransportResult::failed;
     }
     const size_t size = header_bytes + writer.offset();

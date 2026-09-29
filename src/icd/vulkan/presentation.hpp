@@ -54,7 +54,9 @@ public:
     VkResult create_swapchain(VkDevice device, const VkSwapchainCreateInfoKHR *info, VkSwapchainKHR *swapchain);
     void     destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain);
     VkResult swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count, VkImage *images);
-    VkResult acquire(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, uint32_t *index);
+    /* The next image, with `semaphore` and `fence` signalled for it. */
+    VkResult acquire(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore,
+                     VkFence fence, uint32_t *index);
     /* Every swapchain of `info` in turn: each result into pResults, the worst
      * as the answer. */
     VkResult present(VkQueue queue, const VkPresentInfoKHR *info);

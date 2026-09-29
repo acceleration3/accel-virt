@@ -123,6 +123,8 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
     held_[index] = false;
     const VkResult state = window_state();
     if (state != VK_SUCCESS) return state;
+    if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_IMMEDIATE_KHR) && !pacer_.admits())
+        return device_.skip(queue, wait_count, waits);
     const VkResult copied = device_.copy(queue, device_.made(index).image_, extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
     to_window_order(device_.readback());

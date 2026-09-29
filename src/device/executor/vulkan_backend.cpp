@@ -44,7 +44,7 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), host_import_(false), handles_(),
+    : gpu_(nullptr), listed_(), extensions_(), application_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), host_import_(false), handles_(),
       adopted_(), import_(), importable_(), parent_(0u), ran_(0u), lost_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -161,6 +161,18 @@ void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
     create.enabledExtensionCount = extensions_.count();
 }
 
+void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
+{
+    AV_SCOPE("VulkanBackend::adopt_host_version");
+    uint32_t host_version = lowest_api_version;
+    if (::vkEnumerateInstanceVersion(&host_version) != VK_SUCCESS) return;
+    application_ = create.pApplicationInfo != nullptr ? *create.pApplicationInfo : VkApplicationInfo{};
+    application_.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    if (application_.apiVersion >= host_version) return;
+    application_.apiVersion = host_version;
+    create.pApplicationInfo = &application_;
+}
+
 void VulkanBackend::enable_host_import(VkDeviceCreateInfo &create)
 {
     AV_SCOPE("VulkanBackend::enable_host_import");
@@ -192,6 +204,7 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
         return VK_ERROR_INCOMPATIBLE_DRIVER;
     VkInstanceCreateInfo create = *pCreateInfo;
     enable_identity(create);
+    adopt_host_version(create);
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
     /* Kept so shut_down can destroy what a dying context never did. Which
      * handles the guest may name back is not decided here: every handle leaves

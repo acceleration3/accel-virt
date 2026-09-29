@@ -46,6 +46,9 @@ public:
      * `queue` once the `waits` semaphores are signalled, and waited for; the
      * image is left in PRESENT_SRC. */
     VkResult copy(VkQueue queue, VkImage image, VkExtent2D extent, uint32_t wait_count, const VkSemaphore *waits);
+    /* The `waits` semaphores waited on `queue` for a frame that is not shown:
+     * a present consumes what the application signalled for it either way. */
+    VkResult skip(VkQueue queue, uint32_t wait_count, const VkSemaphore *waits);
     /* Everything made, in reverse. */
     void     release();
     uint32_t images() const;
