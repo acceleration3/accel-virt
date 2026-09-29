@@ -69,6 +69,54 @@ static const GraphicHwOps virtio_gpu_rvk_console_ops = {
     .text_update = virtio_gpu_rvk_console_text,
 };
 
+/* The core's modes, and GET_DISPLAY_INFO's rectangle at the preferred one: a
+ * driver that asks only for the rectangle still starts in the preferred mode.
+ * None to offer leaves the rectangle xres and yres. */
+static bool virtio_gpu_rvk_apply_modes(VirtIOGPURvk *r, const char *modes, Error **errp)
+{
+    VirtIOGPUBase *b = VIRTIO_GPU_BASE(r);
+    uint32_t width = 0;
+    uint32_t height = 0;
+    const int set = rvk_device_set_modes(r->core, modes, &width, &height);
+
+    if (set < 0) {
+        error_setg(errp, "virtio-gpu-rvk: modes '%s' is not a list of WxH sizes between commas "
+                   "(the first preferred), such as 1920x1080,80x80", modes);
+        return false;
+    }
+    for (uint32_t i = 0; set > 0 && i < b->conf.max_outputs; i++) {
+        b->req_state[i].width = width;
+        b->req_state[i].height = height;
+    }
+    return true;
+}
+
+static char *virtio_gpu_rvk_get_modes(Object *obj, Error **errp)
+{
+    VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
+
+    return g_strdup(r->modes ? r->modes : "");
+}
+
+/* Before realize this only keeps the text, which realize applies. After it
+ * the modes change at once and the guest is told with a display event, as a
+ * monitor being swapped would tell it. */
+static void virtio_gpu_rvk_set_modes(Object *obj, const char *value, Error **errp)
+{
+    VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
+    VirtIOGPUBase *b = VIRTIO_GPU_BASE(obj);
+
+    if (r->core) {
+        if (!virtio_gpu_rvk_apply_modes(r, value, errp)) {
+            return;
+        }
+        b->virtio_config.events_read |= VIRTIO_GPU_EVENT_DISPLAY;
+        virtio_notify_config(VIRTIO_DEVICE(obj));
+    }
+    g_free(r->modes);
+    r->modes = g_strdup(value);
+}
+
 static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
 {
     /* A profiling run (RVK_PERFETTO) lets any process of the user read this
@@ -151,6 +199,10 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     }
     for (uint32_t i = 0; i < b->conf.max_outputs; i++) {
         qemu_graphic_console_set_hwops(b->scanout[i].con, &virtio_gpu_rvk_console_ops, b);
+    }
+    /* After the base class, which sets the rectangle from xres and yres. */
+    if (!virtio_gpu_rvk_apply_modes(r, r->modes, errp)) {
+        return;
     }
     /* A GPU that renders but drives no monitor, as a second host GPU is. */
     if (!r->display) {
@@ -310,6 +362,8 @@ static void virtio_gpu_rvk_finalize(Object *obj)
     if (r->executor_library) {
         g_module_close(r->executor_library);
     }
+    g_free(r->modes);
+    r->modes = NULL;
 }
 
 /* Stores that are not a connected doorbell's ioeventfd land here and do nothing. */
@@ -361,6 +415,10 @@ static void virtio_gpu_rvk_class_init(ObjectClass *klass, const void *data)
     vgc->process_cmd = virtio_gpu_rvk_process_cmd;
     vdc->reset = virtio_gpu_rvk_reset;
     device_class_set_props(dc, virtio_gpu_rvk_properties);
+    object_class_property_add_str(klass, "modes", virtio_gpu_rvk_get_modes, virtio_gpu_rvk_set_modes);
+    object_class_property_set_description(klass, "modes",
+                                          "the display's modes, WxH between commas, the first preferred; "
+                                          "empty: the host monitors' modes");
 }
 
 static const TypeInfo virtio_gpu_rvk_info[] = {

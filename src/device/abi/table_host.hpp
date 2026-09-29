@@ -31,6 +31,7 @@ public:
     GpuIdentity gpu_identity(uint32_t index) override;
     Status   gpu_pci_address(uint32_t index, PciAddress &address) override;
     Status   read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
+    Status   list_directory(const char *path, char *buffer, size_t capacity, size_t &length) override;
     void    *allocate(size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;

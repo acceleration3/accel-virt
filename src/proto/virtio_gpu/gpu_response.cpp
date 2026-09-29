@@ -47,7 +47,19 @@ void GpuResponse::set_capset(const CapsetInfo &capset)
     set(ok_capset);
     WireWriter writer(bytes_ + header_size, CapsetInfo::encoded_size);
     capset.encode(writer);
-    length_ = max_length;
+    length_ = header_size + CapsetInfo::encoded_size;
+}
+
+void GpuResponse::set_display_modes(const DisplayModeSet &modes)
+{
+    AV_SCOPE("GpuResponse::set_display_modes");
+    WireWriter writer(bytes_, sizeof bytes_);
+    if (modes.encode(writer) != Status::ok) {
+        set(err_unspec);
+        return;
+    }
+    type_ = DisplayModeSet::response_type;
+    length_ = writer.offset();
 }
 
 uint32_t GpuResponse::type() const

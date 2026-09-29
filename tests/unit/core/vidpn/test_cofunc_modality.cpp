@@ -84,7 +84,7 @@ TEST(cofunc_modality_enumerate, nothing_pinned_offers_every_mode_on_both_ends)
   CHECK_EQ(sources.modes(), DisplayModeList::standard_count);
   CHECK_EQ(targets.modes(), DisplayModeList::standard_count);
   CHECK_EQ(sources.mode(0u).PrimSurfSizeCx, 640u);
-  CHECK_EQ(sources.mode(0u).PixelFormat, 22);
+  CHECK_EQ(sources.mode(0u).PixelFormat, 21);
   for (std::uint32_t index = 0u; index < targets.modes(); index++) {
       const D3dkmdtVidPnTargetModeRecord &mode = targets.mode(index);
       const bool is_preferred = mode.VideoSignalInfo.ActiveSizeCx == 1280u && mode.VideoSignalInfo.ActiveSizeCy == 800u;

@@ -1,5 +1,7 @@
 #include "core/miniport/dxgkrnl_interface.hpp"
 
+#include "core/ddi/dxgk_child_status_record.hpp"
+
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
@@ -140,6 +142,21 @@ void DxgkrnlInterface::notify_dpc()
     AV_SCOPE("DxgkrnlInterface::notify_dpc");
     platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::notify_dpc");
     if (initialized_) record_.DxgkCbNotifyDpc(record_.DeviceHandle);
+}
+
+void DxgkrnlInterface::replug(uint32_t child)
+{
+    AV_SCOPE("DxgkrnlInterface::replug");
+    platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::replug");
+    if (!initialized_ || record_.DxgkCbIndicateChildStatus == nullptr) return;
+    constexpr int32_t     status_connection = 1;   /* StatusConnection */
+    DxgkChildStatusRecord status = {};
+    status.Type = status_connection;
+    status.ChildUid = child;
+    status.HotPlugConnected = 0u;
+    static_cast<void>(record_.DxgkCbIndicateChildStatus(record_.DeviceHandle, &status));
+    status.HotPlugConnected = 1u;
+    static_cast<void>(record_.DxgkCbIndicateChildStatus(record_.DeviceHandle, &status));
 }
 
 Status DxgkrnlInterface::query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface)

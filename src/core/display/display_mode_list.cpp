@@ -49,6 +49,36 @@ Status DisplayModeList::follow(const DisplayInfoResponse &info, uint32_t scanout
     return Status::ok;
 }
 
+Status DisplayModeList::adopt(const DisplayModeSet &set)
+{
+    AV_SCOPE("DisplayModeList::adopt");
+    DisplayMode taken[max_modes];
+    uint32_t    count = 0u;
+    uint32_t    preferred = max_modes;
+    for (uint32_t index = 0u; index < set.count() && count < max_modes; index++) {
+        const DisplayMode mode(set.width(index), set.height(index));
+        if (!mode.offerable()) continue;
+        /* Into place by area, after any of the same area: ascending, and in
+         * the host's order where two modes tie. */
+        uint32_t at = count;
+        while (at != 0u && area_of(taken[at - 1u]) > area_of(mode)) {
+            taken[at] = taken[at - 1u];
+            at--;
+        }
+        taken[at] = mode;
+        if (preferred != max_modes && preferred >= at) preferred++;
+        if (index == set.preferred()) preferred = at;
+        count++;
+    }
+    if (count == 0u) return Status::not_found;
+    /* Sorted by area, the last is the largest. */
+    if (preferred == max_modes) preferred = count - 1u;
+    for (uint32_t index = 0u; index < count; index++) modes_[index] = taken[index];
+    count_ = count;
+    preferred_index_ = preferred;
+    return Status::ok;
+}
+
 uint32_t DisplayModeList::count() const
 {
     AV_SCOPE("DisplayModeList::count");

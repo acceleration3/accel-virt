@@ -55,6 +55,8 @@ public:
     GpuIdentity gpu_identity(std::uint32_t index) override;
     Status   gpu_pci_address(std::uint32_t index, PciAddress &address) override;
     Status   read_file(const char *path, char *buffer, std::size_t capacity, std::size_t &length) override;
+    /* The names directly under `path` of the files add_file was given. */
+    Status   list_directory(const char *path, char *buffer, std::size_t capacity, std::size_t &length) override;
     void    *allocate(std::size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(std::uint64_t address, std::uint64_t &length, bool &direct) override;
@@ -386,8 +388,8 @@ private:
     static constexpr std::uint32_t max_ranges = 128u;
     static constexpr std::uint32_t max_recordings = 4u;
     static constexpr std::size_t   max_path = 128u;
-    static constexpr std::uint32_t max_files = 16u;
-    static constexpr std::size_t   max_file_bytes = 32u;
+    static constexpr std::uint32_t max_files = 24u;
+    static constexpr std::size_t   max_file_bytes = 512u;
     /* What one recording may hold in the mock: larger than any test writes,
      * so a test that overruns it is a test that meant something else. */
     static constexpr std::size_t   recording_capacity = 4u << 20;

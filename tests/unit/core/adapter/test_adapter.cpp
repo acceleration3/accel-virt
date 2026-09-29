@@ -98,6 +98,7 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
@@ -110,7 +111,9 @@
 #include "proto/submission/submission_descriptor.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
+#include <utility>
 #include <cstring>
 
 namespace av {
@@ -298,6 +301,9 @@ public:
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
     void                   offer_opengl() { capset_ = host_capset(first_gpu, 0x3u); }
+    /* The modes the host offers from the next ask on (GET_DISPLAY_MODES); a
+     * fixture offering none answers that ask as a device from before it would. */
+    void                   offer_modes(const av::DisplayModeSet &modes) { offered_modes_ = modes; }
     /* A device with no room left for a window chunk's blob. */
     void                   refuse_the_blob() { refuse_blob_ = true; }
     /* MAP_BLOBs and UNMAP_BLOBs the device answered: window chunks placed and
@@ -369,6 +375,13 @@ private:
                                                             &Fixture::answer_present_copy, fixture));
             return;
         }
+        if (asked == av::DisplayModeSet::request_type && fixture->offered_modes_.count() != 0u) {
+            av::GpuResponse answer;
+            answer.set_display_modes(fixture->offered_modes_);
+            static_cast<void>(fixture->control().respond_all(answer.bytes(),
+                                                             static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
         if (fixture->answer_ == Answer::none) return;
         if (fixture->answer_ == Answer::wrong_type) {
             static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA, not display info */
@@ -406,6 +419,7 @@ private:
     std::uint32_t         blob_unmaps_ = 0u;
     std::uint32_t         context_requests_ = 0u;
     bool                  ignore_capset_ = false;
+    av::DisplayModeSet    offered_modes_;
     Answer                answer_ = Answer::display_info;
     std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
@@ -1105,13 +1119,13 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   fixture.platform().set_irql(Irql::passive);
   const std::uint32_t after_commit = control.respond_all(0x1100u);
   CHECK_EQ(after_commit, 5u);                         /* create, attach, set_scanout, transfer, flush */
-  /* Requests 0 to 2 were StartDevice's: the display info, and the two the
-   * capset query takes (feature 040, FR-005). */
-  CHECK_EQ(control.request_type(3u), 0x0101u);
-  CHECK_EQ(control.request_type(4u), 0x0106u);
-  CHECK_EQ(control.request_type(5u), 0x0103u);
-  CHECK_EQ(control.request_type(6u), 0x0105u);
-  CHECK_EQ(control.request_type(7u), 0x0104u);
+  /* Requests 0 to 3 were StartDevice's: the display info, its modes, and the
+   * two the capset query takes (feature 040, FR-005). */
+  CHECK_EQ(control.request_type(4u), 0x0101u);
+  CHECK_EQ(control.request_type(5u), 0x0106u);
+  CHECK_EQ(control.request_type(6u), 0x0103u);
+  CHECK_EQ(control.request_type(7u), 0x0105u);
+  CHECK_EQ(control.request_type(8u), 0x0104u);
   /* Nothing presented since: the host is not asked to read again. */
   fixture.platform().advance_time(display_period);
   fixture.platform().set_irql(Irql::dispatch);
@@ -3640,14 +3654,14 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Requests 0 to 2 were StartDevice's display info and capset query; the
-   * resource and the scanout are the second source's. */
-  CHECK_EQ(control.request_type(3u), 0x0101u);
-  CHECK_EQ(u32(control.request(3u), 24u), av::ScanoutResource::first_resource_id + 1u);
-  CHECK_EQ(u32(control.request(3u), 32u), 1024u);
-  CHECK_EQ(control.request_type(5u), 0x0103u);
-  CHECK_EQ(u32(control.request(5u), 40u), 1u);   /* scanout 1 */
-  CHECK_EQ(u32(control.request(5u), 44u), av::ScanoutResource::first_resource_id + 1u); }
+  /* Requests 0 to 3 were StartDevice's display info, modes and capset query;
+   * the resource and the scanout are the second source's. */
+  CHECK_EQ(control.request_type(4u), 0x0101u);
+  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(4u), 32u), 1024u);
+  CHECK_EQ(control.request_type(6u), 0x0103u);
+  CHECK_EQ(u32(control.request(6u), 40u), 1u);   /* scanout 1 */
+  CHECK_EQ(u32(control.request(6u), 44u), av::ScanoutResource::first_resource_id + 1u); }
 
 /* One mode list cannot describe displays of different sizes, so the driver says
  * when the device gives it some. */
@@ -5026,3 +5040,77 @@ TEST(adapter_dpc_routine, lets_a_follower_go_once_it_has_waited_the_deadline)
   CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* ---- the host's own modes (GET_DISPLAY_MODES) ---------------------------- */
+
+namespace {
+
+av::DisplayModeSet host_modes(std::initializer_list<std::pair<std::uint32_t, std::uint32_t>> modes,
+                              std::uint32_t preferred)
+{
+    av::DisplayModeSet set;
+    for (const auto &mode : modes) CHECK_STATUS(set.add(mode.first, mode.second), av::Status::ok);
+    CHECK_STATUS(set.prefer(preferred), av::Status::ok);
+    return set;
+}
+
+/* The width of the EDID's preferred timing: what Windows starts the monitor in. */
+std::uint32_t edid_preferred_width(Fixture &fixture)
+{
+    av::DxgkDeviceDescriptorRecord descriptor = {};
+    std::uint8_t                   edid[av::Edid::block_bytes] = {};
+    descriptor.DescriptorLength = sizeof edid;
+    descriptor.DescriptorBuffer = edid;
+    CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+    return static_cast<std::uint32_t>(edid[56] | (edid[58] >> 4u) << 8u);
+}
+
+}  // namespace
+
+TEST(adapter_start_device, offers_the_hosts_own_modes_whatever_their_size)
+{ Fixture fixture;
+  /* 5120x2880 is past what the EDID's detailed timing can describe, and 80x80
+   * under the 100 pixels an edge dxgkrnl takes. */
+  fixture.offer_modes(host_modes({{1920u, 1080u}, {100u, 100u}, {2560u, 1440u}, {5120u, 2880u}, {80u, 80u}}, 2u));
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(edid_preferred_width(fixture), 2560u);
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 0u);
+  const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u);
+  /* Any of them can be committed, however small; a standard mode the host did
+   * not offer, or one left out, cannot. */
+  CHECK_EQ(commit(fixture, 100u, 100u), success);
+  CHECK_EQ(commit(fixture, 80u, 80u), invalid_source_mode);
+  CHECK_EQ(commit(fixture, 1280u, 800u), invalid_source_mode); }
+
+/* A change of modes while the guest runs: the interrupt's DPC clears the
+ * device's event and replugs each monitor, and the monitor DDIs Windows then
+ * calls follow the device's new modes. */
+TEST(adapter_dpc_routine, a_display_event_is_cleared_and_each_monitor_replugged)
+{ Fixture fixture;
+  fixture.offer_modes(host_modes({{1920u, 1080u}}, 0u));
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(edid_preferred_width(fixture), 1920u);
+  fixture.offer_modes(host_modes({{100u, 100u}, {1024u, 768u}}, 0u));
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 1u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.function().device_config().read_u32(4u), 1u);   /* events_clear: VIRTIO_GPU_EVENT_DISPLAY */
+  CHECK_EQ(fixture.dxgkrnl().child_statuses(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().child_status_uid(0u), 0u);
+  CHECK(!fixture.dxgkrnl().child_status_connected(0u));
+  CHECK(fixture.dxgkrnl().child_status_connected(1u));
+  fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+  CHECK_EQ(edid_preferred_width(fixture), 100u);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(commit(fixture, 100u, 100u), success);
+  CHECK_EQ(commit(fixture, 1920u, 1080u), invalid_source_mode);
+  /* The next DPC with no new event replugs nothing. */
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().child_statuses(), 2u); }

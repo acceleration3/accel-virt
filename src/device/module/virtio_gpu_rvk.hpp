@@ -9,6 +9,7 @@
 #include "device/context/local_context_plane.hpp"
 #include "device/isolation/renderer_context_plane.hpp"
 #include "device/display/display_heads.hpp"
+#include "device/display/display_modes.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
@@ -50,6 +51,14 @@ public:
     /* Main loop. Whether the core answered the control request; false leaves it
      * to the base class, as does every request to an unrealized device. */
     bool                 control(void *request, uint32_t type);
+    /* Main loop, before the guest runs or while it does: the modes the display
+     * offers from now on - `text` as the `modes` property writes it, or the
+     * host's monitors' for none - and the preferred one's edges, for
+     * GET_DISPLAY_INFO's rectangle. invalid_parameter, nothing changed, for
+     * text that is no list of modes; not_found for none and no monitor. */
+    [[nodiscard]] Status set_modes(const char *text, uint32_t &width, uint32_t &height);
+    /* rvk_device_set_modes' answer for the same: 1 set, 0 none, -1 refused. */
+    int                  offer_modes(const char *text, uint32_t *width, uint32_t *height);
     /* How many capsets the device offers: one once realized. */
     uint32_t             capsets() const;
     /* Main loop: the host image a guest allocation shows under `key`, into a
@@ -95,6 +104,7 @@ private:
     /* After the blobs it pins and before the contexts: a head holds a pin, so
      * every head lets go before the table it pinned from goes. */
     DisplayHeads       heads_;
+    DisplayModes       display_modes_;
     FenceInterrupts    interrupts_;
     DriverStatus       status_;
     /* Where the contexts run: here, or in the renderer realize started. */

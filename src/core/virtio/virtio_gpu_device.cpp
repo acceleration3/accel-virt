@@ -180,6 +180,13 @@ bool VirtioGpuDevice::running() const
     return running_;
 }
 
+Status VirtioGpuDevice::acknowledge_display_event()
+{
+    AV_SCOPE("VirtioGpuDevice::acknowledge_display_event");
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::acknowledge_display_event");
+    return transport_.write_device_u32(events_clear_offset, event_display);
+}
+
 uint32_t VirtioGpuDevice::scanouts() const
 {
     AV_SCOPE("VirtioGpuDevice::scanouts");

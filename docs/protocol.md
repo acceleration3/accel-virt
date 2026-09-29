@@ -443,6 +443,40 @@ the device refuses, does not answer, or the driver cannot hand it - more pages
 than its buffer holds - the miniport moves itself, as it did before this
 request.
 
+#### The display's modes (control queue)
+
+The resolutions the display offers, any sizes and not only the standard ones,
+are the host's to set: the device's `modes` property (`WxH` entries between
+commas, the first preferred, such as `2560x1440,1920x1080,1000x600`), given on
+QEMU's command line or changed over QMP while the guest runs; or, set to
+nothing, the modes of the monitors connected to the host, as
+`/sys/class/drm/<card>-<connector>/modes` lists them - interlaced ones and
+those under 640x480 left out, the largest monitor's best mode preferred. The
+miniport asks at start and again after each display event:
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | a `virtio_gpu_ctrl_hdr`, type `0x02F3`, context 0, no fence |
+
+and the device answers:
+
+| Offset | Size | Field | |
+|--:|--:|---|---|
+| 0 | 24 | header | type `0x11F3` |
+| 24 | 4 | count | 1 to 32 |
+| 28 | 4 | preferred | the index of the mode the guest shows unless its user picks another; below `count` |
+| 32 | 8 each | modes | u32 width, u32 height, each 1 to 16384; no mode twice |
+
+A device with no modes to offer - none set and no monitor - answers
+`ERR_UNSPEC`, and so does one from before this request; the miniport then
+offers the standard modes that fit `GET_DISPLAY_INFO`'s rectangle, as it did
+before. The device keeps that rectangle at the preferred mode, and a change of
+modes while the guest runs sets `VIRTIO_GPU_EVENT_DISPLAY` and notifies the
+configuration change, which is when the miniport asks again, clears the event
+and has Windows read the monitor's modes afresh. A mode the miniport cannot
+describe in its EDID's detailed timing - an edge past 4095, or a pixel clock
+past 655.35 MHz at 60 Hz - is not offered.
+
 ### Reply slot (device -> guest)
 
 Offset 0 of the reply resource; the answer follows at offset 32. 32 bytes.

@@ -8,6 +8,7 @@
 #include "device/memory/host_shared_object.hpp"
 #include "device/memory/host_shared_objects.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 #include "device/recording/record_kind.hpp"
 #include "device/recording/record_kinds.hpp"
 #include "core/support/text_buffer.hpp"
@@ -1005,3 +1006,43 @@ TEST(virtio_gpu_rvk_realize, an_empty_renderer_keeps_the_contexts_in_qemu)
 { RendererDevice rig(0u);
   CHECK_STATUS(rig.realize("", nullptr), Status::ok);
   CHECK_EQ(rig.host().renderer_starts(), 0u); }
+
+/* The modes the display offers: told, or the host monitors' for none; the
+ * guest's GET_DISPLAY_MODES reads them; rvk_device_set_modes' answers. */
+TEST(virtio_gpu_rvk_modes, told_modes_are_answered_and_a_bad_text_changes_nothing)
+{ MockHost host;
+  host.add_gpu(first);
+  const char status[] = "connected\n";
+  const char listed[] = "2560x1440\n1920x1080\n";
+  host.add_file("/sys/class/drm/card1-DP-2/status", status, sizeof status - 1u);
+  host.add_file("/sys/class/drm/card1-DP-2/modes", listed, sizeof listed - 1u);
+  VirtioGpuRvk device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  std::uint32_t width = 0u;
+  std::uint32_t height = 0u;
+  CHECK_EQ(device.offer_modes("", &width, &height), 1);
+  CHECK_EQ(width, 2560u);
+  CHECK_EQ(height, 1440u);
+  CHECK_EQ(device.offer_modes("80x80,1920x1080", &width, &height), 1);
+  CHECK_EQ(width, 80u);
+  CHECK_EQ(height, 80u);
+  CHECK_EQ(device.offer_modes("80x", &width, &height), -1);
+  GpuRequestBuilder asked(av::DisplayModeSet::request_type);
+  MockRequest       request(asked.bytes(), asked.size());
+  CHECK(device.control(&request, av::DisplayModeSet::request_type));
+  av::DisplayModeSet read;
+  CHECK_STATUS(read.decode(request.response_bytes(), request.response_size()), Status::ok);
+  CHECK_EQ(read.count(), 2u);
+  CHECK_EQ(read.width(read.preferred()), 80u);
+  /* No text and no monitor: nothing to offer, and the guest keeps the rectangle. */
+  MockHost bare;
+  bare.add_gpu(first);
+  VirtioGpuRvk headless(bare);
+  CHECK_STATUS(headless.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  CHECK_EQ(headless.offer_modes(nullptr, nullptr, nullptr), 0);
+  std::uint32_t none = 7u;
+  CHECK_STATUS(headless.set_modes("", none, none), Status::not_found);
+  CHECK_EQ(none, 0u);
+  CHECK(device.invariants_hold()); }

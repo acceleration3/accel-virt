@@ -77,7 +77,7 @@ TEST(vidpn_commit_apply, a_mode_or_format_the_adapter_lacks_is_an_invalid_source
   CHECK(size.sources().committed_mode(0u) == nullptr);
   Commit format;
   D3dkmdtVidPnSourceModeRecord mode = source_mode(1024u, 768u);
-  mode.PixelFormat = 21;
+  mode.PixelFormat = 22;   /* D3DDDIFMT_X8R8G8B8 */
   format.vidpn().source_modes(0u).seed(mode, true);
   CHECK_EQ(format.apply(), invalid_source_mode); }
 

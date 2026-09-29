@@ -6,6 +6,7 @@
 #define AV_GPU_RESPONSE_HPP
 
 #include "proto/context/capset_info.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,7 +27,9 @@ public:
         err_invalid_parameter = 0x1205u,
     };
     static constexpr uint32_t map_cache_cached = 1u;   /* VIRTIO_GPU_MAP_CACHE_CACHED */
-    static constexpr size_t   max_length = 24u + CapsetInfo::encoded_size;
+    static constexpr size_t   max_length = 24u + CapsetInfo::encoded_size > DisplayModeSet::max_encoded_size
+                                               ? 24u + CapsetInfo::encoded_size
+                                               : DisplayModeSet::max_encoded_size;
 
     GpuResponse();
 
@@ -34,6 +37,8 @@ public:
     void           set_map_info(uint32_t map_info);
     void           set_capset_info(uint32_t capset_id, uint32_t max_version, uint32_t max_size);
     void           set_capset(const CapsetInfo &capset);
+    /* OK_RVK_DISPLAY_MODES and the set; ERR_UNSPEC for an empty one. */
+    void           set_display_modes(const DisplayModeSet &modes);
     uint32_t       type() const;
     const uint8_t *bytes() const;
     size_t         length() const;

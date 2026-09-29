@@ -11,6 +11,20 @@ DisplayMode::DisplayMode(uint32_t width, uint32_t height) : width_(width), heigh
     AV_SCOPE("DisplayMode::DisplayMode");
 }
 
+DisplayMode::DisplayMode() : DisplayMode(smallest_width, smallest_height)
+{
+    AV_SCOPE("DisplayMode::DisplayMode");
+}
+
+bool DisplayMode::offerable() const
+{
+    AV_SCOPE("DisplayMode::offerable");
+    if (width_ < min_source_edge || height_ < min_source_edge) return false;
+    if (width_ > max_edid_edge || height_ > max_edid_edge) return false;
+    if (total_height() - height_ > max_edid_edge) return false;
+    return pixel_rate() / edid_pixel_clock_unit_hz <= max_edid_pixel_clock_units;
+}
+
 uint32_t DisplayMode::width() const
 {
     AV_SCOPE("DisplayMode::width");
@@ -47,7 +61,7 @@ void DisplayMode::describe(D3dkmdtVidPnSourceModeRecord &source) const
     source.VisibleRegionSizeCx = width_;
     source.VisibleRegionSizeCy = height_;
     source.Stride = width_ * bytes_per_pixel;
-    source.PixelFormat = format_x8r8g8b8;
+    source.PixelFormat = format_a8r8g8b8;
     source.ColorBasis = color_basis_srgb;
     source.PixelValueAccessMode = access_direct;
 }
@@ -72,7 +86,7 @@ bool DisplayMode::matches(const D3dkmdtVidPnSourceModeRecord &source) const
 {
     AV_SCOPE("DisplayMode::matches");
     return source.PrimSurfSizeCx == width_ && source.PrimSurfSizeCy == height_ &&
-           source.PixelFormat == format_x8r8g8b8;
+           source.PixelFormat == format_a8r8g8b8;
 }
 
 bool DisplayMode::matches(const D3dkmdtVideoSignalInfoRecord &signal) const

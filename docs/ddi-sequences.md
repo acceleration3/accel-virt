@@ -488,9 +488,9 @@ and this driver follows, for one source and one target:
 
 | DDI | Answer |
 |---|---|
-| `IsSupportedVidPn` | a null VidPn, or at most one path joining source 0 to target 0, is supported; anything else is not (still `STATUS_SUCCESS`) |
+| `IsSupportedVidPn` | a null VidPn, or at most one path joining source 0 to target 0 whose pinned source mode, if any, is in the list, is supported; anything else is not (still `STATUS_SUCCESS`) |
 | `EnumVidPnCofuncModality` | per path: a source mode set that is neither pinned nor the pivot is replaced (`pfnCreateNewSourceModeSet`, `pfnAddMode` per mode, `pfnAssignSourceModeSet`) by every mode; a target mode set likewise, narrowed to the pinned source mode's size when one is pinned; unset scaling and rotation (not the pivot) get identity-only support through `pfnUpdatePathSupportInfo` |
-| `CommitVidPn` | `PathPoweredOff` changes nothing; no path from the affected source, or no pinned source mode, leaves it without a mode; a pinned mode not in the list or not X8R8G8B8 is `STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE` (0xC01E0310) |
+| `CommitVidPn` | `PathPoweredOff` changes nothing; no path from the affected source, or no pinned source mode, leaves it without a mode; a pinned mode not in the list or not A8R8G8B8 - the only 32-bpp format cdd.dll lists - is `STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE` (0xC01E0310) |
 | `UpdateActiveVidPnPresentPath` | identity scaling and rotation only, else `STATUS_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_SUPPORTED` (0xC01E0346) |
 | `RecommendMonitorModes` | every mode as a driver-origin monitor source mode, 1280x800 preferred; `STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET` (0xC01E0314) from `pfnAddMode` is not a failure |
 | `RecommendFunctionalVidPn` | `STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN` (0xC01E0323) |

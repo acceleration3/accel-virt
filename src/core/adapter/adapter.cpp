@@ -87,7 +87,9 @@
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/support/text_buffer.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "core/vidpn/path_transformation.hpp"
@@ -126,7 +128,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u),
-      display_changed_(0u), started_(false), luid_(0u), present_(true)
+      display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
       }
@@ -395,8 +397,10 @@ uint8_t Adapter::interrupt_routine(uint32_t message)
     const bool    messages = resources_.message_interrupts() != 0u;
     const uint8_t isr = messages ? 0u : device_.object().read_isr();
     if (!messages && isr == 0u) return 0u;
-    if (messages ? message == config_message : (isr & isr_configuration_changed) != 0u)
+    if (messages ? message == config_message : (isr & isr_configuration_changed) != 0u) {
         platform_.store_atomic(display_changed_, 1u);
+        platform_.store_atomic(display_announced_, 1u);
+    }
     static_cast<void>(dxgkrnl_.queue_dpc());
     return 1u;
 }
@@ -408,6 +412,7 @@ void Adapter::dpc_routine()
     SpinLockGuard serialized(dpc_lock_);
     uint32_t completed = 0u;
     const bool harvest = device_.constructed() && present_ && device_.object().running();
+    announce_display_change(harvest);
     /* A device that fails every harvest would otherwise log on every DPC, so
      * each of these lines is spent from the budget (feature 037, FR-003). */
     if (harvest && device_.object().harvest_control(completed) != Status::ok && budget_.allows())
@@ -1036,7 +1041,7 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
     AV_SCOPE("Adapter::is_supported_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, sources_, *request).decide().value();
+    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, modes_, sources_, *request).decide().value();
     log_status("rvkgpu: IsSupportedVidPn", decided);
     return decided;
 }
@@ -1102,11 +1107,61 @@ Status Adapter::follow_display_info()
     if (exchanged != Status::ok) return exchanged;
     const Status decoded = display_info_.decode(answer, written);
     if (decoded != Status::ok) return decoded;
-    const Status followed = modes_.follow(display_info_, 0u);
+    const Status followed = follow_display_modes();
     if (followed != Status::ok) return followed;
     edid_.follow(modes_.preferred());
     log_unlike_outputs();
     return Status::ok;
+}
+
+Status Adapter::follow_display_modes()
+{
+    AV_SCOPE("Adapter::follow_display_modes");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_modes");
+    uint8_t          request[RvkRequestWriter::max_request_size] = {};
+    RvkRequestWriter writer(request, sizeof request);
+    static_cast<void>(writer.display_modes());
+    uint8_t        answer[DisplayModeSet::max_encoded_size] = {};
+    uint32_t       written = 0u;
+    DisplayModeSet offered;
+    if (device_.object().ask_control(request, writer.length(), answer, sizeof answer, written) == Status::ok &&
+        offered.decode(answer, written) == Status::ok && modes_.adopt(offered) == Status::ok) {
+        log_offered_modes(offered.count());
+        return Status::ok;
+    }
+    return modes_.follow(display_info_, 0u);
+}
+
+/* What the host offered and what came of it: a mode past what the EDID can
+ * describe is dropped, and the line says how many were. */
+void Adapter::log_offered_modes(uint32_t offered)
+{
+    AV_SCOPE("Adapter::log_offered_modes");
+    if (!budget_.allows()) return;
+    char       bytes[112];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: the host offers ");
+    message.append_decimal(offered);
+    message.append(" modes, ");
+    message.append_decimal(modes_.count());
+    message.append(" taken, preferred ");
+    message.append_decimal(modes_.preferred().width());
+    message.append("x");
+    message.append_decimal(modes_.preferred().height());
+    platform_.log(message.text());
+}
+
+/* A display event the interrupt saw: the device's event is cleared, and each
+ * monitor unplugged and plugged back, which has Windows read its EDID and modes
+ * again - the passive DDIs that answer them follow the device's new modes. */
+void Adapter::announce_display_change(bool running)
+{
+    AV_SCOPE("Adapter::announce_display_change");
+    if (!running || platform_.load_atomic(display_announced_) == 0u) return;
+    platform_.store_atomic(display_announced_, 0u);
+    if (device_.object().acknowledge_display_event() != Status::ok && budget_.allows())
+        platform_.log("rvkgpu: the display event could not be cleared");
+    for (uint32_t child = 0u; child < sources_.count(); child++) dxgkrnl_.replug(child);
 }
 
 /* Every output is offered the list the first scanout's rectangle allows, which

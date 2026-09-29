@@ -52,6 +52,8 @@ public:
     /* The shared object `object_id` is gone from the guest: every process let
      * go of the allocation it was minted over (SharedReleaseRequest). */
     [[nodiscard]] Status release_shared(uint64_t object_id);
+    /* GET_DISPLAY_MODES: the modes the host's display offers (DisplayModeSet). */
+    [[nodiscard]] Status display_modes();
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
     /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;

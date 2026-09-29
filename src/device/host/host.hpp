@@ -59,6 +59,10 @@ public:
     /* Main loop. Up to `capacity` bytes of the file at `path`, their count in
      * `length`: not_found when the host cannot read it. */
     [[nodiscard]] virtual Status read_file(const char *path, char *buffer, size_t capacity, size_t &length) = 0;
+    /* Main loop. The names in the directory at `path`, each ended by '\n', as
+     * many whole names as `capacity` holds, their bytes in `length`: not_found
+     * when the host cannot list it. */
+    [[nodiscard]] virtual Status list_directory(const char *path, char *buffer, size_t capacity, size_t &length) = 0;
 
     /* Any thread: a monotonic count of nanoseconds, for measuring what the
      * device did rather than for telling the time. */

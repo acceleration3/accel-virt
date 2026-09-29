@@ -761,17 +761,18 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   driver.platform().set_irql(av::Irql::passive);
   av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Requests 0 to 2 were StartDevice's GET_DISPLAY_INFO and its capset query. */
-  CHECK_EQ(control.request_type(3u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(4u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(5u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(6u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(7u), 0x0104u);        /* RESOURCE_FLUSH */
+  /* Requests 0 to 3 were StartDevice's GET_DISPLAY_INFO, GET_DISPLAY_MODES and
+   * its capset query. */
+  CHECK_EQ(control.request_type(4u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(5u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(6u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(7u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(8u), 0x0104u);        /* RESOURCE_FLUSH */
   /* One memory entry, because the pages VidMm gave are adjacent, and it is the
    * guest physical address of the first one - not the aperture address. */
-  CHECK_EQ(u32(control.request(4u), 28u), 1u);
-  CHECK_EQ(u32(control.request(4u), 32u), 0x40000000u);
-  CHECK_EQ(u32(control.request(4u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(u32(control.request(5u), 28u), 1u);
+  CHECK_EQ(u32(control.request(5u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(5u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* Suspend and resume as dxgkrnl drives it (feature 040, US1): the whole table,
@@ -2170,13 +2171,13 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
                    table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
                0);
   }
-  /* Two creates, one per source, each with its own resource id, after the three
+  /* Two creates, one per source, each with its own resource id, after the four
    * StartDevice made. */
   CHECK_EQ(control.respond_all(0x1100u), 2u);
-  CHECK_EQ(control.request_type(3u), 0x0101u);
-  CHECK_EQ(u32(control.request(3u), 24u), av::ScanoutResource::first_resource_id);
   CHECK_EQ(control.request_type(4u), 0x0101u);
-  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id);
+  CHECK_EQ(control.request_type(5u), 0x0101u);
+  CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* Through the real table: the device's host-visible region is the driver's

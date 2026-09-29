@@ -236,6 +236,16 @@ Status VirtioPciTransport::read_device_u32(uint64_t offset, uint32_t &value)
     return Status::ok;
 }
 
+Status VirtioPciTransport::write_device_u32(uint64_t offset, uint32_t value)
+{
+    AV_SCOPE("VirtioPciTransport::write_device_u32");
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioPciTransport::write_device_u32");
+    const uint64_t length = device_.length();
+    if (length < 4u || offset > length - 4u) return Status::invalid_parameter;
+    device_.write_u32(offset, value);
+    return Status::ok;
+}
+
 bool VirtioPciTransport::invariants_hold() const
 {
     AV_SCOPE("VirtioPciTransport::invariants_hold");

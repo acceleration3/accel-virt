@@ -56,6 +56,12 @@ public:
     std::uint32_t                           interrupts() const;
     const DxgkargcbNotifyInterruptDataRecord &interrupt(std::uint32_t index) const;
     std::uint32_t                           dpc_notifications() const;
+    /* DxgkCbIndicateChildStatus calls: how many, and each one's child and
+     * connection, in order; only the first max_child_statuses kept. */
+    static constexpr std::uint32_t max_child_statuses = 16u;
+    std::uint32_t                           child_statuses() const;
+    std::uint32_t                           child_status_uid(std::uint32_t index) const;
+    bool                                    child_status_connected(std::uint32_t index) const;
     /* Every DxgkCbNotifyInterrupt from now, past the ones kept: what a caller
      * waiting on many fences reads. Null stops it. */
     using InterruptSink = void (*)(void *context, const DxgkargcbNotifyInterruptDataRecord &data);
@@ -109,6 +115,9 @@ private:
     DxgkargcbNotifyInterruptDataRecord interrupts_[max_interrupts];
     std::uint32_t          interrupt_count_;
     std::uint32_t          dpc_notifications_;
+    std::uint32_t          child_status_count_ = 0u;
+    std::uint32_t          child_status_uids_[max_child_statuses] = {};
+    bool                   child_status_connected_[max_child_statuses] = {};
     InterruptSink          sink_;
     void                  *sink_context_;
     std::uint32_t          synchronize_status_;

@@ -1,5 +1,7 @@
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 
+#include "core/ddi/dxgk_child_status_record.hpp"
+
 #include "core/ddi/dxgkargcb_query_feature_support_record.hpp"
 
 #include "harness/dxgkrnl/fake_handle_table.hpp"
@@ -53,6 +55,17 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
         static_cast<FakeDxgkrnlAdapter *>(handle)->notify_interrupt(*data);
     };
     record_.DxgkCbNotifyDpc = +[](void *handle) { static_cast<FakeDxgkrnlAdapter *>(handle)->notify_dpc(); };
+    record_.DxgkCbIndicateChildStatus = +[](void *handle, const DxgkChildStatusRecord *status) -> std::int32_t {
+        auto *const fake = static_cast<FakeDxgkrnlAdapter *>(handle);
+        if (fake->platform_.current_irql() > Irql::dispatch)
+            TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbIndicateChildStatus above DISPATCH_LEVEL");
+        if (fake->child_status_count_ < max_child_statuses) {
+            fake->child_status_uids_[fake->child_status_count_] = status->ChildUid;
+            fake->child_status_connected_[fake->child_status_count_] = status->HotPlugConnected != 0u;
+        }
+        fake->child_status_count_++;
+        return 0;
+    };
     record_.DxgkCbQueueDpc = +[](void *handle) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->queue_dpc();
     };
@@ -187,6 +200,15 @@ const DxgkargcbNotifyInterruptDataRecord &FakeDxgkrnlAdapter::interrupt(std::uin
 }
 
 std::uint32_t FakeDxgkrnlAdapter::dpc_notifications() const { return dpc_notifications_; }
+std::uint32_t FakeDxgkrnlAdapter::child_statuses() const { return child_status_count_; }
+std::uint32_t FakeDxgkrnlAdapter::child_status_uid(std::uint32_t index) const
+{
+    return index < max_child_statuses ? child_status_uids_[index] : 0u;
+}
+bool FakeDxgkrnlAdapter::child_status_connected(std::uint32_t index) const
+{
+    return index < max_child_statuses && child_status_connected_[index];
+}
 
 void FakeDxgkrnlAdapter::refuse_synchronize(std::uint32_t status) { synchronize_status_ = status; }
 

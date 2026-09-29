@@ -171,6 +171,18 @@ Status TableHost::read_file(const char *path, char *buffer, size_t capacity, siz
     return Status::ok;
 }
 
+Status TableHost::list_directory(const char *path, char *buffer, size_t capacity, size_t &length)
+{
+    AV_SCOPE("TableHost::list_directory");
+    length = 0u;
+    if (ops_.list_directory == nullptr) return Status::not_found;
+    size_t listed = 0u;
+    if (ops_.list_directory(ops_.opaque, path, buffer, capacity, &listed) != 0 || listed > capacity)
+        return Status::not_found;
+    length = listed;
+    return Status::ok;
+}
+
 void *TableHost::allocate(size_t bytes)
 {
     AV_SCOPE("TableHost::allocate");

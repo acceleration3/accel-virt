@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "device/control/display_mode_commands.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/scanout_commands.hpp"
@@ -20,7 +21,7 @@ constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
-      heads_(host, blobs_), interrupts_(host), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
+      heads_(host, blobs_), display_modes_(host), interrupts_(host), status_(host, interrupts_), local_(host, blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_)
       {
           AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
@@ -168,7 +169,34 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
            BlobCommands(host_, blobs_, recorder_, *contexts_).answer(control, type) ||
            ScanoutCommands(host_, blobs_, heads_).answer(control, type) ||
            SharedCommands(host_, *contexts_, capset_.info().gpu().uuid()).answer(control, type) ||
-           PresentCommands(host_).answer(control, type);
+           PresentCommands(host_).answer(control, type) ||
+           DisplayModeCommands(host_, display_modes_).answer(control, type);
+}
+
+Status VirtioGpuRvk::set_modes(const char *text, uint32_t &width, uint32_t &height)
+{
+    AV_SCOPE("VirtioGpuRvk::set_modes");
+    host_.require_main_loop("VirtioGpuRvk::set_modes");
+    width = 0u;
+    height = 0u;
+    const Status set = display_modes_.set(text);
+    if (set != Status::ok) return set;
+    const DisplayModeSet &modes = display_modes_.current();
+    width = modes.width(modes.preferred());
+    height = modes.height(modes.preferred());
+    return Status::ok;
+}
+
+int VirtioGpuRvk::offer_modes(const char *text, uint32_t *width, uint32_t *height)
+{
+    AV_SCOPE("VirtioGpuRvk::offer_modes");
+    uint32_t     preferred_width = 0u;
+    uint32_t     preferred_height = 0u;
+    const Status set = set_modes(text, preferred_width, preferred_height);
+    if (width != nullptr) *width = preferred_width;
+    if (height != nullptr) *height = preferred_height;
+    if (set == Status::invalid_parameter) return -1;
+    return set == Status::ok ? 1 : 0;
 }
 
 uint32_t VirtioGpuRvk::capsets() const

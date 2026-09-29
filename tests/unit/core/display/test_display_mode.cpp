@@ -12,8 +12,8 @@ using av::DisplayMode;
 namespace {
 
 constexpr std::int32_t  graphics = 1;         /* D3DKMDT_RMT_GRAPHICS */
-constexpr std::int32_t  x8r8g8b8 = 22;        /* D3DDDIFMT_X8R8G8B8 */
-constexpr std::int32_t  a8r8g8b8 = 21;
+constexpr std::int32_t  a8r8g8b8 = 21;        /* D3DDDIFMT_A8R8G8B8 */
+constexpr std::int32_t  x8r8g8b8 = 22;
 constexpr std::int32_t  srgb = 2;             /* D3DKMDT_CB_SRGB */
 constexpr std::int32_t  direct = 1;           /* D3DKMDT_PVAM_DIRECT */
 constexpr std::int32_t  standard_other = 255; /* D3DKMDT_VSS_OTHER */
@@ -31,7 +31,7 @@ TEST(display_mode, has_1080p_blanking_proportions)
   CHECK_EQ(mode.pixel_rate(), 2080u * 1125u * 60u);
   CHECK_EQ(DisplayMode(1280u, 800u).total_height(), 833u); }
 
-TEST(display_mode_describe, a_source_mode_is_a_32_bpp_x8r8g8b8_primary)
+TEST(display_mode_describe, a_source_mode_is_a_32_bpp_a8r8g8b8_primary)
 { D3dkmdtVidPnSourceModeRecord source = {};
   source.Id = 7u;
   DisplayMode(1024u, 768u).describe(source);
@@ -42,7 +42,7 @@ TEST(display_mode_describe, a_source_mode_is_a_32_bpp_x8r8g8b8_primary)
   CHECK_EQ(source.VisibleRegionSizeCx, 1024u);
   CHECK_EQ(source.VisibleRegionSizeCy, 768u);
   CHECK_EQ(source.Stride, 4096u);
-  CHECK_EQ(source.PixelFormat, x8r8g8b8);
+  CHECK_EQ(source.PixelFormat, a8r8g8b8);
   CHECK_EQ(source.ColorBasis, srgb);
   CHECK_EQ(source.PixelValueAccessMode, direct); }
 
@@ -66,9 +66,11 @@ TEST(display_mode_matches, a_source_mode_of_its_size_and_format)
   D3dkmdtVidPnSourceModeRecord source = {};
   mode.describe(source);
   CHECK(mode.matches(source));
-  source.PixelFormat = a8r8g8b8;
-  CHECK(!mode.matches(source));
+  /* The format a Windows source mode had before this driver offered A8R8G8B8,
+   * which dxgkrnl may still pin from its saved configuration. */
   source.PixelFormat = x8r8g8b8;
+  CHECK(!mode.matches(source));
+  source.PixelFormat = a8r8g8b8;
   source.PrimSurfSizeCx = 1023u;
   CHECK(!mode.matches(source));
   source.PrimSurfSizeCx = 1024u;
@@ -94,3 +96,19 @@ TEST(display_mode_scan_line, sweeps_the_total_height_once_per_frame)
   CHECK_EQ(mode.scan_line(second), 0u);
   CHECK_EQ(mode.scan_line(second * 3600u * 24u * 365u * 100u + second / 120u), 562u);
   CHECK(mode.scan_line(0xFFFFFFFFFFFFFFFFull) < 1125u); }
+
+/* dxgkrnl's smallest source mode edge is 100, and an EDID's detailed timing
+ * names edges and blanks in twelve bits and the clock up to 655.35 MHz. */
+TEST(display_mode, what_windows_can_be_offered)
+{ CHECK(av::DisplayMode(100u, 100u).offerable());
+  CHECK(!av::DisplayMode(99u, 100u).offerable());
+  CHECK(!av::DisplayMode(100u, 99u).offerable());
+  CHECK(!av::DisplayMode(80u, 80u).offerable());
+  CHECK(av::DisplayMode(3840u, 2160u).offerable());
+  CHECK(av::DisplayMode(4095u, 2160u).offerable());
+  CHECK(!av::DisplayMode(4096u, 2160u).offerable());
+  CHECK(!av::DisplayMode(1000u, 4096u).offerable());
+  CHECK(!av::DisplayMode(4095u, 4095u).offerable());
+  /* A slot's default is the smallest standard mode. */
+  CHECK_EQ(av::DisplayMode().width(), 640u);
+  CHECK_EQ(av::DisplayMode().height(), 480u); }

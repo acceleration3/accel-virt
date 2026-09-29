@@ -73,6 +73,8 @@ public:
     GpuIdentity          gpu_identity(uint32_t index) override;
     [[nodiscard]] Status gpu_pci_address(uint32_t index, PciAddress &address) override;
     [[nodiscard]] Status read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
+    /* The renderer runs contexts, not the display: it lists nothing. */
+    [[nodiscard]] Status list_directory(const char *path, char *buffer, size_t capacity, size_t &length) override;
 
     uint64_t monotonic_nanoseconds() override;
 

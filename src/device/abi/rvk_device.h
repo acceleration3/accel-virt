@@ -234,6 +234,12 @@ typedef struct RvkHostOps {
      * and the caller imports the block's own mapping as a host pointer
      * instead. NULL: the host makes none (docs/host-window.md). */
     int (*dmabuf_over_host_memory)(void *opaque, void *memory, uint64_t offset, uint64_t size, int *fd);
+
+    /* Main loop. The names in the directory at `path`, each ended by '\n', as
+     * many whole names as `size` holds, their bytes in *length: nonzero when
+     * it cannot be listed. NULL: the host lists nothing, and the device knows
+     * no host monitor's modes. */
+    int (*list_directory)(void *opaque, const char *path, char *buffer, size_t size, size_t *length);
 } RvkHostOps;
 
 /* What a device writes down of what crosses its wire (docs/protocol.md), from
@@ -287,6 +293,13 @@ uint32_t rvk_device_capsets(RvkDevice *device);
  * bound host GPU's PCI identity instead of virtio-gpu's own; zero when that
  * GPU has none the host could read. Main loop, after rvk_device_create. */
 int rvk_device_pci_identity(RvkDevice *device, RvkPciIdentity *identity);
+/* Main loop, before the guest runs or while it does: the modes the display
+ * offers - "WxH,WxH", any sizes, the first preferred - or, for NULL or "", the
+ * host's monitors'. 1, with the preferred mode's edges, when the device has
+ * modes to offer; 0 when it has none (no text and no monitor), and the guest
+ * keeps GET_DISPLAY_INFO's rectangle; -1, nothing changed, for text that is no
+ * list of modes. */
+int rvk_device_set_modes(RvkDevice *device, const char *modes, uint32_t *width, uint32_t *height);
 /* The status the driver wrote (virtio_set_status). Main loop. */
 void rvk_device_status(RvkDevice *device, uint8_t status);
 /* A virtio reset: every context is destroyed, the fence interrupts released,

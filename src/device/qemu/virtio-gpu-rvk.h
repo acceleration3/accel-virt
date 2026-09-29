@@ -62,6 +62,9 @@ struct VirtIOGPURvk {
     char *record_kinds;
     bool record_wrap;
     bool display;
+    /* The modes the display offers, "WxH,WxH" with the first preferred; none
+     * is the host's monitors'. Settable before realize and while the VM runs. */
+    char *modes;
     RvkHostOps host;
     uint32_t gpu_count;
     RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];

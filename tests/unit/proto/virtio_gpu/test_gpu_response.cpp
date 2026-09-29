@@ -64,7 +64,7 @@ TEST(gpu_response_set_capset, carries_the_capset_encoding_after_the_header)
                           GpuIdentity(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, uuid, 1u, 2u, "gpu"));
   GpuResponse response;
   response.set_capset(capset);
-  CHECK_EQ(response.length(), GpuResponse::max_length);
+  CHECK_EQ(response.length(), 24u + CapsetInfo::encoded_size);
   CHECK_EQ(response.type(), GpuResponse::ok_capset);
   CHECK_EQ(u32(response.bytes(), 0u), 0x1103u);
   CapsetInfo decoded;
@@ -73,3 +73,26 @@ TEST(gpu_response_set_capset, carries_the_capset_encoding_after_the_header)
   response.set(GpuResponse::err_invalid_context_id);
   CHECK_EQ(response.length(), 24u);
   for (std::size_t byte = 24u; byte < GpuResponse::max_length; byte++) CHECK_EQ(response.bytes()[byte], 0u); }
+
+TEST(gpu_response_set_display_modes, carries_the_set_and_an_empty_one_is_unspecified)
+{ av::DisplayModeSet modes;
+  CHECK_STATUS(modes.add(80u, 80u), Status::ok);
+  CHECK_STATUS(modes.add(3840u, 2160u), Status::ok);
+  CHECK_STATUS(modes.prefer(1u), Status::ok);
+  GpuResponse response;
+  response.set_display_modes(modes);
+  CHECK_EQ(response.type(), av::DisplayModeSet::response_type);
+  CHECK_EQ(response.length(), modes.encoded_size());
+  av::DisplayModeSet read;
+  CHECK_STATUS(read.decode(response.bytes(), response.length()), Status::ok);
+  CHECK(read.same_as(modes));
+  /* The largest set fits the response. */
+  for (std::uint32_t width = 100u; modes.count() < av::DisplayModeSet::max_modes; width++)
+      CHECK_STATUS(modes.add(width, 100u), Status::ok);
+  response.set_display_modes(modes);
+  CHECK_EQ(response.length(), av::DisplayModeSet::max_encoded_size);
+  CHECK(response.length() <= GpuResponse::max_length);
+  modes.clear();
+  response.set_display_modes(modes);
+  CHECK_EQ(response.type(), GpuResponse::err_unspec);
+  CHECK_EQ(response.length(), 24u); }

@@ -76,7 +76,7 @@ void drive(av::WireReader &reader)
     shape(reader, fixture.vidpn());
 
     av::DxgkargIsSupportedVidPnRecord supported = {fixture.handle(), 0u, {}};
-    static_cast<void>(av::VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), sources, supported).decide());
+    static_cast<void>(av::VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), modes, sources, supported).decide());
 
     const std::int32_t  pivot = reader.read_u8() % 7;
     const std::uint32_t pivot_source = reader.read_u8() % 3u;

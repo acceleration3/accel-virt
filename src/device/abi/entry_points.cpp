@@ -50,6 +50,10 @@ int rvk_device_pci_identity(RvkDevice *device, RvkPciIdentity *identity)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().pci_identity(*identity) ? 1 : 0; }
 
 __attribute__((visibility("default")))
+int rvk_device_set_modes(RvkDevice *device, const char *modes, uint32_t *width, uint32_t *height)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().offer_modes(modes, width, height); }
+
+__attribute__((visibility("default")))
 void rvk_device_status(RvkDevice *device, uint8_t status)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().status(status); }
 

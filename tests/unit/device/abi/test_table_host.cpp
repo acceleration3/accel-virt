@@ -757,3 +757,29 @@ TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
   before.kill_renderer();
   CHECK_EQ(mock.renderer_kills(), 0u);
   mock.disconnect_fence_interrupts(); }
+
+/* The glue's directory listing reaches the core as it gave it; none, or one
+ * claiming more than it was given room for, is a host that lists nothing. */
+TEST(table_host, a_directory_is_listed_through_the_glue_or_not_at_all)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_file("/sys/class/drm/card1-DP-2/status", "connected\n", 10u);
+  mock.add_file("/sys/class/drm/card1-DP-2/modes", "2560x1440\n", 10u);
+  mock.add_file("/sys/class/drm/card1/dev", "226:1\n", 6u);
+  char        names[64] = {};
+  std::size_t length = 0u;
+  CHECK_STATUS(host.list_directory("/sys/class/drm", names, sizeof names, length), Status::ok);
+  CHECK_EQ(length, 17u);
+  CHECK(std::memcmp(names, "card1-DP-2\ncard1\n", 17u) == 0);
+  CHECK_STATUS(host.list_directory("/sys/absent", names, sizeof names, length), Status::not_found);
+  CHECK_EQ(length, 0u);
+  RvkHostOps table = ops.table();
+  table.list_directory = nullptr;
+  TableHost without(table);
+  CHECK_STATUS(without.list_directory("/sys/class/drm", names, sizeof names, length), Status::not_found);
+  table.list_directory = [](void *, const char *, char *, std::size_t size, std::size_t *listed) {
+      *listed = size + 1u;
+      return 0;
+  };
+  TableHost overlong(table);
+  CHECK_STATUS(overlong.list_directory("/sys/class/drm", names, sizeof names, length), Status::not_found);
+  CHECK_EQ(length, 0u); }

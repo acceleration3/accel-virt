@@ -72,6 +72,9 @@ public:
     /* virtio_gpu_config.num_scanouts as the device reported it at start, which
      * is how many displays it has; zero before a start and after a stop. */
     uint32_t scanouts() const;
+    /* Up to DISPATCH_LEVEL: clears VIRTIO_GPU_EVENT_DISPLAY once the driver has
+     * taken the configuration change it came with. */
+    [[nodiscard]] Status acknowledge_display_event();
     /* Any thread, including an ISR: whether start() finished. A device that is
      * being built is not one an interrupt may harvest from. */
     bool     running() const;
@@ -82,6 +85,8 @@ private:
     enum : uint16_t { control_queue = 0u, cursor_queue = 1u, first_fence_queue = 2u };
     static constexpr uint16_t no_vector = 0xFFFFu;
     static constexpr uint64_t num_scanouts_offset = 8u;   /* struct virtio_gpu_config */
+    static constexpr uint64_t events_clear_offset = 4u;
+    static constexpr uint32_t event_display = 1u;          /* VIRTIO_GPU_EVENT_DISPLAY */
 
     uint16_t vector_for(uint16_t source, uint32_t message_interrupts) const;
     uint16_t fence_vector_for(uint32_t doorbell, uint32_t message_interrupts) const;

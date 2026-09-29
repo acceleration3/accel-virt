@@ -1118,6 +1118,30 @@ static int rvk_read_file(void *opaque, const char *path, char *buffer, size_t si
     return 0;
 }
 
+/* The names in the directory at `path`, each ended by a newline; the core
+ * lists /sys/class/drm through it to find the host's monitors. */
+static int rvk_list_directory(void *opaque, const char *path, char *buffer, size_t size, size_t *length)
+{
+    GDir *directory = g_dir_open(path, 0, NULL);
+    const char *name;
+
+    if (directory == NULL) {
+        return 1;
+    }
+    *length = 0;
+    while ((name = g_dir_read_name(directory)) != NULL) {
+        const size_t name_length = strlen(name);
+        if (*length + name_length + 1 > size) {
+            break;
+        }
+        memcpy(buffer + *length, name, name_length);
+        *length += name_length;
+        buffer[(*length)++] = '\n';
+    }
+    g_dir_close(directory);
+    return 0;
+}
+
 /* No loader or no device leaves the catalog empty; the core names the failure. */
 static void rvk_read_gpus(VirtIOGPURvk *r)
 {
@@ -1258,6 +1282,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .update_scanout = rvk_update_scanout,
         .hide_scanout = rvk_hide_scanout,
         .read_file = rvk_read_file,
+        .list_directory = rvk_list_directory,
         .event_descriptor = rvk_event_descriptor,
         .fence_interrupt_descriptor = rvk_fence_interrupt_descriptor,
         .host_memory_descriptor = rvk_host_memory_descriptor,

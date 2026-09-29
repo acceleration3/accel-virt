@@ -4,9 +4,12 @@
 #include "core/display/display_mode_list.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <utility>
 
 using av::D3dkmdtVideoSignalInfoRecord;
 using av::D3dkmdtVidPnSourceModeRecord;
@@ -200,3 +203,57 @@ TEST(display_mode_list_invariants, an_empty_list_a_preference_past_it_and_a_mode
   DisplayModeList overflowing;
   av::DisplayModeListProbe::offer_more_than_it_has(overflowing);
   CHECK(!overflowing.invariants_hold()); }
+
+/* ---- the host's own modes -------------------------------------------------- */
+
+namespace {
+
+av::DisplayModeSet offered(std::initializer_list<std::pair<std::uint32_t, std::uint32_t>> modes, std::uint32_t preferred)
+{
+    av::DisplayModeSet set;
+    for (const auto &mode : modes) CHECK_STATUS(set.add(mode.first, mode.second), av::Status::ok);
+    CHECK_STATUS(set.prefer(preferred), av::Status::ok);
+    return set;
+}
+
+}  // namespace
+
+TEST(display_mode_list_adopt, the_hosts_modes_in_ascending_area_with_its_preferred_one)
+{ DisplayModeList modes;
+  CHECK_STATUS(modes.adopt(offered({{2560u, 1440u}, {100u, 100u}, {1920u, 1080u}, {1080u, 1920u}}, 0u)), av::Status::ok);
+  CHECK_EQ(modes.count(), 4u);
+  CHECK_EQ(modes.mode(0u).width(), 100u);
+  /* The same area twice keeps the host's order. */
+  CHECK_EQ(modes.mode(1u).width(), 1920u);
+  CHECK_EQ(modes.mode(2u).width(), 1080u);
+  CHECK_EQ(modes.mode(3u).width(), 2560u);
+  CHECK_EQ(modes.preferred().width(), 2560u);
+  CHECK(modes.is_preferred(modes.mode(3u)));
+  CHECK_STATUS(modes.adopt(offered({{2560u, 1440u}, {100u, 100u}}, 1u)), av::Status::ok);
+  CHECK_EQ(modes.preferred().width(), 100u);
+  CHECK(modes.invariants_hold()); }
+
+/* dxgkrnl refuses a source mode under 100 pixels an edge, and one refusal
+ * would fail the whole source mode set - the display with it. */
+TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)
+{ DisplayModeList modes;
+  CHECK_STATUS(modes.adopt(offered({{80u, 80u}, {1920u, 1080u}, {99u, 1080u}, {1280u, 720u}}, 0u)), av::Status::ok);
+  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.mode(0u).width(), 1280u);
+  CHECK_EQ(modes.preferred().width(), 1920u);
+  CHECK_STATUS(modes.adopt(offered({{80u, 80u}}, 0u)), av::Status::not_found);
+  CHECK_EQ(modes.count(), 2u);
+  CHECK(modes.invariants_hold()); }
+
+TEST(display_mode_list_adopt, a_mode_the_edid_cannot_describe_is_left_out)
+{ DisplayModeList modes;
+  /* Past 4095 an edge; the preferred one among them, so the largest left is preferred. */
+  CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}, {4096u, 2160u}, {3840u, 2160u}, {5120u, 2880u}}, 3u)),
+               av::Status::ok);
+  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.preferred().width(), 3840u);
+  /* Nothing describable leaves the list as it was. */
+  CHECK_STATUS(modes.adopt(offered({{4096u, 4096u}, {8000u, 100u}}, 0u)), av::Status::not_found);
+  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.preferred().width(), 3840u);
+  CHECK(modes.invariants_hold()); }

@@ -380,6 +380,12 @@ private:
     /* The device's own display info, followed into the mode list and the EDID.
      * Passive only: it waits for the device's answer. */
     [[nodiscard]] Status follow_display_info();
+    /* GET_DISPLAY_MODES, or, from a device without them, the standard modes
+     * that fit GET_DISPLAY_INFO's rectangle. */
+    [[nodiscard]] Status follow_display_modes();
+    void                 log_offered_modes(uint32_t offered);
+    /* DPC: a display event taken, and Windows told to read each monitor again. */
+    void                 announce_display_change(bool running);
     /* The same, but only once for each configuration change the device
      * signalled: the interrupt notices, and the next DDI that describes the
      * monitor asks, because asking waits and the DPC may not. */
@@ -479,6 +485,9 @@ private:
     /* Set from the interrupt when the device says its configuration changed,
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;
+    /* Set with display_changed_ by the interrupt, taken by the DPC, which
+     * clears the device's event and has Windows replug each monitor. */
+    uint64_t                       display_announced_;
     bool                           started_;
     /* DXGK_START_INFO.AdapterLuid, HighPart above LowPart: what the user-mode
      * driver is told, through UMDRIVERPRIVATE, so it talks to this adapter

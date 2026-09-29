@@ -44,6 +44,9 @@ public:
     void                 notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data);
     /* From the DPC, after the interrupts it follows. */
     void                 notify_dpc();
+    /* Up to DISPATCH_LEVEL: child `child`'s monitor unplugged and plugged back,
+     * which has Windows read its EDID and modes afresh. */
+    void                 replug(uint32_t child);
     /* DxgkCbQueryVidPnInterface, version 1. */
     [[nodiscard]] Status query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface);
     /* Whether this OS allows a feature the driver implements to be turned on.

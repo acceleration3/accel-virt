@@ -632,6 +632,36 @@ Status MockHost::read_file(const char *path, char *buffer, std::size_t capacity,
     return Status::not_found;
 }
 
+Status MockHost::list_directory(const char *path, char *buffer, std::size_t capacity, std::size_t &length)
+{
+    require_main_loop("MockHost::list_directory");
+    length = 0u;
+    const std::size_t prefix = std::strlen(path);
+    bool              any = false;
+    for (std::uint32_t index = 0u; index < file_count_; index++) {
+        const char *const file = files_[index].path;
+        if (std::strncmp(file, path, prefix) != 0 || file[prefix] != '/') continue;
+        any = true;
+        const char *const name = file + prefix + 1u;
+        std::size_t       name_length = 0u;
+        while (name[name_length] != '\0' && name[name_length] != '/') name_length++;
+        /* Once each, however many of its files there are. */
+        bool listed = false;
+        for (std::size_t at = 0u; at < length && !listed;) {
+            std::size_t end = at;
+            while (end < length && buffer[end] != '\n') end++;
+            listed = end - at == name_length && std::strncmp(buffer + at, name, name_length) == 0;
+            at = end + 1u;
+        }
+        if (listed) continue;
+        if (length + name_length + 1u > capacity) break;
+        std::memcpy(buffer + length, name, name_length);
+        length += name_length;
+        buffer[length++] = '\n';
+    }
+    return any ? Status::ok : Status::not_found;
+}
+
 void MockHost::place_gpu_on_pci(std::uint32_t index, const PciBus &bus)
 {
     StateLock lock(state_);

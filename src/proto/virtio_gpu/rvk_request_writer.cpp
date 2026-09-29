@@ -5,6 +5,7 @@
 
 #include "proto/context/context_setup.hpp"
 #include "proto/wire/wire_writer.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 
 namespace av {
@@ -154,6 +155,14 @@ Status RvkRequestWriter::release_shared(uint64_t object_id)
     WireWriter writer(bytes_, capacity_);
     if (!begin(writer, SharedReleaseRequest::type, 0u, SharedReleaseRequest::encoded_size)) return Status::too_large;
     writer.write_u64(object_id);
+    return Status::ok;
+}
+
+Status RvkRequestWriter::display_modes()
+{
+    AV_SCOPE("RvkRequestWriter::display_modes");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, DisplayModeSet::request_type, 0u, DisplayModeSet::header_size)) return Status::too_large;
     return Status::ok;
 }
 

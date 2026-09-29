@@ -49,6 +49,8 @@ public:
     bool     needs_reset();
     uint8_t  read_isr();
     [[nodiscard]] Status read_device_u32(uint64_t offset, uint32_t &value);
+    /* Up to DISPATCH_LEVEL: a store to the device-specific configuration. */
+    [[nodiscard]] Status write_device_u32(uint64_t offset, uint32_t value);
 
     bool invariants_hold() const;
 

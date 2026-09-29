@@ -388,6 +388,13 @@ Status PosixRendererHost::read_file(const char *path, char *buffer, size_t capac
     return Status::ok;
 }
 
+Status PosixRendererHost::list_directory(const char *, char *, size_t, size_t &length)
+{
+    AV_SCOPE("PosixRendererHost::list_directory");
+    length = 0u;
+    return Status::not_supported;
+}
+
 uint64_t PosixRendererHost::monotonic_nanoseconds()
 {
     AV_SCOPE("PosixRendererHost::monotonic_nanoseconds");

@@ -18,6 +18,7 @@
 
 namespace av {
 
+struct DxgkChildStatusRecord;
 struct DxgkargcbQueryFeatureSupportRecord;
 using DxgkCbQueryFeatureSupport = int32_t (*)(DxgkargcbQueryFeatureSupportRecord *arguments);
 
@@ -43,6 +44,7 @@ using DxgkCbSynchronizeExecution = int32_t (*)(void *device_handle, SynchronizeR
                                                uint32_t message_number, uint8_t *return_value);
 using DxgkCbNotifyInterrupt = void (*)(void *device_handle, const DxgkargcbNotifyInterruptDataRecord *data);
 using DxgkCbNotifyDpc = void (*)(void *device_handle);
+using DxgkCbIndicateChildStatus = int32_t (*)(void *device_handle, const DxgkChildStatusRecord *child_status);
 /* No device handle: the VidPn handle names the adapter. */
 using DxgkCbQueryVidPnInterface = int32_t (*)(void *vidpn, int32_t version, const DxgkVidPnInterfaceRecord **vidpn_interface);
 
@@ -52,7 +54,7 @@ struct DxgkrnlInterfaceRecord {
     void                      *DeviceHandle;
     void                      *DxgkCbEvalAcpiMethod;
     DxgkCbGetDeviceInformation DxgkCbGetDeviceInformation;
-    void                      *DxgkCbIndicateChildStatus;
+    DxgkCbIndicateChildStatus  DxgkCbIndicateChildStatus;
     DxgkCbMapMemory            DxgkCbMapMemory;
     DxgkCbQueueDpc             DxgkCbQueueDpc;
     void                      *DxgkCbQueryServices;
