@@ -81,6 +81,12 @@ void RvkContextBinding::driver_submits()
     context_.driver_submits();
 }
 
+bool RvkContextBinding::forget_progress(const uint64_t *progress)
+{
+    AV_SCOPE("RvkContextBinding::forget_progress");
+    return context_.forget_progress(progress);
+}
+
 Status RvkContextBinding::serve()
 {
     AV_SCOPE("RvkContextBinding::serve");

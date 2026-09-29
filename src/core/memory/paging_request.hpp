@@ -20,6 +20,7 @@
 
 namespace av {
 
+class Allocation;
 class AllocationTable;
 class LogBudget;
 class PagingCommandWriter;
@@ -37,6 +38,9 @@ public:
      * fit answers STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER; for a page table
      * copy MultipassOffset then names the first range left. */
     NtStatus build();
+    /* The allocation an unmap from the aperture segment takes its pages from;
+     * null for any other operation. */
+    Allocation *unmapped() const;
 
 private:
     enum : int32_t {   /* DXGK_BUILDPAGINGBUFFER_OPERATION */

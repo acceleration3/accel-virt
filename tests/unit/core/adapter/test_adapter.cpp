@@ -3902,6 +3902,22 @@ public:
         destroy.pAllocationList = &handle_;
         return nt(fixture_.adapter().destroy_allocation(&destroy));
     }
+    /* What VidMm asks before it lets the pages go: an eviction, or a process
+     * exit on its way to freeing them. */
+    std::uint32_t unmap()
+    {
+        av::DxgkBuildPagingBufferUnmapApertureSegmentRecord unmapping = {};
+        unmapping.hAllocation = handle_;
+        unmapping.SegmentId = av::ApertureSegment::segment_id;
+        unmapping.NumberOfPages = bytes_ / 0x1000u;
+        std::uint8_t                       dma[64] = {};
+        av::DxgkargBuildPagingBufferRecord paging = {};
+        paging.pDmaBuffer = dma;
+        paging.DmaSize = sizeof dma;
+        paging.Operation = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
+        std::memcpy(paging.Reserved, &unmapping, sizeof unmapping);
+        return nt(fixture_.adapter().build_paging_buffer(&paging));
+    }
 
 private:
     Fixture      &fixture_;
@@ -4086,6 +4102,46 @@ TEST(adapter_rvk_context, freeing_memory_a_context_runs_on_destroys_the_host_con
    * uses, and a line claiming a failed destroy for it would be a failure
    * logged where there is none (constitution IX). */
   CHECK(!fixture.platform().logged_line("rvk context destroyed"));
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A process exit unmaps its memory from the aperture before it frees it, and
+ * dxgkrnl waits for none of what the process queued in its ring: the host
+ * still running that would write the fence page and the replies into pages
+ * Windows hands on once the unmap is done. The unmap ends the context first. */
+TEST(adapter_rvk_context, unmapping_memory_a_context_runs_on_destroys_the_host_context_first)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  const std::uint32_t requests = fixture.context_requests();
+  CHECK_EQ(process.ring().unmap(), success);
+  CHECK_EQ(fixture.context_requests(), requests + 4u);   /* CTX_DESTROY and the unrefs, before the pages go */
+  CHECK(fixture.platform().logged_line("rvk context ended by an aperture unmap status 0x00000000"));
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
+  /* The free and the context's destroy that follow have nothing left to end. */
+  CHECK_EQ(process.ring().destroy(), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.context_requests(), requests + 4u);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* Memory no context runs on leaves the aperture without the host hearing of it. */
+TEST(adapter_rvk_context, unmapping_memory_no_context_runs_on_leaves_the_context_running)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  TransportAllocation spare(fixture, handles, av::AllocationKind::host_visible_memory, 0x1000u, 40u);
+  const std::uint32_t requests = fixture.context_requests();
+  CHECK_EQ(spare.unmap(), success);
+  CHECK_EQ(fixture.context_requests(), requests);
+  CHECK(!fixture.platform().logged_line("rvk context ended by an aperture unmap"));
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
 /* A record is honoured only where it can run: a device with no doorbell pages,

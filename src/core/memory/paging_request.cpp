@@ -71,13 +71,20 @@ Status PagingRequest::unmap_aperture()
     AV_SCOPE("PagingRequest::unmap_aperture");
     DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
     read_operation(unmap);
-    Allocation *const allocation = unmap.SegmentId == ApertureSegment::segment_id
-                                      ? allocations_.find(unmap.hAllocation)
-                                      : nullptr;
+    Allocation *const allocation = unmapped();
     if (allocation != nullptr) allocation->unmap_aperture(unmap);
     log_aperture("unmap", unmap.SegmentId, unmap.OffsetInPages, unmap.NumberOfPages,
                  allocation != nullptr ? Status::ok : Status::not_found);
     return Status::ok;
+}
+
+Allocation *PagingRequest::unmapped() const
+{
+    AV_SCOPE("PagingRequest::unmapped");
+    if (request_.Operation != unmap_aperture_segment) return nullptr;
+    DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
+    read_operation(unmap);
+    return unmap.SegmentId == ApertureSegment::segment_id ? allocations_.find(unmap.hAllocation) : nullptr;
 }
 
 NtStatus PagingRequest::refuse()

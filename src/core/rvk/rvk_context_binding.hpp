@@ -82,6 +82,7 @@ public:
      * doorbell, once a process has one of its own (feature 049). */
     void                 user_mode_submits(uint64_t *progress);
     void                 driver_submits();
+    bool                 forget_progress(const uint64_t *progress);
     /* DISPATCH, from the DPC. Reads the fence page and advances what completed. */
     [[nodiscard]] Status serve();
 

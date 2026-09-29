@@ -515,6 +515,15 @@ Status RvkContextTable::driver_submits(const void *context)
     return Status::ok;
 }
 
+bool RvkContextTable::forget_progress(const void *context, const uint64_t *progress)
+{
+    AV_SCOPE("RvkContextTable::forget_progress");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::forget_progress");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    return slot != no_slot && bindings_[slot].object().forget_progress(progress);
+}
+
 uint32_t RvkContextTable::bound() const
 {
     AV_SCOPE("RvkContextTable::bound");

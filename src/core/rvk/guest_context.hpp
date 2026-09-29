@@ -56,6 +56,10 @@ public:
      * until the doorbell goes away again. */
     void                 user_mode_submits(uint64_t *progress);
     void                 driver_submits();
+    /* DISPATCH. The hardware queue whose progress is `progress` is going, and
+     * dxgkrnl frees that fence with it: true when this context still wrote
+     * its completions there, which it no longer does. */
+    bool                 forget_progress(const uint64_t *progress);
     /* DISPATCH, from the DPC. The observer's answer; invalid_state unless established. */
     [[nodiscard]] Status serve();
     /* DISPATCH. Begins releasing what the device holds, from an established or

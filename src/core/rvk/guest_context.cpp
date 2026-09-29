@@ -110,6 +110,17 @@ void GuestContext::driver_submits()
     fences_.driver_submits();
 }
 
+bool GuestContext::forget_progress(const uint64_t *progress)
+{
+    AV_SCOPE("GuestContext::forget_progress");
+    platform_.require_irql_at_most(Irql::dispatch, "GuestContext::forget_progress");
+    SpinLockGuard guard(lock_);
+    if (progress == nullptr || progress_ != progress) return false;
+    progress_ = nullptr;
+    fences_.driver_submits();
+    return true;
+}
+
 Status GuestContext::serve()
 {
     AV_SCOPE("GuestContext::serve");

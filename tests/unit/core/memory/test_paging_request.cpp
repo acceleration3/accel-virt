@@ -105,6 +105,10 @@ public:
     {
         return PagingRequest(platform_, allocations_, budget_, request_).build().value();
     }
+    Allocation *unmapped()
+    {
+        return PagingRequest(platform_, allocations_, budget_, request_).unmapped();
+    }
 
     /* One allocation of four pages, as CreateAllocation would leave it. */
     Allocation *allocate()
@@ -444,6 +448,25 @@ TEST(paging_request_unmap_aperture, answers_an_unmapping_of_an_allocation_it_nev
   unmap.NumberOfPages = 1u;
   paging.place(unmap);
   CHECK_EQ(paging.build(), 0); }
+
+/* The allocation an unmap takes pages from is what the adapter ends a host
+ * context over, so only an unmap from the aperture names one. */
+TEST(paging_request_unmapped, names_the_allocation_an_aperture_unmap_takes_pages_from)
+{ Paging paging(6);
+  Allocation *allocation = paging.allocate();
+  DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap = {};
+  unmap.hAllocation = allocation;
+  unmap.SegmentId = ApertureSegment::segment_id;
+  unmap.NumberOfPages = 4u;
+  paging.place(unmap);
+  CHECK(paging.unmapped() == allocation);
+  unmap.SegmentId = ApertureSegment::segment_id + 1u;
+  paging.place(unmap);
+  CHECK(paging.unmapped() == nullptr);
+  unmap.SegmentId = ApertureSegment::segment_id;
+  paging.place(unmap);
+  paging.request().Operation = 5;   /* the same record read as a map */
+  CHECK(paging.unmapped() == nullptr); }
 
 /* A storm of mappings the driver cannot record spends the window and then goes
  * quiet: the log is evidence, not a flood. */

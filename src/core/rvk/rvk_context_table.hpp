@@ -150,6 +150,9 @@ public:
      * bound. */
     [[nodiscard]] Status user_mode_submits(const void *context, uint64_t *progress);
     [[nodiscard]] Status driver_submits(const void *context);
+    /* DISPATCH. `context` stops writing completions into `progress`, a
+     * hardware queue's that is going: true when it still did. */
+    bool                 forget_progress(const void *context, const uint64_t *progress);
 
     /* One line per live rvk context and its bound chunks; `busy=true` and
      * nothing more while a submission or the DPC holds the slots. */

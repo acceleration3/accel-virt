@@ -997,7 +997,17 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
     AV_SCOPE("Adapter::build_paging_buffer");
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return PagingRequest(platform_, allocations_, budget_, *request).build().value();
+    PagingRequest paging(platform_, allocations_, budget_, *request);
+    /* A process that exits has its allocations unmapped before they are freed,
+     * and its contexts later still: dxgkrnl waits for none of what the process
+     * queued in a ring. The host running that backlog would write the fence
+     * page, the ring and the replies into pages Windows has handed on - page
+     * tables among them - so the context ends before its pages go. */
+    void *const user = rvk_contexts_.user_of(paging.unmapped());
+    if (user != nullptr)
+        log_status("rvkgpu: rvk context ended by an aperture unmap",
+                   NtStatus(rvk_contexts_.unbind(user, answering_device())).value());
+    return paging.build().value();
 }
 
 int32_t Adapter::reset_from_timeout()
@@ -1941,6 +1951,14 @@ int32_t Adapter::destroy_hw_queue(void *queue)
 {
     AV_SCOPE("Adapter::destroy_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_hw_queue");
+    /* The context writes every completion into its queue's progress while a
+     * doorbell is connected, and dxgkrnl frees that fence with the queue: a
+     * queue that goes before its doorbell must take the writes with it, or
+     * every DPC after stores into memory Windows has handed on. */
+    const HwQueue *const found = hw_queues_.find(queue);
+    if (found != nullptr && rvk_contexts_.forget_progress(&found->context(), found->progress()) &&
+        budget_.allows())
+        platform_.log("rvkgpu: a hardware queue went before its doorbell; its context stops writing its progress");
     hw_submissions_.forget(queue);
     hw_queue_contexts_.forget(queue);
     return NtStatus(hw_queues_.destroy(queue)).value();
