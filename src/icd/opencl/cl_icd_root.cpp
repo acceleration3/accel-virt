@@ -4,6 +4,7 @@
 
 #include "icd/common/sliced_wait.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
@@ -394,7 +395,15 @@ cl_int ClIcdRoot::judge(const uint64_t *properties, const uint64_t *allowed, uin
         const uint64_t name = read.name_at(index);
         bool           known = false;
         for (uint32_t row = 0u; row < allowed_count && !known; ++row) known = allowed[row] == name;
-        if (!known) return CL_INVALID_PROPERTY;
+        if (known) continue;
+        /* Named, because an application that only checks for failure - an
+         * OpenCL capability probe - otherwise leaves nothing to say why. */
+        char       bytes[80];
+        TextBuffer line(bytes, sizeof bytes);
+        line.append("rvkcl: a property this ICD does not take: 0x");
+        line.append_hex(name, 4u);
+        log_.write(line.text());
+        return CL_INVALID_PROPERTY;
     }
     return CL_SUCCESS;
 }
