@@ -437,7 +437,6 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
             return nullptr;
         }
         share_name = target->share_name();
-        target->lend();
     }
     const uint32_t thread = slot_.thread_id();
     uint64_t       handle = 0u;
@@ -726,10 +725,7 @@ Status GlIcdRoot::make_chain(GuestGlContext &context)
         GuestGlContext &link = *chain[--length];
         GuestGlContext *const target = contexts_.resolve(link.share_target());
         if (target != nullptr && target->wire() == nullptr) return Status::invalid_state;
-        if (target != nullptr) {
-            target->lend();
-            static_cast<void>(link.share(target->share_name()));
-        }
+        if (target != nullptr) static_cast<void>(link.share(target->share_name()));
         const Status made = link.make();
         if (made != Status::ok) return made;
     }

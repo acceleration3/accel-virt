@@ -5,7 +5,6 @@
  * is refused. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
-#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
@@ -71,13 +70,13 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
       rig.host().gl_policy(0);
   }
   const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
-  GuestGlContext *const third = current_on(rig, c);
+  const GuestGlContext *const third = current_on(rig, c);
   CHECK(third != nullptr);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 3u);
   /* c was made last. */
   CHECK_EQ(last_record_share(rig), third->options().share_context());
-  GuestGlContext *const second = current_on(rig, b);
-  GuestGlContext *const first = current_on(rig, a);
+  const GuestGlContext *const second = current_on(rig, b);
+  const GuestGlContext *const first = current_on(rig, a);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 3u);
   CHECK(second->share_name() != 0u);
   CHECK_EQ(third->options().share_context(), second->share_name());
@@ -90,10 +89,6 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   CHECK_EQ(first->options().major(), 4u);
   CHECK(first->options().profile() == av::GlContextOptions::Profile::compatibility);
   CHECK_EQ(third->share_target(), rig.opengl32().driver_context(b));
-  /* Each writes buffers another can: none keeps copies of them. */
-  CHECK(!first->shadows().trusted());
-  CHECK(!second->shadows().trusted());
-  CHECK(!third->shadows().trusted());
   CHECK(rig.root().invariants_hold()); }
 
 TEST(gl_share_lists, a_share_with_a_made_unknown_or_same_context_or_into_a_loop_is_refused)
@@ -144,9 +139,8 @@ TEST(gl_share_lists, a_deleted_target_shares_nothing_and_a_deleted_context_is_no
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
   const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
-  GuestGlContext *const alone = current_on(rig, b);
+  const GuestGlContext *const alone = current_on(rig, b);
   CHECK(alone != nullptr);
-  CHECK(alone->shadows().trusted());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
   CHECK_EQ(alone->options().share_context(), 0u);
   CHECK_EQ(last_record_share(rig), 0u); }

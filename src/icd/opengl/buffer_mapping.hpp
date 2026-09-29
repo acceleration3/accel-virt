@@ -1,16 +1,10 @@
 /* One mapped range of a buffer object (data-model.md, research.md §5). Neither
  * host driver can map guest memory, so the pointer an application writes
- * through is a copy the guest holds, and written back when the application is
+ * through is a copy the guest holds: filled from the host at map unless the
+ * map invalidates or only writes, and written back when the application is
  * done - at unmap, or before the next command that reads buffers for a
  * persistent map. With explicit flushing only the ranges the application
- * flushed go back.
- *
- * OpenGL keeps every byte a map does not write, so a map that writes starts
- * from what the host holds: the guest's copy of it (BufferShadows) when there
- * is one, the host's bytes otherwise - except where nothing needs keeping,
- * because the map invalidates, flushes only what it marks, or the storage is
- * fresh. A write-back against a copy sends only the words that differ from
- * it; one without sends the whole range, which then becomes the copy. */
+ * flushed go back. */
 #ifndef AV_GLICD_BUFFER_MAPPING_HPP
 #define AV_GLICD_BUFFER_MAPPING_HPP
 
@@ -27,7 +21,6 @@ class StateWriter;
 
 namespace av::glicd {
 
-class BufferShadows;
 struct BufferMappingProbe;
 
 class BufferMapping {
@@ -43,11 +36,8 @@ public:
     static constexpr size_t   blob_write_bytes = size_t{4} << 20u;
     static constexpr size_t   inline_write_bytes = size_t{192} << 10u;
     static constexpr uint64_t max_length = uint64_t{1} << 30u;
-    /* Changes closer than this go back as one write: the bytes between are
-     * the host's own, and a write costs a command. */
-    static constexpr uint64_t merge_gap = 256u;
 
-    BufferMapping(BlockSource &memory, BufferShadows &shadows);
+    explicit BufferMapping(BlockSource &memory);
     ~BufferMapping();
     BufferMapping(const BufferMapping &) = delete;
     BufferMapping &operator=(const BufferMapping &) = delete;
@@ -69,10 +59,9 @@ public:
      * unless the map writes with explicit flushing; invalid_parameter for a
      * range past the mapping. */
     [[nodiscard]] Status mark(uint64_t offset, uint64_t length);
-    /* What the application wrote, to the host: the words that differ from
-     * the guest's copy, the whole range without one, or with explicit
-     * flushing what was marked since the last write-back. Nothing for a map
-     * that does not write. */
+    /* What the application wrote, to the host: the whole range, or with
+     * explicit flushing what was marked since the last write-back. Nothing
+     * for a map that does not write. */
     void     write_back(ClientTransport &wire);
 
     void report(StateWriter &writer, uint32_t index) const;
@@ -80,36 +69,20 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint64_t word = 8u;
-
-    /* The application's first view of the range (see above). */
-    void     start(ClientTransport &wire);
-    void     read(ClientTransport &wire);
-    /* Bytes [at, end) of the range. */
-    void     send(ClientTransport &wire, uint64_t at, uint64_t end);
-    /* The runs that differ from `known`, which then holds them too. */
-    void     send_changes(ClientTransport &wire, uint8_t *known);
-    /* Words step from the start of the range, the last one short when the
-     * length is not a multiple of one. The first word from `at` that
-     * differs from `known`; length_ if none. */
-    uint64_t next_change(const uint8_t *known, uint64_t at) const;
-    /* Where the run of changes from `from` ends: past its last changed word
-     * before merge_gap bytes in a row stay the same. */
-    uint64_t change_end(const uint8_t *known, uint64_t from) const;
+    void   read(ClientTransport &wire);
     /* The next write's bytes: a lease's worth when the arena has room for it
      * - after asking the host something, which retires the arena, if it has
      * not - and an inline command's otherwise. */
     size_t chunk_for(ClientTransport &wire, uint64_t left) const;
 
-    BlockSource   &memory_;
-    BufferShadows &shadows_;
-    uint8_t       *block_;
-    uint32_t       buffer_;
-    uint64_t       offset_;
-    uint64_t       length_;
-    uint32_t       access_;
-    uint64_t       dirty_from_;
-    uint64_t       dirty_to_;
+    BlockSource &memory_;
+    uint8_t     *block_;
+    uint32_t     buffer_;
+    uint64_t     offset_;
+    uint64_t     length_;
+    uint32_t     access_;
+    uint64_t     dirty_from_;
+    uint64_t     dirty_to_;
 
     friend struct BufferMappingProbe;
 };

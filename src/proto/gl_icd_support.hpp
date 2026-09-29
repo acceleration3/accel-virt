@@ -34,22 +34,6 @@ void             forget_bindings() noexcept;
 bool             skip_active_texture(GLenum texture) noexcept;
 bool             skip_bind_texture(GLenum target, GLuint texture) noexcept;
 bool             skip_bind_sampler(GLuint unit, GLuint sampler) noexcept;
-/* What changes a buffer's bytes on the host, for the guest's copies of them
- * (rvk::glicd::BufferShadows): before the command is sent. */
-void             wrote_buffer(GLenum target, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
-void             wrote_named_buffer(GLuint buffer, GLintptr offset, GLsizeiptr size, const void *data) noexcept;
-void             host_writes_target(GLenum target) noexcept;
-void             host_writes_buffer(GLuint buffer) noexcept;
-void             bind_buffer_indexed(GLenum target, GLuint buffer) noexcept;
-void             bind_buffers_indexed(GLenum target) noexcept;
-void             shaders_write_buffers() noexcept;
-void             bindings_restored() noexcept;
-/* A buffer's map state, which only the guest holds: true once `params` has
- * the answer, false for a name the host answers. */
-bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint *params) noexcept;
-bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint64 *params) noexcept;
-bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint *params) noexcept;
-bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint64 *params) noexcept;
 /* Whether the current context has the fixed-function pipeline: a compatibility
  * profile, or a context made before profiles existed (feature 051). A
  * compatibility command called without one is refused rather than sent. */

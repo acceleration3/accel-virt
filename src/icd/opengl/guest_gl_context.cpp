@@ -30,7 +30,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
-      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
+      staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), mappings_(memory, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
 {
@@ -164,7 +164,6 @@ Status GuestGlContext::share(uint32_t share_name)
     if (state_ != State::created) return Status::invalid_state;
     if (options_.major() == 0u) options_ = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
     options_ = options_.sharing(share_name);
-    shadows_.distrust();
     return Status::ok;
 }
 
@@ -222,18 +221,6 @@ MappedBuffers &GuestGlContext::mappings()
 {
     AV_SCOPE("GuestGlContext::mappings");
     return mappings_;
-}
-
-BufferShadows &GuestGlContext::shadows()
-{
-    AV_SCOPE("GuestGlContext::shadows");
-    return shadows_;
-}
-
-void GuestGlContext::lend()
-{
-    AV_SCOPE("GuestGlContext::lend");
-    shadows_.distrust();
 }
 
 GlExternalObjects &GuestGlContext::externals()
@@ -353,7 +340,6 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("extensions", extensions_.count());
     framebuffers_.report(writer);
     mappings_.report(writer);
-    shadows_.report(writer);
     writer.close();
 }
 
@@ -371,7 +357,7 @@ bool GuestGlContext::invariants_hold() const
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
     return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
-           framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold();
+           framebuffers_.invariants_hold() && mappings_.invariants_hold();
 }
 
 Status GuestGlContext::build()
@@ -460,7 +446,6 @@ void GuestGlContext::teardown()
     /* The host's framebuffer objects go with its context. */
     framebuffers_.release(nullptr);
     mappings_.release();
-    shadows_.forget_all();
     if (arena_.constructed()) {
         /* A lost context's host context goes with DestroyContext, and its
          * import with it: nothing is asked of the host. */

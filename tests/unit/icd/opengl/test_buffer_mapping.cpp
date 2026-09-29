@@ -1,14 +1,12 @@
 /* One mapped range (research.md §5): what a read, read-write, invalidating,
- * write-only, explicitly flushed and persistent map send to a scripted host -
- * filled from the host or from the guest's copy, and only the words that
- * changed sent back - the chunks a large range crosses in - through the arena,
- * retired when it has no room, or inline - and every refusal. */
+ * write-only, explicitly flushed and persistent map send to a scripted host,
+ * the chunks a large range crosses in - through the arena, retired when it has
+ * no room, or inline - and every refusal. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
-#include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/client_blob_arena.hpp"
 #include "proto/submission/command_header.hpp"
@@ -23,7 +21,6 @@ using av::GlContextOptions;
 using av::GlContextRig;
 using av::Status;
 using av::glicd::BufferMapping;
-using av::glicd::BufferShadows;
 using av::glicd::GuestGlContext;
 namespace ids = av::glproto;
 
@@ -51,7 +48,6 @@ constexpr std::uint32_t read_only = BufferMapping::map_read;
 constexpr std::uint32_t write_only = BufferMapping::map_write;
 constexpr std::uint32_t read_write = BufferMapping::map_read | BufferMapping::map_write;
 constexpr std::uint32_t explicit_write = BufferMapping::map_write | BufferMapping::map_flush_explicit;
-constexpr std::uint32_t invalidating = BufferMapping::map_write | BufferMapping::map_invalidate_range;
 constexpr std::uint32_t buffer = 7u;
 constexpr std::uint8_t  inline_mode = 1u, blob_mode = 3u;
 
@@ -71,8 +67,7 @@ struct Rig {
     GlContextRig   context_rig;
     GuestGlContext context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
                            context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
-    BufferShadows  shadows{context_rig.platform()};
-    BufferMapping  mapping{context_rig.platform(), shadows};
+    BufferMapping  mapping{context_rig.platform()};
 
     Rig()
     {
@@ -156,8 +151,6 @@ TEST(buffer_mapping, a_read_map_is_the_hosts_bytes_read_in_chunks_a_reply_holds)
   CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 32u, length, read_only), Status::ok);
   CHECK(rig.mapping.invariants_hold());
   CHECK_EQ(rig.commands() - before, 2u);
-  /* A map that never writes back has nothing to weigh against a copy. */
-  CHECK_EQ(rig.shadows.held(), 0u);
   rig.read_at(before, 32u, BufferMapping::read_bytes);
   rig.read_at(before + 1u, 32u + BufferMapping::read_bytes, 8u);
   /* The host answered short: the rest reads as zeros. */
@@ -178,154 +171,41 @@ TEST(buffer_mapping, a_read_map_is_the_hosts_bytes_read_in_chunks_a_reply_holds)
   CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 1u, read_only), Status::invalid_state);
   CHECK(rig.mapping.invariants_hold()); }
 
-/* The fill is what the host holds, so it is kept, and each write-back sends
- * the words that changed since the last. */
-TEST(buffer_mapping, a_read_write_map_sends_back_only_the_words_changed_since_the_last_write_back)
+TEST(buffer_mapping, a_read_write_map_sends_the_whole_range_back_each_time)
 { Rig rig;
-  std::uint8_t data[24];
+  std::uint8_t data[8];
   pattern(data, sizeof data, 3u);
   rig.host().gl_bytes(data, sizeof data);
   CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 4u, sizeof data, read_write), Status::ok);
-  CHECK_EQ(rig.shadows.held(), 1u);
+  rig.bytes()[0] = 0xABu;
   const std::uint32_t before = rig.commands();
   rig.mapping.write_back(rig.wire());
-  CHECK_EQ(rig.commands(), before);
-  rig.bytes()[17] = 0xABu;
   rig.mapping.write_back(rig.wire());
-  rig.mapping.write_back(rig.wire());
-  CHECK_EQ(rig.commands() - before, 1u);
-  const Write sent = rig.write_at(before);
-  CHECK_EQ(sent.buffer, buffer);
-  CHECK_EQ(sent.offset, 4u + 16u);
-  CHECK_EQ(sent.size, 8u);
-  CHECK_EQ(sent.mode, inline_mode);
-  CHECK_EQ(sent.first, data[16]);
-  CHECK_EQ(rig.shadows.covering(buffer, 4u + 17u, 1u)[0], 0xABu);
+  CHECK_EQ(rig.commands() - before, 2u);
+  for (std::uint32_t index = before; index < before + 2u; index++) {
+    const Write sent = rig.write_at(index);
+    CHECK_EQ(sent.buffer, buffer);
+    CHECK_EQ(sent.offset, 4u);
+    CHECK_EQ(sent.size, sizeof data);
+    CHECK_EQ(sent.mode, inline_mode);
+    CHECK_EQ(sent.first, 0xABu);
+  }
   CHECK(!rig.mapping.persistent_writes());
   CHECK(rig.mapping.invariants_hold()); }
 
-/* A write-only map keeps every byte it does not write, so it starts from the
- * host's: asked once, and from the guest's copy after. */
-TEST(buffer_mapping, a_write_only_map_starts_from_the_hosts_bytes_then_from_the_guests_copy)
-{ Rig          rig;
-  std::uint8_t data[64];
-  pattern(data, sizeof data, 11u);
-  rig.host().gl_bytes(data, sizeof data);
-  std::uint32_t before = rig.commands();
-  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 8u, sizeof data, write_only), Status::ok);
-  CHECK_EQ(rig.commands() - before, 1u);
-  rig.read_at(before, 8u, sizeof data);
-  CHECK(std::memcmp(rig.bytes(), data, sizeof data) == 0);
-  CHECK_EQ(rig.shadows.held(), 1u);
-  rig.bytes()[40] = 0xEEu;
-  before = rig.commands();
-  rig.mapping.write_back(rig.wire());
-  CHECK_EQ(rig.commands() - before, 1u);
-  CHECK_EQ(rig.write_at(before).offset, 8u + 40u);
-  CHECK_EQ(rig.write_at(before).size, 8u);
-  /* A later map inside the range asks the host nothing and sees the write. */
-  BufferMapping next{rig.context_rig.platform(), rig.shadows};
-  before = rig.commands();
-  CHECK_STATUS(next.map(rig.wire(), buffer, 16u, 40u, write_only), Status::ok);
-  CHECK_EQ(rig.commands(), before);
-  const std::uint8_t *const seen = static_cast<const std::uint8_t *>(next.pointer());
-  CHECK(std::memcmp(seen, data + 8u, 32u) == 0);
-  CHECK_EQ(seen[32], 0xEEu);
-  CHECK(std::memcmp(seen + 33u, data + 41u, 7u) == 0);
-  next.write_back(rig.wire());
-  CHECK_EQ(rig.commands(), before);
-  CHECK(next.invariants_hold()); }
-
-/* An invalidating map, an explicitly flushed one and one of fresh storage
- * have nothing to keep: the host is not asked, and the range starts zeroed. */
-TEST(buffer_mapping, a_map_with_nothing_to_keep_asks_the_host_nothing)
+/* An invalidating or write-only map asks the host nothing and starts zeroed. */
+TEST(buffer_mapping, an_invalidating_or_write_only_map_is_not_filled)
 { constexpr std::uint32_t accesses[] = {
-      invalidating, BufferMapping::map_write | BufferMapping::map_invalidate_buffer, explicit_write, write_only};
+      write_only, BufferMapping::map_write | BufferMapping::map_invalidate_range,
+      BufferMapping::map_read | BufferMapping::map_write | BufferMapping::map_invalidate_buffer};
   for (const std::uint32_t access : accesses) {
-    Rig rig;
-    if (access == write_only) rig.shadows.respecify(buffer, false);
+    Rig                 rig;
     const std::uint32_t before = rig.commands();
     CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 64u, access), Status::ok);
     CHECK_EQ(rig.commands(), before);
     for (std::uint32_t at = 0u; at < 64u; at++) CHECK_EQ(rig.bytes()[at], 0u);
-    CHECK_EQ(rig.shadows.held(), 0u);
     CHECK(rig.mapping.invariants_hold());
   } }
-
-/* With no copy to weigh it against, a write-back sends the whole range, which
- * then is the copy - and the storage is no longer fresh. */
-TEST(buffer_mapping, a_whole_write_back_becomes_the_copy)
-{ Rig rig;
-  rig.shadows.respecify(buffer, false);
-  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 16u, write_only), Status::ok);
-  pattern(rig.bytes(), 16u, 2u);
-  const std::uint32_t before = rig.commands();
-  rig.mapping.write_back(rig.wire());
-  CHECK_EQ(rig.commands() - before, 1u);
-  CHECK_EQ(rig.write_at(before).size, 16u);
-  CHECK(!rig.shadows.fresh(buffer));
-  CHECK(std::memcmp(rig.shadows.covering(buffer, 0u, 16u), rig.bytes(), 16u) == 0);
-  rig.mapping.write_back(rig.wire());
-  CHECK_EQ(rig.commands() - before, 1u); }
-
-/* Words are compared from the start of the range, the last one short here; a
- * change fewer than merge_gap bytes past the last one goes in its write. */
-TEST(buffer_mapping, changes_within_the_merge_gap_go_as_one_write)
-{ constexpr std::uint64_t length = 1029u;
-  struct Span {
-      std::uint64_t offset;
-      std::uint64_t size;
-  };
-  constexpr struct {
-      std::uint64_t changes[3];
-      std::uint32_t count;
-      Span          writes[2];
-      std::uint32_t written;
-  } cases[] = {
-      /* Within the gap, then past it to the short last word. */
-      {{0u, 200u, 1027u}, 3u, {{0u, 208u}, {1024u, 5u}}, 2u},
-      /* The last full word, then the short one within the gap. */
-      {{1016u, 1028u, 0u}, 2u, {{1016u, 13u}, {0u, 0u}}, 1u},
-      /* The last full word alone. */
-      {{1016u, 0u, 0u}, 1u, {{1016u, 8u}, {0u, 0u}}, 1u},
-      /* One byte short of the gap apart, and exactly the gap apart. */
-      {{0u, 256u, 0u}, 2u, {{0u, 264u}, {0u, 0u}}, 1u},
-      {{0u, 264u, 0u}, 2u, {{0u, 8u}, {264u, 8u}}, 2u},
-  };
-  static_assert(BufferMapping::merge_gap == 256u, "the cases are drawn for this gap");
-  for (const auto &row : cases) {
-    Rig          rig;
-    std::uint8_t zeros[length] = {};
-    rig.shadows.keep(buffer, 0u, length, zeros);
-    CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, write_only), Status::ok);
-    for (std::uint32_t change = 0u; change < row.count; change++) rig.bytes()[row.changes[change]] = 0x77u;
-    const std::uint32_t before = rig.commands();
-    rig.mapping.write_back(rig.wire());
-    CHECK_EQ(rig.commands() - before, row.written);
-    for (std::uint32_t write = 0u; write < row.written; write++) {
-      const Write sent = rig.write_at(before + write);
-      CHECK_EQ(sent.offset, row.writes[write].offset);
-      CHECK_EQ(sent.size, row.writes[write].size);
-    }
-    /* The copy holds them now: nothing more goes. */
-    rig.mapping.write_back(rig.wire());
-    CHECK_EQ(rig.commands() - before, row.written);
-  } }
-
-/* What an explicit write-back sent is what the host holds there now; what
- * was not marked stays the host's. */
-TEST(buffer_mapping, an_explicit_write_back_puts_what_it_sent_into_the_copy)
-{ Rig          rig;
-  std::uint8_t zeros[64] = {};
-  rig.shadows.keep(buffer, 100u, sizeof zeros, zeros);
-  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 100u, 64u, explicit_write), Status::ok);
-  rig.bytes()[10] = 0x5Au;
-  rig.bytes()[40] = 0x6Bu;
-  CHECK_STATUS(rig.mapping.mark(8u, 4u), Status::ok);
-  rig.mapping.write_back(rig.wire());
-  const std::uint8_t *const copy = rig.shadows.covering(buffer, 100u, 64u);
-  CHECK_EQ(copy[10], 0x5Au);
-  CHECK_EQ(copy[40], 0u); }
 
 TEST(buffer_mapping, an_explicit_map_writes_back_the_span_of_what_was_marked_once)
 { Rig rig;
@@ -372,8 +252,7 @@ TEST(buffer_mapping, a_persistent_map_is_a_persistent_writer_only_when_it_writes
   };
   for (const auto &row : cases) {
     Rig rig;
-    /* Everything but the explicitly flushed map is filled. */
-    if ((row.access & BufferMapping::map_flush_explicit) == 0u) rig.host().gl_bytes(nullptr, 0u);
+    if ((row.access & read_only) != 0u) rig.host().gl_bytes(nullptr, 0u);
     CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, 4u, row.access), Status::ok);
     CHECK_EQ(rig.mapping.persistent_writes(), row.writes);
   } }
@@ -385,7 +264,7 @@ TEST(buffer_mapping, a_range_larger_than_the_arena_crosses_in_leases_with_a_reti
   const std::uint64_t mib = std::uint64_t{1} << 20u;
   const std::uint64_t length = 17u * mib;
   CHECK_EQ(rig.wire().blobs().room(), 16u * mib);
-  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, invalidating), Status::ok);
+  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, write_only), Status::ok);
   pattern(rig.bytes(), static_cast<std::size_t>(length), 5u);
   rig.host().gl_varint(1u);
   const std::uint32_t before = rig.commands();
@@ -415,7 +294,7 @@ TEST(buffer_mapping, a_range_larger_than_the_arena_crosses_in_leases_with_a_reti
 TEST(buffer_mapping, without_room_after_a_retire_or_an_arena_the_bytes_go_inline)
 { Rig rig;
   const std::size_t length = BufferMapping::inline_write_bytes + 8u;
-  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, invalidating), Status::ok);
+  CHECK_STATUS(rig.mapping.map(rig.wire(), buffer, 0u, length, write_only), Status::ok);
   pattern(rig.bytes(), length, 9u);
   /* A small arena stays too small once retired. */
   std::uint8_t small[64];
@@ -435,10 +314,8 @@ TEST(buffer_mapping, without_room_after_a_retire_or_an_arena_the_bytes_go_inline
   CHECK_EQ(sent.offset, BufferMapping::inline_write_bytes);
   CHECK_EQ(sent.size, 8u);
   CHECK_EQ(sent.first, rig.bytes()[BufferMapping::inline_write_bytes]);
-  /* No arena at all: inline with nothing asked - every byte changed, so all
-   * of them. */
+  /* No arena at all: inline with nothing asked. */
   rig.wire().blobs().lend(nullptr, 0u);
-  pattern(rig.bytes(), length, 10u);
   before = rig.commands();
   rig.mapping.write_back(rig.wire());
   CHECK_EQ(rig.commands() - before, 2u);
@@ -490,7 +367,6 @@ TEST(buffer_mapping_invariants, fail_for_a_half_held_range_or_marks_outside_it_o
   Probe::set_dirty(marks.mapping, 0u, 8u);
   CHECK(marks.mapping.invariants_hold());
   Rig plain;
-  plain.host().gl_bytes(nullptr, 0u);
   CHECK_STATUS(plain.mapping.map(plain.wire(), buffer, 0u, 8u, write_only), Status::ok);
   Probe::set_dirty(plain.mapping, 0u, 1u);
   CHECK(!plain.mapping.invariants_hold());

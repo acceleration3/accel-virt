@@ -85,10 +85,7 @@ TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
   CHECK(state.pixel_buffer_bound(false));
   CHECK(state.query_buffer_bound());
   CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 6u);
-  CHECK_EQ(state.bound_buffer(0x8A11u), 9u);
-  /* Not a buffer target. */
-  state.bind_buffer(0x0DE1u, 3u);
-  CHECK_EQ(state.bound_buffer(0x0DE1u), 0u);
+  CHECK_EQ(state.bound_buffer(0x8A11u), 0u);
   const std::uint32_t deleted[] = {0u, 4u, 12u};
   state.delete_buffers(3, deleted);
   CHECK(!state.pixel_buffer_bound(true));
@@ -97,41 +94,6 @@ TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
   state.delete_buffers(2, nullptr);
   state.delete_buffers(-1, deleted);
   CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 6u);
-  CHECK(state.invariants_hold()); }
-
-/* Every target a command can write through is kept, so the guest knows whose
- * bytes change. */
-TEST(client_array_state, every_buffer_target_is_kept)
-{ constexpr std::uint32_t targets[] = {0x8892u, 0x88EBu, 0x88ECu, 0x9192u, 0x8A11u, 0x8C2Au, 0x8C8Eu,
-                                       0x8F36u, 0x8F37u, 0x8F3Fu, 0x90D2u, 0x90EEu, 0x92C0u};
-  ClientArrayState state;
-  std::uint32_t    buffer = 20u;
-  for (const std::uint32_t target : targets) state.bind_buffer(target, buffer++);
-  buffer = 20u;
-  for (const std::uint32_t target : targets) CHECK_EQ(state.bound_buffer(target), buffer++);
-  CHECK(state.invariants_hold()); }
-
-/* glBindBuffersBase binds by index; what it leaves at an indexed target's own
- * binding is not relied on. A target with no indices keeps its binding, and a
- * deletion leaves a binding not known as it was. */
-TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_known)
-{ ClientArrayState state;
-  constexpr std::uint32_t indexed[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
-  for (const std::uint32_t target : indexed) {
-    state.bind_buffer(target, 5u);
-    state.lose_buffer(target);
-    CHECK_EQ(state.bound_buffer(target), ClientArrayState::unknown);
-  }
-  state.bind_buffer(ClientArrayState::pixel_pack_buffer, 6u);
-  state.lose_buffer(ClientArrayState::pixel_pack_buffer);
-  state.lose_buffer(0x0DE1u);
-  CHECK_EQ(state.bound_buffer(ClientArrayState::pixel_pack_buffer), 6u);
-  const std::uint32_t deleted[] = {5u};
-  state.delete_buffers(1, deleted);
-  CHECK_EQ(state.bound_buffer(0x8A11u), ClientArrayState::unknown);
-  /* A bind makes it known again. */
-  state.bind_buffer(0x8A11u, 7u);
-  CHECK_EQ(state.bound_buffer(0x8A11u), 7u);
   CHECK(state.invariants_hold()); }
 
 TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
