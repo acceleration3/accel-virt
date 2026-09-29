@@ -80,10 +80,14 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, co
     AV_SCOPE("ExecutorRoot::open");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return nullptr;
-    const bool asked = share != nullptr || (options != nullptr && (options->major != 0u || options->minor != 0u ||
-                                                                   options->profile != 0u || options->flags != 0u ||
-                                                                   options->reserved != 0u));
-    if (asked && sub_api != RVK_EXECUTOR_SUB_API_OPENGL) return nullptr;
+    const bool options_asked = options != nullptr && (options->major != 0u || options->minor != 0u ||
+                                                      options->profile != 0u || options->flags != 0u ||
+                                                      options->reserved != 0u);
+    if (options_asked && sub_api != RVK_EXECUTOR_SUB_API_OPENGL) return nullptr;
+    /* An OpenGL context shares another's lists; an OpenCL one shares a GL
+     * context's objects (cl_khr_gl_sharing); nothing else shares anything. */
+    if (share != nullptr && sub_api != RVK_EXECUTOR_SUB_API_OPENGL && sub_api != RVK_EXECUTOR_SUB_API_OPENCL)
+        return nullptr;
     const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
     if (share != nullptr && shared == nullptr) return nullptr;
     /* A sub-API this GPU does not run is a context the guest should never have
@@ -157,7 +161,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
      * GL object (feature 053, T019). A host with no display shares nothing
      * and runs everything else. */
     case RVK_EXECUTOR_SUB_API_OPENCL:
-        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()));
+        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share);
     case RVK_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
     case RVK_EXECUTOR_SUB_API_D3D:

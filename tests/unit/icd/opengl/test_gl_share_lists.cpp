@@ -1,8 +1,10 @@
 /* wglShareLists through opengl32 over MockKmt (contracts/icd_interface.md): a
- * share is recorded while both contexts are unmade and becomes the share
- * handle of the record the later one is made with; a chain is made from its
- * far end; a share after a make, onto a deleted context, into a loop or twice
- * is refused. */
+ * share is recorded while the context taking it has never been current, and
+ * becomes the share handle of the record it is made with; the context it
+ * shares may be unmade or in use; a chain is made from its far end; a context
+ * made by wglCreateContextAttribsARB and never current is made again,
+ * sharing; a share into a context once current, onto a deleted context, into
+ * a loop or twice is refused. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
@@ -96,7 +98,7 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   CHECK(!third->shadows().trusted());
   CHECK(rig.root().invariants_hold()); }
 
-TEST(gl_share_lists, a_share_with_a_made_unknown_or_same_context_or_into_a_loop_is_refused)
+TEST(gl_share_lists, a_share_into_a_context_once_current_or_unknown_or_same_or_into_a_loop_is_refused)
 { GlIcdRig rig;
   rig.load_with_format();
   void *const a = rig.opengl32().create_context(rig.dc());
@@ -119,15 +121,80 @@ TEST(gl_share_lists, a_share_with_a_made_unknown_or_same_context_or_into_a_loop_
   CHECK(!rig.opengl32().share_lists(d, b));
   check_error(rig, Root::error_invalid_operation);
   CHECK(rig.opengl32().share_lists(d, a));
-  /* After DrvSetContext either way round. */
+  /* Into a context that has been current, even after it was let go: it may
+   * hold objects of its own. */
   void *const made = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
   CHECK(current_on(rig, made) != nullptr);
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
   void *const fresh = rig.opengl32().create_context(rig.dc());
-  CHECK(!rig.opengl32().share_lists(made, fresh));
-  check_error(rig, Root::error_invalid_operation);
   CHECK(!rig.opengl32().share_lists(fresh, made));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_share_lists, a_context_in_use_lends_its_objects_to_one_never_current)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const in_use = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const lender = current_on(rig, in_use);
+  CHECK(lender != nullptr);
+  if (lender == nullptr) return;
+  void *const fresh = rig.opengl32().create_context(rig.dc());
+  CHECK(rig.opengl32().share_lists(in_use, fresh));
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const borrower = current_on(rig, fresh);
+  CHECK(borrower != nullptr);
+  /* Only the fresh one is made, naming the ring of the one in use. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
+  CHECK(lender->share_name() != 0u);
+  CHECK_EQ(last_record_share(rig), lender->share_name());
+  CHECK(!lender->shadows().trusted());
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_share_lists, a_context_made_with_attributes_and_never_current_is_made_again_sharing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  using AttribsFn = void *(APIENTRY *)(void *, void *, const std::int32_t *);
+  const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
+  void *const in_use = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const lender = current_on(rig, in_use);
+  CHECK(lender != nullptr);
+  if (lender == nullptr) return;
+  /* What Photoshop's GPU compute does: a 3.0 context, made at once, then
+   * wglShareLists from the one it draws with. */
+  const std::int32_t three_oh[] = {0x2091, 3, 0x2092, 0, 0};
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  void *const compute = create(rig.dc(), nullptr, three_oh);
+  CHECK(compute != nullptr);
+  const std::uint32_t destroyed = rig.kmt().calls(MockKmt::Call::destroy_context);
+  CHECK(rig.opengl32().share_lists(in_use, compute));
+  /* Its first host context went; nothing had been asked of it. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_context) - destroyed, 1u);
+  const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const borrower = current_on(rig, compute);
+  CHECK(borrower != nullptr);
+  if (borrower == nullptr) return;
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
+  av::RvkContextRecord record;
+  CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
+  CHECK_EQ(record.options().share_context(), lender->share_name());
+  /* The version it asked for is the one it is made again with. */
+  CHECK_EQ(record.options().major(), 3u);
+  CHECK_EQ(record.options().minor(), 0u);
+  /* Current once: no second share. */
+  CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
+  void *const other = rig.opengl32().create_context(rig.dc());
+  CHECK(!rig.opengl32().share_lists(other, compute));
   check_error(rig, Root::error_invalid_operation);
   CHECK(rig.root().invariants_hold()); }
 

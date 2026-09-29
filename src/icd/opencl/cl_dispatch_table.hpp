@@ -44,6 +44,8 @@ public:
      * ICD ABI predates the extension. */
     void *external_mem_acquire() const;
     void *external_mem_release() const;
+    /* clGetGLContextInfoKHR, which an application may also ask for by name. */
+    void *gl_context_info() const;
 
     /* How many slots this ICD claims itself, which is what a test counts to
      * know the table did not quietly shrink. */

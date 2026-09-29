@@ -3,6 +3,8 @@
 #include "core/trace/function_scope.hpp"
 #include "device/executor/gl_context_attributes.hpp"
 
+#include <dlfcn.h>
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <stdlib.h>
@@ -60,6 +62,14 @@ bool GlDisplay::open(const uint8_t *uuid)
      * with it and 98% without. Read when a display initialises, so set before
      * the first; a host that chose for itself is left its choice. */
     setenv("mesa_glthread", "false", 0);
+    /* rusticl finds EGL with dlsym(RTLD_DEFAULT, "eglGetProcAddress"), which
+     * searches the global scope and rusticl's own dependencies. Inside QEMU
+     * libEGL is nobody's global: this library, a module, loaded it locally,
+     * and so did libepoxy for the window. So every OpenCL context naming a GL
+     * context answered CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR there while the
+     * same calls passed in a test that links EGL (research.md §21). Promoting
+     * the copy already loaded makes the lookup find it. */
+    static_cast<void>(dlopen("libEGL.so.1", RTLD_NOW | RTLD_NOLOAD | RTLD_GLOBAL));
 
     auto *const query = reinterpret_cast<QueryDevices>(eglGetProcAddress("eglQueryDevicesEXT"));
     auto *const platform_display =

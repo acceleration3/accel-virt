@@ -22,7 +22,8 @@ struct PixelStoreProbe {
 namespace {
 
 constexpr std::uint32_t rgba = 0x1908u, rgb = 0x1907u, red = 0x1903u, rg = 0x8227u, bgra = 0x80E1u,
-                        depth_stencil = 0x84F9u, alpha = 0x1906u, luminance = 0x1909u;
+                        depth_stencil = 0x84F9u, alpha = 0x1906u, luminance = 0x1909u, luminance_alpha = 0x190Au,
+                        color_index = 0x1900u, alpha_integer = 0x8D97u, abgr = 0x8000u;
 constexpr std::uint32_t ubyte = 0x1401u, sbyte = 0x1400u, ushort = 0x1403u, sshort = 0x1402u, uint = 0x1405u,
                         sint = 0x1404u, gl_float = 0x1406u, half = 0x140Bu, gl_double = 0x140Au;
 
@@ -42,6 +43,10 @@ TEST(pixel_store, a_pixel_is_its_components_times_its_value_bytes)
       {0x8D94u, ubyte, 1u}, {0x8D95u, ubyte, 1u}, {0x8D96u, ubyte, 1u}, {0x8228u, ubyte, 2u},
       {0x8D98u, ubyte, 3u}, {0x8D99u, ubyte, 4u}, {0x8D9Au, ubyte, 3u}, {0x8D9Bu, ubyte, 4u},
       {0x80E0u, ubyte, 3u}, {0x1904u, ubyte, 1u}, {0x1905u, ubyte, 1u},
+      /* The compatibility profile's, which the host sizes too: a luminance
+       * lookup table is what Photoshop's Blur Gallery uploads. */
+      {luminance, ubyte, 1u}, {luminance, gl_float, 4u}, {luminance_alpha, ubyte, 2u},
+      {luminance_alpha, half, 4u}, {color_index, ushort, 2u}, {alpha_integer, sint, 4u},
   };
   for (const Case &row : cases) {
       /* One pixel, and one row of three at alignment 1 so no padding shows. */
@@ -67,7 +72,7 @@ TEST(pixel_store, a_packed_type_is_one_value_per_pixel_and_only_with_its_format)
 
 TEST(pixel_store, nothing_is_sized_for_an_unknown_format_or_type_or_an_empty_transfer)
 { const PixelStore store;
-  CHECK_EQ(store.span(luminance, ubyte, 4, 4, 1), 0u);
+  CHECK_EQ(store.span(abgr, ubyte, 4, 4, 1), 0u);
   CHECK_EQ(store.span(rgba, gl_double, 4, 4, 1), 0u);
   CHECK_EQ(store.span(0u, ubyte, 4, 4, 1), 0u);
   CHECK_EQ(store.span(rgba, 0u, 4, 4, 1), 0u);

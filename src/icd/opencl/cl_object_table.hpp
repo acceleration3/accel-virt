@@ -7,10 +7,10 @@
  * The table searches what it made for that address, which is the same thing
  * the Vulkan ICD's registry does and for the same reason.
  *
- * Destroying a context destroys everything below it, at any depth: OpenCL's
- * own reference counting says the objects die with what they were made on, and
- * a guest that releases a context while holding a buffer must not be left with
- * a buffer whose context is gone. */
+ * An object holds what it was made on, as OpenCL's reference counting says: a
+ * context whose application let go of it lives on, unreachable, while a buffer
+ * made on it does, and goes with the last of them - so a guest that releases a
+ * context while holding a buffer keeps a buffer whose context is there. */
 #ifndef AV_CLICD_CL_OBJECT_TABLE_HPP
 #define AV_CLICD_CL_OBJECT_TABLE_HPP
 
@@ -42,14 +42,17 @@ public:
                               ClObject *parent, ClObject *&object);
 
     /* The object `pointer` names, or null: for a pointer this table never
-     * made, for one it has destroyed, and for one of another kind. Nothing is
-     * read through `pointer` unless it is one of this table's own. */
+     * made, for one it has destroyed, for one the application let go of that
+     * lives on only for what was made on it, and for one of another kind.
+     * Nothing is read through `pointer` unless it is one of this table's own. */
     ClObject *made(const void *pointer, ClObject::Kind kind) const;
 
-    /* One reference of the application's given back. Destroys the object, and
-     * everything below it, when that was the last. False for a pointer this
-     * does not hold. */
-    bool release(ClObject &object);
+    /* One reference of the application's given back. When that was the last
+     * and nothing made on the object lives, it is destroyed, and so is each
+     * object above it that was held only by it; `freed` is the context of a
+     * context object that went, which its owner then tears down. False for an
+     * object this does not hold or that the application had let go of. */
+    bool release(ClObject &object, GuestClContext *&freed);
     /* Destroys `object` and its whole subtree, whatever its count. */
     void destroy(ClObject &object);
 

@@ -36,6 +36,9 @@ public:
      * driver will not make. */
     [[nodiscard]] bool initialize(const GlDisplay *display, const RvkContextOptions *options,
                                   const OpenGlBackend *share);
+    /* The context whose objects another shares: an OpenGL context's share
+     * lists, or an OpenCL context's vehicle under cl_khr_gl_sharing. */
+    const GlContext   &context() const;
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;

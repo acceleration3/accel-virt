@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
                    ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), references_(1u), kind_(kind)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), references_(1u), children_(0u), kind_(kind)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -69,6 +69,15 @@ bool ClObject::descends_from(const ClObject &other) const
     return false;
 }
 
+ClObject *ClObject::nearest(Kind kind)
+{
+    AV_SCOPE("ClObject::nearest");
+    for (ClObject *walk = this; walk != nullptr; walk = walk->parent_) {
+        if (walk->kind_ == kind) return walk;
+    }
+    return nullptr;
+}
+
 void ClObject::retain()
 {
     AV_SCOPE("ClObject::retain");
@@ -91,6 +100,24 @@ uint32_t ClObject::references() const
 {
     AV_SCOPE("ClObject::references");
     return references_;
+}
+
+void ClObject::adopt()
+{
+    AV_SCOPE("ClObject::adopt");
+    ++children_;
+}
+
+void ClObject::orphan()
+{
+    AV_SCOPE("ClObject::orphan");
+    if (children_ != 0u) --children_;
+}
+
+bool ClObject::unheld() const
+{
+    AV_SCOPE("ClObject::unheld");
+    return references_ == 0u && children_ == 0u;
 }
 
 bool ClObject::invariants_hold() const

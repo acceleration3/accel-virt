@@ -135,7 +135,7 @@ Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
     DeviceAllocation *open = nullptr;
     const Status created = opens_.create(open, device, *allocation, object);
     if (created != Status::ok) return created;
-    const Status opened = allocations_.open(*allocation, &device);
+    const Status opened = allocations_.open(*allocation, &device, device.process());
     if (opened != Status::ok) {
         static_cast<void>(opens_.destroy(open));
         return opened;

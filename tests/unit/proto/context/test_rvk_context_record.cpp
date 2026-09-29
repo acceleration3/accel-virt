@@ -239,15 +239,17 @@ TEST(rvk_context_record, gl_options_the_contract_forbids_are_refused)
                  .valid());
   } }
 
-/* Options belong to OpenGL: any non-zero byte of the tail on another sub-API is
- * refused, even one an OpenGL record may carry. */
-TEST(rvk_context_record, an_option_on_a_vulkan_or_opencl_record_is_refused)
-{ for (SubApi api : {SubApi::vulkan, SubApi::opencl})
-      for (std::size_t at = 0u; at < 8u; at++) {
-          std::uint8_t tail[8] = {};
-          tail[at] = 1u;
-          CHECK(rejects_tail(api, tail));
-      }
+/* Options belong to OpenGL. An OpenCL record carries one - the GL context
+ * whose objects it shares, the tail's last four bytes (cl_khr_gl_sharing) -
+ * and any other non-zero byte, on it or on a Vulkan record, is refused, even
+ * one an OpenGL record may carry. */
+TEST(rvk_context_record, an_option_on_a_vulkan_record_or_an_opencl_one_past_its_share_is_refused)
+{ for (std::size_t at = 0u; at < 8u; at++) {
+      std::uint8_t tail[8] = {};
+      tail[at] = 1u;
+      CHECK(rejects_tail(SubApi::vulkan, tail));
+      CHECK_EQ(rejects_tail(SubApi::opencl, tail), at < 4u);
+  }
   const std::uint8_t valid_for_gl[8] = {4u, 6u, 1u, 0u, 0u, 0u, 0u, 0u};
   CHECK(!rejects_tail(SubApi::opengl, valid_for_gl));
   CHECK(rejects_tail(SubApi::vulkan, valid_for_gl)); }

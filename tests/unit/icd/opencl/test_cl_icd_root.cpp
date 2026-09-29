@@ -15,6 +15,9 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "icd/opencl/cl_property_list.hpp"
+#include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/submission/command_header.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -161,15 +164,16 @@ TEST(cl_icd_root, the_extensions_are_the_policy_intersected_with_the_host_not_th
   CHECK(std::strstr(plain, "cl_khr_fp64") != nullptr);
   CHECK_EQ(std::strcmp(reported, ""), 0);
 
-  /* The same host with the one name the rows are answered over: both are
-   * reported, in the policy's order, and still nothing else of the host's. */
+  /* The same host with the one name the rows are answered over: the two
+   * external-memory rows and GL sharing itself are reported, in the policy's
+   * order, and still nothing else of the host's. */
   static const char sharing[] = "cl_khr_fp64 cl_khr_gl_sharing cl_khr_il";
   rig.host().cl_info(CL_SUCCESS, sharing, sizeof sharing);
   std::memset(reported, 'x', sizeof reported);
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS, sizeof reported, reported,
                                     &answered),
            CL_SUCCESS);
-  CHECK_EQ(std::strcmp(reported, "cl_khr_external_memory cl_khr_external_memory_win32"), 0);
+  CHECK_EQ(std::strcmp(reported, "cl_khr_external_memory cl_khr_external_memory_win32 cl_khr_gl_sharing"), 0);
   CHECK_EQ(answered, std::strlen(reported) + 1u);
 
   /* The size query, which an application makes first: the same length, and
@@ -364,10 +368,20 @@ TEST(cl_icd_root, a_queue_a_buffer_a_program_and_a_kernel_are_objects_of_their_c
   CHECK(rig.loader().dispatch_of(kernel) == &rig.root().dispatch());
   CHECK(rig.root().invariants_hold());
 
-  /* Releasing the context takes all of them, however many the application
-   * still holds. */
+  /* Releasing the context leaves what the application still holds, as
+   * OpenCL's objects hold their context: each is still its own to use and to
+   * release, and the context itself is no longer. */
   CHECK_EQ(rig.root().release_context(context), CL_SUCCESS);
-  CHECK_EQ(rig.root().release(queue, ClObject::Kind::command_queue), CL_INVALID_COMMAND_QUEUE);
+  CHECK_EQ(rig.root().release_context(context), CL_INVALID_CONTEXT);
+  cl_uint count = 0u;
+  CHECK_EQ(rig.root().context_info(context, CL_CONTEXT_NUM_DEVICES, sizeof count, &count, nullptr),
+           CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.root().set_kernel_argument(kernel, 0u, sizeof buffer, &buffer), CL_SUCCESS);
+  CHECK_EQ(rig.root().release(queue, ClObject::Kind::command_queue), CL_SUCCESS);
+  CHECK_EQ(rig.root().release(kernel, ClObject::Kind::kernel), CL_SUCCESS);
+  CHECK_EQ(rig.root().release(program, ClObject::Kind::program), CL_SUCCESS);
+  CHECK_EQ(rig.root().release(buffer, ClObject::Kind::mem), CL_SUCCESS);
+  /* Gone now, with the last of them. */
   CHECK_EQ(rig.root().release(kernel, ClObject::Kind::kernel), CL_INVALID_KERNEL);
   CHECK(rig.root().invariants_hold()); }
 
@@ -904,7 +918,7 @@ TEST(cl_icd_root, a_callback_of_nothing_or_on_something_that_is_not_an_event_is_
   CHECK_EQ(rig.kmt().commands(), before + 1u);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_icd_root, releasing_a_context_forgets_the_callbacks_registered_on_it)
+TEST(cl_icd_root, a_context_released_under_a_watched_event_lives_for_its_callback)
 { ClIcdRig rig;
   cl_device_id device = nullptr;
   cl_context context = opened_context(rig, device);
@@ -916,13 +930,14 @@ TEST(cl_icd_root, releasing_a_context_forgets_the_callbacks_registered_on_it)
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().set_event_callback(event, CL_COMPLETE, &note, nullptr), CL_SUCCESS);
 
-  /* The context goes, and with it the transport the watcher would ask over.
-   * Nothing is run and nothing is asked. */
+  /* The event holds its context, so the transport the watcher asks over is
+   * still there when the host says the event completed. */
   CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
-  const std::uint32_t before = rig.kmt().commands();
+  const cl_int complete = CL_COMPLETE;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   CHECK(!rig.watcher().step());
-  CHECK_EQ(callback.times, 0u);
-  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK_EQ(callback.times, 1u);
+  CHECK(callback.event == event);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_icd_root, the_root_is_what_a_watcher_gives_a_delivered_event_back_to)
@@ -1037,6 +1052,100 @@ TEST(cl_icd_root, a_queue_takes_the_two_properties_the_api_names_and_a_buffer_ta
   const std::uint64_t any[] = {1u, 1u, 0u};
   CHECK(rig.root().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr, any, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+namespace {
+
+/* The property list the last queue request carried to the host: its pairs
+ * copied into `pairs`, and how many values that was, or -1 for no list. */
+int host_queue_list(const MockKmt &kmt, std::uint64_t (&pairs)[4])
+{
+    for (std::uint32_t index = kmt.commands(); index-- > 0u;) {
+        if (kmt.command_id(index) != av::clproto::kCmd_clCreateCommandQueueWithProperties) continue;
+        av::WireReader payload(kmt.command_bytes(index) + av::CommandHeader::encoded_size,
+                               MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+        std::uint64_t context = 0u;
+        std::uint64_t device = 0u;
+        std::uint8_t  listed = 0u;
+        std::uint64_t count = 0u;
+        if (!payload.read_pod(context) || !payload.read_pod(device) || !payload.read_pod(listed)) return -2;
+        if (listed == 0u) return -1;
+        if (!payload.read_varint(count) || count > 4u) return -2;
+        for (std::uint64_t at = 0u; at < count; ++at)
+            if (!payload.read_pod(pairs[at])) return -2;
+        return static_cast<int>(count);
+    }
+    return -2;
+}
+
+}  // namespace
+
+TEST(cl_icd_root, a_profiling_queue_is_asked_of_the_host_with_profiling_and_nothing_else)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  std::uint64_t pairs[4] = {};
+
+  /* Profiling crosses; out-of-order does not, and the queue runs in order. */
+  const std::uint64_t both[] = {static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES),
+                                CL_QUEUE_PROFILING_ENABLE | CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0u};
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_int error = CL_INVALID_VALUE;
+  CHECK(rig.root().create_queue(context, device, both, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(host_queue_list(rig.kmt(), pairs), 2);
+  CHECK_EQ(pairs[0], static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES));
+  CHECK_EQ(pairs[1], static_cast<std::uint64_t>(CL_QUEUE_PROFILING_ENABLE));
+
+  const std::uint64_t in_any_order[] = {static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES),
+                                        CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, 0u};
+  rig.host().cl_handle(host_queue + 1u, CL_SUCCESS);
+  CHECK(rig.root().create_queue(context, device, in_any_order, &error) != nullptr);
+  CHECK_EQ(host_queue_list(rig.kmt(), pairs), -1);
+
+  /* The deprecated call's bitfield is the same bit, and none is no list. */
+  rig.host().cl_handle(host_queue + 2u, CL_SUCCESS);
+  pairs[1] = 0u;
+  CHECK(rig.root().dispatch().clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &error) != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK_EQ(host_queue_list(rig.kmt(), pairs), 2);
+  CHECK_EQ(pairs[1], static_cast<std::uint64_t>(CL_QUEUE_PROFILING_ENABLE));
+  rig.host().cl_handle(host_queue + 3u, CL_SUCCESS);
+  CHECK(rig.root().dispatch().clCreateCommandQueue(context, device, 0u, &error) != nullptr);
+  CHECK_EQ(host_queue_list(rig.kmt(), pairs), -1);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, an_events_timestamps_are_the_hosts_and_a_refusal_is_its_too)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  cl_event event = made_user_event(rig, context);
+  CHECK(event != nullptr);
+  if (event == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+
+  const cl_ulong start = 0x1234'5678'9ABCull;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&start), sizeof start);
+  cl_ulong    stamp = 0u;
+  std::size_t answered = 0u;
+  CHECK_EQ(table.clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof stamp, &stamp, &answered),
+           CL_SUCCESS);
+  CHECK_EQ(stamp, start);
+  CHECK_EQ(answered, sizeof stamp);
+  /* A queue made without profiling: the host says so, and nothing is written. */
+  rig.host().cl_info(CL_PROFILING_INFO_NOT_AVAILABLE, "", 0u);
+  stamp = 7u;
+  CHECK_EQ(table.clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof stamp, &stamp, nullptr),
+           CL_PROFILING_INFO_NOT_AVAILABLE);
+  CHECK_EQ(stamp, 7u);
+  const std::uint32_t before = rig.kmt().commands();
+  CHECK_EQ(table.clGetEventProfilingInfo(reinterpret_cast<cl_event>(context), CL_PROFILING_COMMAND_END,
+                                         sizeof stamp, &stamp, nullptr),
+           CL_INVALID_EVENT);
   CHECK_EQ(rig.kmt().commands(), before);
   CHECK(rig.root().invariants_hold()); }
 
@@ -1554,3 +1663,175 @@ TEST(cl_icd_root, the_deprecated_queue_call_makes_the_same_queue)
   /* It is a queue of this ICD, carrying its dispatch table like any other. */
   CHECK(rig.loader().dispatch_of(queue) == &rig.root().dispatch());
   CHECK(rig.root().invariants_hold()); }
+
+/* ---- clGetContextInfo, clGetMemObjectInfo, clGetImageInfo ---------------- */
+
+TEST(cl_icd_root, a_contexts_info_is_this_icds_own_and_asks_the_host_nothing)
+{ ClIcdRig rig;
+  const cl_device_id device = opened_device(rig);
+  CHECK(device != nullptr);
+  if (device == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+  const cl_context_properties asked[] = {CL_CONTEXT_PLATFORM,
+                                         reinterpret_cast<cl_context_properties>(rig.loader().platform(0u)),
+                                         CL_CONTEXT_INTEROP_USER_SYNC, CL_TRUE, 0};
+  rig.host().blob_import(0u, 0x77u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_int           error = CL_INVALID_VALUE;
+  const cl_context context = table.clCreateContext(asked, 1u, &device, nullptr, nullptr, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  if (context == nullptr) return;
+  CHECK_EQ(table.clRetainContext(context), CL_SUCCESS);
+  const std::uint32_t before = rig.kmt().commands();
+
+  cl_uint     count = 0u;
+  std::size_t size = 0u;
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_REFERENCE_COUNT, sizeof count, &count, &size), CL_SUCCESS);
+  CHECK_EQ(count, 2u);
+  CHECK_EQ(size, sizeof(cl_uint));
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_NUM_DEVICES, sizeof count, &count, nullptr), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+  cl_device_id named = nullptr;
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof named, &named, &size), CL_SUCCESS);
+  CHECK(named == device);
+  CHECK_EQ(size, sizeof(cl_device_id));
+  /* The list as the application wrote it, terminator and all. */
+  cl_context_properties kept[8] = {};
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_PROPERTIES, 0u, nullptr, &size), CL_SUCCESS);
+  CHECK_EQ(size, sizeof asked);
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_PROPERTIES, sizeof kept, kept, nullptr), CL_SUCCESS);
+  for (std::size_t at = 0u; at < sizeof asked / sizeof asked[0]; ++at) CHECK_EQ(kept[at], asked[at]);
+  /* Too little room writes nothing; an unknown name and a non-context are refused. */
+  kept[0] = 7;
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_PROPERTIES, sizeof kept[0], kept, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(kept[0], 7);
+  CHECK_EQ(table.clGetContextInfo(context, 0x1234u, sizeof count, &count, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.root().context_info(reinterpret_cast<cl_context>(device), CL_CONTEXT_NUM_DEVICES, sizeof count,
+                                   &count, nullptr),
+           CL_INVALID_CONTEXT);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_context_made_with_no_list_has_none_to_give)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  std::size_t size = 99u;
+  CHECK_EQ(rig.root().context_info(context, CL_CONTEXT_PROPERTIES, 0u, nullptr, &size), CL_SUCCESS);
+  CHECK_EQ(size, 0u); }
+
+TEST(cl_icd_root, a_buffers_info_names_this_icds_objects_and_asks_the_host_the_rest)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+  CHECK_EQ(table.clRetainMemObject(buffer), CL_SUCCESS);
+  const std::uint32_t before = rig.kmt().commands();
+  cl_context owner = nullptr;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_CONTEXT, sizeof owner, &owner, nullptr), CL_SUCCESS);
+  CHECK(owner == context);
+  cl_mem over = buffer;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_ASSOCIATED_MEMOBJECT, sizeof over, &over, nullptr), CL_SUCCESS);
+  CHECK(over == nullptr);
+  cl_uint count = 0u;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_REFERENCE_COUNT, sizeof count, &count, nullptr), CL_SUCCESS);
+  CHECK_EQ(count, 2u);
+  void *pointer = &count;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_HOST_PTR, sizeof pointer, &pointer, nullptr), CL_SUCCESS);
+  CHECK(pointer == nullptr);
+  CHECK_EQ(rig.kmt().commands(), before);
+  /* The size is the host's. */
+  const std::size_t host_size = 64u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&host_size), sizeof host_size);
+  std::size_t size = 0u;
+  CHECK_EQ(table.clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof size, &size, nullptr), CL_SUCCESS);
+  CHECK_EQ(size, 64u);
+  CHECK_EQ(rig.kmt().commands(), before + 1u);
+  CHECK_EQ(rig.root().mem_object_info(reinterpret_cast<cl_mem>(context), CL_MEM_SIZE, sizeof size, &size, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, an_images_buffer_is_none_and_its_extent_is_the_hosts)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  cl_mem buffer = buffer_on(rig, context);
+  CHECK(buffer != nullptr);
+  if (buffer == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+  const std::uint32_t    before = rig.kmt().commands();
+  cl_mem                 under = buffer;
+  CHECK_EQ(table.clGetImageInfo(buffer, CL_IMAGE_BUFFER, sizeof under, &under, nullptr), CL_SUCCESS);
+  CHECK(under == nullptr);
+  CHECK_EQ(rig.kmt().commands(), before);
+  const std::size_t host_width = 640u;
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&host_width), sizeof host_width);
+  std::size_t width = 0u;
+  CHECK_EQ(table.clGetImageInfo(buffer, CL_IMAGE_WIDTH, sizeof width, &width, nullptr), CL_SUCCESS);
+  CHECK_EQ(width, 640u);
+  CHECK_EQ(rig.root().image_info(reinterpret_cast<cl_mem>(context), CL_IMAGE_WIDTH, sizeof width, &width, nullptr),
+           CL_INVALID_MEM_OBJECT); }
+
+/* ---- what the application was refused, in the log ------------------------ */
+
+TEST(cl_icd_root, a_program_that_does_not_build_leaves_its_options_and_the_hosts_log)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  rig.host().cl_handle(host_program, CL_SUCCESS);
+  cl_program program = rig.loader().create_program(context, "__kernel void k(void){ nope; }", nullptr);
+  CHECK(program != nullptr);
+  if (program == nullptr) return;
+  const char compiler[] = "k.cl:1:24: error: use of undeclared identifier 'nope'\n\n1 error generated.\n";
+  rig.host().cl_result(CL_BUILD_PROGRAM_FAILURE);
+  rig.host().cl_info(CL_SUCCESS, compiler, sizeof compiler);
+  rig.host().cl_info(CL_SUCCESS, compiler, sizeof compiler);
+  const std::uint32_t before = rig.log().lines();
+  CHECK_EQ(rig.root().dispatch().clBuildProgram(program, 0u, nullptr, "-cl-fast-relaxed-math", nullptr, nullptr),
+           CL_BUILD_PROGRAM_FAILURE);
+  CHECK_EQ(rig.log().lines() - before, 4u);
+  CHECK(std::strcmp(rig.log().line(before), "rvkcl: a program did not build; its options: -cl-fast-relaxed-math") ==
+        0);
+  CHECK(std::strcmp(rig.log().line(before + 1u),
+                    "rvkcl: build: k.cl:1:24: error: use of undeclared identifier 'nope'") == 0);
+  /* The empty line is skipped. */
+  CHECK(std::strcmp(rig.log().line(before + 2u), "rvkcl: build: 1 error generated.") == 0);
+  CHECK(std::strcmp(rig.log().line(before + 3u), "rvkcl: clBuildProgram answered -11") == 0);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
+
+TEST(cl_icd_root, a_creation_that_fails_is_named_even_with_nowhere_to_put_its_error)
+{ ClIcdRig rig;
+  cl_device_id device = nullptr;
+  cl_context   context = opened_context(rig, device);
+  CHECK(context != nullptr);
+  if (context == nullptr) return;
+  const cl_icd_dispatch &table = rig.root().dispatch();
+  const std::uint32_t    before = rig.log().lines();
+  /* A context is no program. */
+  CHECK(table.clCreateKernel(reinterpret_cast<cl_program>(context), "k", nullptr) == nullptr);
+  cl_int error = CL_SUCCESS;
+  CHECK(table.clCreateKernel(reinterpret_cast<cl_program>(context), "k", &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PROGRAM);
+  cl_uint count = 0u;
+  CHECK_EQ(table.clGetContextInfo(context, 0x1234u, sizeof count, &count, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(table.clGetContextInfo(context, 0x1234u, sizeof count, &count, nullptr), CL_INVALID_VALUE);
+  CHECK_EQ(rig.log().lines() - before, 2u);
+  CHECK(std::strcmp(rig.log().line(before), "rvkcl: clCreateKernel answered -44") == 0);
+  CHECK(std::strcmp(rig.log().line(before + 1u), "rvkcl: clGetContextInfo answered -30") == 0);
+  /* A success writes nothing, and still reaches the application. */
+  error = CL_INVALID_VALUE;
+  CHECK_EQ(table.clGetContextInfo(context, CL_CONTEXT_NUM_DEVICES, sizeof count, &count, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.log().lines() - before, 2u); }

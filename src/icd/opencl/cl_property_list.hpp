@@ -48,6 +48,9 @@ public:
      * what `repeated()` is for. */
     bool     names(uint64_t name, uint64_t &value) const;
     bool     repeated() const;
+    /* The list as it was read, pairs then its zero name, into `out`; how many
+     * values that is, or 0 for a list with no pair or too little room. */
+    uint32_t lay_out(uint64_t *out, uint32_t capacity) const;
 
     bool invariants_hold() const;
 

@@ -52,7 +52,7 @@ public:
     [[nodiscard]] Status describe(DxgkargDescribeAllocationRecord &request, const DisplaySources &sources);
     /* The live allocation `handle` names, or null. */
     Allocation          *find(void *handle);
-    [[nodiscard]] Status open(Allocation &allocation, const void *device);
+    [[nodiscard]] Status open(Allocation &allocation, const void *device, const void *process);
     [[nodiscard]] Status close(Allocation &allocation);
     uint32_t             live() const;
 

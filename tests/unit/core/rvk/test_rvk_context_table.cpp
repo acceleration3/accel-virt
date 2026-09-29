@@ -1587,17 +1587,32 @@ TEST(rvk_context_table_bind, a_share_context_that_is_not_a_live_gl_context_of_th
   CHECK_STATUS(bind_at(fixture, &second_context, gl.record(SubApi::opengl, core)), Status::ok);
   int other_device = 0;
   int this_device = 0;
-  CHECK_STATUS(gl.ring().allocation()->open(&other_device), Status::ok);
-  CHECK_STATUS(asking.ring().allocation()->open(&this_device), Status::ok);
+  int this_process = 0;
+  CHECK_STATUS(gl.ring().allocation()->open(&other_device, &this_process), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&this_device, &this_process), Status::ok);
   const std::uint32_t before = host.queue().requests();
   CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(gl.ring().handle()))),
                Status::invalid_parameter);
   CHECK_EQ(host.queue().requests(), before);
   /* The same device, and it binds. */
   CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);
-  CHECK_STATUS(asking.ring().allocation()->open(&other_device), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&other_device, &this_process), Status::ok);
   CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(gl.ring().handle()))),
                Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&third_context, &fixture.device()), Status::ok);
+  /* An OpenCL context sharing the GL one's objects comes from another ICD, on
+   * a device of its own: another device of the same process binds, and a
+   * device of another process does not (cl_khr_gl_sharing). */
+  const GlContextOptions shares = GlContextOptions().sharing(gl.ring().handle());
+  int other_process = 0;
+  CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&this_device, &other_process), Status::ok);
+  const std::uint32_t before_cl = host.queue().requests();
+  CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opencl, shares)), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), before_cl);
+  CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&this_device, &this_process), Status::ok);
+  CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opencl, shares)), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&third_context, &fixture.device()), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
   CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);

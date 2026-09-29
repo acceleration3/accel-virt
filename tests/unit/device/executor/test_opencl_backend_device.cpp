@@ -246,7 +246,7 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
           continue;
       }
       OpenClBackend backend;
-      CHECK(backend.initialize(hosts.device(index), hosts.display(index)));
+      CHECK(backend.initialize(hosts.device(index), hosts.display(index), nullptr));
       cl_context const context = guest_context(backend, *hosts.device(index));
       if (context == nullptr) { std::fprintf(stderr, "gpu %u makes no context\n", index); backend.shut_down(); continue; }
 
@@ -303,7 +303,7 @@ TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_de
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   cl_device_id const device = static_cast<cl_device_id>(hosts.device(0u)->device());
   char   host_list[4096] = {};
   size_t host_bytes = 0u;
@@ -336,7 +336,7 @@ TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   Exported written;
   if (!written.make(hosts.uuid(0u))) { backend.shut_down(); return; }
 
@@ -360,7 +360,7 @@ TEST(opencl_backend_device, a_property_list_longer_than_the_drivers_own_is_refus
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   cl_device_id named = static_cast<cl_device_id>(hosts.device(0u)->device());
 
   /* Longer than the thirty-two entries the driver copies into its own list. */
@@ -398,7 +398,7 @@ TEST(opencl_backend_device, an_import_of_the_wrong_shape_makes_nothing)
   if (!written.make(hosts.uuid(0u))) return;
 
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
 
@@ -433,7 +433,7 @@ TEST(opencl_backend_device, a_shut_down_gives_back_what_the_guest_did_not)
   if (!written.make(hosts.uuid(0u))) return;
 
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   std::uint64_t first = 0u;
@@ -462,7 +462,7 @@ TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_w
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u)));
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   cl_int                 error = CL_SUCCESS;

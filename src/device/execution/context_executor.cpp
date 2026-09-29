@@ -55,7 +55,7 @@ RvkExecutor *ContextExecutor::make() const
     AV_SCOPE("ContextExecutor::make");
     const RvkContextOptions wanted = {options_.major(), options_.minor(),
                                       static_cast<uint8_t>(options_.profile()), options_.flags(), 0u};
-    if (options_.share_context() != 0u) return shares_.create_sharing(options_.share_context(), uuid_, wanted);
+    if (options_.share_context() != 0u) return shares_.create_sharing(api_, options_.share_context(), uuid_, wanted);
     return library_.create(api_, uuid_, options_.defaults() ? nullptr : &wanted);
 }
 

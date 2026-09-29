@@ -120,3 +120,19 @@ TEST(cl_property_list, the_invariant_catches_a_list_a_read_would_never_leave)
     CHECK(list.read(one));
     ClPropertyListProbe::a_pair_named_nothing(list);
     CHECK(!list.invariants_hold()); } }
+
+TEST(cl_property_list, a_list_lays_out_as_it_was_written_or_not_at_all)
+{ ClPropertyList      list;
+  const std::uint64_t written[] = {0x1084u, 0xABCDu, 0x1085u, 1u, 0u};
+  CHECK(list.read(written));
+  std::uint64_t out[5] = {9u, 9u, 9u, 9u, 9u};
+  CHECK_EQ(list.lay_out(out, 5u), 5u);
+  for (std::uint32_t at = 0u; at < 5u; ++at) CHECK_EQ(out[at], written[at]);
+  /* One value short is no room at all: nothing is written. */
+  std::uint64_t short_of[4] = {9u, 9u, 9u, 9u};
+  CHECK_EQ(list.lay_out(short_of, 4u), 0u);
+  CHECK_EQ(short_of[0], 9u);
+  CHECK_EQ(list.lay_out(nullptr, 5u), 0u);
+  ClPropertyList none;
+  CHECK(none.read(nullptr));
+  CHECK_EQ(none.lay_out(out, 5u), 0u); }

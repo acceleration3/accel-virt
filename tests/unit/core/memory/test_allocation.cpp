@@ -138,9 +138,9 @@ TEST(allocation_report_to, a_gpu_only_allocation_is_not_cpu_visible)
 TEST(allocation_open, counts_opens_and_refuses_a_close_with_none)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
   CHECK_STATUS(allocation.close(), Status::invalid_state);
-  CHECK_STATUS(allocation.open(&platform), Status::ok);
+  CHECK_STATUS(allocation.open(&platform, nullptr), Status::ok);
   CHECK(allocation.invariants_hold());
-  CHECK_STATUS(allocation.open(&platform), Status::ok);
+  CHECK_STATUS(allocation.open(&platform, nullptr), Status::ok);
   CHECK_EQ(allocation.opens(), 2u);
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK(allocation.invariants_hold());
@@ -150,7 +150,7 @@ TEST(allocation, is_legal_up_to_apc)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u); DxgkAllocationInfoRecord info = {};
   platform.set_irql(Irql::dispatch);
   allocation.report_to(info);
-  static_cast<void>(allocation.open(&platform));
+  static_cast<void>(allocation.open(&platform, nullptr));
   static_cast<void>(allocation.close());
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling));
@@ -292,16 +292,16 @@ TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
   int second_device = 0;
   const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
   Allocation allocation(platform, segments.segments(), ring, 0x4000u);
-  CHECK_STATUS(allocation.open(&first_device), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
-  CHECK_STATUS(allocation.open(&first_device), Status::ok);   /* the same device, twice */
+  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
+  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);   /* the same device, twice */
   CHECK(allocation.invariants_hold());
 
   /* Once nobody holds it, it is anybody's again: the handle is gone and what
    * is left is memory. */
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK_STATUS(allocation.close(), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::ok);
   CHECK(allocation.invariants_hold());
   CHECK_STATUS(allocation.close(), Status::ok); }
 
@@ -316,13 +316,13 @@ TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
   Allocation first(platform, segments.segments(), ring, 0x4000u);
   Allocation second(platform, segments.segments(), ring, 0x4000u);
   CHECK(first.held_with(second));
-  CHECK_STATUS(first.open(&first_device), Status::ok);
+  CHECK_STATUS(first.open(&first_device, nullptr), Status::ok);
   CHECK(!first.held_with(second));
   CHECK(!second.held_with(first));
-  CHECK_STATUS(second.open(&second_device), Status::ok);
+  CHECK_STATUS(second.open(&second_device, nullptr), Status::ok);
   CHECK(!first.held_with(second));
   CHECK_STATUS(second.close(), Status::ok);
-  CHECK_STATUS(second.open(&first_device), Status::ok);
+  CHECK_STATUS(second.open(&first_device, nullptr), Status::ok);
   CHECK(first.held_with(second));
   CHECK(first.held_with(first));
   CHECK_STATUS(first.close(), Status::ok);
@@ -337,12 +337,12 @@ TEST(allocation_open, a_fence_page_belongs_to_its_device_and_a_shadow_does_not)
   const AllocationDescriptor page_of_fences(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u,
                                             ScanoutTarget());
   Allocation fences(platform, segments.segments(), page_of_fences, 0x1000u);
-  CHECK_STATUS(fences.open(&first_device), Status::ok);
-  CHECK_STATUS(fences.open(&second_device), Status::invalid_parameter);
+  CHECK_STATUS(fences.open(&first_device, nullptr), Status::ok);
+  CHECK_STATUS(fences.open(&second_device, nullptr), Status::invalid_parameter);
 
   Allocation shared(platform, segments.segments(), shadow, 0x1000u);
-  CHECK_STATUS(shared.open(&first_device), Status::ok);
-  CHECK_STATUS(shared.open(&second_device), Status::ok);
+  CHECK_STATUS(shared.open(&first_device, nullptr), Status::ok);
+  CHECK_STATUS(shared.open(&second_device, nullptr), Status::ok);
   CHECK(shared.invariants_hold()); }
 
 /* An allocation that is open with nobody holding it, or held by somebody with
@@ -356,7 +356,7 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   CHECK(!allocation.invariants_hold());
   AllocationProbe(allocation).set_opens(0u);
   CHECK(allocation.invariants_hold());
-  CHECK_STATUS(allocation.open(&device), Status::ok);
+  CHECK_STATUS(allocation.open(&device, nullptr), Status::ok);
   AllocationProbe(allocation).set_opens(0u);
   CHECK(!allocation.invariants_hold());
   AllocationProbe(allocation).set_opens(1u);
@@ -438,8 +438,8 @@ TEST(allocation_open, a_host_visible_chunk_belongs_to_the_device_that_opened_it)
   const AllocationDescriptor chunk(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x40000u,
                                    ScanoutTarget());
   Allocation allocation(platform, segments.segments(), chunk, 0x40000u);
-  CHECK_STATUS(allocation.open(&first_device), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
+  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
   CHECK(allocation.invariants_hold()); }
 
 TEST(allocation_open, a_reply_slot_belongs_to_the_device_that_opened_it)
@@ -449,8 +449,8 @@ TEST(allocation_open, a_reply_slot_belongs_to_the_device_that_opened_it)
   int second_device = 0;
   const AllocationDescriptor slot(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   Allocation allocation(platform, segments.segments(), slot, 0x1000u);
-  CHECK_STATUS(allocation.open(&first_device), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
+  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
   CHECK(allocation.invariants_hold()); }
 
 /* The binding publishes the whole allocation, wherever VidMm placed it: every
@@ -506,8 +506,8 @@ TEST(allocation_open, a_shared_allocation_takes_a_second_device_where_a_ring_wou
   allocation.shared_as(9u);
   int first = 0;
   int second = 0;
-  CHECK_STATUS(allocation.open(&first), Status::ok);
-  CHECK_STATUS(allocation.open(&second), Status::ok);
+  CHECK_STATUS(allocation.open(&first, nullptr), Status::ok);
+  CHECK_STATUS(allocation.open(&second, nullptr), Status::ok);
   CHECK_EQ(allocation.opens(), 2u);
   CHECK(allocation.invariants_hold());
   CHECK_STATUS(allocation.close(), Status::ok);

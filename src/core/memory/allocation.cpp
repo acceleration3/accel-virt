@@ -11,7 +11,7 @@ namespace av {
 
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
-    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), resource_(nullptr), owner_(nullptr),
+    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), resource_(nullptr), owner_(nullptr), process_(nullptr),
       aperture_(platform, static_cast<uint32_t>(size / page_bytes))
       {
           AV_SCOPE("Allocation::Allocation");
@@ -118,13 +118,16 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.Flags2 = 0u;
 }
 
-Status Allocation::open(const void *device)
+Status Allocation::open(const void *device, const void *process)
 {
     AV_SCOPE("Allocation::open");
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
     if (published_as_blob() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
-    if (opens_ == 0u) owner_ = device;
+    if (opens_ == 0u) {
+        owner_ = device;
+        process_ = process;
+    }
     opens_++;
     return Status::ok;
 }
@@ -135,6 +138,12 @@ bool Allocation::held_with(const Allocation &other) const
     return owner_ == other.owner_;
 }
 
+bool Allocation::held_in_process_of(const Allocation &other) const
+{
+    AV_SCOPE("Allocation::held_in_process_of");
+    return owner_ != nullptr && other.owner_ != nullptr && process_ == other.process_;
+}
+
 Status Allocation::close()
 {
     AV_SCOPE("Allocation::close");
@@ -142,7 +151,10 @@ Status Allocation::close()
     InvariantScope<Allocation> guard(platform_, *this, "close");
     if (opens_ == 0u) return Status::invalid_state;
     opens_--;
-    if (opens_ == 0u) owner_ = nullptr;
+    if (opens_ == 0u) {
+        owner_ = nullptr;
+        process_ = nullptr;
+    }
     return Status::ok;
 }
 
@@ -190,6 +202,7 @@ bool Allocation::invariants_hold() const
 {
     AV_SCOPE("Allocation::invariants_hold");
     if ((opens_ == 0u) != (owner_ == nullptr)) return false;
+    if (opens_ == 0u && process_ != nullptr) return false;
     return size_ != 0u && (size_ & (page_bytes - 1u)) == 0u && size_ >= descriptor_.size() &&
            aperture_.invariants_hold();
 }

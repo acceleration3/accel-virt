@@ -12,6 +12,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_gl_share_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -240,7 +241,8 @@ int main(int argc, char **argv)
         av::RecordingThreadLock   send_lock(trace, 'S');
         av::RecordingLog          icd_log;
         av::ScriptedThread        watcher;
-        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, icd_log, watcher,
+        av::ScriptedGlShareSource no_gl;
+        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, icd_log, watcher, no_gl,
                                        av::clicd::cl_icd_binding);
         samples::icd = &root;
         code = samples::run(argc, argv);

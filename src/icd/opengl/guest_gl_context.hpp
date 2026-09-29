@@ -94,8 +94,11 @@ public:
      * unless made. */
     uint32_t             share_name() const;
     /* wglShareLists: the context whose objects this one is to share, by its
-     * handle, looked up when this one is made. invalid_state once made or
-     * with a target recorded already. */
+     * handle, looked up when this one is made. A context made but never
+     * current - wglCreateContextAttribsARB makes at once, to answer its
+     * errors - holds no object yet, so its host context goes and the next
+     * make takes the share. invalid_state once it has been current, when
+     * lost, or with a target recorded already. */
     [[nodiscard]] Status share_after(uint64_t target);
     uint64_t             share_target() const;
     /* The options name `share_name`'s context to share with, and, when they
@@ -195,6 +198,8 @@ private:
     State                          state_;
     uint32_t                       owner_;
     void                          *current_dc_;
+    /* Sticky: a context once current may hold objects, and takes no share. */
+    bool                           been_current_;
     uint32_t                       error_;
     uint64_t                       share_target_;
     /* The device link a made or lost context holds; no_link otherwise. */

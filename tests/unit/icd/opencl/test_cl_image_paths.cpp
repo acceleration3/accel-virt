@@ -851,3 +851,64 @@ TEST(cl_image_paths, an_event_of_another_context_is_not_one_a_queue_can_wait_on)
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, &foreign, nullptr), CL_INVALID_EVENT_WAIT_LIST);
   CHECK_EQ(rig.kmt().commands(), sent); }
+
+namespace {
+
+/* The description the command at `index` carried to the host, and its flags. */
+bool crossed_description(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t &flags, cl_image_desc &crossed)
+{
+    av::WireReader  payload = payload_of(kmt, index);
+    std::uint64_t   context = 0u;
+    std::uint8_t    present = 0u;
+    cl_image_format format = {};
+    return kmt.command_id(index) == av::clproto::kCmd_clCreateImage && payload.read_pod(context) &&
+           payload.read_varint(flags) && payload.read_pod(present) && present == 1u &&
+           payload.read(&format, sizeof format) && payload.read_pod(present) && present == 1u &&
+           payload.read(&crossed, sizeof crossed);
+}
+
+}  // namespace
+
+TEST(cl_image_paths, the_1_1_image_calls_make_the_image_clcreateimage_would_be_described)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const cl_icd_dispatch *const table = table_of(run.context());
+  const cl_image_format        format = {CL_RGBA, CL_UNORM_INT8};
+  std::uint64_t                flags = 0u;
+  cl_image_desc                crossed = {};
+
+  rig.host().cl_handle(host_image, CL_SUCCESS);
+  std::uint32_t at = rig.kmt().commands();
+  cl_int        error = CL_INVALID_VALUE;
+  cl_mem        flat = table->clCreateImage2D(run.context(), CL_MEM_READ_ONLY, &format, 640u, 480u, 0u, nullptr, &error);
+  CHECK(flat != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(table_of(flat) == table);
+  CHECK(crossed_description(rig.kmt(), at, flags, crossed));
+  CHECK_EQ(flags, static_cast<std::uint64_t>(CL_MEM_READ_ONLY));
+  CHECK_EQ(crossed.image_type, static_cast<cl_mem_object_type>(CL_MEM_OBJECT_IMAGE2D));
+  CHECK_EQ(crossed.image_width, 640u);
+  CHECK_EQ(crossed.image_height, 480u);
+  CHECK_EQ(crossed.image_depth, 0u);
+  CHECK_EQ(crossed.image_row_pitch, 0u);
+
+  rig.host().cl_handle(host_image + 1u, CL_SUCCESS);
+  at = rig.kmt().commands();
+  cl_mem deep = table->clCreateImage3D(run.context(), CL_MEM_READ_WRITE, &format, 32u, 16u, 8u, 0u, 0u, nullptr, &error);
+  CHECK(deep != nullptr);
+  CHECK(crossed_description(rig.kmt(), at, flags, crossed));
+  CHECK_EQ(crossed.image_type, static_cast<cl_mem_object_type>(CL_MEM_OBJECT_IMAGE3D));
+  CHECK_EQ(crossed.image_width, 32u);
+  CHECK_EQ(crossed.image_height, 16u);
+  CHECK_EQ(crossed.image_depth, 8u);
+
+  /* The 1.1 calls refuse what clCreateImage refuses, before anything crosses:
+   * a pointer the flags do not ask to copy from. */
+  at = rig.kmt().commands();
+  std::uint8_t pixels[16] = {};
+  CHECK(table->clCreateImage2D(run.context(), CL_MEM_READ_ONLY, &format, 2u, 2u, 0u, pixels, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_HOST_PTR);
+  CHECK_EQ(rig.kmt().commands(), at);
+  CHECK(rig.root().invariants_hold()); }

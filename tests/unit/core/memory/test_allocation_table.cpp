@@ -300,7 +300,7 @@ TEST(allocation_table_destroy, an_allocation_still_open_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.create(), Status::ok);
   Allocation *allocation = fixture.table().find(fixture.info(0u).hAllocation);
-  CHECK_STATUS(fixture.table().open(*allocation, &fixture), Status::ok);
+  CHECK_STATUS(fixture.table().open(*allocation, &fixture, nullptr), Status::ok);
   CHECK_STATUS(fixture.destroy(1u), Status::invalid_state);
   CHECK_STATUS(fixture.table().close(*allocation), Status::ok);
   CHECK_STATUS(fixture.table().close(*allocation), Status::invalid_state);

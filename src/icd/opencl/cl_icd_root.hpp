@@ -31,11 +31,13 @@
 #include "icd/opencl/cl_extension_policy.hpp"
 #include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/cl_pending_reads.hpp"
+#include "icd/opencl/cl_refusal_log.hpp"
 #include "icd/opencl/cl_platform.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 
 #include <CL/cl.h>
+#include <CL/cl_gl.h>
 #include <CL/cl_icd.h>
 
 namespace av {
@@ -54,6 +56,7 @@ class ThreadLock;
 namespace av::clicd {
 
 class ClIcdBinding;
+class GlShareSource;
 struct ClIcdRootProbe;
 
 class ClIcdRoot final : public StateReporter, public ClEventOwner {
@@ -70,7 +73,8 @@ public:
     static constexpr size_t  host_extensions_bytes = 4096u;
 
     ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              icd::LogSink &log, icd::ServiceThread &watcher_thread, ClIcdBinding &binding);
+              icd::LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              ClIcdBinding &binding);
     ~ClIcdRoot();
     ClIcdRoot(const ClIcdRoot &) = delete;
     ClIcdRoot &operator=(const ClIcdRoot &) = delete;
@@ -102,7 +106,10 @@ public:
     /* `properties` is the application's zero-terminated list, which the API
      * requires this to judge rather than ignore: an unknown property is
      * CL_INVALID_PROPERTY, and a driver that quietly dropped one would be
-     * doing something other than what it was asked. */
+     * doing something other than what it was asked. CL_GL_CONTEXT_KHR (with
+     * CL_WGL_HDC_KHR) makes the context from that OpenGL context, which must
+     * be current on the calling thread and one this process's OpenGL ICD
+     * made; any other is CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR. */
     cl_context create_context(const uint64_t *properties, const cl_device_id *devices,
                               cl_uint num_devices, cl_int *error);
     cl_int     retain_context(cl_context context);
@@ -165,6 +172,13 @@ public:
      * keep the host's image and the application's pointer the same. */
     cl_mem create_image(cl_context context, cl_mem_flags flags, const cl_image_format *format,
                         const cl_image_desc *desc, void *host_pointer, cl_int *error);
+    /* The 1.1 calls, which a program written for 1.1 makes every image with:
+     * the same image clCreateImage makes, described as it would be told. */
+    cl_mem create_image_2d(cl_context context, cl_mem_flags flags, const cl_image_format *format, size_t width,
+                           size_t height, size_t row_pitch, void *host_pointer, cl_int *error);
+    cl_mem create_image_3d(cl_context context, cl_mem_flags flags, const cl_image_format *format, size_t width,
+                           size_t height, size_t depth, size_t row_pitch, size_t slice_pitch, void *host_pointer,
+                           cl_int *error);
     /* Image transfers are always complete when they return: a non-blocking
      * one may be, and the bytes are then valid before the event says so,
      * which the API allows. Both wait for the queue first and then go as
@@ -182,6 +196,32 @@ public:
      * the answer is the host's as it stands. */
     cl_int supported_image_formats(cl_context context, cl_mem_flags flags, cl_mem_object_type type,
                                    cl_uint num_entries, cl_image_format *formats, cl_uint *num_formats);
+
+    /* ---- cl_khr_gl_sharing ------------------------------------------------ */
+
+    /* An OpenCL object over an OpenGL one of the context `context` was made
+     * from, named as the application names it in GL - the host resolves the
+     * name in that context's share group. CL_INVALID_CONTEXT for a context not
+     * made from a GL context; the host's own refusal otherwise. Every texture
+     * spelling - clCreateFromGLTexture and the 1.1 pair - is one call. */
+    cl_mem create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error);
+    cl_mem create_from_gl_texture(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint level,
+                                  cl_GLuint texture, cl_int *error);
+    cl_mem create_from_gl_renderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
+                                       cl_int *error);
+    cl_int gl_object_info(cl_mem object, cl_gl_object_type *type, cl_GLuint *name);
+    cl_int gl_texture_info(cl_mem object, cl_gl_texture_info name, size_t value_bytes, void *value,
+                           size_t *size_ret);
+    /* Acquire and release, which the host runs in the queue's order after the
+     * wait list: every object must be one of the queue's context. */
+    cl_int enqueue_acquire_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                              const cl_event *events, cl_event *event);
+    cl_int enqueue_release_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                              const cl_event *events, cl_event *event);
+    /* clGetGLContextInfoKHR, answered here: the one device this ICD shows is
+     * the one every OpenGL context of ours runs on. */
+    cl_int gl_context_info(const cl_context_properties *properties, cl_gl_context_info name, size_t value_bytes,
+                           void *value, size_t *size_ret);
 
     /* ---- the queue's own points ------------------------------------------ */
 
@@ -236,6 +276,24 @@ public:
     cl_int   wait_for_events(cl_uint count, const cl_event *events);
     cl_int   event_info(cl_event event, cl_event_info name, size_t value_bytes, void *value,
                         size_t *size_ret);
+    /* An entry point this ICD does not serve was called, and refused: named
+     * in the log, since an application that only reports "a problem" leaves
+     * nothing else to say which. */
+    void     note_refused(const char *entry_point);
+    /* `result`, and in the log the first time an entry point answers it, when
+     * it is an error. */
+    cl_int   noted(const char *entry_point, cl_int result);
+    /* clGetContextInfo, clGetMemObjectInfo and clGetImageInfo: an answer that
+     * names an object is this ICD's handle for it; the rest is the host's. */
+    cl_int   context_info(cl_context context, cl_context_info name, size_t value_bytes, void *value,
+                          size_t *size_ret);
+    cl_int   mem_object_info(cl_mem object, cl_mem_info name, size_t value_bytes, void *value,
+                             size_t *size_ret);
+    cl_int   image_info(cl_mem image, cl_image_info name, size_t value_bytes, void *value, size_t *size_ret);
+    /* The host GPU's timestamps for the command, on a queue made with
+     * CL_QUEUE_PROFILING_ENABLE. */
+    cl_int   event_profiling(cl_event event, cl_profiling_info name, size_t value_bytes, void *value,
+                             size_t *size_ret);
     /* Registers a callback on the watcher's thread. No guest function pointer
      * crosses the wire: the device registers its own with the host, and its
      * completion wakes this context's worker. */
@@ -306,6 +364,22 @@ private:
      * event of another context, CL_OUT_OF_RESOURCES past max_waited. */
     cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events,
                                uint64_t *into);
+    /* The share name of the OpenGL context `list` names, into `share`: 0 for a
+     * list naming none, CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR for one that
+     * names a context this process's OpenGL ICD cannot vouch for. */
+    cl_int           gl_share_for(const ClPropertyList &list, uint32_t &share);
+    /* The context object `context` names when it was made from a GL context
+     * and can still send; null with the error set otherwise. */
+    ClObject        *gl_sharing(cl_context context, cl_int *error);
+    void             note_build_log(ClientTransport &wire, uint64_t program, const char *options);
+    /* What a host create over a GL object answered, wrapped as a mem object. */
+    cl_mem           gl_object(ClientTransport &wire, ClObject &context, uint64_t made, cl_int host_error,
+                               cl_int *error);
+    using GlObjectsCommand = cl_int (*)(ClientTransport &, uint64_t, cl_uint, const uint64_t *, cl_uint,
+                                        const uint64_t *, uint64_t *);
+    cl_int           enqueue_gl_objects(GlObjectsCommand command, cl_command_queue queue, cl_uint count,
+                                        const cl_mem *objects, cl_uint waits, const cl_event *events,
+                                        cl_event *event);
     /* A marker or a barrier: which of the two generated calls sends it is the
      * whole difference. */
     using PointCommand = cl_int (*)(ClientTransport &, uint64_t, cl_uint, const uint64_t *, uint64_t *);
@@ -347,6 +421,7 @@ private:
 
     icd::ThreadLock       &lock_;
     icd::LogSink          &log_;
+    GlShareSource         &gl_share_;
     ClIcdBinding          &binding_;
     ClDispatchTable        dispatch_;
     ClPlatform             platform_;
@@ -365,6 +440,7 @@ private:
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
     ClPendingReads         reads_;
+    ClRefusalLog           refusals_;
 };
 
 }  // namespace av::clicd

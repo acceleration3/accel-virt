@@ -24,6 +24,8 @@
 
 namespace av {
 
+class OpenGlBackend;
+
 class GlDisplay;
 class OpenClDevice;
 /* What the tests reach the extension-string surgery through: `without` is
@@ -53,8 +55,14 @@ public:
      * against a GL context of this one's - which is what happens inside QEMU
      * on the machine this was written on, where the same calls succeed in an
      * ordinary process (research.md §21). A context is made and released to
-     * find out, once, before the guest asks. */
-    [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display);
+     * find out, once, before the guest asks.
+     *
+     * `share` is the OpenGL context of the guest's that this one was made to
+     * share objects with (cl_khr_gl_sharing), or null. With one, the vehicle
+     * shares its lists, so a GL name the guest hands clCreateFromGLBuffer is
+     * the same object here; and a context that cannot share is refused, since
+     * the guest asked for nothing else. */
+    [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -227,6 +235,7 @@ private:
      * needs afterwards, terminator included. */
     size_t             without(char *text, size_t bytes, const char *name) const;
     /* Whether `length` letters at `text` are the whole of `name`. */
+    [[nodiscard]] bool share_with(const GlDisplay &display, const OpenGlBackend &share);
     bool               names(const char *text, size_t length, const char *name) const;
     /* The queue an acquire is enqueued on, made on the guest's context at the
      * first import: the acquire is the device's own bookkeeping and no guest

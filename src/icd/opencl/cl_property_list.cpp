@@ -75,6 +75,19 @@ bool ClPropertyList::repeated() const
     return repeated_;
 }
 
+uint32_t ClPropertyList::lay_out(uint64_t *out, uint32_t capacity) const
+{
+    AV_SCOPE("ClPropertyList::lay_out");
+    const uint32_t values = pairs_ * 2u + 1u;
+    if (pairs_ == 0u || out == nullptr || capacity < values) return 0u;
+    for (uint32_t index = 0u; index < pairs_; ++index) {
+        out[index * 2u] = names_[index];
+        out[index * 2u + 1u] = values_[index];
+    }
+    out[values - 1u] = 0u;
+    return values;
+}
+
 bool ClPropertyList::invariants_hold() const
 {
     AV_SCOPE("ClPropertyList::invariants_hold");

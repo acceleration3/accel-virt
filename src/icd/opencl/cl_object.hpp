@@ -53,6 +53,9 @@ public:
 
     /* Whether this object is `other` or is somewhere below it. */
     bool descends_from(const ClObject &other) const;
+    /* This object or the closest one above it of `kind`, or null: a buffer's
+     * context, a sub-buffer's buffer. */
+    ClObject *nearest(Kind kind);
 
     /* The application's own reference count, which is not the host's: the
      * guest retains and releases, and only the last release destroys. */
@@ -60,6 +63,13 @@ public:
     /* Whether that was the last one. */
     bool     release();
     uint32_t references() const;
+    /* The objects made on this one hold it, as OpenCL's objects hold what
+     * they were made on: a context outlives the application's last reference
+     * while a buffer of it lives, and a program while a kernel of it does. */
+    void     adopt();
+    void     orphan();
+    /* Held by neither the application nor an object made on it. */
+    bool     unheld() const;
 
     bool invariants_hold() const;
 
@@ -75,6 +85,7 @@ private:
     uint64_t               backing_offset_;
     uint64_t               backing_bytes_;
     uint32_t               references_;
+    uint32_t               children_;
     Kind                   kind_;
 };
 

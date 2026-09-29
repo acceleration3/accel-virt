@@ -171,9 +171,10 @@ private:
      * when `context` already holds one (in `duplicate`). */
     uint32_t             claim(void *context, bool &duplicate);
     [[nodiscard]] Status resolve(uint32_t handle, uint32_t role, uint8_t order, Allocation *&allocation);
-    /* The device id of the live OpenGL context of this process and device whose
-     * ring `handle` names, other than `slot`'s own; 0 for a handle of 0. */
-    [[nodiscard]] Status resolve_share(uint32_t slot, uint32_t handle, uint32_t &context_id);
+    /* The device id of the live OpenGL context whose ring `handle` names, other
+     * than `slot`'s own: of this device for an OpenGL context asking, of this
+     * process for an OpenCL one; 0 for a handle of 0. */
+    [[nodiscard]] Status resolve_share(uint32_t slot, SubApi asking, uint32_t handle, uint32_t &context_id);
     [[nodiscard]] Status set_up(uint32_t slot, const RvkContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);

@@ -29,7 +29,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
                                const GlContextOptions &options)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
+      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(icd::IcdConnection::no_link), loss_reported_(false),
       staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), arena_(), reported_(), arrays_(), uniforms_(), queries_(), profile_(), interval_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), mappings_(memory, shadows_, log), externals_(handles, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u)
@@ -126,6 +126,7 @@ void GuestGlContext::set_current_dc(void *dc)
 {
     AV_SCOPE("GuestGlContext::set_current_dc");
     current_dc_ = dc;
+    if (dc != nullptr) been_current_ = true;
 }
 int32_t               GuestGlContext::pixel_format() const
 {
@@ -147,7 +148,8 @@ uint32_t GuestGlContext::share_name() const
 Status GuestGlContext::share_after(uint64_t target)
 {
     AV_SCOPE("GuestGlContext::share_after");
-    if (state_ != State::created || share_target_ != 0u) return Status::invalid_state;
+    if (share_target_ != 0u || been_current_ || state_ == State::lost) return Status::invalid_state;
+    if (state_ == State::made) teardown();
     share_target_ = target;
     return Status::ok;
 }

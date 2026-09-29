@@ -39,6 +39,10 @@ public:
 
     /* Every field zero. */
     bool defaults() const;
+    /* Every field zero but the share context: all an OpenCL context's record
+     * carries, naming the OpenGL context whose objects it shares
+     * (cl_khr_gl_sharing). */
+    bool shares_only() const;
     /* A version OpenGL has (1.0-1.5, 2.0-2.1, 3.0-3.3, 4.0-4.6), a defined
      * profile and only the defined flags; or the defaults. */
     bool valid() const;

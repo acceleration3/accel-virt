@@ -47,12 +47,13 @@ bool same_word(const char *text, const char *name, size_t length)
  * application enables, and this ICD answers its two queries without claiming
  * the extension.
  *
- * `cl_khr_gl_sharing` needs something this design does not have yet: the
- * *host's* CL context must be created against the *host's* GL context, and the
- * GL context to share with belongs to another rvk context - the OpenGL ICD's,
- * in another DLL of the same process - which nothing on the wire names. That
- * is a wire and executor-ABI change rather than a table, and research.md §18
- * records what it would take. */
+ * `cl_khr_gl_sharing` is reported where the host's device lists it - which
+ * it does exactly when its OpenCL made a context against a GL context of the
+ * device's own. The context this ICD makes from a GL context is a context of
+ * the device's made in that GL context's share group: the OpenGL ICD names
+ * the context by its ring (rvkGetShareName), the miniport resolves the name
+ * for a context of the same process, and the executor makes the host's
+ * context against a GL context sharing the guest one's objects. */
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
      "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver",
@@ -60,6 +61,7 @@ const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory_win32", 1u,
      "cl_buffer_paths.a_buffer_over_a_shared_object_is_opened_and_released_as_one",
      "cl_khr_gl_sharing"},
+    {"cl_khr_gl_sharing", 1u, "cl_gl_sharing.a_context_made_from_the_current_gl_context_names_its_objects"},
 };
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 

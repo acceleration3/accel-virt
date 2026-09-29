@@ -1,9 +1,12 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "icd/opencl/cl_info_request.hpp"
+
 #include "proto/cl_blob_backing.hpp"
 
 #include "icd/common/sliced_wait.hpp"
 
+#include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -15,6 +18,7 @@
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
+#include "icd/opencl/gl_share_source.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
@@ -49,11 +53,11 @@ void report_error(cl_int *error, cl_int value)
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      icd::ThreadLock &send_lock, icd::LogSink &log,
-                     icd::ServiceThread &watcher_thread, ClIcdBinding &binding)
-    : lock_(lock), log_(log), binding_(binding), dispatch_(), platform_(),
+                     icd::ServiceThread &watcher_thread, GlShareSource &gl_share, ClIcdBinding &binding)
+    : lock_(lock), log_(log), gl_share_(gl_share), binding_(binding), dispatch_(), platform_(),
       extensions_(reported_extensions, reported_extension_count), objects_(memory, dispatch_.table()), connection_(kmt),
       shared_handles_(kmt, lock), contexts_(memory), memory_(memory), send_lock_(send_lock), device_(0u),
-      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_()
+      device_object_(nullptr), watcher_(watcher_thread, log, *this), waits_(kmt), reads_(), refusals_(log, lock)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -131,6 +135,7 @@ void *ClIcdRoot::extension_function(const char *name)
         return dispatch_.external_mem_acquire();
     if (spells(name, "clEnqueueReleaseExternalMemObjectsKHR"))
         return dispatch_.external_mem_release();
+    if (spells(name, "clGetGLContextInfoKHR")) return dispatch_.gl_context_info();
     return nullptr;
 }
 
@@ -412,16 +417,23 @@ cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device
                                      cl_uint num_devices, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_context");
-    /* CL_CONTEXT_PLATFORM must be this platform if it is named at all; the
-     * interop-sync flag is accepted and has no effect, because there is no
-     * GL sharing here for it to synchronise with. */
+    /* CL_CONTEXT_PLATFORM must be this platform if it is named at all. The
+     * interop-sync flag is accepted and has no effect: a GL-sharing context's
+     * application finishes its GL work before it acquires (the extension's
+     * own rule), and the host is told nothing it would change. */
     static constexpr uint64_t allowed[] = {
-        static_cast<uint64_t>(CL_CONTEXT_PLATFORM),
-        static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC)};
+        static_cast<uint64_t>(CL_CONTEXT_PLATFORM), static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC),
+        static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR)};
     ClPropertyList            list;
-    const cl_int              judged_list = judge(properties, allowed, 2u, list);
+    const cl_int              judged_list = judge(properties, allowed, 4u, list);
     if (judged_list != CL_SUCCESS) {
         report_error(error, judged_list);
+        return nullptr;
+    }
+    uint32_t     gl_share = 0u;
+    const cl_int shared = gl_share_for(list, gl_share);
+    if (shared != CL_SUCCESS) {
+        report_error(error, shared);
         return nullptr;
     }
     uint64_t named = 0u;
@@ -442,11 +454,15 @@ cl_context ClIcdRoot::create_context(const uint64_t *properties, const cl_device
     lock_.acquire();
     GuestClContext *context = nullptr;
     Status          made = contexts_.create(context, connection_, memory_, send_lock_, log_, shared_handles_);
-    if (made == Status::ok) made = context->make();
+    if (made == Status::ok) made = context->make(gl_share);
+    if (made == Status::ok) context->keep_properties(properties);
     if (made != Status::ok) {
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
         lock_.release();
+        /* A context the device would not put in that GL context's share group
+         * is the extension's refusal, not a missing device. */
         report_error(error, made == Status::no_memory ? CL_OUT_OF_HOST_MEMORY
+                            : gl_share != 0u          ? CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR
                                                       : CL_DEVICE_NOT_AVAILABLE);
         return nullptr;
     }
@@ -547,16 +563,19 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
             }
         }
     }
-    const bool held_still = !last;
-    static_cast<void>(objects_.release(*held));
-    if (!held_still && kind == ClObject::Kind::context && context != nullptr) {
+    /* The context goes when the last thing holding it does - the
+     * application, or the last object made on it - which may be this release
+     * of a kernel as well as of the context. */
+    GuestClContext *freed = nullptr;
+    static_cast<void>(objects_.release(*held, freed));
+    if (freed != nullptr) {
         /* Callbacks registered on this context's events are dropped first:
          * their transport is about to go, and asking the host over a torn
          * down one is what would happen otherwise. */
-        watcher_.forget_context(context->wire());
-        /* The context's own objects went with it in the table; its transport
-         * and everything the host held on it go now. */
-        static_cast<void>(contexts_.destroy(context));
+        watcher_.forget_context(freed->wire());
+        /* Its objects are gone from the table; its transport and everything
+         * the host held on it go now. */
+        static_cast<void>(contexts_.destroy(freed));
     }
     lock_.release();
     return CL_SUCCESS;
@@ -589,9 +608,10 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
                                          const uint64_t *properties, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_queue");
-    /* The two the API names for a queue. The bits CL_QUEUE_PROPERTIES may
-     * carry are judged by the host, which is the only thing that knows which
-     * of them its device supports. */
+    /* The two the API names for a queue. Of the bits CL_QUEUE_PROPERTIES may
+     * carry, profiling is the one the host's queue is made with: a command's
+     * timestamps are the host GPU's, and nothing here has a clock for them.
+     * An out-of-order queue stays in order, which the API allows of any. */
     static constexpr uint64_t allowed[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES),
                                            static_cast<uint64_t>(CL_QUEUE_SIZE)};
     ClPropertyList            list;
@@ -621,9 +641,13 @@ cl_command_queue ClIcdRoot::create_queue(cl_context context, cl_device_id device
         report_error(error, CL_INVALID_DEVICE);
         return nullptr;
     }
+    uint64_t       bits = 0u;
+    const bool     named = list.names(CL_QUEUE_PROPERTIES, bits);
+    const uint64_t profiled[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), CL_QUEUE_PROFILING_ENABLE, 0u};
     cl_int         host_error = CL_SUCCESS;
     const uint64_t queue = av::clproto::rvk_clCreateCommandQueueWithProperties(
-        *wire, held->wire(), host_device->wire(), nullptr, &host_error);
+        *wire, held->wire(), host_device->wire(),
+        named && (bits & CL_QUEUE_PROFILING_ENABLE) != 0u ? profiled : nullptr, &host_error);
     if (queue == 0u) {
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_OUT_OF_RESOURCES);
         return nullptr;
@@ -794,7 +818,53 @@ cl_int ClIcdRoot::build_program(cl_program program, const char *options)
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     /* Built for the one device this ICD shows; a null list is what the API
      * means by "every device of the context", which is the same device. */
-    return av::clproto::rvk_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
+    const cl_int built = av::clproto::rvk_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
+    if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), options);
+    return built;
+}
+
+/* The host compiler's own words for a program that did not build: an
+ * application that reports only "a problem" leaves them nowhere else. Its
+ * first lines, since a large program's log runs long. */
+void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, const char *options)
+{
+    AV_SCOPE("ClIcdRoot::note_build_log");
+    constexpr size_t   most_bytes = 1u << 20;
+    constexpr uint32_t most_lines = 24u;
+    char       bytes[256];
+    TextBuffer line(bytes, sizeof bytes);
+    line.append("rvkcl: a program did not build; its options: ");
+    line.append(options != nullptr ? options : "");
+    log_.write(line.text());
+    size_t size = 0u;
+    if (device_object_ == nullptr ||
+        av::clproto::rvk_clGetProgramBuildInfo(wire, program, device_object_->wire(), CL_PROGRAM_BUILD_LOG, 0u,
+                                               nullptr, &size) != CL_SUCCESS ||
+        size == 0u || size > most_bytes)
+        return;
+    char *const text = static_cast<char *>(memory_.allocate(size + 1u, Pool::paged));
+    if (text == nullptr) return;
+    ScopeExit given_back([&] { memory_.release(text); });
+    if (av::clproto::rvk_clGetProgramBuildInfo(wire, program, device_object_->wire(), CL_PROGRAM_BUILD_LOG, size,
+                                               text, nullptr) != CL_SUCCESS)
+        return;
+    text[size] = '\0';
+    uint32_t written = 0u;
+    for (char *start = text; *start != '\0' && written < most_lines;) {
+        char *end = start;
+        while (*end != '\0' && *end != '\n') end++;
+        const bool last = *end == '\0';
+        *end = '\0';
+        if (end != start) {
+            TextBuffer said(bytes, sizeof bytes);
+            said.append("rvkcl: build: ");
+            said.append(start);
+            log_.write(said.text());
+            written++;
+        }
+        if (last) break;
+        start = end + 1;
+    }
 }
 
 cl_kernel ClIcdRoot::create_kernel(cl_program program, const char *name, cl_int *error)
@@ -1372,6 +1442,119 @@ cl_int ClIcdRoot::event_info(cl_event event, cl_event_info name, size_t value_by
     return asked;
 }
 
+void ClIcdRoot::note_refused(const char *entry_point)
+{
+    AV_SCOPE("ClIcdRoot::note_refused");
+    refusals_.note(entry_point);
+}
+
+cl_int ClIcdRoot::noted(const char *entry_point, cl_int result)
+{
+    AV_SCOPE("ClIcdRoot::noted");
+    refusals_.note_failure(entry_point, result);
+    return result;
+}
+
+cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t value_bytes, void *value,
+                               size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::context_info");
+    ClObject *const held = judged(context, ClObject::Kind::context);
+    if (held == nullptr) return CL_INVALID_CONTEXT;
+    /* All of it this ICD's own: its one device, the application's count, the
+     * list the application gave. The host's context has other answers. */
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    switch (name) {
+    case CL_CONTEXT_REFERENCE_COUNT: {
+        lock_.acquire();
+        const cl_uint count = held->references();
+        lock_.release();
+        return asked.give(&count, sizeof count);
+    }
+    case CL_CONTEXT_NUM_DEVICES: {
+        const cl_uint one = 1u;
+        return asked.give(&one, sizeof one);
+    }
+    case CL_CONTEXT_DEVICES: {
+        const cl_device_id device = reinterpret_cast<cl_device_id>(device_object_);
+        return asked.give(&device, sizeof device);
+    }
+    case CL_CONTEXT_PROPERTIES: {
+        uint64_t       laid[ClPropertyList::max_pairs * 2u + 1u];
+        const uint32_t values = held->context()->properties(laid, ClPropertyList::max_pairs * 2u + 1u);
+        return asked.give(laid, values * sizeof(uint64_t));
+    }
+    default:
+        return CL_INVALID_VALUE;
+    }
+}
+
+cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_bytes, void *value,
+                                  size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::mem_object_info");
+    ClObject *const held = judged(object, ClObject::Kind::mem);
+    if (held == nullptr) return CL_INVALID_MEM_OBJECT;
+    /* What names an object is this ICD's handle for it, not the host's; the
+     * rest is the host's own answer. */
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    switch (name) {
+    case CL_MEM_CONTEXT: {
+        const cl_context owner = reinterpret_cast<cl_context>(held->nearest(ClObject::Kind::context));
+        return asked.give(&owner, sizeof owner);
+    }
+    case CL_MEM_ASSOCIATED_MEMOBJECT: {
+        ClObject *const parent = held->parent();
+        const cl_mem    over = reinterpret_cast<cl_mem>(parent != nullptr ? parent->nearest(ClObject::Kind::mem) : nullptr);
+        return asked.give(&over, sizeof over);
+    }
+    case CL_MEM_REFERENCE_COUNT: {
+        lock_.acquire();
+        const cl_uint count = held->references();
+        lock_.release();
+        return asked.give(&count, sizeof count);
+    }
+    /* The host's pointer is nothing in this process, and memory of the
+     * application's own is not carried under an object (create_image). */
+    case CL_MEM_HOST_PTR: {
+        const void *const none = nullptr;
+        return asked.give(&none, sizeof none);
+    }
+    default:
+        break;
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetMemObjectInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::image_info(cl_mem image, cl_image_info name, size_t value_bytes, void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::image_info");
+    ClObject *const held = judged(image, ClObject::Kind::mem);
+    if (held == nullptr) return CL_INVALID_MEM_OBJECT;
+    /* The one answer that is an object: this ICD keeps no buffer under an
+     * image, and the host's number for one is nothing here. */
+    if (name == CL_IMAGE_BUFFER) {
+        const cl_mem none = nullptr;
+        return ClInfoRequest(value_bytes, value, size_ret).give(&none, sizeof none);
+    }
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetImageInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::event_profiling(cl_event event, cl_profiling_info name, size_t value_bytes, void *value,
+                                  size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::event_profiling");
+    ClObject *const held = judged(event, ClObject::Kind::event);
+    if (held == nullptr) return CL_INVALID_EVENT;
+    ClientTransport *const wire = wire_of(*held);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetEventProfilingInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
+}
+
 cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Notify notify,
                               void *user_data)
 {
@@ -1657,6 +1840,33 @@ uint64_t ClIcdRoot::own_queue(ClientTransport &wire, uint64_t context, cl_int &e
     return queue;
 }
 
+cl_mem ClIcdRoot::create_image_2d(cl_context context, cl_mem_flags flags, const cl_image_format *format,
+                                  size_t width, size_t height, size_t row_pitch, void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_image_2d");
+    cl_image_desc desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+    desc.image_width = width;
+    desc.image_height = height;
+    desc.image_row_pitch = row_pitch;
+    return create_image(context, flags, format, &desc, host_pointer, error);
+}
+
+cl_mem ClIcdRoot::create_image_3d(cl_context context, cl_mem_flags flags, const cl_image_format *format,
+                                  size_t width, size_t height, size_t depth, size_t row_pitch, size_t slice_pitch,
+                                  void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_image_3d");
+    cl_image_desc desc = {};
+    desc.image_type = CL_MEM_OBJECT_IMAGE3D;
+    desc.image_width = width;
+    desc.image_height = height;
+    desc.image_depth = depth;
+    desc.image_row_pitch = row_pitch;
+    desc.image_slice_pitch = slice_pitch;
+    return create_image(context, flags, format, &desc, host_pointer, error);
+}
+
 cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
                                const cl_image_format *format, const cl_image_desc *desc,
                                void *host_pointer, cl_int *error)
@@ -1855,6 +2065,181 @@ cl_int ClIcdRoot::enqueue_point(PointCommand command, cl_command_queue queue, cl
             wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
     }
     return placed;
+}
+
+cl_int ClIcdRoot::gl_share_for(const ClPropertyList &list, uint32_t &share)
+{
+    AV_SCOPE("ClIcdRoot::gl_share_for");
+    share = 0u;
+    uint64_t gl_context = 0u;
+    if (!list.names(static_cast<uint64_t>(CL_GL_CONTEXT_KHR), gl_context) || gl_context == 0u) return CL_SUCCESS;
+    share = gl_share_.share_name(reinterpret_cast<void *>(static_cast<uintptr_t>(gl_context)));
+    return share != 0u ? CL_SUCCESS : CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR;
+}
+
+ClObject *ClIcdRoot::gl_sharing(cl_context context, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::gl_sharing");
+    ClObject *const       held = judged(context, ClObject::Kind::context);
+    GuestClContext *const guest = held != nullptr ? held->context() : nullptr;
+    /* A context made without a GL context still has a GL context of the
+     * host's own behind it (feature 053's vehicle), in which the application's
+     * GL names mean nothing - or something else. */
+    if (guest == nullptr || !guest->shares_gl()) {
+        report_error(error, CL_INVALID_CONTEXT);
+        return nullptr;
+    }
+    if (wire_of(*held) == nullptr) {
+        report_error(error, CL_OUT_OF_RESOURCES);
+        return nullptr;
+    }
+    return held;
+}
+
+cl_mem ClIcdRoot::gl_object(ClientTransport &wire, ClObject &context, uint64_t made, cl_int host_error,
+                            cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::gl_object");
+    if (made == 0u) {
+        report_error(error, host_error != CL_SUCCESS ? host_error : CL_INVALID_GL_OBJECT);
+        return nullptr;
+    }
+    return static_cast<cl_mem>(wrap(wire, ClObject::Kind::mem, made, context.context(), &context, error));
+}
+
+cl_mem ClIcdRoot::create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_gl_buffer");
+    ClObject *const held = gl_sharing(context, error);
+    if (held == nullptr) return nullptr;
+    ClientTransport &wire = *wire_of(*held);
+    cl_int           host_error = CL_SUCCESS;
+    const uint64_t   made = av::clproto::rvk_clCreateFromGLBuffer(wire, held->wire(), flags, buffer, &host_error);
+    return gl_object(wire, *held, made, host_error, error);
+}
+
+cl_mem ClIcdRoot::create_from_gl_texture(cl_context context, cl_mem_flags flags, cl_GLenum target, cl_GLint level,
+                                         cl_GLuint texture, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_gl_texture");
+    ClObject *const held = gl_sharing(context, error);
+    if (held == nullptr) return nullptr;
+    ClientTransport &wire = *wire_of(*held);
+    cl_int           host_error = CL_SUCCESS;
+    const uint64_t   made =
+        av::clproto::rvk_clCreateFromGLTexture(wire, held->wire(), flags, target, level, texture, &host_error);
+    return gl_object(wire, *held, made, host_error, error);
+}
+
+cl_mem ClIcdRoot::create_from_gl_renderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
+                                              cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_from_gl_renderbuffer");
+    ClObject *const held = gl_sharing(context, error);
+    if (held == nullptr) return nullptr;
+    ClientTransport &wire = *wire_of(*held);
+    cl_int           host_error = CL_SUCCESS;
+    const uint64_t   made =
+        av::clproto::rvk_clCreateFromGLRenderbuffer(wire, held->wire(), flags, renderbuffer, &host_error);
+    return gl_object(wire, *held, made, host_error, error);
+}
+
+cl_int ClIcdRoot::gl_object_info(cl_mem object, cl_gl_object_type *type, cl_GLuint *name)
+{
+    AV_SCOPE("ClIcdRoot::gl_object_info");
+    ClObject *const named = judged(object, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    ClientTransport *const wire = wire_of(*named);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetGLObjectInfo(*wire, named->wire(), type, name);
+}
+
+cl_int ClIcdRoot::gl_texture_info(cl_mem object, cl_gl_texture_info name, size_t value_bytes, void *value,
+                                  size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::gl_texture_info");
+    ClObject *const named = judged(object, ClObject::Kind::mem);
+    if (named == nullptr) return CL_INVALID_MEM_OBJECT;
+    ClientTransport *const wire = wire_of(*named);
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    return av::clproto::rvk_clGetGLTextureInfo(*wire, named->wire(), name, value_bytes, value, size_ret);
+}
+
+cl_int ClIcdRoot::enqueue_acquire_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                     const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_acquire_gl");
+    return enqueue_gl_objects(&av::clproto::rvk_clEnqueueAcquireGLObjects, queue, count, objects, waits, events,
+                              event);
+}
+
+cl_int ClIcdRoot::enqueue_release_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                     const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_release_gl");
+    return enqueue_gl_objects(&av::clproto::rvk_clEnqueueReleaseGLObjects, queue, count, objects, waits, events,
+                              event);
+}
+
+cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue queue, cl_uint count,
+                                     const cl_mem *objects, cl_uint waits, const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("ClIcdRoot::enqueue_gl_objects");
+    ClObject *const held = judged(queue, ClObject::Kind::command_queue);
+    if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
+    GuestClContext *const context = held->context();
+    ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
+    if (wire == nullptr) return CL_OUT_OF_RESOURCES;
+    if (count != 0u && objects == nullptr) return CL_INVALID_VALUE;
+    if (count > max_waited) return CL_OUT_OF_RESOURCES;
+    uint64_t named[max_waited] = {};
+    for (cl_uint index = 0u; index < count; index++) {
+        ClObject *const object = judged(objects[index], ClObject::Kind::mem);
+        if (object == nullptr) return CL_INVALID_MEM_OBJECT;
+        if (context_of(*object) != context) return CL_INVALID_CONTEXT;
+        named[index] = object->wire();
+    }
+    uint64_t     handles[max_waited] = {};
+    const cl_int listed = wait_list(*context, waits, events, handles);
+    if (listed != CL_SUCCESS) return listed;
+    uint64_t     produced = 0u;
+    const cl_int placed = command(*wire, held->wire(), count, count != 0u ? named : nullptr, waits,
+                                  waits != 0u ? handles : nullptr, event != nullptr ? &produced : nullptr);
+    if (placed == CL_SUCCESS && event != nullptr)
+        *event = static_cast<cl_event>(wrap(*wire, ClObject::Kind::event, produced, context, held, nullptr));
+    return placed;
+}
+
+cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl_context_info name,
+                                  size_t value_bytes, void *value, size_t *size_ret)
+{
+    AV_SCOPE("ClIcdRoot::gl_context_info");
+    static constexpr uint64_t allowed[] = {
+        static_cast<uint64_t>(CL_CONTEXT_PLATFORM), static_cast<uint64_t>(CL_CONTEXT_INTEROP_USER_SYNC),
+        static_cast<uint64_t>(CL_GL_CONTEXT_KHR), static_cast<uint64_t>(CL_WGL_HDC_KHR)};
+    ClPropertyList list;
+    const cl_int   judged_list =
+        judge(reinterpret_cast<const uint64_t *>(properties), allowed, 4u, list);
+    if (judged_list != CL_SUCCESS) return judged_list;
+    uint64_t platform = 0u;
+    if (list.names(static_cast<uint64_t>(CL_CONTEXT_PLATFORM), platform) && platform != 0u &&
+        !platform_.names_this(reinterpret_cast<cl_platform_id>(platform)))
+        return CL_INVALID_PLATFORM;
+    uint32_t     share = 0u;
+    const cl_int shared = gl_share_for(list, share);
+    if (shared != CL_SUCCESS) return shared;
+    if (share == 0u) return CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR;
+    if (name != CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR && name != CL_DEVICES_FOR_GL_CONTEXT_KHR)
+        return CL_INVALID_VALUE;
+    lock_.acquire();
+    const Status opened = open_device();
+    lock_.release();
+    if (opened != Status::ok) return CL_OUT_OF_RESOURCES;
+    if (size_ret != nullptr) *size_ret = sizeof(cl_device_id);
+    if (value == nullptr) return CL_SUCCESS;
+    if (value_bytes < sizeof(cl_device_id)) return CL_INVALID_VALUE;
+    *static_cast<cl_device_id *>(value) = reinterpret_cast<cl_device_id>(device_object_);
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::enqueue_marker(cl_command_queue queue, cl_uint count, const cl_event *events,

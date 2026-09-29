@@ -95,7 +95,7 @@ Status RvkContextTable::resolve(uint32_t handle, uint32_t role, uint8_t order, A
     return Status::ok;
 }
 
-Status RvkContextTable::resolve_share(uint32_t slot, uint32_t handle, uint32_t &context_id)
+Status RvkContextTable::resolve_share(uint32_t slot, SubApi asking, uint32_t handle, uint32_t &context_id)
 {
     AV_SCOPE("RvkContextTable::resolve_share");
     context_id = 0u;
@@ -108,8 +108,11 @@ Status RvkContextTable::resolve_share(uint32_t slot, uint32_t handle, uint32_t &
         /* A slot with no context names no ring, so a handle that is no allocation matches nothing. */
         if (other == slot || uses_[other][ring_role] != ring || !live_[other]) continue;
         const RvkContextBinding &binding = bindings_[other].object();
-        if (binding.sub_api() != SubApi::opengl || !ring->held_with(*uses_[slot][ring_role]))
-            return Status::invalid_parameter;
+        /* An OpenGL context shares within its own device; an OpenCL one comes
+         * from another ICD, on another device of the same process. */
+        const Allocation &own = *uses_[slot][ring_role];
+        const bool same_owner = asking == SubApi::opengl ? ring->held_with(own) : ring->held_in_process_of(own);
+        if (binding.sub_api() != SubApi::opengl || !same_owner) return Status::invalid_parameter;
         context_id = binding.context_id();
         return Status::ok;
     }
@@ -142,7 +145,8 @@ Status RvkContextTable::bind(void *context, const RvkContextRecord &record, Virt
         orders_[slot] = record.ring_order();
     }
     uint32_t     share = 0u;
-    const Status shared = resolve_share(slot, record.options().share_context(), share);
+    const Status shared =
+        resolve_share(slot, record.sub_api(), record.options().share_context(), share);
     if (shared != Status::ok) return shared;
     const RvkContextRecord sharing(record.sub_api(), record.ring_order(), record.ring(), record.fence(),
                                    record.reply(), record.options().sharing(share));

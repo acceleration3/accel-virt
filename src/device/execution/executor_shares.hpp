@@ -9,6 +9,7 @@
 
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
+#include "proto/context/sub_api.hpp"
 
 #include <stdint.h>
 
@@ -37,10 +38,12 @@ public:
     [[nodiscard]] Status publish(uint32_t id, const uint8_t *uuid, RvkExecutor *executor);
     /* Not any more; returns once no create is using it. */
     void                 withdraw(uint32_t id);
-    /* An OpenGL executor made with `options` sharing context `share_id`'s on
-     * the same GPU; null, with nothing asked of the library, when there is no
-     * such executor, and null when the library makes none. */
-    RvkExecutor         *create_sharing(uint32_t share_id, const uint8_t *uuid, const RvkContextOptions &options);
+    /* An executor of `api` made with `options` sharing context `share_id`'s
+     * OpenGL objects on the same GPU - an OpenGL one sharing lists, an OpenCL
+     * one under cl_khr_gl_sharing; null, with nothing asked of the library,
+     * when there is no such executor, and null when the library makes none. */
+    RvkExecutor         *create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
+                                        const RvkContextOptions &options);
     uint32_t             published();
 
     bool invariants_hold() const;

@@ -7,8 +7,8 @@ namespace av {
 
 ClIcdRig::ClIcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-      log_(), watcher_(),
-      root_(platform_, kmt_, lock_, send_lock_, log_, watcher_, clicd::cl_icd_binding),
+      log_(), watcher_(), gl_share_(),
+      root_(platform_, kmt_, lock_, send_lock_, log_, watcher_, gl_share_, clicd::cl_icd_binding),
       loader_(root_)
 {
     const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
@@ -29,6 +29,7 @@ RecordingThreadLock &ClIcdRig::lock() { return lock_; }
 RecordingThreadLock &ClIcdRig::send_lock() { return send_lock_; }
 RecordingLog        &ClIcdRig::log() { return log_; }
 ScriptedThread      &ClIcdRig::watcher() { return watcher_; }
+ScriptedGlShareSource &ClIcdRig::gl_share() { return gl_share_; }
 clicd::ClIcdRoot    &ClIcdRig::root() { return root_; }
 FakeClLoader        &ClIcdRig::loader() { return loader_; }
 

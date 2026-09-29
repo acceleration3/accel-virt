@@ -308,6 +308,18 @@ target_compile_options(rvkglsamples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-c
 target_link_options(rvkglsamples PRIVATE /ENTRY:rvkglsamples_entry /STACK:8388608,8388608)
 target_link_libraries(rvkglsamples PRIVATE ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
 
+# The OpenCL-OpenGL sharing samples (samples/clgl): cl_khr_gl_sharing between
+# the system opengl32.dll's context and the OpenCL.dll pushed beside it, each
+# sample checking the values it moves.
+file(GLOB RVKCLGLSAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/clgl/*.cpp)
+add_executable(rvkclglsamples ${RVKCLGLSAMPLES_SOURCES})
+add_dependencies(rvkclglsamples rvktest_imports rvkglprobe_imports)
+target_include_directories(rvkclglsamples SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include)
+target_compile_options(rvkclglsamples PRIVATE /WX- /W3 -Wno-conversion -Wno-sign-conversion -Wno-old-style-cast
+                       -Wno-shadow -Wno-unused-parameter /Gs1000000)
+target_link_options(rvkclglsamples PRIVATE /ENTRY:rvkclglsamples_entry /STACK:8388608,8388608)
+target_link_libraries(rvkclglsamples PRIVATE ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
+
 # The D3D12 samples (samples/d3d12): tools/d3d12_report.py's guest side, on
 # the system d3d12.dll, which reaches rvkumd.dll's OpenAdapter12.
 file(GLOB RVKD3D12SAMPLES_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../samples/d3d12/*.cpp)

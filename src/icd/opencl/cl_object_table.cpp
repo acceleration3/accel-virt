@@ -30,6 +30,7 @@ Status ClObjectTable::make(ClObject::Kind kind, uint64_t wire, GuestClContext *c
     ClObject *made = nullptr;
     const Status created = pool_.create(made, table_, kind, wire, context, parent);
     if (created != Status::ok) return created;
+    if (parent != nullptr) parent->adopt();
     object = made;
     ++live_;
     return Status::ok;
@@ -42,7 +43,7 @@ ClObject *ClObjectTable::made(const void *pointer, ClObject::Kind kind) const
     /* find judges the address against what the pool holds; nothing is read
      * through it before that answers. */
     ClObject *const object = pool_.find(const_cast<void *>(pointer));
-    if (object == nullptr) return nullptr;
+    if (object == nullptr || object->references() == 0u) return nullptr;
     return object->kind() == kind ? object : nullptr;
 }
 
@@ -50,6 +51,7 @@ void ClObjectTable::destroy(ClObject &object)
 {
     AV_SCOPE("ClObjectTable::destroy");
     if (pool_.find(&object) == nullptr) return;
+    ClObject *const parent = object.parent();
     /* The subtree first, at any depth, then the object itself: a child that
      * outlived its parent would hold a pointer to freed storage. */
     pool_.destroy_if([&object, this](const ClObject &held) {
@@ -61,14 +63,25 @@ void ClObjectTable::destroy(ClObject &object)
      * asking again would be asking a question already answered. */
     static_cast<void>(pool_.destroy(&object));
     --live_;
+    /* What it was made on no longer holds it; the subtree's own parents went
+     * with it. */
+    if (parent != nullptr && pool_.find(parent) != nullptr) parent->orphan();
 }
 
-bool ClObjectTable::release(ClObject &object)
+bool ClObjectTable::release(ClObject &object, GuestClContext *&freed)
 {
     AV_SCOPE("ClObjectTable::release");
-    if (pool_.find(&object) == nullptr) return false;
+    freed = nullptr;
+    if (pool_.find(&object) == nullptr || object.references() == 0u) return false;
     if (!object.release()) return true;
-    destroy(object);
+    /* Up the chain while each is held by nothing: the kinds only rise towards
+     * the root, so this ends. */
+    for (ClObject *at = &object; at != nullptr && at->unheld();) {
+        ClObject *const parent = at->parent();
+        if (at->kind() == ClObject::Kind::context) freed = at->context();
+        destroy(*at);
+        at = parent;
+    }
     return true;
 }
 

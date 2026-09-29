@@ -136,6 +136,11 @@ public:
      * it (or was already), 0 when the host answered; 0 with
      * ERROR_INVALID_OPERATION with nothing current. */
     int32_t          force_context_fault();
+    /* The calling thread's context's share name - its ring allocation's
+     * D3DKMT handle, by which a context of this process made by another ICD
+     * names it to share its objects (cl_khr_gl_sharing); 0 with nothing
+     * current or a context not yet made. */
+    uint32_t         current_share_name();
     uint64_t         mint_sync_token();
     /* A command whose encoding overflowed and was not sent. */
     void             note_dropped(const char *api, const char *command, size_t written);

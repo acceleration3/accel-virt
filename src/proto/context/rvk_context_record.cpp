@@ -75,8 +75,11 @@ bool RvkContextRecord::fields_valid() const
                                sub_api_ == static_cast<uint32_t>(SubApi::d3d);
     const bool distinct_reply =
         reply_ == 0u || (reply_ != ring_ && reply_ != fence_);
-    const bool options_fit =
-        sub_api_ == static_cast<uint32_t>(SubApi::opengl) ? options_.valid() : options_.defaults();
+    /* OpenGL takes every option; OpenCL only the OpenGL context it shares
+     * objects with (cl_khr_gl_sharing); the rest none. */
+    const bool options_fit = sub_api_ == static_cast<uint32_t>(SubApi::opengl)   ? options_.valid()
+                             : sub_api_ == static_cast<uint32_t>(SubApi::opencl) ? options_.shares_only()
+                                                                                  : options_.defaults();
     return one_known_api && ring_ != 0u && fence_ != 0u && fence_ != ring_ && distinct_reply &&
            ring_order_ >= lowest_order && ring_order_ <= highest_order && options_fit;
 }

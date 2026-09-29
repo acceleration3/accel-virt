@@ -290,12 +290,23 @@ TEST(context_setup_decode, options_the_contract_forbids_are_malformed)
   }
   for (SubApi api : {SubApi::vulkan, SubApi::opencl}) {
       Encoded encoded(with_options(GlContextOptions(), api));
-      encoded.bytes()[36] = 1u;   /* a share context on a context that shares nothing */
+      encoded.bytes()[32] = 4u;   /* a version, which only OpenGL has */
       ContextSetup decoded;
       CHECK_STATUS(decoded.decode(encoded.bytes(), 48u), Status::malformed);
       CHECK_STATUS(with_options(core_46, api).encode(encoded.bytes(), ContextSetup::encoded_size),
                    Status::invalid_parameter);
-  } }
+  }
+  /* A share context on a Vulkan context, which shares nothing; an OpenCL one
+   * shares a GL context's objects (cl_khr_gl_sharing), and decodes. */
+  Encoded vulkan(with_options(GlContextOptions(), SubApi::vulkan));
+  vulkan.bytes()[36] = 1u;
+  ContextSetup refused;
+  CHECK_STATUS(refused.decode(vulkan.bytes(), 48u), Status::malformed);
+  Encoded opencl(with_options(GlContextOptions(), SubApi::opencl));
+  opencl.bytes()[36] = 1u;
+  ContextSetup shares;
+  CHECK_STATUS(shares.decode(opencl.bytes(), 48u), Status::ok);
+  CHECK_EQ(shares.options().share_context(), 1u); }
 
 TEST(context_setup_decode, a_setup_with_options_survives_the_hostile_sweep)
 { Encoded encoded(with_options(core_46));

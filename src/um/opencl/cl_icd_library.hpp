@@ -11,6 +11,7 @@
 #include "core/support/object_storage.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "um/gdi_kmt.hpp"
+#include "um/opencl/windows_gl_share_source.hpp"
 #include "um/icd/file_log.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
@@ -63,6 +64,7 @@ private:
         /* Declared before the root, so it is stopped after the root has let
          * its watcher go. */
         WindowsServiceThread watcher;
+        WindowsGlShareSource gl_share;
         clicd::ClIcdRoot root;
         ProcessTrace     trace;
     };

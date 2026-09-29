@@ -97,7 +97,12 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 bool ContextSetup::options_fit() const
 {
     AV_SCOPE("ContextSetup::options_fit");
-    if (sub_api_ == static_cast<uint32_t>(SubApi::opengl) && size() == encoded_size) return options_.valid();
+    /* A setup of the previous minor has no room for options at all. OpenGL
+     * takes every option; OpenCL only the GL context whose objects it shares
+     * (cl_khr_gl_sharing); the rest none. */
+    if (size() != encoded_size) return options_.defaults();
+    if (sub_api_ == static_cast<uint32_t>(SubApi::opengl)) return options_.valid();
+    if (sub_api_ == static_cast<uint32_t>(SubApi::opencl)) return options_.shares_only();
     return options_.defaults();
 }
 

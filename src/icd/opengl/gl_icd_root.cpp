@@ -316,9 +316,11 @@ bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
         fail(error_invalid_handle);
         return false;
     }
-    const bool unmade = target->state() == GuestGlContext::State::created &&
-                        sharer->state() == GuestGlContext::State::created;
-    if (!unmade || shares_into(first, second) || sharer->share_after(first) != Status::ok) {
+    /* Only the context taking the share must hold no object yet. The one it
+     * shares may be in use: a made one is named by its ring, and an unmade
+     * one is made first (make_chain). */
+    if (target->state() == GuestGlContext::State::lost || shares_into(first, second) ||
+        sharer->share_after(first) != Status::ok) {
         fail(error_invalid_operation);
         return false;
     }
@@ -348,6 +350,7 @@ void *GlIcdRoot::get_proc_address(const char *name)
         if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
     if (__builtin_strcmp(name, "rvkForceContextFault") == 0)
         return reinterpret_cast<void *>(&entry::rvkForceContextFault);
+    if (__builtin_strcmp(name, "rvkGetShareName") == 0) return reinterpret_cast<void *>(&entry::rvkGetShareName);
     /* Before the generated table on purpose: four of these the generator never
      * emitted, and the other four it did - and those must substitute the
      * host's name for the one the application holds, so this ICD's answer has
@@ -577,6 +580,13 @@ uint32_t GlIcdRoot::reset_status()
     if (context == nullptr) return 0u;
     ClientTransport *const transport = context->wire();
     return transport != nullptr ? glproto::rvk_glGetGraphicsResetStatus(*transport) : context->lost_reset_status();
+}
+
+uint32_t GlIcdRoot::current_share_name()
+{
+    AV_SCOPE("GlIcdRoot::current_share_name");
+    const GuestGlContext *const context = currents_.current();
+    return context != nullptr ? context->share_name() : 0u;
 }
 
 int32_t GlIcdRoot::force_context_fault()

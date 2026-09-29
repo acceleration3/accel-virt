@@ -25,6 +25,7 @@
 #include "icd/common/batched_transport.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
+#include "icd/opencl/cl_property_list.hpp"
 #include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/svm_table.hpp"
 
@@ -81,9 +82,21 @@ public:
      * created; not_supported with no rvkgpu device; no_memory when the
      * staging cannot be had; the driver's own refusal otherwise - and
      * nothing is held after any of them. An arena the device cannot give is
-     * logged once, and bulk data then crosses inline. */
-    [[nodiscard]] Status make();
+     * logged once, and bulk data then crosses inline.
+     *
+     * `gl_share` is the share name of the OpenGL context this one shares
+     * objects with (cl_khr_gl_sharing), or 0 for none: the device then makes
+     * the host's context in that GL context's share group. */
+    [[nodiscard]] Status make(uint32_t gl_share = 0u);
     State                state() const;
+    /* Whether this context was made from an OpenGL context, so that a GL name
+     * an application hands it means that context's object. */
+    bool                 shares_gl() const;
+    /* The list clCreateContext was given, kept for CL_CONTEXT_PROPERTIES: a
+     * list already judged, so it reads. */
+    void                 keep_properties(const uint64_t *properties);
+    /* That list laid out into `out`, and how many values it is; 0 for none. */
+    uint32_t             properties(uint64_t *out, uint32_t capacity) const;
 
     /* What a call sends through: null unless made and not lost. A faulted
      * transport makes the context lost here, which is why every call goes
@@ -129,7 +142,7 @@ public:
 private:
     friend struct GuestClContextProbe;
 
-    [[nodiscard]] Status build();
+    [[nodiscard]] Status build(uint32_t gl_share);
     void                 teardown();
 
     icd::IcdConnection &connection_;
@@ -137,6 +150,7 @@ private:
     icd::ThreadLock    &send_lock_;
     icd::LogSink       &log_;
     uint32_t            link_;
+    uint32_t            gl_share_;
     uint8_t            *staging_;
     uint8_t            *batch_block_;
     ObjectStorage<KmtTransport>          transport_;
@@ -147,6 +161,7 @@ private:
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     MappedRegion                         mappings_[max_mappings];
+    ClPropertyList                       properties_;
     State                                state_;
 };
 

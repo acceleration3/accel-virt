@@ -350,7 +350,7 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
   if (host.device() == nullptr) return;
   av::GlDisplay closed;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), &closed));
+  CHECK(backend.initialize(host.device(), &closed, nullptr));
   cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
   /* Nothing is opened into it, and the extension it would have been opened
    * through is not shown. */
@@ -368,7 +368,7 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
  * context from any type. */
 TEST(opencl_backend, unbound_it_offers_no_platform_device_or_context)
 { OpenClBackend backend;
-  CHECK(!backend.initialize(nullptr, nullptr));
+  CHECK(!backend.initialize(nullptr, nullptr, nullptr));
   cl_platform_id platforms[2] = {other_platform(), other_platform()};
   cl_uint count = 7u;
   CHECK_EQ(backend.on_clGetPlatformIDs(2u, platforms, &count), CL_PLATFORM_NOT_FOUND_KHR);
@@ -404,7 +404,7 @@ TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_d
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr));
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
   cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
 
   char   host_list[4096] = {};
@@ -447,7 +447,7 @@ TEST(opencl_backend, bound_it_offers_its_gpu_s_platform_and_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr));
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
   const cl_platform_id platform = static_cast<cl_platform_id>(host.device()->platform());
   const cl_device_id   device = static_cast<cl_device_id>(host.device()->device());
 
@@ -504,7 +504,7 @@ TEST(opencl_backend, a_context_from_a_type_holds_the_bound_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr));
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
   cl_int error = CL_INVALID_VALUE;
   const cl_context context = backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, &error);
   CHECK_EQ(error, CL_SUCCESS);
@@ -530,7 +530,7 @@ TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr));
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
   std::uint8_t frame[16];
   WireWriter writer(frame, sizeof frame);
   writer.write_varint<std::uint32_t>(4u);
@@ -1095,7 +1095,7 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
   if (context == nullptr) return;
 
   OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr));
+  CHECK(backend.initialize(host.device(), nullptr, nullptr));
   /* One reference for this test to hold past the shutdown, one for the ICD. */
   CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
   backend.made(av::clproto::HandleKind::context, context);

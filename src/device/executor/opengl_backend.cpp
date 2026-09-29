@@ -6,6 +6,7 @@
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 
+#include <stdio.h>
 #include <string.h>
 
 namespace av {
@@ -59,6 +60,12 @@ OpenGlBackend::OpenGlBackend()
       lost_(false), current_(false)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
+}
+
+const GlContext &OpenGlBackend::context() const
+{
+    AV_SCOPE("OpenGlBackend::context");
+    return context_;
 }
 
 bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions *options, const OpenGlBackend *share)
@@ -130,9 +137,18 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
      * turn, a batch at a time: the current one is set at a batch's first
      * command. Not per command - libglvnd's eglMakeCurrent, and even its
      * eglGetCurrentContext, is a getpid() system call each time. */
-    if (!current_ && !context_.make_current()) return false;
+    /* Named here, because all the guest learns is that its batch could not
+     * be decoded, and the device's fault names only the fence. */
+    if (!current_ && !context_.make_current()) {
+        fprintf(stderr, "virtio-gpu-rvk: opengl: the context could not be made current for %s\n",
+                glproto::cmd_id_to_string(command_id));
+        return false;
+    }
     current_ = true;
-    if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) return false;
+    if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
+        fprintf(stderr, "virtio-gpu-rvk: opengl: %s could not run\n", glproto::cmd_id_to_string(command_id));
+        return false;
+    }
     ran_++;
     return true;
 }

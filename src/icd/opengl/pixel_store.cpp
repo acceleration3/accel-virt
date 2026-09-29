@@ -7,6 +7,7 @@ namespace av::glicd {
 namespace {
 
 enum : uint32_t {
+    gl_color_index = 0x1900u, gl_luminance = 0x1909u, gl_luminance_alpha = 0x190Au, gl_alpha_integer = 0x8D97u,
     gl_stencil_index = 0x1901u, gl_depth_component = 0x1902u, gl_red = 0x1903u, gl_green = 0x1904u,
     gl_blue = 0x1905u, gl_alpha = 0x1906u, gl_rgb = 0x1907u, gl_rgba = 0x1908u, gl_bgr = 0x80E0u,
     gl_bgra = 0x80E1u, gl_rg = 0x8227u, gl_rg_integer = 0x8228u, gl_depth_stencil = 0x84F9u,
@@ -97,7 +98,13 @@ bool PixelStore::invariants_hold() const
 size_t PixelStore::components(uint32_t format) const
 {
     AV_SCOPE("PixelStore::components");
+    /* Every format the host's decoder sizes, the compatibility profile's
+     * among them: a transfer sized 0 here crosses with no pixels, and the host
+     * refuses the batch it is in. */
     switch (format) {
+    case gl_color_index:
+    case gl_luminance:
+    case gl_alpha_integer:
     case gl_stencil_index:
     case gl_depth_component:
     case gl_red:
@@ -110,6 +117,7 @@ size_t PixelStore::components(uint32_t format) const
         return 1u;
     case gl_rg:
     case gl_rg_integer:
+    case gl_luminance_alpha:
     case gl_depth_stencil:
         return 2u;
     case gl_rgb:

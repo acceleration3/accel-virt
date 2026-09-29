@@ -7,6 +7,7 @@
 #include "icd/common/icd_connection.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "icd/common/log_sink.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::clicd {
@@ -15,8 +16,8 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
                                icd::ThreadLock &send_lock, icd::LogSink &log,
                                icd::SharedHandles &handles)
     : connection_(connection), memory_(memory), send_lock_(send_lock), log_(log),
-      link_(icd::IcdConnection::no_link), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), locked_(), arena_(),
-      svm_(memory), external_(handles, log), mappings_(), state_(State::created)
+      link_(icd::IcdConnection::no_link), gl_share_(0u), staging_(nullptr), batch_block_(nullptr), transport_(), batched_(), locked_(), arena_(),
+      svm_(memory), external_(handles, log), mappings_(), properties_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -27,19 +28,38 @@ GuestClContext::~GuestClContext()
     teardown();
 }
 
-Status GuestClContext::make()
+Status GuestClContext::make(uint32_t gl_share)
 {
     AV_SCOPE("GuestClContext::make");
     if (state_ != State::created) return Status::invalid_state;
     ScopeExit    undo([&] { teardown(); });
-    const Status built = build();
+    const Status built = build(gl_share);
     if (built != Status::ok) return built;
     undo.dismiss();
+    gl_share_ = gl_share;
     state_ = State::made;
     return Status::ok;
 }
 
-Status GuestClContext::build()
+bool GuestClContext::shares_gl() const
+{
+    AV_SCOPE("GuestClContext::shares_gl");
+    return state_ == State::made && gl_share_ != 0u;
+}
+
+void GuestClContext::keep_properties(const uint64_t *properties)
+{
+    AV_SCOPE("GuestClContext::keep_properties");
+    static_cast<void>(properties_.read(properties));
+}
+
+uint32_t GuestClContext::properties(uint64_t *out, uint32_t capacity) const
+{
+    AV_SCOPE("GuestClContext::properties");
+    return properties_.lay_out(out, capacity);
+}
+
+Status GuestClContext::build(uint32_t gl_share)
 {
     AV_SCOPE("GuestClContext::build");
     if (connection_.acquire(link_) != Status::ok) return Status::not_supported;
@@ -50,7 +70,7 @@ Status GuestClContext::build()
      * non-default one on any other sub-API without asking the driver. */
     static_cast<void>(transport_.construct(connection_.device(link_), SubApi::opencl, ring_order,
                                            reply_bytes, staging_, staging_bytes));
-    const Status initialized = transport_.object().initialize();
+    const Status initialized = transport_.object().initialize(GlContextOptions().sharing(gl_share));
     if (initialized != Status::ok) {
         log_.write("rvkcl: the driver refused the context");
         return initialized;
@@ -85,6 +105,7 @@ Status GuestClContext::build()
 void GuestClContext::teardown()
 {
     AV_SCOPE("GuestClContext::teardown");
+    gl_share_ = 0u;
     /* A buffer released with a mapping live keeps the mapping's memory until
      * the unmap, so the blocks go here rather than with the buffer. */
     for (uint32_t slot = 0u; slot < max_mappings; ++slot) give_back_mapping(mappings_[slot]);

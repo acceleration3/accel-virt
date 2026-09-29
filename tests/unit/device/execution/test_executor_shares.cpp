@@ -86,7 +86,7 @@ TEST(executor_shares, a_published_executor_is_shared_by_a_create_on_the_same_gpu
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
       CHECK_EQ(shares.published(), 1u);
       CHECK(shares.invariants_hold());
-      RvkExecutor *const second = shares.create_sharing(3u, gpu, core_46);
+      RvkExecutor *const second = shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46);
       CHECK(second != nullptr);
       CHECK(fixture.ops().last_share() == first);
       CHECK(fixture.ops().last_share_live());
@@ -109,20 +109,20 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
   fixture.on_worker([&] {
       RvkExecutor *const first = fixture.library().create(SubApi::opengl, gpu);
       const std::uint32_t asked = fixture.ops().option_creates();
-      CHECK(shares.create_sharing(3u, gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
-      CHECK(shares.create_sharing(4u, gpu, core_46) == nullptr);
-      CHECK(shares.create_sharing(0u, gpu, core_46) == nullptr);
-      CHECK(shares.create_sharing(3u, other_gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 4u, gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 0u, gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 3u, other_gpu, core_46) == nullptr);
       shares.withdraw(3u);
       shares.withdraw(3u);
       shares.withdraw(9u);
-      CHECK(shares.create_sharing(3u, gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_EQ(fixture.ops().option_creates(), asked);
       /* A library that refuses answers null too. */
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
       fixture.ops().fail_create_at(1u);
-      CHECK(shares.create_sharing(3u, gpu, core_46) == nullptr);
+      CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_EQ(fixture.ops().option_creates(), asked + 1u);
       shares.withdraw(3u);
       fixture.library().destroy(first);
@@ -150,7 +150,7 @@ TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
       fixture.library().destroy(shared);
   };
   RvkExecutor *made = nullptr;
-  auto sharer = [&] { made = shares.create_sharing(5u, gpu, core_46); };
+  auto sharer = [&] { made = shares.create_sharing(av::SubApi::opengl, 5u, gpu, core_46); };
   void *const owning = fixture.start(owner);
   while (!published) sched_yield();
   fixture.ops().hold_creates();
@@ -179,7 +179,7 @@ TEST(executor_shares, publishing_needs_the_lock_and_a_free_entry)
   ExecutorShares shares(host, library);
   RvkExecutor *const fake = static_cast<RvkExecutor *>(static_cast<void *>(&host));
   CHECK_STATUS(shares.publish(1u, gpu, fake), Status::invalid_state);
-  CHECK(shares.create_sharing(1u, gpu, core_46) == nullptr);
+  CHECK(shares.create_sharing(av::SubApi::opengl, 1u, gpu, core_46) == nullptr);
   shares.withdraw(1u);
   CHECK_EQ(shares.published(), 0u);
   CHECK_EQ(ops.option_creates(), 0u);

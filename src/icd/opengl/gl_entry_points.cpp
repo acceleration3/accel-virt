@@ -160,6 +160,12 @@ int32_t APIENTRY rvkForceContextFault()
     return gl_icd_binding.root().force_context_fault();
 }
 
+uint32_t APIENTRY rvkGetShareName()
+{
+    AV_SCOPE("rvkGetShareName");
+    return gl_icd_binding.root().current_share_name();
+}
+
 void APIENTRY get_integerv(GLenum pname, GLint *data)
 {
     AV_SCOPE("get_integerv");

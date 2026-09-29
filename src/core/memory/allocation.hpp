@@ -60,11 +60,14 @@ public:
      * shared memory (feature 041, FR-003). Nothing else is refused a second
      * device: an allocation the adapter gave an identity to was created to be
      * held by more than one (feature 053). */
-    [[nodiscard]] Status open(const void *device);
+    [[nodiscard]] Status open(const void *device, const void *process);
     [[nodiscard]] Status close();
     /* Whether the same device holds both, or neither is held: two rvk contexts
      * share objects only on one device (feature 050). */
     bool                 held_with(const Allocation &other) const;
+    /* Whether the two are held by devices of one process: an OpenCL context
+     * sharing an OpenGL one is made by another ICD, on its own device. */
+    bool                 held_in_process_of(const Allocation &other) const;
 
     /* The guest pages the aperture segment now reads this allocation from. */
     [[nodiscard]] Status map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request);
@@ -99,6 +102,8 @@ private:
     /* Which device holds it, while any does; only a ring or a fence page keeps
      * anyone else out. */
     const void          *owner_;
+    /* The owner's process, as the device it was opened through names it. */
+    const void          *process_;
     AperturePages        aperture_;
 
     friend struct AllocationProbe;

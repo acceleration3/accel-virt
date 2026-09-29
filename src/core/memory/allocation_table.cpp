@@ -197,12 +197,12 @@ Allocation *AllocationTable::find(void *handle)
     return allocations_.find(handle);
 }
 
-Status AllocationTable::open(Allocation &allocation, const void *device)
+Status AllocationTable::open(Allocation &allocation, const void *device, const void *process)
 {
     AV_SCOPE("AllocationTable::open");
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::open");
     MutexGuard lock(mutex_);
-    return allocation.open(device);
+    return allocation.open(device, process);
 }
 
 Status AllocationTable::close(Allocation &allocation)

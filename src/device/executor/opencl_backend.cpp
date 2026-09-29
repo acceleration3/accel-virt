@@ -1,5 +1,7 @@
 #include "device/executor/opencl_backend.hpp"
 
+#include "device/executor/opengl_backend.hpp"
+
 #include <CL/cl_gl.h>
 
 #include "device/shim/gl_context.hpp"
@@ -55,11 +57,12 @@ OpenClBackend::OpenClBackend()
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
-bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display)
+bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share)
 {
     AV_SCOPE("OpenClBackend::initialize");
     bound_ = device;
     if (bound_ == nullptr) return false;
+    if (share != nullptr) return display != nullptr && share_with(*display, *share);
     /* The vehicle is optional and its failure is not this context's: a GPU
      * with no EGL display, or a driver that will not make a context, leaves
      * OpenCL running everything it ran before and refusing to open a shared
@@ -81,6 +84,21 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
         return true;
     }
     return true;
+}
+
+/* A vehicle in the guest's GL context's share group, or no context at all. */
+bool OpenClBackend::share_with(const GlDisplay &display, const OpenGlBackend &share)
+{
+    AV_SCOPE("OpenClBackend::share_with");
+    const GlContextAttributes plain(nullptr);
+    if (!display.open() || !vehicle_.open(display, plain, &share.context())) return false;
+    display_ = &display;
+    import_.configure(vehicle_);
+    buffers_.configure(vehicle_);
+    if (shares_with_gl()) return true;
+    display_ = nullptr;
+    vehicle_.close();
+    return false;
 }
 
 cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name,

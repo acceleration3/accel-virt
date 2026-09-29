@@ -77,7 +77,8 @@ void ExecutorShares::withdraw(uint32_t id)
 
 /* The lock is held across the library's create: that is what keeps the shared
  * executor alive for it. */
-RvkExecutor *ExecutorShares::create_sharing(uint32_t share_id, const uint8_t *uuid, const RvkContextOptions &options)
+RvkExecutor *ExecutorShares::create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
+                                            const RvkContextOptions &options)
 {
     AV_SCOPE("ExecutorShares::create_sharing");
     if (lock_ == nullptr || share_id == 0u) return nullptr;
@@ -85,7 +86,7 @@ RvkExecutor *ExecutorShares::create_sharing(uint32_t share_id, const uint8_t *uu
     const uint32_t index = index_of(share_id);
     RvkExecutor   *made = nullptr;
     if (index != none && on_gpu(index, uuid))
-        made = library_.create(SubApi::opengl, uuid, &options, executors_[index]);
+        made = library_.create(api, uuid, &options, executors_[index]);
     host_.unlock_mutex(lock_);
     return made;
 }

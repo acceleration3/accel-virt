@@ -67,6 +67,12 @@ bool GlContextOptions::defaults() const
     return major_ == 0u && minor_ == 0u && profile_ == 0u && flags_ == 0u && share_context_ == 0u;
 }
 
+bool GlContextOptions::shares_only() const
+{
+    AV_SCOPE("GlContextOptions::shares_only");
+    return major_ == 0u && minor_ == 0u && profile_ == 0u && flags_ == 0u;
+}
+
 bool GlContextOptions::valid() const
 {
     AV_SCOPE("GlContextOptions::valid");

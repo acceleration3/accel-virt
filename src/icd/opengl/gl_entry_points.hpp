@@ -49,6 +49,9 @@ GLenum    APIENTRY get_error();
 GLenum    APIENTRY get_graphics_reset_status();
 /* The probe's own fault hook (feature 050, T040), found only by name. */
 int32_t   APIENTRY rvkForceContextFault();
+/* The OpenCL ICD's question, found only by name (cl_khr_gl_sharing): the
+ * share name of the calling thread's context. */
+uint32_t  APIENTRY rvkGetShareName();
 /* glGetIntegerv, which answers GL_NUM_EXTENSIONS itself. */
 void      APIENTRY get_integerv(GLenum pname, GLint *data);
 

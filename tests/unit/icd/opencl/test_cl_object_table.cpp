@@ -169,7 +169,9 @@ TEST(cl_object_table, a_parent_it_does_not_hold_is_refused)
 TEST(cl_object_table, releasing_the_last_reference_destroys_the_object)
 { Table rig;
   ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x901u);
-  CHECK(rig.objects().release(*buffer));
+  av::clicd::GuestClContext *freed = some_context;
+  CHECK(rig.objects().release(*buffer, freed));
+  CHECK(freed == nullptr);
   CHECK_EQ(rig.objects().live(), 0u);
   CHECK(rig.objects().invariants_hold()); }
 
@@ -179,11 +181,12 @@ TEST(cl_object_table, an_object_retained_survives_as_many_releases_as_it_was_ret
   buffer->retain();
   buffer->retain();
   CHECK_EQ(buffer->references(), 3u);
-  CHECK(rig.objects().release(*buffer));
+  av::clicd::GuestClContext *freed = nullptr;
+  CHECK(rig.objects().release(*buffer, freed));
   CHECK_EQ(rig.objects().live(), 1u);
-  CHECK(rig.objects().release(*buffer));
+  CHECK(rig.objects().release(*buffer, freed));
   CHECK_EQ(rig.objects().live(), 1u);
-  CHECK(rig.objects().release(*buffer));
+  CHECK(rig.objects().release(*buffer, freed));
   CHECK_EQ(rig.objects().live(), 0u);
   CHECK(rig.objects().invariants_hold()); }
 
@@ -234,7 +237,8 @@ TEST(cl_object_table, releasing_or_destroying_what_it_does_not_hold_changes_noth
   rig.objects().destroy(*buffer);
   CHECK_EQ(rig.objects().live(), 0u);
   /* The application releases it again, as applications do. */
-  CHECK(!rig.objects().release(*buffer));
+  av::clicd::GuestClContext *freed = nullptr;
+  CHECK(!rig.objects().release(*buffer, freed));
   rig.objects().destroy(*buffer);
   CHECK_EQ(rig.objects().live(), 0u);
   CHECK(rig.objects().invariants_hold()); }
@@ -411,3 +415,58 @@ TEST(cl_object_table, the_invariant_catches_a_child_whose_parent_the_table_lost)
   CHECK(!rig.objects().invariants_hold());
   ClObjectProbe::adopt(*queue, *context);
   CHECK(rig.objects().invariants_hold()); }
+
+TEST(cl_object_table, the_nearest_of_a_kind_is_the_object_itself_or_the_closest_above_it)
+{ Table table;
+  ClObject *const context = table.make(ClObject::Kind::context, 0x10u);
+  ClObject *const program = table.make(ClObject::Kind::program, 0x20u, context);
+  ClObject *const kernel = table.make(ClObject::Kind::kernel, 0x30u, program);
+  ClObject *const buffer = table.make(ClObject::Kind::mem, 0x40u, context);
+  CHECK(kernel->nearest(ClObject::Kind::kernel) == kernel);
+  CHECK(kernel->nearest(ClObject::Kind::program) == program);
+  CHECK(kernel->nearest(ClObject::Kind::context) == context);
+  CHECK(buffer->nearest(ClObject::Kind::context) == context);
+  /* A buffer's parent is its context: no buffer above it. */
+  CHECK(buffer->parent()->nearest(ClObject::Kind::mem) == nullptr);
+  CHECK(context->nearest(ClObject::Kind::kernel) == nullptr); }
+
+TEST(cl_object_table, a_context_let_go_of_lives_while_an_object_made_on_it_does)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const program = rig.make(ClObject::Kind::program, 0x902u, context);
+  ClObject *const kernel = rig.make(ClObject::Kind::kernel, 0x903u, program);
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x905u, context);
+  av::clicd::GuestClContext *freed = nullptr;
+  /* What an application's wrappers do: the context and the program go first. */
+  CHECK(rig.objects().release(*context, freed));
+  CHECK(rig.objects().release(*program, freed));
+  CHECK(freed == nullptr);
+  CHECK_EQ(rig.objects().live(), 4u);
+  /* Neither is the application's any more, and neither is released twice. */
+  CHECK(rig.objects().made(context, ClObject::Kind::context) == nullptr);
+  CHECK(rig.objects().made(program, ClObject::Kind::program) == nullptr);
+  CHECK(!rig.objects().release(*context, freed));
+  /* What was made on them still works. */
+  CHECK(rig.objects().made(kernel, ClObject::Kind::kernel) == kernel);
+  CHECK(rig.objects().made(buffer, ClObject::Kind::mem) == buffer);
+  CHECK(kernel->nearest(ClObject::Kind::context) == context);
+  /* The kernel takes its program with it; the buffer still holds the context. */
+  CHECK(rig.objects().release(*kernel, freed));
+  CHECK(freed == nullptr);
+  CHECK_EQ(rig.objects().live(), 2u);
+  /* The last object goes, and the context with it, which its owner is told. */
+  CHECK(rig.objects().release(*buffer, freed));
+  CHECK(freed == some_context);
+  CHECK_EQ(rig.objects().live(), 0u);
+  CHECK(rig.objects().invariants_hold()); }
+
+TEST(cl_object_table, a_forced_destroy_lets_go_of_what_the_object_was_made_on)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x905u, context);
+  rig.objects().destroy(*buffer);
+  /* The context held only by the application now: its last release frees it. */
+  av::clicd::GuestClContext *freed = nullptr;
+  CHECK(rig.objects().release(*context, freed));
+  CHECK(freed == some_context);
+  CHECK_EQ(rig.objects().live(), 0u); }

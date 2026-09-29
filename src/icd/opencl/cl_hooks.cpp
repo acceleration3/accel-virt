@@ -13,6 +13,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/cl_noted_error.hpp"
 #include "proto/generated/opencl/cl_icd_stubs.h"
 #include "proto/icd_stub_report.hpp"
 
@@ -42,7 +43,7 @@ cl_int CL_API_CALL get_platform_ids(cl_uint num_entries, cl_platform_id *platfor
 {
     AV_SCOPE("get_platform_ids");
     AV_CL_ROOT_OR(CL_PLATFORM_NOT_FOUND_KHR);
-    return root.platform_ids(num_entries, platforms, num_platforms);
+    return root.noted("clGetPlatformIDs", root.platform_ids(num_entries, platforms, num_platforms));
 }
 
 cl_int CL_API_CALL get_platform_info(cl_platform_id platform, cl_platform_info name,
@@ -50,7 +51,7 @@ cl_int CL_API_CALL get_platform_info(cl_platform_id platform, cl_platform_info n
 {
     AV_SCOPE("get_platform_info");
     AV_CL_ROOT_OR(CL_INVALID_PLATFORM);
-    return root.platform_info(platform, name, value_bytes, value, size_ret);
+    return root.noted("clGetPlatformInfo", root.platform_info(platform, name, value_bytes, value, size_ret));
 }
 
 cl_int CL_API_CALL get_device_ids(cl_platform_id platform, cl_device_type type, cl_uint num_entries,
@@ -58,7 +59,7 @@ cl_int CL_API_CALL get_device_ids(cl_platform_id platform, cl_device_type type, 
 {
     AV_SCOPE("get_device_ids");
     AV_CL_ROOT_OR(CL_INVALID_PLATFORM);
-    return root.device_ids(platform, type, num_entries, devices, num_devices);
+    return root.noted("clGetDeviceIDs", root.device_ids(platform, type, num_entries, devices, num_devices));
 }
 
 cl_int CL_API_CALL get_device_info(cl_device_id device, cl_device_info name, size_t value_bytes,
@@ -66,7 +67,7 @@ cl_int CL_API_CALL get_device_info(cl_device_id device, cl_device_info name, siz
 {
     AV_SCOPE("get_device_info");
     AV_CL_ROOT_OR(CL_INVALID_DEVICE);
-    return root.device_info(device, name, value_bytes, value, size_ret);
+    return root.noted("clGetDeviceInfo", root.device_info(device, name, value_bytes, value, size_ret));
 }
 
 cl_context CL_API_CALL create_context(const cl_context_properties *properties, cl_uint num_devices,
@@ -79,22 +80,23 @@ cl_context CL_API_CALL create_context(const cl_context_properties *properties, c
         if (error != nullptr) *error = CL_INVALID_PLATFORM;
         return nullptr;
     }
-    return cl_icd_binding.root().create_context(
-        reinterpret_cast<const uint64_t *>(properties), devices, num_devices, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateContext", error);
+    return cl_icd_binding.root().create_context(reinterpret_cast<const uint64_t *>(properties), devices, num_devices,
+                                                noted.pointer());
 }
 
 cl_int CL_API_CALL retain_context(cl_context context)
 {
     AV_SCOPE("retain_context");
     AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
-    return root.retain_context(context);
+    return root.noted("clRetainContext", root.retain_context(context));
 }
 
 cl_int CL_API_CALL release_context(cl_context context)
 {
     AV_SCOPE("release_context");
     AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
-    return root.release_context(context);
+    return root.noted("clReleaseContext", root.release_context(context));
 }
 
 cl_command_queue CL_API_CALL create_queue_with_properties(cl_context context, cl_device_id device,
@@ -106,36 +108,39 @@ cl_command_queue CL_API_CALL create_queue_with_properties(cl_context context, cl
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateCommandQueueWithProperties", error);
     return cl_icd_binding.root().create_queue(context, device,
                                               reinterpret_cast<const uint64_t *>(properties),
-                                              error);
+                                              noted.pointer());
 }
 
 cl_command_queue CL_API_CALL create_queue(cl_context context, cl_device_id device,
-                                          cl_command_queue_properties, cl_int *error)
+                                          cl_command_queue_properties properties, cl_int *error)
 {
     AV_SCOPE("create_queue");
     if (!cl_icd_binding.bound()) {
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    /* The deprecated 1.2 call carries a bitfield rather than a list, and the
-     * host is what judges its bits. */
-    return cl_icd_binding.root().create_queue(context, device, nullptr, error);
+    /* The deprecated 1.2 call carries a bitfield rather than a list: the same
+     * bits, which a list names as its one CL_QUEUE_PROPERTIES. */
+    const uint64_t listed[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), properties, 0u};
+    ClNotedError noted(cl_icd_binding.root(), "clCreateCommandQueue", error);
+    return cl_icd_binding.root().create_queue(context, device, properties != 0u ? listed : nullptr, noted.pointer());
 }
 
 cl_int CL_API_CALL retain_queue(cl_command_queue queue)
 {
     AV_SCOPE("retain_queue");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.retain(queue, ClObject::Kind::command_queue);
+    return root.noted("clRetainCommandQueue", root.retain(queue, ClObject::Kind::command_queue));
 }
 
 cl_int CL_API_CALL release_queue(cl_command_queue queue)
 {
     AV_SCOPE("release_queue");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.release(queue, ClObject::Kind::command_queue);
+    return root.noted("clReleaseCommandQueue", root.release(queue, ClObject::Kind::command_queue));
 }
 
 cl_mem CL_API_CALL create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
@@ -148,7 +153,8 @@ cl_mem CL_API_CALL create_buffer(cl_context context, cl_mem_flags flags, size_t 
     }
     /* clCreateBuffer carries no list; clCreateBufferWithProperties is not a
      * slot this ICD claims, so the only list a buffer could have is none. */
-    return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, nullptr, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateBuffer", error);
+    return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, nullptr, noted.pointer());
 }
 
 /* clCreateBufferWithProperties: the same create, with the list the
@@ -163,22 +169,23 @@ cl_mem CL_API_CALL create_buffer_with_properties(cl_context context, const cl_me
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateBufferWithProperties", error);
     return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer,
-                                               reinterpret_cast<const uint64_t *>(properties), error);
+                                               reinterpret_cast<const uint64_t *>(properties), noted.pointer());
 }
 
 cl_int CL_API_CALL retain_mem(cl_mem buffer)
 {
     AV_SCOPE("retain_mem");
     AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
-    return root.retain(buffer, ClObject::Kind::mem);
+    return root.noted("clRetainMemObject", root.retain(buffer, ClObject::Kind::mem));
 }
 
 cl_int CL_API_CALL release_mem(cl_mem buffer)
 {
     AV_SCOPE("release_mem");
     AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
-    return root.release(buffer, ClObject::Kind::mem);
+    return root.noted("clReleaseMemObject", root.release(buffer, ClObject::Kind::mem));
 }
 
 cl_program CL_API_CALL create_program_with_source(cl_context context, cl_uint count,
@@ -190,7 +197,8 @@ cl_program CL_API_CALL create_program_with_source(cl_context context, cl_uint co
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_program(context, count, sources, lengths, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateProgramWithSource", error);
+    return cl_icd_binding.root().create_program(context, count, sources, lengths, noted.pointer());
 }
 
 cl_int CL_API_CALL build_program(cl_program program, cl_uint, const cl_device_id *,
@@ -199,21 +207,21 @@ cl_int CL_API_CALL build_program(cl_program program, cl_uint, const cl_device_id
 {
     AV_SCOPE("build_program");
     AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
-    return root.build_program(program, options);
+    return root.noted("clBuildProgram", root.build_program(program, options));
 }
 
 cl_int CL_API_CALL retain_program(cl_program program)
 {
     AV_SCOPE("retain_program");
     AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
-    return root.retain(program, ClObject::Kind::program);
+    return root.noted("clRetainProgram", root.retain(program, ClObject::Kind::program));
 }
 
 cl_int CL_API_CALL release_program(cl_program program)
 {
     AV_SCOPE("release_program");
     AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
-    return root.release(program, ClObject::Kind::program);
+    return root.noted("clReleaseProgram", root.release(program, ClObject::Kind::program));
 }
 
 cl_kernel CL_API_CALL create_kernel(cl_program program, const char *name, cl_int *error)
@@ -223,28 +231,29 @@ cl_kernel CL_API_CALL create_kernel(cl_program program, const char *name, cl_int
         if (error != nullptr) *error = CL_INVALID_PROGRAM;
         return nullptr;
     }
-    return cl_icd_binding.root().create_kernel(program, name, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateKernel", error);
+    return cl_icd_binding.root().create_kernel(program, name, noted.pointer());
 }
 
 cl_int CL_API_CALL set_kernel_arg(cl_kernel kernel, cl_uint index, size_t bytes, const void *value)
 {
     AV_SCOPE("set_kernel_arg");
     AV_CL_ROOT_OR(CL_INVALID_KERNEL);
-    return root.set_kernel_argument(kernel, index, bytes, value);
+    return root.noted("clSetKernelArg", root.set_kernel_argument(kernel, index, bytes, value));
 }
 
 cl_int CL_API_CALL retain_kernel(cl_kernel kernel)
 {
     AV_SCOPE("retain_kernel");
     AV_CL_ROOT_OR(CL_INVALID_KERNEL);
-    return root.retain(kernel, ClObject::Kind::kernel);
+    return root.noted("clRetainKernel", root.retain(kernel, ClObject::Kind::kernel));
 }
 
 cl_int CL_API_CALL release_kernel(cl_kernel kernel)
 {
     AV_SCOPE("release_kernel");
     AV_CL_ROOT_OR(CL_INVALID_KERNEL);
-    return root.release(kernel, ClObject::Kind::kernel);
+    return root.noted("clReleaseKernel", root.release(kernel, ClObject::Kind::kernel));
 }
 
 cl_int CL_API_CALL enqueue_ndrange(cl_command_queue queue, cl_kernel kernel, cl_uint dimensions,
@@ -253,7 +262,7 @@ cl_int CL_API_CALL enqueue_ndrange(cl_command_queue queue, cl_kernel kernel, cl_
 {
     AV_SCOPE("enqueue_ndrange");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_kernel(queue, kernel, dimensions, offset, global, local, event);
+    return root.noted("clEnqueueNDRangeKernel", root.enqueue_kernel(queue, kernel, dimensions, offset, global, local, event));
 }
 
 cl_int CL_API_CALL enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -262,7 +271,7 @@ cl_int CL_API_CALL enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool b
 {
     AV_SCOPE("enqueue_read");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_read(queue, buffer, blocking, offset, bytes, into, event);
+    return root.noted("clEnqueueReadBuffer", root.enqueue_read(queue, buffer, blocking, offset, bytes, into, event));
 }
 
 cl_int CL_API_CALL enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -271,28 +280,28 @@ cl_int CL_API_CALL enqueue_write(cl_command_queue queue, cl_mem buffer, cl_bool 
 {
     AV_SCOPE("enqueue_write");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_write(queue, buffer, blocking, offset, bytes, from, event);
+    return root.noted("clEnqueueWriteBuffer", root.enqueue_write(queue, buffer, blocking, offset, bytes, from, event));
 }
 
 cl_int CL_API_CALL finish_queue(cl_command_queue queue)
 {
     AV_SCOPE("finish_queue");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.finish(queue);
+    return root.noted("clFinish", root.finish(queue));
 }
 
 cl_int CL_API_CALL flush_queue(cl_command_queue queue)
 {
     AV_SCOPE("flush_queue");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.flush(queue);
+    return root.noted("clFlush", root.flush(queue));
 }
 
 cl_int CL_API_CALL retain_event(cl_event event)
 {
     AV_SCOPE("retain_event");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
-    return root.retain(event, ClObject::Kind::event);
+    return root.noted("clRetainEvent", root.retain(event, ClObject::Kind::event));
 }
 
 void *CL_API_CALL map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool blocking,
@@ -304,8 +313,8 @@ void *CL_API_CALL map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool bloc
         if (error != nullptr) *error = CL_INVALID_COMMAND_QUEUE;
         return nullptr;
     }
-    return cl_icd_binding.root().map_buffer(queue, buffer, blocking, flags, offset, bytes, event,
-                                            error);
+    ClNotedError noted(cl_icd_binding.root(), "clEnqueueMapBuffer", error);
+    return cl_icd_binding.root().map_buffer(queue, buffer, blocking, flags, offset, bytes, event, noted.pointer());
 }
 
 cl_int CL_API_CALL unmap_mem_object(cl_command_queue queue, cl_mem buffer, void *pointer, cl_uint,
@@ -313,7 +322,7 @@ cl_int CL_API_CALL unmap_mem_object(cl_command_queue queue, cl_mem buffer, void 
 {
     AV_SCOPE("unmap_mem_object");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.unmap(queue, buffer, pointer, event);
+    return root.noted("clEnqueueUnmapMemObject", root.unmap(queue, buffer, pointer, event));
 }
 
 void *CL_API_CALL svm_alloc(cl_context context, cl_svm_mem_flags flags, size_t bytes,
@@ -337,7 +346,7 @@ cl_int CL_API_CALL enqueue_svm_map(cl_command_queue queue, cl_bool blocking, cl_
 {
     AV_SCOPE("enqueue_svm_map");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.svm_map(queue, blocking, flags, pointer, bytes, event);
+    return root.noted("clEnqueueSVMMap", root.svm_map(queue, blocking, flags, pointer, bytes, event));
 }
 
 cl_int CL_API_CALL enqueue_svm_unmap(cl_command_queue queue, void *pointer, cl_uint,
@@ -345,21 +354,21 @@ cl_int CL_API_CALL enqueue_svm_unmap(cl_command_queue queue, void *pointer, cl_u
 {
     AV_SCOPE("enqueue_svm_unmap");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.svm_unmap(queue, pointer, event);
+    return root.noted("clEnqueueSVMUnmap", root.svm_unmap(queue, pointer, event));
 }
 
 cl_int CL_API_CALL set_kernel_arg_svm_pointer(cl_kernel kernel, cl_uint index, const void *pointer)
 {
     AV_SCOPE("set_kernel_arg_svm_pointer");
     AV_CL_ROOT_OR(CL_INVALID_KERNEL);
-    return root.set_kernel_svm_argument(kernel, index, pointer);
+    return root.noted("clSetKernelArgSVMPointer", root.set_kernel_svm_argument(kernel, index, pointer));
 }
 
 cl_int CL_API_CALL release_event(cl_event event)
 {
     AV_SCOPE("release_event");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
-    return root.release(event, ClObject::Kind::event);
+    return root.noted("clReleaseEvent", root.release(event, ClObject::Kind::event));
 }
 
 cl_event CL_API_CALL create_user_event(cl_context context, cl_int *error)
@@ -369,21 +378,22 @@ cl_event CL_API_CALL create_user_event(cl_context context, cl_int *error)
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_user_event(context, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateUserEvent", error);
+    return cl_icd_binding.root().create_user_event(context, noted.pointer());
 }
 
 cl_int CL_API_CALL set_user_event_status(cl_event event, cl_int status)
 {
     AV_SCOPE("set_user_event_status");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
-    return root.set_user_event_status(event, status);
+    return root.noted("clSetUserEventStatus", root.set_user_event_status(event, status));
 }
 
 cl_int CL_API_CALL wait_for_events(cl_uint count, const cl_event *events)
 {
     AV_SCOPE("wait_for_events");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
-    return root.wait_for_events(count, events);
+    return root.noted("clWaitForEvents", root.wait_for_events(count, events));
 }
 
 cl_int CL_API_CALL get_event_info(cl_event event, cl_event_info name, size_t value_bytes,
@@ -391,7 +401,39 @@ cl_int CL_API_CALL get_event_info(cl_event event, cl_event_info name, size_t val
 {
     AV_SCOPE("get_event_info");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
-    return root.event_info(event, name, value_bytes, value, size_ret);
+    return root.noted("clGetEventInfo", root.event_info(event, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL get_context_info(cl_context context, cl_context_info name, size_t value_bytes, void *value,
+                                    size_t *size_ret)
+{
+    AV_SCOPE("get_context_info");
+    AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
+    return root.noted("clGetContextInfo", root.context_info(context, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL get_mem_object_info(cl_mem object, cl_mem_info name, size_t value_bytes, void *value,
+                                       size_t *size_ret)
+{
+    AV_SCOPE("get_mem_object_info");
+    AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
+    return root.noted("clGetMemObjectInfo", root.mem_object_info(object, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL get_image_info(cl_mem image, cl_image_info name, size_t value_bytes, void *value,
+                                  size_t *size_ret)
+{
+    AV_SCOPE("get_image_info");
+    AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
+    return root.noted("clGetImageInfo", root.image_info(image, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL get_event_profiling_info(cl_event event, cl_profiling_info name, size_t value_bytes,
+                                            void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_event_profiling_info");
+    AV_CL_ROOT_OR(CL_INVALID_EVENT);
+    return root.noted("clGetEventProfilingInfo", root.event_profiling(event, name, value_bytes, value, size_ret));
 }
 
 cl_int CL_API_CALL set_event_callback(cl_event event, cl_int status,
@@ -401,7 +443,7 @@ cl_int CL_API_CALL set_event_callback(cl_event event, cl_int status,
     AV_SCOPE("set_event_callback");
     AV_CL_ROOT_OR(CL_INVALID_EVENT);
     if (notify == nullptr) return CL_INVALID_VALUE;
-    return root.watch_event(event, status, notify, user_data);
+    return root.noted("clSetEventCallback", root.watch_event(event, status, notify, user_data));
 }
 
 cl_int CL_API_CALL get_program_build_info(cl_program program, cl_device_id device,
@@ -410,7 +452,7 @@ cl_int CL_API_CALL get_program_build_info(cl_program program, cl_device_id devic
 {
     AV_SCOPE("get_program_build_info");
     AV_CL_ROOT_OR(CL_INVALID_PROGRAM);
-    return root.program_build_info(program, device, name, value_bytes, value, size_ret);
+    return root.noted("clGetProgramBuildInfo", root.program_build_info(program, device, name, value_bytes, value, size_ret));
 }
 
 cl_int CL_API_CALL get_kernel_work_group_info(cl_kernel kernel, cl_device_id device,
@@ -419,7 +461,7 @@ cl_int CL_API_CALL get_kernel_work_group_info(cl_kernel kernel, cl_device_id dev
 {
     AV_SCOPE("get_kernel_work_group_info");
     AV_CL_ROOT_OR(CL_INVALID_KERNEL);
-    return root.kernel_work_group_info(kernel, device, name, value_bytes, value, size_ret);
+    return root.noted("clGetKernelWorkGroupInfo", root.kernel_work_group_info(kernel, device, name, value_bytes, value, size_ret));
 }
 
 cl_int CL_API_CALL enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_mem to,
@@ -428,7 +470,7 @@ cl_int CL_API_CALL enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_m
 {
     AV_SCOPE("enqueue_copy_buffer");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_copy_buffer(queue, from, to, from_offset, to_offset, bytes, event);
+    return root.noted("clEnqueueCopyBuffer", root.enqueue_copy_buffer(queue, from, to, from_offset, to_offset, bytes, event));
 }
 
 cl_int CL_API_CALL enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, const void *pattern,
@@ -437,7 +479,7 @@ cl_int CL_API_CALL enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, co
 {
     AV_SCOPE("enqueue_fill_buffer");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_fill_buffer(queue, buffer, pattern, pattern_bytes, offset, bytes, event);
+    return root.noted("clEnqueueFillBuffer", root.enqueue_fill_buffer(queue, buffer, pattern, pattern_bytes, offset, bytes, event));
 }
 
 cl_int CL_API_CALL enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem to,
@@ -447,7 +489,7 @@ cl_int CL_API_CALL enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_me
 {
     AV_SCOPE("enqueue_copy_image");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_copy_image(queue, from, to, from_origin, to_origin, region, event);
+    return root.noted("clEnqueueCopyImage", root.enqueue_copy_image(queue, from, to, from_origin, to_origin, region, event));
 }
 
 cl_mem CL_API_CALL create_image(cl_context context, cl_mem_flags flags,
@@ -459,7 +501,35 @@ cl_mem CL_API_CALL create_image(cl_context context, cl_mem_flags flags,
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    return cl_icd_binding.root().create_image(context, flags, format, desc, host_pointer, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateImage", error);
+    return cl_icd_binding.root().create_image(context, flags, format, desc, host_pointer, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_image_2d(cl_context context, cl_mem_flags flags, const cl_image_format *format,
+                                   size_t width, size_t height, size_t row_pitch, void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("create_image_2d");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateImage2D", error);
+    return cl_icd_binding.root().create_image_2d(context, flags, format, width, height, row_pitch, host_pointer,
+                                                 noted.pointer());
+}
+
+cl_mem CL_API_CALL create_image_3d(cl_context context, cl_mem_flags flags, const cl_image_format *format,
+                                   size_t width, size_t height, size_t depth, size_t row_pitch, size_t slice_pitch,
+                                   void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("create_image_3d");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateImage3D", error);
+    return cl_icd_binding.root().create_image_3d(context, flags, format, width, height, depth, row_pitch,
+                                                 slice_pitch, host_pointer, noted.pointer());
 }
 
 cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_bool,
@@ -469,8 +539,8 @@ cl_int CL_API_CALL enqueue_read_image(cl_command_queue queue, cl_mem image, cl_b
 {
     AV_SCOPE("enqueue_read_image");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_read_image(queue, image, origin, region, row_pitch, slice_pitch, into,
-                                   event);
+    return root.noted("clEnqueueReadImage", root.enqueue_read_image(queue, image, origin, region, row_pitch, slice_pitch, into,
+                                   event));
 }
 
 cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_bool,
@@ -480,8 +550,8 @@ cl_int CL_API_CALL enqueue_write_image(cl_command_queue queue, cl_mem image, cl_
 {
     AV_SCOPE("enqueue_write_image");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_write_image(queue, image, origin, region, row_pitch, slice_pitch, from,
-                                    event);
+    return root.noted("clEnqueueWriteImage", root.enqueue_write_image(queue, image, origin, region, row_pitch, slice_pitch, from,
+                                    event));
 }
 
 cl_sampler CL_API_CALL create_sampler_with_properties(cl_context context,
@@ -493,8 +563,9 @@ cl_sampler CL_API_CALL create_sampler_with_properties(cl_context context,
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateSamplerWithProperties", error);
     return cl_icd_binding.root().create_sampler(
-        context, reinterpret_cast<const uint64_t *>(properties), error);
+        context, reinterpret_cast<const uint64_t *>(properties), noted.pointer());
 }
 
 cl_sampler CL_API_CALL create_sampler(cl_context context, cl_bool normalized,
@@ -511,21 +582,22 @@ cl_sampler CL_API_CALL create_sampler(cl_context context, cl_bool normalized,
                                    CL_SAMPLER_ADDRESSING_MODE,   addressing,
                                    CL_SAMPLER_FILTER_MODE,       filter,
                                    0u};
-    return cl_icd_binding.root().create_sampler(context, properties, error);
+    ClNotedError noted(cl_icd_binding.root(), "clCreateSampler", error);
+    return cl_icd_binding.root().create_sampler(context, properties, noted.pointer());
 }
 
 cl_int CL_API_CALL retain_sampler(cl_sampler sampler)
 {
     AV_SCOPE("retain_sampler");
     AV_CL_ROOT_OR(CL_INVALID_SAMPLER);
-    return root.retain(sampler, ClObject::Kind::sampler);
+    return root.noted("clRetainSampler", root.retain(sampler, ClObject::Kind::sampler));
 }
 
 cl_int CL_API_CALL release_sampler(cl_sampler sampler)
 {
     AV_SCOPE("release_sampler");
     AV_CL_ROOT_OR(CL_INVALID_SAMPLER);
-    return root.release(sampler, ClObject::Kind::sampler);
+    return root.noted("clReleaseSampler", root.release(sampler, ClObject::Kind::sampler));
 }
 
 cl_int CL_API_CALL get_supported_image_formats(cl_context context, cl_mem_flags flags,
@@ -534,7 +606,7 @@ cl_int CL_API_CALL get_supported_image_formats(cl_context context, cl_mem_flags 
 {
     AV_SCOPE("get_supported_image_formats");
     AV_CL_ROOT_OR(CL_INVALID_CONTEXT);
-    return root.supported_image_formats(context, flags, type, num_entries, formats, num_formats);
+    return root.noted("clGetSupportedImageFormats", root.supported_image_formats(context, flags, type, num_entries, formats, num_formats));
 }
 
 cl_int CL_API_CALL enqueue_marker(cl_command_queue queue, cl_uint count, const cl_event *events,
@@ -542,7 +614,7 @@ cl_int CL_API_CALL enqueue_marker(cl_command_queue queue, cl_uint count, const c
 {
     AV_SCOPE("enqueue_marker");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_marker(queue, count, events, event);
+    return root.noted("clEnqueueMarkerWithWaitList", root.enqueue_marker(queue, count, events, event));
 }
 
 cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const cl_event *events,
@@ -550,7 +622,83 @@ cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const 
 {
     AV_SCOPE("enqueue_barrier");
     AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
-    return root.enqueue_barrier(queue, count, events, event);
+    return root.noted("clEnqueueBarrierWithWaitList", root.enqueue_barrier(queue, count, events, event));
+}
+
+/* cl_khr_gl_sharing: each slot of cl_icd_dispatch, and clGetGLContextInfoKHR
+ * also by name, since an application may ask the ICD for it directly. */
+cl_mem CL_API_CALL create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
+{
+    AV_SCOPE("create_from_gl_buffer");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromGLBuffer", error);
+    return cl_icd_binding.root().create_from_gl_buffer(context, flags, buffer, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_from_gl_texture(cl_context context, cl_mem_flags flags, cl_GLenum target,
+                                          cl_GLint level, cl_GLuint texture, cl_int *error)
+{
+    AV_SCOPE("create_from_gl_texture");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromGLTexture", error);
+    return cl_icd_binding.root().create_from_gl_texture(context, flags, target, level, texture, noted.pointer());
+}
+
+cl_mem CL_API_CALL create_from_gl_renderbuffer(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
+                                               cl_int *error)
+{
+    AV_SCOPE("create_from_gl_renderbuffer");
+    if (!cl_icd_binding.bound()) {
+        if (error != nullptr) *error = CL_INVALID_CONTEXT;
+        return nullptr;
+    }
+    ClNotedError noted(cl_icd_binding.root(), "clCreateFromGLRenderbuffer", error);
+    return cl_icd_binding.root().create_from_gl_renderbuffer(context, flags, renderbuffer, noted.pointer());
+}
+
+cl_int CL_API_CALL get_gl_object_info(cl_mem object, cl_gl_object_type *type, cl_GLuint *name)
+{
+    AV_SCOPE("get_gl_object_info");
+    AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
+    return root.noted("clGetGLObjectInfo", root.gl_object_info(object, type, name));
+}
+
+cl_int CL_API_CALL get_gl_texture_info(cl_mem object, cl_gl_texture_info name, size_t value_bytes, void *value,
+                                       size_t *size_ret)
+{
+    AV_SCOPE("get_gl_texture_info");
+    AV_CL_ROOT_OR(CL_INVALID_MEM_OBJECT);
+    return root.noted("clGetGLTextureInfo", root.gl_texture_info(object, name, value_bytes, value, size_ret));
+}
+
+cl_int CL_API_CALL enqueue_acquire_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                      const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("enqueue_acquire_gl");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueAcquireGLObjects", root.enqueue_acquire_gl(queue, count, objects, waits, events, event));
+}
+
+cl_int CL_API_CALL enqueue_release_gl(cl_command_queue queue, cl_uint count, const cl_mem *objects, cl_uint waits,
+                                      const cl_event *events, cl_event *event)
+{
+    AV_SCOPE("enqueue_release_gl");
+    AV_CL_ROOT_OR(CL_INVALID_COMMAND_QUEUE);
+    return root.noted("clEnqueueReleaseGLObjects", root.enqueue_release_gl(queue, count, objects, waits, events, event));
+}
+
+cl_int CL_API_CALL get_gl_context_info(const cl_context_properties *properties, cl_gl_context_info name,
+                                       size_t value_bytes, void *value, size_t *size_ret)
+{
+    AV_SCOPE("get_gl_context_info");
+    AV_CL_ROOT_OR(CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR);
+    return root.noted("clGetGLContextInfoKHR", root.gl_context_info(properties, name, value_bytes, value, size_ret));
 }
 
 /* `cl_khr_external_memory`'s two, which the loader asks for by name: they are
@@ -627,6 +775,10 @@ void ClDispatchTable::fill()
     table_.clSetUserEventStatus = &set_user_event_status;
     table_.clWaitForEvents = &wait_for_events;
     table_.clGetEventInfo = &get_event_info;
+    table_.clGetEventProfilingInfo = &get_event_profiling_info;
+    table_.clGetContextInfo = &get_context_info;
+    table_.clGetMemObjectInfo = &get_mem_object_info;
+    table_.clGetImageInfo = &get_image_info;
     table_.clSetEventCallback = &set_event_callback;
     table_.clGetProgramBuildInfo = &get_program_build_info;
     table_.clGetKernelWorkGroupInfo = &get_kernel_work_group_info;
@@ -634,6 +786,8 @@ void ClDispatchTable::fill()
     table_.clEnqueueFillBuffer = &enqueue_fill_buffer;
     table_.clEnqueueCopyImage = &enqueue_copy_image;
     table_.clCreateImage = &create_image;
+    table_.clCreateImage2D = &create_image_2d;
+    table_.clCreateImage3D = &create_image_3d;
     table_.clEnqueueReadImage = &enqueue_read_image;
     table_.clEnqueueWriteImage = &enqueue_write_image;
     table_.clCreateSamplerWithProperties = &create_sampler_with_properties;
@@ -643,7 +797,17 @@ void ClDispatchTable::fill()
     table_.clGetSupportedImageFormats = &get_supported_image_formats;
     table_.clEnqueueMarkerWithWaitList = &enqueue_marker;
     table_.clEnqueueBarrierWithWaitList = &enqueue_barrier;
-    claimed_ = 57u;
+    table_.clCreateFromGLBuffer = &create_from_gl_buffer;
+    table_.clCreateFromGLTexture = &create_from_gl_texture;
+    table_.clCreateFromGLTexture2D = &create_from_gl_texture;
+    table_.clCreateFromGLTexture3D = &create_from_gl_texture;
+    table_.clCreateFromGLRenderbuffer = &create_from_gl_renderbuffer;
+    table_.clGetGLObjectInfo = &get_gl_object_info;
+    table_.clGetGLTextureInfo = &get_gl_texture_info;
+    table_.clEnqueueAcquireGLObjects = &enqueue_acquire_gl;
+    table_.clEnqueueReleaseGLObjects = &enqueue_release_gl;
+    table_.clGetGLContextInfoKHR = &get_gl_context_info;
+    claimed_ = 73u;
     /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
@@ -674,6 +838,12 @@ void *ClDispatchTable::external_mem_acquire() const
 {
     AV_SCOPE("ClDispatchTable::external_mem_acquire");
     return reinterpret_cast<void *>(&acquire_external_objects);
+}
+
+void *ClDispatchTable::gl_context_info() const
+{
+    AV_SCOPE("ClDispatchTable::gl_context_info");
+    return reinterpret_cast<void *>(&get_gl_context_info);
 }
 
 void *ClDispatchTable::external_mem_release() const
@@ -707,8 +877,8 @@ void stub_called(const char *api, const char *entry_point, const char *why) noex
 {
     AV_SCOPE("stub_called");
     static_cast<void>(api);
-    static_cast<void>(entry_point);
     static_cast<void>(why);
+    if (clicd::cl_icd_binding.bound()) clicd::cl_icd_binding.root().note_refused(entry_point);
 }
 
 void payload_dropped(const char *api, const char *command, size_t written) noexcept

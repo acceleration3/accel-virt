@@ -24,6 +24,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_gl_share_source.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -141,7 +142,7 @@ class ClProcess {
 public:
     explicit ClProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-          root_(memory_, kmt, lock_, send_lock_, log_, watcher_, av::clicd::cl_icd_binding),
+          root_(memory_, kmt, lock_, send_lock_, log_, watcher_, gl_share_, av::clicd::cl_icd_binding),
           loader_(root_)
     {
     }
@@ -160,6 +161,7 @@ private:
     RecordingThreadLock send_lock_;
     RecordingLog        log_;
     ScriptedThread      watcher_;
+    av::ScriptedGlShareSource gl_share_;
     ClIcdRoot           root_;
     FakeClLoader        loader_;
 };
