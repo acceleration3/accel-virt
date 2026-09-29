@@ -122,7 +122,7 @@ TEST(gl_context_table, reports_each_live_context_under_its_handle)
                                    "contexts/0/context/65537/windows/0 held=0 draws_window=false "
                                    "reads_window=false\n"
                      "contexts/0/context/65537/mappings/0 held=0 persistent_writers=0\n"
-                    "contexts/0/context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
+                    "contexts/0/context/65537/shadows/0 trusted=true held=0 held_bytes=0") == 0); }
 
 TEST(gl_context_table_invariants, fail_for_a_zero_generation_a_miscount_or_a_broken_context)
 { Table zero;

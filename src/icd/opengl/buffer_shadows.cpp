@@ -6,8 +6,7 @@
 namespace av::glicd {
 
 BufferShadows::BufferShadows(BlockSource &memory)
-    : memory_(memory), shadows_{}, fresh_{}, next_fresh_(0u), size_names_{}, sizes_{}, next_size_(0u),
-      held_bytes_(0u), clock_(0u), distrusted_(false)
+    : memory_(memory), shadows_{}, fresh_{}, next_fresh_(0u), held_bytes_(0u), clock_(0u), distrusted_(false)
 {
     AV_SCOPE("BufferShadows::BufferShadows");
 }
@@ -62,37 +61,13 @@ void BufferShadows::wrote(uint32_t buffer, uint64_t offset, uint64_t length, con
     shadows_[slot].object().overwrite(offset, length, static_cast<const uint8_t *>(bytes));
 }
 
-void BufferShadows::respecify(uint32_t buffer, int64_t size, bool with_data)
+void BufferShadows::respecify(uint32_t buffer, bool with_data)
 {
     AV_SCOPE("BufferShadows::respecify");
-    if (size < 0) return;
     forget(buffer);
-    sized(buffer, static_cast<uint64_t>(size));
     if (with_data || let_go() || buffer == 0u) return;
     fresh_[next_fresh_] = buffer;
     next_fresh_ = (next_fresh_ + 1u) % max_fresh;
-}
-
-void BufferShadows::sized(uint32_t buffer, uint64_t size)
-{
-    AV_SCOPE("BufferShadows::sized");
-    if (let_go() || buffer == 0u) return;
-    uint32_t row = size_row(buffer);
-    if (row == max_sizes) {
-        row = next_size_;
-        next_size_ = (next_size_ + 1u) % max_sizes;
-    }
-    size_names_[row] = buffer;
-    sizes_[row] = size;
-}
-
-bool BufferShadows::size_of(uint32_t buffer, uint64_t &size)
-{
-    AV_SCOPE("BufferShadows::size_of");
-    const uint32_t row = size_row(buffer);
-    if (let_go() || buffer == 0u || row == max_sizes) return false;
-    size = sizes_[row];
-    return true;
 }
 
 bool BufferShadows::fresh(uint32_t buffer) const
@@ -108,8 +83,6 @@ void BufferShadows::forget(uint32_t buffer)
 {
     AV_SCOPE("BufferShadows::forget");
     unmark(buffer);
-    const uint32_t row = size_row(buffer);
-    if (row != max_sizes) size_names_[row] = 0u;
     const uint32_t slot = holding(buffer);
     if (slot != max_shadows) drop(slot);
 }
@@ -128,7 +101,6 @@ void BufferShadows::forget_all()
         if (shadows_[slot].constructed()) drop(slot);
     }
     for (uint32_t &marked : fresh_) marked = 0u;
-    for (uint32_t &named : size_names_) named = 0u;
 }
 
 void BufferShadows::distrust()
@@ -158,18 +130,15 @@ void BufferShadows::report(StateWriter &writer) const
     writer.flag("trusted", trusted());
     writer.number("held", held());
     writer.number("held_bytes", held_bytes_);
-    uint32_t sizes = 0u;
-    for (const uint32_t named : size_names_) sizes += named != 0u ? 1u : 0u;
-    writer.number("sizes", sizes);
     for (uint32_t slot = 0u; slot < max_shadows; slot++) {
         if (shadows_[slot].constructed()) shadows_[slot].object().report(writer, slot);
     }
     writer.close();
 }
 
-/* Each copy is whole and of a buffer no other copy is, their bytes are counted
- * and within the budget, and no buffer has two sizes. A distrusted context can
- * still hold what it had until its own thread next asks. */
+/* Each copy is whole and of a buffer no other copy is, and their bytes are
+ * counted and within the budget. A distrusted context can still hold what it
+ * had until its own thread next asks. */
 bool BufferShadows::invariants_hold() const
 {
     AV_SCOPE("BufferShadows::invariants_hold");
@@ -180,9 +149,7 @@ bool BufferShadows::invariants_hold() const
         if (!shadow.invariants_hold() || shadow.buffer() == 0u || holding(shadow.buffer()) != slot) return false;
         bytes += shadow.length();
     }
-    for (uint32_t row = 0u; row < max_sizes; row++)
-        if (size_names_[row] != 0u && size_row(size_names_[row]) != row) return false;
-    return bytes == held_bytes_ && held_bytes_ <= max_bytes && next_fresh_ < max_fresh && next_size_ < max_sizes;
+    return bytes == held_bytes_ && held_bytes_ <= max_bytes && next_fresh_ < max_fresh;
 }
 
 uint32_t BufferShadows::holding(uint32_t buffer) const
@@ -240,14 +207,6 @@ bool BufferShadows::let_go()
     if (trusted()) return false;
     forget_all();
     return true;
-}
-
-uint32_t BufferShadows::size_row(uint32_t buffer) const
-{
-    AV_SCOPE("BufferShadows::size_row");
-    for (uint32_t row = 0u; row < max_sizes; row++)
-        if (size_names_[row] == buffer) return row;
-    return max_sizes;
 }
 
 void BufferShadows::unmark(uint32_t buffer)

@@ -2140,8 +2140,6 @@ BUFFER_WRITES = {
     "glTransformFeedbackBufferBase": "::av::glicd::shaders_write_buffers()",
     "glTransformFeedbackBufferRange": "::av::glicd::shaders_write_buffers()",
     "glBeginTransformFeedback": "::av::glicd::shaders_write_buffers()",
-    # A transform feedback object brings its own buffer bindings.
-    "glBindTransformFeedback": "::av::glicd::bind_buffers_indexed(0x8C8Eu)",
     "glBindImageTexture": "::av::glicd::shaders_write_buffers()",
     "glBindImageTextures": "::av::glicd::shaders_write_buffers()",
     "glMakeBufferResidentNV": "::av::glicd::shaders_write_buffers()",

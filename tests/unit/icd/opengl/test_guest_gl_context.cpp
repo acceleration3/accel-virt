@@ -494,7 +494,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
                                     "profile=2 flags=0 share=0 share_target=0 error=0 link=4 arena=false renderer= extensions=0\n"
                                     "context/65537/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/65537/mappings/0 held=0 persistent_writers=0\n"
-                     "context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0);
+                     "context/65537/shadows/0 trusted=true held=0 held_bytes=0") == 0);
   rig.host().gl_make(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   context->set_owner(2u);
@@ -505,7 +505,7 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
                                  "share=0 share_target=0 error=1282 link=0 arena=true renderer=rvk host renderer extensions=0\n"
                                  "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
                      "context/1/mappings/0 held=0 persistent_writers=0\n"
-                     "context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
+                     "context/1/shadows/0 trusted=true held=0 held_bytes=0") == 0); }
 
 TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
 { GlContextRig rig;

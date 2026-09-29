@@ -1,10 +1,9 @@
 /* The buffer ranges one context has mapped (data-model.md: at most 64), with
  * the checks OpenGL makes of a map, an unmap and an explicit flush, and the
- * one line per context that says maps are copies here (FR-006). A range is
- * judged against the buffer's size, which the host is asked only when the
- * context does not know it; what each map starts from and sends back is
- * weighed against the context's copies of what the host holds
- * (BufferShadows). */
+ * one line per context that says maps are copies here (FR-006). The host is
+ * asked a buffer's size at every map, since a range is judged against it.
+ * What each map starts from and sends back is weighed against the context's
+ * copies of what the host holds (BufferShadows). */
 #ifndef AV_GLICD_MAPPED_BUFFERS_HPP
 #define AV_GLICD_MAPPED_BUFFERS_HPP
 
