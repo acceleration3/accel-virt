@@ -93,12 +93,16 @@ difference.
   twelve lines a second under a capture. DWM, interrupted, reached its capture
   check late, and the next frame skipped: 55 to 56 captures a second. After:
   no DPC of 0.5 ms or longer, 58 to 59.6.
-- **The rest**, measured with this tool: in the frames a skip is measured from,
-  DWM's render thread runs about 2 ms instead of 0.7 - on the CPU the whole
-  time, not waiting for one, not blocked, not interrupted. The extra is DWM's
-  own composition (`CLegacyRenderTarget::Render`, `CComposition::PreRender`,
-  `CComposition::CleanTrees`, Direct2D's `EndDraw`) and `memmove`; this
-  driver's user-mode and kernel-mode code grow by a few tens of microseconds.
+- **2026-09-30, fixed** (ecf52db4): in the frames a skip is measured from,
+  DWM's render thread ran about 2 ms instead of 0.7 - on the CPU the whole
+  time, every one of DWM's own functions slower alike. The host was moving
+  the vCPU threads between the 9950X3D's two CCDs, and a vCPU resumed on a
+  cold cache. Kept on one CCD, a normal frame takes 0.4 ms of CPU and the
+  capture runs at 59.6 to 60.0 a second; `run_guest_suite.py` confines the
+  vCPUs to one host cache domain (`tools/guest/cache_domains.py`).
+- **2026-09-30, fixed** (dd4abbe5): each unmap of DWM's large dynamic buffers
+  copied the whole buffer into the command stream, 89 ms of `memmove` a
+  second; the written pages alone now go (write watch), 12 ms.
 
 ## Files
 
