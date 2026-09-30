@@ -51,6 +51,7 @@ from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E
 from fetch_opencl_loader import Refused as ClRefused, pins_from as cl_pins_from  # noqa: E402
 from fetch_opencl_loader import problems_on_disk as cl_problems_on_disk  # noqa: E402
 from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
+from cache_domains import CacheDomains  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "host"))
 import list_gpus  # noqa: E402
 
@@ -1032,7 +1033,16 @@ class GuestRun:
                 raise StepFailed(f"{prefix}boot", f"QEMU exited {self.qemu.poll()} before QMP listened; see qemu.log")
             time.sleep(0.1)
         self.qmp = self.step(f"{prefix}qmp", lambda: Qmp(str(self.work / "qmp.sock"), self.args.agent_timeout))
+        self.confine_vcpus()
         self.connect_agent(f"{prefix}boot")
+
+    def confine_vcpus(self):
+        threads = [cpu["thread-id"] for cpu in self.qmp.execute("query-cpus-fast")]
+        domain = CacheDomains().confine(threads)
+        if domain is None:
+            self.say(f"vcpus: no cache domain holds {len(threads)}; the host places them")
+            return
+        self.say(f"vcpus: {len(threads)} kept on CPUs {','.join(map(str, sorted(domain)))}")
 
     def panicked_while_booting(self):
         if self.qmp is None:
