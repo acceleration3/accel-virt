@@ -28,6 +28,7 @@ GetModuleHandleW
 GetProcAddress
 GetProcessHeap
 GetStdHandle
+GetWriteWatch
 HeapAlloc
 HeapFree
 InitOnceExecuteOnce
@@ -48,6 +49,7 @@ QueryPerformanceCounter
 QueryPerformanceFrequency
 ReadFile
 ReleaseSRWLockExclusive
+ResetWriteWatch
 RtlLookupFunctionEntry
 RtlVirtualUnwind
 SetEvent
@@ -60,6 +62,8 @@ TlsGetValue
 TlsSetValue
 TryAcquireSRWLockExclusive
 UnmapViewOfFile
+VirtualAlloc
+VirtualFree
 VirtualQuery
 WaitForSingleObject
 WideCharToMultiByte

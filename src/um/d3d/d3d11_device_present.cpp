@@ -294,6 +294,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
         to.shared_key = from.shared_key;
         to.shadow = from.shadow;
         to.shadow_bytes = from.shadow_bytes;
+        to.shadow_watched = from.shadow_watched;
         to.mapped_write = from.mapped_write;
         to.present_model = from.present_model;
         to.vidpn_source = from.vidpn_source;
@@ -383,6 +384,7 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     if (!d3dproto::rvk_d3d_CreateResource(wire(), resource.id, desc, 0u)) return false;
     const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
     resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    resource.shadow_watched = 0u;
     resource.shadow_bytes = resource.shadow == nullptr ? 0u : bytes;
     if (resource.shadow != nullptr) __builtin_memset(resource.shadow, 0, bytes);
     guest_surfaces_[guest_surface_count_++] = &resource;

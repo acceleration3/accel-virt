@@ -124,7 +124,13 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->Usage == D3D10_DDI_USAGE_DYNAMIC || args->Usage == D3D10_DDI_USAGE_STAGING || args->MapFlags != 0u) {
         size_t bytes = 0u;
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) bytes += subresource_bytes(resource, sub);
-        resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+        /* A buffer's writes are watched, so an unmap sends only what changed;
+         * one subresource, so no page is shared with another's. */
+        bool watched = false;
+        resource.shadow = resource.dimension == D3D10DDIRESOURCE_BUFFER
+                              ? shadows_.allocate(bytes, watched)
+                              : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+        resource.shadow_watched = watched ? 1u : 0u;
         resource.shadow_bytes = resource.shadow == nullptr ? 0u : bytes;
         if (resource.shadow == nullptr) set_error(E_OUTOFMEMORY);
     }
@@ -147,6 +153,8 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                                          static_cast<size_t>(row) * initial.SysMemPitch,
                                      line);
         }
+        /* The host was made with this data: it is not a write to send. */
+        if (resource.shadow_watched != 0u) shadows_.forget_writes(resource.shadow, resource.shadow_bytes);
     }
 
     /* Another process - DWM - may open the key as soon as the kernel hands
@@ -227,7 +235,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     ResourceRecord &resource = record(handle);
     forget_guest_surface(resource);
     destroy_object(resource.id);
-    if (resource.shadow != nullptr) memory_.release(resource.shadow);
+    if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     if (resource.allocation != 0u && resource.shared_key == 0u) {
         D3DDDICB_DEALLOCATE deallocate = {};
         deallocate.hResource = static_cast<HANDLE>(resource.runtime_resource);

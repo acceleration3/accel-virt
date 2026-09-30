@@ -25,6 +25,7 @@
 #include "um/icd/srw_lock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_records.hpp"
+#include "um/d3d/watched_shadows.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/paging_queue.hpp"
 #include "icd/d3d/present_snapshot_keys.hpp"
@@ -124,6 +125,7 @@ private:
     size_t   subresource_offset(const ResourceRecord &resource, uint32_t subresource) const;
     uint32_t subresource_count(const ResourceRecord &resource) const;
 
+    [[nodiscard]] bool upload_written(const ResourceRecord &resource);
     /* `bytes` of data for one subresource, as UpdateSubresource1 takes it,
      * crossing through the blob arena when it is large. */
     void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
@@ -196,6 +198,7 @@ private:
 
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
+    WatchedShadows         shadows_;
     icd::LogSink          &log_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;

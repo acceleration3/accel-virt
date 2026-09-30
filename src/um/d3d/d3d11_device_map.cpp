@@ -34,6 +34,9 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         set_error(D3DDDIERR_DEVICEREMOVED);
         return;
     }
+    /* What the read-back wrote is the host's already. */
+    if ((type == D3D10_DDI_MAP_READ || type == D3D10_DDI_MAP_READWRITE) && resource.shadow_watched != 0u)
+        shadows_.forget_writes(at, bytes);
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
     mapped->pData = at;
@@ -54,11 +57,30 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
     if (resource.shadow == nullptr || subresource >= tracked_subresources) return;
     if ((resource.mapped_write & (1u << subresource)) == 0u) return;
     resource.mapped_write &= ~(1u << subresource);
+    if (resource.shadow_watched != 0u && upload_written(resource)) return;
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
     const uint32_t line = row_bytes(resource, width);
     upload(resource, subresource, nullptr, resource.shadow + subresource_offset(resource, subresource),
            subresource_bytes(resource, subresource), line, line * rows(resource, height), resource.reserved);
+}
+
+/* The pages of a watched buffer the application wrote, a box each run; the
+ * first carries the map's DISCARD, as a whole upload's first piece does.
+ * False when the watch cannot tell, and the buffer then goes whole. */
+bool D3d11Device::upload_written(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::upload_written");
+    WatchedShadows::Run runs[WatchedShadows::max_runs];
+    uint32_t            count = 0u;
+    if (!shadows_.take_written(resource.shadow, resource.shadow_bytes, runs, count)) return false;
+    for (uint32_t index = 0u; index < count; index++) {
+        const D3D10_DDI_BOX box = {static_cast<LONG>(runs[index].offset), 0, 0,
+                                   static_cast<LONG>(runs[index].offset + runs[index].bytes), 1, 1};
+        upload(resource, 0u, &box, resource.shadow + runs[index].offset, runs[index].bytes, 0u, 0u,
+               index == 0u ? resource.reserved : resource.reserved & ~copy_discard);
+    }
+    return true;
 }
 
 VOID D3d11Device::resource_map(D3D10DDI_HRESOURCE resource, UINT sub, D3D10_DDI_MAP type, UINT flags,
