@@ -167,6 +167,8 @@ public:
     DoorbellFabric &fabric();
 
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
+    /* The miniport's DxgkDdiGetScanLine answers, as dxgkrnl has it do. */
+    Status   scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position) override;
     Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                     std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;

@@ -10,6 +10,7 @@
 #include "core/ddi/dxgkarg_create_allocation_record.hpp"
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
+#include "core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
@@ -20,6 +21,7 @@
 #include "core/memory/aperture_segment.hpp"
 #include "core/miniport/ddi_table.hpp"
 #include "core/support/nt_status.hpp"
+#include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "proto/context/umd_adapter_info.hpp"
@@ -755,6 +757,17 @@ bool DdiKmt::waiting_on(const Doorbell &doorbell, std::uint32_t context)
         return false;
     const HardwareQueue *const on = find_hardware_queue(doorbell.queue);
     return on != nullptr && on->context == context;
+}
+
+Status DdiKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position)
+{
+    if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
+    DxgkargGetScanLineRecord request = {};
+    request.VidPnTargetId = source;
+    const auto read = routine<std::int32_t (*)(void *, DxgkargGetScanLineRecord *)>(DdiSlot::DxgkDdiGetScanLine);
+    const Status answered = answer(read(fdo_.context(), &request));
+    if (answered == Status::ok) position = BeamPosition(request.InVerticalBlank != 0u, request.ScanLine);
+    return answered;
 }
 
 /* dxgkrnl turns the blank on for a waiter and off once it is woken. The blanks

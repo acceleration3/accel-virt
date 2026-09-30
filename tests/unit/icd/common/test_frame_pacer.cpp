@@ -95,3 +95,85 @@ TEST(frame_pacer, no_adapter_means_no_wait_at_all)
   CHECK_EQ(pacer.failures(), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), 0u);
   CHECK_EQ(rig.log().holding(unpaced), 1u); }
+
+namespace {
+
+/* The mock's refresh: a blank every sixtieth of its second, the first at 0. */
+constexpr std::uint64_t refresh = MockKmt::ticks_per_second / 60u;
+/* The first present, 0.6 into the third refresh: a clock that has run a while,
+ * so that a schedule of the pacer's own starts where that present was. */
+constexpr std::uint64_t first_present = 2u * refresh + 100000u;
+
+/* Whether each of `count` unpaced presents was admitted: the first at
+ * first_present, the rest `step` ticks apart. */
+template <std::size_t count>
+void admit_every(FramePacer &pacer, MockKmt &kmt, std::uint64_t step, bool (&admitted)[count])
+{ kmt.reads_clock(nullptr, first_present);
+  admitted[0] = pacer.admits();
+  kmt.reads_clock(nullptr, step);
+  for (std::size_t i = 1u; i < count; i++) admitted[i] = pacer.admits(); }
+
+}  // namespace
+
+/* Presents 0.3 of a refresh apart: blanks fall before the 3rd, the 6th and,
+ * by two ticks, the 9th, and the first frame after each is the one shown. A
+ * schedule a refresh apart from the first would have shown the 5th and 8th,
+ * late in their refreshes. */
+TEST(frame_pacer, the_first_frame_presented_after_each_blank_is_admitted)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.log(), rig.adapter(), rig.device());
+  bool admitted[9] = {};
+  admit_every(pacer, rig.kmt(), 50000u, admitted);
+  const bool expected[9] = {true, false, true, false, false, true, false, false, true};
+  for (std::size_t i = 0u; i < 9u; i++) CHECK_EQ(admitted[i], expected[i]);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 9u);
+  CHECK(pacer.invariants_hold());
+  CHECK_EQ(rig.kmt().misuses(), 0u); }
+
+/* A frame a refresh after the last, at the same place in its refresh, has a
+ * blank between them however the lines compare. */
+TEST(frame_pacer, a_frame_a_refresh_after_the_last_is_admitted_at_the_same_line)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.log(), rig.adapter(), rig.device());
+  bool admitted[4] = {};
+  admit_every(pacer, rig.kmt(), refresh, admitted);
+  for (bool each : admitted) CHECK(each); }
+
+/* Presents a sixteenth of a refresh short of one apart count as a blank apart
+ * even within one refresh; a tick closer, and only the scan-out says. */
+TEST(frame_pacer, presents_nearly_a_refresh_apart_count_as_a_blank_apart)
+{ const std::uint64_t nearly = refresh - refresh / 16u;
+  const std::uint64_t gaps[2] = {nearly - 1u, nearly};
+  for (std::uint64_t gap : gaps) {
+      PacerRig rig;
+      FramePacer pacer(rig.kmt(), rig.log(), rig.adapter(), rig.device());
+      rig.kmt().reads_clock(nullptr, 1000u);
+      CHECK(pacer.admits());
+      rig.kmt().reads_clock(nullptr, 5000u);
+      CHECK(!pacer.admits());
+      /* Still before the blank at `refresh`. */
+      rig.kmt().reads_clock(nullptr, gap);
+      CHECK_EQ(pacer.admits(), gap == nearly);
+  } }
+
+/* Where the scan-out cannot be read, frames keep a schedule a refresh apart
+ * from the first. */
+TEST(frame_pacer, without_an_adapter_frames_are_admitted_a_refresh_apart)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.log(), 0u, rig.device());
+  bool admitted[9] = {};
+  admit_every(pacer, rig.kmt(), 50000u, admitted);
+  const bool expected[9] = {true, false, false, false, true, false, false, true, false};
+  for (std::size_t i = 0u; i < 9u; i++) CHECK_EQ(admitted[i], expected[i]);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 0u); }
+
+/* A refused read falls back to the schedule for that frame. */
+TEST(frame_pacer, a_refused_scan_line_admits_on_the_schedule)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.log(), rig.adapter(), rig.device());
+  rig.kmt().reads_clock(nullptr, 50000u);
+  rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
+  CHECK(pacer.admits());
+  rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
+  CHECK(!pacer.admits());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 2u); }

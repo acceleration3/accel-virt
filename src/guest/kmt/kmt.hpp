@@ -16,6 +16,7 @@ namespace av {
 
 class UmdAdapterInfo;
 
+class BeamPosition;
 class PciIdentity;
 
 class Kmt {
@@ -177,6 +178,8 @@ public:
      * frame pacing waits on, and the only way in to see the rate the driver
      * reports. */
     virtual Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) = 0;
+    /* Where the scan-out of `source` is now, as the driver's clock places it. */
+    virtual Status   scan_line(uint32_t adapter, uint32_t source, BeamPosition &position) = 0;
     /* D3DKMTEscape with driver-private data on `context` of `device`: the
      * miniport reads the `size` bytes and may write its answer back into them,
      * which the caller finds in `data` on return. The status is the driver's. */

@@ -1,6 +1,7 @@
 #include "harness/loopback/loopback_kmt.hpp"
 
 #include "core/support/status.hpp"
+#include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -286,6 +287,8 @@ Status LoopbackKmt::wait_for_context(std::uint32_t, std::uint32_t context)
 }
 
 Status LoopbackKmt::wait_for_vertical_blank(std::uint32_t, std::uint32_t, std::uint32_t) { return Status::ok; }
+
+Status LoopbackKmt::scan_line(std::uint32_t, std::uint32_t, BeamPosition &) { return Status::not_supported; }
 
 /* The one escape the shim answers as the driver would: where a context's ring
  * and reply slot are. */

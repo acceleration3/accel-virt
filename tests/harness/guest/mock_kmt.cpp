@@ -933,6 +933,16 @@ Status MockKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t dev
     return succeed();
 }
 
+Status MockKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position)
+{
+    if (!begin(Call::scan_line)) return refuse(last_code_);
+    if (find(Kind::adapter, adapter) == nullptr || source != 0u || blank_period_ == 0u) return misuse();
+    const std::uint64_t into = (ticks_ + read_ticks_) % blank_period_ * beam_total_lines / blank_period_;
+    const auto          line = static_cast<std::uint32_t>((beam_height + into) % beam_total_lines);
+    position = BeamPosition(line >= beam_height, line);
+    return succeed();
+}
+
 Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                        std::uint32_t size)
 {

@@ -81,6 +81,7 @@ public:
     Status   destroy_doorbell(uint32_t doorbell) override;
     Status   notify_work_submission(uint32_t doorbell) override;
     Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) override;
+    Status   scan_line(uint32_t adapter, uint32_t source, BeamPosition &position) override;
     Status   escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size) override;
     uint64_t performance_counter(uint64_t &frequency) const override;
     uint32_t last_code() const override;

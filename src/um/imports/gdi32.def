@@ -24,6 +24,7 @@ D3DKMTDestroySynchronizationObject
 D3DKMTEnumAdapters2
 D3DKMTEscape
 D3DKMTFreeGpuVirtualAddress
+D3DKMTGetScanLine
 D3DKMTLock2
 D3DKMTMakeResident
 D3DKMTMapGpuVirtualAddress

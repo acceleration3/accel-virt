@@ -18,6 +18,7 @@
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
+#include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 
@@ -89,6 +90,7 @@ public:
         destroy_doorbell,
         notify_work_submission,
         wait_for_vertical_blank,
+        scan_line,
         escape,
         adapter_luid,
         query_video_memory,
@@ -103,6 +105,10 @@ public:
     static constexpr std::uint64_t page_bytes = 4096u;
     /* The performance counter this answers, in the 100ns units Windows uses. */
     static constexpr std::uint64_t ticks_per_second = 10000000u;
+    /* The beam scan_line reports: a 1080-line mode with 1125 lines in all,
+     * its blank beginning at line 1080 as the driver numbers it. */
+    static constexpr std::uint32_t beam_height = 1080u;
+    static constexpr std::uint32_t beam_total_lines = 1125u;
     /* The memory each lock of an allocation up to this size addresses; several
      * may be held at once. A larger allocation's lock addresses all of it. */
     static constexpr std::uint32_t view_capacity = 8192u;
@@ -240,6 +246,9 @@ public:
      * a test reaches the doorbell a transport made for itself. */
     std::uint32_t doorbell_handle(std::uint32_t index) const;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
+    /* Where the beam is on the clock performance_counter answers: a blank
+     * begins every blank period, the first at tick 0. */
+    Status        scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position) override;
     /* As the driver answers them: a ContextViewsRecord with where the
      * context's ring and reply slot are, refused for a context made without a
      * record; a HostWindowRecord as open_host_window says; anything else

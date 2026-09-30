@@ -3,6 +3,7 @@
 
 #include "core/support/nt_status.hpp"
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/beam_position.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/umd_adapter_info.hpp"
 
@@ -781,6 +782,19 @@ Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32
     wait.hDevice = device;
     wait.VidPnSourceId = source;
     return answer(D3DKMTWaitForVerticalBlankEvent(&wait));
+}
+
+/* dxgkrnl answers from the driver's DxgkDdiGetScanLine, which reads the
+ * device's display clock. */
+Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &position)
+{
+    AV_SCOPE("GdiKmt::scan_line");
+    D3DKMT_GETSCANLINE read = {};
+    read.hAdapter = adapter;
+    read.VidPnSourceId = source;
+    const Status answered = answer(D3DKMTGetScanLine(&read));
+    if (answered == Status::ok) position = BeamPosition(read.InVerticalBlank != FALSE, read.ScanLine);
+    return answered;
 }
 
 /* dxgkrnl copies the data into the kernel, hands the copy to DxgkDdiEscape and
