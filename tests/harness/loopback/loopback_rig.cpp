@@ -25,6 +25,11 @@ LoopbackDevice &LoopbackRig::device() { return device_; }
 LoopbackDriver &LoopbackRig::driver() { return driver_; }
 GuestContext   &LoopbackRig::context(std::uint32_t index) { return index == 0u ? first_ : second_; }
 ContextMemory  &LoopbackRig::memory(std::uint32_t index) { return index == 0u ? first_memory_ : second_memory_; }
+
+std::uint8_t *LoopbackRig::reply(std::uint32_t index)
+{
+    return reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(memory(index).reply_view()));
+}
 std::uint32_t   LoopbackRig::line(std::uint32_t index) const { return index + 1u; }
 
 const CapsetInfo &LoopbackRig::capset() const { return query_.capset(); }
@@ -40,7 +45,8 @@ Status LoopbackRig::set_up(std::uint32_t index)
      * pages, so only an idle one's memory is replaced with a fresh ring. */
     if (context(index).state() == GuestContext::State::idle) {
         memory(index).release();
-        const Status allocated = memory(index).allocate(ring_order);
+        Status allocated = memory(index).allocate(ring_order, reply_bytes);
+        if (allocated == Status::ok) allocated = memory(index).map_into_process();
         if (allocated != Status::ok) return allocated;
     }
     return context(index).set_up(query_.capset(), index + 1u, setup, memory(index).pages());

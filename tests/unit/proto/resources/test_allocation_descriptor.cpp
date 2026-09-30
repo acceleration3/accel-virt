@@ -88,9 +88,7 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
       AllocationDescriptor(AllocationKind::staging, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::gdi, false, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x2000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
   };
   for (const AllocationDescriptor &descriptor : descriptors) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -167,30 +165,17 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
   const std::uint32_t acceptable = 32u + 96u + 64u + 1u + 11u + 2u + 62u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
-/* Feature 041, US2: the pages an rvk context runs on. A ring the device reads
- * with a power-of-two mask, and the single page its fences are written to - the
- * device's own decoder refuses anything else, so a descriptor asking for it is
- * refused here first. */
-TEST(allocation_descriptor_decode, a_ring_is_a_power_of_two_of_pages_and_a_fence_page_is_one)
+/* The page an rvk context is named by: nothing is ever kept in it - the
+ * context runs on the driver's memory (docs/protocol.md, "Context memory") - so
+ * it is one page, exactly, and never a surface. */
+TEST(allocation_descriptor_decode, a_context_s_name_is_one_page_and_no_surface)
 { struct Case { AllocationKind kind; std::uint64_t size; bool surface; Status expected; };
   const Case cases[] = {
       {AllocationKind::context_ring, 0x1000u, false, Status::ok},
-      {AllocationKind::context_ring, 0x4000u, false, Status::ok},
-      {AllocationKind::context_ring, 0x3000u, false, Status::malformed},   /* not a power of two */
+      {AllocationKind::context_ring, 0x2000u, false, Status::malformed},
+      {AllocationKind::context_ring, 0x4000u, false, Status::malformed},   /* a ring, as it once was */
       {AllocationKind::context_ring, 0x800u, false, Status::malformed},    /* under a page */
-      {AllocationKind::context_ring, 0x4000u, true, Status::malformed},    /* not a surface */
-      {AllocationKind::fence_page, 0x1000u, false, Status::ok},
-      {AllocationKind::fence_page, 0x2000u, false, Status::malformed},     /* one page, exactly */
-      {AllocationKind::fence_page, 0x1000u, true, Status::malformed},
-      {AllocationKind::reply_slot, 0x1000u, false, Status::ok},
-      {AllocationKind::reply_slot, 0x3000u, false, Status::ok},
-      {AllocationKind::reply_slot, 0x1800u, false, Status::malformed},     /* whole pages */
-      {AllocationKind::reply_slot, 0x1000u, true, Status::malformed},
-      /* Feature 045: a host-visible chunk is any whole number of pages, never a surface. */
-      {AllocationKind::host_visible_memory, 0x1000u, false, Status::ok},
-      {AllocationKind::host_visible_memory, 0x4000000u, false, Status::ok},
-      {AllocationKind::host_visible_memory, 0x4000001u, false, Status::malformed},
-      {AllocationKind::host_visible_memory, 0x1000u, true, Status::malformed},
+      {AllocationKind::context_ring, 0x1000u, true, Status::malformed},    /* not a surface */
   };
   for (const Case &one : cases) {
       const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
@@ -207,9 +192,11 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
 { const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   static_cast<void>(encoded(ring, bytes));
-  /* 21 was host memory VidMm placed in a CPU-visible segment, which is gone
-   * (docs/host-window.md); a stale client asking for it is refused. */
-  const std::uint16_t pasts[] = {21u, 22u};
+  /* 18 to 20 were a context's fence page and reply slot and a chunk of its
+   * guest RAM, all the driver's own memory now (docs/protocol.md, "Context
+   * memory"); 21 was host memory VidMm placed in a CPU-visible segment, which
+   * is gone (docs/host-window.md). A stale client asking for any is refused. */
+  const std::uint16_t pasts[] = {18u, 19u, 20u, 21u, 22u};
   for (std::uint16_t past : pasts) {
       std::memcpy(bytes + 4u, &past, sizeof past);
       AllocationDescriptor decoded;

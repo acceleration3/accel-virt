@@ -29,7 +29,7 @@ Status ShippedBatch::read()
     count_ = 0u;
     SubmissionDescriptor submitted;
     RingHeader           ring;
-    const std::uint8_t *const view = kmt_.view_of(ring_);
+    const std::uint8_t *const view = kmt_.ring_named(ring_);
     if (view == nullptr || submitted.decode(kmt_.last_submission(), kmt_.last_submission_size()) != Status::ok ||
         ring.decode(view, RingHeader::encoded_size) != Status::ok)
         return Status::malformed;

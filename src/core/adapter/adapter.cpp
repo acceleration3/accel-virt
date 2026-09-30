@@ -22,6 +22,7 @@
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "proto/submission/follow_record.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "core/ddi/dxgkarg_native_fence_records.hpp"
 #include "core/ddi/dxgkddi_feature_interface_record.hpp"
@@ -36,7 +37,6 @@
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
 #include "proto/resources/host_window_record.hpp"
 #include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
@@ -699,37 +699,18 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (escape->PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
     if (magic == TailPublishRecord::magic) return publish_own_tail(*escape);
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
-    if (magic != TraceEscapeRecord::magic) return bind_chunk(*escape);
+    if (magic == ContextViewsRecord::magic) return context_views(*escape);
+    if (magic != TraceEscapeRecord::magic) return NtStatus(Status::not_supported).value();
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
     return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
 }
 
-/* The one escape this driver defines: a process binding a host-visible chunk to
- * its rvk context (feature 045). Every refusal is STATUS_INVALID_PARAMETER, a
- * status dxgkrnl hands the caller as it is (feature 037). */
-int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
-{
-    AV_SCOPE("Adapter::bind_chunk");
-    auto *const       bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
-    uint32_t          magic = 0u;
-    if (escape.PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
-    if (magic != HostVisibleBindRecord::magic || escape.hContext == nullptr)
-        return NtStatus(Status::not_supported).value();
-    HostVisibleBindRecord record;
-    VirtioGpuDevice *const device = answering_device();
-    if (escape.PrivateDriverDataSize != HostVisibleBindRecord::encoded_size ||
-        record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok || device == nullptr ||
-        rvk_contexts_.bind_chunk(escape.hContext, record, *device) != Status::ok)
-        return NtStatus(Status::invalid_parameter).value();
-    static_cast<void>(record.encode(bytes, HostVisibleBindRecord::encoded_size));   /* the length was checked */
-    return NtStatus(Status::ok).value();
-}
-
-/* A process asking for a chunk of the host window on its rvk context, or giving
- * one back (docs/host-window.md). A window this adapter does not have is
- * STATUS_NOT_SUPPORTED, which a process takes as "use guest RAM"; every other
- * refusal is STATUS_INVALID_PARAMETER, as a chunk binding's is. */
+/* A process asking for a chunk on its rvk context - of the host window, or of
+ * guest RAM where the window cannot hold it - or giving one back
+ * (docs/host-window.md). A device that refuses the chunk's blob, or refuses to
+ * let go of one an import still holds, is STATUS_NOT_SUPPORTED; every other
+ * refusal is STATUS_INVALID_PARAMETER. */
 int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::window_chunk");
@@ -743,6 +724,21 @@ int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
     if (status == Status::not_supported) return NtStatus(status).value();
     if (status != Status::ok) return NtStatus(Status::invalid_parameter).value();
     static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));   /* the length was checked */
+    return NtStatus(Status::ok).value();
+}
+
+/* A process asking where its rvk context's ring and reply slot are: the driver
+ * mapped them into it when the context was made (docs/protocol.md, "Context
+ * memory"). Every refusal is STATUS_INVALID_PARAMETER. */
+int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::context_views");
+    auto *const        bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
+    ContextViewsRecord record;
+    if (escape.hContext == nullptr || record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok ||
+        rvk_contexts_.views(escape.hContext, record) != Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
+    static_cast<void>(record.encode(bytes, ContextViewsRecord::encoded_size));   /* decode checked the length */
     return NtStatus(Status::ok).value();
 }
 
@@ -813,9 +809,10 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
     if (request->pAllocationList != nullptr)
         for (uint32_t index = 0u; index < request->NumAllocations; index++) {
             sources_.forget_primary(request->pAllocationList[index]);
-            /* The device writes a context's fence page and reads its ring
-             * until the context is destroyed on it; pages freed first would be
-             * written after they are someone else's. */
+            /* A context is named by its ring allocation, and another context
+             * of the process shares with it by that name (feature 050); a name
+             * freed while the context lives could be a new allocation's, so the
+             * context goes with it - which is the order a process exit uses. */
             void *const user = rvk_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
             if (user != nullptr) static_cast<void>(rvk_contexts_.unbind(user, answering_device()));
         }
@@ -1002,16 +999,11 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
     AV_SCOPE("Adapter::build_paging_buffer");
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    /* An unmap is VidMm evicting as often as a process exiting - a suspended
+     * app's allocations go first - and ends no context: what a context runs on,
+     * and every chunk it holds, is memory the driver owns, not an allocation
+     * (docs/protocol.md, "Context memory"). */
     PagingRequest paging(platform_, allocations_, budget_, *request);
-    /* A process that exits has its allocations unmapped before they are freed,
-     * and its contexts later still: dxgkrnl waits for none of what the process
-     * queued in a ring. The host running that backlog would write the fence
-     * page, the ring and the replies into pages Windows has handed on - page
-     * tables among them - so the context ends before its pages go. */
-    void *const user = rvk_contexts_.user_of(paging.unmapped());
-    if (user != nullptr)
-        log_status("rvkgpu: rvk context ended by an aperture unmap",
-                   NtStatus(rvk_contexts_.unbind(user, answering_device())).value());
     return paging.build().value();
 }
 

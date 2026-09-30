@@ -11,9 +11,6 @@ namespace {
 
 struct SideSteps {
     const char        *chunk;
-    const char        *lock;
-    const char        *bind;
-    const char        *pages;
     const char        *buffer;
     const char        *import;
     const char        *bind_buffer;
@@ -21,13 +18,10 @@ struct SideSteps {
 };
 
 constexpr SideSteps side_steps[] = {
-    {"src_chunk", "src_lock", "src_bind", "src_pages", "src_buffer", "src_import", "src_bind_buffer",
-     VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
-    {"dst_chunk", "dst_lock", "dst_bind", "dst_pages", "dst_buffer", "dst_import", "dst_bind_buffer",
-     VK_BUFFER_USAGE_TRANSFER_DST_BIT},
+    {"src_chunk", "src_buffer", "src_import", "src_bind_buffer", VK_BUFFER_USAGE_TRANSFER_SRC_BIT},
+    {"dst_chunk", "dst_buffer", "dst_import", "dst_bind_buffer", VK_BUFFER_USAGE_TRANSFER_DST_BIT},
 };
 
-constexpr uint64_t page_bytes = 4096u;
 /* The queue VulkanDeviceChain made its device with. */
 constexpr uint32_t queue_family = 0u;
 
@@ -36,8 +30,8 @@ constexpr uint32_t queue_family = 0u;
 HostVisibleImportScenario::HostVisibleImportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : steps_(kmt, report, "import"), link_(kmt, search, steps_, SubApi::vulkan), chain_(steps_, link_.transport()),
       pattern_(copy_bytes),
-      chunks_{HostVisibleChunk(link_.connection(), link_.transport()),
-              HostVisibleChunk(link_.connection(), link_.transport())},
+      chunks_{HostWindowChunk(link_.connection(), link_.transport()),
+              HostWindowChunk(link_.connection(), link_.transport())},
       imports_{BlobImport(link_.transport()), BlobImport(link_.transport())}, buffers_{}, memory_types_{},
       pool_(VK_NULL_HANDLE), command_buffer_(0u), fence_(VK_NULL_HANDLE)
       {
@@ -73,18 +67,11 @@ Status HostVisibleImportScenario::read_memory_types()
 Status HostVisibleImportScenario::make_chunk(uint32_t side)
 {
     AV_SCOPE("HostVisibleImportScenario::make_chunk");
-    const SideSteps  &names = side_steps[side];
-    HostVisibleChunk &chunk = chunks_[side];
-    const Status      allocated = steps_.check(names.chunk, chunk.allocate(chunk_bytes));
-    if (allocated != Status::ok) return allocated;
-    const Status locked = steps_.check(names.lock, chunk.lock());
-    if (locked != Status::ok) return locked;
-    const Status bound = chunk.bind();
-    if (bound != Status::ok) return steps_.check(names.bind, bound);
-    static_cast<void>(steps_.check_measured(names.bind, bound, chunk.resource_id()));
-    const uint64_t pages = chunk.pages();
-    return steps_.check_measured(names.pages, pages == chunk_bytes / page_bytes ? Status::ok : Status::malformed,
-                                 static_cast<uint32_t>(pages));
+    const SideSteps &names = side_steps[side];
+    HostWindowChunk &chunk = chunks_[side];
+    const Status     opened = chunk.open(chunk_bytes);
+    if (opened != Status::ok) return steps_.check(names.chunk, opened);
+    return steps_.check_measured(names.chunk, opened, chunk.resource_id());
 }
 
 Status HostVisibleImportScenario::make_buffer(uint32_t side)
@@ -250,7 +237,7 @@ Status HostVisibleImportScenario::destroy()
     Status     first = Status::ok;
     const auto keep = [&first](Status status) { first = first == Status::ok ? status : first; };
     for (BlobImport &import : imports_) keep(import.release());
-    for (HostVisibleChunk &chunk : chunks_) keep(chunk.release());
+    for (HostWindowChunk &chunk : chunks_) keep(chunk.release());
     chain_.destroy();
     fence_ = VK_NULL_HANDLE;
     command_buffer_ = 0u;

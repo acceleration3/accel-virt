@@ -35,6 +35,26 @@ its rvk context. There is an `open` (bytes → resource, address) and a `close`
 the owning process has already exited, its view is gone, and only the host
 side is released.
 
+## When the window cannot hold a chunk
+
+The same `open` answers with a chunk of guest RAM when the adapter has no
+window, the window has no room for the chunk, the device will not place a host
+blob there, or the process cannot be given a view within its reach. The
+driver allocates the pages itself, maps them into the process write-back, and
+publishes them as a `GUEST` blob in the same chunk slot, which the device
+imports as it imports any guest pages. The process sees the same answer: a
+resource, whole pages of at least what it asked, and an address. Only a device
+that will back the chunk nowhere refuses it, with `STATUS_NOT_SUPPORTED`.
+
+The pages are the driver's, not an allocation of the process's, for the reason
+a context's ring is (docs/protocol.md, "Context memory"): VidMm evicts a
+suspended process's allocations and maps them back at other pages, under a
+device that had imported the old ones. A `close` sends `RESOURCE_UNREF`; one
+the device refuses - an import still holds the blob - leaves the chunk bound
+until its context goes, so a process that closes early cannot make the driver
+keep page after page out of use. Pages the device may still hold when the
+context goes are kept out of use for good rather than freed.
+
 Why not VidMm: on WDDM 3.x, VidMm refuses a CPU-visible allocation whose
 segment set has no aperture segment. With the aperture in the set, VidMm hands
 out the aperture's staging pages at Lock rather than the window. So a driver
@@ -63,8 +83,8 @@ itself.
 | OpenCL | The context arena, and `ALLOC_HOST_PTR` buffers made over it | Mapped buffers are write-back |
 | Vulkan | `HOST_VISIBLE` chunks | The mapping matches the `HOST_CACHED` types the host advertises |
 
-A chunk that the window cannot hold, or a device with no window, falls back to
-guest RAM as before (`HostVisibleChunk`).
+A chunk that the window cannot hold, or a device with no window, is guest RAM
+the driver owns, reached the same way.
 
 ## Budgets
 

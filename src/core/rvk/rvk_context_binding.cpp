@@ -130,13 +130,18 @@ Status RvkContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resour
     return answer.type() == GpuResponse::ok_nodata ? Status::ok : Status::not_supported;
 }
 
-void RvkContextBinding::release_chunk(VirtioGpuDevice &device, uint32_t resource_id)
+Status RvkContextBinding::release_chunk(VirtioGpuDevice &device, uint32_t resource_id)
 {
     AV_SCOPE("RvkContextBinding::release_chunk");
     RvkRequestWriter writer(request_, capacity_);
-    if (writer.unref(resource_id) != Status::ok) return;
-    uint32_t answered = 0u;
-    static_cast<void>(device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered));
+    const Status     written = writer.unref(resource_id);
+    if (written != Status::ok) return written;
+    uint32_t     answered = 0u;
+    const Status asked = device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered);
+    if (asked != Status::ok) return asked;
+    GpuResponseReader answer;
+    if (answer.decode(answer_, answered) != Status::ok) return Status::malformed;
+    return answer.type() == GpuResponse::ok_nodata ? Status::ok : Status::not_supported;
 }
 
 GuestContext::State RvkContextBinding::state() const

@@ -8,11 +8,11 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
 #include "proto/resources/host_window_record.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -21,6 +21,7 @@
 #include "proto/client_transport.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
+#include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -30,7 +31,6 @@
 #include <cstring>
 
 using av::ClientDescriptor;
-using av::HostVisibleBindRecord;
 using av::MockKmt;
 using av::PciIdentity;
 using av::ReplyHeader;
@@ -315,11 +315,11 @@ TEST(mock_kmt, a_virtual_context_records_its_private_data)
 
 namespace {
 
-/* A device with a mapped command buffer and a locked reply allocation: what a
- * transport's context stands on. */
+/* A device with a mapped command buffer and the allocation a context's record
+ * names its ring by: what a transport's context stands on. */
 class AnsweringRig {
 public:
-    explicit AnsweringRig(MockKmt &kmt) : kmt_(kmt), device_(0u), buffer_(0u), fence_(0u), reply_(0u), address_(0u), slot_(nullptr)
+    explicit AnsweringRig(MockKmt &kmt) : kmt_(kmt), device_(0u), buffer_(0u), name_(0u), address_(0u), slot_(nullptr)
     {
         kmt.add_adapter(rvk, 3200u);
         std::uint32_t adapters[1] = {};
@@ -328,26 +328,24 @@ public:
         CHECK_STATUS(kmt.create_device(adapters[0], device_), Status::ok);
         const ClientDescriptor descriptor(4096u);
         CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), buffer_), Status::ok);
-        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), fence_), Status::ok);
-        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), reply_), Status::ok);
+        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), name_), Status::ok);
         std::uint32_t queue = 0u;
         std::uint32_t fence_object = 0u;
         CHECK_STATUS(kmt.create_paging_queue(device_, queue, fence_object), Status::ok);
         std::uint64_t fence = 0u;
         CHECK_STATUS(kmt.map_gpu_virtual_address(queue, buffer_, 1u, address_, fence), Status::ok);
-        void *view = nullptr;
-        CHECK_STATUS(kmt.lock(device_, reply_, view), Status::ok);
-        slot_ = static_cast<std::uint8_t *>(view);
     }
 
-    /* A context whose private data names `reply` as its reply slot. */
-    std::uint32_t context_naming(std::uint32_t reply)
+    /* A context made with a record, whose reply slot becomes the rig's. */
+    std::uint32_t context()
     {
         std::uint8_t record[RvkContextRecord::encoded_size] = {};
-        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, buffer_, fence_, reply).encode(record, sizeof record),
+        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
                      Status::ok);
         std::uint32_t context = 0u;
         CHECK_STATUS(kmt_.create_context_virtual(device_, record, sizeof record, context), Status::ok);
+        slot_ = kmt_.reply_of(context);
+        CHECK(slot_ != nullptr);
         return context;
     }
 
@@ -359,7 +357,7 @@ public:
     }
 
     std::uint32_t device() const { return device_; }
-    std::uint32_t reply() const { return reply_; }
+    std::uint32_t name() const { return name_; }
     std::uint64_t address() const { return address_; }
     std::uint8_t *slot() const { return slot_; }
 
@@ -367,8 +365,7 @@ private:
     MockKmt      &kmt_;
     std::uint32_t device_;
     std::uint32_t buffer_;
-    std::uint32_t fence_;
-    std::uint32_t reply_;
+    std::uint32_t name_;
     std::uint64_t address_;
     std::uint8_t *slot_;
 };
@@ -387,7 +384,7 @@ bool slot_is_empty(const std::uint8_t *slot)
 TEST(mock_kmt, a_wait_on_a_transport_context_finds_the_scripted_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
-  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint32_t context = rig.context();
   const std::uint8_t answer[4] = {0xA1u, 0xB2u, 0xC3u, 0xD4u};
   rig.submit_fence(context, 7u);
   /* Nothing is written until a test scripts an answer. */
@@ -413,7 +410,7 @@ TEST(mock_kmt, a_wait_on_a_transport_context_finds_the_scripted_answer)
 TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
-  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint32_t context = rig.context();
   std::uint8_t answer[MockKmt::max_answer + 8u] = {};
   for (std::uint32_t i = 0u; i < sizeof answer; i++) answer[i] = static_cast<std::uint8_t>(i + 1u);
   kmt.answer_waits(answer, sizeof answer);
@@ -426,46 +423,43 @@ TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
            static_cast<std::uint8_t>(MockKmt::max_answer));
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer], 0u); }
 
-/* No slot is written that the context did not name, the process does not hold a
- * view of, or for a submission that named no fence. */
-TEST(mock_kmt, only_a_named_locked_slot_and_a_described_submission_are_answered)
+/* No slot is written for a context made without a record - not another
+ * context's - or for a submission that named no fence. */
+TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
 { const std::uint8_t answer[4] = {1u, 2u, 3u, 4u};
-  { MockKmt kmt;   /* a plain context names no reply slot */
+  { MockKmt kmt;   /* a plain context has no reply slot */
     AnsweringRig rig(kmt);
+    rig.context();
     kmt.answer_waits(answer, sizeof answer);
     std::uint32_t context = 0u;
     CHECK_STATUS(kmt.create_context(rig.device(), context), Status::ok);
+    CHECK(kmt.reply_of(context) == nullptr);
+    CHECK(kmt.ring_of(context) == nullptr);
     rig.submit_fence(context, 1u);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
-  { MockKmt kmt;   /* private data that is no record names no reply slot either */
+  { MockKmt kmt;   /* private data that is no record has none either */
     AnsweringRig rig(kmt);
+    rig.context();
     kmt.answer_waits(answer, sizeof answer);
     const std::uint8_t garbage[RvkContextRecord::encoded_size] = {0xFFu};
     std::uint32_t context = 0u;
     CHECK_STATUS(kmt.create_context_virtual(rig.device(), garbage, sizeof garbage, context), Status::ok);
+    CHECK(kmt.reply_of(context) == nullptr);
     rig.submit_fence(context, 1u);
-    CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
-    CHECK(slot_is_empty(rig.slot())); }
-  { MockKmt kmt;   /* a reply allocation with no view held */
-    AnsweringRig rig(kmt);
-    kmt.answer_waits(answer, sizeof answer);
-    const std::uint32_t context = rig.context_naming(rig.reply());
-    rig.submit_fence(context, 1u);
-    CHECK_STATUS(kmt.unlock(rig.device(), rig.reply()), Status::ok);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
   { MockKmt kmt;   /* a submission without a descriptor names no fence */
     AnsweringRig rig(kmt);
     kmt.answer_waits(answer, sizeof answer);
-    const std::uint32_t context = rig.context_naming(rig.reply());
+    const std::uint32_t context = rig.context();
     CHECK_STATUS(kmt.submit(context, rig.address(), 64u, nullptr, 0u), Status::ok);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
   { MockKmt kmt;   /* a refused wait answers nothing */
     AnsweringRig rig(kmt);
     kmt.answer_waits(answer, sizeof answer);
-    const std::uint32_t context = rig.context_naming(rig.reply());
+    const std::uint32_t context = rig.context();
     rig.submit_fence(context, 1u);
     kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
     CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
@@ -476,7 +470,7 @@ TEST(mock_kmt, only_a_named_locked_slot_and_a_described_submission_are_answered)
 TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
-  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint32_t context = rig.context();
   const std::uint8_t first[2] = {0x11u, 0x12u};
   const std::uint8_t second[3] = {0x21u, 0x22u, 0x23u};
   const std::uint8_t standing[1] = {0x31u};
@@ -507,7 +501,7 @@ TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
 TEST(mock_kmt_withhold_answer_at, the_nth_wait_writes_nothing_and_takes_no_queued_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
-  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint32_t context = rig.context();
   const std::uint8_t first[2] = {0x11u, 0x12u};
   const std::uint8_t second[3] = {0x21u, 0x22u, 0x23u};
   kmt.queue_answer(first, sizeof first);
@@ -565,18 +559,20 @@ TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
 
 namespace {
 
-/* A device, a context on it and a host-visible chunk: what an escape binding a
- * chunk names. */
+/* A device and a context made with a record on it: what an escape names. */
 class EscapeRig {
 public:
-    explicit EscapeRig(MockKmt &kmt) : kmt_(kmt), adapter_(0u), device_(0u), context_(0u), chunk_(0u)
+    explicit EscapeRig(MockKmt &kmt) : kmt_(kmt), adapter_(0u), device_(0u), name_(0u), context_(0u)
     {
         kmt.add_adapter(rvk, 3200u);
         std::uint32_t count = 0u;
         CHECK_STATUS(kmt.enumerate_adapters(&adapter_, 1u, count), Status::ok);
         CHECK_STATUS(kmt.create_device(adapter_, device_), Status::ok);
-        CHECK_STATUS(kmt.create_context(device_, context_), Status::ok);
-        chunk_ = allocate(av::AllocationKind::host_visible_memory, 3u * 4096u);
+        name_ = allocate(av::AllocationKind::context_ring, 4096u);
+        std::uint8_t record[RvkContextRecord::encoded_size] = {};
+        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, name_, reply_bytes).encode(record, sizeof record),
+                     Status::ok);
+        CHECK_STATUS(kmt.create_context_virtual(device_, record, sizeof record, context_), Status::ok);
     }
 
     std::uint32_t allocate(av::AllocationKind kind, std::uint64_t bytes)
@@ -590,30 +586,34 @@ public:
         return allocation;
     }
 
-    Status escape(std::uint8_t *record, std::uint32_t size = HostVisibleBindRecord::encoded_size)
+    Status escape(std::uint8_t *record, std::uint32_t size)
     {
         return kmt_.escape(adapter_, device_, context_, record, size);
     }
 
     std::uint32_t adapter() const { return adapter_; }
     std::uint32_t device() const { return device_; }
+    std::uint32_t name() const { return name_; }
     std::uint32_t context() const { return context_; }
-    std::uint32_t chunk() const { return chunk_; }
 
 private:
     MockKmt      &kmt_;
     std::uint32_t adapter_;
     std::uint32_t device_;
+    std::uint32_t name_;
     std::uint32_t context_;
-    std::uint32_t chunk_;
 };
 
-void encode_request(HostVisibleBindRecord::Operation operation, std::uint32_t allocation, std::uint32_t resource,
-                    std::uint8_t *bytes)
+void encode_views(std::uint8_t *record)
 {
-    CHECK_STATUS(
-        HostVisibleBindRecord(operation, allocation, resource).encode(bytes, HostVisibleBindRecord::encoded_size),
-        Status::ok);
+    CHECK_STATUS(av::ContextViewsRecord().encode(record, av::ContextViewsRecord::encoded_size), Status::ok);
+}
+
+void encode_window(av::HostWindowRecord::Operation operation, std::uint64_t bytes, std::uint32_t resource,
+                   std::uint8_t *record)
+{
+    CHECK_STATUS(av::HostWindowRecord(operation, bytes, resource).encode(record, av::HostWindowRecord::encoded_size),
+                 Status::ok);
 }
 
 std::uint32_t u32_at(const std::uint8_t *bytes, std::uint32_t offset)
@@ -632,132 +632,124 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::uint32_t offset)
 
 }  // namespace
 
-/* As the driver answers a bind: the resource a context's chunk slot becomes -
- * the first after its three transport resources, then on - and the chunk's
- * pages, written back into the record; an unbind names a bound resource. */
-TEST(mock_kmt_escape, a_bind_answers_the_next_chunk_resource_and_the_pages)
+/* As the driver answers a ContextViewsRecord: where the context's ring - its
+ * header written, at the record's order - and its reply slot are mapped,
+ * written back into the request; a plain context has neither, and an escape
+ * that is no record of the driver's is not supported. */
+TEST(mock_kmt_escape, a_views_escape_answers_where_the_context_memory_is)
 { MockKmt kmt;
   EscapeRig rig(kmt);
-  const std::uint32_t second = rig.allocate(av::AllocationKind::host_visible_memory, 16u * 4096u);
-  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(u32_at(record, 12u), 0x00100003u);
-  CHECK_EQ(u64_at(record, 16u), 3u);
-  CHECK_EQ(u32_at(record, 8u), rig.chunk());
-  CHECK_EQ(kmt.last_escape_size(), static_cast<std::uint32_t>(HostVisibleBindRecord::encoded_size));
-  CHECK_EQ(u32_at(kmt.last_escape(), 0u), HostVisibleBindRecord::magic);
-  CHECK_EQ(u32_at(kmt.last_escape(), 12u), 0u);   /* the request as it was sent */
-  encode_request(HostVisibleBindRecord::Operation::bind, second, 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(u32_at(record, 12u), 0x00100004u);
-  CHECK_EQ(u64_at(record, 16u), 16u);
-  CHECK_EQ(kmt.bindings(), 2u);
-  CHECK_EQ(kmt.bound_allocation(0u), rig.chunk());
-  CHECK_EQ(kmt.bound_allocation(1u), second);
-  CHECK_EQ(kmt.bound_allocation(2u), 0u);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(kmt.bindings(), 1u);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);   /* already unbound */
+  std::uint8_t record[av::ContextViewsRecord::encoded_size] = {};
+  encode_views(record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  av::ContextViewsRecord views;
+  CHECK_STATUS(views.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(views.ring(), reinterpret_cast<std::uintptr_t>(kmt.ring_of(rig.context())));
+  CHECK_EQ(views.reply(), reinterpret_cast<std::uintptr_t>(kmt.reply_of(rig.context())));
+  CHECK(kmt.ring_named(rig.name()) == kmt.ring_of(rig.context()));
+  CHECK(kmt.ring_named(0u) == nullptr);
+  CHECK(kmt.ring_named(rig.name() + 400u) == nullptr);
+  av::RingHeader header;
+  CHECK_STATUS(header.decode(kmt.ring_of(rig.context()), av::RingHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.capacity(), std::uint64_t{1} << 12u);
+  kmt.reply_of(rig.context())[reply_bytes - 1u] = 0x42u;   /* the whole slot is writable */
+  CHECK_EQ(kmt.last_escape_size(), static_cast<std::uint32_t>(av::ContextViewsRecord::encoded_size));
+  CHECK_EQ(u32_at(kmt.last_escape(), 0u), av::ContextViewsRecord::magic);
+  CHECK_EQ(u64_at(kmt.last_escape(), 8u), 0u);   /* the request as it was sent */
+  /* An answer sent back is no request, nor is a record cut short. */
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
-  CHECK_EQ(kmt.bound_allocation(0u), rig.chunk());   /* history, not what is live */
-  /* A miscounted answer, for the next bind only. */
-  kmt.answer_next_bind_pages(2u);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(u64_at(record, 16u), 2u);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(u64_at(record, 16u), 3u);
-  CHECK_EQ(kmt.calls(MockKmt::Call::escape), 6u);
+  encode_views(record);
+  CHECK_STATUS(rig.escape(record, sizeof record - 1u), Status::invalid_parameter);
+  std::uint32_t plain = 0u;
+  CHECK_STATUS(kmt.create_context(rig.device(), plain), Status::ok);
+  CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), plain, record, sizeof record), Status::invalid_parameter);
+  CHECK_EQ(u64_at(record, 8u), 0u);
+  std::uint8_t nope[av::ContextViewsRecord::encoded_size] = {'N', 'O', 'P', 'E'};
+  CHECK_STATUS(rig.escape(nope, sizeof nope), Status::not_supported);
+  CHECK_EQ(kmt.last_code(), 0xC00000BBu);
+  CHECK_STATUS(kmt.destroy_context(rig.context()), Status::ok);
+  CHECK(kmt.ring_named(rig.name()) == nullptr);
+  CHECK(kmt.ring_of(rig.context()) == nullptr && kmt.reply_of(rig.context()) == nullptr);
+  CHECK_EQ(kmt.calls(MockKmt::Call::escape), 5u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* What the driver refuses, every refusal STATUS_INVALID_PARAMETER as the
- * driver answers it: a record that is no request, a chunk of another kind or
- * of no allocation, and more chunks than a context keeps; an escape that is not
- * the driver's record at all is not supported. */
-TEST(mock_kmt_escape, refuses_what_the_driver_refuses)
+/* Without a window every open is a chunk of guest RAM, as the driver falls
+ * back: the resources after the window's, whole pages of writable memory a test
+ * reaches as the host does, a close of only what the same context holds, and
+ * the context's teardown closing the rest. */
+TEST(mock_kmt_escape, an_open_with_no_window_is_a_chunk_of_guest_ram)
 { MockKmt kmt;
   EscapeRig rig(kmt);
-  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {'N', 'O', 'P', 'E'};
-  CHECK_STATUS(rig.escape(record), Status::not_supported);
-  CHECK_EQ(kmt.last_code(), 0xC00000BBu);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  record[16] = 1u;   /* pages already filled in: an answer, not a request */
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record, 31u), Status::invalid_parameter);
-  std::uint8_t longer[HostVisibleBindRecord::encoded_size + 1u] = {};
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, longer);
-  CHECK_STATUS(rig.escape(longer, sizeof longer), Status::invalid_parameter);
-  const std::uint32_t client = rig.allocate(av::AllocationKind::client, 4096u);
-  encode_request(HostVisibleBindRecord::Operation::bind, client, 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.context(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  CHECK_EQ(kmt.bindings(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u);
-  for (std::uint32_t bind = 0u; bind < MockKmt::max_bindings; bind++) {
-      encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-      CHECK_STATUS(rig.escape(record), Status::ok);
-  }
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  CHECK_EQ(kmt.bindings(), MockKmt::max_bindings);
-  CHECK_EQ(kmt.bound_allocation(MockKmt::max_bindings), 0u); }
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  encode_window(av::HostWindowRecord::Operation::open, 4097u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  av::HostWindowRecord first(av::HostWindowRecord::Operation::open, 4097u, 0u);
+  CHECK_STATUS(first.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(first.resource_id(), MockKmt::first_chunk_resource);
+  CHECK_EQ(first.bytes(), 2u * 4096u);
+  CHECK_EQ(first.address(), reinterpret_cast<std::uintptr_t>(kmt.ram_chunk(0u)));
+  CHECK_EQ(kmt.ram_chunk_pages(0u), 2u);
+  CHECK_EQ(kmt.ram_chunks(), 1u);
+  CHECK_EQ(kmt.window_chunks(), 0u);
+  CHECK_EQ(kmt.window_opens(), 0u);
+  reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(first.address()))[2u * 4096u - 1u] = 0x42u;
+  CHECK_EQ(kmt.ram_chunk(0u)[2u * 4096u - 1u], 0x42u);
+  /* A miscounted answer, for the next open only. */
+  kmt.answer_next_chunk_bytes(4096u);
+  encode_window(av::HostWindowRecord::Operation::open, 3u * 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(u32_at(record, 8u), MockKmt::first_chunk_resource + 1u);
+  CHECK_EQ(u64_at(record, 16u), 4096u);
+  CHECK_EQ(kmt.ram_chunk_pages(1u), 3u);
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(u64_at(record, 16u), 4096u);
+  CHECK_EQ(kmt.ram_chunks(), 3u);
+  std::uint32_t other = 0u;
+  CHECK_STATUS(kmt.create_context(rig.device(), other), Status::ok);
+  encode_window(av::HostWindowRecord::Operation::close, 0u, first.resource_id(), record);
+  CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), other, record, sizeof record), Status::invalid_parameter);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(kmt.ram_chunks(), 2u);
+  CHECK(kmt.ram_chunk(0u) == nullptr);
+  CHECK_EQ(kmt.ram_chunk_pages(0u), 0u);
+  CHECK(kmt.ram_chunk(1u) != nullptr);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);   /* already closed */
+  CHECK_STATUS(kmt.destroy_context(other), Status::ok);
+  CHECK_EQ(kmt.ram_chunks(), 2u);
+  CHECK_STATUS(kmt.destroy_context(rig.context()), Status::ok);
+  CHECK_EQ(kmt.ram_chunks(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
 
 /* A context the host faulted - one whose answer was withheld - is lost to the
- * driver, which refuses a bind or unbind on it and keeps its other contexts'
- * as they were. */
-TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_binds_and_unbinds)
+ * driver, which refuses every escape on it and keeps its other contexts' as
+ * they were. */
+TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_escapes)
 { MockKmt kmt;
   EscapeRig rig(kmt);
   std::uint32_t healthy = 0u;
   CHECK_STATUS(kmt.create_context(rig.device(), healthy), Status::ok);
-  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), healthy), Status::ok);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);   /* a wait that was answered loses nothing */
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);   /* a wait that was answered loses nothing */
   kmt.withhold_answer_at(1u);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
+  encode_window(av::HostWindowRecord::Operation::close, 0u, MockKmt::first_chunk_resource, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  CHECK_EQ(u32_at(record, 12u), 0u);
-  CHECK_EQ(kmt.bindings(), 2u);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100004u, record);
+  std::uint8_t views[av::ContextViewsRecord::encoded_size] = {};
+  encode_views(views);
+  CHECK_STATUS(rig.escape(views, sizeof views), Status::invalid_parameter);
+  CHECK_EQ(u64_at(views, 8u), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 2u);
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), healthy, record, sizeof record), Status::ok);
-  CHECK_EQ(kmt.bindings(), 1u);
-  CHECK_EQ(kmt.misuses(), 0u); }
-
-/* Destroying a bound chunk unbinds it, as the driver does when it tears the
- * chunk's context down; a chunk bound twice goes from both, and another
- * chunk's binding stays. */
-TEST(mock_kmt_escape, destroying_a_bound_allocation_unbinds_it)
-{ MockKmt kmt;
-  EscapeRig rig(kmt);
-  const std::uint32_t second = rig.allocate(av::AllocationKind::host_visible_memory, 4096u);
-  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
-  const std::uint32_t chunks[] = {rig.chunk(), second, rig.chunk()};
-  for (const std::uint32_t chunk : chunks) {
-      encode_request(HostVisibleBindRecord::Operation::bind, chunk, 0u, record);
-      CHECK_STATUS(rig.escape(record), Status::ok);
-  }
-  CHECK_EQ(kmt.bindings(), 3u);
-  CHECK_STATUS(kmt.destroy_allocation(rig.device(), rig.chunk()), Status::ok);
-  CHECK_EQ(kmt.bindings(), 1u);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
-  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
-  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100004u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(kmt.bindings(), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 3u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 /* Handles it never gave, or that do not belong together, or no data, are a
@@ -767,8 +759,8 @@ TEST(mock_kmt_escape, destroying_a_bound_allocation_unbinds_it)
 TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
 { MockKmt kmt;
   EscapeRig rig(kmt);
-  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(kmt.escape(rig.adapter() + 4u, rig.device(), rig.context(), record, sizeof record),
                Status::invalid_parameter);
   CHECK_STATUS(kmt.escape(rig.adapter(), rig.device() + 400u, rig.context(), record, sizeof record),
@@ -789,31 +781,31 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
   CHECK_STATUS(kmt.escape(adapters[1], rig.device(), rig.context(), record, sizeof record),
                Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 7u);
-  CHECK_EQ(kmt.bindings(), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 0u);
   kmt.fail_at(MockKmt::Call::escape, 1u, 0xC0000001u);
-  CHECK_STATUS(rig.escape(record), Status::invalid_state);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_state);
   CHECK_EQ(kmt.last_code(), 0xC0000001u);
-  CHECK_EQ(u32_at(record, 12u), 0u);
+  CHECK_EQ(u32_at(record, 8u), 0u);
   kmt.zero_next(MockKmt::Call::escape);
-  CHECK_STATUS(rig.escape(record), Status::ok);
-  CHECK_EQ(u32_at(record, 12u), 0u);
-  CHECK_EQ(kmt.bindings(), 0u);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(u32_at(record, 8u), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 0u);
   const std::uint8_t scripted[4] = {0xEEu, 0xDDu, 0xCCu, 0xBBu};
   kmt.answer_next_escape(scripted, sizeof scripted);
-  CHECK_STATUS(rig.escape(record), Status::ok);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_EQ(u32_at(record, 0u), 0xBBCCDDEEu);
   CHECK_EQ(record[4], 1u);   /* the rest of the record as it was */
-  CHECK_EQ(kmt.bindings(), 0u);
-  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
-  CHECK_STATUS(rig.escape(record), Status::ok);   /* the script was for one escape */
-  CHECK_EQ(u32_at(record, 12u), 0x00100003u);
+  CHECK_EQ(kmt.ram_chunks(), 0u);
+  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);   /* the script was for one escape */
+  CHECK_EQ(u32_at(record, 8u), MockKmt::first_chunk_resource);
   std::uint8_t too_long[MockKmt::max_private + 1u] = {};
   std::memset(too_long, 0x77, sizeof too_long);
   kmt.answer_next_escape(too_long, sizeof too_long);
-  std::uint8_t cut[HostVisibleBindRecord::encoded_size + 1u] = {};
-  CHECK_STATUS(rig.escape(cut, HostVisibleBindRecord::encoded_size), Status::ok);
-  CHECK_EQ(cut[HostVisibleBindRecord::encoded_size - 1u], 0x77u);
-  CHECK_EQ(cut[HostVisibleBindRecord::encoded_size], 0u);
+  std::uint8_t cut[av::HostWindowRecord::encoded_size + 1u] = {};
+  CHECK_STATUS(rig.escape(cut, av::HostWindowRecord::encoded_size), Status::ok);
+  CHECK_EQ(cut[av::HostWindowRecord::encoded_size - 1u], 0x77u);
+  CHECK_EQ(cut[av::HostWindowRecord::encoded_size], 0u);
   std::uint8_t big[MockKmt::max_private + 8u] = {1u};
   kmt.zero_next(MockKmt::Call::escape);
   CHECK_STATUS(rig.escape(big, sizeof big), Status::ok);
@@ -825,7 +817,7 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
 TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
-  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint32_t context = rig.context();
   struct Played {
       std::uint32_t times;
       std::uint32_t waits_seen;
@@ -955,7 +947,7 @@ TEST(mock_kmt, a_large_allocation_is_viewed_whole)
 { MockKmt kmt;
   EscapeRig rig(kmt);
   const std::uint64_t bytes = std::uint64_t{64} << 20u;
-  const std::uint32_t large = rig.allocate(av::AllocationKind::host_visible_memory, bytes);
+  const std::uint32_t large = rig.allocate(av::AllocationKind::client, bytes);
   void *view = nullptr;
   CHECK_STATUS(kmt.lock(rig.device(), large, view), Status::ok);
   auto *const whole = static_cast<std::uint8_t *>(view);
@@ -1388,29 +1380,15 @@ TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
   CHECK_STATUS(kmt.destroy_shared_allocation(creator, carrier), Status::ok);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-namespace {
-
-void encode_window(av::HostWindowRecord::Operation operation, std::uint64_t bytes, std::uint32_t resource,
-                   std::uint8_t *record)
-{
-    CHECK_STATUS(av::HostWindowRecord(operation, bytes, resource).encode(record, av::HostWindowRecord::encoded_size),
-                 Status::ok);
-}
-
-}  // namespace
-
-/* As the driver answers a HostWindowRecord: NOT_SUPPORTED with no window;
- * with one, an open placed first fit whose address is writable memory, a
- * close only of a chunk the same context holds, a record that is no request
- * refused, and the context's teardown closing what it still holds. */
+/* As the driver answers a HostWindowRecord with a window: an open placed first
+ * fit whose address is writable memory - one with no room is guest RAM
+ * instead - a close only of a chunk the same context holds, a record that is
+ * no request refused, and the context's teardown closing what it still holds. */
 TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
 { MockKmt kmt;
   EscapeRig rig(kmt);
   std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
-  encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
-  CHECK_STATUS(rig.escape(record, sizeof record), Status::not_supported);
   CHECK(kmt.window_base() == nullptr);
-
   kmt.open_host_window(4u * 4096u);
   CHECK(kmt.window_base() != nullptr);
   encode_window(av::HostWindowRecord::Operation::open, 4097u, 0u, record);
@@ -1427,9 +1405,16 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_STATUS(second.accept_answer(record, sizeof record), Status::ok);
   CHECK_EQ(second.address(), first.address() + 2u * 4096u);
-  /* One page left of four is no room for three. */
+  /* One page left of four is no room for three, nor is a request larger than
+   * the whole window. */
   encode_window(av::HostWindowRecord::Operation::open, 3u * 4096u, 0u, record);
-  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(u32_at(record, 8u), MockKmt::first_chunk_resource);
+  encode_window(av::HostWindowRecord::Operation::open, 5u * 4096u, 0u, record);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  CHECK_EQ(u32_at(record, 8u), MockKmt::first_chunk_resource + 1u);
+  CHECK_EQ(kmt.ram_chunks(), 2u);
+  CHECK_EQ(kmt.window_chunks(), 2u);
   /* A scripted refusal, once. */
   kmt.refuse_next_window_open(refused_code);
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
@@ -1460,13 +1445,14 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_EQ(kmt.window_chunks(), 2u);
   CHECK_STATUS(kmt.destroy_context(rig.context()), Status::ok);
   CHECK_EQ(kmt.window_chunks(), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* The window's chunk slots run out as the driver's do. */
+/* The chunk slots, of either kind, run out as the driver's do. */
 TEST(mock_kmt_escape, a_host_window_refuses_past_its_chunk_slots)
 { MockKmt kmt;
   EscapeRig rig(kmt);
-  kmt.open_host_window((MockKmt::max_window_chunks + 1u) * 4096u);
+  kmt.open_host_window(4096u);
   std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
   for (std::uint32_t chunk = 0u; chunk < MockKmt::max_window_chunks; chunk++) {
       encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
@@ -1474,7 +1460,9 @@ TEST(mock_kmt_escape, a_host_window_refuses_past_its_chunk_slots)
   }
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
-  CHECK_EQ(kmt.window_chunks(), MockKmt::max_window_chunks);
+  CHECK_EQ(kmt.window_chunks(), 1u);
+  CHECK_EQ(kmt.ram_chunks(), MockKmt::max_window_chunks - 1u);
   /* A window given again starts empty. */
   kmt.open_host_window(4096u);
-  CHECK_EQ(kmt.window_chunks(), 0u); }
+  CHECK_EQ(kmt.window_chunks(), 0u);
+  CHECK_EQ(kmt.ram_chunks(), 0u); }

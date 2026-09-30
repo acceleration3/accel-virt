@@ -1,14 +1,16 @@
 /* One sub-API context's transport to the host, over D3DKMT (docs/protocol.md;
  * feature 043). It is the ClientTransport the generated client is handed: it
- * owns the context's ring, reply slot and a small DMA buffer for the submission
- * descriptor, all allocated on a shared GuestConnection's device and kept
- * mapped for the context's life. request_writer lends room for one command in
- * staging memory the caller owns, sized to its largest command - for an ICD far
- * more than a stack holds (feature 045); send_* frames it as a batch, publishes
- * it, rings it through D3DKMTSubmitCommand on the virtual context, and - for a
- * synchronous call - waits for the context and reads the reply. send_batch
- * publishes commands the caller framed itself. The record it was built with is
- * the private data the create-context carried; the miniport decoded it. */
+ * holds the page that names the context and a small DMA buffer for the
+ * submission descriptor, allocated on a shared GuestConnection's device, and
+ * the views the driver gives it of the ring and reply slot the context runs on
+ * - memory the driver owns, for the context's life ("Context memory").
+ * request_writer lends room for one command in staging memory the caller owns,
+ * sized to its largest command - for an ICD far more than a stack holds
+ * (feature 045); send_* frames it as a batch, publishes it, rings it through
+ * D3DKMTSubmitCommand on the virtual context, and - for a synchronous call -
+ * waits for the context and reads the reply. send_batch publishes commands the
+ * caller framed itself. The record it was built with is the private data the
+ * create-context carried; the miniport decoded it. */
 #ifndef AV_KMT_TRANSPORT_HPP
 #define AV_KMT_TRANSPORT_HPP
 
@@ -46,14 +48,16 @@ public:
                  uint8_t *staging, size_t staging_bytes);
     ~KmtTransport();
 
-    /* Creates the ring, fence, reply and DMA allocations, maps and locks them,
-     * and creates the virtual context whose private data - the RvkContextRecord -
-     * names the ring, fence and reply by the handles just allocated, for the
-     * miniport to publish. invalid_state once set up; invalid_parameter, with
-     * nothing asked of the Kmt, for staging with no room past a command header;
-     * the Kmt's own error otherwise, with nothing left open. The record carries
-     * `options` (feature 050): options it cannot carry - any but the defaults
-     * off OpenGL, or none OpenGL has - are invalid_parameter, asked of no one. */
+    /* Creates the context's name and its DMA buffer, creates the virtual
+     * context whose private data - the RvkContextRecord - names it and sizes
+     * its reply slot, and asks the driver where it mapped the ring and reply
+     * slot it made with it. invalid_state once set up; invalid_parameter, with
+     * nothing asked of the Kmt, for staging with no room past a command header
+     * or a reply slot the record cannot size; the Kmt's own error otherwise,
+     * and malformed for views the driver could not have answered, with nothing
+     * left open. The record carries `options` (feature 050): options it cannot
+     * carry - any but the defaults off OpenGL, or none OpenGL has - are
+     * invalid_parameter, asked of no one. */
     [[nodiscard]] Status initialize(const GlContextOptions &options = GlContextOptions());
     void                 teardown();
     bool                 established() const;
@@ -77,8 +81,9 @@ public:
     /* The virtual context's D3DKMT handle, for a call the driver takes beside
      * the transport - an escape on this context; 0 unless established. */
     uint32_t             context() const;
-    /* The ring allocation's D3DKMT handle, by which another OpenGL context of
-     * this process names this one to share with; 0 unless established. */
+    /* The D3DKMT handle of the page that names the context, by which another
+     * OpenGL context of this process names this one to share with; 0 unless
+     * established. */
     uint32_t             ring() const;
 
     /* A round trip of the transport's own no-op (feature 044), which the
@@ -121,18 +126,18 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t allocation_count = 4u;   /* ring, fence, reply, dma */
-    static constexpr uint32_t ring_index  = 0u;
-    static constexpr uint32_t fence_index = 1u;
-    static constexpr uint32_t reply_index = 2u;
-    static constexpr uint32_t dma_index   = 3u;
+    static constexpr uint32_t allocation_count = 2u;   /* name, dma */
+    static constexpr uint32_t name_index  = 0u;
+    static constexpr uint32_t dma_index   = 1u;
     /* The NTSTATUS a kernel wait that ran out its bound leaves in last_code(). */
     static constexpr uint32_t wait_timed_out = 0xC00000B5u;
 
     /* Whether the record can carry `options` for this sub-API and order. */
     bool                 record_carries(const GlContextOptions &options) const;
     [[nodiscard]] Status setup_allocation(uint32_t index, AllocationKind kind, uint64_t bytes, bool map_gpu,
-                                          bool do_lock, uint8_t *&view, uint64_t &address);
+                                          uint64_t &address);
+    /* The ring and reply slot where the driver mapped them for this context. */
+    [[nodiscard]] Status adopt_views();
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
     /* Waits for everything sent so far, and retires its fences. */
@@ -156,10 +161,7 @@ private:
     uint32_t         reply_bytes_;
     uint8_t         *staging_;
     size_t           staging_bytes_;
-    uint32_t         allocations_[allocation_count];   /* ring, fence, reply, dma */
-    /* Which of them this process holds a view of: an unlock of one it never
-     * locked is a call D3DKMT refuses. */
-    bool             locked_[allocation_count];
+    uint32_t         allocations_[allocation_count];   /* name, dma */
     uint64_t         dma_address_;
     uint32_t         context_;
     /* Whether the OS gave this context out as one a hardware queue may run on:

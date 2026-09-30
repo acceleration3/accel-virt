@@ -168,7 +168,6 @@ TEST(fullstack_rvk, the_host_gpu_copies_between_two_imported_guest_chunks)
   GuestReport report;
   run_alone<av::HostVisibleImportScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
-  CHECK(reported(report, "ok import.src_pages 16384"));
   CHECK(reported(report, "ok import.wait 1"));
   CHECK(reported(report, "ok import.copied 1048576"));
   CHECK(reported(report, "ok import.guest_saw_host_write 0"));
@@ -208,7 +207,7 @@ TEST(fullstack_rvk, the_rvk_run_passes_every_step_on_the_host_gpu)
     failed = suite.run_rvk(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK(reported(report, "rvktest: 91 passed, 0 failed"));
+  CHECK(reported(report, "rvktest: 85 passed, 0 failed"));
   /* The benchmark measured both paths on the one boot, on the real GPU. */
   CHECK(reported(report, "note submit.doorbell connected"));
   CHECK(std::strstr(report.text(), "\nok submit.ratio ") != nullptr);

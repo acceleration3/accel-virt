@@ -106,7 +106,7 @@ public:
       CHECK_EQ(entry<CreateDevice>("vkCreateDevice")(physical_, &info, nullptr, &device_), VK_SUCCESS); }
     ~MemoryRig()
     { if (instance_ != VK_NULL_HANDLE) rig_.destroy_instance(instance_);
-      CHECK_EQ(rig_.kmt().bindings(), 0u);
+      CHECK_EQ(rig_.kmt().ram_chunks(), 0u);
       CHECK_EQ(rig_.kmt().misuses(), 0u); }
 
     IcdRig          &rig() { return rig_; }
@@ -276,9 +276,9 @@ TEST(icd_memory, a_host_visible_allocation_maps_the_chunk_itself_with_no_round_t
 { MemoryRig rig;
   const VkDeviceMemory first = rig.host_visible(page, imported, true);
   const VkDeviceMemory second = rig.host_visible(2u * page + 1u, imported + 1u, false);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_EQ(rig.last_command(), CommandHeader::import_blob_id);
-  const std::uint8_t *const chunk = rig.kmt().view_of(rig.kmt().bound_allocation(0u));
+  const std::uint8_t *const chunk = rig.kmt().ram_chunk(0u);
   CHECK(chunk != nullptr);
 
   const std::uint32_t commands = rig.kmt().commands();
@@ -301,11 +301,11 @@ TEST(icd_memory, a_host_visible_allocation_maps_the_chunk_itself_with_no_round_t
   rig.host().nop();
   rig.free(first);
   CHECK_EQ(rig.last_command(), CommandHeader::release_blob_id);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_EQ(rig.map(first, 0u, 1u, data), VK_ERROR_MEMORY_MAP_FAILED);
   rig.host().nop();
   rig.free(second);
-  CHECK_EQ(rig.kmt().bindings(), 0u); }
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
 
 /* The range asked for must lie in the allocation - which is its whole pages -
  * and be some bytes; flags are refused, having none this ICD implements. */
@@ -421,7 +421,7 @@ TEST(icd_memory, a_device_local_allocation_is_the_host_s_and_cannot_be_mapped)
   CHECK_EQ(rig.allocate(page, 0u, memory), VK_SUCCESS);
   CHECK(memory == as_memory(allocated));
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkAllocateMemory));
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   void *data = nullptr;
   CHECK_EQ(rig.map(memory, 0u, 1u, data), VK_ERROR_MEMORY_MAP_FAILED);
   CHECK(data == nullptr);
@@ -457,13 +457,13 @@ TEST(icd_memory, a_host_visible_allocation_refused_anywhere_is_out_of_device_mem
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   rig.host().vk_memory_properties(types, visible);
   CHECK_EQ(rig.rig().log().holding("memory types cannot be learnt"), 1u);
-  rig.kmt().fail_at(MockKmt::Call::create_allocation, 1u, MockKmt::invalid_parameter);
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the chunk's open */
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 1u);
   rig.host().blob_import(4u, 0u);
   CHECK_EQ(rig.allocate(page, 2u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 2u);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
 /* A release the host answers wrongly is logged; the allocation is gone. */
@@ -473,7 +473,7 @@ TEST(icd_memory, a_refused_release_is_logged_and_the_allocation_gone)
   rig.host().blob_import(0u, 1u);
   rig.free(memory);
   CHECK_EQ(rig.rig().log().holding("release was refused"), 1u);
-  CHECK_EQ(rig.kmt().bindings(), 0u); }
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
 
 /* Destroying the device releases its imports and gives its chunks back before
  * the device's own destroy is sent: the host refuses to unbind a chunk it still
@@ -491,7 +491,7 @@ TEST(icd_memory, destroying_the_device_gives_its_memory_back_first)
   CHECK_EQ(rig.kmt().command_id(commands), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands + 1u), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands + 2u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkDestroyDevice));
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   /* The memory lock around both releases and the unbind, then the destroy,
    * with nothing but root-lock lookups between. */
   const char *const trace = rig.rig().trace().text();
@@ -506,7 +506,7 @@ TEST(icd_memory, a_device_whose_memory_is_not_released_whole_still_goes)
   rig.host().blob_import(0u, 1u);
   rig.entry<DestroyDevice>("vkDestroyDevice")(rig.device(), nullptr);
   CHECK_EQ(rig.rig().log().holding("not released whole"), 1u);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK(rig.rig().root().invariants_hold()); }
 
 /* Destroying the instance releases every device's memory - devices that never
@@ -526,7 +526,7 @@ TEST(icd_memory, destroying_the_instance_gives_every_device_s_memory_back_first)
   CHECK(rig.rig().root().invariants_hold());
   CHECK_EQ(rig.kmt().command_id(commands), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands + 1u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkDestroyInstance));
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK(rig.rig().root().connection_of(rig.device(), Kind::device) == nullptr); }
 
 TEST(icd_memory, an_instance_or_device_it_did_not_make_is_nothing_to_destroy)
@@ -605,7 +605,7 @@ TEST(device_memory, releases_every_chunk_allocation_at_once)
   rig.host().nop();
   CHECK_STATUS(memory.release_all(), Status::ok);
   CHECK(memory.invariants_hold());
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   void *data = nullptr;
   CHECK_EQ(memory.map(first, 0u, 1u, 0u, data), VK_ERROR_MEMORY_MAP_FAILED); }
 

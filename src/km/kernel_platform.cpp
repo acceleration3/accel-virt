@@ -72,6 +72,28 @@ uint64_t KernelPlatform::physical_address(void *block)
     return static_cast<uint64_t>(MmGetPhysicalAddress(block).QuadPart);
 }
 
+/* From anywhere in RAM, since the device reads guest physical memory directly;
+ * all of it or nothing (MM_ALLOCATE_FULLY_REQUIRED), and zeroed, which is
+ * MmAllocatePagesForMdlEx's default. The MDL's byte count is a ULONG. */
+void *KernelPlatform::allocate_pages(uint64_t bytes)
+{
+    AV_SCOPE("KernelPlatform::allocate_pages");
+    if (bytes == 0u || bytes > max_mapping_bytes || (bytes & (PAGE_SIZE - 1u)) != 0u) return nullptr;
+    PHYSICAL_ADDRESS lowest = {};
+    PHYSICAL_ADDRESS highest = {};
+    PHYSICAL_ADDRESS skip = {};
+    highest.QuadPart = MAXLONGLONG;
+    return MmAllocatePagesForMdlEx(lowest, highest, skip, static_cast<SIZE_T>(bytes), MmCached,
+                                   MM_ALLOCATE_FULLY_REQUIRED);
+}
+
+void KernelPlatform::release_pages(void *pages)
+{
+    AV_SCOPE("KernelPlatform::release_pages");
+    MmFreePagesFromMdl(static_cast<PMDL>(pages));
+    ExFreePool(pages);
+}
+
 /* MmGetMdlPfnArray is the only way to the pages of a locked MDL; the span the
  * MDL describes bounds the read, because dxgkrnl's page count and ours coming
  * apart would have the device read memory the allocation does not own. */
@@ -142,25 +164,50 @@ void KernelPlatform::unmap_pages(uint8_t *view, void *mapping)
  * to read, so the MDL's page array is written by hand; they never move, which
  * is what MDL_PAGES_LOCKED claims. Write-back, because the host maps the same
  * pages write-back and an alias of any other type reads stale data
- * (docs/host-window.md). A user-mode mapping the process's address space
- * refuses is raised as an exception, not answered with null. */
+ * (docs/host-window.md). */
 Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_to_process");
     view = 0u;
     mapping = nullptr;
     if (bytes == 0u || bytes > max_mapping_bytes) return Status::no_memory;
-    auto *const record =
-        static_cast<ProcessMapping *>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(ProcessMapping), pool_tag_));
-    if (record == nullptr) return Status::no_memory;
-    ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
     PMDL const mdl = IoAllocateMdl(reinterpret_cast<PVOID>(physical), static_cast<ULONG>(bytes), FALSE, FALSE, nullptr);
     if (mdl == nullptr) return Status::no_memory;
-    ScopeExit free_mdl([mdl] { IoFreeMdl(mdl); });
     PFN_NUMBER *const frames = MmGetMdlPfnArray(mdl);
     const PFN_NUMBER  first = static_cast<PFN_NUMBER>(physical >> PAGE_SHIFT);
     for (uint64_t page = 0u; page < bytes >> PAGE_SHIFT; page++) frames[page] = first + page;
     mdl->MdlFlags |= MDL_PAGES_LOCKED;
+    return map_mdl_to_process(mdl, view, mapping);
+}
+
+/* A mapping of its own over the same frames, so unmap_from_process frees what
+ * it maps whichever kind of memory it was, and the pages' own MDL stays the
+ * record release_pages takes. */
+Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_pages_to_process");
+    view = 0u;
+    mapping = nullptr;
+    auto *const  owned = static_cast<MDL *>(pages);
+    const ULONG  bytes = MmGetMdlByteCount(owned);
+    PMDL const   mdl = IoAllocateMdl(nullptr, bytes, FALSE, FALSE, nullptr);
+    if (mdl == nullptr) return Status::no_memory;
+    RtlCopyMemory(MmGetMdlPfnArray(mdl), MmGetMdlPfnArray(owned),
+                  ADDRESS_AND_SIZE_TO_SPAN_PAGES(nullptr, bytes) * sizeof(PFN_NUMBER));
+    mdl->MdlFlags |= MDL_PAGES_LOCKED;
+    return map_mdl_to_process(mdl, view, mapping);
+}
+
+/* A user-mode mapping the process's address space refuses is raised as an
+ * exception, not answered with null. */
+Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t &view, void *&mapping)
+{
+    AV_SCOPE("KernelPlatform::map_mdl_to_process");
+    ScopeExit free_mdl([mdl] { IoFreeMdl(mdl); });
+    auto *const record =
+        static_cast<ProcessMapping *>(ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(ProcessMapping), pool_tag_));
+    if (record == nullptr) return Status::no_memory;
+    ScopeExit free_record([this, record] { ExFreePoolWithTag(record, pool_tag_); });
     PVOID user = nullptr;
     __try {
         user = MmMapLockedPagesSpecifyCache(mdl, UserMode, MmCached, nullptr, FALSE, NormalPagePriority);

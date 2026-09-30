@@ -173,7 +173,7 @@ namespace {
 
 /* The private data a process sends to ask for an rvk context, encoded. */
 std::size_t rvk_private_data(std::uint8_t *bytes, std::size_t capacity)
-{ RvkContextRecord record(SubApi::vulkan, 16u, 2u, 3u, 4u);
+{ RvkContextRecord record(SubApi::vulkan, 16u, 2u, 4096u);
   if (record.encode(bytes, capacity) != Status::ok) return 0u;
   return RvkContextRecord::encoded_size; }
 

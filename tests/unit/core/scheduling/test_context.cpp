@@ -95,9 +95,9 @@ TEST(context, becomes_the_guest_half_of_an_rvk_context)
   const GpuMmuGeometry geometry(platform);
   Context context(platform, device, geometry, 0u, 4u);
   CHECK(!context.is_rvk());
-  context.become_rvk(av::RvkContextRecord(av::SubApi::opencl, 14u, 5u, 6u, 0u));
+  context.become_rvk(av::RvkContextRecord(av::SubApi::opencl, 14u, 5u, 8192u));
   CHECK(context.is_rvk());
   CHECK_EQ(context.rvk_record().sub_api(), av::SubApi::opencl);
+  CHECK_EQ(context.rvk_record().ring_order(), 14u);
   CHECK_EQ(context.rvk_record().ring(), 5u);
-  CHECK_EQ(context.rvk_record().fence(), 6u);
-  CHECK_EQ(context.rvk_record().reply(), 0u); }
+  CHECK_EQ(context.rvk_record().reply_bytes(), 8192u); }

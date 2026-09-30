@@ -643,6 +643,118 @@ TEST(mock_platform_map_to_process, a_resolver_puts_the_view_on_the_memory_behind
   CHECK(backed != reinterpret_cast<std::uintptr_t>(backed_page));
   platform.unmap_from_process(first); }
 
+/* Pages the driver owns: zeroed, reachable by frame as a device reaches guest
+ * memory, and one memory with the process's view of them. */
+TEST(mock_platform_pages, are_zeroed_and_reached_by_frame_and_by_process_view)
+{ MockPlatform platform;
+  void *const pages = platform.allocate_pages(0x3000u);
+  CHECK(pages != nullptr);
+  CHECK_EQ(platform.owned_page_blocks(), 1u);
+  std::uint64_t frames[3] = {};
+  CHECK_STATUS(platform.read_page_frames(pages, 0u, 3u, frames), av::Status::ok);
+  CHECK_EQ(frames[1], frames[0] + 0x1000u);
+  CHECK_EQ(frames[2], frames[0] + 0x2000u);
+  CHECK_EQ(frames[0] & 0xFFFu, 0u);
+  /* The last two, and nothing past the end. */
+  std::uint64_t tail[2] = {};
+  CHECK_STATUS(platform.read_page_frames(pages, 1u, 2u, tail), av::Status::ok);
+  CHECK_EQ(tail[0], frames[1]);
+  CHECK_STATUS(platform.read_page_frames(pages, 2u, 2u, tail), av::Status::invalid_parameter);
+  std::uint64_t view = 0u;
+  void *mapping = nullptr;
+  CHECK_STATUS(platform.map_pages_to_process(pages, view, mapping), av::Status::ok);
+  CHECK(platform.maps_into_process(view, frames[0], 0x3000u));
+  auto *const bytes = reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(view));
+  CHECK_EQ(bytes[0], 0u);
+  CHECK_EQ(bytes[0x2FFF], 0u);
+  bytes[0x1004] = 0x5Au;
+  std::uint8_t *const page = platform.map_frame(frames[1]);
+  CHECK(page != nullptr);
+  CHECK_EQ(page[4], 0x5Au);
+  platform.unmap_frame(page);
+  platform.unmap_from_process(mapping);
+  platform.release_pages(pages);
+  CHECK_EQ(platform.owned_page_blocks(), 0u);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+/* Blocks are numbered in the order they were handed out - a refused one takes
+ * no number - and a test reaches one by its number only while it is live. */
+TEST(mock_platform_pages, are_reached_by_the_order_they_were_made_while_live)
+{ MockPlatform platform;
+  CHECK_EQ(platform.page_blocks_made(), 0u);
+  CHECK(platform.page_block(0u) == nullptr);
+  void *const first = platform.allocate_pages(0x1000u);
+  platform.fail_page_allocation_at(1u);
+  CHECK(platform.allocate_pages(0x1000u) == nullptr);
+  void *const second = platform.allocate_pages(0x2000u);
+  CHECK_EQ(platform.page_blocks_made(), 2u);
+  std::uint64_t frame = 0u;
+  CHECK_STATUS(platform.read_page_frames(second, 1u, 1u, &frame), av::Status::ok);
+  std::uint8_t *const page = platform.map_frame(frame);
+  page[7] = 0x3Cu;
+  CHECK_EQ(platform.page_block(1u)[0x1007], 0x3Cu);
+  CHECK(platform.page_block(0u) != nullptr && platform.page_block(0u) != platform.page_block(1u));
+  CHECK(platform.page_block(2u) == nullptr);
+  platform.unmap_frame(page);
+  platform.release_pages(first);
+  CHECK(platform.page_block(0u) == nullptr);
+  void *const third = platform.allocate_pages(0x1000u);   /* the freed slot, a new number */
+  CHECK(platform.page_block(0u) == nullptr);
+  CHECK(platform.page_block(2u) != nullptr);
+  platform.release_pages(second);
+  platform.release_pages(third);
+  CHECK_EQ(platform.page_blocks_made(), 3u);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_pages, refuse_partial_pages_dispatch_and_the_requested_failure)
+{ MockPlatform platform;
+  CHECK(platform.allocate_pages(0u) == nullptr);
+  CHECK(platform.allocate_pages(0x1800u) == nullptr);
+  platform.set_irql(Irql::dispatch);
+  CHECK(platform.allocate_pages(0x1000u) == nullptr);
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::allocation_at_dispatch));
+  platform.fail_page_allocation_at(2u);
+  void *const first = platform.allocate_pages(0x1000u);
+  CHECK(first != nullptr);
+  CHECK(platform.allocate_pages(0x1000u) == nullptr);
+  void *const third = platform.allocate_pages(0x1000u);
+  CHECK(third != nullptr);
+  /* A failed process map leaves nothing mapped, and counts with map_to_process. */
+  std::uint64_t view = 9u;
+  void *mapping = &view;
+  platform.fail_process_map_at(1u);
+  CHECK_STATUS(platform.map_pages_to_process(first, view, mapping), av::Status::no_memory);
+  CHECK_EQ(view, 0u);
+  CHECK(mapping == nullptr);
+  CHECK_EQ(platform.process_mappings(), 0u);
+  platform.release_pages(first);
+  platform.release_pages(third);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+/* Pages freed under a process's view would be memory it writes after someone
+ * else owns it. */
+TEST(mock_platform_pages, releasing_pages_a_process_still_maps_is_misuse)
+{ MockPlatform platform;
+  void *const pages = platform.allocate_pages(0x1000u);
+  std::uint64_t view = 0u;
+  void *mapping = nullptr;
+  CHECK_STATUS(platform.map_pages_to_process(pages, view, mapping), av::Status::ok);
+  platform.release_pages(pages);
+  CHECK(platform.claim(Violation::frame_misuse));
+  platform.unmap_from_process(mapping);
+  /* A record never allocated maps nothing. */
+  int stranger = 0;
+  CHECK_STATUS(platform.map_pages_to_process(&stranger, view, mapping), av::Status::no_memory);
+  CHECK(platform.claim(Violation::frame_misuse));
+  CHECK_STATUS(platform.read_page_frames(&stranger, 0u, 1u, &view), av::Status::invalid_parameter);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_destruction, pages_left_allocated_fail_the_test)
+{ { MockPlatform platform;
+    CHECK(platform.allocate_pages(0x1000u) != nullptr); }
+  CHECK(TestRegistry::instance().take_current_failure()); }
+
 TEST(mock_platform_destruction, a_process_view_left_mapped_fails_the_test)
 { { MockPlatform platform;
     std::uint64_t view = 0u;

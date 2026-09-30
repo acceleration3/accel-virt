@@ -272,7 +272,7 @@ TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u);
-  CHECK_EQ(rig.kmt().bindings(), 0u); }
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u); }
 
 TEST(guest_gl_context, no_rvkgpu_device_is_not_supported)
 { GlContextRig rig;
@@ -299,8 +299,7 @@ TEST(guest_gl_context, a_driver_refusal_of_the_transport_is_invalid_parameter_wi
 { struct Step { MockKmt::Call call; std::uint32_t nth; };
   const Step steps[] = {
       {MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::create_allocation, 2u},
-      {MockKmt::Call::create_allocation, 3u}, {MockKmt::Call::create_allocation, 4u},
-      {MockKmt::Call::lock, 1u},              {MockKmt::Call::create_context_virtual, 1u},
+      {MockKmt::Call::create_context_virtual, 1u}, {MockKmt::Call::escape, 1u},
   };
   for (const Step &step : steps) {
       GlContextRig rig;
@@ -328,8 +327,9 @@ TEST(guest_gl_context, a_transport_out_of_memory_is_no_memory)
 TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
 { GlContextRig rig;
   Context context(rig);
-  /* The transport's four allocations, then the arena's chunk. */
-  rig.kmt().fail_at(MockKmt::Call::create_allocation, 5u, MockKmt::invalid_parameter);
+  /* The transport's views and tail are the first two escapes; the arena's
+   * chunk is the third. */
+  rig.kmt().fail_at(MockKmt::Call::escape, 3u, MockKmt::invalid_parameter);
   rig.host().gl_string("vendor");
   rig.host().gl_string(renderer);
   rig.host().gl_string("4.6");

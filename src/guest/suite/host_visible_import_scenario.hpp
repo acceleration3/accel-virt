@@ -1,7 +1,8 @@
 /* A guest process's memory as the host GPU's memory (feature 045, research.md
- * §7, the live experiment): two 64 MiB host-visible chunks, each bound to a
- * Vulkan context by escape and imported with IMPORT_BLOB as a host-visible
- * memory type, back two buffers on the host's device. The guest writes a
+ * §7, the live experiment): two 64 MiB chunks the driver gives a Vulkan
+ * context - of its host window, or of guest RAM where the window cannot hold
+ * one - each imported with IMPORT_BLOB as a host-visible memory type, back two
+ * buffers on the host's device. The guest writes a
  * GuestPattern into the first chunk's view and clears the second; the host
  * copies the first buffer into the second with vkCmdCopyBuffer in a submitted
  * command buffer, its fence waited in slices a TDR never sees; and the guest
@@ -9,8 +10,8 @@
  * and written pages the guest reads, with no copy in between.
  *
  * Steps: the context's; instance, physical_device, device; memory_types with
- * how many; for each side (src_, dst_) chunk, lock, bind with the resource,
- * pages, buffer, import with the memory type the host took, bind_buffer; then
+ * how many; for each side (src_, dst_) chunk with the resource, pages, buffer,
+ * import with the memory type the host took, bind_buffer; then
  * command_pool, command_buffer, record, queue, fence, submit, wait with the
  * slices waited, copied with the bytes that match, guest_saw_host_write with
  * the destination's bytes that were not zero before the copy; release. Every
@@ -24,7 +25,7 @@
 #include "guest/suite/scenario_transport.hpp"
 #include "guest/suite/vulkan_device_chain.hpp"
 #include "guest/transport/blob_import.hpp"
-#include "guest/transport/host_visible_chunk.hpp"
+#include "guest/transport/host_window_chunk.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
@@ -74,7 +75,7 @@ private:
     ScenarioTransport                link_;
     VulkanDeviceChain                chain_;
     GuestPattern                     pattern_;
-    HostVisibleChunk                 chunks_[sides];
+    HostWindowChunk                  chunks_[sides];
     BlobImport                       imports_[sides];
     VkBuffer                         buffers_[sides];
     VkPhysicalDeviceMemoryProperties memory_types_;

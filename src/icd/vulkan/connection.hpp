@@ -25,7 +25,7 @@
 #include <stdint.h>
 
 namespace av {
-class BlobChunk;
+class HostWindowChunk;
 class BlockSource;
 class ClientTransport;
 class Kmt;
@@ -82,15 +82,15 @@ public:
 
     /* A chunk of `bytes` built in `chunk` and bound to this connection's
      * context, under the lock: the device's host window when the kernel has
-     * room there, else guest RAM on this connection's device (BlobChunk).
+     * room there, else guest RAM the kernel owns (HostWindowChunk).
      * invalid_state while not open, faulted, or with `chunk` already holding
      * one, and nothing asked of the Kmt; otherwise the chunk's refusal, with
      * whatever was made given back and `chunk` empty. */
-    [[nodiscard]] Status open_chunk(ObjectStorage<BlobChunk> &chunk, uint64_t bytes);
+    [[nodiscard]] Status open_chunk(ObjectStorage<HostWindowChunk> &chunk, uint64_t bytes);
     /* Gives back the chunk `chunk` holds, under the lock, whether or not the
      * connection has faulted: the first refusal, and `chunk` empty either
      * way. */
-    [[nodiscard]] Status close_chunk(ObjectStorage<BlobChunk> &chunk);
+    [[nodiscard]] Status close_chunk(ObjectStorage<HostWindowChunk> &chunk);
 
     /* Its fields on the line `writer` has open: whether open and faulted, and
      * the adapter, LUID, device and context it sends through. */

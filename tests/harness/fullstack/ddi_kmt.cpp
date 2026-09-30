@@ -41,6 +41,11 @@
 namespace av {
 
 namespace {
+
+void *lend_chunk_ram(void *context, std::uint64_t bytes, std::uint64_t &physical)
+{
+    return static_cast<DdiKmt *>(context)->lend_pages(bytes, physical);
+}
 /* DXGK_CREATEALLOCATIONFLAGS::Resource, and DXGK_DESTROYALLOCATIONFLAGS::
  * DestroyResource: each is bit 0 of its own Value. */
 constexpr std::uint32_t resource_flag = 1u;
@@ -105,6 +110,7 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
       next_chunk_address_(chunk_ram_address), last_code_(0u), started_ns_(now_ns())
 {
     host_.add_guest_ram(chunk_ram_address, chunk_ram_bytes);
+    platform_.back_pages_with(&lend_chunk_ram, this);
     /* A doorbell and its queue are the adapter's, and dxgkrnl gives them back
      * before the adapter stops. */
     fdo_.on_stopping(
@@ -124,6 +130,7 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
 /* Whatever the process still held after the adapter went away is only memory. */
 DdiKmt::~DdiKmt()
 {
+    platform_.back_pages_with(nullptr, nullptr);
     dxgkrnl_.on_interrupt(nullptr, nullptr);
     for (Allocation &slot : allocations_)
         if (slot.handle != 0u) release(slot);
@@ -341,8 +348,8 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
         status = slot.frames != nullptr ? Status::ok : Status::no_memory;
     }
     if (status == Status::ok) {
-        if (slot.guest_ram == 0u) platform_.zero(slot.block, slot.bytes);
-        const std::uint64_t physical = slot.guest_ram != 0u ? slot.guest_ram : platform_.physical_address(slot.block);
+        platform_.zero(slot.block, slot.bytes);
+        const std::uint64_t physical = platform_.physical_address(slot.block);
         for (std::uint64_t index = 0u; index < pages; index++) slot.frames[index] = physical + index * page_bytes;
         slot.handle = handles_.insert(slot.driver);
         status = slot.handle != 0u ? Status::ok : Status::no_space;
@@ -356,25 +363,23 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
     return refuse(status);
 }
 
-/* The host GPU imports a host-visible chunk through a second mapping of its
- * pages, which only file-backed guest RAM allows - what the runner's shared
- * memory backend gives QEMU. Every other allocation stays in the platform's
- * memory, where the other tests read it. Chunk RAM is handed out once and never
- * reused, so it is still the zero pages the file began as. */
 Status DdiKmt::back(Allocation &slot)
 {
-    AllocationDescriptor descriptor;
-    const bool chunk = descriptor.decode(slot.private_data, AllocationDescriptor::encoded_size) == Status::ok &&
-                       descriptor.kind() == AllocationKind::host_visible_memory;
-    if (!chunk) {
-        slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
-        return slot.block != nullptr ? Status::ok : Status::no_memory;
-    }
-    if (slot.bytes > chunk_ram_address + chunk_ram_bytes - next_chunk_address_) return Status::no_memory;
-    slot.guest_ram = next_chunk_address_;
-    slot.block = host_.guest_ram(slot.guest_ram);
-    next_chunk_address_ += slot.bytes;
-    return Status::ok;
+    slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
+    return slot.block != nullptr ? Status::ok : Status::no_memory;
+}
+
+/* The host GPU imports a chunk of guest RAM through a second mapping of its
+ * pages, which only file-backed guest RAM allows - what the runner's shared
+ * memory backend gives QEMU - so the driver's own pages come from there while
+ * there is room. It is handed out once and never reused, so it is still the
+ * zero pages the file began as. */
+void *DdiKmt::lend_pages(std::uint64_t bytes, std::uint64_t &physical)
+{
+    if (bytes > chunk_ram_address + chunk_ram_bytes - next_chunk_address_) return nullptr;
+    physical = next_chunk_address_;
+    next_chunk_address_ += bytes;
+    return host_.guest_ram(physical);
 }
 
 Status DdiKmt::open_on(Allocation &slot, void *driver_device)
@@ -408,7 +413,7 @@ void DdiKmt::release(Allocation &slot)
             DdiSlot::DxgkDdiDestroyAllocation)(fdo_.context(), &request));
     }
     if (slot.handle != 0u) handles_.remove(slot.handle);
-    if (slot.block != nullptr && slot.guest_ram == 0u) platform_.release_contiguous(slot.block, slot.bytes);
+    if (slot.block != nullptr) platform_.release_contiguous(slot.block, slot.bytes);
     std::free(slot.frames);
     std::memset(static_cast<void *>(&slot), 0, sizeof slot);
 }

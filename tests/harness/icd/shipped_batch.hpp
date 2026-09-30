@@ -21,7 +21,7 @@ public:
     /* Room for the largest batch a connection ships. */
     static constexpr std::size_t max_bytes = 256u * 1024u;
 
-    /* `ring` is the ring allocation's handle. */
+    /* `ring` is the handle of the allocation the context is named by. */
     ShippedBatch(MockKmt &kmt, std::uint32_t ring);
     ~ShippedBatch();
     ShippedBatch(const ShippedBatch &) = delete;

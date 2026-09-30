@@ -17,12 +17,7 @@
 #include "harness/fullstack/full_stack_rig.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/context/sub_api.hpp"
-#include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/allocation_kind.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
 #include "proto/resources/host_window_record.hpp"
-#include "proto/resources/scanout_target.hpp"
-#include "proto/resources/surface_layout.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -43,7 +38,6 @@ using av::DdiSlot;
 using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
-using av::HostVisibleBindRecord;
 using av::HostWindowRecord;
 using av::KmtTransport;
 using av::KmtTransportProbe;
@@ -158,7 +152,9 @@ TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_se
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
-  CHECK_EQ(usage, 8192u + 3u * 4096u);   /* the ring's two pages, the fence page, reply slot and DMA buffer */
+  /* The page naming the context and the DMA buffer: the ring, fence page and
+   * reply slot are the driver's own pages, which no segment counts. */
+  CHECK_EQ(usage, 2u * 4096u);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
   CHECK_EQ(usage, 0u);
   CHECK_STATUS(kmt.query_video_memory(adapter + 1u, av::MemorySegmentGroup::local, budget, usage),
@@ -238,7 +234,7 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK(open.address() != 0u);
   CHECK_EQ(rig.device().device().blobs(), 4u);
   CHECK(rig.device().host().placed_at(0u) != nullptr);
-  CHECK_EQ(rig.platform().process_mappings(), 1u);
+  CHECK_EQ(rig.platform().process_mappings(), 3u);   /* and the context's ring and reply slot */
   /* The process's view is the host's memory: what it writes, the host reads. */
   auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
   view[0] = 0x5Au;
@@ -251,7 +247,7 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK(rig.device().host().placed_at(0u) == nullptr);
-  CHECK_EQ(rig.platform().process_mappings(), 0u);
+  CHECK_EQ(rig.platform().process_mappings(), 2u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
 
@@ -267,11 +263,12 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_EQ(kmt.open_objects(), 0u); }
 
 /* DdiKmt's escape is DxgkDdiEscape as dxgkrnl calls it: the driver's device and
- * context, a kernel copy of the record copied back out. A 64 MiB host-visible
- * chunk of the process becomes a GUEST blob of the context's own range, the
- * answer carries its resource and pages, and the unbind gives the blob back;
- * handles the process never had, and data that is no record, are refused. */
-TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_driver)
+ * context, a kernel copy of the record copied back out. A chunk larger than the
+ * whole window is guest RAM the driver owns instead, a GUEST blob of the
+ * context's own range the device imports, and the process's view is that
+ * memory; the close gives the blob back. Handles the process never had, and
+ * data that is no record, are refused. */
+TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_guest_ram_through_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
   DdiKmt &kmt = rig.kmt();
@@ -284,21 +281,12 @@ TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_
   KmtTransport transport(connection, SubApi::vulkan, ring_order,
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  const std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
-  std::uint8_t descriptor[av::AllocationDescriptor::encoded_size] = {};
-  CHECK_STATUS(av::AllocationDescriptor(av::AllocationKind::host_visible_memory, true, av::SurfaceLayout(),
-                                        chunk_bytes, av::ScanoutTarget())
-                   .encode(descriptor, sizeof descriptor),
-               Status::ok);
-  std::uint32_t chunk = 0u;
-  CHECK_STATUS(kmt.create_allocation(connection.device(), descriptor, sizeof descriptor, chunk), Status::ok);
-  std::uint64_t fence = 0u;
-  CHECK_STATUS(kmt.make_resident(connection.queue(), chunk, fence), Status::ok);
-  CHECK_STATUS(kmt.wait_for_fence(connection.device(), connection.fence_object(), fence), Status::ok);
+  const std::uint32_t mapped = rig.device().host().live_guest_mappings();
+  const std::uint64_t chunk_bytes = FullStackRig::hostmem_bytes + 0x1000u;
 
-  std::uint8_t bytes[HostVisibleBindRecord::encoded_size] = {};
-  HostVisibleBindRecord bind(HostVisibleBindRecord::Operation::bind, chunk, 0u);
-  CHECK_STATUS(bind.encode(bytes, sizeof bytes), Status::ok);
+  std::uint8_t bytes[HostWindowRecord::encoded_size] = {};
+  HostWindowRecord open(HostWindowRecord::Operation::open, chunk_bytes, 0u);
+  CHECK_STATUS(open.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context() + 1u, bytes, sizeof bytes),
                Status::invalid_parameter);
   CHECK_STATUS(kmt.escape(adapter, connection.device() + 1u, transport.context(), bytes, sizeof bytes),
@@ -307,24 +295,32 @@ TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_
                Status::invalid_parameter);
   CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
-  CHECK_STATUS(bind.accept_answer(bytes, sizeof bytes), Status::ok);
-  CHECK_EQ(bind.pages(), chunk_bytes / 4096u);
-  CHECK(bind.resource_id() != 0u);
+  CHECK_STATUS(open.accept_answer(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(open.bytes(), chunk_bytes);
+  CHECK(open.resource_id() != 0u);
+  CHECK(rig.device().host().placed_at(0u) == nullptr);   /* nothing of the window */
   CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK(rig.device().host().live_guest_mappings() > mapped);
+  CHECK_EQ(rig.platform().process_mappings(), 3u);
+  auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
+  view[chunk_bytes - 1u] = 0x5Au;
+  CHECK_EQ(view[chunk_bytes - 1u], 0x5Au);
 
-  std::uint8_t foreign[HostVisibleBindRecord::encoded_size] = {'N', 'O', 'P', 'E'};
+  std::uint8_t foreign[HostWindowRecord::encoded_size] = {'N', 'O', 'P', 'E'};
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), foreign, sizeof foreign),
                Status::not_supported);
-  HostVisibleBindRecord unbind(HostVisibleBindRecord::Operation::unbind, 0u, bind.resource_id());
-  CHECK_STATUS(unbind.encode(bytes, sizeof bytes), Status::ok);
+  HostWindowRecord close(HostWindowRecord::Operation::close, 0u, open.resource_id());
+  CHECK_STATUS(close.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
   CHECK_EQ(rig.device().device().blobs(), 3u);
+  CHECK_EQ(rig.device().host().live_guest_mappings(), mapped);
+  CHECK_EQ(rig.platform().process_mappings(), 2u);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
-  CHECK_STATUS(kmt.destroy_allocation(connection.device(), chunk), Status::ok);
   transport.teardown();
   connection.close();
   CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_EQ(rig.platform().process_mappings(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 
@@ -578,7 +574,7 @@ TEST(fullstack_teardown, a_process_that_exits_holding_a_context_leaves_nothing_b
                            reply_bytes, transport_staging, sizeof transport_staging);
     CHECK_STATUS(transport.initialize(), Status::ok);
     CHECK(echoes(transport, echo_payload));
-    CHECK(rig.kmt().open_objects() >= 6u);   /* a device, four allocations and a context */
+    CHECK(rig.kmt().open_objects() >= 4u);   /* a device, two allocations and a context */
     /* The process ends here without a teardown: dxgkrnl cleans up after it. */
     rig.kmt().end_process();
     CHECK_EQ(rig.kmt().open_objects(), 0u);

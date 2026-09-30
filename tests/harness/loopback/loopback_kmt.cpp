@@ -4,7 +4,9 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/rvk_context_record.hpp"
+#include "proto/submission/ring_header.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
@@ -173,29 +175,67 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
     if (context_count_ >= max_contexts) return Status::no_space;
     RvkContextRecord record;
     if (private_data == nullptr || record.decode(private_data, size) != Status::ok) return Status::invalid_parameter;
-    Allocation *const ring = find_allocation(record.ring());
-    Allocation *const fence = find_allocation(record.fence());
-    Allocation *const reply = find_allocation(record.reply());
-    if (ring == nullptr || fence == nullptr || reply == nullptr) return Status::invalid_parameter;
+    if (find_allocation(record.ring()) == nullptr) return Status::invalid_parameter;
+    const std::uint64_t ring_bytes =
+        (RingHeader::encoded_size + (std::uint64_t{1} << record.ring_order()) + page_bytes - 1u) & ~(page_bytes - 1u);
+    Context made = {};
+    made.ring = make_memory(ring_bytes);
+    made.fence = make_memory(page_bytes);
+    made.reply = make_memory((std::uint64_t{record.reply_bytes()} + page_bytes - 1u) & ~(page_bytes - 1u));
+    if (made.ring.view == nullptr || made.fence.view == nullptr || made.reply.view == nullptr) {
+        free_context_memory(made);
+        return Status::no_memory;
+    }
+    static_cast<void>(RingHeader(record.ring_order(), 0u, 0u).encode(made.ring.view, RingHeader::encoded_size));
     const std::uint32_t ring_id = next_resource_++;
     const std::uint32_t fence_id = next_resource_++;
     const std::uint32_t reply_id = next_resource_++;
-    if (!publish(ring_id, *ring) || !publish(fence_id, *fence) || !publish(reply_id, *reply))
+    if (!publish(ring_id, made.ring) || !publish(fence_id, made.fence) || !publish(reply_id, made.reply)) {
+        free_context_memory(made);
         return Status::not_supported;
+    }
     const std::uint32_t handle = next_handle_++;
     const std::uint32_t doorbell = next_doorbell_++;
     std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
     RvkRequestWriter created(request, sizeof request);
-    if (created.create_context(handle, rvk_capset) != Status::ok || !control(request, created.length()))
-        return Status::not_supported;
     const ContextSetup setup(ProtocolVersion(1u, 0u), record.sub_api(), ring_id, record.ring_order(), fence_id,
                              doorbell, reply_id);
     RvkRequestWriter set(request, sizeof request);
-    if (set.setup(handle, setup) != Status::ok || !control(request, set.length())) return Status::not_supported;
-    contexts_[context_count_] = Context{handle, ring->view, doorbell, {ring_id, fence_id, reply_id}, 0u};
+    if (created.create_context(handle, rvk_capset) != Status::ok || !control(request, created.length()) ||
+        set.setup(handle, setup) != Status::ok || !control(request, set.length())) {
+        free_context_memory(made);
+        return Status::not_supported;
+    }
+    made.handle = handle;
+    made.doorbell = doorbell;
+    made.blobs[0] = ring_id;
+    made.blobs[1] = fence_id;
+    made.blobs[2] = reply_id;
+    contexts_[context_count_] = made;
     context_count_++;
     context = handle;
     return Status::ok;
+}
+
+LoopbackKmt::Allocation LoopbackKmt::make_memory(std::uint64_t bytes)
+{
+    auto *const block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(bytes));
+    if (block == nullptr) return Allocation{};
+    platform_.zero(block, bytes);
+    return Allocation{0u, block, platform_.physical_address(block), bytes};
+}
+
+void LoopbackKmt::free_memory(Allocation &memory)
+{
+    if (memory.view != nullptr) platform_.release_contiguous(memory.view, memory.bytes);
+    memory = Allocation{};
+}
+
+void LoopbackKmt::free_context_memory(Context &context)
+{
+    free_memory(context.ring);
+    free_memory(context.fence);
+    free_memory(context.reply);
 }
 
 Status LoopbackKmt::destroy_context(std::uint32_t context)
@@ -209,6 +249,7 @@ Status LoopbackKmt::destroy_context(std::uint32_t context)
         RvkRequestWriter unref(request, sizeof request);
         if (unref.unref(found->blobs[i]) == Status::ok) static_cast<void>(control(request, unref.length()));
     }
+    free_context_memory(*found);
     *found = contexts_[--context_count_];
     return Status::ok;
 }
@@ -221,7 +262,7 @@ Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t, 
     SubmissionDescriptor submission;
     if (found == nullptr || private_data == nullptr || submission.decode(private_data, private_size) != Status::ok)
         return Status::invalid_parameter;
-    WireWriter tail(found->ring + tail_offset, sizeof(std::uint64_t));
+    WireWriter tail(found->ring.view + tail_offset, sizeof(std::uint64_t));
     tail.write_u64(submission.end());
     found->seen = device_.host().raised(found->doorbell);
     device_.doorbells().write_u32(found->doorbell * page_bytes, 1u);
@@ -237,10 +278,28 @@ Status LoopbackKmt::wait_for_context(std::uint32_t, std::uint32_t context)
 
 Status LoopbackKmt::wait_for_vertical_blank(std::uint32_t, std::uint32_t, std::uint32_t) { return Status::ok; }
 
-/* No driver stands behind this D3DKMT to answer an escape. */
-Status LoopbackKmt::escape(std::uint32_t, std::uint32_t, std::uint32_t, std::uint8_t *, std::uint32_t)
+/* The one escape the shim answers as the driver would: where a context's ring
+ * and reply slot are. */
+Status LoopbackKmt::escape(std::uint32_t, std::uint32_t, std::uint32_t context, std::uint8_t *data,
+                           std::uint32_t size)
 {
-    return Status::not_supported;
+    std::uint32_t magic = 0u;
+    for (std::uint32_t i = 0u; data != nullptr && i < sizeof magic && i < size; i++)
+        magic |= std::uint32_t{data[i]} << (8u * i);
+    if (magic != ContextViewsRecord::magic) return Status::not_supported;
+    return context_views(context, data, size);
+}
+
+Status LoopbackKmt::context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
+{
+    const Context *const found = find_context(context);
+    ContextViewsRecord   record;
+    if (found == nullptr || record.decode(data, size) != Status::ok) return Status::invalid_parameter;
+    static_cast<void>(record
+                          .answered(reinterpret_cast<std::uintptr_t>(found->ring.view),
+                                    reinterpret_cast<std::uintptr_t>(found->reply.view))
+                          .encode(data, size));
+    return Status::ok;
 }
 
 std::uint64_t LoopbackKmt::performance_counter(std::uint64_t &frequency) const

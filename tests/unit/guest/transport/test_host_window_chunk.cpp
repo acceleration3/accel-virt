@@ -46,9 +46,9 @@ constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t window_bytes = 256u * mib;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t refused = 0xC0000001u;
-/* The connection's device and queue, the transport's four allocations, its DMA
+/* The connection's device and queue, the transport's two allocations, its DMA
  * mapping and its context, with the adapter. */
-constexpr std::uint32_t link_objects = 9u;
+constexpr std::uint32_t link_objects = 7u;
 
 class Rig {
 public:
@@ -81,7 +81,7 @@ public:
     void check_only_the_link_is_left()
     {
         CHECK_EQ(kmt_.open_objects(), link_objects);
-        CHECK_EQ(kmt_.bindings(), 0u);
+        CHECK_EQ(kmt_.ram_chunks(), 0u);
         CHECK_EQ(kmt_.window_chunks(), 0u);
         CHECK_EQ(kmt_.misuses(), 0u);
     }
@@ -187,26 +187,48 @@ TEST(host_window_chunk, an_open_while_held_or_of_nothing_asks_nothing)
   CHECK_STATUS(chunk.release(), Status::ok);
   rig.check_only_the_link_is_left(); }
 
-/* A device with no window, a window with no room and a kernel with no free
- * chunk slot are each the kernel's refusal, with nothing held. */
+/* A device with no window, or a window with no room, is guest RAM the kernel
+ * owns: the same open, answered with another resource and a view of that
+ * memory, and the same close. */
+TEST(host_window_chunk, a_chunk_the_window_cannot_hold_is_guest_ram)
+{ { Rig rig;
+    HostWindowChunk chunk(rig.connection(), rig.transport());
+    CHECK_STATUS(chunk.open(mib), Status::ok);
+    CHECK(chunk.invariants_hold());
+    CHECK_EQ(chunk.resource_id(), MockKmt::first_chunk_resource);
+    CHECK(chunk.view() == rig.kmt().ram_chunk(0u));
+    CHECK_EQ(chunk.bytes(), mib);
+    CHECK_STATUS(chunk.release(), Status::ok);
+    CHECK_EQ(rig.kmt().ram_chunks(), 0u);
+    rig.check_only_the_link_is_left(); }
+  { Rig rig;
+    rig.kmt().open_host_window(window_bytes);
+    HostWindowChunk larger(rig.connection(), rig.transport());
+    CHECK_STATUS(larger.open(window_bytes + 1u), Status::ok);
+    CHECK_EQ(larger.resource_id(), MockKmt::first_chunk_resource);
+    HostWindowChunk whole(rig.connection(), rig.transport());
+    CHECK_STATUS(whole.open(window_bytes), Status::ok);
+    CHECK_EQ(whole.resource_id(), MockKmt::first_window_resource);
+    HostWindowChunk past(rig.connection(), rig.transport());
+    CHECK_STATUS(past.open(4096u), Status::ok);
+    CHECK_EQ(past.resource_id(), MockKmt::first_chunk_resource + 1u);
+    CHECK_EQ(rig.kmt().window_chunks(), 1u);
+    CHECK_EQ(rig.kmt().ram_chunks(), 2u);
+    CHECK_STATUS(larger.release(), Status::ok);
+    CHECK_STATUS(whole.release(), Status::ok);
+    CHECK_STATUS(past.release(), Status::ok);
+    rig.check_only_the_link_is_left(); } }
+
+/* A device that will back the chunk nowhere, and any other refusal of the
+ * open, is the kernel's answer, with nothing held. */
 TEST(host_window_chunk, the_kernels_refusal_is_the_answer_and_nothing_is_held)
 { { Rig rig;
     HostWindowChunk chunk(rig.connection(), rig.transport());
+    rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::not_supported);
     CHECK_STATUS(chunk.open(mib), Status::not_supported);
     CHECK(chunk.invariants_hold());
     CHECK_EQ(chunk.resource_id(), 0u);
     CHECK(chunk.view() == nullptr);
-    rig.check_only_the_link_is_left(); }
-  { Rig rig;
-    rig.kmt().open_host_window(window_bytes);
-    HostWindowChunk chunk(rig.connection(), rig.transport());
-    CHECK_STATUS(chunk.open(window_bytes + 1u), Status::invalid_parameter);
-    CHECK_EQ(chunk.resource_id(), 0u);
-    CHECK_STATUS(chunk.open(window_bytes), Status::ok);
-    HostWindowChunk full(rig.connection(), rig.transport());
-    CHECK_STATUS(full.open(4096u), Status::invalid_parameter);
-    CHECK(full.invariants_hold());
-    CHECK_STATUS(chunk.release(), Status::ok);
     rig.check_only_the_link_is_left(); }
   { Rig rig;
     rig.kmt().open_host_window(window_bytes);

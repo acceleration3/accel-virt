@@ -97,7 +97,7 @@ constexpr std::uint64_t other_luid = 0x0000000200001235ull;
 constexpr std::uint64_t queue_host = 0x6600u;
 constexpr std::uint64_t command_buffer_host = 0x7700u;
 /* What one open connection holds in MockKmt (test_connection.cpp). */
-constexpr std::uint32_t connection_objects = 9u;
+constexpr std::uint32_t connection_objects = 7u;
 
 PFN_vkVoidFunction entry_of(auto function) { return reinterpret_cast<PFN_vkVoidFunction>(function); }
 

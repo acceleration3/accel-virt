@@ -92,7 +92,7 @@ public:
     {
         CHECK_EQ(allocator_.chunks(), 0u);
         CHECK_EQ(allocator_.placements(), 0u);
-        CHECK_EQ(kmt().bindings(), 0u);
+        CHECK_EQ(kmt().ram_chunks(), 0u);
         CHECK_EQ(kmt().window_chunks(), 0u);
         CHECK_EQ(kmt().open_objects(), OpenConnection::link_objects);
         CHECK_EQ(kmt().misuses(), 0u);
@@ -124,8 +124,8 @@ TEST(chunk_allocator, a_first_allocation_binds_a_chunk_and_imports_its_pages)
   ChunkPlacement *placed = rig.allocate(page + 1u);
   CHECK_EQ(rig.allocator().chunks(), 1u);
   CHECK_EQ(rig.allocator().placements(), 1u);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
-  CHECK_EQ(rig.kmt().allocation_pages(rig.kmt().bound_allocation(0u)), ChunkAllocator::chunk_pages);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunk_pages(0u), ChunkAllocator::chunk_pages);
   const BlobImportRequest request = rig.last_import();
   CHECK_EQ(request.resource_id(), MockKmt::first_chunk_resource);
   CHECK_EQ(request.offset(), 0u);
@@ -152,7 +152,7 @@ TEST(chunk_allocator, allocations_share_a_chunk_until_the_last_is_freed)
   CHECK(rig.allocator().find(memory) == nullptr);
   CHECK(rig.allocator().find(memory + 1u) == second);
   CHECK_EQ(rig.allocator().chunks(), 1u);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   /* The hole the first left is taken again. */
   ChunkPlacement *third = rig.allocate(page);
   CHECK_EQ(third->offset(), 0u);
@@ -170,7 +170,7 @@ TEST(chunk_allocator, a_chunk_s_worth_fills_one_and_a_byte_more_gets_its_own)
   CHECK_EQ(rig.allocator().chunks(), 2u);
   CHECK_EQ(larger->bytes(), chunk_bytes + page);
   CHECK_EQ(larger->space().pages(), ChunkAllocator::chunk_pages + 1u);
-  CHECK_EQ(rig.kmt().allocation_pages(rig.kmt().bound_allocation(1u)), ChunkAllocator::chunk_pages + 1u);
+  CHECK_EQ(rig.kmt().ram_chunk_pages(1u), ChunkAllocator::chunk_pages + 1u);
   CHECK_EQ(rig.last_import().resource_id(), MockKmt::first_chunk_resource + 1u);
   ChunkPlacement *small = rig.allocate(page);
   CHECK_EQ(rig.allocator().chunks(), 3u);
@@ -199,26 +199,16 @@ TEST(chunk_allocator, a_size_that_is_no_allocation_is_refused_unasked)
   CHECK_EQ(rig.kmt().commands(), commands);
   rig.check_nothing_held(); }
 
-/* The chunk refused at any of its steps: nothing is imported and nothing
- * held. */
-TEST(chunk_allocator, a_chunk_refused_at_any_step_leaves_nothing)
-{ /* No window here: the bind is the second escape, after the window's
-   * refused open. */
-  struct Step { MockKmt::Call call; std::uint32_t nth; };
-  const Step steps[] = {{MockKmt::Call::create_allocation, 1u}, {MockKmt::Call::make_resident, 1u},
-                        {MockKmt::Call::wait_for_fence, 1u}, {MockKmt::Call::lock, 1u},
-                        {MockKmt::Call::escape, 2u}};
-  for (const Step &step : steps) {
-      Rig rig;
-      const std::uint32_t commands = rig.kmt().commands();
-      rig.kmt().fail_at(step.call, step.nth, MockKmt::invalid_parameter);
-      ChunkPlacement *placed = nullptr;
-      CHECK(rig.allocator().allocate(page, host_visible_type, placed) != Status::ok);
-      CHECK(placed == nullptr);
-      CHECK_EQ(rig.kmt().commands(), commands);
-      rig.check_nothing_held();
-  }
-}
+/* The chunk the kernel refuses: nothing is imported and nothing held. */
+TEST(chunk_allocator, a_chunk_the_kernel_refuses_leaves_nothing)
+{ Rig rig;
+  const std::uint32_t commands = rig.kmt().commands();
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the open */
+  ChunkPlacement *placed = nullptr;
+  CHECK(rig.allocator().allocate(page, host_visible_type, placed) != Status::ok);
+  CHECK(placed == nullptr);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  rig.check_nothing_held(); }
 
 /* The host refusing the import - or answering nothing, or garbage - gives the
  * chunk it opened for it back; a chunk other allocations use stays. */
@@ -282,19 +272,20 @@ TEST(chunk_allocator, stops_at_a_context_s_chunks)
       ChunkAllocatorProbe::chunk(rig.allocator(), index) = ChunkAllocatorProbe::chunk(rig.allocator(), 0u);
   ChunkAllocatorProbe::set_chunks(rig.allocator(), ChunkAllocator::max_chunks);
   const std::uint32_t commands = rig.kmt().commands();
-  const std::uint32_t allocations = rig.kmt().calls(MockKmt::Call::create_allocation);
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   ChunkPlacement *placed = nullptr;
   CHECK_STATUS(rig.allocator().allocate(page, host_visible_type, placed), Status::no_memory);
   CHECK(placed == nullptr);
   CHECK_EQ(rig.kmt().commands(), commands);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   ChunkAllocatorProbe::set_chunks(rig.allocator(), 1u);
   CHECK(rig.allocator().invariants_hold());
   rig.free(full);
   rig.check_nothing_held(); }
 
-/* A release the host answers wrongly, or the transport cannot carry, is
- * reported, and the allocation and its chunk are gone all the same. */
+/* A release the host answers wrongly, or a close the kernel refuses, is
+ * reported, and the allocation and its chunk are gone all the same - a chunk
+ * whose close was refused is the kernel's, to close with the context. */
 TEST(chunk_allocator, a_failed_release_still_frees)
 { Rig rig;
   ChunkPlacement *placed = rig.allocate(page);
@@ -303,11 +294,12 @@ TEST(chunk_allocator, a_failed_release_still_frees)
   rig.check_nothing_held();
 
   placed = rig.allocate(page);
-  rig.kmt().fail_at(MockKmt::Call::unlock, 1u, MockKmt::invalid_parameter);
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the close */
   rig.rig().host().nop();
   CHECK(rig.allocator().free(*placed) != Status::ok);
   CHECK_EQ(rig.allocator().chunks(), 0u);
-  CHECK_EQ(rig.allocator().placements(), 0u); }
+  CHECK_EQ(rig.allocator().placements(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u); }
 
 /* A placement this allocator does not hold is not freed. */
 TEST(chunk_allocator, frees_only_its_own_placements)
@@ -358,7 +350,7 @@ TEST(chunk_allocator, destroying_it_gives_the_chunks_back_unasked)
       commands = rig.kmt().commands();
   }
   CHECK_EQ(rig.kmt().commands(), commands);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects);
   CHECK_EQ(rig.platform().live_allocations(), 1u); }
 
@@ -406,16 +398,16 @@ TEST(chunk_allocator, chunks_come_from_the_window_and_fall_back_to_guest_ram_whe
   ChunkPlacement *second = rig.allocate(chunk_bytes);
   CHECK_EQ(rig.allocator().chunks(), 2u);
   CHECK_EQ(rig.kmt().window_chunks(), 2u);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK(first->view() == rig.kmt().window_base());
   CHECK(second->view() == rig.kmt().window_base() + chunk_bytes);
   CHECK_EQ(rig.last_import().resource_id(), MockKmt::first_window_resource + 1u);
   /* The window is full: the third chunk is guest RAM. */
   ChunkPlacement *third = rig.allocate(page);
   CHECK_EQ(rig.allocator().chunks(), 3u);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_EQ(rig.last_import().resource_id(), MockKmt::first_chunk_resource);
-  CHECK(third->view() == rig.kmt().view_of(rig.kmt().bound_allocation(0u)));
+  CHECK(third->view() == rig.kmt().ram_chunk(0u));
   third->view()[0] = 0x11u;
   first->view()[chunk_bytes - 1u] = 0x22u;
   CHECK_EQ(rig.kmt().window_base()[chunk_bytes - 1u], 0x22u);

@@ -1,17 +1,21 @@
-/* Kernel memory standing in for the allocations a process sets a context up
- * on (docs/protocol.md): the ring - its 32-byte header and 2^order bytes of
- * data, in whole pages - the fence page and the reply slot, each one physically
- * contiguous block, with the frames of every page so they can be handed out as
- * the ContextPages a context runs on. Zeroed, with the ring's fresh header
- * written, before anything is sent. PASSIVE. */
+/* The memory one rvk context runs on (docs/protocol.md, "Context memory"):
+ * its ring - the 32-byte header and 2^order bytes of data, in whole pages -
+ * its fence page and its reply slot, in guest RAM the driver alone owns, so the
+ * pages the device is handed stay where they are whatever VidMm does with the
+ * process's allocations.
+ *
+ * Besides the frames of every page it holds the kernel's own views of the
+ * ring header and of the fence page - the only bytes the driver itself touches
+ * - and, once mapped, the process's views of the ring and of the reply slot.
+ * The ring's fresh header is written before anything is sent. PASSIVE. */
 #ifndef AV_CONTEXT_MEMORY_HPP
 #define AV_CONTEXT_MEMORY_HPP
 
+#include "core/memory/guest_pages.hpp"
 #include "core/platform/platform.hpp"
 #include "core/rvk/context_pages.hpp"
 #include "core/support/status.hpp"
 
-#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -20,47 +24,51 @@ struct ContextMemoryProbe;
 
 class ContextMemory {
 public:
-    static constexpr size_t page_bytes = 4096u;
-
     explicit ContextMemory(Platform &platform);
     ~ContextMemory();
     ContextMemory(const ContextMemory &) = delete;
     ContextMemory &operator=(const ContextMemory &) = delete;
 
-    /* invalid_parameter for an order the protocol does not allow; no_memory,
-     * holding nothing, when the platform has none; invalid_state once holding. */
-    [[nodiscard]] Status allocate(uint8_t order);
+    /* A ring of `order`, a fence page and a reply slot of `reply_bytes` in
+     * whole pages, zeroed, with the ring's header written and the kernel's two
+     * views mapped. invalid_parameter for an order or a reply size the protocol
+     * does not allow; invalid_state once holding; no_memory, holding nothing,
+     * when the platform has no memory or cannot map a view. */
+    [[nodiscard]] Status allocate(uint8_t order, uint32_t reply_bytes);
+    /* The ring and the reply slot mapped into the calling process.
+     * invalid_state unless allocated and not yet mapped; the platform's
+     * refusal otherwise, with neither mapped. */
+    [[nodiscard]] Status map_into_process();
+    /* Every view gone, then the pages. */
     void                 release();
-    bool                 allocated() const;
-    uint8_t              order() const;
-    uint8_t             *ring() const;
-    size_t               ring_bytes() const;
-    uint64_t             ring_address() const;
-    uint8_t             *fence_page() const;
-    uint64_t             fence_address() const;
-    uint8_t             *reply() const;
-    uint64_t             reply_address() const;
-    /* Empty unless allocated; valid until released. */
-    ContextPages         pages() const;
+    /* Every view gone and the pages kept out of use for good: a device that
+     * never answered the context's teardown may still write them. */
+    void                 abandon();
+
+    bool         allocated() const;
+    uint8_t      order() const;
+    /* The process's addresses of the ring and of the reply slot; 0 unless
+     * mapped. */
+    uint64_t     ring_view() const;
+    uint64_t     reply_view() const;
+    /* Empty unless allocated; valid until released or abandoned. */
+    ContextPages pages() const;
 
     bool invariants_hold() const;
 
 private:
-    /* A zeroed page-multiple block, or null. */
-    uint8_t *allocate_block(size_t bytes);
-    /* The frames of the ring's pages and of the other two blocks; false, holding
-     * no ring frames, when the platform has no memory for them. */
-    bool     record_frames();
+    /* The kernel's two views gone, if mapped. */
+    void unmap_kernel_views();
+    /* Every view gone, then the pages, of whatever part is held. */
+    void free_all();
 
-    Platform &platform_;
-    uint8_t  *ring_;
-    uint8_t  *fence_;
-    uint8_t  *reply_;
-    uint64_t *ring_frames_;
-    uint64_t  fence_frame_;
-    uint64_t  reply_frame_;
-    size_t    ring_bytes_;
-    uint8_t   order_;
+    Platform  &platform_;
+    GuestPages ring_;
+    GuestPages fence_;
+    GuestPages reply_;
+    uint8_t   *ring_header_;
+    uint8_t   *fence_view_;
+    uint8_t    order_;
 
     friend struct ContextMemoryProbe;
 };

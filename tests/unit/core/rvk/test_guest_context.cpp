@@ -73,11 +73,11 @@ ContextSetup setup(std::uint8_t order = 12u, SubApi api = SubApi::vulkan)
     return ContextSetup(ProtocolVersion(1u, 0u), api, 10u, order, 11u, 2u, 12u);
 }
 
-/* The memory stands in for a process's ring, fence and reply allocations, and
- * outlives the context set up on it. */
+/* The memory a context runs on, the driver's own, which outlives the context
+ * set up on it. */
 class Fixture {
 public:
-    Fixture() : memory_(platform_), context_(platform_, doorbells_) { CHECK_STATUS(memory_.allocate(12u), Status::ok); }
+    Fixture() : memory_(platform_), context_(platform_, doorbells_) { CHECK_STATUS(memory_.allocate(12u, 4096u), Status::ok); }
     ~Fixture() { platform_.set_irql(Irql::passive); }
 
     MockPlatform      &platform() { return platform_; }
@@ -141,8 +141,8 @@ TEST(guest_context, sets_up_submits_serves_and_tears_down)
   CHECK(fixture.context().state() == GuestContext::State::idle);
   CHECK(fixture.context().ring() == nullptr && fixture.context().fence_page() == nullptr);
   fixture.established();
-  CHECK(fixture.context().ring() == fixture.memory().ring());
-  CHECK(fixture.context().fence_page() == fixture.memory().fence_page());
+  CHECK(fixture.context().ring() == fixture.memory().pages().ring_view());
+  CHECK(fixture.context().fence_page() == fixture.memory().pages().fence_view());
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
   CHECK_EQ(fixture.doorbells().rings(2u), 1u);
   CHECK(fixture.context().tail() == 24u);
@@ -254,7 +254,7 @@ TEST(guest_context_set_up, publishes_into_the_ring_it_was_handed)
   fixture.established();
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
   std::uint64_t tail = 0u;
-  std::memcpy(&tail, fixture.memory().ring() + 8u, 8u);
+  std::memcpy(&tail, fixture.memory().pages().ring_view() + 8u, 8u);
   CHECK(tail == 24u); }
 
 TEST(guest_context_abandon, a_device_reset_releases_everything_the_device_held)
@@ -321,7 +321,7 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   /* Four batches the process wrote and rang for, and a completion the driver
    * never submitted: it is believed, and reported. */
   std::uint64_t tail = 96u;
-  std::memcpy(fixture.memory().ring() + 8u, &tail, 8u);
+  std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
   static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), 32u));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
@@ -329,7 +329,7 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   /* A batch it falls back with is one the process already published the tail
    * for: the driver takes it from where the submission begins. */
   tail = 128u;
-  std::memcpy(fixture.memory().ring() + 8u, &tail, 8u);
+  std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
   CHECK_STATUS(fixture.submit(4u, 96u, 128u), Status::ok);
 
   /* Handed back, the progress location is let go of and nothing more is

@@ -74,7 +74,9 @@ MockPlatform::~MockPlatform()
     for (const Timer &timer : timers_)
         if (timer.live) registry.record_failure(__FILE__, __LINE__, "a timer was never destroyed");
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
-    for (std::uint32_t i = 0u; i < contiguous_count_; i++) std::free(contiguous_[i].block);
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++)
+        if (!contiguous_[i].borrowed) std::free(contiguous_[i].block);
+    for (const OwnedPages &owned : owned_pages_) std::free(owned.frames);
 }
 
 void MockPlatform::record(Violation kind, const char *format, ...)
@@ -170,6 +172,113 @@ std::uint64_t MockPlatform::physical_address(void *block)
     std::abort();
 }
 
+void *MockPlatform::allocate_pages(std::uint64_t bytes)
+{
+    if (irql_ > Irql::passive) {
+        record(Violation::allocation_at_dispatch, "%llu page bytes at IRQL %u",
+               static_cast<unsigned long long>(bytes), static_cast<unsigned>(irql_));
+        return nullptr;
+    }
+    page_allocation_sequence_++;
+    if (page_allocation_fail_at_ != 0u && page_allocation_sequence_ == page_allocation_fail_at_) return nullptr;
+    if (bytes == 0u || (bytes & 0xFFFu) != 0u || contiguous_count_ == max_contiguous) return nullptr;
+    for (OwnedPages &owned : owned_pages_) {
+        if (owned.live) continue;
+        const std::uint32_t count = static_cast<std::uint32_t>(bytes / 0x1000u);
+        std::uint64_t       address = 0u;
+        void *const         lent = page_backer_ != nullptr ? page_backer_(page_backer_context_, bytes, address) : nullptr;
+        void *const         block = lent != nullptr ? lent : std::calloc(1u, static_cast<std::size_t>(bytes));
+        auto *const         frames = static_cast<std::uint64_t *>(std::calloc(count, sizeof(std::uint64_t)));
+        if (block == nullptr || frames == nullptr) {
+            if (lent == nullptr) std::free(block);
+            std::free(frames);
+            return nullptr;
+        }
+        if (lent == nullptr) {
+            address = next_physical_address_;
+            next_physical_address_ += bytes + 0x1000u;
+        }
+        contiguous_[contiguous_count_++] = ContiguousBlock{block, address, static_cast<std::size_t>(bytes), lent != nullptr};
+        for (std::uint32_t page = 0u; page < count; page++) frames[page] = address + std::uint64_t{page} * 0x1000u;
+        owned = OwnedPages{PageFrames{frames, count}, block, frames, address, bytes, page_blocks_made_++, true};
+        return &owned.record;
+    }
+    std::fprintf(stderr, "\n    more than %u page blocks\n", max_owned_pages);
+    std::abort();
+}
+
+void MockPlatform::release_pages(void *pages)
+{
+    if (irql_ > Irql::passive)
+        record(Violation::irql_ceiling, "release_pages at IRQL %u", static_cast<unsigned>(irql_));
+    OwnedPages *const owned = find_owned(pages);
+    if (owned == nullptr) {
+        std::fprintf(stderr, "\n    release of untracked page block %p\n", pages);
+        std::abort();
+    }
+    for (const ProcessView &view : process_views_)
+        if (view.live && view.physical == owned->physical)
+            record(Violation::frame_misuse, "release_pages of a block a process still maps");
+    bool borrowed = false;
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++) {
+        if (contiguous_[i].block != owned->block) continue;
+        borrowed = contiguous_[i].borrowed;
+        contiguous_[i] = contiguous_[--contiguous_count_];
+        break;
+    }
+    if (!borrowed) std::free(owned->block);
+    std::free(owned->frames);
+    *owned = OwnedPages{};
+}
+
+MockPlatform::OwnedPages *MockPlatform::find_owned(void *pages)
+{
+    for (OwnedPages &owned : owned_pages_)
+        if (owned.live && pages == &owned.record) return &owned;
+    return nullptr;
+}
+
+std::uint32_t MockPlatform::owned_page_blocks() const
+{
+    std::uint32_t live = 0u;
+    for (const OwnedPages &owned : owned_pages_) live += owned.live ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockPlatform::page_blocks_made() const { return page_blocks_made_; }
+
+std::uint8_t *MockPlatform::page_block(std::uint32_t ordinal) const
+{
+    for (const OwnedPages &owned : owned_pages_)
+        if (owned.live && owned.ordinal == ordinal) return static_cast<std::uint8_t *>(owned.block);
+    return nullptr;
+}
+
+std::uint32_t MockPlatform::reclaim_page_blocks()
+{
+    std::uint32_t reclaimed = 0u;
+    for (OwnedPages &owned : owned_pages_) {
+        if (!owned.live) continue;
+        bool mapped = false;
+        for (const ProcessView &view : process_views_) mapped = mapped || (view.live && view.physical == owned.physical);
+        if (mapped) continue;
+        release_pages(&owned.record);
+        reclaimed++;
+    }
+    return reclaimed;
+}
+
+void MockPlatform::back_pages_with(PageBacker backer, void *context)
+{
+    page_backer_ = backer;
+    page_backer_context_ = context;
+}
+
+void MockPlatform::fail_page_allocation_at(std::uint32_t nth)
+{
+    page_allocation_fail_at_ = nth == 0u ? 0u : page_allocation_sequence_ + nth;
+}
+
 void *MockPlatform::attach_page_frames(const std::uint64_t *frames, std::uint32_t page_count)
 {
     if (page_frame_count_ == max_page_frames) {
@@ -193,7 +302,11 @@ Status MockPlatform::read_page_frames(void *mdl, std::uint32_t first, std::uint3
         for (std::uint32_t page = 0u; page < count; page++) frames[page] = attached.frames[first + page];
         return Status::ok;
     }
-    return Status::invalid_parameter;
+    const OwnedPages *const owned = find_owned(mdl);
+    if (owned == nullptr) return Status::invalid_parameter;
+    if (first > owned->record.count || count > owned->record.count - first) return Status::invalid_parameter;
+    for (std::uint32_t page = 0u; page < count; page++) frames[page] = owned->frames[first + page];
+    return Status::ok;
 }
 
 void *MockPlatform::translate_physical(std::uint64_t physical_address, std::size_t bytes) const
@@ -313,6 +426,30 @@ Status MockPlatform::map_to_process(std::uint64_t physical, std::uint64_t bytes,
         const std::uint64_t address = backed != nullptr ? reinterpret_cast<std::uintptr_t>(backed) : next_process_view_;
         slot = ProcessView{physical, bytes, address, true};
         if (backed == nullptr) next_process_view_ += (bytes + 0xFFFu) & ~std::uint64_t{0xFFFu};
+        view = slot.view;
+        mapping = &slot;
+        return Status::ok;
+    }
+    std::fprintf(stderr, "\n    more than %u process views\n", max_process_views);
+    std::abort();
+}
+
+Status MockPlatform::map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping)
+{
+    view = 0u;
+    mapping = nullptr;
+    if (irql_ > Irql::passive)
+        record(Violation::irql_ceiling, "map_pages_to_process at IRQL %u", static_cast<unsigned>(irql_));
+    const OwnedPages *const owned = find_owned(pages);
+    if (owned == nullptr) {
+        record(Violation::frame_misuse, "map_pages_to_process of a block never allocated");
+        return Status::no_memory;
+    }
+    process_map_sequence_++;
+    if (process_fail_at_ != 0u && process_map_sequence_ == process_fail_at_) return Status::no_memory;
+    for (ProcessView &slot : process_views_) {
+        if (slot.live) continue;
+        slot = ProcessView{owned->physical, owned->bytes, reinterpret_cast<std::uintptr_t>(owned->block), true};
         view = slot.view;
         mapping = &slot;
         return Status::ok;

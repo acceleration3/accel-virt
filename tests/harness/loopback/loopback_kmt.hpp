@@ -1,8 +1,9 @@
 /* A D3DKMT the in-process transport runs against the loopback device core
  * (feature 043, L4): allocations are guest memory the device reads by physical
- * address, and a virtual context is set up by publishing its ring, fence and
- * reply as guest blobs and sending CTX_CREATE and the setup over the device's
- * control channel - the miniport's job, done in a shim. A submission stores
+ * address, and a virtual context is set up, as the miniport sets one up, on a
+ * ring, fence page and reply slot this shim allocates, publishes as guest
+ * blobs and hands the process by escape, before it sends CTX_CREATE and the
+ * setup over the device's control channel. A submission stores
  * the tail its descriptor ends at in the ring header and rings the context's
  * doorbell, as the miniport does; a wait blocks on its fence-queue interrupt. It is the
  * ClientTransport's `Kmt` so KmtTransport, and the generated client above it,
@@ -106,7 +107,10 @@ private:
     };
     struct Context {
         std::uint32_t handle;
-        std::uint8_t *ring;
+        /* The driver's memory the context runs on; handle 0. */
+        Allocation    ring;
+        Allocation    fence;
+        Allocation    reply;
         std::uint32_t doorbell;
         std::uint32_t blobs[3];
         std::uint32_t seen;   /* fence-line raises seen before the pending submit */
@@ -117,6 +121,12 @@ private:
     /* One control request through the device; true when it answered OK_NODATA. */
     bool        control(const std::uint8_t *request, std::size_t length);
     bool        publish(std::uint32_t resource_id, const Allocation &allocation);
+    /* `bytes` of zeroed guest memory, as the driver allocates a context's; no
+     * view for none. */
+    Allocation  make_memory(std::uint64_t bytes);
+    void        free_memory(Allocation &memory);
+    void        free_context_memory(Context &context);
+    Status      context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
 
     MockPlatform  &platform_;
     LoopbackDevice &device_;

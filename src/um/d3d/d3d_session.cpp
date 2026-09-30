@@ -60,8 +60,8 @@ HRESULT D3dSession::open(uint32_t adapter)
     }
     static_cast<void>(arena_.construct(connection_, transport_.object()));
     /* Each size is the host window's when it has room and guest RAM's when
-     * not (BlobChunk); an arena neither can hold is tried again at half the
-     * size, down to what bulk data alone needs. */
+     * not (the kernel decides); an arena neither can hold is tried again at
+     * half the size, down to what bulk data alone needs. */
     uint64_t bytes = arena_bytes_;
     Status   opened = arena_.object().open(bytes);
     while (opened != Status::ok && bytes / 2u >= KmtBlobArena::default_bytes) {

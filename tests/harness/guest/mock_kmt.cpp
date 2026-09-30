@@ -12,7 +12,7 @@
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/resources/host_window_record.hpp"
 
 #include <sys/mman.h>
@@ -30,8 +30,7 @@ MockKmt::MockKmt()
     : identities_{}, versions_{}, luids_{}, budgets_{default_local_budget, default_non_local_budget}, usages_{},
       adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{}, failing_run_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
-      escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), bind_pages_(0u), bound_resources_{},
-      bound_allocations_{}, bound_history_{}, binds_(0u), window_(nullptr), window_pages_(0u), window_chunks_{}, window_opens_(0u), window_refusal_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
+      escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), adapter_escapes_(nullptr), window_(nullptr), window_pages_(0u), window_chunks_{}, window_opens_(0u), window_refusal_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), shared_{},
       next_shared_handle_(first_shared_handle),
       next_object_id_(first_object_id), scribble_record_(false), keep_record_(false), short_record_(false), carried_next_(),
@@ -220,6 +219,8 @@ MockKmt::~MockKmt()
 {
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (large_views_[slot] != nullptr) munmap(large_views_[slot], large_bytes_[slot]);
+    for (Object &object : objects_) unmap_context_memory(object);
+    for (WindowChunk &chunk : window_chunks_) clear_chunk(chunk);
     if (window_ != nullptr) munmap(window_, window_pages_ * page_bytes);
 }
 
@@ -599,11 +600,6 @@ Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocatio
     if (object->resource) return refuse(invalid_parameter);
     for (const Object &mapping : objects_)
         if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
-    for (std::uint32_t slot = 0u; slot < max_bindings; slot++) {
-        if (bound_allocations_[slot] != allocation) continue;
-        bound_resources_[slot] = 0u;
-        bound_allocations_[slot] = 0u;
-    }
     return close(Kind::allocation, allocation);
 }
 
@@ -748,9 +744,12 @@ Status MockKmt::create_context_virtual(std::uint32_t device, const std::uint8_t 
     for (std::uint32_t i = 0u; i < private_size_; i++) private_[i] = private_data[i];
     RvkContextRecord    record;
     const bool          decoded = record.decode(private_data, size) == Status::ok;
-    if (!zeroed(Call::create_context_virtual)) context = open(Kind::context, device, decoded ? record.reply() : 0u, 0u);
+    if (!zeroed(Call::create_context_virtual)) context = open(Kind::context, device, 0u, 0u);
     Object *const created = find(Kind::context, context);
-    if (created != nullptr && decoded) created->ring = record.ring();
+    if (created != nullptr && decoded) {
+        created->ring = record.ring();
+        map_context_memory(*created, record.ring_order(), record.reply_bytes());
+    }
     return succeed();
 }
 
@@ -772,7 +771,11 @@ Status MockKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t
 Status MockKmt::destroy_context(std::uint32_t context)
 {
     if (!begin(Call::destroy_context)) return refuse(last_code_);
-    if (find(Kind::context, context) != nullptr) close_window_chunks_of(context);
+    Object *const destroyed = find(Kind::context, context);
+    if (destroyed != nullptr) {
+        close_window_chunks_of(context);
+        unmap_context_memory(*destroyed);
+    }
     return close(Kind::context, context);
 }
 
@@ -836,7 +839,7 @@ void MockKmt::take_doorbell_store(const Object &context)
         /* What the process published is what the device consumes: the ring's
          * own tail, since nothing of this went through a submission. */
         RingHeader                header;
-        const std::uint8_t *const ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+        const std::uint8_t *const ring = context.ring_memory;
         if (ring == nullptr || header.decode(ring, RingHeader::encoded_size) != Status::ok ||
             header.tail() == 0u)
             return;
@@ -862,8 +865,7 @@ void MockKmt::write_answer(const Object &context)
 void MockKmt::write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size)
 {
     SubmissionDescriptor submitted;
-    std::uint8_t *const  slot =
-        context.address != 0u ? view_of(static_cast<std::uint32_t>(context.address)) : nullptr;
+    std::uint8_t *const  slot = context.reply_memory;
     if (slot == nullptr || submitted.decode(submission_, submission_size_) != Status::ok) return;
     static_cast<void>(ReplyHeader(submitted.fence_id(), size).encode(slot, ReplyHeader::encoded_size));
     for (std::uint32_t i = 0u; i < size; i++) slot[ReplyHeader::encoded_size + i] = answer[i];
@@ -875,7 +877,7 @@ void MockKmt::journal(const Object &context)
 {
     SubmissionDescriptor submitted;
     RingHeader           header;
-    const std::uint8_t *const ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+    const std::uint8_t *const ring = context.ring_memory;
     if (ring == nullptr || submitted.decode(submission_, submission_size_) != Status::ok ||
         header.decode(ring, RingHeader::encoded_size) != Status::ok)
         return;
@@ -909,7 +911,7 @@ void MockKmt::consume(const Object &context)
 {
     SubmissionDescriptor submitted;
     RingHeader           header;
-    std::uint8_t *const  ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+    std::uint8_t *const  ring = context.ring_memory;
     if (ring == nullptr || submitted.decode(submission_, submission_size_) != Status::ok ||
         header.decode(ring, RingHeader::encoded_size) != Status::ok)
         return;
@@ -958,24 +960,90 @@ Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_
     }
     std::uint32_t magic = 0u;
     for (std::uint32_t i = 0u; i < sizeof magic && i < size; i++) magic |= std::uint32_t{data[i]} << (8u * i);
+    if (magic == ContextViewsRecord::magic) return context_views(context, data, size);
     if (magic == HostWindowRecord::magic) return window_chunk(context, data, size);
-    return bind_chunk(device, data, size);
+    return refuse(not_supported);
 }
 
-/* The driver answers NOT_SUPPORTED for a device without a window before it
- * reads anything, and INVALID_PARAMETER for every refusal after. */
+Status MockKmt::context_views(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
+{
+    const Object *const on = find(Kind::context, context);
+    ContextViewsRecord  record;
+    if (on == nullptr || on->ring_memory == nullptr || record.decode(data, size) != Status::ok)
+        return refuse(invalid_parameter);
+    static_cast<void>(record
+                          .answered(reinterpret_cast<std::uintptr_t>(on->ring_memory),
+                                    reinterpret_cast<std::uintptr_t>(on->reply_memory))
+                          .encode(data, size));
+    return succeed();
+}
+
+void MockKmt::map_context_memory(Object &context, std::uint8_t order, std::uint32_t reply_bytes)
+{
+    const std::uint64_t ring_bytes = (RingHeader::encoded_size + (std::uint64_t{1} << order) + page_bytes - 1u) &
+                                     ~(page_bytes - 1u);
+    const std::uint64_t slot_bytes = (std::uint64_t{reply_bytes} + page_bytes - 1u) & ~(page_bytes - 1u);
+    void *const ring = mmap(nullptr, ring_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *const reply = mmap(nullptr, slot_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ring == MAP_FAILED || reply == MAP_FAILED) {
+        if (ring != MAP_FAILED) munmap(ring, ring_bytes);
+        if (reply != MAP_FAILED) munmap(reply, slot_bytes);
+        return;
+    }
+    context.ring_memory = static_cast<std::uint8_t *>(ring);
+    context.ring_bytes = ring_bytes;
+    context.reply_memory = static_cast<std::uint8_t *>(reply);
+    context.reply_bytes = slot_bytes;
+    static_cast<void>(RingHeader(order, 0u, 0u).encode(context.ring_memory, RingHeader::encoded_size));
+}
+
+void MockKmt::unmap_context_memory(Object &context)
+{
+    if (context.ring_memory != nullptr) munmap(context.ring_memory, context.ring_bytes);
+    if (context.reply_memory != nullptr) munmap(context.reply_memory, context.reply_bytes);
+    context.ring_memory = nullptr;
+    context.ring_bytes = 0u;
+    context.reply_memory = nullptr;
+    context.reply_bytes = 0u;
+}
+
+std::uint8_t *MockKmt::ring_of(std::uint32_t context)
+{
+    const Object *const on = find(Kind::context, context);
+    return on != nullptr ? on->ring_memory : nullptr;
+}
+
+std::uint8_t *MockKmt::ring_named(std::uint32_t name)
+{
+    for (const Object &object : objects_)
+        if (object.kind == Kind::context && name != 0u && object.ring == name) return object.ring_memory;
+    return nullptr;
+}
+
+std::uint8_t *MockKmt::reply_of(std::uint32_t context)
+{
+    const Object *const on = find(Kind::context, context);
+    return on != nullptr ? on->reply_memory : nullptr;
+}
+
+/* Every refusal the driver makes of a record is INVALID_PARAMETER. */
 Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
 {
-    if (window_ == nullptr) return refuse(not_supported);
     HostWindowRecord record;
     if (record.decode(data, size) != Status::ok) return refuse(invalid_parameter);
     if (record.opens()) return open_window_chunk(context, data, size, record.bytes());
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != record.resource_id() || chunk.context != context) continue;
-        chunk = WindowChunk{};
+        clear_chunk(chunk);
         return succeed();
     }
     return refuse(invalid_parameter);
+}
+
+void MockKmt::clear_chunk(WindowChunk &chunk)
+{
+    if (chunk.ram != nullptr) munmap(chunk.ram, chunk.pages * page_bytes);
+    chunk = WindowChunk{};
 }
 
 Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
@@ -986,17 +1054,28 @@ Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std
         window_refusal_ = 0u;
         return refuse(code);
     }
-    if (bytes > window_pages_ * page_bytes) return refuse(invalid_parameter);
     const std::uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
-    const std::uint64_t first = window_fit(pages);
-    if (first == window_pages_) return refuse(invalid_parameter);
+    const std::uint64_t first = bytes <= window_pages_ * page_bytes ? window_fit(pages) : window_pages_;
+    const HostWindowRecord request(HostWindowRecord::Operation::open, bytes, 0u);
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != 0u) continue;
-        chunk = WindowChunk{first_window_resource + window_opens_, context, first, pages};
-        window_opens_++;
-        const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
-        const HostWindowRecord request(HostWindowRecord::Operation::open, bytes, 0u);
-        static_cast<void>(request.answered(chunk.resource, pages * page_bytes, address).encode(data, size));
+        if (first != window_pages_) {
+            chunk = WindowChunk{first_window_resource + window_opens_, context, first, pages};
+            window_opens_++;
+            const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
+            static_cast<void>(request.answered(chunk.resource, answered_bytes(pages), address).encode(data, size));
+            return succeed();
+        }
+        /* Anonymous pages are zero and cost nothing until touched, so a 64 MiB
+         * chunk is only what a test writes into it. */
+        void *const ram = mmap(nullptr, pages * page_bytes, PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (ram == MAP_FAILED) return refuse(invalid_parameter);
+        chunk = WindowChunk{first_chunk_resource + ram_opens_, context, 0u, pages,
+                            static_cast<std::uint8_t *>(ram), ram_opens_};
+        ram_opens_++;
+        const std::uint64_t address = reinterpret_cast<std::uintptr_t>(ram);
+        static_cast<void>(request.answered(chunk.resource, answered_bytes(pages), address).encode(data, size));
         return succeed();
     }
     return refuse(invalid_parameter);
@@ -1009,7 +1088,9 @@ std::uint64_t MockKmt::window_fit(std::uint64_t pages) const
     while (moved) {
         moved = false;
         for (const WindowChunk &chunk : window_chunks_) {
-            if (chunk.resource == 0u || chunk.first >= first + pages || chunk.first + chunk.pages <= first) continue;
+            if (chunk.resource == 0u || chunk.ram != nullptr || chunk.first >= first + pages ||
+                chunk.first + chunk.pages <= first)
+                continue;
             first = chunk.first + chunk.pages;
             moved = true;
         }
@@ -1020,7 +1101,7 @@ std::uint64_t MockKmt::window_fit(std::uint64_t pages) const
 void MockKmt::close_window_chunks_of(std::uint32_t context)
 {
     for (WindowChunk &chunk : window_chunks_)
-        if (chunk.resource != 0u && chunk.context == context) chunk = WindowChunk{};
+        if (chunk.resource != 0u && chunk.context == context) clear_chunk(chunk);
 }
 
 void MockKmt::open_host_window(std::uint64_t bytes)
@@ -1031,7 +1112,7 @@ void MockKmt::open_host_window(std::uint64_t bytes)
                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     window_ = mapped == MAP_FAILED ? nullptr : static_cast<std::uint8_t *>(mapped);
     window_pages_ = window_ != nullptr ? window_pages_ : 0u;
-    for (WindowChunk &chunk : window_chunks_) chunk = WindowChunk{};
+    for (WindowChunk &chunk : window_chunks_) clear_chunk(chunk);
 }
 
 void MockKmt::refuse_next_window_open(std::uint32_t code) { window_refusal_ = code; }
@@ -1039,49 +1120,42 @@ void MockKmt::refuse_next_window_open(std::uint32_t code) { window_refusal_ = co
 std::uint32_t MockKmt::window_chunks() const
 {
     std::uint32_t held = 0u;
-    for (const WindowChunk &chunk : window_chunks_) held += chunk.resource != 0u ? 1u : 0u;
+    for (const WindowChunk &chunk : window_chunks_) held += chunk.resource != 0u && chunk.ram == nullptr ? 1u : 0u;
     return held;
+}
+
+std::uint32_t MockKmt::ram_chunks() const
+{
+    std::uint32_t held = 0u;
+    for (const WindowChunk &chunk : window_chunks_) held += chunk.ram != nullptr ? 1u : 0u;
+    return held;
+}
+
+std::uint64_t MockKmt::answered_bytes(std::uint64_t pages)
+{
+    const std::uint64_t bytes = chunk_bytes_answer_ != 0u ? chunk_bytes_answer_ : pages * page_bytes;
+    chunk_bytes_answer_ = 0u;
+    return bytes;
+}
+
+void MockKmt::answer_next_chunk_bytes(std::uint64_t bytes) { chunk_bytes_answer_ = bytes; }
+
+std::uint64_t MockKmt::ram_chunk_pages(std::uint32_t index) const
+{
+    for (const WindowChunk &chunk : window_chunks_)
+        if (chunk.ram != nullptr && chunk.ram_index == index) return chunk.pages;
+    return 0u;
+}
+
+std::uint8_t *MockKmt::ram_chunk(std::uint32_t index) const
+{
+    for (const WindowChunk &chunk : window_chunks_)
+        if (chunk.ram != nullptr && chunk.ram_index == index) return chunk.ram;
+    return nullptr;
 }
 
 std::uint32_t MockKmt::window_opens() const { return window_opens_; }
 std::uint8_t *MockKmt::window_base() const { return window_; }
-
-/* The driver's own refusals are all STATUS_INVALID_PARAMETER; only data that is
- * not its record at all is not supported. */
-Status MockKmt::bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32_t size)
-{
-    HostVisibleBindRecord record;
-    std::uint32_t         magic = 0u;
-    for (std::uint32_t i = 0u; i < sizeof magic && i < size; i++) magic |= std::uint32_t{data[i]} << (8u * i);
-    if (magic != HostVisibleBindRecord::magic) return refuse(not_supported);
-    if (size != HostVisibleBindRecord::encoded_size || record.decode(data, size) != Status::ok)
-        return refuse(invalid_parameter);
-    if (!record.binds()) {
-        for (std::uint32_t slot = 0u; slot < max_bindings; slot++)
-            if (bound_resources_[slot] == record.resource_id()) {
-                bound_resources_[slot] = 0u;
-                bound_allocations_[slot] = 0u;
-                return succeed();
-            }
-        return refuse(invalid_parameter);
-    }
-    const Object *const chunk = find(Kind::allocation, record.allocation());
-    if (chunk == nullptr || chunk->owner != device ||
-        chunk->allocation_kind != static_cast<std::uint16_t>(AllocationKind::host_visible_memory))
-        return refuse(invalid_parameter);
-    for (std::uint32_t slot = 0u; slot < max_bindings; slot++) {
-        if (bound_resources_[slot] != 0u) continue;
-        bound_resources_[slot] = first_chunk_resource + binds_;
-        bound_allocations_[slot] = record.allocation();
-        if (binds_ < max_bindings) bound_history_[binds_] = record.allocation();
-        binds_++;
-        const std::uint64_t pages = bind_pages_ != 0u ? bind_pages_ : chunk->pages;
-        bind_pages_ = 0u;
-        static_cast<void>(record.answered(bound_resources_[slot], pages).encode(data, size));
-        return succeed();
-    }
-    return refuse(invalid_parameter);
-}
 
 bool MockKmt::played()
 {
@@ -1108,22 +1182,8 @@ void MockKmt::answer_adapter_escapes(AdapterEscapes *driver)
     adapter_escapes_ = driver;
 }
 
-void MockKmt::answer_next_bind_pages(std::uint64_t pages) { bind_pages_ = pages; }
-
 const std::uint8_t *MockKmt::last_escape() const { return escape_; }
 std::uint32_t       MockKmt::last_escape_size() const { return escape_size_; }
-
-std::uint32_t MockKmt::bindings() const
-{
-    std::uint32_t bound = 0u;
-    for (const std::uint32_t resource : bound_resources_) bound += resource != 0u ? 1u : 0u;
-    return bound;
-}
-
-std::uint32_t MockKmt::bound_allocation(std::uint32_t index) const
-{
-    return index < binds_ && index < max_bindings ? bound_history_[index] : 0u;
-}
 
 std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
 {

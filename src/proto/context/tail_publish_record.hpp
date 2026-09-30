@@ -16,7 +16,7 @@ namespace av {
 class TailPublishRecord {
 public:
     /* dxgkrnl answers STATUS_NOT_SUPPORTED to an 8-byte private escape without
-     * handing it to the driver; one the size of HostVisibleBindRecord gets
+     * handing it to the driver; one the size of the other escape records gets
      * through. */
     static constexpr size_t   encoded_size = 32u;
     static constexpr uint32_t magic        = 0x50564B52u;  /* "RVKP" */

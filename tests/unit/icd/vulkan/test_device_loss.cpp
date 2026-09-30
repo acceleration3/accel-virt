@@ -101,7 +101,7 @@ public:
     {
         if (instance_ != VK_NULL_HANDLE) rig_.destroy_instance(instance_);
         CHECK(rig_.root().invariants_hold());
-        CHECK_EQ(rig_.kmt().bindings(), 0u);
+        CHECK_EQ(rig_.kmt().ram_chunks(), 0u);
         CHECK_EQ(rig_.kmt().window_chunks(), 0u);
         CHECK_EQ(rig_.kmt().open_objects(), 0u);
         CHECK_EQ(rig_.kmt().misuses(), 0u);
@@ -328,9 +328,9 @@ TEST(device_loss, a_memory_properties_query_the_host_faults_asks_no_budget)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::query_video_memory), budgets); }
 
 /* A view mapped before the loss is still the process's memory: what was written
- * is read back after it, until the allocation is freed. Freeing gives the chunk
- * back to the kernel without asking the host - or the kernel, which refuses a
- * lost context's unbind and unbinds the chunk as it is destroyed. */
+ * is read back after it, until the allocation is freed. Freeing lets the chunk
+ * go without asking the host - or the kernel, which refuses a lost context's
+ * escapes and closes the chunk with the context. */
 TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
 { LossRig rig;
   const VkDeviceMemory memory = rig.host_visible();
@@ -338,23 +338,20 @@ TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
   CHECK_EQ(rig.map(memory, data), VK_SUCCESS);
   auto *const view = static_cast<std::uint8_t *>(data);
   for (std::uint64_t offset = 0u; offset < page; offset++) view[offset] = static_cast<std::uint8_t>(pattern ^ offset);
-  const std::uint32_t chunk = rig.kmt().bound_allocation(0u);
   rig.lose();
   for (std::uint64_t offset = 0u; offset < page; offset++)
       CHECK_EQ(view[offset], static_cast<std::uint8_t>(pattern ^ offset));
   rig.entry<UnmapMemory>("vkUnmapMemory")(rig.device(), memory);
   CHECK_EQ(view[page - 1u], static_cast<std::uint8_t>(pattern ^ (page - 1u)));
-  CHECK(rig.kmt().view_of(chunk) != nullptr);
+  CHECK(rig.kmt().ram_chunk(0u) != nullptr);
   const std::uint32_t objects = rig.kmt().open_objects();
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   const std::uint32_t commands = rig.kmt().commands();
   const std::uint32_t submissions = rig.kmt().calls(MockKmt::Call::submit);
   rig.entry<FreeMemory>("vkFreeMemory")(rig.device(), memory, nullptr);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK(rig.kmt().view_of(chunk) == nullptr);
-  CHECK_EQ(rig.kmt().allocation_pages(chunk), 0u);
-  CHECK_EQ(rig.kmt().open_objects(), objects - 1u);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), objects);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);   /* the kernel's, until the context goes */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submissions);
   CHECK_EQ(rig.kmt().commands(), commands);
@@ -420,8 +417,8 @@ TEST(device_loss, freeing_and_destroying_after_the_loss_succeed_locally)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), waits);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes); }
 
-/* A device destroyed with host-visible memory still allocated gives the chunk
- * back the same way, with no host call. */
+/* A device destroyed with host-visible memory still allocated lets the chunk
+ * go the same way, with no host call; the kernel closes it with the context. */
 TEST(device_loss, destroying_a_lost_device_gives_its_chunks_back)
 { LossRig rig;
   static_cast<void>(rig.host_visible());
@@ -430,7 +427,7 @@ TEST(device_loss, destroying_a_lost_device_gives_its_chunks_back)
   const std::uint32_t commands = rig.kmt().commands();
   rig.entry<DestroyDevice>("vkDestroyDevice")(rig.device(), nullptr);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
@@ -450,7 +447,7 @@ TEST(device_loss, a_fault_while_the_types_are_learnt_is_lost)
   CHECK_EQ(rig.rig().log().holding("cannot be learnt"), 1u); }
 
 /* A host that faults the context while importing: the allocation is lost, and
- * the chunk bound for it goes back to the kernel without an unbind. */
+ * the chunk opened for it is left to the kernel without a close. */
 TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
 { LossRig rig;
   rig.host().vk_memory_properties(types, visible);
@@ -461,8 +458,8 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_DEVICE_LOST);
   CHECK(memory == VK_NULL_HANDLE);
   CHECK(rig.connection()->faulted());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 2u);   /* the window's refused open and the bind */
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);   /* the open */
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), objects); }
 
 /* A refusal that is not a loss stays what it was: an import the host refuses

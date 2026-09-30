@@ -123,7 +123,7 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       {MockKmt::Call::create_device, "FAIL transport.connection status=7 code=0xC0000001\n", "transport.initialize"},
       {MockKmt::Call::create_paging_queue, "FAIL transport.connection status=7", "transport.initialize"},
       {MockKmt::Call::create_allocation, "FAIL transport.initialize status=7", "transport.nop"},
-      {MockKmt::Call::lock, "FAIL transport.initialize status=7", "transport.nop"},
+      {MockKmt::Call::escape, "FAIL transport.initialize status=7", "transport.nop"},
       {MockKmt::Call::create_context_virtual, "FAIL transport.initialize status=7", "transport.nop"},
       {MockKmt::Call::submit, "FAIL transport.nop status=7", "transport.latency"},
       {MockKmt::Call::wait_for_context, "FAIL transport.nop status=7", "transport.latency"}};

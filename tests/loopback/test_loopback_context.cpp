@@ -4,6 +4,8 @@
 #include "core/rvk/capset_query.hpp"
 #include "core/rvk/device_identity.hpp"
 #include "core/rvk/context_memory.hpp"
+#include "proto/resources/guest_page_list.hpp"
+#include "core/rvk/context_pages.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/module/driver_status.hpp"
@@ -89,15 +91,18 @@ TEST(loopback_capset, offers_only_the_memory_paths_its_probes_proved)
 TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
 { LoopbackRig rig;
   ContextMemory memory(rig.platform());
-  CHECK_STATUS(memory.allocate(LoopbackRig::ring_order), Status::ok);
+  CHECK_STATUS(memory.allocate(LoopbackRig::ring_order, LoopbackRig::reply_bytes), Status::ok);
   std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
   RvkRequestWriter writer(request, sizeof request);
   CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id), Status::ok);
   CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
-  const std::uint64_t addresses[3] = {memory.ring_address(), memory.fence_address(), memory.reply_address()};
-  const std::uint64_t lengths[3] = {memory.ring_bytes(), ContextMemory::page_bytes, ContextMemory::page_bytes};
+  /* The rig's pages lie one after another, so each block is one run. */
+  const av::ContextPages   pages = memory.pages();
+  const av::GuestPageList  lists[3] = {pages.ring(), pages.fence(), pages.reply()};
   for (std::uint32_t blob = 0u; blob < 3u; blob++) {
-      CHECK_STATUS(writer.guest_blob(40u + blob, addresses[blob], static_cast<std::uint32_t>(lengths[blob])),
+      const std::uint64_t length = std::uint64_t{lists[blob].count()} * av::GuestPageList::page_bytes;
+      CHECK_EQ(lists[blob].runs(), 1u);
+      CHECK_STATUS(writer.guest_blob(40u + blob, lists[blob].frame(0u), static_cast<std::uint32_t>(length)),
                    Status::ok);
       CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
   }
@@ -138,10 +143,10 @@ TEST(loopback_context, sets_up_runs_batches_with_a_reply_and_tears_down)
   CHECK(!rig.context(0u).faulted());
   CHECK_EQ(rig.device().executor().executed(), 2u);
   ReplyHeader reply;
-  CHECK_STATUS(reply.decode(rig.memory(0u).reply(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_STATUS(reply.decode(rig.reply(0u), ReplyHeader::encoded_size), Status::ok);
   CHECK_EQ(reply.fence_id(), 2u);
   CHECK_EQ(reply.size(), 8u);
-  CHECK(std::memcmp(rig.memory(0u).reply() + ReplyHeader::encoded_size, "loopback", 8u) == 0);
+  CHECK(std::memcmp(rig.reply(0u) + ReplyHeader::encoded_size, "loopback", 8u) == 0);
   CHECK(rig.retire(0u));
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 0u);
@@ -152,7 +157,7 @@ TEST(loopback_context, a_nop_round_trips_with_an_empty_answer_the_executor_never
   CHECK(rig.read_capset());
   CHECK(rig.establish(0u));
   GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
-  std::memset(rig.memory(0u).reply(), 0xEE, ReplyHeader::encoded_size + 1u);
+  std::memset(rig.reply(0u), 0xEE, ReplyHeader::encoded_size + 1u);
   std::uint8_t payload[CommandHeader::encoded_size] = {};
   CHECK_STATUS(CommandHeader(CommandHeader::nop_id, sizeof payload, CommandHeader::generate_reply)
                    .encode(payload, sizeof payload),
@@ -164,11 +169,11 @@ TEST(loopback_context, a_nop_round_trips_with_an_empty_answer_the_executor_never
   CHECK(!rig.context(0u).faulted());
   CHECK_EQ(rig.device().executor().executed(), 0u);
   ReplyHeader reply;
-  CHECK_STATUS(reply.decode(rig.memory(0u).reply(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_STATUS(reply.decode(rig.reply(0u), ReplyHeader::encoded_size), Status::ok);
   CHECK_EQ(reply.fence_id(), 1u);
   CHECK_EQ(reply.size(), 0u);
   CHECK(!reply.too_large());
-  CHECK_EQ(rig.memory(0u).reply()[ReplyHeader::encoded_size], 0xEEu);
+  CHECK_EQ(rig.reply(0u)[ReplyHeader::encoded_size], 0xEEu);
   CHECK(rig.retire(0u));
   CHECK(rig.context(0u).invariants_hold()); }
 

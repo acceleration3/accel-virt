@@ -640,7 +640,7 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
 | 0 | u32 | magic | `RVKA` = `0x414B5652` |
-| 4 | u16 | kind | 1 shared primary, 2 shadow, 3 staging, 4 GDI surface (the `D3DKMDT_STANDARDALLOCATION_TYPE` values), 16 client |
+| 4 | u16 | kind | 1 shared primary, 2 shadow, 3 staging, 4 GDI surface (the `D3DKMDT_STANDARDALLOCATION_TYPE` values), 5 user-mode surface, 16 client, 17 context name |
 | 6 | u16 | flags | bit 0 CPU visible; others 0 |
 | 8 | u32 | width | pixels |
 | 12 | u32 | height | pixels |
@@ -652,83 +652,105 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 | 40 | u32 | source | VidPn source; shared primary only, else 0 |
 | 44 | u32 | reserved | 0 |
 
-Every kind but client is a surface: width, height and pitch are non-zero.
+Every kind but client and context name is a surface: width, height and pitch
+are non-zero. A context name is exactly one page and no surface: the handle an
+rvk context is known by (see Context record), which no device reads.
 
 ## Context record (user mode -> guest driver)
 
 The private driver data of one `D3DKMTCreateContextVirtual`. A process that
 wants a host rvk context writes it; the miniport decodes it at `PASSIVE` inside
 `DxgkDdiCreateContext` and, like the allocation descriptor, treats every byte as
-hostile. It never reaches the device: it names, by the process's own D3DKMT
-allocation handles, the ring, fence page and reply slot the miniport must
-publish as guest blobs before it sends the context's setup. It carries no
+hostile. It never reaches the device. It names the sub-API, the ring's order,
+the reply slot's size, and one allocation of the process's: the page the
+context is known by, the one handle a driver can resolve in the process that
+made it, so another context of the same process can name this one. The memory
+the context runs on is the driver's own (see Context memory). It carries no
 doorbell - the miniport owns the doorbell page and rings it itself. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKT` = `0x544B5652` |
-| 4 | u32 | sub_api | exactly one of `SubApi` {1 Vulkan, 2 OpenGL, 4 OpenCL} |
+| 0 | u32 | magic | `RVKK` = `0x4B4B5652` |
+| 4 | u32 | sub_api | exactly one of `SubApi` {1 Vulkan, 2 OpenGL, 4 OpenCL, 8 Direct3D} |
 | 8 | u8 | ring_order | within the capset's [min, max] |
 | 9 | u8[3] | reserved | 0 |
-| 12 | u32 | ring | the ring allocation, non-zero |
-| 16 | u32 | fence | the fence-page allocation, non-zero, different from `ring` |
-| 20 | u32 | reply | 0 for no reply slot; otherwise different from `ring` and `fence` |
+| 12 | u32 | ring | the context's name: an allocation of kind 17, non-zero |
+| 16 | u32 | reply_bytes | the reply slot's size, 1 to 16 MiB; the driver rounds it up to pages |
+| 20 | u32 | reserved | 0 |
 | 24 | u8 | gl_major | OpenGL only, as the setup's options (feature 050); 0 on any other sub-API |
 | 25 | u8 | gl_minor | |
 | 26 | u8 | gl_profile | |
 | 27 | u8 | gl_flags | |
-| 28 | u32 | share_context | the ring allocation handle of another rvk OpenGL context of this process and device, or 0 |
+| 28 | u32 | share_context | the name of another rvk OpenGL context of this process and device, or 0; the one option an OpenCL record may carry (cl_khr_gl_sharing) |
 
-All eight option bytes zero is the record of old. The bytes alone prove magic,
-one known sub-API, non-zero distinct ids, an order in 12..24 and options only
-an OpenGL record may carry; the miniport resolves `share_context` - a ring
-handle, since dxgkrnl resolves no context handle for a driver - to a live
-OpenGL context of the calling process whose ring the same device holds, and puts
-that context's device id in the setup; membership in the device's `sub_apis` and the capset's order
-range are a second validation against the decoded capset. The record is
-unchanged unless the decode returns ok.
+The bytes alone prove magic, one known sub-API, a non-zero name, a reply size
+in range, an order in 12..24 and options only the sub-API may carry. The
+miniport then resolves the name to a context-name allocation of the calling
+process that no other live context uses, and `share_context` - a name, since
+dxgkrnl resolves no context handle for a driver - to a live OpenGL context of
+the calling process whose name the same device holds, and puts that context's
+device id in the setup. Membership in the device's `sub_apis` and the capset's
+order range are a second validation against the decoded capset. The record is
+unchanged unless the decode returns ok. A record of the kind that named three
+allocations under the magic `RVKT` is refused whole.
 
-### The submission path
+Freeing the name ends the context first: the process is done with it.
 
-With a context set up, a process submits by writing a batch into the ring it
-mapped (see Batches), leaving a submission descriptor (RVKS) in the DMA buffer
-of a `D3DKMTSubmitCommandVirtual`, and letting the miniport ring the doorbell;
-the miniport completes the D3DKMT submission fence the process waits on from the
-fence-page interrupt (see Fence page). A reply-generating command's answer is in
-the reply slot before the fence completes, so a process that waited reads a
-finished answer.
+## Context memory
 
-## Host-visible bind record (user mode -> guest driver, escape)
+A context's ring, fence page and reply slot are pages the miniport allocates
+when it makes the context (`MmAllocatePagesForMdlEx`, cached), publishes to the
+device as `GUEST` blobs, and maps into the calling process write-back: the ring
+(its header, then its data area) and the reply slot, not the fence page, which
+only the miniport reads. They are the driver's rather than allocations of the
+process's because VidMm evicts a suspended process's allocations - a UWP app in
+the background - and maps them back at other pages when it resumes. A device
+that had imported the old pages would go on reading the ring and writing
+replies into memory the process no longer sees, and into pages Windows had
+already handed on. No eviction touches these pages, so a context outlives any
+number of suspensions.
+
+The pages go when the context does: CTX_DESTROY, then an unref of each blob,
+then the process's views and the pages. Pages a device may still hold - it
+did not answer the destroy or the unrefs - are kept out of use for good rather
+than freed.
+
+### Context views record (user mode -> guest driver, escape)
 
 The private data of one `D3DKMTEscape` whose `hContext` names a live rvk
-context (feature 045). A process binds a chunk of its host-visible memory - an
-allocation of kind `host_visible_memory`, resident and locked - to the context,
-and the miniport publishes the chunk's pages as a `GUEST` blob in one of the
-context's 64 chunk slots, which IMPORT_BLOB then names. The miniport decodes it
-at `PASSIVE` and treats every byte as hostile; it writes the answer back into the
-same bytes. 32 bytes.
+context: how the process learns where the miniport mapped its context's ring
+and reply slot. The miniport decodes it at `PASSIVE`, treats every byte as
+hostile, and writes its answer back into the same bytes. 32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `RVKH` = `0x484B5652` |
+| 0 | u32 | magic | `RVKV` = `0x564B5652` |
 | 4 | u16 | version | 1 |
-| 6 | u16 | operation | 1 bind, 2 unbind |
-| 8 | u32 | allocation | the chunk's D3DKMT handle in the calling process |
-| 12 | u32 | resource_id | bind: 0 in, the chunk's resource out; unbind: the resource to release |
-| 16 | u64 | pages | 0 in; bind: the chunk's page count out |
+| 6 | u16 | reserved | 0 |
+| 8 | u64 | ring | 0 in; the ring's address in the process out |
+| 16 | u64 | reply | 0 in; the reply slot's address in the process out |
 | 24 | u64 | reserved | 0 |
 
-An escape whose data is not this record, or that names no context, answers
-`STATUS_NOT_SUPPORTED` as every other escape does. After that every refusal is
-`STATUS_INVALID_PARAMETER` and sends nothing: a wrong version, operation or
-reserved field; an allocation not of this process or not of kind
-`host_visible_memory`; pages not complete; the context's chunk slots full; an
-unbind of a resource not bound on the context. A bind sends
-`RESOURCE_CREATE_BLOB` (`GUEST`, the pages as memory entries); an unbind sends
-`RESOURCE_UNREF`, which the device refuses while an import holds the blob.
-Tearing a context down unbinds its chunks before its own three resources, and a
-chunk freed while bound destroys its context, as a freed ring does: the host may
-still hold the pages imported.
+An answer has both addresses non-zero and different; a process takes nothing
+else as one. An escape whose data is no record the miniport knows answers
+`STATUS_NOT_SUPPORTED`; every refusal of this one - a wrong length, version or
+reserved field, addresses already filled in, no context named or one that is
+not a live rvk context - is `STATUS_INVALID_PARAMETER` and writes nothing back.
+
+### The submission path
+
+With a context set up, a process submits by writing a batch into the ring the
+miniport mapped into it (see Batches), leaving a submission descriptor (RVKS) in
+the DMA buffer of a `D3DKMTSubmitCommandVirtual`, and letting the miniport ring
+the doorbell; the miniport completes the D3DKMT submission fence the process
+waits on from the fence-page interrupt (see Fence page). A reply-generating
+command's answer is in the reply slot before the fence completes, so a process
+that waited reads a finished answer.
+
+Chunks of host-visible memory are taken on the context by the host window's
+escape (docs/host-window.md): a chunk of the window, or of guest RAM the
+miniport owns where the window cannot hold it, in one of the context's 64
+chunk slots, which IMPORT_BLOB then names.
 
 ## Present command (guest driver -> device, in a DMA buffer)
 
@@ -1019,9 +1041,11 @@ the device core by the loopback suite (`tests/loopback/`):
    version it names. A capset that does not decode, is not `0x72`, or is of
    another major ends the query; nothing below starts without one.
 2. **Memory.** A ring of `32 + 2^order` bytes rounded up to pages with a fresh
-   header, a fence page and a reply page, each physically contiguous, zeroed.
+   header, a fence page and a reply slot, zeroed pages the driver owns (see
+   Context memory).
 3. **Setup.** `CTX_CREATE` with capset `0x72`, then `RESOURCE_CREATE_BLOB`
-   (guest memory, one entry) for the ring, the fence page and the reply slot,
+   (guest memory, the pages as entries) for the ring, the fence page and the
+   reply slot,
    then the context setup in `SUBMIT_3D`. Each is sent when the one before is
    answered. Any answer other than `OK_NODATA`, or one that does not decode,
    fails the setup; a step whose answer did not decode is counted as done,
@@ -1036,9 +1060,10 @@ the device core by the loopback suite (`tests/loopback/`):
    page"). A page or head that breaks a rule fails the context: it submits and
    serves nothing more until torn down.
 6. **Teardown.** `CTX_DESTROY` if the context was created, then
-   `RESOURCE_UNREF` for each blob created, in order; then the memory is freed.
-   After a virtio reset the driver abandons its contexts - the device holds
-   none - and frees their memory without requests.
+   `RESOURCE_UNREF` for each blob created, in order; then the memory is freed,
+   or kept out of use for good if the device did not answer. After a virtio
+   reset the driver abandons its contexts - the device holds none - and frees
+   their memory without requests.
 
 ## Fence queues and interrupts (device -> guest)
 

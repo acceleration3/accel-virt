@@ -1,8 +1,9 @@
 /* The adapter's rvk contexts, over the pieces a started adapter has: a mapped
  * virtio-gpu-rvk-pci with its doorbell pages, dxgkrnl's handle table, the
- * allocation table with a process's ring, fence page and reply slot mapped into
- * the aperture, and a device the test answers. A record binds the context to
- * those allocations; a submission rings its doorbell; the DPC's serve finishes on
+ * allocation table with the page a process names its context by, and a device
+ * the test answers. A record binds the context, on a ring, fence page and reply
+ * slot the driver allocates and maps into the process (docs/protocol.md,
+ * "Context memory"); a submission rings its doorbell; the DPC's serve finishes on
  * the node only what the fence page says the host completed. */
 #include "core/ddi/dxgk_allocation_info_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
@@ -34,7 +35,7 @@
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/resources/host_window_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -55,20 +56,21 @@ struct RvkContextTableProbe {
     {
         return table.chunks_[slot][index];
     }
-    static const Allocation *swap_use(RvkContextTable &table, std::uint32_t slot, std::uint32_t role,
-                                      const Allocation *use)
+    static const Allocation *swap_name(RvkContextTable &table, std::uint32_t slot, const Allocation *name)
     {
-        const Allocation *const was = table.uses_[slot][role];
-        table.uses_[slot][role] = use;
+        const Allocation *const was = table.names_[slot];
+        table.names_[slot] = name;
         return was;
     }
-    static std::uint8_t *swap_view(RvkContextTable &table, std::uint32_t slot, bool ring, std::uint8_t *view)
+    static ObjectStorage<ContextMemory> &memory(RvkContextTable &table, std::uint32_t slot)
     {
-        std::uint8_t *&held = ring ? table.ring_views_[slot] : table.fence_views_[slot];
-        std::uint8_t *const was = held;
-        held = view;
-        return was;
+        return table.memories_[slot];
     }
+};
+
+/* The one part of a context's memory a test breaks on its own. */
+struct ContextMemoryProbe {
+    static GuestPages &fence(ContextMemory &memory) { return memory.fence_; }
 };
 
 }  // namespace av
@@ -179,7 +181,8 @@ private:
 };
 
 /* One allocation of a process: created in the table, given a D3DKMT handle,
- * and mapped into the aperture over guest memory the platform can map back. */
+ * and - as VidMm would make it resident - mappable into the aperture over guest
+ * memory the platform can map back. */
 class ProcessAllocation {
 public:
     ProcessAllocation(av::MockPlatform &platform, av::AllocationTable &table, av::FakeHandleTable &handles,
@@ -251,12 +254,7 @@ public:
         CHECK_STATUS(aperture_.initialize(std::int64_t{1} << 30u), Status::ok);
         device_.emplace(mapped_.platform(), mapped_.mappings(), mapped_.layout());
         CHECK_STATUS(device_->start(6u), Status::ok);
-        ring_.emplace(mapped_.platform(), allocations_, handles_, AllocationKind::context_ring, 2u * page);
-        fence_.emplace(mapped_.platform(), allocations_, handles_, AllocationKind::fence_page, page);
-        reply_.emplace(mapped_.platform(), allocations_, handles_, AllocationKind::reply_slot, page);
-        ring_->map_into_aperture(10u);
-        fence_->map_into_aperture(20u);
-        reply_->map_into_aperture(30u);
+        name_.emplace(mapped_.platform(), allocations_, handles_, AllocationKind::context_ring, page);
     }
     ~Fixture()
     {
@@ -266,7 +264,7 @@ public:
 
     RvkContextRecord record(std::uint8_t order = 12u) const
     {
-        return RvkContextRecord(SubApi::vulkan, order, ring_->handle(), fence_->handle(), reply_->handle());
+        return RvkContextRecord(SubApi::vulkan, order, name_->handle(), page);
     }
     Status bind(void *context) { return bind(context, record()); }
     Status bind(void *context, const RvkContextRecord &asked)
@@ -282,11 +280,23 @@ public:
         mapped_.platform().set_irql(Irql::passive);
         return status;
     }
+    /* The memory the driver gave the context in `slot`. */
+    av::ContextMemory &memory(std::uint32_t slot = 0u)
+    {
+        return RvkContextTableProbe::memory(table_, slot).object();
+    }
+    /* Its ring header and fence page, as the host reaches them: the rig's
+     * pages lie in one block, so a page's view reaches the rest of it too. */
+    std::uint8_t *ring_memory(std::uint32_t slot = 0u) { return memory(slot).pages().ring_view(); }
+    std::uint8_t *fence_page(std::uint32_t slot = 0u)
+    {
+        return const_cast<std::uint8_t *>(memory(slot).pages().fence_view());
+    }
     /* What the host writes when it finishes the batches through `completed`. */
     void complete_through(std::uint64_t completed, std::uint32_t fault = 0u)
     {
         const FencePage written = fault == 0u ? FencePage(completed, completed) : FencePage(completed, completed, fault);
-        static_cast<void>(written.encode(fence_->bytes(), 32u));
+        static_cast<void>(written.encode(fence_page(), 32u));
     }
     void serve()
     {
@@ -305,9 +315,8 @@ public:
     RvkContextTable          &table() { return table_; }
     ExecutionNode            &node() { return node_; }
     av::HwQueueSubmissions   &queues() { return queues_; }
-    ProcessAllocation        &ring() { return *ring_; }
-    ProcessAllocation        &fence() { return *fence_; }
-    ProcessAllocation        &reply() { return *reply_; }
+    /* The page the process names its context by. */
+    ProcessAllocation        &ring() { return *name_; }
 
 private:
     av::MappedVirtioFunction                mapped_;
@@ -324,18 +333,20 @@ private:
      * completion its packets do, so a serve answers both. */
     av::HwQueueSubmissions                  queues_;
     std::optional<av::VirtioGpuDevice>      device_;
-    std::optional<ProcessAllocation>        ring_;
-    std::optional<ProcessAllocation>        fence_;
-    std::optional<ProcessAllocation>        reply_;
+    std::optional<ProcessAllocation>        name_;
 };
 
 int first_context = 0;
 int second_context = 0;
-constexpr bool both_views[] = {true, false};   /* the ring header's, then the fence page's */
+
+std::uint8_t *at(std::uint64_t view)
+{
+    return reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(view));
+}
 
 }  // namespace
 
-TEST(rvk_context_table_bind, sets_the_host_context_up_on_the_process_s_own_pages)
+TEST(rvk_context_table_bind, sets_the_host_context_up_on_memory_the_driver_owns)
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
@@ -349,22 +360,56 @@ TEST(rvk_context_table_bind, sets_the_host_context_up_on_the_process_s_own_pages
   CHECK_EQ(host.count_of(create_blob_type), 3u);
   CHECK_EQ(host.count_of(submit_3d_type), 1u);
   /* Slot 0: host context 1, blobs from the driver's first id, whose one memory
-   * entry is the ring's first page - the process's memory, not the driver's. */
+   * entry is the ring's first page - the driver's own pages, three blocks of
+   * them: the ring, the fence page and the reply slot. */
+  const av::ContextPages pages = fixture.memory().pages();
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 3u);
   CHECK_EQ(host.field(ctx_create_type, 0u, 16u), 1u);
   CHECK_EQ(host.field(create_blob_type, 0u, 24u), av::RvkContextBinding::first_resource_id);
   CHECK_EQ(host.field(create_blob_type, 0u, 36u), 1u);   /* one entry: the ring is contiguous here */
-  CHECK_EQ(host.field(create_blob_type, 0u, 56u),
-           static_cast<std::uint32_t>(fixture.platform().physical_address(fixture.ring().bytes())));
-  CHECK_EQ(host.field(create_blob_type, 1u, 56u),
-           static_cast<std::uint32_t>(fixture.platform().physical_address(fixture.fence().bytes())));
+  CHECK_EQ(host.field(create_blob_type, 0u, 56u), static_cast<std::uint32_t>(pages.ring().frame(0u)));
+  CHECK_EQ(host.field(create_blob_type, 1u, 56u), static_cast<std::uint32_t>(pages.fence().frame(0u)));
+  CHECK_EQ(host.field(create_blob_type, 2u, 56u), static_cast<std::uint32_t>(pages.reply().frame(0u)));
+  /* The ring the device reads at setup already has its header. */
+  av::RingHeader header;
+  CHECK_STATUS(header.decode(fixture.ring_memory(), av::RingHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.order(), 12u);
   /* The doorbell's fence queue got the first message past the sources. */
   CHECK_EQ(fixture.mapped().common().queue(2u).vector, 3u);
-  /* The driver maps the ring header and the fence page, and nothing else. */
+  /* The driver maps the ring header and the fence page for itself, and the
+   * ring and reply slot into the process, and nothing else. */
   CHECK_EQ(fixture.platform().mapped_frames(), 2u);
+  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK(fixture.platform().maps_into_process(fixture.memory().ring_view(), pages.ring().frame(0u), 2u * page));
+  CHECK(fixture.platform().maps_into_process(fixture.memory().reply_view(), pages.reply().frame(0u), page));
   CHECK(fixture.platform().logged_line("rvk context on doorbell 0 message 3 status 0x00000000"));
   CHECK_EQ(fixture.handles().outstanding(), 0u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
+
+/* The process asks where its ring and reply slot are, and is told the views
+ * the driver made of them; a context not live has none. */
+TEST(rvk_context_table_views, answers_the_process_where_its_ring_and_reply_slot_are)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  av::ContextViewsRecord answer;
+  CHECK_STATUS(fixture.table().views(&first_context, answer), Status::invalid_parameter);
+  CHECK_EQ(answer.ring(), 0u);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().views(&first_context, answer), Status::ok);
+  CHECK_EQ(answer.ring(), fixture.memory().ring_view());
+  CHECK_EQ(answer.reply(), fixture.memory().reply_view());
+  /* What the process writes through its ring is the ring the device reads. */
+  at(answer.ring())[av::RingHeader::encoded_size] = 0x5Au;
+  CHECK_EQ(fixture.ring_memory()[av::RingHeader::encoded_size], 0x5Au);
+  CHECK_STATUS(fixture.table().views(&second_context, answer), Status::invalid_parameter);
+  fixture.table().abandon_all();
+  av::ContextViewsRecord lost;
+  CHECK_STATUS(fixture.table().views(&first_context, lost), Status::invalid_parameter);
+  CHECK_EQ(lost.ring(), 0u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* A submission the process describes lands in its ring and rings its doorbell,
  * and the node completes it only when the host's fence page says so. */
@@ -377,7 +422,7 @@ TEST(rvk_context_table_submit, rings_the_doorbell_and_the_node_waits_for_the_hos
   CHECK_EQ(awaited, 1u);
   CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u);
   std::uint64_t tail = 0u;
-  std::memcpy(&tail, fixture.ring().bytes() + 8u, sizeof tail);
+  std::memcpy(&tail, fixture.ring_memory() + 8u, sizeof tail);
   CHECK_EQ(tail, 32u);
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(fixture.node().submit(5u, &first_context, awaited), Status::ok);
@@ -412,30 +457,38 @@ TEST(rvk_context_table_submit, refuses_what_is_not_a_descriptor_of_a_live_contex
   CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 0u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
-TEST(rvk_context_table_bind, refuses_a_record_that_does_not_name_the_process_s_transport_memory)
+TEST(rvk_context_table_bind, refuses_a_record_that_does_not_name_the_context_by_a_ring_of_the_process)
 { Fixture fixture;
   Host host(fixture.mapped());
-  const std::uint32_t ring = fixture.ring().handle();
-  const std::uint32_t fence = fixture.fence().handle();
-  const std::uint32_t reply = fixture.reply().handle();
+  ProcessAllocation client(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::client,
+                           page);
   const RvkContextRecord cases[] = {
-      RvkContextRecord(SubApi::vulkan, 12u, 0x7777u, fence, reply),   /* no such handle */
-      RvkContextRecord(SubApi::vulkan, 12u, fence, ring, reply),      /* roles swapped */
-      RvkContextRecord(SubApi::vulkan, 12u, ring, fence, 0x7777u),
-      RvkContextRecord(SubApi::vulkan, 13u, ring, fence, reply),      /* 32 + 8192 bytes do not fit two pages */
+      RvkContextRecord(SubApi::vulkan, 12u, 0x7777u, page),           /* no such handle */
+      RvkContextRecord(SubApi::vulkan, 12u, client.handle(), page),   /* not a ring */
   };
   for (const RvkContextRecord &asked : cases) {
       CHECK_STATUS(fixture.bind(&first_context, asked), Status::invalid_parameter);
       CHECK_EQ(fixture.table().bound(), 0u);
       CHECK_EQ(fixture.handles().outstanding(), 0u);
+      CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
       CHECK(fixture.table().invariants_hold());
   }
   CHECK_EQ(host.queue().requests(), 0u);
   CHECK_STATUS(fixture.bind(nullptr), Status::invalid_state);
-  /* Pages VidMm has taken away are pages the device may not be given. */
-  fixture.reply().evict(30u);
-  CHECK_STATUS(fixture.bind(&first_context), Status::invalid_parameter);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+
+/* The name is only a name: VidMm never mapping it, or evicting it, moves
+ * nothing the device holds, and a ring of any order the capset allows binds. */
+TEST(rvk_context_table_bind, a_name_vidmm_never_mapped_or_evicted_still_binds)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context, fixture.record(20u)), Status::ok);
+  CHECK_EQ(fixture.memory().pages().ring().count(), 257u);   /* 32 + 1 MiB, in pages */
+  fixture.ring().map_into_aperture(10u);
+  fixture.ring().evict(10u);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 TEST(rvk_context_table_bind, a_context_bound_twice_or_memory_already_in_use_is_refused)
 { Fixture fixture;
@@ -459,19 +512,12 @@ TEST(rvk_context_table_bind, every_doorbell_taken_refuses_the_next_context)
 { Fixture fixture;
   Host host(fixture.mapped());
   static int contexts[RvkContextTable::max_contexts + 1u];
-  std::optional<ProcessAllocation> memory[RvkContextTable::max_contexts + 1u][3];
-  for (std::uint32_t index = 0u; index <= RvkContextTable::max_contexts; index++) {
-      memory[index][0].emplace(fixture.platform(), fixture.allocations(), fixture.handles(),
-                               AllocationKind::context_ring, 2u * page);
-      memory[index][1].emplace(fixture.platform(), fixture.allocations(), fixture.handles(),
-                               AllocationKind::fence_page, page);
-      memory[index][2].emplace(fixture.platform(), fixture.allocations(), fixture.handles(),
-                               AllocationKind::reply_slot, page);
-      for (std::uint32_t role = 0u; role < 3u; role++) memory[index][role]->map_into_aperture(100u + index * 4u + role);
-  }
+  std::optional<ProcessAllocation> names[RvkContextTable::max_contexts + 1u];
+  for (std::uint32_t index = 0u; index <= RvkContextTable::max_contexts; index++)
+      names[index].emplace(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
+                           page);
   const auto record_of = [&](std::uint32_t index) {
-      return RvkContextRecord(SubApi::vulkan, 12u, memory[index][0]->handle(), memory[index][1]->handle(),
-                              memory[index][2]->handle());
+      return RvkContextRecord(SubApi::vulkan, 12u, names[index]->handle(), page);
   };
   for (std::uint32_t index = 0u; index < RvkContextTable::max_contexts; index++)
       CHECK_STATUS(fixture.bind(&contexts[index], record_of(index)), Status::ok);
@@ -484,16 +530,37 @@ TEST(rvk_context_table_bind, every_doorbell_taken_refuses_the_next_context)
   CHECK(fixture.table().invariants_hold());
   for (std::uint32_t index = 0u; index <= last; index++)
       if (index != 7u) CHECK_STATUS(fixture.table().unbind(&contexts[index], &fixture.device()), Status::ok);
-  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
 
-TEST(rvk_context_table_bind, a_page_that_cannot_be_mapped_or_a_refused_vector_binds_nothing)
+/* No memory for the ring, fence page or reply slot, no view of one for the
+ * kernel or the process, or a refused vector: nothing bound, nothing held,
+ * nothing asked of the device. */
+TEST(rvk_context_table_bind, memory_or_a_view_that_cannot_be_had_or_a_refused_vector_binds_nothing)
 { Fixture fixture;
   Host host(fixture.mapped());
+  const auto nothing_held = [&fixture, &host] {
+      CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+      CHECK_EQ(fixture.platform().process_mappings(), 0u);
+      CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+      CHECK_EQ(fixture.table().bound(), 0u);
+      CHECK_EQ(host.queue().requests(), 0u);
+      CHECK(fixture.table().invariants_hold());
+  };
+  for (std::uint32_t nth = 1u; nth <= 3u; nth++) {
+      fixture.platform().fail_page_allocation_at(nth);
+      CHECK_STATUS(fixture.bind(&first_context), Status::no_memory);
+      nothing_held();
+  }
   for (std::uint32_t nth = 1u; nth <= 2u; nth++) {
       fixture.platform().fail_frame_map_at(nth);
       CHECK_STATUS(fixture.bind(&first_context), Status::no_memory);
-      CHECK_EQ(fixture.platform().mapped_frames(), 0u);
-      CHECK_EQ(fixture.table().bound(), 0u);
+      nothing_held();
+  }
+  for (std::uint32_t nth = 1u; nth <= 2u; nth++) {
+      fixture.platform().fail_process_map_at(nth);
+      CHECK_STATUS(fixture.bind(&first_context), Status::no_memory);
+      nothing_held();
   }
   fixture.platform().fail_frame_map_at(0u);
   fixture.mapped().common().refuse_vectors();
@@ -513,6 +580,8 @@ TEST(rvk_context_table_bind, a_setup_the_device_refuses_is_undone)
   CHECK_EQ(host.count_of(ctx_destroy_type), 1u);
   CHECK_EQ(host.count_of(unref_type), 1u);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
   CHECK(fixture.platform().logged_line("status 0xC00000BB"));
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
@@ -520,8 +589,7 @@ TEST(rvk_context_table_bind, a_setup_the_device_refuses_is_undone)
 TEST(rvk_context_table_bind, a_record_the_capset_forbids_is_refused_before_the_device_is_asked)
 { Fixture fixture;
   Host host(fixture.mapped());
-  const RvkContextRecord opengl(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
-                                fixture.reply().handle());
+  const RvkContextRecord opengl(SubApi::opengl, 12u, fixture.ring().handle(), page);
   const CapsetInfo vulkan_only(av::ProtocolVersion(1u, 0u), 0x1u, 64u, 12u, 20u, 0u,
                                av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
   CHECK_STATUS(fixture.table().bind(&first_context, opengl, fixture.device(),
@@ -545,9 +613,13 @@ TEST(rvk_context_table_unbind, tears_down_on_the_device_or_lets_go_without_one)
   CHECK_STATUS(fixture.table().unbind(&first_context, nullptr), Status::ok);   /* no device: nothing sent */
   CHECK_EQ(host.queue().requests(), asked);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
-/* A device that will not answer a teardown still has its context let go of. */
+/* A device that will not answer a teardown still has its context let go of,
+ * but may still write its ring, fence page and reply slot: those are kept out
+ * of use for good, with no view of them left. */
 TEST(rvk_context_table_unbind, a_device_that_stopped_answering_still_releases_the_slot)
 { Fixture fixture;
   { Host host(fixture.mapped());
@@ -556,7 +628,9 @@ TEST(rvk_context_table_unbind, a_device_that_stopped_answering_still_releases_th
   CHECK_STATUS(fixture.device().stop(), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(fixture.table().bound(), 0u);
-  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().reclaim_page_blocks(), 3u); }
 
 TEST(rvk_context_table_abandon_all, a_reset_device_serves_and_accepts_nothing_until_unbound)
 { Fixture fixture;
@@ -575,18 +649,18 @@ TEST(rvk_context_table_abandon_all, a_reset_device_serves_and_accepts_nothing_un
   const std::uint32_t asked = host.queue().requests();
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(host.queue().requests(), asked);
+  /* A reset device holds nothing, so the memory is free again. */
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
   fixture.platform().set_irql(Irql::dispatch);
   static_cast<void>(fixture.node().abort_pending());
   fixture.platform().set_irql(Irql::passive); }
 
-TEST(rvk_context_table_user_of, names_the_context_an_allocation_serves)
+TEST(rvk_context_table_user_of, names_the_context_an_allocation_names)
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK(fixture.table().user_of(fixture.ring().allocation()) == nullptr);
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   CHECK(fixture.table().user_of(fixture.ring().allocation()) == &first_context);
-  CHECK(fixture.table().user_of(fixture.fence().allocation()) == &first_context);
-  CHECK(fixture.table().user_of(fixture.reply().allocation()) == &first_context);
   CHECK(fixture.table().user_of(nullptr) == nullptr);
   int unrelated = 0;
   CHECK(fixture.table().user_of(static_cast<const Allocation *>(static_cast<void *>(&unrelated))) == nullptr);
@@ -598,8 +672,8 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   static_cast<void>(fixture.table().bind(&first_context, fixture.record(), fixture.device(),
                                          fixture.mapped().function().doorbells(), capset()));
   static_cast<void>(fixture.table().unbind(&first_context, nullptr));
-  av::HostVisibleBindRecord chunk(av::HostVisibleBindRecord::Operation::unbind, 0u, 1u);
-  static_cast<void>(fixture.table().bind_chunk(&first_context, chunk, fixture.device()));
+  av::ContextViewsRecord views;
+  static_cast<void>(fixture.table().views(&first_context, views));
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.table().abandon_all();
   static_cast<void>(fixture.table().user_of(nullptr));
@@ -609,68 +683,63 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   fixture.table().serve(fixture.node(), fixture.queues());
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::allocation_at_dispatch)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
   while (fixture.platform().claim(Violation::lock_order)) {}
   while (fixture.platform().claim(Violation::release_order)) {} }
 
-TEST(rvk_context_table_invariants, detect_a_slot_live_unbound_or_bound_without_its_allocations)
+TEST(rvk_context_table_invariants, detect_a_slot_live_unbound_or_bound_without_its_name_or_memory)
 { Fixture fixture;
   Host host(fixture.mapped());
   RvkContextTable &table = fixture.table();
-  std::uint8_t stray = 0u;
   CHECK(table.invariants_hold());
-  /* Free slots: live, holding a view, or naming an allocation. */
+  /* Free slots: live, holding memory, or naming an allocation. */
   RvkContextTableProbe::set_live(table, 5u, true);
   CHECK(!table.invariants_hold());
   RvkContextTableProbe::set_live(table, 5u, false);
-  for (const bool ring : both_views) {
-      RvkContextTableProbe::swap_view(table, 6u, ring, &stray);
-      CHECK(!table.invariants_hold());
-      RvkContextTableProbe::swap_view(table, 6u, ring, nullptr);
-  }
-  RvkContextTableProbe::swap_use(table, 6u, 0u, fixture.ring().allocation());
+  static_cast<void>(RvkContextTableProbe::memory(table, 6u).construct(fixture.platform()));
   CHECK(!table.invariants_hold());
-  RvkContextTableProbe::swap_use(table, 6u, 0u, nullptr);
-  /* A slot claimed but not yet set up is bound without a binding; live, it is broken. */
+  RvkContextTableProbe::memory(table, 6u).destroy();
+  RvkContextTableProbe::swap_name(table, 6u, fixture.ring().allocation());
+  CHECK(!table.invariants_hold());
+  RvkContextTableProbe::swap_name(table, 6u, nullptr);
+  /* A slot claimed but not yet set up is bound without a binding or memory;
+   * live, it is broken. */
   RvkContextTableProbe::set_context(table, 7u, &second_context);
-  for (std::uint32_t role = 0u; role < 3u; role++)
-      RvkContextTableProbe::swap_use(table, 7u, role, fixture.ring().allocation());
+  RvkContextTableProbe::swap_name(table, 7u, fixture.ring().allocation());
   CHECK(table.invariants_hold());
   RvkContextTableProbe::set_live(table, 7u, true);
   CHECK(!table.invariants_hold());
-  RvkContextTableProbe::swap_view(table, 7u, true, &stray);
-  RvkContextTableProbe::swap_view(table, 7u, false, &stray);
-  CHECK(!table.invariants_hold());   /* mapped, live, and still no binding */
-  RvkContextTableProbe::swap_view(table, 7u, true, nullptr);
-  RvkContextTableProbe::swap_view(table, 7u, false, nullptr);
   RvkContextTableProbe::set_live(table, 7u, false);
-  for (std::uint32_t role = 0u; role < 3u; role++) RvkContextTableProbe::swap_use(table, 7u, role, nullptr);
+  /* Claimed with no name at all. */
+  RvkContextTableProbe::swap_name(table, 7u, nullptr);
+  CHECK(!table.invariants_hold());
   RvkContextTableProbe::set_context(table, 7u, nullptr);
-  /* A bound, live slot: every allocation named, both views mapped. */
+  CHECK(table.invariants_hold());
+  /* A bound, live slot: named, and on memory that is held and mapped into
+   * the process. */
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   CHECK(table.invariants_hold());
-  for (std::uint32_t role = 0u; role < 3u; role++) {
-      const Allocation *const was = RvkContextTableProbe::swap_use(table, 0u, role, nullptr);
-      CHECK(!table.invariants_hold());
-      RvkContextTableProbe::swap_use(table, 0u, role, was);
-  }
-  for (const bool ring : both_views) {
-      std::uint8_t *const was = RvkContextTableProbe::swap_view(table, 0u, ring, nullptr);
-      CHECK(!table.invariants_hold());
-      RvkContextTableProbe::swap_view(table, 0u, ring, was);
-  }
-  CHECK(table.invariants_hold());
-  /* A free slot still holding a binding. */
-  RvkContextTableProbe::set_live(table, 0u, false);
-  RvkContextTableProbe::set_context(table, 0u, nullptr);
-  const Allocation *const ring_use = RvkContextTableProbe::swap_use(table, 0u, 0u, nullptr);
-  std::uint8_t *const ring_view = RvkContextTableProbe::swap_view(table, 0u, true, nullptr);
-  std::uint8_t *const fence_view = RvkContextTableProbe::swap_view(table, 0u, false, nullptr);
+  const Allocation *const name = RvkContextTableProbe::swap_name(table, 0u, nullptr);
   CHECK(!table.invariants_hold());
-  RvkContextTableProbe::set_context(table, 0u, &first_context);
-  RvkContextTableProbe::swap_use(table, 0u, 0u, ring_use);
-  RvkContextTableProbe::swap_view(table, 0u, true, ring_view);
-  RvkContextTableProbe::swap_view(table, 0u, false, fence_view);
+  RvkContextTableProbe::swap_name(table, 0u, name);
+  av::ContextMemory &memory = fixture.memory();
+  memory.release();
+  CHECK(!table.invariants_hold());   /* live on no memory */
+  CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
+  CHECK(!table.invariants_hold());   /* live on memory the process cannot see */
+  CHECK_STATUS(memory.map_into_process(), Status::ok);
+  CHECK(table.invariants_hold());
+  /* Memory whose own invariant is broken. */
+  RvkContextTableProbe::set_live(table, 0u, false);
+  av::ContextMemoryProbe::fence(memory).release();
+  CHECK(!table.invariants_hold());
+  memory.release();
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
+  CHECK_STATUS(memory.map_into_process(), Status::ok);
+  RvkContextTableProbe::set_live(table, 0u, true);
+  CHECK(table.invariants_hold());
   CHECK_STATUS(table.unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* A handle whose data is not one of this adapter's allocations names no memory. */
@@ -679,7 +748,7 @@ TEST(rvk_context_table_bind, a_handle_to_something_that_is_not_an_allocation_is_
   Host host(fixture.mapped());
   int not_an_allocation = 0;
   const std::uint32_t handle = fixture.handles().insert(&not_an_allocation);
-  const RvkContextRecord record(SubApi::vulkan, 12u, handle, fixture.fence().handle(), fixture.reply().handle());
+  const RvkContextRecord record(SubApi::vulkan, 12u, handle, page);
   CHECK_STATUS(fixture.bind(&first_context, record), Status::invalid_parameter);
   CHECK_EQ(fixture.handles().outstanding(), 0u);
   CHECK_STATUS(fixture.table().unbind(nullptr, &fixture.device()), Status::invalid_parameter); }
@@ -698,7 +767,8 @@ TEST(rvk_context_table_unbind, a_context_failed_by_its_fence_page_is_still_destr
   CHECK_EQ(host.count_of(ctx_destroy_type), 1u);
   CHECK_EQ(host.count_of(unref_type), 3u); }
 
-/* An adapter destroyed with contexts still bound lets go of their pages. */
+/* An adapter destroyed with contexts still bound lets go of their pages: its
+ * device stopped first, and holds none of them. */
 TEST(rvk_context_table, destruction_releases_what_is_still_bound)
 { Fixture fixture;
   Host host(fixture.mapped());
@@ -706,8 +776,11 @@ TEST(rvk_context_table, destruction_releases_what_is_still_bound)
     CHECK_STATUS(table.bind(&first_context, fixture.record(), fixture.device(),
                             fixture.mapped().function().doorbells(), capset()),
                  Status::ok);
-    CHECK_EQ(fixture.platform().mapped_frames(), 2u); }
-  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+    CHECK_EQ(fixture.platform().mapped_frames(), 2u);
+    CHECK_EQ(fixture.platform().owned_page_blocks(), 3u); }
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
 
 /* FR-006: a context the host faulted has everything it queued completed, in
  * order, so the process waiting on it wakes; its next submission is refused
@@ -780,244 +853,6 @@ TEST(rvk_context_table_serve, a_page_no_device_could_write_loses_the_context_too
   CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::invalid_parameter);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
-/* Feature 045: a process binds a host-visible chunk - guest RAM the host GPU
- * imports - to its live rvk context by escape. The chunk becomes a GUEST blob of
- * the context's own resource range, past its three transport resources. */
-namespace {
-
-using av::HostVisibleBindRecord;
-using BindOperation = av::HostVisibleBindRecord::Operation;
-
-constexpr std::uint32_t chunk_base = av::RvkContextBinding::first_resource_id + 3u;
-
-Status bind_chunk(Fixture &fixture, void *context, std::uint32_t allocation, HostVisibleBindRecord &answer)
-{
-    answer = HostVisibleBindRecord(BindOperation::bind, allocation, 0u);
-    return fixture.table().bind_chunk(context, answer, fixture.device());
-}
-
-Status unbind_chunk(Fixture &fixture, void *context, std::uint32_t resource)
-{
-    HostVisibleBindRecord record(BindOperation::unbind, 0u, resource);
-    return fixture.table().bind_chunk(context, record, fixture.device());
-}
-
-}  // namespace
-
-TEST(rvk_context_table_bind_chunk, a_mapped_chunk_becomes_a_blob_of_the_context_s_range)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, 4u * page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  CHECK_EQ(answer.resource_id(), chunk_base);
-  CHECK_EQ(answer.pages(), 4u);
-  CHECK(fixture.table().invariants_hold());
-  /* The fourth blob: the chunk's pages, as one entry here since they are contiguous. */
-  CHECK_EQ(host.count_of(create_blob_type), 4u);
-  CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
-  CHECK_EQ(host.field(create_blob_type, 3u, 36u), 1u);
-  CHECK_EQ(host.field(create_blob_type, 3u, 56u),
-           static_cast<std::uint32_t>(fixture.platform().physical_address(chunk.bytes())));
-  CHECK(fixture.table().user_of(chunk.allocation()) == &first_context);
-  CHECK_EQ(fixture.handles().outstanding(), 0u);
-
-  /* A second chunk takes the next slot; unbinding the first frees it for the next bind. */
-  ProcessAllocation second(fixture.platform(), fixture.allocations(), fixture.handles(),
-                           AllocationKind::host_visible_memory, page);
-  second.map_into_aperture(50u);
-  HostVisibleBindRecord second_answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, second.handle(), second_answer), Status::ok);
-  CHECK_EQ(second_answer.resource_id(), chunk_base + 1u);
-  /* The second is found past the first, which is still bound; then the first. */
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 1u), Status::ok);
-  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base + 1u);
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::ok);
-  CHECK_EQ(host.count_of(unref_type), 2u);
-  CHECK_EQ(host.field(unref_type, 1u, 24u), chunk_base);
-  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
-  CHECK(fixture.table().invariants_hold());
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  CHECK_EQ(answer.resource_id(), chunk_base);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-/* Each refusal sends the device nothing and binds nothing. */
-TEST(rvk_context_table_bind_chunk, refuses_what_is_not_the_process_s_mapped_chunk_on_a_live_context)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, 2u * page);
-  ProcessAllocation unmapped(fixture.platform(), fixture.allocations(), fixture.handles(),
-                             AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord answer;
-  /* No context bound yet. */
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  const std::uint32_t asked = host.queue().requests();
-  CHECK_STATUS(bind_chunk(fixture, &second_context, chunk.handle(), answer), Status::invalid_parameter);
-  CHECK_STATUS(bind_chunk(fixture, &first_context, fixture.ring().handle(), answer), Status::invalid_parameter);
-  CHECK_STATUS(bind_chunk(fixture, &first_context, unmapped.handle(), answer), Status::invalid_parameter);
-  CHECK_STATUS(bind_chunk(fixture, &first_context, 0x7777u, answer), Status::invalid_parameter);
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::invalid_parameter);
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 5u), Status::invalid_parameter);
-  CHECK_EQ(host.queue().requests(), asked);
-  CHECK_EQ(answer.resource_id(), 0u);
-  /* The same chunk twice. */
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  const std::uint32_t after = host.queue().requests();
-  HostVisibleBindRecord again;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), again), Status::invalid_parameter);
-  CHECK_EQ(host.queue().requests(), after);
-  CHECK_EQ(fixture.handles().outstanding(), 0u);
-  CHECK(fixture.table().invariants_hold());
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-/* A device refusing the blob leaves the slot free and the chunk unbound. */
-TEST(rvk_context_table_bind_chunk, a_blob_the_device_refuses_binds_nothing)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  host.refuse_at(static_cast<int>(host.queue().requests()));
-  HostVisibleBindRecord answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::not_supported);
-  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  CHECK_EQ(answer.resource_id(), chunk_base);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-/* Every chunk slot taken refuses the next chunk without asking the device. */
-TEST(rvk_context_table_bind_chunk, the_context_s_chunk_slots_full_refuses_the_next)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  std::optional<ProcessAllocation> chunks[av::RvkContextBinding::chunk_slots + 1u];
-  for (std::uint32_t index = 0u; index <= av::RvkContextBinding::chunk_slots; index++) {
-      chunks[index].emplace(fixture.platform(), fixture.allocations(), fixture.handles(),
-                            AllocationKind::host_visible_memory, page);
-      chunks[index]->map_into_aperture(100u + index);
-  }
-  HostVisibleBindRecord answer;
-  for (std::uint32_t index = 0u; index < av::RvkContextBinding::chunk_slots; index++) {
-      CHECK_STATUS(bind_chunk(fixture, &first_context, chunks[index]->handle(), answer), Status::ok);
-      CHECK_EQ(answer.resource_id(), chunk_base + index);
-  }
-  const std::uint32_t asked = host.queue().requests();
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunks[av::RvkContextBinding::chunk_slots]->handle(), answer),
-               Status::no_space);
-  CHECK_EQ(host.queue().requests(), asked);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  /* Teardown released every chunk (the fake device logs only the first 64
-   * requests, so what is judged is that none is still named). */
-  for (std::uint32_t index = 0u; index <= av::RvkContextBinding::chunk_slots; index++)
-      CHECK(fixture.table().user_of(chunks[index]->allocation()) == nullptr);
-  CHECK(fixture.table().invariants_hold()); }
-
-/* A context torn down is destroyed on the device before its chunks are
- * released: the device refuses to release a chunk it still holds imported, and
- * destroying the context ends its imports. A second context's chunks take its
- * own range. */
-TEST(rvk_context_table_bind_chunk, teardown_destroys_the_context_before_its_chunks_and_ranges_are_per_context)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  /* CTX_DESTROY, then the three transport unrefs, then the chunk's. */
-  std::uint32_t chunk_unref = 0u;
-  std::uint32_t destroy = 0u;
-  for (std::uint32_t i = 0u; i < host.queue().requests(); i++) {
-      if (host.queue().request_type(i) == unref_type) chunk_unref = i;
-      if (host.queue().request_type(i) == ctx_destroy_type) destroy = i;
-  }
-  CHECK(destroy < chunk_unref);
-  CHECK_EQ(host.field(unref_type, 3u, 24u), chunk_base);
-  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
-  CHECK(fixture.table().invariants_hold());
-
-  /* Slot 1 of the adapter: its chunks start past its own transport resources. */
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation ring(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
-                         2u * page);
-  ProcessAllocation fences(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::fence_page,
-                           page);
-  ProcessAllocation reply(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::reply_slot,
-                          page);
-  ring.map_into_aperture(60u);
-  fences.map_into_aperture(70u);
-  reply.map_into_aperture(80u);
-  CHECK_STATUS(fixture.bind(&second_context, RvkContextRecord(SubApi::vulkan, 12u, ring.handle(), fences.handle(),
-                                                              reply.handle())),
-               Status::ok);
-  CHECK_STATUS(bind_chunk(fixture, &second_context, chunk.handle(), answer), Status::ok);
-  CHECK_EQ(answer.resource_id(),
-           av::RvkContextBinding::first_resource_id + av::RvkContextBinding::resources_per_context + 3u);
-  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-/* Abandoned by a reset, a context's chunks are let go of without a request. */
-TEST(rvk_context_table_bind_chunk, an_abandoned_context_releases_its_chunks_silently)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
-  fixture.table().abandon_all();
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
-  const std::uint32_t asked = host.queue().requests();
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  CHECK_EQ(host.queue().requests(), asked);
-  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
-  CHECK(fixture.table().invariants_hold()); }
-
-/* A context the host faulted takes no chunk: it will never import one. */
-TEST(rvk_context_table_bind_chunk, a_context_the_host_faulted_is_refused)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  fixture.complete_through(0u, 6u);
-  fixture.serve();
-  HostVisibleBindRecord answer;
-  const std::uint32_t asked = host.queue().requests();
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
-  CHECK_EQ(host.queue().requests(), asked);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-/* A chunk slot naming an allocation with no resource, or a chunk on a slot no
- * context holds, is a table that has lost track of what the device holds. */
-TEST(rvk_context_table_invariants, detect_a_broken_chunk_or_one_on_a_free_slot)
-{ Fixture fixture;
-  Host host(fixture.mapped());
-  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  av::ContextChunk &held = RvkContextTableProbe::chunk(fixture.table(), 0u, 3u);
-  held.take_guest(*fixture.ring().allocation(), 0u);
-  CHECK(!fixture.table().invariants_hold());
-  held.clear();
-  CHECK(fixture.table().invariants_hold());
-  av::ContextChunk &stray = RvkContextTableProbe::chunk(fixture.table(), 5u, 0u);
-  stray.take_guest(*fixture.ring().allocation(), 7u);
-  CHECK(!fixture.table().invariants_hold());
-  stray.clear();
-  CHECK(fixture.table().invariants_hold());
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
-
-
 /* ---- window chunks (docs/host-window.md) ------------------------------------------ */
 
 /* A process asks for a chunk of the host window on its live rvk context: the
@@ -1029,8 +864,16 @@ namespace {
 using av::HostWindowRecord;
 using WindowOperation = av::HostWindowRecord::Operation;
 
+/* A context's chunks take its resources past its three transport ones. */
+constexpr std::uint32_t chunk_base = av::RvkContextBinding::first_resource_id + 3u;
 constexpr std::uint64_t window_base = 0x4000000000ull;
 constexpr std::uint64_t window_pages = 16u;
+/* What a bound context itself holds: its ring and reply slot in the process,
+ * and its ring, fence page and reply slot as pages. */
+constexpr std::uint32_t context_views = 2u;
+constexpr std::uint32_t context_blocks = 3u;
+constexpr std::uint32_t blob_mem_guest = 1u;     /* VIRTIO_GPU_BLOB_MEM_GUEST */
+constexpr std::uint32_t blob_mem_host3d = 2u;    /* VIRTIO_GPU_BLOB_MEM_HOST3D */
 
 Status open_window(Fixture &fixture, void *context, std::uint64_t bytes, HostWindowRecord &answer)
 {
@@ -1072,13 +915,14 @@ TEST(rvk_context_table_window_chunk, an_open_places_a_host_blob_in_the_window_an
   /* The fourth blob, after the transport's three: HOST3D, mappable, no pages of
    * the guest's, and as long as the pages granted. */
   CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
-  CHECK_EQ(host.field(create_blob_type, 3u, 28u), 2u);   /* VIRTIO_GPU_BLOB_MEM_HOST3D */
+  CHECK_EQ(host.field(create_blob_type, 3u, 28u), blob_mem_host3d);
   CHECK_EQ(host.field(create_blob_type, 3u, 32u), 1u);   /* VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE */
   CHECK_EQ(host.field(create_blob_type, 3u, 36u), 0u);
   CHECK_EQ(field64(host, create_blob_type, 3u, 48u), 0x2000u);
   CHECK_EQ(host.field(map_blob_type, 0u, 24u), chunk_base);
   CHECK_EQ(field64(host, map_blob_type, 0u, 32u), 0u);
   CHECK_EQ(fixture.window().pages_in_use(), 2u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks);   /* no guest RAM taken */
 
   /* The next chunk takes the next slot and the next free pages. */
   HostWindowRecord second;
@@ -1086,17 +930,17 @@ TEST(rvk_context_table_window_chunk, an_open_places_a_host_blob_in_the_window_an
   CHECK_EQ(second.resource_id(), chunk_base + 1u);
   CHECK_EQ(field64(host, map_blob_type, 1u, 32u), 2u * page);
   CHECK(fixture.platform().maps_into_process(second.address(), window_base + 2u * page, page));
-  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 2u);
 
   /* A close takes the process's view down, then the blob, then the pages. */
   host.watch(fixture.window());
   CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
   CHECK_EQ(host.field(unmap_blob_type, 0u, 24u), chunk_base);
   CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
-  CHECK_EQ(host.views_when_unmapped(), 1u);    /* the process's view was already gone */
-  CHECK_EQ(host.pages_when_released(), 3u);    /* the pages were not yet back */
+  CHECK_EQ(host.views_when_unmapped(), context_views + 1u);   /* the process's view was already gone */
+  CHECK_EQ(host.pages_when_released(), 3u);                   /* the pages were not yet back */
   CHECK_EQ(fixture.window().pages_in_use(), 1u);
-  CHECK_EQ(fixture.platform().process_mappings(), 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
   CHECK(!fixture.platform().maps_into_process(answer.address(), window_base, 0x2000u));
 
   /* First fit from the start of the window: the pages just freed are reused,
@@ -1122,53 +966,190 @@ TEST(rvk_context_table_window_chunk, an_open_places_a_host_blob_in_the_window_an
   CHECK(destroy < last_unmap);
   CHECK(fixture.table().invariants_hold()); }
 
-/* Each thing an open can be refused for, and none of them leaves anything
- * taken, placed or mapped. */
+/* A chunk the window cannot hold - there is none - is guest RAM the driver
+ * owns: a GUEST blob over its pages, mapped cached into the process, and freed
+ * once the device lets go of it. The process cannot tell the two kinds apart
+ * but by where they are. */
+TEST(rvk_context_table_ram_chunk, an_open_with_no_window_is_guest_ram_published_and_mapped)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, 0x1800u, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_EQ(answer.bytes(), 0x2000u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks + 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
+  /* A GUEST blob of the context's next chunk resource, one memory entry over
+   * the pages the process now sees. */
+  CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
+  CHECK_EQ(host.field(create_blob_type, 3u, 28u), blob_mem_guest);
+  CHECK_EQ(host.field(create_blob_type, 3u, 36u), 1u);
+  const std::uint64_t frame = field64(host, create_blob_type, 3u, 56u);
+  CHECK(fixture.platform().maps_into_process(answer.address(), frame, 0x2000u));
+  CHECK_EQ(at(answer.address())[0x1FFF], 0u);   /* zeroed */
+  CHECK(fixture.table().invariants_hold());
+  /* A close has the device let go of the blob, then frees the pages. */
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
+  CHECK_EQ(host.count_of(unmap_blob_type), 0u);   /* nothing was placed */
+  CHECK_EQ(fixture.platform().process_mappings(), context_views);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
+
+/* A window with no room for the chunk, one withdrawn, a device that will not
+ * make or place the host blob, or a process that cannot be given a view of the
+ * window - a 32-bit one, where the window lies above 4 GiB - all get guest RAM
+ * instead, with whatever the window took given back. */
+TEST(rvk_context_table_ram_chunk, whatever_keeps_a_chunk_out_of_the_window_puts_it_in_guest_ram)
+{ struct Case { const char *what; std::uint64_t bytes; std::uint32_t refused; std::uint32_t map_info; bool fail_view;
+                bool withdraw; std::uint32_t unmaps; std::uint32_t unrefs; };
+  const Case cases[] = {
+      {"too big for the window", (window_pages + 1u) * page, 0u, GpuResponse::map_cache_cached, false, false, 0u, 0u},
+      {"withdrawn", page, 0u, GpuResponse::map_cache_cached, false, true, 0u, 0u},
+      {"host blob refused", page, create_blob_type, GpuResponse::map_cache_cached, false, false, 0u, 0u},
+      {"map refused", page, map_blob_type, GpuResponse::map_cache_cached, false, false, 0u, 1u},
+      {"map not cached", page, 0u, 0x3u, false, false, 0u, 1u},
+      {"no view of the window", page, 0u, GpuResponse::map_cache_cached, true, false, 1u, 1u},
+  };
+  for (const Case &one : cases) {
+      Fixture fixture;
+      Host host(fixture.mapped());
+      bind_with_window(fixture);
+      if (one.withdraw) fixture.window().withdraw();
+      host.refuse_next(one.refused);
+      host.answer_map_with(one.map_info);
+      if (one.fail_view) fixture.platform().fail_process_map_at(1u);
+      HostWindowRecord answer;
+      CHECK_STATUS(open_window(fixture, &first_context, one.bytes, answer), Status::ok);
+      CHECK_EQ(answer.resource_id(), chunk_base);
+      CHECK_EQ(host.count_of(unmap_blob_type), one.unmaps);
+      CHECK_EQ(host.count_of(unref_type), one.unrefs);
+      /* The window's pages went back, and the chunk is guest RAM. */
+      CHECK_EQ(fixture.window().pages_in_use(), 0u);
+      CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks + 1u);
+      CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
+      CHECK(!fixture.platform().maps_into_process(answer.address(), window_base, one.bytes));
+      CHECK(fixture.table().invariants_hold());
+      host.answer_map_with(GpuResponse::map_cache_cached);
+      CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+      CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+  } }
+
+/* Each thing an open or a close can be refused for, and none of them leaves
+ * anything taken, placed or mapped. */
 TEST(rvk_context_table_window_chunk, refuses_what_it_cannot_serve_and_holds_nothing_after)
 { Fixture fixture;
   Host host(fixture.mapped());
   HostWindowRecord answer;
-  /* No context bound, and then no window. */
+  /* No context bound. */
   CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::invalid_parameter);
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   const std::uint32_t asked = host.queue().requests();
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_supported);
   CHECK_STATUS(fixture.window().initialize(window_base, window_pages * page), Status::ok);
-  /* More than the window, and more than a page index can count. */
-  CHECK_STATUS(open_window(fixture, &first_context, (window_pages + 1u) * page, answer), Status::no_space);
+  /* More than a page list can count, in the window or in guest RAM, and more
+   * than whole pages can hold at all. */
   CHECK_STATUS(open_window(fixture, &first_context, (std::uint64_t{UINT32_MAX} + 1u) * page, answer),
                Status::no_space);
-  /* A resource that is none of the context's window chunks. */
+  CHECK_STATUS(open_window(fixture, &first_context, UINT64_MAX, answer), Status::no_space);
+  /* A resource that is none of the context's chunks. */
   CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
-  /* Withdrawn: the device changed, and nothing more is placed. */
-  fixture.window().withdraw();
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_supported);
   CHECK_EQ(host.queue().requests(), asked);
   CHECK_EQ(fixture.window().pages_in_use(), 0u);
-  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
-/* A guest chunk's resource is not a window chunk's: closing it through the
- * window is refused and leaves it bound. */
-TEST(rvk_context_table_window_chunk, a_guest_chunk_is_neither_closed_as_a_window_nor_the_reverse)
+/* Guest RAM that is not there, a process that cannot be given a view of it, or
+ * a GUEST blob the device refuses: nothing held, and the slot free again. */
+TEST(rvk_context_table_ram_chunk, memory_a_view_or_a_blob_that_cannot_be_had_holds_nothing)
 { Fixture fixture;
   Host host(fixture.mapped());
-  bind_with_window(fixture);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord bound;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), bound), Status::ok);
-  HostWindowRecord window;
-  CHECK_STATUS(open_window(fixture, &first_context, page, window), Status::ok);
-  CHECK_EQ(window.resource_id(), chunk_base + 1u);   /* the two kinds share the slots */
-  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
-  CHECK(fixture.table().user_of(chunk.allocation()) == &first_context);
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 1u), Status::invalid_parameter);
-  CHECK_EQ(fixture.platform().process_mappings(), 1u);
-  CHECK_STATUS(close_window(fixture, &first_context, chunk_base + 1u), Status::ok);
-  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  HostWindowRecord answer;
+  fixture.platform().fail_page_allocation_at(1u);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
+  fixture.platform().fail_allocation_at(1u);   /* the pages' frames */
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
+  fixture.platform().fail_process_map_at(1u);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
+  const std::uint32_t asked = host.queue().requests();
+  host.refuse_next(create_blob_type);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::not_supported);
+  CHECK_EQ(host.queue().requests(), asked + 1u);
+  CHECK_EQ(answer.resource_id(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A RAM chunk an import still holds - the device will not let go of it - stays
+ * bound, its pages and the process's view with it, so a process closing chunks
+ * early cannot have the driver keep page after page out of use; the context's
+ * teardown ends the import, and the pages go then. */
+TEST(rvk_context_table_ram_chunk, one_the_device_will_not_let_go_of_stays_bound_until_the_context_goes)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  host.refuse_next(unref_type);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::not_supported);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks + 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
+  /* The slot is still taken: the next chunk is the next resource. */
+  HostWindowRecord next;
+  CHECK_STATUS(open_window(fixture, &first_context, page, next), Status::ok);
+  CHECK_EQ(next.resource_id(), chunk_base + 1u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(host.count_of(unref_type), 1u + 2u + context_blocks);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u); }
+
+/* A device that answers a GUEST blob with nothing may have made it over the
+ * pages, and one that stopped answering may still hold a chunk's blob: both
+ * keep the pages out of use for good, with the process's view gone. */
+TEST(rvk_context_table_ram_chunk, pages_a_device_may_still_hold_are_never_freed)
+{ Fixture fixture;
+  { Host host(fixture.mapped());
+    CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+    HostWindowRecord answer;
+    CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok); }
+  fixture.platform().on_stall(nullptr, nullptr);
+  HostWindowRecord unanswered;
+  const Status status = open_window(fixture, &first_context, page, unanswered);
+  CHECK(status != Status::ok && status != Status::not_supported);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
+  CHECK_STATUS(fixture.device().stop(), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  /* The context's three blocks, the chunk it held, and the unanswered one. */
+  CHECK_EQ(fixture.platform().reclaim_page_blocks(), context_blocks + 2u); }
+
+/* A context the device no longer holds - reset, or gone - holds none of its
+ * RAM chunks either: freed with nothing asked. */
+TEST(rvk_context_table_ram_chunk, a_context_the_device_let_go_of_frees_its_ram_silently)
+{ const bool abandoned[] = {true, false};
+  for (bool reset : abandoned) {
+      Fixture fixture;
+      Host host(fixture.mapped());
+      CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+      HostWindowRecord answer;
+      CHECK_STATUS(open_window(fixture, &first_context, 3u * page, answer), Status::ok);
+      if (reset) fixture.table().abandon_all();
+      const std::uint32_t asked = host.queue().requests();
+      CHECK_STATUS(fixture.table().unbind(&first_context, reset ? &fixture.device() : nullptr), Status::ok);
+      CHECK_EQ(host.queue().requests(), asked);
+      CHECK_EQ(fixture.platform().process_mappings(), 0u);
+      CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+      CHECK(fixture.table().invariants_hold());
+  } }
 
 /* Every chunk slot taken refuses the next open without taking pages or asking
  * the device. */
@@ -1184,44 +1165,10 @@ TEST(rvk_context_table_window_chunk, the_context_s_chunk_slots_full_refuses_the_
   CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_space);
   CHECK_EQ(host.queue().requests(), asked);
   CHECK_EQ(fixture.window().pages_in_use(), av::RvkContextBinding::chunk_slots);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(fixture.window().pages_in_use(), 0u);
   CHECK_EQ(fixture.platform().process_mappings(), 0u); }
-
-/* A step that fails undoes the ones before it, in reverse: the pages come back
- * only once the device holds no blob over them. */
-TEST(rvk_context_table_window_chunk, a_failed_step_undoes_the_ones_before_it)
-{ struct Case { const char *what; std::uint32_t refused; std::uint32_t map_info; bool fail_view; Status status;
-                std::uint32_t unmaps; std::uint32_t unrefs; };
-  const Case cases[] = {
-      {"create refused", create_blob_type, GpuResponse::map_cache_cached, false, Status::not_supported, 0u, 0u},
-      {"map refused", map_blob_type, GpuResponse::map_cache_cached, false, Status::not_supported, 0u, 1u},
-      {"map not cached", 0u, 0x3u, false, Status::malformed, 0u, 1u},
-      {"no process view", 0u, GpuResponse::map_cache_cached, true, Status::no_memory, 1u, 1u},
-  };
-  for (const Case &one : cases) {
-      Fixture fixture;
-      Host host(fixture.mapped());
-      bind_with_window(fixture);
-      host.refuse_next(one.refused);
-      host.answer_map_with(one.map_info);
-      if (one.fail_view) fixture.platform().fail_process_map_at(1u);
-      HostWindowRecord answer;
-      CHECK_STATUS(open_window(fixture, &first_context, page, answer), one.status);
-      CHECK_EQ(answer.resource_id(), 0u);
-      CHECK_EQ(answer.address(), 0u);
-      CHECK_EQ(host.count_of(unmap_blob_type), one.unmaps);
-      CHECK_EQ(host.count_of(unref_type), one.unrefs);
-      CHECK_EQ(fixture.window().pages_in_use(), 0u);
-      CHECK_EQ(fixture.platform().process_mappings(), 0u);
-      /* The slot and the pages are free for the next open. */
-      host.answer_map_with(GpuResponse::map_cache_cached);
-      CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
-      CHECK_EQ(answer.resource_id(), chunk_base);
-      CHECK(fixture.platform().maps_into_process(answer.address(), window_base, page));
-      CHECK(fixture.table().invariants_hold());
-      CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  } }
 
 /* A blob the device would not release may still be placed over its pages, so
  * they stay out of the window for good - whether the open was being undone or
@@ -1233,20 +1180,25 @@ TEST(rvk_context_table_window_chunk, pages_the_device_did_not_let_go_of_are_neve
   fixture.platform().fail_process_map_at(1u);
   host.refuse_next(unref_type);
   HostWindowRecord answer;
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
+  /* The window's view failed and its blob stayed: those pages are kept, and
+   * the chunk is guest RAM. */
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
   CHECK_EQ(fixture.window().pages_in_use(), 1u);
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
-  CHECK_EQ(answer.resource_id(), chunk_base);
-  CHECK(fixture.platform().maps_into_process(answer.address(), window_base + page, page));
+  CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks + 1u);
+  HostWindowRecord windowed;
+  CHECK_STATUS(open_window(fixture, &first_context, page, windowed), Status::ok);
+  CHECK_EQ(windowed.resource_id(), chunk_base + 1u);
+  CHECK(fixture.platform().maps_into_process(windowed.address(), window_base + page, page));
   host.refuse_next(unmap_blob_type);
-  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
-  CHECK_EQ(fixture.platform().process_mappings(), 0u);   /* the process's view is gone all the same */
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base + 1u), Status::ok);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);   /* its view is gone all the same */
   CHECK_EQ(fixture.window().pages_in_use(), 2u);
-  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::invalid_parameter);
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
-  CHECK(fixture.platform().maps_into_process(answer.address(), window_base + 2u * page, page));
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base + 1u), Status::invalid_parameter);
+  CHECK_STATUS(open_window(fixture, &first_context, page, windowed), Status::ok);
+  CHECK(fixture.platform().maps_into_process(windowed.address(), window_base + 2u * page, page));
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  CHECK_EQ(fixture.window().pages_in_use(), 2u); }
+  CHECK_EQ(fixture.window().pages_in_use(), 2u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
 
 /* A context the device no longer holds - reset, or gone - holds none of its
  * window chunks either: the process's views come down and the pages are free,
@@ -1282,25 +1234,31 @@ TEST(rvk_context_table_window_chunk, a_device_that_stopped_answering_keeps_the_p
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(fixture.table().bound(), 0u);
   CHECK_EQ(fixture.platform().process_mappings(), 0u);
-  CHECK_EQ(fixture.window().pages_in_use(), 1u); }
+  CHECK_EQ(fixture.window().pages_in_use(), 1u);
+  CHECK_EQ(fixture.platform().reclaim_page_blocks(), context_blocks); }
 
-/* A table destroyed with a window chunk open still takes the process's view
- * down. */
+/* A table destroyed with chunks open - one in the window, one in guest RAM -
+ * still takes the process's views down and frees the RAM: the device stopped
+ * before the adapter went. */
 TEST(rvk_context_table_window_chunk, destruction_unmaps_what_is_still_open)
 { Fixture fixture;
   Host host(fixture.mapped());
-  CHECK_STATUS(fixture.window().initialize(window_base, window_pages * page), Status::ok);
+  CHECK_STATUS(fixture.window().initialize(window_base, page), Status::ok);
   { RvkContextTable table(fixture.platform(), fixture.mapped().interface(), fixture.allocations(), fixture.window());
     CHECK_STATUS(table.bind(&first_context, fixture.record(), fixture.device(),
                             fixture.mapped().function().doorbells(), capset()),
                  Status::ok);
-    HostWindowRecord answer(WindowOperation::open, page, 0u);
-    CHECK_STATUS(table.window_chunk(&first_context, answer, fixture.device()), Status::ok);
-    CHECK_EQ(fixture.platform().process_mappings(), 1u); }
+    HostWindowRecord windowed(WindowOperation::open, page, 0u);
+    CHECK_STATUS(table.window_chunk(&first_context, windowed, fixture.device()), Status::ok);
+    HostWindowRecord ram(WindowOperation::open, page, 0u);
+    CHECK_STATUS(table.window_chunk(&first_context, ram, fixture.device()), Status::ok);
+    CHECK_EQ(fixture.platform().process_mappings(), context_views + 2u);
+    CHECK_EQ(fixture.platform().owned_page_blocks(), context_blocks + 1u); }
   CHECK_EQ(fixture.platform().process_mappings(), 0u);
-  CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
 
-/* A context the host faulted takes no window chunk either. */
+/* A context the host faulted takes no chunk either. */
 TEST(rvk_context_table_window_chunk, a_context_the_host_faulted_is_refused)
 { Fixture fixture;
   Host host(fixture.mapped());
@@ -1325,6 +1283,25 @@ TEST(rvk_context_table_window_chunk, is_passive_only)
   while (fixture.platform().claim(Violation::lock_order)) {}
   while (fixture.platform().claim(Violation::release_order)) {} }
 
+/* A chunk slot holding pages with no resource, or a chunk on a slot no context
+ * holds, is a table that has lost track of what the device holds. */
+TEST(rvk_context_table_invariants, detect_a_broken_chunk_or_one_on_a_free_slot)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  av::GuestPages pages(fixture.platform());
+  av::ContextChunk &held = RvkContextTableProbe::chunk(fixture.table(), 0u, 3u);
+  held.take_ram(0u, pages);
+  CHECK(!fixture.table().invariants_hold());
+  held.clear();
+  CHECK(fixture.table().invariants_hold());
+  av::ContextChunk &stray = RvkContextTableProbe::chunk(fixture.table(), 5u, 0u);
+  stray.take_ram(7u, pages);
+  CHECK(!fixture.table().invariants_hold());
+  stray.clear();
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
 TEST(rvk_context_table_report, writes_a_window_chunk_s_pages)
 { Fixture fixture;
   Host host(fixture.mapped());
@@ -1347,11 +1324,8 @@ TEST(rvk_context_table_report, writes_each_live_context_its_memory_and_its_chunk
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
-  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
-                          AllocationKind::host_visible_memory, page);
-  chunk.map_into_aperture(40u);
-  HostVisibleBindRecord answer;
-  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
   char bytes[1024];
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.table().report(writer);
@@ -1361,11 +1335,12 @@ TEST(rvk_context_table_report, writes_each_live_context_its_memory_and_its_chunk
   char expected[1024];
   std::snprintf(expected, sizeof expected,
                 "rvk_context_table/0 busy=false bound=1\n"
-                "rvk_context_table/0/rvk_context/0 handle=0x%016llX doorbell=0 ring_order=12 ring=0x%016llX"
-                " fence_page=0x%016llX reply=0x%016llX state=2 context_id=1 completed=0 live=true lost=false\n"
-                "rvk_context_table/0/rvk_context/0/chunk/0 resource=%u allocation=0x%016llX",
-                hex_of(&first_context), hex_of(fixture.ring().allocation()), hex_of(fixture.fence().allocation()),
-                hex_of(fixture.reply().allocation()), static_cast<unsigned>(chunk_base), hex_of(chunk.allocation()));
+                "rvk_context_table/0/rvk_context/0 handle=0x%016llX doorbell=0 ring_order=12 name=0x%016llX"
+                " ring_view=%llu reply_view=%llu state=2 context_id=1 completed=0 live=true lost=false\n"
+                "rvk_context_table/0/rvk_context/0/chunk/0 resource=%u ram_bytes=4096",
+                hex_of(&first_context), hex_of(fixture.ring().allocation()),
+                static_cast<unsigned long long>(fixture.memory().ring_view()),
+                static_cast<unsigned long long>(fixture.memory().reply_view()), static_cast<unsigned>(chunk_base));
   CHECK(std::strcmp(writer.dump(), expected) == 0);
   CHECK(fixture.table().invariants_hold());
   CHECK_EQ(fixture.platform().locks_held(), 0u);
@@ -1440,28 +1415,21 @@ CapsetInfo capset_at(std::uint16_t minor)
                       av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
-/* A second context's ring, fence page and reply slot, mapped past the first's. */
+/* A second context's name. */
 class Transport {
 public:
-    Transport(Fixture &fixture, std::uint64_t at)
-        : ring_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring, 2u * page),
-          fence_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::fence_page, page),
-          reply_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::reply_slot, page)
+    explicit Transport(Fixture &fixture)
+        : ring_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring, page)
     {
-        ring_.map_into_aperture(at);
-        fence_.map_into_aperture(at + 2u);
-        reply_.map_into_aperture(at + 3u);
     }
     RvkContextRecord record(SubApi api, const GlContextOptions &options) const
     {
-        return RvkContextRecord(api, 12u, ring_.handle(), fence_.handle(), reply_.handle(), options);
+        return RvkContextRecord(api, 12u, ring_.handle(), page, options);
     }
     ProcessAllocation &ring() { return ring_; }
 
 private:
     ProcessAllocation ring_;
-    ProcessAllocation fence_;
-    ProcessAllocation reply_;
 };
 
 Status bind_at(Fixture &fixture, void *context, const RvkContextRecord &record, std::uint16_t minor = 1u)
@@ -1485,8 +1453,7 @@ TEST(rvk_context_table_bind, a_gl_contexts_options_reach_the_setup_unchanged)
   const GlContextOptions options(4u, 6u, GlProfile::core,
                                  GlContextOptions::debug | GlContextOptions::robust_access, 0u);
   CHECK_STATUS(bind_at(fixture, &first_context,
-                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
-                                        fixture.reply().handle(), options)),
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), page, options)),
                Status::ok);
   CHECK_EQ(host.count_of(submit_3d_type), 1u);
   CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 48u);            /* the setup's size */
@@ -1508,8 +1475,8 @@ TEST(rvk_context_table_bind, a_device_at_the_previous_minor_gets_the_old_setup_a
   CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 32u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   const std::uint32_t sent = host.queue().requests();
-  const RvkContextRecord with_options(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
-                                      fixture.reply().handle(), GlContextOptions(3u, 3u, GlProfile::core, 0u, 0u));
+  const RvkContextRecord with_options(SubApi::opengl, 12u, fixture.ring().handle(), page,
+                                      GlContextOptions(3u, 3u, GlProfile::core, 0u, 0u));
   CHECK_STATUS(bind_at(fixture, &first_context, with_options, 0u), Status::invalid_parameter);
   CHECK_EQ(host.queue().requests(), sent);
   CHECK_EQ(fixture.table().bound(), 0u);
@@ -1520,10 +1487,9 @@ TEST(rvk_context_table_bind, a_share_context_naming_a_live_gl_context_becomes_it
   Host host(fixture.mapped());
   const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
   CHECK_STATUS(bind_at(fixture, &first_context,
-                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
-                                        fixture.reply().handle(), core)),
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), page, core)),
                Status::ok);
-  Transport second(fixture, 60u);
+  Transport second(fixture);
   CHECK_STATUS(bind_at(fixture, &second_context,
                        second.record(SubApi::opengl, core.sharing(fixture.ring().handle()))),
                Status::ok);
@@ -1534,7 +1500,7 @@ TEST(rvk_context_table_bind, a_share_context_naming_a_live_gl_context_becomes_it
   CHECK_EQ(fixture.handles().outstanding(), 0u);
   CHECK(fixture.table().invariants_hold());
   /* A third may share the second, whose own ring names it. */
-  Transport third(fixture, 70u);
+  Transport third(fixture);
   CHECK_STATUS(bind_at(fixture, &third_context, third.record(SubApi::opengl, core.sharing(second.ring().handle()))),
                Status::ok);
   CHECK_EQ(host.field(submit_3d_type, 2u, options_offset + 4u), 2u);
@@ -1548,15 +1514,15 @@ TEST(rvk_context_table_bind, a_share_context_that_is_not_a_live_gl_context_of_th
   const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
   /* The first context speaks Vulkan. */
   CHECK_STATUS(bind_at(fixture, &first_context, fixture.record()), Status::ok);
-  Transport gl(fixture, 60u);
-  Transport asking(fixture, 70u);
+  Transport gl(fixture);
+  Transport asking(fixture);
   const std::uint32_t own = asking.ring().handle();
   ProcessAllocation stray(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
-                          2u * page);
-  stray.map_into_aperture(80u);
+                          page);
+  ProcessAllocation client(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::client, page);
   /* A handle of another process resolves to nothing here. */
   ProcessAllocation elsewhere(fixture.platform(), fixture.allocations(), fixture.handles(),
-                              AllocationKind::context_ring, 2u * page);
+                              AllocationKind::context_ring, page);
   const std::uint32_t foreign = elsewhere.handle();
   fixture.handles().remove(foreign);
   const std::uint32_t refused[] = {
@@ -1565,7 +1531,7 @@ TEST(rvk_context_table_bind, a_share_context_that_is_not_a_live_gl_context_of_th
       fixture.ring().handle(),       /* a Vulkan context's ring */
       own,                           /* the context's own */
       stray.handle(),                /* a ring no context runs on */
-      fixture.fence().handle(),      /* not a ring */
+      client.handle(),               /* not a ring */
   };
   const std::uint32_t sent = host.queue().requests();
   for (const std::uint32_t share : refused) {
@@ -1626,11 +1592,10 @@ TEST(rvk_context_table_bind, an_abandoned_gl_context_is_no_share_context)
   Host host(fixture.mapped());
   const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
   CHECK_STATUS(bind_at(fixture, &first_context,
-                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
-                                        fixture.reply().handle(), core)),
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), page, core)),
                Status::ok);
   fixture.table().abandon_all();
-  Transport second(fixture, 60u);
+  Transport second(fixture);
   const std::uint32_t sent = host.queue().requests();
   CHECK_STATUS(bind_at(fixture, &second_context, second.record(SubApi::opengl, core.sharing(fixture.ring().handle()))),
                Status::invalid_parameter);
@@ -1728,7 +1693,7 @@ TEST(rvk_context_table_kick, rings_a_live_context_s_doorbell_and_nothing_else)
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u);
   std::uint64_t tail = 0u;
-  std::memcpy(&tail, fixture.ring().bytes() + 8u, sizeof tail);
+  std::memcpy(&tail, fixture.ring_memory() + 8u, sizeof tail);
   CHECK_EQ(tail, 0u);                                   /* nothing was published */
 
   std::uint64_t awaited = 0u;

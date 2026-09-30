@@ -19,11 +19,13 @@ using av::SubApi;
 
 namespace {
 
-/* Ring 2, fence 3, reply 4 - three distinct non-zero allocation indices, an
- * order the wire allows, one sub-API. */
+constexpr std::uint32_t reply_bytes = 0x10000u;
+
+/* Named by allocation 2, with a 64 KiB reply slot, an order the wire allows,
+ * one sub-API. */
 RvkContextRecord sample()
 {
-    return RvkContextRecord(SubApi::vulkan, 16u, 2u, 3u, 4u);
+    return RvkContextRecord(SubApi::vulkan, 16u, 2u, reply_bytes);
 }
 
 class Encoded {
@@ -62,16 +64,18 @@ TEST(rvk_context_record, a_well_formed_record_round_trips)
   CHECK_EQ(decoded.sub_api(), SubApi::vulkan);
   CHECK_EQ(decoded.ring_order(), std::uint8_t{16u});
   CHECK_EQ(decoded.ring(), 2u);
-  CHECK_EQ(decoded.fence(), 3u);
-  CHECK_EQ(decoded.reply(), 4u);
+  CHECK_EQ(decoded.reply_bytes(), reply_bytes);
+  /* Where the contract puts the name and the size. */
+  CHECK_EQ(encoded.bytes()[12], 2u);
+  CHECK_EQ(encoded.bytes()[18], 1u);
   std::uint8_t again[RvkContextRecord::encoded_size] = {};
   CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
   CHECK(std::memcmp(again, encoded.bytes(), sizeof again) == 0); }
 
-/* Each known sub-API decodes: OpenGL and OpenCL as well as Vulkan. */
+/* Each known sub-API decodes: OpenGL, OpenCL and Direct3D as well as Vulkan. */
 TEST(rvk_context_record, every_known_sub_api_decodes)
-{ for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl}) {
-      RvkContextRecord record(api, 16u, 2u, 3u, 4u);
+{ for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl, SubApi::d3d}) {
+      RvkContextRecord record(api, 16u, 2u, reply_bytes);
       Encoded encoded(record);
       CHECK_STATUS(encoded.status(), Status::ok);
       RvkContextRecord decoded;
@@ -79,14 +83,18 @@ TEST(rvk_context_record, every_known_sub_api_decodes)
       CHECK(decoded.sub_api() == api);
   } }
 
-/* A reply of zero is a context that reads no answer back, which is legal. */
-TEST(rvk_context_record, a_reply_of_zero_is_no_reply_slot)
-{ RvkContextRecord record(SubApi::opencl, 12u, 2u, 3u, 0u);
-  Encoded encoded(record);
-  CHECK_STATUS(encoded.status(), Status::ok);
-  RvkContextRecord decoded;
-  CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
-  CHECK_EQ(decoded.reply(), 0u); }
+/* The reply slot is locked guest RAM for the context's life: at least a byte
+ * - every context reads answers - and no more than the protocol's bound. */
+TEST(rvk_context_record, a_reply_slot_is_sized_within_its_bounds)
+{ for (std::uint32_t bytes : {1u, 4096u, RvkContextRecord::max_reply_bytes}) {
+      Encoded encoded(RvkContextRecord(SubApi::opencl, 12u, 2u, bytes));
+      RvkContextRecord decoded;
+      CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+      CHECK_EQ(decoded.reply_bytes(), bytes);
+  }
+  CHECK(rejects_encoded(RvkContextRecord(SubApi::opencl, 12u, 2u, 0u)));
+  CHECK(rejects_encoded(RvkContextRecord(SubApi::opencl, 12u, 2u, RvkContextRecord::max_reply_bytes + 1u)));
+  CHECK(rejects_encoded(RvkContextRecord(SubApi::opencl, 12u, 2u, UINT32_MAX))); }
 
 TEST(rvk_context_record, a_short_record_is_refused)
 { Encoded encoded(sample());
@@ -112,26 +120,25 @@ TEST(rvk_context_record, a_sub_api_that_is_not_one_known_bit_is_refused)
 TEST(rvk_context_record, an_order_outside_the_wire_range_is_refused)
 { for (std::uint8_t order : {std::uint8_t{0u}, std::uint8_t{11u}, std::uint8_t{25u}, std::uint8_t{255u}}) {
       std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
-      CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 16u, 2u, 3u, 4u).encode(bytes, sizeof bytes),
+      CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 16u, 2u, reply_bytes).encode(bytes, sizeof bytes),
                    Status::ok);
       bytes[8] = order;
       CHECK(rejects(bytes, sizeof bytes));
   } }
 
-/* Ring and fence must be non-zero and distinct; a reply that names either is
- * refused, because one allocation cannot be two roles. */
-TEST(rvk_context_record, colliding_or_zero_allocation_ids_are_refused)
-{ CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 0u, 3u, 4u)));  /* ring zero */
-  CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 2u, 0u, 4u)));  /* fence zero */
-  CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 2u, 2u, 4u)));  /* ring == fence */
-  CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 2u, 3u, 2u)));  /* reply == ring */
-  CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 2u, 3u, 3u))); }/* reply == fence */
+/* A context with no name is one no driver can resolve. */
+TEST(rvk_context_record, a_context_named_by_no_allocation_is_refused)
+{ CHECK(rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 0u, reply_bytes)));
+  CHECK(!rejects_encoded(RvkContextRecord(SubApi::vulkan, 16u, 1u, reply_bytes))); }
 
+/* The padding after the order and the word after the reply size. */
 TEST(rvk_context_record, a_reserved_byte_that_is_not_zero_is_refused)
-{ std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
-  CHECK_STATUS(sample().encode(bytes, sizeof bytes), Status::ok);
-  bytes[9] = 1u;
-  CHECK(rejects(bytes, sizeof bytes)); }
+{ for (std::size_t at : {std::size_t{9u}, std::size_t{11u}, std::size_t{20u}, std::size_t{23u}}) {
+      std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
+      CHECK_STATUS(sample().encode(bytes, sizeof bytes), Status::ok);
+      bytes[at] = 1u;
+      CHECK(rejects(bytes, sizeof bytes));
+  } }
 
 /* ---- an OpenGL context's options, in the reserved tail (feature 050) ---- */
 
@@ -144,14 +151,14 @@ constexpr std::uint32_t share_handle = 0x40000242u;
 
 RvkContextRecord gl_record(const GlContextOptions &options)
 {
-    return RvkContextRecord(SubApi::opengl, 20u, 2u, 3u, 4u, options);
+    return RvkContextRecord(SubApi::opengl, 20u, 2u, reply_bytes, options);
 }
 
 /* The options' eight bytes at offset 24 of an OpenGL record, `tail` given. */
 bool rejects_tail(SubApi api, const std::uint8_t tail[8])
 {
     std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
-    if (RvkContextRecord(api, 20u, 2u, 3u, 4u).encode(bytes, sizeof bytes) != Status::ok) return false;
+    if (RvkContextRecord(api, 20u, 2u, reply_bytes).encode(bytes, sizeof bytes) != Status::ok) return false;
     std::memcpy(bytes + 24u, tail, 8u);
     return rejects(bytes, sizeof bytes);
 }
@@ -183,7 +190,7 @@ TEST(rvk_context_record, gl_options_round_trip_in_the_reserved_tail)
 /* All eight zero is 043's record: the host's default context, no sharing. */
 TEST(rvk_context_record, an_all_zero_tail_is_the_default_options)
 { for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl}) {
-      Encoded encoded(RvkContextRecord(api, 20u, 2u, 3u, 4u));
+      Encoded encoded(RvkContextRecord(api, 20u, 2u, reply_bytes));
       CHECK(std::memcmp(encoded.bytes() + 24u, "\0\0\0\0\0\0\0\0", 8u) == 0);
       RvkContextRecord decoded;
       CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
@@ -274,5 +281,6 @@ TEST(rvk_context_record, a_byte_flip_sweep_decodes_exactly_or_is_refused)
           CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
           CHECK(std::memcmp(again, bytes, sizeof again) == 0);
       }
-  /* The magic's 32 bits, the reserved padding's 24 and the flags' high 4 at least. */
-  CHECK(refused >= 60u); }
+  /* The magic's 32 bits, the reserved padding's 24 and word's 32, and the
+   * flags' high 4 at least. */
+  CHECK(refused >= 92u); }

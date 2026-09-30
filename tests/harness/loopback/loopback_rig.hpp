@@ -21,6 +21,7 @@ namespace av {
 class LoopbackRig {
 public:
     static constexpr std::uint8_t  ring_order = 12u;
+    static constexpr std::uint32_t reply_bytes = 4096u;
     static constexpr std::uint32_t contexts = 2u;
 
     /* `gpu` names the host GPU the device is bound to; rigs share one unless a
@@ -35,8 +36,11 @@ public:
     LoopbackDevice &device();
     LoopbackDriver &driver();
     GuestContext   &context(std::uint32_t index);
-    /* The memory context `index` runs on: where its replies land. */
+    /* The memory context `index` runs on. */
     ContextMemory  &memory(std::uint32_t index);
+    /* Its reply slot, as the process the rig plays sees it: where its replies
+     * land. */
+    std::uint8_t   *reply(std::uint32_t index);
     /* The doorbell, and fence line, context `index` sets up on: index + 1. */
     std::uint32_t   line(std::uint32_t index) const;
 

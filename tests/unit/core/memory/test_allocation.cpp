@@ -290,8 +290,8 @@ TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
   Segments segments(platform);
   int first_device = 0;
   int second_device = 0;
-  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), ring, 0x4000u);
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), ring, 0x1000u);
   CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
   CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
   CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);   /* the same device, twice */
@@ -312,9 +312,9 @@ TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
   Segments segments(platform);
   int first_device = 0;
   int second_device = 0;
-  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  Allocation first(platform, segments.segments(), ring, 0x4000u);
-  Allocation second(platform, segments.segments(), ring, 0x4000u);
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation first(platform, segments.segments(), ring, 0x1000u);
+  Allocation second(platform, segments.segments(), ring, 0x1000u);
   CHECK(first.held_with(second));
   CHECK_STATUS(first.open(&first_device, nullptr), Status::ok);
   CHECK(!first.held_with(second));
@@ -329,17 +329,13 @@ TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
   CHECK_STATUS(second.close(), Status::ok);
   CHECK(first.held_with(second)); }
 
-TEST(allocation_open, a_fence_page_belongs_to_its_device_and_a_shadow_does_not)
+/* Only a context's name is one device's: every other kind is memory, which
+ * any device may open. */
+TEST(allocation_open, a_shadow_is_opened_by_any_device)
 { MockPlatform platform;
   Segments segments(platform);
   int first_device = 0;
   int second_device = 0;
-  const AllocationDescriptor page_of_fences(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u,
-                                            ScanoutTarget());
-  Allocation fences(platform, segments.segments(), page_of_fences, 0x1000u);
-  CHECK_STATUS(fences.open(&first_device, nullptr), Status::ok);
-  CHECK_STATUS(fences.open(&second_device, nullptr), Status::invalid_parameter);
-
   Allocation shared(platform, segments.segments(), shadow, 0x1000u);
   CHECK_STATUS(shared.open(&first_device, nullptr), Status::ok);
   CHECK_STATUS(shared.open(&second_device, nullptr), Status::ok);
@@ -362,15 +358,15 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   AllocationProbe(allocation).set_opens(1u);
   CHECK_STATUS(allocation.close(), Status::ok); }
 
-/* A client's buffer is guest RAM VidMm keeps in its own system memory
- * segment, the one after the aperture: the device's hostmem region is no
- * segment of this adapter (docs/host-window.md). */
+/* A client's buffer, and a context's name, are guest RAM VidMm keeps in its
+ * own system memory segment, the one after the aperture: the device's hostmem
+ * region is no segment of this adapter (docs/host-window.md). */
 TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
 { MockPlatform platform;
   Segments segments(platform);
   const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
-  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  const AllocationDescriptor asked[] = {client};
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  const AllocationDescriptor asked[] = {client, ring};
   for (const AllocationDescriptor &descriptor : asked) {
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
       DxgkAllocationInfoRecord info = {};
@@ -397,68 +393,34 @@ TEST(allocation_report_to, a_client_buffer_follows_vidmm_s_system_memory_past_th
   CHECK_EQ(info.SupportedReadSegmentSet, 0x4u);
   CHECK_EQ(info.SupportedWriteSegmentSet, 0x4u);
 
-  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  Allocation pinned(platform, segments.segments(), ring, ring.size());
-  DxgkAllocationInfoRecord pinned_info = {};
-  pinned.report_to(pinned_info);
-  CHECK_EQ(pinned_info.PreferredSegment, av::ApertureSegment::segment_id);
-  CHECK_EQ(pinned_info.SupportedReadSegmentSet, av::ApertureSegment::segment_set); }
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation name(platform, segments.segments(), ring, ring.size());
+  DxgkAllocationInfoRecord name_info = {};
+  name.report_to(name_info);
+  CHECK_EQ(name_info.PreferredSegment, 3u);
+  CHECK_EQ(name_info.SupportedReadSegmentSet, 0x4u); }
 
-/* Feature 043: a context's ring, fence page and reply slot are published to the
- * device as guest blobs, and the only pages the driver ever learns are the ones
- * VidMm maps into the aperture. So each is pinned there like a primary, and a
- * client's buffer is not. */
-TEST(allocation_report_to, the_transport_s_memory_is_pinned_in_the_aperture)
+/* A context's name is no memory the device reads - the context runs on the
+ * driver's own (docs/protocol.md, "Context memory") - so VidMm keeps it where
+ * it keeps a client's buffer, and evicting it moves nothing a device holds. */
+TEST(allocation_report_to, a_context_s_name_is_not_pinned_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
-  const AllocationDescriptor transport[] = {
-      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
-      /* Feature 045: a host-visible chunk is published the same way, and the host GPU imports it. */
-      AllocationDescriptor(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x40000u, ScanoutTarget()),
-  };
-  for (const AllocationDescriptor &descriptor : transport) {
-      Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
-      DxgkAllocationInfoRecord info = {};
-      allocation.report_to(info);
-      CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
-      CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
-      CHECK_EQ(info.SupportedWriteSegmentSet, av::ApertureSegment::segment_set);
-      CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */
-  } }
-
-/* A chunk the host GPU imports is one process's memory: another device opening it
- * would be a second process mapping memory the first process's context imported. */
-TEST(allocation_open, a_host_visible_chunk_belongs_to_the_device_that_opened_it)
-{ MockPlatform platform;
-  Segments segments(platform);
-  int first_device = 0;
-  int second_device = 0;
-  const AllocationDescriptor chunk(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x40000u,
-                                   ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), chunk, 0x40000u);
-  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
-  CHECK(allocation.invariants_hold()); }
-
-TEST(allocation_open, a_reply_slot_belongs_to_the_device_that_opened_it)
-{ MockPlatform platform;
-  Segments segments(platform);
-  int first_device = 0;
-  int second_device = 0;
-  const AllocationDescriptor slot(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), slot, 0x1000u);
-  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
-  CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
-  CHECK(allocation.invariants_hold()); }
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), ring, ring.size());
+  DxgkAllocationInfoRecord info = {};
+  allocation.report_to(info);
+  CHECK_EQ(info.PreferredSegment, 2u);
+  CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
+  CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
+  CHECK_EQ(info.Flags, 1u);   /* CpuVisible, and nothing AccessedPhysically */ }
 
 /* The binding publishes the whole allocation, wherever VidMm placed it: every
  * page, in order, or nothing while any page is not mapped. */
 TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
 { MockPlatform platform; Segments segments(platform);
-  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), ring, 4u * page);
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), client, 4u * page);
   CHECK_EQ(allocation.pages().count(), 0u);
   const std::uint64_t frames[] = {9u * page, 3u * page, 4u * page, 5u * page};
   av::DxgkBuildPagingBufferMapApertureSegmentRecord head = {};

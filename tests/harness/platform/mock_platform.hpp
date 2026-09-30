@@ -41,6 +41,14 @@ public:
     void    *allocate_contiguous(std::size_t bytes) override;
     void     release_contiguous(void *block, std::size_t bytes) override;
     std::uint64_t physical_address(void *block) override;
+    /* A zero-filled block at a fresh physical address, as allocate_contiguous
+     * makes one - so map_frame and a device reach its frames - whose record
+     * read_page_frames and map_pages_to_process take. Null for a size that is
+     * not whole pages, at DISPATCH, and at the allocation
+     * fail_page_allocation_at names. A block left allocated fails the test. */
+    void         *allocate_pages(std::uint64_t bytes) override;
+    /* Releasing pages a process still has a view of is frame misuse. */
+    void          release_pages(void *pages) override;
     Status        read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count,
                                    std::uint64_t *frames) override;
     /* A frame inside a contiguous block maps to that block's own memory; any
@@ -59,6 +67,10 @@ public:
      * ranges are frame misuse. */
     Status        map_to_process(std::uint64_t physical, std::uint64_t bytes, std::uint64_t &view,
                                  void *&mapping) override;
+    /* The block itself is the view: the modelled process and the test share one
+     * address space, so what a process writes there the device reads. Counted
+     * with map_to_process for fail_process_map_at. */
+    Status        map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping) override;
     void          unmap_from_process(void *mapping) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
@@ -195,6 +207,24 @@ public:
     /* Makes the Nth map_to_process from now (1-based) answer no_memory; 0
      * disables. */
     void          fail_process_map_at(std::uint32_t nth);
+    /* Makes the Nth allocate_pages from now (1-based) answer null; 0 disables. */
+    void          fail_page_allocation_at(std::uint32_t nth);
+    /* What a rig whose host GPU imports guest RAM answers for `bytes` of pages:
+     * zeroed memory a second mapping of which the host can take, and its guest
+     * physical address; null for none, and allocate_pages uses its own. */
+    using PageBacker = void *(*)(void *context, std::uint64_t bytes, std::uint64_t &physical);
+    void          back_pages_with(PageBacker backer, void *context);
+    /* Blocks allocate_pages handed out and release_pages has not taken back. */
+    std::uint32_t owned_page_blocks() const;
+    /* How many blocks allocate_pages has ever handed out, and the memory of
+     * the `ordinal`th of them (0-based) while it is live, null otherwise: how
+     * a test plays the host on pages only the driver maps, such as a context's
+     * fence page. */
+    std::uint32_t page_blocks_made() const;
+    std::uint8_t *page_block(std::uint32_t ordinal) const;
+    /* Frees every such block no process view maps - what a driver kept out of
+     * use for good, which the test then counts - and answers how many. */
+    std::uint32_t reclaim_page_blocks();
     /* What a rig whose device backs device memory answers for a process view
      * of `bytes` at `physical`: the host memory there, or null for none. */
     using ProcessViewResolver = void *(*)(void *context, std::uint64_t physical, std::uint64_t bytes);
@@ -213,7 +243,7 @@ public:
 
 private:
     static constexpr std::uint32_t max_live = 4096u;
-    static constexpr std::uint32_t max_contiguous = 256u;
+    static constexpr std::uint32_t max_contiguous = 1024u;
     static constexpr std::uint32_t max_page_frames = 256u;
     static constexpr std::uint32_t max_frame_views = 256u;
     static constexpr std::uint32_t max_process_views = 256u;
@@ -228,6 +258,8 @@ private:
         void         *block;
         std::uint64_t physical_address;
         std::size_t   bytes;
+        /* Memory a page backer lent, which is the rig's to free. */
+        bool          borrowed = false;
     };
 
     struct ProcessView {
@@ -241,6 +273,21 @@ private:
         const std::uint64_t *frames;
         std::uint32_t        count;
     };
+
+    /* One allocate_pages block: `record` is what its caller holds. */
+    struct OwnedPages {
+        PageFrames     record;
+        void          *block;
+        std::uint64_t *frames;
+        std::uint64_t  physical;
+        std::uint64_t  bytes;
+        std::uint32_t  ordinal;
+        bool           live;
+    };
+    static constexpr std::uint32_t max_owned_pages = 512u;
+
+    /* The live block `pages` names, or null. */
+    OwnedPages *find_owned(void *pages);
 
     struct AttachedWindow {
         std::uintptr_t  base;
@@ -290,6 +337,12 @@ private:
     std::uint32_t frame_map_sequence_ = 0u;
     std::uint32_t frame_fail_at_ = 0u;
     ProcessView   process_views_[max_process_views] = {};
+    OwnedPages    owned_pages_[max_owned_pages] = {};
+    std::uint32_t page_allocation_sequence_ = 0u;
+    std::uint32_t page_blocks_made_ = 0u;
+    PageBacker    page_backer_ = nullptr;
+    void         *page_backer_context_ = nullptr;
+    std::uint32_t page_allocation_fail_at_ = 0u;
     std::uint64_t next_process_view_ = first_process_view;
     std::uint32_t process_map_sequence_ = 0u;
     std::uint32_t process_fail_at_ = 0u;

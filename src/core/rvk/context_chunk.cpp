@@ -4,15 +4,15 @@
 
 namespace av {
 
-ContextChunk::ContextChunk() : allocation_(nullptr), mapping_(nullptr), resource_id_(0u), first_page_(0u), pages_(0u)
+ContextChunk::ContextChunk() : ram_(nullptr), mapping_(nullptr), resource_id_(0u), first_page_(0u), pages_(0u)
 {
     AV_SCOPE("ContextChunk::ContextChunk");
 }
 
-void ContextChunk::take_guest(const Allocation &allocation, uint32_t resource_id)
+void ContextChunk::take_ram(uint32_t resource_id, GuestPages &pages)
 {
-    AV_SCOPE("ContextChunk::take_guest");
-    allocation_ = &allocation;
+    AV_SCOPE("ContextChunk::take_ram");
+    ram_ = &pages;
     mapping_ = nullptr;
     resource_id_ = resource_id;
     first_page_ = 0u;
@@ -22,7 +22,7 @@ void ContextChunk::take_guest(const Allocation &allocation, uint32_t resource_id
 void ContextChunk::take_window(uint32_t resource_id, uint32_t first, uint32_t pages, void *mapping)
 {
     AV_SCOPE("ContextChunk::take_window");
-    allocation_ = nullptr;
+    ram_ = nullptr;
     mapping_ = mapping;
     resource_id_ = resource_id;
     first_page_ = first;
@@ -32,7 +32,7 @@ void ContextChunk::take_window(uint32_t resource_id, uint32_t first, uint32_t pa
 void ContextChunk::clear()
 {
     AV_SCOPE("ContextChunk::clear");
-    allocation_ = nullptr;
+    ram_ = nullptr;
     mapping_ = nullptr;
     resource_id_ = 0u;
     first_page_ = 0u;
@@ -51,10 +51,10 @@ bool ContextChunk::in_window() const
     return mapping_ != nullptr;
 }
 
-const Allocation *ContextChunk::allocation() const
+GuestPages *ContextChunk::ram() const
 {
-    AV_SCOPE("ContextChunk::allocation");
-    return allocation_;
+    AV_SCOPE("ContextChunk::ram");
+    return ram_;
 }
 
 uint32_t ContextChunk::resource_id() const
@@ -86,7 +86,7 @@ void *ContextChunk::mapping() const
 bool ContextChunk::invariants_hold() const
 {
     AV_SCOPE("ContextChunk::invariants_hold");
-    const bool guest = allocation_ != nullptr;
+    const bool guest = ram_ != nullptr;
     const bool window = mapping_ != nullptr;
     if (resource_id_ == 0u) return !guest && !window && pages_ == 0u && first_page_ == 0u;
     if (guest) return !window && pages_ == 0u && first_page_ == 0u;

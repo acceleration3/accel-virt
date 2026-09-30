@@ -336,14 +336,15 @@ private:
     void                 submissions_to_user_mode(const HwQueue &queue);
     void                 submissions_to_driver(void *doorbell);
     /* CreateContext for a context that asked with a record: the host context
-     * set up on the process's own memory (feature 043). */
+     * set up on memory the driver owns and maps into the process (feature 043;
+     * docs/protocol.md, "Context memory"). */
     [[nodiscard]] Status bind_rvk(Context &context);
     /* The device a teardown can still ask, or null when it cannot. */
     VirtioGpuDevice     *answering_device();
     /* Tells the device of every shared object a destroy forgot. PASSIVE. */
     void                 release_shared();
-    int32_t          bind_chunk(const DxgkargEscapeRecord &escape);
     int32_t          window_chunk(const DxgkargEscapeRecord &escape);
+    int32_t          context_views(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an rvk context: published, rung, and held on
      * the node until the fence page says the host finished it. */

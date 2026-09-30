@@ -1,6 +1,6 @@
 /* The room one OpenGL context lends bulk data in (feature 050, research.md §5):
  * a chunk bound to the context's own transport - the device's host window
- * when the kernel has room there, else guest RAM (BlobChunk) - and imported
+ * when the kernel has room there, else guest RAM the kernel owns - and imported
  * whole with IMPORT_BLOB, which the host executor takes as the region its bulk-data
  * commands read and write. While it is held, the transport's blobs() lends from
  * the chunk's view, a lease's offset being its distance from the chunk's
@@ -9,7 +9,7 @@
 #define AV_KMT_BLOB_ARENA_HPP
 
 #include "core/support/status.hpp"
-#include "guest/transport/blob_chunk.hpp"
+#include "guest/transport/host_window_chunk.hpp"
 #include "guest/transport/blob_import.hpp"
 
 #include <stdint.h>
@@ -64,7 +64,7 @@ public:
 
 private:
     KmtTransport    &transport_;
-    BlobChunk        chunk_;
+    HostWindowChunk        chunk_;
     BlobImport       import_;
     uint64_t         bytes_;
 

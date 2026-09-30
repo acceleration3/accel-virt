@@ -48,7 +48,7 @@ std::uint64_t place(ChunkSpace &space, std::uint64_t pages)
 
 TEST(chunk_space, is_closed_and_places_nothing_until_opened)
 { OpenConnection      rig;
-  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::create_allocation);
+  const std::uint32_t asked = rig.kmt().calls(MockKmt::Call::escape);
   ChunkSpace          space(rig.connection());
   CHECK(space.invariants_hold());
   CHECK(!space.opened());
@@ -61,7 +61,7 @@ TEST(chunk_space, is_closed_and_places_nothing_until_opened)
   CHECK_EQ(offset, 7u);
   CHECK_STATUS(space.remove(0u), Status::invalid_parameter);
   CHECK_STATUS(space.close(), Status::ok);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made); }
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked); }
 
 TEST(chunk_space, opens_as_a_bound_chunk_of_the_pages_asked)
 { OpenConnection rig;
@@ -73,54 +73,55 @@ TEST(chunk_space, opens_as_a_bound_chunk_of_the_pages_asked)
   CHECK_EQ(space.pages(), chunk_pages);
   CHECK_EQ(space.resource_id(), MockKmt::first_chunk_resource);
   CHECK(space.view() != nullptr);
-  CHECK_EQ(rig.kmt().allocation_pages(rig.kmt().bound_allocation(0u)), chunk_pages);
+  CHECK_EQ(rig.kmt().ram_chunk_pages(0u), chunk_pages);
   CHECK_STATUS(space.open(chunk_pages), Status::invalid_state);
-  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);
   CHECK_STATUS(space.close(), Status::ok);
   CHECK(space.invariants_hold());
   CHECK(!space.opened());
   CHECK_EQ(space.pages(), 0u);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
 
 /* Zero pages, and a count whose bytes do not fit 64 bits, are not asked of the
  * kernel at all. */
 TEST(chunk_space, a_size_that_is_no_chunk_is_refused_unasked)
 { OpenConnection      rig;
-  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::create_allocation);
+  const std::uint32_t asked = rig.kmt().calls(MockKmt::Call::escape);
   ChunkSpace          space(rig.connection());
   const std::uint64_t sizes[] = {0u, (~std::uint64_t{0} >> 12u) + 1u, ~std::uint64_t{0}};
   for (const std::uint64_t pages : sizes) {
       CHECK_STATUS(space.open(pages), Status::invalid_parameter);
       CHECK(!space.opened());
   }
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made); }
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked); }
 
 TEST(chunk_space, the_kernel_s_refusal_is_the_answer)
 { OpenConnection rig;
   ChunkSpace     space(rig.connection());
-  rig.kmt().fail_at(MockKmt::Call::escape, 2u, MockKmt::invalid_parameter);   /* the bind */
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the open */
   CHECK(space.open(chunk_pages) != Status::ok);
   CHECK(space.invariants_hold());
   CHECK(!space.opened());
   CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
 
-/* A kernel that bound fewer pages than were asked for would have the device
- * refuse every import past them: refused, with the chunk given back. One that
- * gave more - a window grants whole pages of at least what was asked - is
- * taken, and only the pages asked are placed in. */
+/* A kernel that granted fewer bytes than were asked for would have the device
+ * refuse every import past them: the answer is refused, and the chunk it made
+ * is left to the context, whose teardown takes it. One that gave more - whole
+ * pages of at least what was asked - is taken, and only the pages asked are
+ * placed in. */
 TEST(chunk_space, a_chunk_smaller_than_asked_is_refused_and_a_larger_one_used_as_asked)
 { { OpenConnection rig;
     ChunkSpace     space(rig.connection());
-    rig.kmt().answer_next_bind_pages(chunk_pages - 1u);
+    rig.kmt().answer_next_chunk_bytes((chunk_pages - 1u) * MockKmt::page_bytes);
     CHECK_STATUS(space.open(chunk_pages), Status::malformed);
     CHECK(space.invariants_hold());
     CHECK(!space.opened());
-    CHECK_EQ(rig.kmt().bindings(), 0u);
+    CHECK_EQ(rig.kmt().ram_chunks(), 1u);
     CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects); }
   { OpenConnection rig;
     ChunkSpace     space(rig.connection());
-    rig.kmt().answer_next_bind_pages(chunk_pages + 1u);
+    rig.kmt().answer_next_chunk_bytes((chunk_pages + 1u) * MockKmt::page_bytes);
     CHECK_STATUS(space.open(chunk_pages), Status::ok);
     CHECK_EQ(space.pages(), chunk_pages);
     std::uint64_t offset = 0u;
@@ -128,22 +129,22 @@ TEST(chunk_space, a_chunk_smaller_than_asked_is_refused_and_a_larger_one_used_as
     CHECK_STATUS(space.place(1u, offset), Status::no_memory);
     CHECK_STATUS(space.remove(0u), Status::ok);
     CHECK_STATUS(space.close(), Status::ok);
-    CHECK_EQ(rig.kmt().bindings(), 0u); } }
+    CHECK_EQ(rig.kmt().ram_chunks(), 0u); } }
 
 /* On a device with a host window the space is a chunk of it: its resource,
  * its view in the window, and placement exactly as over guest RAM. */
 TEST(chunk_space, opens_over_a_window_chunk_when_the_kernel_grants_one)
 { OpenConnection rig;
   rig.kmt().open_host_window(2u * chunk_pages * page);
-  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::create_allocation);
+  const std::uint32_t asked = rig.kmt().calls(MockKmt::Call::escape);
   ChunkSpace space(rig.connection());
   CHECK_STATUS(space.open(chunk_pages), Status::ok);
   CHECK(space.invariants_hold());
   CHECK_EQ(space.pages(), chunk_pages);
   CHECK_EQ(space.resource_id(), MockKmt::first_window_resource);
   CHECK(space.view() == rig.kmt().window_base());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made);
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), asked + 1u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK_EQ(place(space, 2u), 0u);
   CHECK_EQ(place(space, 1u), 2u * page);
   CHECK_STATUS(space.close(), Status::invalid_state);
@@ -248,7 +249,7 @@ TEST(chunk_space, destroying_it_gives_the_chunk_back)
       CHECK_STATUS(space.open(chunk_pages), Status::ok);
       CHECK_EQ(place(space, 2u), 0u);
   }
-  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().ram_chunks(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), OpenConnection::link_objects);
   CHECK_EQ(rig.kmt().misuses(), 0u); }
 
@@ -256,10 +257,11 @@ TEST(chunk_space, a_refused_release_still_closes_it)
 { OpenConnection rig;
   ChunkSpace     space(rig.connection());
   CHECK_STATUS(space.open(chunk_pages), Status::ok);
-  rig.kmt().fail_at(MockKmt::Call::unlock, 1u, MockKmt::invalid_parameter);
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the close */
   CHECK(space.close() != Status::ok);
   CHECK(!space.opened());
-  CHECK(space.invariants_hold()); }
+  CHECK(space.invariants_hold());
+  CHECK_EQ(rig.kmt().ram_chunks(), 1u);   /* the kernel's, until the context goes */ }
 
 TEST(chunk_space, invariants_refuse_ranges_that_overlap_leave_the_chunk_or_hold_nothing)
 { OpenConnection rig;

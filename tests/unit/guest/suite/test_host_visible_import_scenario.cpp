@@ -75,8 +75,8 @@ public:
 private:
     void copy()
     {
-        const std::uint8_t *const source = kmt_.view_of(kmt_.bound_allocation(0u));
-        std::uint8_t *const       destination = kmt_.view_of(kmt_.bound_allocation(1u));
+        const std::uint8_t *const source = kmt_.ram_chunk(0u);
+        std::uint8_t *const       destination = kmt_.ram_chunk(1u);
         if (source == nullptr || destination == nullptr) return;
         std::memcpy(destination, source, HostVisibleImportScenario::copy_bytes);
         for (std::uint32_t byte = 0u; byte < spoiled_; byte++)
@@ -108,12 +108,12 @@ public:
         scenario.run();
     }
 
-    /* Only the adapter the search owns, every chunk unbound, every answer taken. */
+    /* Only the adapter the search owns, every chunk closed, every answer taken. */
     void check_nothing_left_but_the_adapter()
     {
         CHECK_EQ(kmt_.open_objects(), 1u);
         CHECK_EQ(kmt_.misuses(), 0u);
-        CHECK_EQ(kmt_.bindings(), 0u);
+        CHECK_EQ(kmt_.ram_chunks(), 0u);
         CHECK_EQ(kmt_.queued_answers(), 0u);
         CHECK_STATUS(search_.close(), Status::ok);
     }
@@ -197,15 +197,14 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
       expected, sizeof expected,
       "ok import.adapter\nok import.connection\nok import.initialize\nok import.instance\n"
       "ok import.physical_device 2\nok import.device\nok import.memory_types 4\n"
-      "ok import.src_chunk\nok import.src_lock\nok import.src_bind %u\nok import.src_pages %u\n"
+      "ok import.src_chunk %u\n"
       "ok import.src_buffer\nok import.src_import 1\nok import.src_bind_buffer\n"
-      "ok import.dst_chunk\nok import.dst_lock\nok import.dst_bind %u\nok import.dst_pages %u\n"
+      "ok import.dst_chunk %u\n"
       "ok import.dst_buffer\nok import.dst_import 1\nok import.dst_bind_buffer\n"
       "ok import.command_pool\nok import.command_buffer\nok import.record\nok import.queue\n"
       "ok import.fence\nok import.submit\nok import.wait 1\nok import.copied %u\n"
       "ok import.guest_saw_host_write 0\nok import.release\n",
-      MockKmt::first_chunk_resource, chunk_pages, MockKmt::first_chunk_resource + 1u, chunk_pages,
-      HostVisibleImportScenario::copy_bytes));
+      MockKmt::first_chunk_resource, MockKmt::first_chunk_resource + 1u, HostVisibleImportScenario::copy_bytes));
   CHECK(std::strcmp(report.text(), expected) == 0);
   CHECK_EQ(report.failed(), 0u);
   CHECK_EQ(rig.gpu().copies(), 1u);
@@ -220,14 +219,15 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
   CHECK_EQ(rig.sent(kCmd_vkDestroyDevice), 1u);
   CHECK_EQ(rig.sent(kCmd_vkDestroyInstance), 1u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), CommandHeader::nop_id);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);   /* the tail's publishing, two binds, two unbinds */
+  /* The context's views, the tail's publishing, two opens and two closes. */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Every import is released before any chunk is unbound - the device refuses to
+/* Every import is released before any chunk is closed - the device refuses to
  * unreference a blob an import still holds - and before the device it was
  * made on is destroyed. */
-TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_unbound)
+TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_closed)
 { Rig rig;
   rig.host().host_visible_import_run();
   struct Seen {
@@ -241,8 +241,8 @@ TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_
   }, &seen);
   GuestReport report;
   rig.run(report);
-  CHECK_EQ(seen.escapes, 3u);   /* the tail's publishing and the binds only */
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);
+  CHECK_EQ(seen.escapes, 4u);   /* the views, the tail's publishing and the opens only */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
   const std::uint32_t commands = rig.kmt().commands();
   /* Then the device the imports were made on, and its instance. */
   CHECK_EQ(rig.kmt().command_id(commands - 5u), CommandHeader::release_blob_id);
@@ -437,25 +437,14 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       const char   *skipped;
   };
   const Case cases[] = {
-      {Fault::fail, MockKmt::Call::create_allocation, 5u, 5u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
-       "import.src_lock"},
-      {Fault::fail, MockKmt::Call::make_resident, 5u, 5u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
-       "import.src_lock"},
-      {Fault::fail, MockKmt::Call::wait_for_fence, 6u, 5u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
-       "import.src_lock"},
-      {Fault::fail, MockKmt::Call::lock, 3u, 5u, "FAIL import.src_lock status=7 code=0xC0000001\n",
-       "import.src_bind"},
-      {Fault::fail, MockKmt::Call::escape, 2u, 5u, "FAIL import.src_bind status=7 code=0xC0000001\n",
-       "import.src_pages"},
-      {Fault::zero_escape, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_bind status=9 code=0x00000000\n",
-       "import.src_pages"},
-      {Fault::short_pages, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_pages status=9 1\n", "import.src_buffer"},
-      {Fault::fail, MockKmt::Call::create_allocation, 6u, 9u, "FAIL import.dst_chunk status=7 code=0xC0000001\n",
-       "import.dst_lock"},
-      {Fault::fail, MockKmt::Call::lock, 4u, 9u, "FAIL import.dst_lock status=7 code=0xC0000001\n",
-       "import.dst_bind"},
-      {Fault::fail, MockKmt::Call::escape, 3u, 9u, "FAIL import.dst_bind status=7 code=0xC0000001\n",
-       "import.dst_pages"},
+      {Fault::fail, MockKmt::Call::escape, 3u, 5u, "FAIL import.src_chunk status=7 code=0xC0000001\n",
+       "import.src_buffer"},
+      {Fault::zero_escape, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_chunk status=9 code=0x00000000\n",
+       "import.src_buffer"},
+      {Fault::short_pages, MockKmt::Call::escape, 0u, 5u, "FAIL import.src_chunk status=9 code=0x00000000\n",
+       "import.src_buffer"},
+      {Fault::fail, MockKmt::Call::escape, 4u, 9u, "FAIL import.dst_chunk status=7 code=0xC0000001\n",
+       "import.dst_buffer"},
       {Fault::fail, MockKmt::Call::wait_for_context, 8u, 7u, "FAIL import.src_import status=7 0\n",
        "import.src_bind_buffer"},
       {Fault::fail, MockKmt::Call::submit, 16u, 15u, "FAIL import.record status=7 4294967292\n", "import.queue"},
@@ -466,9 +455,10 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       Rig rig;
       answer_until(rig, one.answers);
       if (one.fault == Fault::fail) rig.kmt().fail_at(one.call, one.nth, refused);
-      /* The first escape is the transport's own, publishing its ring tail. */
-      if (one.fault == Fault::zero_escape) rig.kmt().zero_at(MockKmt::Call::escape, 2u);
-      if (one.fault == Fault::short_pages) rig.kmt().answer_next_bind_pages(1u);
+      /* The first two escapes are the transport's own: its context's views,
+       * then publishing its ring tail. */
+      if (one.fault == Fault::zero_escape) rig.kmt().zero_at(MockKmt::Call::escape, 3u);
+      if (one.fault == Fault::short_pages) rig.kmt().answer_next_chunk_bytes((chunk_pages - 1u) * MockKmt::page_bytes);
       GuestReport report;
       rig.run(report);
       CHECK(has_line(report, one.line));
@@ -594,11 +584,11 @@ TEST(host_visible_import_scenario, a_lost_device_fails_the_wait_on_its_first_sli
   rig.check_nothing_left_but_the_adapter(); }
 
 /* The releases are the scenario's last word: an import released with bytes in
- * its answer, an unbind the driver refuses, or a no-op answered with bytes
- * fails release, and everything is still let go. */
+ * its answer, a close the driver refuses, or a no-op answered with bytes fails
+ * release, and everything is still let go. */
 TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everything_still_let_go)
 { struct Case { std::uint32_t fault; const char *line; };
-  /* fault: 0 the first release answered with bytes, 1 the first unbind refused,
+  /* fault: 0 the first release answered with bytes, 1 the first close refused,
    * 2 the no-op answered with bytes */
   const Case cases[] = {{0u, "FAIL import.release status=9 code=0x00000000\n"},
                         {1u, "FAIL import.release status=7 code=0x00000000\n"},
@@ -614,7 +604,7 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       rig.host().nop();
       if (one.fault == 2u) rig.host().vk_result(0);
       else rig.host().nop();
-      if (one.fault == 1u) rig.kmt().fail_at(MockKmt::Call::escape, 4u, refused);
+      if (one.fault == 1u) rig.kmt().fail_at(MockKmt::Call::escape, 5u, refused);
       rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
       GuestReport report;
       rig.run(report);
@@ -622,12 +612,12 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       CHECK(has_line(report, one.line));
       CHECK_EQ(report.failed(), 1u);
       CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 2u);
-      CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 5u);
+      CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
       CHECK_EQ(rig.kmt().open_objects(), 1u);
       CHECK_EQ(rig.kmt().queued_answers(), 0u);
       CHECK_EQ(rig.kmt().misuses(), 0u);
-      /* A refused unbind leaves the binding until the chunk is destroyed,
-       * which unbinds it as the driver does. */
-      CHECK_EQ(rig.kmt().bindings(), 0u);
+      /* A refused close leaves the chunk held until its context is
+       * destroyed, which closes it as the driver does. */
+      CHECK_EQ(rig.kmt().ram_chunks(), 0u);
       CHECK_STATUS(rig.search().close(), Status::ok);
   } }

@@ -30,13 +30,10 @@ Status ChunkSpace::open(uint64_t pages)
     AV_SCOPE("ChunkSpace::open");
     if (opened()) return Status::invalid_state;
     if (pages == 0u || pages > max_pages) return Status::invalid_parameter;
+    /* A chunk is granted at least the bytes asked for (HostWindowRecord), and
+     * more than was asked is room nothing is placed in. */
     const Status status = connection_.open_chunk(chunk_, pages * page_bytes);
     if (status != Status::ok) return status;
-    /* More than was asked is room nothing is placed in. */
-    if (chunk_.object().bytes() / page_bytes < pages) {
-        static_cast<void>(connection_.close_chunk(chunk_));   /* the size is the answer */
-        return Status::malformed;
-    }
     pages_ = pages;
     return Status::ok;
 }

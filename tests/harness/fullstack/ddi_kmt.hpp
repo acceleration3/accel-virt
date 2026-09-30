@@ -54,7 +54,7 @@ public:
     /* STATUS_IO_TIMEOUT, what GdiKmt reports for a wait that expired. */
     static constexpr std::uint32_t timed_out = 0xC00000B5u;
 
-    /* Host-visible chunks live in file-backed guest RAM of `host` at this
+    /* The driver's own pages live in file-backed guest RAM of `host` at this
      * address, far from the platform's own physical addresses. */
     static constexpr std::uint64_t chunk_ram_address = 0x6000000000ull;
     static constexpr std::uint64_t chunk_ram_bytes = std::uint64_t{256} << 20u;
@@ -63,6 +63,9 @@ public:
            FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host);
     ~DdiKmt();
     DdiKmt(const DdiKmt &) = delete;
+    /* What the platform lends the driver as its own pages: the next run of
+     * chunk RAM, at `physical`, or null when it is spent. */
+    void *lend_pages(std::uint64_t bytes, std::uint64_t &physical);
     DdiKmt &operator=(const DdiKmt &) = delete;
 
     Status   enumerate_adapters(std::uint32_t *adapters, std::uint32_t capacity, std::uint32_t &count) override;
@@ -199,8 +202,6 @@ private:
         std::uint64_t offset_in_pages;
         std::uint64_t gpu_address;
         std::uint64_t *frames;
-        /* The guest-RAM address of a chunk's pages; 0 for platform memory. */
-        std::uint64_t  guest_ram;
         /* The resource the create made, for one asked for as a carrier; null
          * otherwise. D3DKMTShareObjects names this and not the allocation
          * (research.md §16). */
@@ -277,6 +278,7 @@ private:
     Status destroy_slot(std::uint32_t device, std::uint32_t allocation, void *resource);
     Status admit(Allocation &slot, std::uint32_t device, void *driver_device);
     Status back(Allocation &slot);
+
     Status open_on(Allocation &slot, void *driver_device);
     Status page(Allocation &slot, std::int32_t operation);
     Status create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,

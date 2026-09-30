@@ -71,11 +71,11 @@ CapsetInfo capset()
                       GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
-/* Allocations 10, 11 and 12 of their process - distinct, order the capset
- * allows, Vulkan. */
+/* Named by allocation 10 of its process, a page of replies, an order the
+ * capset allows, Vulkan. */
 RvkContextRecord record()
 {
-    return RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u);
+    return RvkContextRecord(SubApi::vulkan, 12u, 10u, 4096u);
 }
 
 /* A device answering control requests from the stall between the driver's
@@ -146,7 +146,7 @@ public:
     {
         const Status mapped = mapped_.map();
         if (mapped != Status::ok) return mapped;
-        const Status allocated = memory_.allocate(12u);
+        const Status allocated = memory_.allocate(12u, 4096u);
         if (allocated != Status::ok) return allocated;
         device_.emplace(mapped_.platform(), mapped_.mappings(), mapped_.layout());
         return device_->start(3u);
@@ -356,7 +356,7 @@ TEST(rvk_context_binding_chunks, a_chunk_is_a_blob_of_the_context_s_range)
   CHECK_EQ(host.count_of(create_blob_type), 1u);
   CHECK_EQ(host.field(create_blob_type, 0u, 24u), binding.chunk_resource(5u));
   CHECK(host.field(create_blob_type, 0u, 56u) == static_cast<std::uint32_t>(pages.frame(0u)));
-  binding.release_chunk(fixture.device(), binding.chunk_resource(5u));
+  CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(5u)), Status::ok);
   CHECK_EQ(host.count_of(unref_type), 1u);
   CHECK_EQ(host.field(unref_type, 0u, 24u), binding.chunk_resource(5u)); }
 
@@ -391,15 +391,31 @@ TEST(rvk_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_publi
     RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
     host.answer_nothing();
     CHECK(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages) != Status::ok);
-    /* A release the device does not answer is let go of all the same. */
-    binding.release_chunk(fixture.device(), binding.chunk_resource(0u)); }
+    /* A release the device does not answer is no release: it may still hold
+     * the blob. */
+    CHECK(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)) != Status::ok); }
   /* A request buffer too small for the blob writes nothing and asks nothing. */
   Host host(fixture.mapped());
   std::uint8_t tiny[16] = {};
   RvkContextBinding cramped(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, tiny, sizeof tiny);
   CHECK(cramped.publish_chunk(fixture.device(), cramped.chunk_resource(0u), pages) != Status::ok);
-  cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u));
+  CHECK(cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u)) != Status::ok);
   CHECK_EQ(host.queue().requests(), 0u); }
+
+/* A device that will not let go of a chunk - an import still holds it - says
+ * so, and one whose answer is no answer a device sends has not let go either:
+ * the driver keeps the chunk's pages for both. */
+TEST(rvk_context_binding_chunks, a_release_the_device_refuses_or_garbles_is_no_release)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  { Host host(fixture.mapped());
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
+    host.refuse_at(0);
+    CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)), Status::not_supported); }
+  Host host(fixture.mapped());
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
+  host.answer_short();
+  CHECK_STATUS(binding.release_chunk(fixture.device(), binding.chunk_resource(0u)), Status::malformed); }
 
 
 /* Feature 049: which side of the kernel boundary submits on this context is

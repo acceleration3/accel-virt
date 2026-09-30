@@ -42,8 +42,8 @@ namespace {
 
 constexpr std::uint8_t  order = 12u;
 constexpr std::size_t   ring_bytes = 32u + (1u << order);
-/* What the ring allocation is asked for: whole pages, as a transport's is. */
-constexpr std::uint64_t ring_allocation_bytes = 8192u;
+/* The page a transport's context is named by, which its doorbell hangs off. */
+constexpr std::uint64_t ring_allocation_bytes = 4096u;
 /* The header's byte where the device's worker says it is watching the ring. */
 constexpr std::size_t   awake_byte = 5u;
 

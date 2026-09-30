@@ -77,10 +77,6 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * is the one this driver reports, and a primary pinned there arrives as an
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
-    /* A context's ring, fence page and reply slot (feature 043), and a
-     * host-visible chunk (045), are published as guest blobs over the pages the
-     * aperture mapping hands the driver, so they are pinned there for the same
-     * reason. */
     /* A user-mode driver's surface is blitted by the miniport from its pages
      * and read back into by the host, so it wants them known too - and so does
      * a staging surface, which is where an application's blt-model present
@@ -88,8 +84,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * which CDD makes as a staging surface and the miniport writes through its
      * pages. */
     const AllocationKind kind = descriptor_.kind();
-    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging ||
-                        published_as_blob();
+    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging;
     const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
@@ -123,7 +118,7 @@ Status Allocation::open(const void *device, const void *process)
     AV_SCOPE("Allocation::open");
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
-    if (published_as_blob() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
+    if (names_a_context() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
     if (opens_ == 0u) {
         owner_ = device;
         process_ = process;
@@ -190,12 +185,12 @@ GuestPageList Allocation::pages() const
     return aperture_.whole();
 }
 
-bool Allocation::published_as_blob() const
+/* A context shares with another by this name only within the device, or the
+ * process, that made it (feature 050), so no other device opens it. */
+bool Allocation::names_a_context() const
 {
-    AV_SCOPE("Allocation::published_as_blob");
-    const AllocationKind kind = descriptor_.kind();
-    return kind == AllocationKind::context_ring || kind == AllocationKind::fence_page ||
-           kind == AllocationKind::reply_slot || kind == AllocationKind::host_visible_memory;
+    AV_SCOPE("Allocation::names_a_context");
+    return descriptor_.kind() == AllocationKind::context_ring;
 }
 
 bool Allocation::invariants_hold() const

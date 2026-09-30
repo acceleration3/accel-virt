@@ -92,9 +92,10 @@ public:
      * made it, not_supported when it refused, malformed for an answer no device
      * sends. The request buffer is the owner's; it serializes. */
     [[nodiscard]] Status publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages);
-    /* PASSIVE. Drops the blob; the answer is the device's to give, and a chunk
-     * whose release was not answered is let go of all the same. */
-    void                 release_chunk(VirtioGpuDevice &device, uint32_t resource_id);
+    /* PASSIVE. Drops the blob: ok once the device let go of it,
+     * not_supported when it refused - an import still holds it - malformed
+     * for an answer no device sends, and the exchange's failure otherwise. */
+    [[nodiscard]] Status release_chunk(VirtioGpuDevice &device, uint32_t resource_id);
 
     GuestContext::State state() const;
     bool                established() const;

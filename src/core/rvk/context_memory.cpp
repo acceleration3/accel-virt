@@ -1,17 +1,27 @@
 #include "core/rvk/context_memory.hpp"
 
+#include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/context/rvk_context_record.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/submission/ring_header.hpp"
 
 namespace av {
 
+namespace {
+
+constexpr uint64_t page_bytes = GuestPageList::page_bytes;
+constexpr uint64_t page_mask = page_bytes - 1u;
+
+}  // namespace
+
 ContextMemory::ContextMemory(Platform &platform)
-    : platform_(platform), ring_(nullptr), fence_(nullptr), reply_(nullptr), ring_frames_(nullptr), fence_frame_(0u),
-      reply_frame_(0u), ring_bytes_(0u), order_(0u)
-      {
-          AV_SCOPE("ContextMemory::ContextMemory");
-      }
+    : platform_(platform), ring_(platform), fence_(platform), reply_(platform), ring_header_(nullptr),
+      fence_view_(nullptr), order_(0u)
+{
+    AV_SCOPE("ContextMemory::ContextMemory");
+}
 
 ContextMemory::~ContextMemory()
 {
@@ -19,126 +29,126 @@ ContextMemory::~ContextMemory()
     release();
 }
 
-uint8_t *ContextMemory::allocate_block(size_t bytes)
-{
-    AV_SCOPE("ContextMemory::allocate_block");
-    auto *const block = static_cast<uint8_t *>(platform_.allocate_contiguous(bytes));
-    if (block != nullptr) platform_.zero(block, bytes);
-    return block;
-}
-
-bool ContextMemory::record_frames()
-{
-    AV_SCOPE("ContextMemory::record_frames");
-    const size_t ring_pages = ring_bytes_ / page_bytes;
-    ring_frames_ = static_cast<uint64_t *>(platform_.allocate(ring_pages * sizeof *ring_frames_, Pool::non_paged));
-    if (ring_frames_ == nullptr) return false;
-    const uint64_t ring_address = platform_.physical_address(ring_);
-    for (size_t page = 0u; page < ring_pages; page++) ring_frames_[page] = ring_address + page * page_bytes;
-    fence_frame_ = platform_.physical_address(fence_);
-    reply_frame_ = platform_.physical_address(reply_);
-    return true;
-}
-
-Status ContextMemory::allocate(uint8_t order)
+Status ContextMemory::allocate(uint8_t order, uint32_t reply_bytes)
 {
     AV_SCOPE("ContextMemory::allocate");
     platform_.require_irql_at_most(Irql::passive, "ContextMemory::allocate");
-    if (ring_ != nullptr) return Status::invalid_state;
-    if (order < RingHeader::lowest_order || order > RingHeader::highest_order) return Status::invalid_parameter;
-    const size_t ring_bytes = (RingHeader::encoded_size + (size_t{1} << order) + page_bytes - 1u) & ~(page_bytes - 1u);
-    ScopeExit    release_all([this] { release(); });
-    ring_ = allocate_block(ring_bytes);
-    ring_bytes_ = ring_ != nullptr ? ring_bytes : 0u;
-    fence_ = ring_ != nullptr ? allocate_block(page_bytes) : nullptr;
-    reply_ = fence_ != nullptr ? allocate_block(page_bytes) : nullptr;
-    if (reply_ == nullptr || !record_frames()) return Status::no_memory;
+    InvariantScope<ContextMemory> guard(platform_, *this, "allocate");
+    if (ring_.held()) return Status::invalid_state;
+    if (order < RingHeader::lowest_order || order > RingHeader::highest_order || reply_bytes == 0u ||
+        reply_bytes > RvkContextRecord::max_reply_bytes)
+        return Status::invalid_parameter;
+    ScopeExit      release_all([this] { free_all(); });
+    const uint64_t ring_bytes = (RingHeader::encoded_size + (uint64_t{1} << order) + page_mask) & ~page_mask;
+    Status         status = ring_.allocate(ring_bytes);
+    if (status == Status::ok) status = fence_.allocate(page_bytes);
+    if (status == Status::ok) status = reply_.allocate((uint64_t{reply_bytes} + page_mask) & ~page_mask);
+    if (status != Status::ok) return Status::no_memory;
+    ring_header_ = platform_.map_frame(ring_.pages().frame(0u));
+    fence_view_ = platform_.map_frame(fence_.pages().frame(0u));
+    if (ring_header_ == nullptr || fence_view_ == nullptr) return Status::no_memory;
     release_all.dismiss();
     order_ = order;
-    /* Sized for it: a ring holds its header. */
-    static_cast<void>(RingHeader(order, 0u, 0u).encode(ring_, RingHeader::encoded_size));
+    /* A page holds the header. */
+    static_cast<void>(RingHeader(order, 0u, 0u).encode(ring_header_, RingHeader::encoded_size));
     return Status::ok;
+}
+
+Status ContextMemory::map_into_process()
+{
+    AV_SCOPE("ContextMemory::map_into_process");
+    platform_.require_irql_at_most(Irql::passive, "ContextMemory::map_into_process");
+    InvariantScope<ContextMemory> guard(platform_, *this, "map_into_process");
+    if (!ring_.held() || ring_.view() != 0u) return Status::invalid_state;
+    const Status ring = ring_.map_into_process();
+    if (ring != Status::ok) return ring;
+    const Status reply = reply_.map_into_process();
+    if (reply != Status::ok) ring_.unmap_from_process();
+    return reply;
+}
+
+void ContextMemory::unmap_kernel_views()
+{
+    AV_SCOPE("ContextMemory::unmap_kernel_views");
+    if (fence_view_ != nullptr) platform_.unmap_frame(fence_view_);
+    if (ring_header_ != nullptr) platform_.unmap_frame(ring_header_);
+    fence_view_ = nullptr;
+    ring_header_ = nullptr;
 }
 
 void ContextMemory::release()
 {
     AV_SCOPE("ContextMemory::release");
     platform_.require_irql_at_most(Irql::passive, "ContextMemory::release");
-    if (ring_frames_ != nullptr) platform_.release(ring_frames_);
-    if (reply_ != nullptr) platform_.release_contiguous(reply_, page_bytes);
-    if (fence_ != nullptr) platform_.release_contiguous(fence_, page_bytes);
-    if (ring_ != nullptr) platform_.release_contiguous(ring_, ring_bytes_);
-    ring_ = nullptr;
-    fence_ = nullptr;
-    reply_ = nullptr;
-    ring_frames_ = nullptr;
-    fence_frame_ = 0u;
-    reply_frame_ = 0u;
-    ring_bytes_ = 0u;
+    InvariantScope<ContextMemory> guard(platform_, *this, "release");
+    free_all();
+}
+
+/* Whatever part is held: an allocation that failed half way leaves some. */
+void ContextMemory::free_all()
+{
+    AV_SCOPE("ContextMemory::free_all");
+    unmap_kernel_views();
+    reply_.release();
+    fence_.release();
+    ring_.release();
     order_ = 0u;
 }
 
-bool     ContextMemory::allocated() const
+void ContextMemory::abandon()
+{
+    AV_SCOPE("ContextMemory::abandon");
+    platform_.require_irql_at_most(Irql::passive, "ContextMemory::abandon");
+    InvariantScope<ContextMemory> guard(platform_, *this, "abandon");
+    unmap_kernel_views();
+    reply_.abandon();
+    fence_.abandon();
+    ring_.abandon();
+    order_ = 0u;
+}
+
+bool ContextMemory::allocated() const
 {
     AV_SCOPE("ContextMemory::allocated");
-    return ring_ != nullptr;
+    return ring_.held();
 }
-uint8_t  ContextMemory::order() const
+
+uint8_t ContextMemory::order() const
 {
     AV_SCOPE("ContextMemory::order");
     return order_;
 }
-uint8_t *ContextMemory::ring() const
+
+uint64_t ContextMemory::ring_view() const
 {
-    AV_SCOPE("ContextMemory::ring");
-    return ring_;
+    AV_SCOPE("ContextMemory::ring_view");
+    return ring_.view();
 }
-size_t   ContextMemory::ring_bytes() const
+
+uint64_t ContextMemory::reply_view() const
 {
-    AV_SCOPE("ContextMemory::ring_bytes");
-    return ring_bytes_;
-}
-uint8_t *ContextMemory::fence_page() const
-{
-    AV_SCOPE("ContextMemory::fence_page");
-    return fence_;
-}
-uint8_t *ContextMemory::reply() const
-{
-    AV_SCOPE("ContextMemory::reply");
-    return reply_;
-}
-uint64_t ContextMemory::ring_address() const
-{
-    AV_SCOPE("ContextMemory::ring_address");
-    return platform_.physical_address(ring_);
-}
-uint64_t ContextMemory::fence_address() const
-{
-    AV_SCOPE("ContextMemory::fence_address");
-    return platform_.physical_address(fence_);
-}
-uint64_t ContextMemory::reply_address() const
-{
-    AV_SCOPE("ContextMemory::reply_address");
-    return platform_.physical_address(reply_);
+    AV_SCOPE("ContextMemory::reply_view");
+    return reply_.view();
 }
 
 ContextPages ContextMemory::pages() const
 {
     AV_SCOPE("ContextMemory::pages");
-    if (ring_frames_ == nullptr) return ContextPages();
-    return ContextPages(GuestPageList(ring_frames_, static_cast<uint32_t>(ring_bytes_ / page_bytes)),
-                        GuestPageList(&fence_frame_, 1u), GuestPageList(&reply_frame_, 1u), ring_, fence_);
+    if (!ring_.held()) return ContextPages();
+    return ContextPages(ring_.pages(), fence_.pages(), reply_.pages(), ring_header_, fence_view_);
 }
 
-/* All three blocks and their frames are held, or none is. */
+/* The three blocks, both kernel views and the order are held together or not
+ * at all, and the process sees the ring and reply slot both or neither. */
 bool ContextMemory::invariants_hold() const
 {
     AV_SCOPE("ContextMemory::invariants_hold");
-    const bool ring = ring_ != nullptr;
-    return (fence_ != nullptr) == ring && (reply_ != nullptr) == ring && (ring_bytes_ != 0u) == ring &&
-           (ring_frames_ != nullptr) == ring && (fence_frame_ != 0u) == ring && (reply_frame_ != 0u) == ring;
+    if (!ring_.invariants_hold() || !fence_.invariants_hold() || !reply_.invariants_hold()) return false;
+    const bool held = ring_.held();
+    if (fence_.held() != held || reply_.held() != held || (order_ != 0u) != held) return false;
+    if ((ring_header_ != nullptr) != held || (fence_view_ != nullptr) != held) return false;
+    if (fence_.view() != 0u) return false;
+    return (ring_.view() != 0u) == (reply_.view() != 0u);
 }
 
 }  // namespace av

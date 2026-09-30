@@ -42,7 +42,6 @@
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
-#include "proto/resources/host_visible_bind_record.hpp"
 #include "proto/resources/host_window_record.hpp"
 #include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
@@ -104,10 +103,12 @@
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "proto/submission/fence_page.hpp"
+#include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
 #include <cstdint>
@@ -2626,7 +2627,7 @@ TEST(adapter_query_adapter_info, is_passive_only)
 
 /* ---- Escape ---------------------------------------------------------------- */
 
-TEST(adapter_escape, an_escape_that_is_not_a_chunk_binding_is_not_supported)
+TEST(adapter_escape, an_escape_of_no_record_the_driver_knows_is_not_supported)
 { Fixture fixture; std::uint8_t data[64] = {};
   DxgkargEscapeRecord escape = {};
   escape.pPrivateDriverData = data;
@@ -3943,24 +3944,22 @@ private:
     std::uint32_t kmt_handle_;
 };
 
-/* One process's rvk transport as the adapter sees it: its device, its ring,
- * fence page and reply slot, and the record naming them. */
+/* A page of reply, as the rvk suite's transport asks. */
+constexpr std::uint32_t reply_bytes = 4096u;
+
+/* One process's rvk transport as the adapter sees it: its device, the page
+ * that names its context, and the record. The ring, fence page and reply slot
+ * are the driver's own pages, made with the context. */
 class RvkProcess {
 public:
     RvkProcess(Fixture &fixture, av::FakeHandleTable &handles)
         : fixture_((fixture.answer_asks(), fixture)), device_{},
-          ring_(fixture, handles, av::AllocationKind::context_ring, 0x2000u, 10u),
-          fence_(fixture, handles, av::AllocationKind::fence_page, 0x1000u, 20u),
-          reply_(fixture, handles, av::AllocationKind::reply_slot, 0x1000u, 30u), record_bytes_{}
+          ring_(fixture, handles, av::AllocationKind::context_ring, 0x1000u, 10u), record_bytes_{},
+          fence_block_(0u)
     {
         CHECK_EQ(nt(fixture.adapter().create_device(&device_)), success);
-        const av::RvkContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), fence_.kmt_handle(),
-                                          reply_.kmt_handle());
+        const av::RvkContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), reply_bytes);
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
-        /* The device writes a fresh fence page when it binds the context, and a
-         * submission reads it at once to learn whether the batch already
-         * finished: zeroes there are a malformed page, not "nothing yet". */
-        host_completes(0u);
     }
 
     /* A context a hardware queue may run on, which is what a doorbell hangs off
@@ -3969,24 +3968,19 @@ public:
     std::uint32_t create_hw_queue_context(av::DxgkargCreateContextRecord &request)
     {
         request.Flags = 0x14u;   /* VirtualAddressing | HwQueueSupported */
-        request.pPrivateDriverData = record_bytes_;
-        request.PrivateDriverDataSize = sizeof record_bytes_;
-        return nt(fixture_.adapter().create_context(device_.hDevice, &request));
+        return create(request);
     }
 
     /* The record asks for an OpenGL context made with `options` instead. */
     void ask_for_gl(const av::GlContextOptions &options)
     {
-        const av::RvkContextRecord record(av::SubApi::opengl, 12u, ring_.kmt_handle(), fence_.kmt_handle(),
-                                          reply_.kmt_handle(), options);
+        const av::RvkContextRecord record(av::SubApi::opengl, 12u, ring_.kmt_handle(), reply_bytes, options);
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
     }
     std::uint32_t create_context(av::DxgkargCreateContextRecord &request)
     {
         request.Flags = 0x4u;   /* VirtualAddressing */
-        request.pPrivateDriverData = record_bytes_;
-        request.PrivateDriverDataSize = sizeof record_bytes_;
-        return nt(fixture_.adapter().create_context(device_.hDevice, &request));
+        return create(request);
     }
     std::uint32_t submit(void *context, std::uint32_t fence_id, const av::SubmissionDescriptor &descriptor)
     {
@@ -4000,27 +3994,44 @@ public:
         submit.SubmissionFenceId = fence_id;
         return nt(fixture_.adapter().submit_command_virtual(&submit));
     }
-    /* What the host writes once it finishes batches through `completed`. */
+    /* What the host writes, into the last context's fence page, once it
+     * finishes batches through `completed`. */
     void host_completes(std::uint64_t completed)
     {
-        static_cast<void>(av::FencePage(completed, completed).encode(fence_.bytes(), 32u));
+        static_cast<void>(av::FencePage(completed, completed).encode(fence_page(), 32u));
     }
     void host_faults(std::uint64_t completed, std::uint32_t code)
     {
-        static_cast<void>(av::FencePage(completed, completed, code).encode(fence_.bytes(), 32u));
+        static_cast<void>(av::FencePage(completed, completed, code).encode(fence_page(), 32u));
     }
     TransportAllocation &ring() { return ring_; }
     void                *device() const { return device_.hDevice; }
     std::uint8_t        *record_bytes() { return record_bytes_; }
 
 private:
+    /* The device writes a fresh fence page when it binds the context, and a
+     * submission reads it at once to learn whether the batch already
+     * finished: zeroes there are a malformed page, not "nothing yet". The
+     * context's pages are made ring, fence page, reply slot. */
+    std::uint32_t create(av::DxgkargCreateContextRecord &request)
+    {
+        request.pPrivateDriverData = record_bytes_;
+        request.PrivateDriverDataSize = sizeof record_bytes_;
+        const std::uint32_t made = fixture_.platform().page_blocks_made();
+        const std::uint32_t status = nt(fixture_.adapter().create_context(device_.hDevice, &request));
+        if (status != success) return status;
+        fence_block_ = made + 1u;
+        host_completes(0u);
+        return status;
+    }
+    std::uint8_t *fence_page() { return fixture_.platform().page_block(fence_block_); }
+
     Fixture                      &fixture_;
     av::DxgkargCreateDeviceRecord device_;
     TransportAllocation           ring_;
-    TransportAllocation           fence_;
-    TransportAllocation           reply_;
     std::uint8_t                  record_bytes_[av::RvkContextRecord::encoded_size];
     std::uint8_t                  descriptor_bytes_[av::SubmissionDescriptor::encoded_size] = {};
+    std::uint32_t                 fence_block_;
 };
 
 }  // namespace
@@ -4095,10 +4106,10 @@ TEST(adapter_rvk_context, a_process_s_batch_completes_when_the_host_says_it_did)
   CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* The pages a context runs on cannot be freed under it: freeing its ring first
- * destroys the host context, so the device writes nothing into pages that are
- * no longer the process's. */
-TEST(adapter_rvk_context, freeing_memory_a_context_runs_on_destroys_the_host_context_first)
+/* Freeing the page that names a context ends it first - the process is done
+ * with the context - so the device writes nothing more into memory the
+ * process no longer reaches. */
+TEST(adapter_rvk_context, freeing_the_page_that_names_a_context_destroys_the_host_context_first)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
@@ -4111,18 +4122,20 @@ TEST(adapter_rvk_context, freeing_memory_a_context_runs_on_destroys_the_host_con
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(fixture.context_requests(), requests + 4u);   /* nothing more to destroy */
-  /* And nothing is said about it. The context went with its memory, so the
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+  /* And nothing is said about it. The context went with its name, so the
    * destroy has nothing left to unbind - which is the order a process exit
    * uses, and a line claiming a failed destroy for it would be a failure
    * logged where there is none (constitution IX). */
   CHECK(!fixture.platform().logged_line("rvk context destroyed"));
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* A process exit unmaps its memory from the aperture before it frees it, and
- * dxgkrnl waits for none of what the process queued in its ring: the host
- * still running that would write the fence page and the replies into pages
- * Windows hands on once the unmap is done. The unmap ends the context first. */
-TEST(adapter_rvk_context, unmapping_memory_a_context_runs_on_destroys_the_host_context_first)
+/* VidMm evicts the allocations of a process it suspends - a UWP app in the
+ * background - and maps them back, maybe elsewhere, when it resumes. A
+ * context runs on the driver's own pages, not the process's allocations, so an
+ * eviction ends nothing: the host is not told, the context still submits, and
+ * the process's views are the same memory as before. */
+TEST(adapter_rvk_context, an_aperture_unmap_ends_no_context)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
@@ -4131,31 +4144,16 @@ TEST(adapter_rvk_context, unmapping_memory_a_context_runs_on_destroys_the_host_c
   CHECK_EQ(process.create_context(context), success);
   const std::uint32_t requests = fixture.context_requests();
   CHECK_EQ(process.ring().unmap(), success);
-  CHECK_EQ(fixture.context_requests(), requests + 4u);   /* CTX_DESTROY and the unrefs, before the pages go */
-  CHECK(fixture.platform().logged_line("rvk context ended by an aperture unmap status 0x00000000"));
-  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
-  /* The free and the context's destroy that follow have nothing left to end. */
-  CHECK_EQ(process.ring().destroy(), success);
-  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
-  CHECK_EQ(fixture.context_requests(), requests + 4u);
-  CHECK(fixture.adapter().invariants_hold());
-  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
-
-/* Memory no context runs on leaves the aperture without the host hearing of it. */
-TEST(adapter_rvk_context, unmapping_memory_no_context_runs_on_leaves_the_context_running)
-{ Fixture fixture; av::FakeHandleTable handles;
-  fixture.function().add_doorbell_region();
-  CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
-  av::DxgkargCreateContextRecord context = {};
-  CHECK_EQ(process.create_context(context), success);
-  TransportAllocation spare(fixture, handles, av::AllocationKind::host_visible_memory, 0x1000u, 40u);
-  const std::uint32_t requests = fixture.context_requests();
-  CHECK_EQ(spare.unmap(), success);
   CHECK_EQ(fixture.context_requests(), requests);
-  CHECK(!fixture.platform().logged_line("rvk context ended by an aperture unmap"));
+  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 3u);
   CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), 1u);
+  /* The free that follows a process exit does end it. */
+  CHECK_EQ(process.ring().destroy(), success);
+  CHECK_EQ(fixture.context_requests(), requests + 4u);   /* CTX_DESTROY and the unrefs */
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
 /* A record is honoured only where it can run: a device with no doorbell pages,
@@ -4544,101 +4542,58 @@ TEST(adapter_rvk_context, a_timeout_reset_loses_the_host_context_and_a_new_one_s
   CHECK_EQ(nt(fixture.adapter().destroy_context(again.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* Feature 045: a process binds a host-visible chunk to its rvk context by escape,
- * and reads back the resource and page count the kernel wrote into the same
- * bytes. Anything else about the escape is refused before a table is asked. */
-TEST(adapter_escape, a_chunk_bound_by_escape_answers_its_resource_in_the_private_data)
+/* A process asks where its rvk context's ring and reply slot are, and reads
+ * the answer back from the same bytes: views of the driver's own pages,
+ * mapped when the context was made, the ring's header already written.
+ * Anything else about the escape is refused. */
+TEST(adapter_escape, a_context_s_views_are_answered_in_the_private_data)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
   RvkProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
-  TransportAllocation chunk(fixture, handles, av::AllocationKind::host_visible_memory, 0x4000u, 40u);
-  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
-  const av::HostVisibleBindRecord bind(av::HostVisibleBindRecord::Operation::bind, chunk.kmt_handle(), 0u);
-  CHECK_STATUS(bind.encode(data, sizeof data), av::Status::ok);
+  CHECK_EQ(fixture.platform().process_mappings(), 2u);
+  std::uint8_t data[av::ContextViewsRecord::encoded_size] = {};
+  CHECK_STATUS(av::ContextViewsRecord().encode(data, sizeof data), av::Status::ok);
   DxgkargEscapeRecord escape = {};
   escape.pPrivateDriverData = data;
   escape.PrivateDriverDataSize = sizeof data;
   escape.hContext = context.hContext;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
-  std::uint32_t resource = 0u;
-  std::uint64_t pages = 0u;
-  std::memcpy(&resource, data + 12u, sizeof resource);
-  std::memcpy(&pages, data + 16u, sizeof pages);
-  CHECK_EQ(resource, av::RvkContextBinding::first_resource_id + av::RvkContextBinding::transport_resources);
-  CHECK_EQ(pages, 4u);
+  av::ContextViewsRecord views;
+  CHECK_STATUS(views.accept_answer(data, sizeof data), av::Status::ok);
+  av::RingHeader header;
+  CHECK_STATUS(header.decode(reinterpret_cast<const std::uint8_t *>(static_cast<std::uintptr_t>(views.ring())),
+                             av::RingHeader::encoded_size),
+               av::Status::ok);
+  CHECK_EQ(header.capacity(), std::uint64_t{1} << 12u);
+  auto *const reply = reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(views.reply()));
+  reply[reply_bytes - 1u] = 0x42u;   /* the process may write the whole slot */
 
-  /* The same record again is an answer, not a request. */
+  /* The same bytes again are an answer, not a request. */
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
-  /* A chunk binding on no rvk context of this adapter. */
-  CHECK_STATUS(bind.encode(data, sizeof data), av::Status::ok);
+  /* A context of no one, no context named, and the wrong length. */
+  CHECK_STATUS(av::ContextViewsRecord().encode(data, sizeof data), av::Status::ok);
   int stranger = 0;
   escape.hContext = &stranger;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
-  /* No context named: not a binding at all. */
   escape.hContext = nullptr;
-  CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
-  /* The magic with the wrong length. */
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
   escape.hContext = context.hContext;
   escape.PrivateDriverDataSize = sizeof data - 1u;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
   escape.PrivateDriverDataSize = 3u;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
+  std::uint64_t ring = 0u;
+  std::memcpy(&ring, data + 8u, sizeof ring);
+  CHECK_EQ(ring, 0u);   /* no refusal writes an answer */
 
-  /* Unbinding by resource, then destroying the context, sends what it must. */
-  const av::HostVisibleBindRecord unbind(av::HostVisibleBindRecord::Operation::unbind, 0u, resource);
-  CHECK_STATUS(unbind.encode(data, sizeof data), av::Status::ok);
-  escape.PrivateDriverDataSize = sizeof data;
-  const std::uint32_t before = fixture.context_requests();
-  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
-  CHECK_EQ(fixture.context_requests(), before + 1u);   /* the chunk's unref */
-  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);   /* no longer bound */
+  /* The views go with the context. */
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
-
-/* A chunk the process frees while bound takes its context with it, as a ring
- * does: the host may still hold its pages imported. */
-TEST(adapter_escape, freeing_a_bound_chunk_destroys_its_context)
-{ Fixture fixture; av::FakeHandleTable handles;
-  fixture.function().add_doorbell_region();
-  CHECK_EQ(fixture.start(), success);
-  RvkProcess process(fixture, handles);
-  av::DxgkargCreateContextRecord context = {};
-  CHECK_EQ(process.create_context(context), success);
-  TransportAllocation chunk(fixture, handles, av::AllocationKind::host_visible_memory, 0x1000u, 40u);
-  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
-  CHECK_STATUS(av::HostVisibleBindRecord(av::HostVisibleBindRecord::Operation::bind, chunk.kmt_handle(), 0u)
-                   .encode(data, sizeof data),
-               av::Status::ok);
-  DxgkargEscapeRecord escape = {};
-  escape.pPrivateDriverData = data;
-  escape.PrivateDriverDataSize = sizeof data;
-  escape.hContext = context.hContext;
-  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
-  const std::uint32_t before = fixture.context_requests();
-  CHECK_EQ(chunk.destroy(), success);
-  /* The chunk's unref, CTX_DESTROY and the three transport unrefs. */
-  CHECK_EQ(fixture.context_requests(), before + 5u);
-  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
-  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
-  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
-
-/* A binding with no device to publish on is refused, however well formed. */
-TEST(adapter_escape, a_chunk_binding_with_no_device_is_invalid)
-{ Fixture fixture;
-  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
-  CHECK_STATUS(av::HostVisibleBindRecord(av::HostVisibleBindRecord::Operation::bind, 0x40000001u, 0u)
-                   .encode(data, sizeof data),
-               av::Status::ok);
-  DxgkargEscapeRecord escape = {};
-  escape.pPrivateDriverData = data;
-  escape.PrivateDriverDataSize = sizeof data;
-  int context = 0;
-  escape.hContext = &context;
-  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter); }
-
 
 /* ---- the host window (docs/host-window.md) ---------------------------------------- */
 
@@ -4740,28 +4695,62 @@ TEST(adapter_escape, a_window_chunk_opened_by_escape_answers_its_resource_and_ad
   av::HostWindowRecord closed = close;
   CHECK_STATUS(closed.accept_answer(data, sizeof data), av::Status::ok);
   CHECK_EQ(fixture.blob_unmaps(), 1u);
-  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 2u);   /* the context's ring and reply slot */
   CHECK_EQ(window_escape(fixture, context.hContext, close, data), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 
-/* No window, or a device that will not back the chunk, is STATUS_NOT_SUPPORTED:
- * the process uses guest RAM instead, and nothing is left held. */
-TEST(adapter_escape, a_window_chunk_without_a_window_is_not_supported)
+/* With no window the chunk is guest RAM the driver owns: a guest blob of its
+ * pages, the process's view of the same memory, and on close the blob
+ * released and the pages freed. */
+TEST(adapter_escape, a_chunk_with_no_window_is_guest_ram)
 { Fixture bare; av::FakeHandleTable handles;
   bare.function().add_doorbell_region();
   CHECK_EQ(bare.start(), success);
   RvkProcess process(bare, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
+  const std::uint32_t block = bare.platform().page_blocks_made();
+  const std::uint32_t requests = bare.context_requests();
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
-  CHECK_EQ(window_escape(bare, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
-           not_supported);
+  const av::HostWindowRecord open(WindowOperation::open, 0x1800u, 0u);
+  CHECK_EQ(window_escape(bare, context.hContext, open, data), success);
+  av::HostWindowRecord answer = open;
+  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK_EQ(answer.resource_id(), first_chunk_resource);
+  CHECK_EQ(answer.bytes(), 0x2000u);
   CHECK_EQ(bare.blob_maps(), 0u);
+  CHECK_EQ(bare.platform().process_mappings(), 3u);
+  reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(answer.address()))[0x1FFFu] = 0x42u;
+  CHECK(bare.platform().page_block(block) != nullptr);
+  CHECK_EQ(bare.platform().page_block(block)[0x1FFFu], 0x42u);
+  const std::uint8_t *created = nullptr;
+  for (std::uint32_t index = 0u; index < bare.control().requests(); index++)
+      if (bare.control().request_type(index) == create_blob) created = bare.control().request(index);
+  CHECK(created != nullptr);
+  std::uint32_t resource = 0u;
+  std::uint32_t blob_mem = 0u;
+  std::uint32_t entries = 0u;
+  std::memcpy(&resource, created + 24u, sizeof resource);
+  std::memcpy(&blob_mem, created + 28u, sizeof blob_mem);
+  std::memcpy(&entries, created + 36u, sizeof entries);
+  CHECK_EQ(resource, first_chunk_resource);
+  CHECK_EQ(blob_mem, 1u);   /* VIRTIO_GPU_BLOB_MEM_GUEST */
+  CHECK(entries != 0u);
+
+  const av::HostWindowRecord close(WindowOperation::close, 0u, answer.resource_id());
+  CHECK_EQ(window_escape(bare, context.hContext, close, data), success);
+  CHECK_EQ(bare.context_requests(), requests + 1u);   /* the blob's unref */
+  CHECK_EQ(bare.platform().process_mappings(), 2u);
+  CHECK(bare.platform().page_block(block) == nullptr);
+  CHECK_EQ(window_escape(bare, context.hContext, close, data), invalid_parameter);
   CHECK_EQ(nt(bare.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(bare.adapter().destroy_device(process.device())), success); }
 
-TEST(adapter_escape, a_window_chunk_the_device_will_not_back_is_not_supported)
+/* A device that will back the chunk neither in the window nor in guest RAM is
+ * STATUS_NOT_SUPPORTED, and nothing is left held: a refused blob holds no
+ * pages, so they are freed rather than kept out of use. */
+TEST(adapter_escape, a_chunk_the_device_will_back_nowhere_is_not_supported)
 { Fixture refusing; av::FakeHandleTable refusing_handles;
   refusing.function().add_doorbell_region();
   refusing.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
@@ -4773,7 +4762,8 @@ TEST(adapter_escape, a_window_chunk_the_device_will_not_back_is_not_supported)
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
   CHECK_EQ(window_escape(refusing, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
            not_supported);
-  CHECK_EQ(refusing.platform().process_mappings(), 0u);
+  CHECK_EQ(refusing.platform().process_mappings(), 2u);
+  CHECK_EQ(refusing.platform().owned_page_blocks(), 3u);   /* the context's own */
   CHECK_EQ(nt(refusing.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(refusing.adapter().destroy_device(process.device())), success); }
 
@@ -4798,7 +4788,7 @@ TEST(adapter_escape, destroying_a_context_closes_its_window_chunks)
   std::uint8_t data[av::HostWindowRecord::encoded_size] = {};
   CHECK_EQ(window_escape(fixture, context.hContext, av::HostWindowRecord(WindowOperation::open, 0x1000u, 0u), data),
            success);
-  CHECK_EQ(fixture.platform().process_mappings(), 1u);
+  CHECK_EQ(fixture.platform().process_mappings(), 3u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(fixture.platform().process_mappings(), 0u);
   CHECK_EQ(fixture.blob_unmaps(), 1u);

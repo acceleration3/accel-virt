@@ -43,6 +43,18 @@ public:
     /* Of a block allocate_contiguous returned; never of null. */
     virtual uint64_t physical_address(void *block) = 0;
 
+    /* `bytes` (whole pages, non-zero) of guest RAM the driver alone owns,
+     * zero-filled and cached: pages no memory manager pages out or moves until
+     * release_pages, so a device may keep their addresses for as long as the
+     * driver holds them - which no process's allocation promises, since VidMm
+     * evicts those whenever it likes (docs/protocol.md, "Context memory").
+     * Their record, which read_page_frames reads, or null when the memory is
+     * not there. PASSIVE. */
+    virtual void    *allocate_pages(uint64_t bytes) = 0;
+    /* Of a record allocate_pages returned, with no view of it left mapped;
+     * never of null. PASSIVE. */
+    virtual void     release_pages(void *pages) = 0;
+
     /* The physical addresses of `count` pages of the MDL `mdl`, from its page
      * `first`, into `frames`. The MDL comes from dxgkrnl, so its extent is
      * checked: invalid_parameter unless it covers those pages. Never at
@@ -72,6 +84,10 @@ public:
      * no_memory when it cannot be mapped. Passive only. */
     [[nodiscard]] virtual Status map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view,
                                                 void *&mapping) = 0;
+    /* Every page of `pages`, a record allocate_pages returned, mapped cached
+     * into the calling process as map_to_process maps device memory, with the
+     * same answers. */
+    [[nodiscard]] virtual Status map_pages_to_process(void *pages, uint64_t &view, void *&mapping) = 0;
     /* The mapping gone from the process it was made in, whichever process
      * calls - or nothing more than the bookkeeping when that process has
      * exited, which took its mappings with it. Passive only. */

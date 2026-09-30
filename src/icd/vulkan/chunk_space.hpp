@@ -10,7 +10,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "guest/transport/blob_chunk.hpp"
+#include "guest/transport/host_window_chunk.hpp"
 
 #include <stdint.h>
 
@@ -63,7 +63,7 @@ private:
     uint32_t hole_before(uint64_t pages, uint64_t &first) const;
 
     Connection                     &connection_;
-    ObjectStorage<BlobChunk>        chunk_;
+    ObjectStorage<HostWindowChunk>        chunk_;
     uint64_t                        pages_;
     uint32_t                        placed_;
     /* The placed ranges in address order: first page and page count. */

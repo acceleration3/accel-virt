@@ -614,7 +614,7 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   /* The host GPU's copy, played on the chunks' views at the import's fence wait. */
   kmt.play_at_wait(before_import + av::ScriptedHost::host_visible_import_copy_wait, [](void *played) {
       MockKmt &mock = *static_cast<MockKmt *>(played);
-      std::memcpy(mock.view_of(mock.bound_allocation(1u)), mock.view_of(mock.bound_allocation(0u)),
+      std::memcpy(mock.ram_chunk(1u), mock.ram_chunk(0u),
                   HostVisibleImportScenario::copy_bytes);
   }, &kmt);
   const std::uint32_t before_fault = before_import + av::ScriptedHost::host_visible_import_waits +
@@ -629,7 +629,7 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok submit.kernel_ns 0\n", "ok vulkan.bind\n",
                                "ok opencl.sum 64\n", "ok import.copied 1048576\n", "ok import.release\n",
                                "ok opengl.nop 0\n", "ok isolation.relink\n",
-                               "ok suite.close_adapter\n", "rvktest: 91 passed, 0 failed\n"};
+                               "ok suite.close_adapter\n", "rvktest: 85 passed, 0 failed\n"};
   const char *at = report.text();
   for (const char *line : order) {
       const char *const found = std::strstr(at, line);

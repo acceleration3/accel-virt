@@ -17,8 +17,9 @@ namespace av {
 
 class OpenConnection {
 public:
-    /* Adapters, device, queue, the transport's allocations, mapping and context. */
-    static constexpr std::uint32_t link_objects = 9u;
+    /* Adapters, device, queue, the transport's name and DMA allocations, its
+     * mapping and its context. */
+    static constexpr std::uint32_t link_objects = 7u;
 
     OpenConnection();
     OpenConnection(const OpenConnection &) = delete;

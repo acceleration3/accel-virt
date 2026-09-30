@@ -48,7 +48,6 @@ namespace av {
 
 struct KmtTransportProbe {
     static std::uint32_t ring(const KmtTransport &t) { return t.allocations_[0]; }
-    static std::uint32_t reply(const KmtTransport &t) { return t.allocations_[2]; }
 };
 
 }  // namespace av
@@ -154,7 +153,7 @@ TEST(d3d_device_channel, the_lock_is_held_for_each_call_and_no_longer)
  * that asks for one is fence 1. */
 TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
 { Fixture fixture;
-  std::uint8_t *reply = fixture.kmt().view_of(KmtTransportProbe::reply(fixture.transport()));
+  std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
   CHECK(reply != nullptr);
   static_cast<void>(av::ReplyHeader(1u, 4u).encode(reply, av::ReplyHeader::encoded_size));
   const std::uint32_t removed = 0x887A0005u;
@@ -204,7 +203,7 @@ namespace {
 /* The host's answer to the first batch that asks for one: an hresult and a level. */
 void answer_create(Fixture &fixture, std::uint32_t hresult)
 {
-    std::uint8_t *reply = fixture.kmt().view_of(KmtTransportProbe::reply(fixture.transport()));
+    std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
     CHECK(reply != nullptr);
     static_cast<void>(av::ReplyHeader(1u, 8u).encode(reply, av::ReplyHeader::encoded_size));
     const std::uint32_t words[2] = {hresult, 0xb100u};

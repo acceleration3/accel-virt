@@ -17,16 +17,11 @@ enum class AllocationKind : uint16_t {
      * host's pixels are read back into (the Direct3D driver, rvkumd). */
     surface = 5u,
     client = 16u,
-    /* What an rvk context runs on, and what feature 043's transport gives a
-     * process: a submission ring of a power-of-two page size, and the one page
-     * a context's fences are written to. */
+    /* The page that names an rvk context: the one handle of a context a driver
+     * resolves in the process that made it, so another context of that process
+     * names it by this (feature 050). No device reads it - a context runs on
+     * memory the driver owns (docs/protocol.md, "Context memory"). */
     context_ring = 17u,
-    fence_page = 18u,
-    /* The slot a context's answers are written to (feature 043). */
-    reply_slot = 19u,
-    /* Guest RAM the host GPU imports as host-visible Vulkan memory: a process
-     * binds it to its rvk context and maps it with no copy (feature 045). */
-    host_visible_memory = 20u,
 };
 
 }  // namespace av

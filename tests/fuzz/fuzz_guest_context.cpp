@@ -43,7 +43,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::GuestContext      context(platform, doorbells);
     const av::CapsetInfo  capset(av::ProtocolVersion(1u, 0u), 1u, 64u, 12u, 24u, 0u,
                                  av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
-    if (memory.allocate(12u) != av::Status::ok ||
+    if (memory.allocate(12u, 4096u) != av::Status::ok ||
         context.set_up(capset, 1u,
                        av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 2u, 12u, 3u, 0u, 4u),
                        memory.pages()) != av::Status::ok)

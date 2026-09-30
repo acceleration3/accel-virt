@@ -10,10 +10,12 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
+#include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -43,14 +45,12 @@ using av::WireWriter;
 namespace av {
 
 struct KmtTransportProbe {
-    static std::uint32_t ring_allocation(const KmtTransport &t) { return t.allocations_[0]; }
-    static std::uint32_t fence_allocation(const KmtTransport &t) { return t.allocations_[1]; }
-    static std::uint32_t reply_allocation(const KmtTransport &t) { return t.allocations_[2]; }
-    static std::uint32_t dma_allocation(const KmtTransport &t) { return t.allocations_[3]; }
+    static std::uint32_t name_allocation(const KmtTransport &t) { return t.allocations_[0]; }
+    static std::uint32_t dma_allocation(const KmtTransport &t) { return t.allocations_[1]; }
     /* An established context with its DMA buffer gone: what it never builds. */
     static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0u; }
-    /* A view held of an allocation that does not exist. */
-    static void phantom_view(KmtTransport &t) { t.locked_[2] = true; t.allocations_[2] = 0u; }
+    /* An established context with its buffer, and no name. */
+    static void nameless(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0x1000u; t.allocations_[0] = 0u; }
 };
 
 }  // namespace av
@@ -189,7 +189,7 @@ TEST(kmt_transport, context_is_the_virtual_context_while_established)
   CHECK_STATUS(fixture.kmt().wait_for_context(fixture.connection().device(), context), Status::invalid_parameter);
   CHECK_EQ(fixture.kmt().misuses(), 1u); }
 
-TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
+TEST(kmt_transport, initialize_names_the_context_and_takes_the_driver_s_views)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
@@ -199,18 +199,23 @@ TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
   CHECK(transport.established());
   /* The record was carried as private data. */
   CHECK_EQ(fixture.kmt().last_private_size(), RvkContextRecord::encoded_size);
-  /* Each allocation is the kind the driver pins in the aperture and publishes;
-   * a ring of order 12 is two pages, its header and data. */
-  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::ring_allocation(transport)), 17u);
-  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::ring_allocation(transport)), 2u);
-  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::fence_allocation(transport)), 18u);
-  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::reply_allocation(transport)), 19u);
+  /* Two allocations: the page the context is named by, and the DMA buffer a
+   * submission names. The ring and reply slot are the driver's. */
+  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::name_allocation(transport)), 17u);
+  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::name_allocation(transport)), 1u);
   CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::dma_allocation(transport)), 16u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 0u);
   RvkContextRecord record;
   CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
-  CHECK_EQ(record.ring(), KmtTransportProbe::ring_allocation(transport));
-  CHECK_EQ(record.fence(), KmtTransportProbe::fence_allocation(transport));
-  CHECK_EQ(record.reply(), KmtTransportProbe::reply_allocation(transport));
+  CHECK_EQ(record.ring(), KmtTransportProbe::name_allocation(transport));
+  CHECK_EQ(record.ring_order(), 12u);
+  CHECK_EQ(record.reply_bytes(), reply_bytes);
+  /* The ring it writes is the one the driver made: its header is there. */
+  const std::uint8_t *const ring = fixture.kmt().ring_of(transport.context());
+  CHECK(ring != nullptr);
+  av::RingHeader header;
+  CHECK_STATUS(header.decode(ring, av::RingHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.order(), 12u);
   /* A second initialize is refused. */
   CHECK_STATUS(transport.initialize(), Status::invalid_state);
   CHECK(transport.invariants_hold());
@@ -232,7 +237,7 @@ TEST(kmt_transport, an_opengl_record_carries_its_options_and_the_ring_is_named)
   const av::GlContextOptions options(4u, 5u, av::GlContextOptions::Profile::core,
                                      av::GlContextOptions::debug, 0x4242u);
   CHECK_STATUS(transport.initialize(options), Status::ok);
-  CHECK_EQ(transport.ring(), KmtTransportProbe::ring_allocation(transport));
+  CHECK_EQ(transport.ring(), KmtTransportProbe::name_allocation(transport));
   RvkContextRecord record;
   CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
   const av::GlContextOptions carried = record.options();
@@ -267,7 +272,7 @@ TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
   writer.write_u32(0xCAFEu);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
   /* The ring holds a batch of fence 1 whose command is the one sent. */
-  const std::uint8_t *ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+  const std::uint8_t *ring = fixture.kmt().ring_of(transport.context());
   CHECK(ring != nullptr);
   BatchHeader batch;
   CHECK_STATUS(batch.decode(ring + 32u, BatchHeader::encoded_size), Status::ok);
@@ -306,7 +311,7 @@ TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
   CHECK_STATUS(transport.initialize(), Status::ok);
   /* Play the device: the first sync command takes fence 1, so write its answer
    * into the reply slot before the call reads it. */
-  std::uint8_t *reply = fixture.kmt().view_of(KmtTransportProbe::reply_allocation(transport));
+  std::uint8_t *reply = fixture.kmt().reply_of(transport.context());
   CHECK(reply != nullptr);
   static_cast<void>(ReplyHeader(1u, 8u).encode(reply, ReplyHeader::encoded_size));
   const std::uint8_t answer[8] = {1u, 0u, 0u, 0u, 2u, 0u, 0u, 0u};
@@ -398,15 +403,13 @@ void refuse_setup(MockKmt::Call call, std::uint32_t nth)
 }  // namespace
 
 TEST(kmt_transport, a_failure_at_each_setup_step_leaves_it_unestablished)
-{ refuse_setup(MockKmt::Call::create_allocation, 1u);   /* ring */
-  refuse_setup(MockKmt::Call::create_allocation, 2u);   /* fence */
-  refuse_setup(MockKmt::Call::create_allocation, 3u);   /* reply */
-  refuse_setup(MockKmt::Call::create_allocation, 4u);   /* dma */
+{ refuse_setup(MockKmt::Call::create_allocation, 1u);   /* the name */
+  refuse_setup(MockKmt::Call::create_allocation, 2u);   /* dma */
   refuse_setup(MockKmt::Call::make_resident, 1u);
-  refuse_setup(MockKmt::Call::wait_for_fence, 1u);      /* ring residency */
+  refuse_setup(MockKmt::Call::wait_for_fence, 1u);      /* the name's residency */
   refuse_setup(MockKmt::Call::map_gpu_virtual_address, 1u);
-  refuse_setup(MockKmt::Call::lock, 1u);
-  refuse_setup(MockKmt::Call::create_context_virtual, 1u); }
+  refuse_setup(MockKmt::Call::create_context_virtual, 1u);
+  refuse_setup(MockKmt::Call::escape, 1u); }            /* where the ring and reply slot are */
 
 /* The last residency wait a setup makes is the DMA buffer's mapping wait; a
  * device that never reaches it fails the setup. Counting the waits keeps this
@@ -463,17 +466,25 @@ TEST(kmt_transport, a_torn_down_transport_initializes_again)
   CHECK_EQ(fixture.kmt().open_objects(), 3u);   /* the adapter, device and paging queue */
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
-/* A lock that hands back a null view cannot bind the ring. */
-TEST(kmt_transport, a_null_ring_view_is_refused)
+/* Views no driver could have answered - an address missing, or the ring and
+ * reply slot at one place - set nothing up, and leave nothing open. */
+TEST(kmt_transport, views_the_driver_could_not_have_answered_are_refused)
 { MockKmt kmt;
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  kmt.zero_next(MockKmt::Call::lock);   /* the ring lock returns no view */
-  std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
-  CHECK(transport.initialize() != Status::ok);
-  CHECK(!transport.established()); }
+  const std::uint64_t answers[][2] = {{0u, 0x2000u}, {0x1000u, 0u}, {0x1000u, 0x1000u}};
+  for (const auto &views : answers) {
+      std::uint8_t answer[av::ContextViewsRecord::encoded_size] = {};
+      CHECK_STATUS(av::ContextViewsRecord().answered(views[0], views[1]).encode(answer, sizeof answer), Status::ok);
+      kmt.answer_next_escape(answer, sizeof answer);
+      std::uint8_t transport_staging[staging_bytes] = {};
+      KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging,
+                             sizeof transport_staging);
+      CHECK_STATUS(transport.initialize(), Status::malformed);
+      CHECK(!transport.established());
+      CHECK_EQ(kmt.open_objects(), 3u);
+  } }
 
 /* A submission the device refuses fails the send. */
 TEST(kmt_transport, a_refused_submission_fails_the_send)
@@ -665,38 +676,40 @@ TEST(kmt_transport, a_wait_the_device_refuses_fails_the_sync)
   WireReader reply(nullptr, 0u);
   CHECK(transport.send_sync(0x10002u, w1, reply) == TransportResult::failed); }
 
-/* Teardown gives back the views setup took - the ring's and the reply's - and
- * nothing it never locked, leaving the connection as it found it. */
-TEST(kmt_transport, teardown_unlocks_only_the_views_it_holds)
+/* Teardown destroys the context, which takes the driver's views of its ring
+ * and reply slot with it, and the two allocations, leaving the connection as it
+ * found it; a setup that failed after the context was made does the same. */
+TEST(kmt_transport, teardown_leaves_the_connection_as_it_found_it)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
   KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 2u);
+  const std::uint32_t context = transport.context();
+  CHECK(fixture.kmt().ring_of(context) != nullptr);
   transport.teardown();
   CHECK(transport.invariants_hold());
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 2u);
+  CHECK(fixture.kmt().ring_of(context) == nullptr);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 0u);
   CHECK_EQ(fixture.kmt().misuses(), 0u);
   /* The adapter, the device and the queue. */
   CHECK_EQ(fixture.kmt().open_objects(), 3u);
-  /* A setup that failed after the ring's lock gives that one view back. */
-  fixture.kmt().fail_at(MockKmt::Call::lock, 2u, MockKmt::invalid_parameter);
+  fixture.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
   CHECK(transport.initialize() != Status::ok);
   CHECK(transport.invariants_hold());
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 3u);
   CHECK_EQ(fixture.kmt().misuses(), 0u);
   CHECK_EQ(fixture.kmt().open_objects(), 3u); }
 
-TEST(kmt_transport, the_invariant_catches_a_view_of_no_allocation)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.open(), Status::ok);
+TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_name)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   std::uint8_t transport_staging[staging_bytes] = {};
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
-                         reply_bytes, transport_staging, sizeof transport_staging);
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK(transport.invariants_hold());
-  KmtTransportProbe::phantom_view(transport);
+  KmtTransportProbe::nameless(transport);
   CHECK(!transport.invariants_hold()); }
 
 TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
@@ -831,8 +844,10 @@ TEST(kmt_transport_limits, a_256_kib_command_crosses_and_one_past_the_staging_is
   KmtTransport transport(fixture.connection(), SubApi::vulkan, icd_ring_order, icd_reply_bytes, staging,
                          sizeof staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::ring_allocation(transport)), 512u);
-  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::reply_allocation(transport)), 16u);
+  RvkContextRecord record;
+  CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
+  CHECK_EQ(record.ring_order(), icd_ring_order);
+  CHECK_EQ(record.reply_bytes(), icd_reply_bytes);
   std::uint8_t answer[MockKmt::max_answer] = {};
   answer[MockKmt::max_answer - 1u] = 0x5Au;
   fixture.kmt().queue_answer(answer, sizeof answer);
@@ -902,7 +917,7 @@ TEST(kmt_transport_send_batch, publishes_the_framed_commands_once_and_reads_the_
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
   CHECK_EQ(reply.remaining(), 4u);
   CHECK_EQ(reply.read_u8(), 9u);
-  const std::uint8_t *const ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+  const std::uint8_t *const ring = fixture.kmt().ring_of(transport.context());
   BatchHeader batch;
   CHECK_STATUS(batch.decode(ring + 32u, BatchHeader::encoded_size), Status::ok);
   CHECK_EQ(batch.fence_id(), 1u);
@@ -1004,7 +1019,7 @@ TEST(kmt_transport_send_batch, a_malformed_batch_is_refused_before_publishing)
       CHECK(transport.send_batch(bytes, length, reply) == TransportResult::failed);
       CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 0u);
       CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
-      const std::uint8_t *const ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+      const std::uint8_t *const ring = fixture.kmt().ring_of(transport.context());
       BatchHeader batch;
       CHECK(batch.decode(ring + 32u, BatchHeader::encoded_size) != Status::ok);   /* nothing was written */
       CHECK(!transport.faulted());

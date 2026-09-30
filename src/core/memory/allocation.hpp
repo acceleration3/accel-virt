@@ -89,7 +89,7 @@ private:
     static constexpr uint32_t flag_accessed_physically = 0x8000u;
     static constexpr uint32_t priority_normal = 0x28000000u;      /* D3DDDI_ALLOCATIONPRIORITY_NORMAL */
 
-    bool published_as_blob() const;
+    bool names_a_context() const;
 
     Platform            &platform_;
     const MemorySegments &segments_;

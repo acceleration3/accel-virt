@@ -1,7 +1,8 @@
 /* The adapter's rvk contexts (docs/protocol.md; feature 043): for each dxgkrnl
  * context a process created with an RvkContextRecord, the binding that runs it
- * on the device, the doorbell slot it holds, the allocations its record named
- * and the kernel's own views of their fence page and ring header. A process's
+ * on the device, the doorbell slot it holds, the allocation its record names
+ * it by, and the memory it runs on - guest RAM the driver owns, which VidMm
+ * never moves (docs/protocol.md, "Context memory"). A process's
  * submission, the DPC's serve and two contexts' creation or teardown can meet,
  * so a slot is claimed, made live and given back under a spin lock, and the
  * device is waited on outside it. dxgkrnl holds the adapter's DDI lock only
@@ -15,15 +16,19 @@
 #ifndef AV_RVK_CONTEXT_TABLE_HPP
 #define AV_RVK_CONTEXT_TABLE_HPP
 
+#include "core/memory/guest_pages.hpp"
 #include "core/platform/platform.hpp"
 #include "core/platform/spin_lock.hpp"
 #include "core/platform/wait_mutex.hpp"
 #include "core/rvk/context_chunk.hpp"
+#include "core/rvk/context_memory.hpp"
 #include "core/rvk/ring_submitter.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "core/rvk/submission_reader.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "proto/resources/allocation_kind.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -35,11 +40,11 @@ class StateWriter;
 class Allocation;
 class AllocationTable;
 class CapsetInfo;
+class ContextViewsRecord;
 class DxgkrnlInterface;
 class ExecutionNode;
 class HwQueueSubmissions;
 class GuestPageList;
-class HostVisibleBindRecord;
 class HostWindow;
 class HostWindowRecord;
 class RegisterWindow;
@@ -61,24 +66,31 @@ public:
     RvkContextTable &operator=(const RvkContextTable &) = delete;
 
     /* PASSIVE, inside the CreateContext of the process that made the record's
-     * allocations, whose handles only resolve there. Takes a free doorbell,
-     * resolves the ring, fence page and reply slot, maps the two pages the
-     * driver reads, connects the doorbell's fence queue and sets the host
-     * context up. invalid_state for a context already bound; no_space when no
-     * doorbell is free or the device has none for the slot; invalid_parameter
-     * for a handle naming no allocation of its role, one another context
-     * already runs on, a ring too small for its order, pages VidMm has not
-     * all mapped, a share context that is not another live OpenGL context of
-     * the process on the same device (named by its ring's handle, which only
-     * resolves in the process that made it; feature 050), or options the
-     * device's protocol cannot carry; no_memory when a page cannot be
-     * mapped; the device's refusal otherwise. Nothing stays bound on failure. */
+     * allocation, whose handle only resolves there. Takes a free doorbell,
+     * resolves the allocation that names the context, allocates the ring,
+     * fence page and reply slot and maps the ring and reply slot into the
+     * process, connects the doorbell's fence queue and sets the host context
+     * up. invalid_state for a context already bound; no_space when no doorbell
+     * is free or the device has none for the slot; invalid_parameter for a
+     * handle naming no ring allocation of the process or one another context
+     * is already named by, a share context that is not another live OpenGL
+     * context of the process on the same device (named by its ring's handle,
+     * which only resolves in the process that made it; feature 050), or
+     * options the device's protocol cannot carry; no_memory when there is no
+     * memory to run on or the process cannot be given a view of it; the
+     * device's refusal otherwise. Nothing stays bound on failure. */
     [[nodiscard]] Status bind(void *context, const RvkContextRecord &record, VirtioGpuDevice &device,
                               RegisterWindow &doorbells, const CapsetInfo &capset);
     /* PASSIVE. Tears the host context down on `device`, or lets go of it
      * without a request when there is no device or the device will not answer,
-     * and unmaps its pages. invalid_parameter for a context not bound. */
+     * and takes its memory back - keeping it out of use for good when a device
+     * that did not answer may still write it. invalid_parameter for a context
+     * not bound. */
     [[nodiscard]] Status unbind(void *context, VirtioGpuDevice *device);
+    /* PASSIVE, inside the Escape of the process that created `context`: the
+     * addresses there of its ring and of its reply slot, in `record`.
+     * invalid_parameter for a context not live. */
+    [[nodiscard]] Status views(void *context, ContextViewsRecord &record);
     /* The shared object `object_id` is gone from the guest: the device is
      * told, in turn with this table's own sequences, because the control
      * queue answers one exchange at a time (SharedObjectRelease). PASSIVE. */
@@ -109,30 +121,26 @@ public:
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();
-    /* DISPATCH. The context whose record named `allocation`, or null: an
-     * allocation a context runs on may not be freed under it. */
+    /* DISPATCH. The context `allocation` names, or runs a chunk on, or null:
+     * a context whose name goes, goes with it. */
     void                *user_of(const Allocation *allocation);
-    /* PASSIVE, inside the Escape of the process that made the chunk (feature 045).
-     * A bind resolves `record`'s allocation in the calling process - a mapped
-     * host_visible_memory allocation no context uses - publishes it as a GUEST
-     * blob of the context's next free chunk resource, and answers the resource
-     * and page count in `record`. An unbind releases the chunk bound as that
-     * resource. invalid_parameter for a context not live, an allocation that is
-     * not such a chunk, or a resource not bound; no_space when every chunk slot
-     * is taken; the device's refusal otherwise. Nothing is bound on failure. */
-    [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     /* PASSIVE, inside the Escape of the process that asks (docs/host-window.md).
      * An open takes the first run of window pages that holds `record`'s bytes
      * rounded up to pages, makes a host blob of the context's next free chunk
      * resource, has the device place it there, maps those pages into the
      * calling process write-back, and answers the resource, the bytes granted
-     * and the address in `record`. A close unmaps the process's view, has the
+     * and the address in `record`. Where the window cannot hold the chunk -
+     * there is none, it has no run that long, the device will not make or
+     * place the blob, or the process cannot be given a view within its reach
+     * - the chunk is guest RAM the driver owns instead, published as a GUEST
+     * blob and mapped cached. A close unmaps the process's view, has the
      * device unmap and release the blob, and only then frees the pages.
      * invalid_parameter for a context not live or a resource that is none of
-     * its window chunks; not_supported when there is no window, or the device
-     * will not make or place the blob; no_space when the window has no run
-     * that long or every chunk slot is taken; no_memory when the process cannot
-     * be given a view. Nothing is held on failure. */
+     * its chunks; no_space when every chunk slot is taken or the size cannot
+     * be held at all; no_memory when there is neither memory nor a view; the
+     * device's refusal of the GUEST blob, or of letting a RAM chunk go while
+     * an import holds it, which leaves that chunk bound. Nothing is held on a
+     * failed open. */
     [[nodiscard]] Status window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
     /* DISPATCH. Whether the table still holds `context`. Destroying an
@@ -161,7 +169,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    enum : uint32_t { ring_role = 0u, fence_role = 1u, reply_role = 2u, roles = 3u, chunk_role = 3u };
     static constexpr uint32_t no_slot = max_contexts;
 
     uint32_t             slot_of(const void *context) const;
@@ -170,7 +177,9 @@ private:
     /* Claims a free slot for `context` under the lock; no_slot when full or
      * when `context` already holds one (in `duplicate`). */
     uint32_t             claim(void *context, bool &duplicate);
-    [[nodiscard]] Status resolve(uint32_t handle, uint32_t role, uint8_t order, Allocation *&allocation);
+    /* The process's allocation `handle`, of `kind`, that no context names or
+     * runs a chunk on. */
+    [[nodiscard]] Status resolve(uint32_t handle, AllocationKind kind, Allocation *&allocation);
     /* The device id of the live OpenGL context whose ring `handle` names, other
      * than `slot`'s own: of this device for an OpenGL context asking, of this
      * process for an OpenCL one; 0 for a handle of 0. */
@@ -182,15 +191,22 @@ private:
      * `host_let_go` says a device that is not asked holds nothing of the
      * context any more, so its window pages are free again. */
     void                 release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go);
-    [[nodiscard]] Status publish_chunk(uint32_t slot, HostVisibleBindRecord &record, VirtioGpuDevice &device);
-    [[nodiscard]] Status unpublish_chunk(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
     /* The index of the slot's first free chunk slot, or chunk_slots. */
     uint32_t             free_chunk(uint32_t slot) const;
     [[nodiscard]] Status open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
+    /* The chunk as a run of window pages, in chunk slot `index`. */
+    [[nodiscard]] Status place_in_window(uint32_t slot, uint32_t index, HostWindowRecord &record,
+                                         VirtioGpuDevice &device);
+    /* The chunk as guest RAM the driver owns, in chunk slot `index`. */
+    [[nodiscard]] Status place_in_ram(uint32_t slot, uint32_t index, HostWindowRecord &record,
+                                      VirtioGpuDevice &device);
     [[nodiscard]] Status close_window(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
     /* Takes a window chunk down: the process's view, then the blob on `device`
      * when there is one to ask, then the pages. */
     void                 take_down(ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go);
+    /* Takes a RAM chunk down: the blob on `device` when there is one to ask,
+     * then the view and the pages. */
+    void                 take_down_ram(uint32_t slot, ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go);
     void                 log_binding(uint32_t slot, uint32_t message, Status status);
 
     Platform                        &platform_;
@@ -201,10 +217,12 @@ private:
     SubmissionReader                 reader_;
     ObjectStorage<RvkContextBinding> bindings_[max_contexts];
     void                            *contexts_[max_contexts];
-    const Allocation                *uses_[max_contexts][roles];
+    /* The allocation each slot's context is named by. */
+    const Allocation                *names_[max_contexts];
+    ObjectStorage<ContextMemory>     memories_[max_contexts];
     ContextChunk                     chunks_[max_contexts][RvkContextBinding::chunk_slots];
-    uint8_t                         *ring_views_[max_contexts];
-    uint8_t                         *fence_views_[max_contexts];
+    /* The pages of every RAM chunk a slot holds. */
+    ObjectPool<GuestPages>           ram_chunks_;
     uint8_t                          orders_[max_contexts];
     /* Bindings each slot has had, so each takes fresh device ids. */
     uint32_t                         generations_[max_contexts];

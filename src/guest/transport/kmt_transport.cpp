@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/context/context_views_record.hpp"
 #include "proto/context/tail_publish_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
@@ -26,7 +27,7 @@ constexpr size_t   max_batch = 0xFFFFFFFFu;
 KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order, uint32_t reply_bytes,
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
-      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
+      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), fences_(), fence_ends_{}, faulted_(false), answered_(false),
       decode_arena_(nullptr, 0u), blobs_()
@@ -41,7 +42,7 @@ KmtTransport::~KmtTransport()
 }
 
 Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint64_t bytes, bool map_gpu,
-                                      bool do_lock, uint8_t *&view, uint64_t &address)
+                                      uint64_t &address)
 {
     AV_SCOPE("KmtTransport::setup_allocation");
     uint32_t      &allocation = allocations_[index];
@@ -66,13 +67,6 @@ Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint6
         const Status settled = kmt.wait_for_fence(device, connection_.fence_object(), map_fence);
         if (settled != Status::ok) return settled;
     }
-    if (do_lock) {
-        void        *mapped_view = nullptr;
-        const Status locked = kmt.lock(device, allocation, mapped_view);
-        if (locked != Status::ok) return locked;
-        locked_[index] = true;
-        view = static_cast<uint8_t *>(mapped_view);
-    }
     return Status::ok;
 }
 
@@ -83,35 +77,16 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     if (staging_bytes_ <= CommandHeader::encoded_size) return Status::invalid_parameter;
     if (!record_carries(options)) return Status::invalid_parameter;
     ScopeExit undo([&] { teardown(); });
-    uint8_t      *ring_view = nullptr;
-    uint8_t      *reply_view = nullptr;
-    uint8_t      *unlocked = nullptr;
-    uint64_t      unused = 0u;
-    /* A ring allocation is a power of two of pages (the driver's rule), and the
-     * header and 2^order bytes of data fit the next one up. */
-    const Status  ring_ready = setup_allocation(ring_index, AllocationKind::context_ring,
-                                                uint64_t{2} << ring_order_, false, true, ring_view, unused);
-    if (ring_ready != Status::ok) return ring_ready;
-    /* The fence page is the device's to write and the driver's to read; the
-     * guest only allocates it, so it is not locked here. */
-    const Status fence_ready = setup_allocation(fence_index, AllocationKind::fence_page, page_bytes, false, false,
-                                                unlocked, unused);
-    if (fence_ready != Status::ok) return fence_ready;
-    const Status reply_ready = setup_allocation(reply_index, AllocationKind::reply_slot, reply_bytes_, false, true,
-                                                reply_view, unused);
-    if (reply_ready != Status::ok) return reply_ready;
+    uint64_t  unused = 0u;
+    /* A page the driver resolves the context by, the one handle of it another
+     * context of this process can name (feature 050). */
+    const Status named = setup_allocation(name_index, AllocationKind::context_ring, page_bytes, false, unused);
+    if (named != Status::ok) return named;
     /* The DMA buffer is only what dxgkrnl insists a submission names; the
      * descriptor travels as the submission's private data. */
-    const Status dma_ready = setup_allocation(dma_index, AllocationKind::client, dma_bytes, true, false,
-                                              unlocked, dma_address_);
+    const Status dma_ready = setup_allocation(dma_index, AllocationKind::client, dma_bytes, true, dma_address_);
     if (dma_ready != Status::ok) return dma_ready;
-    const Status ring_bound = ring_.initialize(ring_view, ring_order_);
-    if (ring_bound != Status::ok) return ring_bound;
-    reply_ = ReplyReader(reply_view, reply_bytes_);
-    /* The record names the ring, fence and reply by the handles just allocated,
-     * so the miniport publishes exactly this context's memory. */
-    const RvkContextRecord record(sub_api_, ring_order_, allocations_[ring_index], allocations_[fence_index],
-                                  allocations_[reply_index], options);
+    const RvkContextRecord record(sub_api_, ring_order_, allocations_[name_index], reply_bytes_, options);
     uint8_t      private_data[RvkContextRecord::encoded_size] = {};
     static_cast<void>(record.encode(private_data, sizeof private_data));
     /* A context a hardware queue may run on first: that is what a doorbell
@@ -134,7 +109,7 @@ Status KmtTransport::initialize(const GlContextOptions &options)
      * (049 research.md §20) - and one whose doorbell is refused anyway is
      * given back for the plain one. */
     if (hardware_scheduled_ &&
-        doorbell_.initialize(connection_.device(), context_, allocations_[ring_index]) == Status::ok) {
+        doorbell_.initialize(connection_.device(), context_, allocations_[name_index]) == Status::ok) {
         static_cast<void>(doorbell_.connect());
     } else if (hardware_scheduled_) {
         static_cast<void>(connection_.kmt().destroy_context(context_));
@@ -144,6 +119,8 @@ Status KmtTransport::initialize(const GlContextOptions &options)
                                                                       sizeof private_data, context_);
         if (plain != Status::ok) return plain;
     }
+    const Status viewed = adopt_views();
+    if (viewed != Status::ok) return viewed;
     if (!doorbell_.established()) {
         uint8_t escape[TailPublishRecord::encoded_size] = {};
         static_cast<void>(TailPublishRecord(ring()).encode(escape, sizeof escape));
@@ -156,12 +133,37 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     return Status::ok;
 }
 
+/* A view the driver answered past what this process can address - a 32-bit
+ * one, above 4 GiB - is no answer it gives, and is refused rather than cut
+ * down to some other address. */
+Status KmtTransport::adopt_views()
+{
+    AV_SCOPE("KmtTransport::adopt_views");
+    uint8_t                  bytes[ContextViewsRecord::encoded_size] = {};
+    const ContextViewsRecord request;
+    static_cast<void>(request.encode(bytes, sizeof bytes));   /* the buffer is the encoded size */
+    const Status escaped =
+        connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
+    if (escaped != Status::ok) return escaped;
+    ContextViewsRecord views = request;
+    const Status       answered = views.accept_answer(bytes, sizeof bytes);
+    if (answered != Status::ok) return answered;
+    const auto ring = static_cast<uintptr_t>(views.ring());
+    const auto reply = static_cast<uintptr_t>(views.reply());
+    if constexpr (sizeof(uintptr_t) < sizeof(uint64_t))
+        if (uint64_t{ring} != views.ring() || uint64_t{reply} != views.reply()) return Status::malformed;
+    const Status ring_bound = ring_.initialize(reinterpret_cast<uint8_t *>(ring), ring_order_);
+    if (ring_bound != Status::ok) return ring_bound;
+    reply_ = ReplyReader(reinterpret_cast<uint8_t *>(reply), reply_bytes_);
+    return Status::ok;
+}
+
 bool KmtTransport::record_carries(const GlContextOptions &options) const
 {
     AV_SCOPE("KmtTransport::record_carries");
-    /* Distinct stand-ins for the handles the allocations will have: the record
-     * judges the options as the miniport will. */
-    const RvkContextRecord candidate(sub_api_, ring_order_, 1u, 2u, 3u, options);
+    /* A stand-in for the handle the name will have: the record judges the
+     * reply slot and the options as the miniport will. */
+    const RvkContextRecord candidate(sub_api_, ring_order_, 1u, reply_bytes_, options);
     uint8_t                bytes[RvkContextRecord::encoded_size] = {};
     static_cast<void>(candidate.encode(bytes, sizeof bytes));
     RvkContextRecord decoded;
@@ -195,7 +197,7 @@ uint64_t KmtTransport::submissions() const
 uint32_t KmtTransport::ring() const
 {
     AV_SCOPE("KmtTransport::ring");
-    return context_ != 0u ? allocations_[ring_index] : 0u;
+    return context_ != 0u ? allocations_[name_index] : 0u;
 }
 
 void KmtTransport::teardown()
@@ -211,8 +213,6 @@ void KmtTransport::teardown()
     }
     for (uint32_t index = 0u; index < allocation_count; index++) {
         if (allocations_[index] == 0u) continue;
-        if (locked_[index]) static_cast<void>(kmt.unlock(device, allocations_[index]));
-        locked_[index] = false;
         if (index == dma_index && dma_address_ != 0u) {
             static_cast<void>(kmt.free_gpu_virtual_address(connection_.adapter(), dma_address_,
                                                            dma_bytes / page_bytes));
@@ -221,9 +221,9 @@ void KmtTransport::teardown()
         static_cast<void>(kmt.destroy_allocation(device, allocations_[index]));
         allocations_[index] = 0u;
     }
-    /* The ring and reply views are gone with their allocations, and a context
-     * set up again numbers its fences from the start: without this a transport
-     * torn down could never be initialized again. */
+    /* The ring and reply views went with the context, and a context set up
+     * again numbers its fences from the start: without this a transport torn
+     * down could never be initialized again. */
     ring_ = TransportRing();
     reply_ = ReplyReader();
     fences_ = TransportFence();
@@ -628,12 +628,9 @@ void KmtTransport::give_back_doorbell()
 bool KmtTransport::invariants_hold() const
 {
     AV_SCOPE("KmtTransport::invariants_hold");
-    /* An established context has its DMA buffer mapped, and only an allocation
-     * that exists can be locked; the ring and fence keep their own invariants,
-     * tested with them. */
-    for (uint32_t index = 0u; index < allocation_count; index++)
-        if (locked_[index] && allocations_[index] == 0u) return false;
-    return context_ == 0u || dma_address_ != 0u;
+    /* An established context has its name and its DMA buffer mapped; the ring
+     * and fence keep their own invariants, tested with them. */
+    return context_ == 0u || (allocations_[name_index] != 0u && dma_address_ != 0u);
 }
 
 }  // namespace av

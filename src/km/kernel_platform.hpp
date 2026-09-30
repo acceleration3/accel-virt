@@ -21,12 +21,15 @@ public:
     void    *allocate_contiguous(size_t bytes) override;
     void     release_contiguous(void *block, size_t bytes) override;
     uint64_t physical_address(void *block) override;
+    void    *allocate_pages(uint64_t bytes) override;
+    void     release_pages(void *pages) override;
     Status   read_page_frames(void *mdl, uint32_t first, uint32_t count, uint64_t *frames) override;
     uint8_t *map_frame(uint64_t frame) override;
     void     unmap_frame(uint8_t *view) override;
     uint8_t *map_pages(const GuestPageList &pages, void *&mapping) override;
     void     unmap_pages(uint8_t *view, void *mapping) override;
     Status   map_to_process(uint64_t physical, uint64_t bytes, uint64_t &view, void *&mapping) override;
+    Status   map_pages_to_process(void *pages, uint64_t &view, void *&mapping) override;
     void     unmap_from_process(void *mapping) override;
     void     zero(void *dst, size_t bytes) override;
     void     copy(void *dst, const void *src, size_t bytes) override;
@@ -89,6 +92,11 @@ private:
     };
     /* An MDL's byte count is a ULONG. */
     static constexpr uint64_t max_mapping_bytes = 0xFFFFF000u;
+
+    /* `mdl`, whose pages its caller wrote and marked locked, mapped into the
+     * calling process; the mapping owns the MDL from then on, and frees it
+     * whatever the answer. */
+    Status map_mdl_to_process(PMDL mdl, uint64_t &view, void *&mapping);
 
     /* ZwSetValueKey on the device's driver key, opened for the one write. */
     Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,
