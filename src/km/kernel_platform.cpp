@@ -32,11 +32,17 @@ static_assert(sizeof(KSPIN_LOCK) == sizeof(uintptr_t), "SpinLock word is not a K
 static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsigned>(Pool::paged) == 1u,
               "pool_flags_ is indexed by Pool");
 
-KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_lock_(), bugcheck_record_()
+KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_(), bugcheck_record_()
 {
     AV_SCOPE("KernelPlatform::KernelPlatform");
-    KeInitializeSpinLock(&log_lock_);
     KeInitializeCallbackRecord(&bugcheck_record_);
+    if (log_.start() != Status::ok) log("rvkgpu: the log thread did not start; lines go out on the caller's thread");
+}
+
+KernelPlatform::~KernelPlatform()
+{
+    AV_SCOPE("KernelPlatform::~KernelPlatform");
+    log_.stop();
 }
 
 void *KernelPlatform::allocate(size_t bytes, Pool pool)
@@ -441,25 +447,14 @@ void KernelPlatform::write_register_u64(void *address, uint64_t value)
 void KernelPlatform::log(const char *message)
 {
     AV_SCOPE("KernelPlatform::log");
-    KIRQL previous = 0;
-    KeAcquireSpinLock(&log_lock_, &previous);
     DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: %s\n", message);
-    /* WRITE_PORT_BUFFER_UCHAR expands to __outbytestring, which clang-cl does
-     * not provide; one byte at a time is the same port protocol. */
-    for (const char *cursor = message; *cursor != '\0'; ++cursor)
-        WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
-    WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
-    KeReleaseSpinLock(&log_lock_, previous);
+    log_.write(message);
 }
 
-/* At a bugcheck another processor may be frozen holding log_lock_, and
- * DbgPrint may not be safe to call: the port is written directly. */
 void KernelPlatform::log_at_bugcheck(const char *message)
 {
     AV_SCOPE("KernelPlatform::log_at_bugcheck");
-    for (const char *cursor = message; *cursor != '\0'; ++cursor)
-        WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
-    WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
+    log_.write_now(message);
 }
 
 /* BugcheckRoutine is KBUGCHECK_CALLBACK_ROUTINE with ULONG spelled uint32_t,

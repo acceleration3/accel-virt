@@ -7,14 +7,19 @@
 #include <ntddk.h>
 
 #include "core/platform/platform.hpp"
+#include "km/debug_port_log.hpp"
 
 namespace av {
 
 class KernelPlatform final : public Platform {
 public:
+    /* Starts the log's writer thread: DriverEntry constructs the platform at
+     * PASSIVE_LEVEL before anything logs. */
     explicit KernelPlatform(ULONG pool_tag);
     KernelPlatform(const KernelPlatform &) = delete;
     KernelPlatform &operator=(const KernelPlatform &) = delete;
+    /* At unload: the log written out and its thread gone. */
+    ~KernelPlatform();
 
     void    *allocate(size_t bytes, Pool pool) override;
     void     release(void *block) override;
@@ -102,16 +107,10 @@ private:
 
     /* Indexed by Pool, so choosing a pool is a lookup rather than a branch. */
     static constexpr POOL_FLAGS pool_flags_[] = {POOL_FLAG_NON_PAGED, POOL_FLAG_PAGED};
-    /* QEMU isa-debugcon (docs/kb/11-implementation-plan.md, M0): one byte per
-     * port write, legal at any IRQL, readable on the host from DriverEntry on. */
-    static constexpr uintptr_t debug_port = 0x402u;
-
-    ULONG      pool_tag_;
-    /* One line at a time on the debug port. Four processors writing it byte by
-     * byte interleave the characters of concurrent lines and truncate them,
-     * which feature 037's guest log showed. Not the core SpinLock: this object
-     * implements that contract, so its own logging cannot route through it. */
-    KSPIN_LOCK log_lock_;
+    ULONG        pool_tag_;
+    /* Not the core SpinLock inside: this object implements that contract, so
+     * its own logging cannot route through it. */
+    DebugPortLog log_;
     /* The trace table's bugcheck registration (docs/trace.md): non-paged, as
      * the kernel keeps it on its list until it is deregistered. */
     KBUGCHECK_CALLBACK_RECORD bugcheck_record_;
