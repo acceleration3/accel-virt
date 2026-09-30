@@ -212,8 +212,7 @@ include = [
     # HANDLE - a type the host build's headers do not declare - and the ICD
     # answers all four itself, over the FD extensions above: an export
     # remembers the object, and an import asks the host for a fresh fd of it
-    # and forwards VkImportMemoryFdInfoKHR in the Win32 structure's place
-    # (specs/047-vulkan-for-d3d-translation/research.md §10).
+    # and forwards VkImportMemoryFdInfoKHR in the Win32 structure's place.
     "VK_KHR_external_memory_win32",
     "VK_KHR_external_semaphore_win32",
 ]

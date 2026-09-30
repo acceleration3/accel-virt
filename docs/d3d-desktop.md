@@ -16,8 +16,7 @@ beside this note:
   commands to a host that replays them on a host GPU), viogpu3d, Mesa's
   d3d10umd and VMware's screen targets, read at pinned revisions.
 
-It replaces nothing in `specs/`; where it disagrees with a feature spec, the
-evidence here is newer.
+Where it disagrees with older notes, the evidence here is newer.
 
 ## 1. What is true now
 

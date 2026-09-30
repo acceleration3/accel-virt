@@ -10,7 +10,7 @@ wire protocol between them. Serialization is generated here from the Khronos
 registries, by the generator vendored in `tools/codegen/`; what it writes is
 committed under `src/proto/generated/` and never hand-edited.
 
-**Read before writing code:** `.specify/memory/constitution.md` (the rules that
+**Read before writing code:** `docs/constitution.md` (the rules that
 govern the project), `docs/testing.md` (how a display miniport is unit tested),
 `docs/roadmap.md` (what to build, in order).
 
@@ -143,7 +143,7 @@ allocation. Nothing allocates on the submission path.
 enforces all three, so a violation is a failing unit test rather than a
 bugcheck in a VM.
 
-**Tests**: see `.specify/memory/constitution.md`, Principle IV. Every branch,
+**Tests**: see `docs/constitution.md`, Principle IV. Every branch,
 invariants after every mutation, hostile input, and a fuzz target for anything
 that reads bytes it did not write. Coverage is the floor, not the goal: a test
 asserts the outcome a caller would care about, at the values that are actually

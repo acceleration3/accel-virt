@@ -23,8 +23,7 @@ import sys
 TABLE_DIRECTORY = "src/icd"
 SHARED_DIRECTORY = "common"
 # APIs whose drivers live under src/icd but report no extensions, because the
-# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's
-# (specs/055-umd-foundation/contracts/umd_interface.md).
+# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's.
 NO_EXTENSIONS = ("d3d",)
 # Where each API's generator lists what it implemented, and the array naming it.
 IMPLEMENTED_LISTS = {

@@ -872,7 +872,7 @@ driver reports, which is the hostmem region, not the host GPU's memory.
   device's **scanout** is captured with QMP `screendump` - not a guest-side
   screenshot, which would go through the guest's own composition, the thing
   under test - and compared with the frame committed in
-  `specs/048-vulkan-conformance/references/`, within a per-channel step a GPU
+  `tests/references/vulkan/`, within a per-channel step a GPU
   may round by. A mismatch keeps the capture, the reference and a difference
   image. No reference is committed yet, and the run says so and keeps the
   capture rather than claiming a match: nothing the guest presents reaches the

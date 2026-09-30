@@ -4,5 +4,4 @@
 # the line to add.
 #
 # EMPTY ON PURPOSE. No guest has run the Vulkan CTS yet: the archive is not on
-# this machine and there is no network to pin it from (specs/048-.../plan.md),
-# so a record with names in it would be a claim nobody made.
+# this machine and there is no network to pin it from, so a record with names in it would be a claim nobody made.

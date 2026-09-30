@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.6.4 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-20
+**Version**: 3.0.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-30
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -9,15 +9,6 @@ serialization is generated here from the Khronos registries, by the generator
 vendored in `tools/codegen/`; this project owns all of it.
 
 ## Core Principles
-
-### I. Specification precedes implementation
-
-No code lands without a spec in `specs/NNN-*/spec.md` that states what it must
-do and how it will be proven. Specs describe observable behaviour and
-acceptance criteria, never implementation. The spec-kit flow is the workflow:
-`/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` →
-`/speckit-implement`. A spec that cannot state its acceptance criteria is not
-ready to plan.
 
 ### II. The core is portable; the shim is not
 
@@ -108,7 +99,7 @@ until it is destroyed. These two templates are the only places a placement-new
 expression may appear; `tools/check_design.py` enforces it.
 
 The full standard, including naming, ownership, error handling and the
-freestanding-kernel adaptations, is in [`CLAUDE.md`](../../CLAUDE.md) and is
+freestanding-kernel adaptations, is in [`CLAUDE.md`](../CLAUDE.md) and is
 binding on every feature.
 
 ### IV. Test-first and exhaustive (NON-NEGOTIABLE)
@@ -119,8 +110,8 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
 1. **Every branch.** Branch coverage of `src/core`, `src/device` and
    `src/proto` is 100%, measured by `llvm-cov`. A branch that genuinely cannot
    be reached from a test is marked `AV_UNTESTABLE("reason")` at the site. The
-   coverage gate counts those marks, fails if the count rises without a spec
-   change, and every mark is reviewed.
+   coverage gate counts those marks, fails if the count rises unreviewed, and
+   every mark is reviewed.
 
 2. **Invariants.** Every class that owns state has
    `bool invariants_hold() const`, total and side-effect free.
@@ -255,7 +246,7 @@ device exists.
 
 A task is done when all of the following hold:
 
-1. Its spec's acceptance criteria are demonstrated by an automated test.
+1. The behaviour it adds is demonstrated by an automated test.
 2. `ctest` passes, including sanitizers.
 3. Branch coverage of touched core files is 100%, or new `AV_UNTESTABLE` marks
    are justified in the PR.

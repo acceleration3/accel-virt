@@ -5,7 +5,7 @@
 # tools/guest/run_guest_suite.py prints the line to add.
 #
 # The nanoseconds either path costs are the host's property and are not kept
-# here: the ratio is the driver's (specs/049-.../research.md §5).
+# here: the ratio is the driver's.
 #
 # EMPTY ON PURPOSE. No guest has run the benchmark yet - whether this machine's
 # Windows hands the adapter a hardware queue at all is what the first live run

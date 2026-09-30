@@ -1,5 +1,5 @@
 """The feature decomposition: WDDM levels as implementation phases, plus the
-QEMU device and the foundations. Consumed by gen_specs.py.
+QEMU device and the foundations. Consumed by gen_roadmap.py.
 
 status:
   implement  build it, test it, report the capability

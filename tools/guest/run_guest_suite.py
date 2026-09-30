@@ -151,7 +151,7 @@ CTS_CASES = CTS_DIRECTORY + "\\cases.txt"
 # Where the frames an application run is judged against live (feature 048,
 # US2). A reference is the device's scanout, committed, so what a run compares
 # is what a monitor would have shown.
-REFERENCES = ROOT / "specs" / "048-vulkan-conformance" / "references"
+REFERENCES = ROOT / "tests" / "references" / "vulkan"
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable
 # surfaces name devices too, always with more on the line. --summary prints no

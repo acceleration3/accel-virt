@@ -15,7 +15,7 @@ Read these, in this order:
 
 1. `CLAUDE.md` — the C++ standard for this repo (decrapify-cpp, adapted for
    freestanding kernel-mode).
-2. `.specify/memory/constitution.md` — the nine principles. III (object-oriented
+2. `docs/constitution.md` — the principles. III (object-oriented
    with state) and IV (test-first and exhaustive) are marked NON-NEGOTIABLE and
    are enforced by build gates.
 3. `docs/testing.md` — the five test layers and why a display miniport can be
@@ -51,7 +51,6 @@ git status --short && git log --oneline -3
 [ -f third_party/windows-kit/VERSION ] || tools/fetch_windows_kit.sh
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ >/dev/null && cmake --build build 2>&1 | tail -3
 ctest --test-dir build 2>&1 | tail -3
-ls specs/ | head -40
 ```
 
 Tools available, and what each is for:
@@ -87,17 +86,8 @@ $PY tools/re/q.py re/ghidra-proj wddm basicrender.sys dec WarpKMSubmitCommandVir
 complete and which is not yet implemented, and say which one you picked and
 why before starting.
 
-Then follow the spec-kit flow, using the skills, not by hand:
-
-```
-/speckit-specify    only if specs/NNN-*/spec.md still has an empty
-                    "User Scenarios" section
-/speckit-clarify    if anything in the spec is ambiguous — cheaper now than later
-/speckit-plan       MUST fill in the spec's "Classes this feature introduces"
-                    table before any code is written
-/speckit-tasks      break the plan down
-/speckit-implement  execute
-```
+Name the classes the work introduces, and which kind each is, before writing
+any code; then write the first failing test.
 
 ### Git
 
@@ -105,18 +95,18 @@ Then follow the spec-kit flow, using the skills, not by hand:
 is the only long-lived branch, pushed there, and holds only
 features that passed every gate.
 
-1. Start each feature from an up-to-date `master` on a branch named for its
-   spec directory: `git switch -c NNN-short-name`.
-2. Commit at each `**Checkpoint**` in `tasks.md` without waiting to be asked,
-   once `ctest --test-dir build` passes at that point. Conventional-commit
+1. Start each feature from an up-to-date `master` on a branch named for it:
+   `git switch -c NNN-short-name`.
+2. Commit at each working step without waiting to be asked, once
+   `ctest --test-dir build` passes at that point. Conventional-commit
    subject (`feat(scope): ... (NNN)`), a body saying what changed and why.
-3. When every task is `[X]` and `tools/gate.sh` passes, fast-forward it in:
+3. When the feature is finished and `tools/gate.sh` passes, fast-forward it in:
    `git switch master && git merge --ff-only NNN-short-name && git branch -d NNN-short-name && git push origin master`.
 4. Never commit kit files, `re/`, build directories, or anything the gates
    reject; never rewrite `master` history.
 
-A feature counts as complete for "pick the work" when its `tasks.md` is all
-`[X]` and it is merged into `master`.
+A feature counts as complete for "pick the work" when it is merged into
+`master`.
 
 ## 4. The rules you will be judged against
 
@@ -167,5 +157,5 @@ standard. Match it.
 ## 5. Report before you start
 
 State: which feature, why it is next, which classes you will add and of which
-kind, what the first failing test will be, and anything in the spec you had to
-interpret. Then begin.
+kind, what the first failing test will be, and anything you had to interpret.
+Then begin.

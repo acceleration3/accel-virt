@@ -673,8 +673,7 @@ guest, and write the frames, their difference and the timings to HTML:
 
 Read these before writing code:
 - [`CLAUDE.md`](CLAUDE.md): the C++ rules;
-- [`.specify/memory/constitution.md`](.specify/memory/constitution.md): the
-  principles;
+- [`docs/constitution.md`](docs/constitution.md): the principles;
 - [`docs/testing.md`](docs/testing.md).
 
 The short version:
