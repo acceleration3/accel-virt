@@ -98,7 +98,11 @@ class KernelPlatformLinks(unittest.TestCase):
     def test_a_driver_using_the_kernel_platform_imports_only_the_kernel(self):
         project = KernelProbeProject(
             {"platform": KERNEL_PLATFORM_ROUND_TRIP},
-            sources=("src/km/kernel_platform.cpp", "src/core/platform/spin_lock.cpp",
+            sources=("src/km/kernel_platform.cpp",
+                     # The log is queued and written to the debug port by its own thread.
+                     "src/km/debug_port_log.cpp", "src/core/support/log_queue.cpp",
+                     "src/core/support/text_buffer.cpp",
+                     "src/core/platform/spin_lock.cpp",
                      "src/core/platform/spin_lock_guard.cpp", "src/core/platform/mutex.cpp",
                      "src/core/platform/mutex_guard.cpp", "src/core/platform/lock_marks.cpp",
                      # Every function opens a trace scope, and the locks mark the table.
